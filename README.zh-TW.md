@@ -224,7 +224,7 @@ Leonardo ✗ + Runway ✗ → 啟用點數服務（Pollo/GoEnhance）
 | # | 階段 | 工時 | 狀態 | 優先級 |
 |---|------|------|------|--------|
 | 1 | 核心基礎設施 | 4h | ✅ 完成 | P0 |
-| 2 | Smart Demo + Gemini 審核 | 15h | 🔄 進行中 | P0 |
+| 2 | Smart Demo + Gemini 審核 + 封鎖快取 | 15h | ✅ 完成 | P0 |
 | 3 | Leonardo + Runway + 自動切換 | 18h | ⏳ 待開始 | P0 |
 | 4 | Pollo + GoEnhance 點數服務 | 12h | ⏳ 待開始 | P1 |
 | 5 | 升級誘因 UI + Streamlit | 10h | ⏳ 待開始 | P1 |
@@ -233,7 +233,7 @@ Leonardo ✗ + Runway ✗ → 啟用點數服務（Pollo/GoEnhance）
 | 8 | 管理後台 + 監控 Dashboard | 8h | ⏳ 待開始 | P2 |
 | 9 | 安全強化 + 測試 + 部署 | 12h | ⏳ 待開始 | P0 |
 
-**總計：105 小時（約 13 工作天）**  
+**總計：105 小時（約 13 工作天）**
 **目標上線日：2024年12月28日**
 
 ---
@@ -294,42 +294,56 @@ vidgo/
 
 ---
 
-### 階段 2：Smart Demo + 內容審核 (15h) 🔄
+### 階段 2：Smart Demo + 內容審核 + 封鎖快取 (15h) ✅
 
-**任務：**
-1. **Smart Demo 引擎** (8h)
-   - 預生成 Demo 資料庫
-   - Prompt 匹配演算法
-   - Demo 影片服務
-   - 浮水印疊加系統
+**已完成項目：**
+1. **Smart Demo 引擎** (8h) ✅
+   - 預生成 Demo 資料庫（ImageDemo 模型）
+   - 多語言 Prompt 匹配（EN, ZH-TW, JA, KO, ES）
+   - GoEnhance 整合的 Demo 影片服務
+   - 浮水印疊加系統（placeholder）
+   - 分類式 Demo 組織
 
-2. **Gemini 內容審核** (5h)
-   - API 整合
+2. **Gemini 內容審核** (5h) ✅
+   - Gemini API 整合 AI 驅動審核
    - 18+ 內容偵測
    - 暴力/非法內容過濾
-   - 關鍵字備援過濾
+   - 關鍵字備援過濾（40+ 封鎖關鍵字）
+   - 可疑內容模式匹配
 
-3. **測試與整合** (2h)
-   - 單元測試
-   - 整合測試
-   - 邊界案例處理
+3. **Redis 封鎖快取** (2h) ✅
+   - Redis 為基礎的 Prompt 封鎖快取，快速偵測非法字詞
+   - 啟動時自動載入種子封鎖字詞
+   - Gemini 驅動學習：分析未知 Prompt 並快取結果
+   - 快取統計與管理員管理端點
+   - 自我學習系統，隨時間改進
 
-**實作邏輯：**
+**封鎖快取流程：**
 ```python
-# 審核流程
+# 智能審核搭配 Redis 封鎖快取
 async def moderate_content(prompt: str) -> ModerationResult:
-    # 1. 嘗試 Gemini API
-    try:
-        result = await gemini_moderate(prompt)
-        return result
-    except GeminiError:
-        # 2. 退回關鍵字過濾
-        result = keyword_filter(prompt)
-        if result.flagged:
-            return result
-        # 3. 放行並標記人工審核
-        return ModerationResult(passed=True, needs_review=True)
+    # 1. 檢查 Redis 封鎖快取（最快 - 已知非法字詞快取）
+    if cached_block := await block_cache.check(prompt):
+        return ModerationResult(blocked=True, reason=cached_block.reason)
+
+    # 2. 快速關鍵字過濾（快速 - 本地）
+    if keyword_match := keyword_filter(prompt):
+        await block_cache.add(keyword_match)  # 學習供下次使用
+        return ModerationResult(blocked=True)
+
+    # 3. Gemini API 深度分析（較慢但精準）
+    result = await gemini_moderate(prompt)
+    if not result.is_safe:
+        await block_cache.add(result.flagged_words)  # 學習供下次使用
+
+    return result
 ```
+
+**新增 API 端點：**
+- `GET /api/v1/demo/block-cache/stats` - 查看快取統計
+- `POST /api/v1/demo/block-cache/check` - 檢查 Prompt 是否被封鎖
+- `POST /api/v1/demo/admin/block-cache/add` - 新增封鎖字詞
+- `DELETE /api/v1/demo/admin/block-cache/remove` - 移除封鎖字詞
 
 ---
 
@@ -657,27 +671,80 @@ result = await goenhance.transform(
 ### 認證與授權
 | 機制 | 技術 | 說明 |
 |------|------|------|
-| JWT Token | Access + Refresh | Access: 15分鐘, Refresh: 7天 |
-| 密碼加密 | bcrypt + salt | 12 rounds hashing |
+| JWT Token | Access + Refresh | Access: 15-30分鐘, Refresh: 7天 |
+| 密碼加密（伺服器） | bcrypt + salt | 12 rounds hashing |
+| 密碼加密（客戶端） | SHA-256 + salt | 傳輸前預先雜湊 |
+| Email 驗證 | Token-based | 24小時過期，啟用帳號必需 |
+| 密碼重設 | 安全 Token | 1小時過期 |
 | API Key | HMAC-SHA256 | 外部 API 驗證 |
-| OAuth 2.0 | Google/Facebook | 社群登入（選用） |
+
+### 縱深防禦（密碼安全）
+
+```
+用戶輸入密碼
+        ↓
+[第一層] 客戶端 SHA-256 雜湊 + 鹽值
+        ↓
+[第二層] HTTPS/TLS 傳輸加密
+        ↓
+[第三層] 伺服器端 bcrypt 雜湊（12 rounds）
+        ↓
+安全儲存於資料庫
+```
+
+**客戶端雜湊優點：**
+- 密碼永不以明文傳輸
+- 防止意外日誌記錄
+- TLS 被破解時的額外保護
+- 無鹽值的雜湊值無法使用
+
+### Email 驗證流程
+
+```
+1. 用戶註冊 → 建立帳號（未啟用）
+            → 發送驗證郵件
+
+2. 用戶點擊郵件連結 → Token 驗證
+                    → 帳號啟用
+                    → 發送歡迎郵件
+
+3. 用戶可以登入 → 發放 Access + Refresh tokens
+```
 
 ### API 安全
 | 防護 | 設定 | 說明 |
 |------|------|------|
 | Rate Limiting | 100 req/min/IP | 防止暴力攻擊 |
 | CORS | 白名單網域 | 跨域請求限制 |
-| HTTPS Only | TLS 1.3 | 強制加密傳輸 |
-| Input Validation | Pydantic/Zod | 嚴格輸入驗證 |
+| HTTPS Only | TLS 1.2/1.3 | 強制加密傳輸 |
+| Input Validation | Pydantic | 嚴格輸入驗證 |
 | SQL Injection | ORM + Parameterized | 防 SQL 注入 |
 | XSS Protection | CSP Headers | 防跨站腳本攻擊 |
+| Token 類型驗證 | access vs refresh | 防止 Token 誤用 |
 
 ### 內容安全 & 金流安全
 - **Gemini API 審核**：所有 Prompt 經過 18+/暴力/非法內容檢測
+- **Redis 封鎖快取**：快速非法字詞偵測，具自我學習功能
 - **IP Ban System**：多次違規自動封禁 IP
 - **PCI DSS**：透過 ECPay/Paddle 處理卡號，本站不存儲
 - **Webhook Signature**：驗證金流回調簽章
 - **Database Encryption**：AES-256 at rest + 每日備份
+
+### 認證 API 端點
+
+| 端點 | 方法 | 用途 |
+|------|------|------|
+| `/api/v1/auth/register` | POST | 用戶註冊（發送驗證郵件） |
+| `/api/v1/auth/login` | POST | 登入（回傳用戶資料 + tokens） |
+| `/api/v1/auth/logout` | POST | 登出 |
+| `/api/v1/auth/refresh` | POST | 刷新 Access Token |
+| `/api/v1/auth/verify-email` | POST | 驗證 Email（使用 Token） |
+| `/api/v1/auth/resend-verification` | POST | 重新發送驗證郵件 |
+| `/api/v1/auth/forgot-password` | POST | 請求密碼重設 |
+| `/api/v1/auth/reset-password` | POST | 重設密碼（使用 Token） |
+| `/api/v1/auth/me` | GET | 取得當前用戶資料 |
+| `/api/v1/auth/me` | PUT | 更新用戶資料 |
+| `/api/v1/auth/me/change-password` | POST | 變更密碼 |
 
 ---
 

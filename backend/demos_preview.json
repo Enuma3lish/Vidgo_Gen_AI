@@ -1,0 +1,4009 @@
+{
+  "generated_at": "2025-12-20T22:07:31.338221",
+  "total_count": 200,
+  "dry_run": true,
+  "source_video": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+  "demos": [
+    {
+      "title": "A cute cat sitting on a windowsill watching birds - Anime Style",
+      "prompt": "A cute cat sitting on a windowsill watching birds",
+      "keywords": [
+        "cat",
+        "window",
+        "birds",
+        "pet",
+        "anime_v5"
+      ],
+      "category": "animals",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "A golden retriever playing fetch in the park - Anime Style",
+      "prompt": "A golden retriever playing fetch in the park",
+      "keywords": [
+        "dog",
+        "golden retriever",
+        "park",
+        "play",
+        "anime_v5"
+      ],
+      "category": "animals",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "A majestic lion walking through the savanna - GPT Anime Style",
+      "prompt": "A majestic lion walking through the savanna",
+      "keywords": [
+        "lion",
+        "savanna",
+        "wildlife",
+        "majestic",
+        "gpt_anime"
+      ],
+      "category": "animals",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Colorful tropical fish swimming in coral reef - Anime Style 3",
+      "prompt": "Colorful tropical fish swimming in coral reef",
+      "keywords": [
+        "fish",
+        "coral",
+        "tropical",
+        "underwater",
+        "anime_v4"
+      ],
+      "category": "animals",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "A wise owl perched on an ancient tree branch - Oil Painting",
+      "prompt": "A wise owl perched on an ancient tree branch",
+      "keywords": [
+        "owl",
+        "tree",
+        "wise",
+        "night",
+        "oil_painting"
+      ],
+      "category": "animals",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Playful dolphins jumping over ocean waves - Anime Style 3",
+      "prompt": "Playful dolphins jumping over ocean waves",
+      "keywords": [
+        "dolphin",
+        "ocean",
+        "waves",
+        "play",
+        "anime_v4"
+      ],
+      "category": "animals",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "A red panda sleeping on a bamboo branch - Pixar Style",
+      "prompt": "A red panda sleeping on a bamboo branch",
+      "keywords": [
+        "panda",
+        "bamboo",
+        "cute",
+        "sleeping",
+        "pixar"
+      ],
+      "category": "animals",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Elephants crossing a river at sunset - Anime Style 2",
+      "prompt": "Elephants crossing a river at sunset",
+      "keywords": [
+        "elephant",
+        "river",
+        "sunset",
+        "africa",
+        "anime_v1"
+      ],
+      "category": "animals",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "A butterfly landing on a colorful flower - Realistic",
+      "prompt": "A butterfly landing on a colorful flower",
+      "keywords": [
+        "butterfly",
+        "flower",
+        "nature",
+        "spring",
+        "realistic"
+      ],
+      "category": "animals",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Arctic fox in a snowy winter landscape - Anime Style 3",
+      "prompt": "Arctic fox in a snowy winter landscape",
+      "keywords": [
+        "fox",
+        "arctic",
+        "snow",
+        "winter",
+        "anime_v4"
+      ],
+      "category": "animals",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "A parrot with vibrant colorful feathers - Clay Style",
+      "prompt": "A parrot with vibrant colorful feathers",
+      "keywords": [
+        "parrot",
+        "colorful",
+        "bird",
+        "tropical",
+        "clay"
+      ],
+      "category": "animals",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Horse galloping through a meadow - GPT Anime Style",
+      "prompt": "Horse galloping through a meadow",
+      "keywords": [
+        "horse",
+        "gallop",
+        "meadow",
+        "freedom",
+        "gpt_anime"
+      ],
+      "category": "animals",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Penguin family on Antarctic ice - Anime Style 3",
+      "prompt": "Penguin family on Antarctic ice",
+      "keywords": [
+        "penguin",
+        "ice",
+        "antarctic",
+        "family",
+        "anime_v4"
+      ],
+      "category": "animals",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "A cheetah running at full speed - GPT Anime Style",
+      "prompt": "A cheetah running at full speed",
+      "keywords": [
+        "cheetah",
+        "running",
+        "speed",
+        "wildlife",
+        "gpt_anime"
+      ],
+      "category": "animals",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Koala bear hugging a eucalyptus tree - Oil Painting",
+      "prompt": "Koala bear hugging a eucalyptus tree",
+      "keywords": [
+        "koala",
+        "eucalyptus",
+        "australia",
+        "cute",
+        "oil_painting"
+      ],
+      "category": "animals",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Breathtaking sunset over the ocean horizon - Cinematic",
+      "prompt": "Breathtaking sunset over the ocean horizon",
+      "keywords": [
+        "sunset",
+        "ocean",
+        "horizon",
+        "sky",
+        "cinematic"
+      ],
+      "category": "nature",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Majestic waterfall in a tropical rainforest - Anime Style",
+      "prompt": "Majestic waterfall in a tropical rainforest",
+      "keywords": [
+        "waterfall",
+        "rainforest",
+        "tropical",
+        "water",
+        "anime_v5"
+      ],
+      "category": "nature",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Cherry blossoms in full bloom in spring - Cyberpunk",
+      "prompt": "Cherry blossoms in full bloom in spring",
+      "keywords": [
+        "cherry blossom",
+        "spring",
+        "pink",
+        "japan",
+        "cyberpunk"
+      ],
+      "category": "nature",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Northern lights dancing over snowy mountains - Pixar Style",
+      "prompt": "Northern lights dancing over snowy mountains",
+      "keywords": [
+        "aurora",
+        "northern lights",
+        "mountains",
+        "night",
+        "pixar"
+      ],
+      "category": "nature",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Peaceful zen garden with raked sand patterns - Anime Style 2",
+      "prompt": "Peaceful zen garden with raked sand patterns",
+      "keywords": [
+        "zen",
+        "garden",
+        "peaceful",
+        "meditation",
+        "anime_v1"
+      ],
+      "category": "nature",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Dramatic lightning storm over a desert landscape - Cute Anime Style",
+      "prompt": "Dramatic lightning storm over a desert landscape",
+      "keywords": [
+        "lightning",
+        "storm",
+        "desert",
+        "dramatic",
+        "cute_anime"
+      ],
+      "category": "nature",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Crystal clear lake reflecting mountain peaks - Anime Style",
+      "prompt": "Crystal clear lake reflecting mountain peaks",
+      "keywords": [
+        "lake",
+        "mountains",
+        "reflection",
+        "clear",
+        "anime_v5"
+      ],
+      "category": "nature",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Autumn forest with colorful falling leaves - Cinematic",
+      "prompt": "Autumn forest with colorful falling leaves",
+      "keywords": [
+        "autumn",
+        "forest",
+        "leaves",
+        "fall",
+        "cinematic"
+      ],
+      "category": "nature",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Misty morning in an ancient forest - Anime Style",
+      "prompt": "Misty morning in an ancient forest",
+      "keywords": [
+        "mist",
+        "forest",
+        "morning",
+        "mysterious",
+        "anime_v5"
+      ],
+      "category": "nature",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Volcanic eruption with flowing lava - Cute Anime Style",
+      "prompt": "Volcanic eruption with flowing lava",
+      "keywords": [
+        "volcano",
+        "lava",
+        "eruption",
+        "fire",
+        "cute_anime"
+      ],
+      "category": "nature",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Vast field of sunflowers under blue sky - Cute Anime Style",
+      "prompt": "Vast field of sunflowers under blue sky",
+      "keywords": [
+        "sunflower",
+        "field",
+        "summer",
+        "yellow",
+        "cute_anime"
+      ],
+      "category": "nature",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Icy glacier calving into the sea - Pixar Style",
+      "prompt": "Icy glacier calving into the sea",
+      "keywords": [
+        "glacier",
+        "ice",
+        "arctic",
+        "ocean",
+        "pixar"
+      ],
+      "category": "nature",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Rainbow appearing after a rain shower - Anime Style",
+      "prompt": "Rainbow appearing after a rain shower",
+      "keywords": [
+        "rainbow",
+        "rain",
+        "colorful",
+        "sky",
+        "anime_v5"
+      ],
+      "category": "nature",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Desert sand dunes at golden hour - Watercolor",
+      "prompt": "Desert sand dunes at golden hour",
+      "keywords": [
+        "desert",
+        "dunes",
+        "sand",
+        "golden",
+        "watercolor"
+      ],
+      "category": "nature",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Starry night sky over a mountain peak - Cinematic",
+      "prompt": "Starry night sky over a mountain peak",
+      "keywords": [
+        "stars",
+        "night",
+        "mountain",
+        "galaxy",
+        "cinematic"
+      ],
+      "category": "nature",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Neon-lit Tokyo street at night with rain - Cinematic",
+      "prompt": "Neon-lit Tokyo street at night with rain",
+      "keywords": [
+        "tokyo",
+        "neon",
+        "night",
+        "rain",
+        "city",
+        "cinematic"
+      ],
+      "category": "urban",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "New York City skyline at sunset - GPT Anime Style",
+      "prompt": "New York City skyline at sunset",
+      "keywords": [
+        "new york",
+        "skyline",
+        "sunset",
+        "city",
+        "gpt_anime"
+      ],
+      "category": "urban",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Cozy European cafe on a cobblestone street - Pixar Style",
+      "prompt": "Cozy European cafe on a cobblestone street",
+      "keywords": [
+        "cafe",
+        "europe",
+        "street",
+        "cozy",
+        "pixar"
+      ],
+      "category": "urban",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Modern glass skyscraper reflecting clouds - Oil Painting",
+      "prompt": "Modern glass skyscraper reflecting clouds",
+      "keywords": [
+        "skyscraper",
+        "modern",
+        "glass",
+        "architecture",
+        "oil_painting"
+      ],
+      "category": "urban",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Vintage car driving through city streets - Anime Style 3",
+      "prompt": "Vintage car driving through city streets",
+      "keywords": [
+        "car",
+        "vintage",
+        "city",
+        "retro",
+        "anime_v4"
+      ],
+      "category": "urban",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Busy night market with colorful lanterns - Watercolor",
+      "prompt": "Busy night market with colorful lanterns",
+      "keywords": [
+        "market",
+        "night",
+        "lanterns",
+        "asia",
+        "watercolor"
+      ],
+      "category": "urban",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Street artist creating graffiti mural - Watercolor",
+      "prompt": "Street artist creating graffiti mural",
+      "keywords": [
+        "graffiti",
+        "street art",
+        "urban",
+        "colorful",
+        "watercolor"
+      ],
+      "category": "urban",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Iconic London double-decker bus - Cinematic",
+      "prompt": "Iconic London double-decker bus",
+      "keywords": [
+        "london",
+        "bus",
+        "red",
+        "iconic",
+        "cinematic"
+      ],
+      "category": "urban",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Floating market in Thailand - Anime Style 2",
+      "prompt": "Floating market in Thailand",
+      "keywords": [
+        "market",
+        "boat",
+        "thailand",
+        "floating",
+        "anime_v1"
+      ],
+      "category": "urban",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Paris Eiffel Tower at dusk - Oil Painting",
+      "prompt": "Paris Eiffel Tower at dusk",
+      "keywords": [
+        "paris",
+        "eiffel tower",
+        "dusk",
+        "france",
+        "oil_painting"
+      ],
+      "category": "urban",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Underground subway station with motion blur - GPT Anime Style",
+      "prompt": "Underground subway station with motion blur",
+      "keywords": [
+        "subway",
+        "train",
+        "motion",
+        "underground",
+        "gpt_anime"
+      ],
+      "category": "urban",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Rooftop bar overlooking city lights - Cute Anime Style",
+      "prompt": "Rooftop bar overlooking city lights",
+      "keywords": [
+        "rooftop",
+        "bar",
+        "city",
+        "night",
+        "cute_anime"
+      ],
+      "category": "urban",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Traditional Japanese temple in modern city - Anime Style",
+      "prompt": "Traditional Japanese temple in modern city",
+      "keywords": [
+        "temple",
+        "japan",
+        "traditional",
+        "contrast",
+        "anime_v5"
+      ],
+      "category": "urban",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Cyclist crossing a bridge at sunrise - Realistic",
+      "prompt": "Cyclist crossing a bridge at sunrise",
+      "keywords": [
+        "bicycle",
+        "bridge",
+        "sunrise",
+        "urban",
+        "realistic"
+      ],
+      "category": "urban",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Historic castle illuminated at night - Anime Style 3",
+      "prompt": "Historic castle illuminated at night",
+      "keywords": [
+        "castle",
+        "night",
+        "historic",
+        "lights",
+        "anime_v4"
+      ],
+      "category": "urban",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Dancer performing ballet in elegant pose - Clay Style",
+      "prompt": "Dancer performing ballet in elegant pose",
+      "keywords": [
+        "dancer",
+        "ballet",
+        "elegant",
+        "performance",
+        "clay"
+      ],
+      "category": "people",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Samurai warrior in traditional armor - Anime Style 2",
+      "prompt": "Samurai warrior in traditional armor",
+      "keywords": [
+        "samurai",
+        "warrior",
+        "japan",
+        "armor",
+        "anime_v1"
+      ],
+      "category": "people",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Chef preparing gourmet dish in kitchen - Realistic",
+      "prompt": "Chef preparing gourmet dish in kitchen",
+      "keywords": [
+        "chef",
+        "cooking",
+        "kitchen",
+        "food",
+        "realistic"
+      ],
+      "category": "people",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Astronaut floating in space with Earth view - Cinematic",
+      "prompt": "Astronaut floating in space with Earth view",
+      "keywords": [
+        "astronaut",
+        "space",
+        "earth",
+        "floating",
+        "cinematic"
+      ],
+      "category": "people",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Street musician playing guitar - Pixar Style",
+      "prompt": "Street musician playing guitar",
+      "keywords": [
+        "musician",
+        "guitar",
+        "street",
+        "music",
+        "pixar"
+      ],
+      "category": "people",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Martial artist performing high kick - Anime Style 3",
+      "prompt": "Martial artist performing high kick",
+      "keywords": [
+        "martial arts",
+        "kick",
+        "action",
+        "fighter",
+        "anime_v4"
+      ],
+      "category": "people",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Fashion model on runway with dramatic lighting - Anime Style 3",
+      "prompt": "Fashion model on runway with dramatic lighting",
+      "keywords": [
+        "fashion",
+        "model",
+        "runway",
+        "style",
+        "anime_v4"
+      ],
+      "category": "people",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Scientist working in futuristic laboratory - Anime Style 2",
+      "prompt": "Scientist working in futuristic laboratory",
+      "keywords": [
+        "scientist",
+        "lab",
+        "future",
+        "research",
+        "anime_v1"
+      ],
+      "category": "people",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Photographer capturing sunset moment - Anime Style 2",
+      "prompt": "Photographer capturing sunset moment",
+      "keywords": [
+        "photographer",
+        "camera",
+        "sunset",
+        "creative",
+        "anime_v1"
+      ],
+      "category": "people",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Yoga practitioner in meditation pose - Watercolor",
+      "prompt": "Yoga practitioner in meditation pose",
+      "keywords": [
+        "yoga",
+        "meditation",
+        "peaceful",
+        "wellness",
+        "watercolor"
+      ],
+      "category": "people",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Surfer riding a massive wave - Anime Style",
+      "prompt": "Surfer riding a massive wave",
+      "keywords": [
+        "surfer",
+        "wave",
+        "ocean",
+        "extreme",
+        "anime_v5"
+      ],
+      "category": "people",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Artist painting on large canvas - Anime Style",
+      "prompt": "Artist painting on large canvas",
+      "keywords": [
+        "artist",
+        "painting",
+        "creative",
+        "studio",
+        "anime_v5"
+      ],
+      "category": "people",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Couple dancing under starlight - Pixar Style",
+      "prompt": "Couple dancing under starlight",
+      "keywords": [
+        "couple",
+        "dance",
+        "romantic",
+        "night",
+        "pixar"
+      ],
+      "category": "people",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Firefighter in action saving lives - Anime Style 2",
+      "prompt": "Firefighter in action saving lives",
+      "keywords": [
+        "firefighter",
+        "hero",
+        "action",
+        "brave",
+        "anime_v1"
+      ],
+      "category": "people",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Child blowing bubbles in garden - Cinematic",
+      "prompt": "Child blowing bubbles in garden",
+      "keywords": [
+        "child",
+        "bubbles",
+        "garden",
+        "playful",
+        "cinematic"
+      ],
+      "category": "people",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Majestic dragon flying over castle - Anime Style",
+      "prompt": "Majestic dragon flying over castle",
+      "keywords": [
+        "dragon",
+        "castle",
+        "fantasy",
+        "flying",
+        "anime_v5"
+      ],
+      "category": "fantasy",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Mystical unicorn in enchanted forest - Clay Style",
+      "prompt": "Mystical unicorn in enchanted forest",
+      "keywords": [
+        "unicorn",
+        "forest",
+        "magical",
+        "enchanted",
+        "clay"
+      ],
+      "category": "fantasy",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Wizard casting spell with glowing magic - Cyberpunk",
+      "prompt": "Wizard casting spell with glowing magic",
+      "keywords": [
+        "wizard",
+        "magic",
+        "spell",
+        "fantasy",
+        "cyberpunk"
+      ],
+      "category": "fantasy",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Fairy with glowing wings in moonlight - GPT Anime Style",
+      "prompt": "Fairy with glowing wings in moonlight",
+      "keywords": [
+        "fairy",
+        "wings",
+        "moonlight",
+        "magical",
+        "gpt_anime"
+      ],
+      "category": "fantasy",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Ancient temple ruins with mystical energy - Cyberpunk",
+      "prompt": "Ancient temple ruins with mystical energy",
+      "keywords": [
+        "temple",
+        "ruins",
+        "mystical",
+        "ancient",
+        "cyberpunk"
+      ],
+      "category": "fantasy",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Phoenix rising from flames - Cute Anime Style",
+      "prompt": "Phoenix rising from flames",
+      "keywords": [
+        "phoenix",
+        "fire",
+        "rebirth",
+        "mythical",
+        "cute_anime"
+      ],
+      "category": "fantasy",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Mermaid swimming in crystal waters - Clay Style",
+      "prompt": "Mermaid swimming in crystal waters",
+      "keywords": [
+        "mermaid",
+        "underwater",
+        "crystal",
+        "fantasy",
+        "clay"
+      ],
+      "category": "fantasy",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Knight in shining armor on horseback - GPT Anime Style",
+      "prompt": "Knight in shining armor on horseback",
+      "keywords": [
+        "knight",
+        "armor",
+        "horse",
+        "medieval",
+        "gpt_anime"
+      ],
+      "category": "fantasy",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Floating islands in a magical sky - Cyberpunk",
+      "prompt": "Floating islands in a magical sky",
+      "keywords": [
+        "islands",
+        "floating",
+        "sky",
+        "magical",
+        "cyberpunk"
+      ],
+      "category": "fantasy",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Giant tree with glowing runes - Pixar Style",
+      "prompt": "Giant tree with glowing runes",
+      "keywords": [
+        "tree",
+        "runes",
+        "glowing",
+        "magical",
+        "pixar"
+      ],
+      "category": "fantasy",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Portal to another dimension opening - Cinematic",
+      "prompt": "Portal to another dimension opening",
+      "keywords": [
+        "portal",
+        "dimension",
+        "magical",
+        "gateway",
+        "cinematic"
+      ],
+      "category": "fantasy",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Elf archer in mystical woodland - Anime Style 2",
+      "prompt": "Elf archer in mystical woodland",
+      "keywords": [
+        "elf",
+        "archer",
+        "woodland",
+        "fantasy",
+        "anime_v1"
+      ],
+      "category": "fantasy",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Crystal cave with magical gems - Clay Style",
+      "prompt": "Crystal cave with magical gems",
+      "keywords": [
+        "cave",
+        "crystal",
+        "gems",
+        "magical",
+        "clay"
+      ],
+      "category": "fantasy",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Steampunk airship in cloudy sky - Anime Style 2",
+      "prompt": "Steampunk airship in cloudy sky",
+      "keywords": [
+        "steampunk",
+        "airship",
+        "sky",
+        "mechanical",
+        "anime_v1"
+      ],
+      "category": "fantasy",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Enchanted library with floating books - Realistic",
+      "prompt": "Enchanted library with floating books",
+      "keywords": [
+        "library",
+        "books",
+        "floating",
+        "magical",
+        "realistic"
+      ],
+      "category": "fantasy",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Futuristic city with flying vehicles - Watercolor",
+      "prompt": "Futuristic city with flying vehicles",
+      "keywords": [
+        "future",
+        "city",
+        "flying cars",
+        "sci-fi",
+        "watercolor"
+      ],
+      "category": "sci-fi",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Robot with human-like expressions - Cyberpunk",
+      "prompt": "Robot with human-like expressions",
+      "keywords": [
+        "robot",
+        "android",
+        "ai",
+        "futuristic",
+        "cyberpunk"
+      ],
+      "category": "sci-fi",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Spaceship landing on alien planet - Cinematic",
+      "prompt": "Spaceship landing on alien planet",
+      "keywords": [
+        "spaceship",
+        "alien",
+        "planet",
+        "landing",
+        "cinematic"
+      ],
+      "category": "sci-fi",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Cyberpunk hacker with neon implants - Realistic",
+      "prompt": "Cyberpunk hacker with neon implants",
+      "keywords": [
+        "cyberpunk",
+        "hacker",
+        "neon",
+        "cyber",
+        "realistic"
+      ],
+      "category": "sci-fi",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Space station orbiting distant planet - Pixar Style",
+      "prompt": "Space station orbiting distant planet",
+      "keywords": [
+        "space station",
+        "orbit",
+        "planet",
+        "space",
+        "pixar"
+      ],
+      "category": "sci-fi",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Alien creature with bioluminescent features - Anime Style 2",
+      "prompt": "Alien creature with bioluminescent features",
+      "keywords": [
+        "alien",
+        "bioluminescent",
+        "creature",
+        "exotic",
+        "anime_v1"
+      ],
+      "category": "sci-fi",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Time travel portal with swirling energy - Anime Style 3",
+      "prompt": "Time travel portal with swirling energy",
+      "keywords": [
+        "time travel",
+        "portal",
+        "energy",
+        "sci-fi",
+        "anime_v4"
+      ],
+      "category": "sci-fi",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Mech warrior in battle stance - Cyberpunk",
+      "prompt": "Mech warrior in battle stance",
+      "keywords": [
+        "mech",
+        "robot",
+        "battle",
+        "warrior",
+        "cyberpunk"
+      ],
+      "category": "sci-fi",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Holographic display of galaxy map - Cute Anime Style",
+      "prompt": "Holographic display of galaxy map",
+      "keywords": [
+        "hologram",
+        "galaxy",
+        "map",
+        "technology",
+        "cute_anime"
+      ],
+      "category": "sci-fi",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Laser battle in space between ships - Oil Painting",
+      "prompt": "Laser battle in space between ships",
+      "keywords": [
+        "laser",
+        "space",
+        "battle",
+        "ships",
+        "oil_painting"
+      ],
+      "category": "sci-fi",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Terraformed Mars colony settlement - Anime Style",
+      "prompt": "Terraformed Mars colony settlement",
+      "keywords": [
+        "mars",
+        "colony",
+        "terraformed",
+        "future",
+        "anime_v5"
+      ],
+      "category": "sci-fi",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "AI consciousness visualization - Watercolor",
+      "prompt": "AI consciousness visualization",
+      "keywords": [
+        "ai",
+        "consciousness",
+        "digital",
+        "abstract",
+        "watercolor"
+      ],
+      "category": "sci-fi",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Cryogenic pod with sleeping passenger - Anime Style 2",
+      "prompt": "Cryogenic pod with sleeping passenger",
+      "keywords": [
+        "cryogenic",
+        "pod",
+        "sleep",
+        "sci-fi",
+        "anime_v1"
+      ],
+      "category": "sci-fi",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Quantum computer with glowing circuits - Oil Painting",
+      "prompt": "Quantum computer with glowing circuits",
+      "keywords": [
+        "quantum",
+        "computer",
+        "circuits",
+        "technology",
+        "oil_painting"
+      ],
+      "category": "sci-fi",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Alien sunset with multiple moons - Oil Painting",
+      "prompt": "Alien sunset with multiple moons",
+      "keywords": [
+        "alien",
+        "sunset",
+        "moons",
+        "planet",
+        "oil_painting"
+      ],
+      "category": "sci-fi",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Gourmet sushi platter with fresh fish - Pixar Style",
+      "prompt": "Gourmet sushi platter with fresh fish",
+      "keywords": [
+        "sushi",
+        "japanese",
+        "fresh",
+        "gourmet",
+        "pixar"
+      ],
+      "category": "food",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Steaming bowl of ramen with toppings - Pixar Style",
+      "prompt": "Steaming bowl of ramen with toppings",
+      "keywords": [
+        "ramen",
+        "noodles",
+        "japanese",
+        "hot",
+        "pixar"
+      ],
+      "category": "food",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Artisan pizza fresh from wood oven - GPT Anime Style",
+      "prompt": "Artisan pizza fresh from wood oven",
+      "keywords": [
+        "pizza",
+        "italian",
+        "oven",
+        "cheese",
+        "gpt_anime"
+      ],
+      "category": "food",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Colorful macarons in pastel shades - Cinematic",
+      "prompt": "Colorful macarons in pastel shades",
+      "keywords": [
+        "macarons",
+        "french",
+        "colorful",
+        "dessert",
+        "cinematic"
+      ],
+      "category": "food",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Juicy burger with all the toppings - Anime Style 3",
+      "prompt": "Juicy burger with all the toppings",
+      "keywords": [
+        "burger",
+        "american",
+        "juicy",
+        "food",
+        "anime_v4"
+      ],
+      "category": "food",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Fresh fruit smoothie bowl - Watercolor",
+      "prompt": "Fresh fruit smoothie bowl",
+      "keywords": [
+        "smoothie",
+        "fruit",
+        "healthy",
+        "bowl",
+        "watercolor"
+      ],
+      "category": "food",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Decadent chocolate cake with ganache - Cyberpunk",
+      "prompt": "Decadent chocolate cake with ganache",
+      "keywords": [
+        "chocolate",
+        "cake",
+        "dessert",
+        "rich",
+        "cyberpunk"
+      ],
+      "category": "food",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Traditional dim sum in bamboo steamer - Cute Anime Style",
+      "prompt": "Traditional dim sum in bamboo steamer",
+      "keywords": [
+        "dim sum",
+        "chinese",
+        "steamer",
+        "traditional",
+        "cute_anime"
+      ],
+      "category": "food",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Colorful Indian curry spread - Realistic",
+      "prompt": "Colorful Indian curry spread",
+      "keywords": [
+        "curry",
+        "indian",
+        "spicy",
+        "colorful",
+        "realistic"
+      ],
+      "category": "food",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Fresh croissant with butter and jam - Clay Style",
+      "prompt": "Fresh croissant with butter and jam",
+      "keywords": [
+        "croissant",
+        "french",
+        "pastry",
+        "breakfast",
+        "clay"
+      ],
+      "category": "food",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Grilled steak with vegetables - Cute Anime Style",
+      "prompt": "Grilled steak with vegetables",
+      "keywords": [
+        "steak",
+        "grill",
+        "meat",
+        "dinner",
+        "cute_anime"
+      ],
+      "category": "food",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Ice cream sundae with toppings - Cute Anime Style",
+      "prompt": "Ice cream sundae with toppings",
+      "keywords": [
+        "ice cream",
+        "sundae",
+        "dessert",
+        "sweet",
+        "cute_anime"
+      ],
+      "category": "food",
+      "style_id": 5,
+      "style_name": "Cute Anime Style",
+      "style_slug": "cute_anime",
+      "style_description": "Kawaii cute anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Coffee latte art in ceramic cup - Realistic",
+      "prompt": "Coffee latte art in ceramic cup",
+      "keywords": [
+        "coffee",
+        "latte art",
+        "cafe",
+        "drink",
+        "realistic"
+      ],
+      "category": "food",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Mediterranean mezze platter - GPT Anime Style",
+      "prompt": "Mediterranean mezze platter",
+      "keywords": [
+        "mediterranean",
+        "mezze",
+        "healthy",
+        "varied",
+        "gpt_anime"
+      ],
+      "category": "food",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Fresh seafood platter on ice - Oil Painting",
+      "prompt": "Fresh seafood platter on ice",
+      "keywords": [
+        "seafood",
+        "fresh",
+        "ocean",
+        "platter",
+        "oil_painting"
+      ],
+      "category": "food",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Flowing liquid metal in slow motion - Realistic",
+      "prompt": "Flowing liquid metal in slow motion",
+      "keywords": [
+        "liquid",
+        "metal",
+        "abstract",
+        "flowing",
+        "realistic"
+      ],
+      "category": "abstract",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Geometric patterns with neon colors - GPT Anime Style",
+      "prompt": "Geometric patterns with neon colors",
+      "keywords": [
+        "geometric",
+        "neon",
+        "patterns",
+        "abstract",
+        "gpt_anime"
+      ],
+      "category": "abstract",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Smoke swirls in colorful light - GPT Anime Style",
+      "prompt": "Smoke swirls in colorful light",
+      "keywords": [
+        "smoke",
+        "colorful",
+        "light",
+        "abstract",
+        "gpt_anime"
+      ],
+      "category": "abstract",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Fractal patterns in vivid colors - Anime Style",
+      "prompt": "Fractal patterns in vivid colors",
+      "keywords": [
+        "fractal",
+        "patterns",
+        "vivid",
+        "mathematical",
+        "anime_v5"
+      ],
+      "category": "abstract",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Paint splatter explosion of colors - Anime Style 2",
+      "prompt": "Paint splatter explosion of colors",
+      "keywords": [
+        "paint",
+        "splash",
+        "explosion",
+        "colorful",
+        "anime_v1"
+      ],
+      "category": "abstract",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Kaleidoscope effect with gems - Cyberpunk",
+      "prompt": "Kaleidoscope effect with gems",
+      "keywords": [
+        "kaleidoscope",
+        "gems",
+        "symmetry",
+        "colorful",
+        "cyberpunk"
+      ],
+      "category": "abstract",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Aurora waves in abstract form - Clay Style",
+      "prompt": "Aurora waves in abstract form",
+      "keywords": [
+        "aurora",
+        "waves",
+        "abstract",
+        "ethereal",
+        "clay"
+      ],
+      "category": "abstract",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Digital particles forming patterns - Clay Style",
+      "prompt": "Digital particles forming patterns",
+      "keywords": [
+        "digital",
+        "particles",
+        "patterns",
+        "tech",
+        "clay"
+      ],
+      "category": "abstract",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Marble texture with gold veins - Clay Style",
+      "prompt": "Marble texture with gold veins",
+      "keywords": [
+        "marble",
+        "gold",
+        "texture",
+        "luxury",
+        "clay"
+      ],
+      "category": "abstract",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Ink drops diffusing in water - GPT Anime Style",
+      "prompt": "Ink drops diffusing in water",
+      "keywords": [
+        "ink",
+        "water",
+        "diffusion",
+        "art",
+        "gpt_anime"
+      ],
+      "category": "abstract",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Neon light trails in motion - Watercolor",
+      "prompt": "Neon light trails in motion",
+      "keywords": [
+        "neon",
+        "light trails",
+        "motion",
+        "dynamic",
+        "watercolor"
+      ],
+      "category": "abstract",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Crystal formations with light refraction - Anime Style",
+      "prompt": "Crystal formations with light refraction",
+      "keywords": [
+        "crystal",
+        "light",
+        "refraction",
+        "natural",
+        "anime_v5"
+      ],
+      "category": "abstract",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Sound wave visualization - Cinematic",
+      "prompt": "Sound wave visualization",
+      "keywords": [
+        "sound",
+        "wave",
+        "music",
+        "visualization",
+        "cinematic"
+      ],
+      "category": "abstract",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Bubble cluster with rainbow reflections - GPT Anime Style",
+      "prompt": "Bubble cluster with rainbow reflections",
+      "keywords": [
+        "bubbles",
+        "rainbow",
+        "reflections",
+        "light",
+        "gpt_anime"
+      ],
+      "category": "abstract",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Fire and ice collision abstract - GPT Anime Style",
+      "prompt": "Fire and ice collision abstract",
+      "keywords": [
+        "fire",
+        "ice",
+        "collision",
+        "contrast",
+        "gpt_anime"
+      ],
+      "category": "abstract",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Soccer player scoring dramatic goal - GPT Anime Style",
+      "prompt": "Soccer player scoring dramatic goal",
+      "keywords": [
+        "soccer",
+        "goal",
+        "sports",
+        "action",
+        "gpt_anime"
+      ],
+      "category": "sports",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Basketball slam dunk in mid-air - Cyberpunk",
+      "prompt": "Basketball slam dunk in mid-air",
+      "keywords": [
+        "basketball",
+        "dunk",
+        "action",
+        "sports",
+        "cyberpunk"
+      ],
+      "category": "sports",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Swimmer diving into crystal pool - Cinematic",
+      "prompt": "Swimmer diving into crystal pool",
+      "keywords": [
+        "swimming",
+        "dive",
+        "pool",
+        "water",
+        "cinematic"
+      ],
+      "category": "sports",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Tennis serve at maximum power - Anime Style 2",
+      "prompt": "Tennis serve at maximum power",
+      "keywords": [
+        "tennis",
+        "serve",
+        "power",
+        "sports",
+        "anime_v1"
+      ],
+      "category": "sports",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Skateboarder performing aerial trick - GPT Anime Style",
+      "prompt": "Skateboarder performing aerial trick",
+      "keywords": [
+        "skateboard",
+        "trick",
+        "aerial",
+        "extreme",
+        "gpt_anime"
+      ],
+      "category": "sports",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Rock climber on vertical cliff - Cinematic",
+      "prompt": "Rock climber on vertical cliff",
+      "keywords": [
+        "climbing",
+        "rock",
+        "cliff",
+        "extreme",
+        "cinematic"
+      ],
+      "category": "sports",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Snowboarder in powder snow jump - Realistic",
+      "prompt": "Snowboarder in powder snow jump",
+      "keywords": [
+        "snowboard",
+        "snow",
+        "jump",
+        "winter",
+        "realistic"
+      ],
+      "category": "sports",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Racing car on track with motion blur - Watercolor",
+      "prompt": "Racing car on track with motion blur",
+      "keywords": [
+        "racing",
+        "car",
+        "speed",
+        "motorsport",
+        "watercolor"
+      ],
+      "category": "sports",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Golfer perfect swing on green - Cyberpunk",
+      "prompt": "Golfer perfect swing on green",
+      "keywords": [
+        "golf",
+        "swing",
+        "green",
+        "sport",
+        "cyberpunk"
+      ],
+      "category": "sports",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Yoga pose on mountaintop at sunrise - Realistic",
+      "prompt": "Yoga pose on mountaintop at sunrise",
+      "keywords": [
+        "yoga",
+        "mountain",
+        "sunrise",
+        "wellness",
+        "realistic"
+      ],
+      "category": "sports",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "BMX rider doing backflip - Clay Style",
+      "prompt": "BMX rider doing backflip",
+      "keywords": [
+        "bmx",
+        "flip",
+        "extreme",
+        "cycling",
+        "clay"
+      ],
+      "category": "sports",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Boxing match punch in action - Realistic",
+      "prompt": "Boxing match punch in action",
+      "keywords": [
+        "boxing",
+        "punch",
+        "fight",
+        "sports",
+        "realistic"
+      ],
+      "category": "sports",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Skier racing down mountain slope - Cinematic",
+      "prompt": "Skier racing down mountain slope",
+      "keywords": [
+        "skiing",
+        "mountain",
+        "snow",
+        "speed",
+        "cinematic"
+      ],
+      "category": "sports",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Martial arts flying kick - Anime Style",
+      "prompt": "Martial arts flying kick",
+      "keywords": [
+        "martial arts",
+        "kick",
+        "action",
+        "combat",
+        "anime_v5"
+      ],
+      "category": "sports",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Volleyball spike at the net - Anime Style 2",
+      "prompt": "Volleyball spike at the net",
+      "keywords": [
+        "volleyball",
+        "spike",
+        "beach",
+        "sports",
+        "anime_v1"
+      ],
+      "category": "sports",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Rock guitarist performing solo on stage - Clay Style",
+      "prompt": "Rock guitarist performing solo on stage",
+      "keywords": [
+        "guitar",
+        "rock",
+        "concert",
+        "performance",
+        "clay"
+      ],
+      "category": "music",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "DJ mixing at neon-lit club - Clay Style",
+      "prompt": "DJ mixing at neon-lit club",
+      "keywords": [
+        "dj",
+        "club",
+        "neon",
+        "electronic",
+        "clay"
+      ],
+      "category": "music",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Classical pianist at grand piano - Cyberpunk",
+      "prompt": "Classical pianist at grand piano",
+      "keywords": [
+        "piano",
+        "classical",
+        "elegant",
+        "music",
+        "cyberpunk"
+      ],
+      "category": "music",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Drummer with explosive energy - Anime Style 2",
+      "prompt": "Drummer with explosive energy",
+      "keywords": [
+        "drums",
+        "energy",
+        "rock",
+        "performance",
+        "anime_v1"
+      ],
+      "category": "music",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Orchestra performing in concert hall - Oil Painting",
+      "prompt": "Orchestra performing in concert hall",
+      "keywords": [
+        "orchestra",
+        "classical",
+        "concert",
+        "elegant",
+        "oil_painting"
+      ],
+      "category": "music",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Street violinist at sunset - Oil Painting",
+      "prompt": "Street violinist at sunset",
+      "keywords": [
+        "violin",
+        "street",
+        "sunset",
+        "romantic",
+        "oil_painting"
+      ],
+      "category": "music",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Hip hop dancer with graffiti backdrop - Cinematic",
+      "prompt": "Hip hop dancer with graffiti backdrop",
+      "keywords": [
+        "hip hop",
+        "dance",
+        "graffiti",
+        "urban",
+        "cinematic"
+      ],
+      "category": "music",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Jazz saxophonist in smoky club - Pixar Style",
+      "prompt": "Jazz saxophonist in smoky club",
+      "keywords": [
+        "jazz",
+        "saxophone",
+        "club",
+        "classic",
+        "pixar"
+      ],
+      "category": "music",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "K-pop group dance performance - Watercolor",
+      "prompt": "K-pop group dance performance",
+      "keywords": [
+        "kpop",
+        "dance",
+        "group",
+        "colorful",
+        "watercolor"
+      ],
+      "category": "music",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Acoustic guitar by campfire - Anime Style 2",
+      "prompt": "Acoustic guitar by campfire",
+      "keywords": [
+        "acoustic",
+        "campfire",
+        "cozy",
+        "night",
+        "anime_v1"
+      ],
+      "category": "music",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Electronic music visualizer - Realistic",
+      "prompt": "Electronic music visualizer",
+      "keywords": [
+        "electronic",
+        "visualizer",
+        "abstract",
+        "music",
+        "realistic"
+      ],
+      "category": "music",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Opera singer in dramatic lighting - Pixar Style",
+      "prompt": "Opera singer in dramatic lighting",
+      "keywords": [
+        "opera",
+        "singer",
+        "dramatic",
+        "classical",
+        "pixar"
+      ],
+      "category": "music",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Festival crowd with confetti - GPT Anime Style",
+      "prompt": "Festival crowd with confetti",
+      "keywords": [
+        "festival",
+        "crowd",
+        "confetti",
+        "celebration",
+        "gpt_anime"
+      ],
+      "category": "music",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Record player with vinyl spinning - Oil Painting",
+      "prompt": "Record player with vinyl spinning",
+      "keywords": [
+        "vinyl",
+        "retro",
+        "music",
+        "analog",
+        "oil_painting"
+      ],
+      "category": "music",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Music studio with equipment - Realistic",
+      "prompt": "Music studio with equipment",
+      "keywords": [
+        "studio",
+        "equipment",
+        "professional",
+        "production",
+        "realistic"
+      ],
+      "category": "music",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Christmas tree with twinkling lights - Realistic",
+      "prompt": "Christmas tree with twinkling lights",
+      "keywords": [
+        "christmas",
+        "tree",
+        "lights",
+        "holiday",
+        "realistic"
+      ],
+      "category": "seasonal",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Halloween jack-o-lantern at night - Clay Style",
+      "prompt": "Halloween jack-o-lantern at night",
+      "keywords": [
+        "halloween",
+        "pumpkin",
+        "spooky",
+        "night",
+        "clay"
+      ],
+      "category": "seasonal",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Spring cherry blossoms in Japan - Anime Style 2",
+      "prompt": "Spring cherry blossoms in Japan",
+      "keywords": [
+        "spring",
+        "cherry blossom",
+        "japan",
+        "pink",
+        "anime_v1"
+      ],
+      "category": "seasonal",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Summer beach with palm trees - Cyberpunk",
+      "prompt": "Summer beach with palm trees",
+      "keywords": [
+        "summer",
+        "beach",
+        "palm trees",
+        "tropical",
+        "cyberpunk"
+      ],
+      "category": "seasonal",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Autumn leaves falling in park - Watercolor",
+      "prompt": "Autumn leaves falling in park",
+      "keywords": [
+        "autumn",
+        "leaves",
+        "fall",
+        "colorful",
+        "watercolor"
+      ],
+      "category": "seasonal",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Winter wonderland snowy scene - Pixar Style",
+      "prompt": "Winter wonderland snowy scene",
+      "keywords": [
+        "winter",
+        "snow",
+        "wonderland",
+        "cold",
+        "pixar"
+      ],
+      "category": "seasonal",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "New Year fireworks over city - Pixar Style",
+      "prompt": "New Year fireworks over city",
+      "keywords": [
+        "new year",
+        "fireworks",
+        "celebration",
+        "night",
+        "pixar"
+      ],
+      "category": "seasonal",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Valentine heart-shaped decorations - Clay Style",
+      "prompt": "Valentine heart-shaped decorations",
+      "keywords": [
+        "valentine",
+        "hearts",
+        "romantic",
+        "love",
+        "clay"
+      ],
+      "category": "seasonal",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Easter eggs in spring garden - Anime Style 3",
+      "prompt": "Easter eggs in spring garden",
+      "keywords": [
+        "easter",
+        "eggs",
+        "spring",
+        "colorful",
+        "anime_v4"
+      ],
+      "category": "seasonal",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Thanksgiving harvest table spread - Cyberpunk",
+      "prompt": "Thanksgiving harvest table spread",
+      "keywords": [
+        "thanksgiving",
+        "harvest",
+        "food",
+        "autumn",
+        "cyberpunk"
+      ],
+      "category": "seasonal",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Chinese New Year dragon dance - GPT Anime Style",
+      "prompt": "Chinese New Year dragon dance",
+      "keywords": [
+        "chinese new year",
+        "dragon",
+        "celebration",
+        "red",
+        "gpt_anime"
+      ],
+      "category": "seasonal",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Diwali festival of lights celebration - Oil Painting",
+      "prompt": "Diwali festival of lights celebration",
+      "keywords": [
+        "diwali",
+        "lights",
+        "festival",
+        "colorful",
+        "oil_painting"
+      ],
+      "category": "seasonal",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Midsummer bonfire at beach - Cinematic",
+      "prompt": "Midsummer bonfire at beach",
+      "keywords": [
+        "midsummer",
+        "bonfire",
+        "beach",
+        "night",
+        "cinematic"
+      ],
+      "category": "seasonal",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Carnival parade with colorful costumes - Pixar Style",
+      "prompt": "Carnival parade with colorful costumes",
+      "keywords": [
+        "carnival",
+        "parade",
+        "colorful",
+        "festive",
+        "pixar"
+      ],
+      "category": "seasonal",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Lantern festival floating lights - Watercolor",
+      "prompt": "Lantern festival floating lights",
+      "keywords": [
+        "lantern",
+        "festival",
+        "floating",
+        "night",
+        "watercolor"
+      ],
+      "category": "seasonal",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Gothic cathedral with stained glass - Realistic",
+      "prompt": "Gothic cathedral with stained glass",
+      "keywords": [
+        "cathedral",
+        "gothic",
+        "stained glass",
+        "historic",
+        "realistic"
+      ],
+      "category": "architecture",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Modern minimalist house design - Anime Style 3",
+      "prompt": "Modern minimalist house design",
+      "keywords": [
+        "modern",
+        "minimalist",
+        "house",
+        "architecture",
+        "anime_v4"
+      ],
+      "category": "architecture",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Ancient Roman colosseum - Oil Painting",
+      "prompt": "Ancient Roman colosseum",
+      "keywords": [
+        "colosseum",
+        "roman",
+        "ancient",
+        "historic",
+        "oil_painting"
+      ],
+      "category": "architecture",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Japanese traditional pagoda - Oil Painting",
+      "prompt": "Japanese traditional pagoda",
+      "keywords": [
+        "pagoda",
+        "japanese",
+        "traditional",
+        "temple",
+        "oil_painting"
+      ],
+      "category": "architecture",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Futuristic Dubai skyscrapers - Clay Style",
+      "prompt": "Futuristic Dubai skyscrapers",
+      "keywords": [
+        "dubai",
+        "skyscraper",
+        "futuristic",
+        "modern",
+        "clay"
+      ],
+      "category": "architecture",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Rustic wooden cabin in mountains - Anime Style",
+      "prompt": "Rustic wooden cabin in mountains",
+      "keywords": [
+        "cabin",
+        "wooden",
+        "mountains",
+        "rustic",
+        "anime_v5"
+      ],
+      "category": "architecture",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Art deco building facade - Realistic",
+      "prompt": "Art deco building facade",
+      "keywords": [
+        "art deco",
+        "building",
+        "vintage",
+        "elegant",
+        "realistic"
+      ],
+      "category": "architecture",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Ancient Egyptian pyramids - Anime Style",
+      "prompt": "Ancient Egyptian pyramids",
+      "keywords": [
+        "pyramids",
+        "egypt",
+        "ancient",
+        "desert",
+        "anime_v5"
+      ],
+      "category": "architecture",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Zen Buddhist temple garden - Anime Style",
+      "prompt": "Zen Buddhist temple garden",
+      "keywords": [
+        "zen",
+        "temple",
+        "garden",
+        "peaceful",
+        "anime_v5"
+      ],
+      "category": "architecture",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Industrial loft interior design - Watercolor",
+      "prompt": "Industrial loft interior design",
+      "keywords": [
+        "loft",
+        "industrial",
+        "interior",
+        "modern",
+        "watercolor"
+      ],
+      "category": "architecture",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Treehouse in giant redwood - Realistic",
+      "prompt": "Treehouse in giant redwood",
+      "keywords": [
+        "treehouse",
+        "redwood",
+        "nature",
+        "unique",
+        "realistic"
+      ],
+      "category": "architecture",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Greek island white buildings - Oil Painting",
+      "prompt": "Greek island white buildings",
+      "keywords": [
+        "greek",
+        "white",
+        "island",
+        "mediterranean",
+        "oil_painting"
+      ],
+      "category": "architecture",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Moroccan palace with tiles - Anime Style 3",
+      "prompt": "Moroccan palace with tiles",
+      "keywords": [
+        "moroccan",
+        "palace",
+        "tiles",
+        "exotic",
+        "anime_v4"
+      ],
+      "category": "architecture",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Suspension bridge at sunset - Realistic",
+      "prompt": "Suspension bridge at sunset",
+      "keywords": [
+        "bridge",
+        "suspension",
+        "sunset",
+        "engineering",
+        "realistic"
+      ],
+      "category": "architecture",
+      "style_id": 2009,
+      "style_name": "Realistic",
+      "style_slug": "realistic",
+      "style_description": "Enhanced realistic rendering",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Underground cave dwelling - Cinematic",
+      "prompt": "Underground cave dwelling",
+      "keywords": [
+        "cave",
+        "underground",
+        "unique",
+        "dwelling",
+        "cinematic"
+      ],
+      "category": "architecture",
+      "style_id": 2010,
+      "style_name": "Cinematic",
+      "style_slug": "cinematic",
+      "style_description": "Hollywood cinematic look",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Classic vintage sports car - Anime Style",
+      "prompt": "Classic vintage sports car",
+      "keywords": [
+        "vintage",
+        "sports car",
+        "classic",
+        "retro",
+        "anime_v5"
+      ],
+      "category": "vehicles",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Futuristic concept electric car - Oil Painting",
+      "prompt": "Futuristic concept electric car",
+      "keywords": [
+        "electric",
+        "concept",
+        "future",
+        "car",
+        "oil_painting"
+      ],
+      "category": "vehicles",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Motorcycle on coastal highway - Cyberpunk",
+      "prompt": "Motorcycle on coastal highway",
+      "keywords": [
+        "motorcycle",
+        "highway",
+        "coastal",
+        "freedom",
+        "cyberpunk"
+      ],
+      "category": "vehicles",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Steam locomotive through mountains - Anime Style",
+      "prompt": "Steam locomotive through mountains",
+      "keywords": [
+        "train",
+        "steam",
+        "mountains",
+        "vintage",
+        "anime_v5"
+      ],
+      "category": "vehicles",
+      "style_id": 2000,
+      "style_name": "Anime Style",
+      "style_slug": "anime_v5",
+      "style_description": "Latest anime style v5",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Yacht sailing on crystal waters - Watercolor",
+      "prompt": "Yacht sailing on crystal waters",
+      "keywords": [
+        "yacht",
+        "sailing",
+        "ocean",
+        "luxury",
+        "watercolor"
+      ],
+      "category": "vehicles",
+      "style_id": 2007,
+      "style_name": "Watercolor",
+      "style_slug": "watercolor",
+      "style_description": "Soft watercolor painting style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Helicopter over city skyline - GPT Anime Style",
+      "prompt": "Helicopter over city skyline",
+      "keywords": [
+        "helicopter",
+        "city",
+        "aerial",
+        "flight",
+        "gpt_anime"
+      ],
+      "category": "vehicles",
+      "style_id": 1033,
+      "style_name": "GPT Anime Style",
+      "style_slug": "gpt_anime",
+      "style_description": "GPT-enhanced anime style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Vintage airplane at sunset - Anime Style 2",
+      "prompt": "Vintage airplane at sunset",
+      "keywords": [
+        "airplane",
+        "vintage",
+        "sunset",
+        "aviation",
+        "anime_v1"
+      ],
+      "category": "vehicles",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Submarine exploring deep ocean - Clay Style",
+      "prompt": "Submarine exploring deep ocean",
+      "keywords": [
+        "submarine",
+        "ocean",
+        "deep",
+        "exploration",
+        "clay"
+      ],
+      "category": "vehicles",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Hot air balloon over landscape - Anime Style 2",
+      "prompt": "Hot air balloon over landscape",
+      "keywords": [
+        "balloon",
+        "hot air",
+        "landscape",
+        "peaceful",
+        "anime_v1"
+      ],
+      "category": "vehicles",
+      "style_id": 2,
+      "style_name": "Anime Style 2",
+      "style_slug": "anime_v1",
+      "style_description": "Classic anime style v1",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Racing speedboat on lake - Clay Style",
+      "prompt": "Racing speedboat on lake",
+      "keywords": [
+        "speedboat",
+        "racing",
+        "lake",
+        "water",
+        "clay"
+      ],
+      "category": "vehicles",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Luxury limousine at night - Oil Painting",
+      "prompt": "Luxury limousine at night",
+      "keywords": [
+        "limousine",
+        "luxury",
+        "night",
+        "elegant",
+        "oil_painting"
+      ],
+      "category": "vehicles",
+      "style_id": 2006,
+      "style_name": "Oil Painting",
+      "style_slug": "oil_painting",
+      "style_description": "Classic oil painting artistic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Dirt bike jumping dunes - Pixar Style",
+      "prompt": "Dirt bike jumping dunes",
+      "keywords": [
+        "dirt bike",
+        "jump",
+        "dunes",
+        "extreme",
+        "pixar"
+      ],
+      "category": "vehicles",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Classic train station platform - Clay Style",
+      "prompt": "Classic train station platform",
+      "keywords": [
+        "train station",
+        "classic",
+        "platform",
+        "travel",
+        "clay"
+      ],
+      "category": "vehicles",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Space shuttle launch - Anime Style 3",
+      "prompt": "Space shuttle launch",
+      "keywords": [
+        "space shuttle",
+        "launch",
+        "rocket",
+        "space",
+        "anime_v4"
+      ],
+      "category": "vehicles",
+      "style_id": 1016,
+      "style_name": "Anime Style 3",
+      "style_slug": "anime_v4",
+      "style_description": "Anime style v4",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Rickshaw in Asian street - Pixar Style",
+      "prompt": "Rickshaw in Asian street",
+      "keywords": [
+        "rickshaw",
+        "asian",
+        "street",
+        "traditional",
+        "pixar"
+      ],
+      "category": "vehicles",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Summer beach with palm trees - Pixar Style",
+      "prompt": "Summer beach with palm trees",
+      "keywords": [
+        "summer",
+        "beach",
+        "palm trees",
+        "tropical",
+        "pixar"
+      ],
+      "category": "seasonal",
+      "style_id": 2004,
+      "style_name": "Pixar Style",
+      "style_slug": "pixar",
+      "style_description": "3D Pixar animation style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Aurora waves in abstract form - Clay Style",
+      "prompt": "Aurora waves in abstract form",
+      "keywords": [
+        "aurora",
+        "waves",
+        "abstract",
+        "ethereal",
+        "clay"
+      ],
+      "category": "abstract",
+      "style_id": 2005,
+      "style_name": "Clay Style",
+      "style_slug": "clay",
+      "style_description": "Claymation stop-motion style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Spaceship landing on alien planet - Cyberpunk",
+      "prompt": "Spaceship landing on alien planet",
+      "keywords": [
+        "spaceship",
+        "alien",
+        "planet",
+        "landing",
+        "cyberpunk"
+      ],
+      "category": "sci-fi",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Koala bear hugging a eucalyptus tree - Cyberpunk",
+      "prompt": "Koala bear hugging a eucalyptus tree",
+      "keywords": [
+        "koala",
+        "eucalyptus",
+        "australia",
+        "cute",
+        "cyberpunk"
+      ],
+      "category": "animals",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    },
+    {
+      "title": "Christmas tree with twinkling lights - Cyberpunk",
+      "prompt": "Christmas tree with twinkling lights",
+      "keywords": [
+        "christmas",
+        "tree",
+        "lights",
+        "holiday",
+        "cyberpunk"
+      ],
+      "category": "seasonal",
+      "style_id": 2008,
+      "style_name": "Cyberpunk",
+      "style_slug": "cyberpunk",
+      "style_description": "Neon cyberpunk futuristic style",
+      "status": "dry_run",
+      "video_url_before": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+      "video_url_after": null,
+      "thumbnail_url": null
+    }
+  ]
+}

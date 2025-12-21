@@ -50,6 +50,19 @@ class Settings(BaseSettings):
     WATERMARK_TEXT: str = "VidGo Demo"
     WATERMARK_IMAGE_PATH: Optional[str] = None
 
+    # Email Configuration (for email verification)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@vidgo.ai"
+    SMTP_FROM_NAME: str = "VidGo"
+    SMTP_TLS: bool = True
+
+    # Email Verification
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
+    FRONTEND_URL: str = "http://localhost:8501"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

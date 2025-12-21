@@ -19,7 +19,7 @@ dependencies = [
     "httpx==0.26.0",
     # Background Tasks
     "redis==5.0.1",
-    "celery==5.3.6",
+    "arq>=0.26.0",  # Async task queue (replaces celery for FastAPI)
     # Streamlit Frontend
     "streamlit==1.30.0",
     "streamlit-option-menu==0.3.12",

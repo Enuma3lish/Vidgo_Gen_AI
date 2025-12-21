@@ -3,8 +3,20 @@ API Client for backend communication
 """
 import requests
 import streamlit as st
+import hashlib
 from typing import Optional, Dict, Any
 from config import *
+
+
+def hash_password_client(password: str, salt: str = "vidgo_salt_2024") -> str:
+    """
+    Hash password on client side before sending to server.
+    This provides an extra layer of security in addition to HTTPS.
+    The server will hash it again with bcrypt.
+    """
+    # Create a salted hash
+    salted = f"{salt}{password}{salt}"
+    return hashlib.sha256(salted.encode()).hexdigest()
 
 
 class APIClient:
@@ -122,30 +134,124 @@ class APIClient:
 
         return False
 
-    def register(self, username: str, email: str, password: str, **kwargs) -> Optional[Dict[str, Any]]:
-        """Register a new user"""
+    def register(self, username: str, email: str, password: str, full_name: str = None, **kwargs) -> Optional[Dict[str, Any]]:
+        """
+        Register a new user.
+        Returns a message response - user must verify email before logging in.
+        Password is hashed client-side before transmission for extra security.
+        """
         try:
-            response = requests.post(
-                API_AUTH_REGISTER,
-                json={
-                    'username': username,
-                    'email': email,
-                    'password': password,
-                    'password_confirm': password,
-                    **kwargs
-                }
-            )
-            return self.handle_response(response)
+            # Hash password before sending (extra security layer)
+            hashed_password = hash_password_client(password)
+
+            payload = {
+                'username': username,
+                'email': email,
+                'password': hashed_password,
+                'password_confirm': hashed_password,
+            }
+            if full_name:
+                payload['full_name'] = full_name
+
+            response = requests.post(API_AUTH_REGISTER, json=payload)
+
+            if response.status_code == 200:
+                data = response.json()
+                return data
+            else:
+                return self.handle_response(response)
         except Exception as e:
             st.error(f"Registration failed: {str(e)}")
             return None
 
-    def login(self, email: str, password: str) -> Optional[Dict[str, Any]]:
-        """Login user"""
+    def verify_email(self, token: str) -> Optional[Dict[str, Any]]:
+        """Verify email using token from verification link"""
         try:
+            from config import API_AUTH_VERIFY_EMAIL
+            response = requests.post(
+                API_AUTH_VERIFY_EMAIL,
+                json={'token': token}
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return self.handle_response(response)
+        except Exception as e:
+            st.error(f"Email verification failed: {str(e)}")
+            return None
+
+    def resend_verification(self, email: str) -> Optional[Dict[str, Any]]:
+        """Resend verification email"""
+        try:
+            from config import API_AUTH_RESEND_VERIFICATION
+            response = requests.post(
+                API_AUTH_RESEND_VERIFICATION,
+                json={'email': email}
+            )
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 429:
+                st.warning("Please wait before requesting another verification email.")
+                return None
+            else:
+                return self.handle_response(response)
+        except Exception as e:
+            st.error(f"Failed to resend verification: {str(e)}")
+            return None
+
+    def forgot_password(self, email: str) -> Optional[Dict[str, Any]]:
+        """Request password reset email"""
+        try:
+            from config import API_AUTH_FORGOT_PASSWORD
+            response = requests.post(
+                API_AUTH_FORGOT_PASSWORD,
+                json={'email': email}
+            )
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 429:
+                st.warning("Please wait before requesting another password reset.")
+                return None
+            else:
+                return self.handle_response(response)
+        except Exception as e:
+            st.error(f"Failed to request password reset: {str(e)}")
+            return None
+
+    def reset_password(self, token: str, new_password: str) -> Optional[Dict[str, Any]]:
+        """
+        Reset password using token from email.
+        Password is hashed client-side before transmission.
+        """
+        try:
+            from config import API_AUTH_RESET_PASSWORD
+            # Hash password before sending
+            hashed_password = hash_password_client(new_password)
+
+            response = requests.post(
+                API_AUTH_RESET_PASSWORD,
+                json={'token': token, 'new_password': hashed_password}
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return self.handle_response(response)
+        except Exception as e:
+            st.error(f"Password reset failed: {str(e)}")
+            return None
+
+    def login(self, email: str, password: str) -> Optional[Dict[str, Any]]:
+        """
+        Login user.
+        Password is hashed client-side before transmission for extra security.
+        """
+        try:
+            # Hash password before sending (must match registration hash)
+            hashed_password = hash_password_client(password)
+
             response = requests.post(
                 API_AUTH_LOGIN,
-                json={'email': email, 'password': password}
+                json={'email': email, 'password': hashed_password}
             )
 
             if response.status_code == 200:
@@ -187,11 +293,40 @@ class APIClient:
         """Get all available plans"""
         try:
             response = requests.get(API_PLANS, headers=self.get_headers(include_auth=False))
-            data = self.handle_response(response)
-            return data.get('results', []) if data else []
+            if response.status_code == 200:
+                data = response.json()
+                # New API returns list directly, not paginated
+                return data if isinstance(data, list) else data.get('results', [])
+            return self.handle_response(response) or []
         except Exception as e:
             st.error(f"Failed to get plans: {str(e)}")
             return []
+
+    def get_current_subscription(self) -> Optional[Dict[str, Any]]:
+        """Get current user's subscription"""
+        try:
+            from config import API_PLANS_CURRENT
+            response = requests.get(API_PLANS_CURRENT, headers=self.get_headers())
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 404:
+                return None  # No subscription
+            return self.handle_response(response)
+        except Exception as e:
+            st.error(f"Failed to get subscription: {str(e)}")
+            return None
+
+    def get_plans_with_subscription(self) -> Optional[Dict[str, Any]]:
+        """Get all plans with current subscription info"""
+        try:
+            from config import API_PLANS_WITH_SUBSCRIPTION
+            response = requests.get(API_PLANS_WITH_SUBSCRIPTION, headers=self.get_headers())
+            if response.status_code == 200:
+                return response.json()
+            return self.handle_response(response)
+        except Exception as e:
+            st.error(f"Failed to get plans: {str(e)}")
+            return None
 
     def get_subscriptions(self) -> Optional[list]:
         """Get user subscriptions"""
@@ -336,3 +471,127 @@ class APIClient:
         except Exception as e:
             st.error(f"Failed to delete account: {str(e)}")
             return False
+
+    # ==========================================================================
+    # Demo API Methods
+    # ==========================================================================
+
+    def demo_search(self, prompt: str, style: str = None, category: str = None,
+                    generate_if_not_found: bool = True) -> Optional[Dict[str, Any]]:
+        """
+        Search for matching demo or generate new one.
+        Supports multi-language prompts.
+        """
+        try:
+            payload = {
+                "prompt": prompt,
+                "generate_if_not_found": generate_if_not_found
+            }
+            if style:
+                payload["style"] = style
+            if category:
+                payload["category"] = category
+
+            response = requests.post(
+                API_DEMO_SEARCH,
+                json=payload,
+                headers=self.get_headers(include_auth=False)
+            )
+
+            if response.status_code == 400:
+                # Content moderation blocked
+                data = response.json()
+                return {"error": True, "detail": data.get("detail", "Content not allowed")}
+
+            return self.handle_response(response)
+        except Exception as e:
+            return {"error": True, "detail": str(e)}
+
+    def demo_get_random(self, category: str = None, style: str = None) -> Optional[Dict[str, Any]]:
+        """Get a random demo for display"""
+        try:
+            params = {}
+            if category:
+                params["category"] = category
+            if style:
+                params["style"] = style
+
+            response = requests.get(
+                API_DEMO_RANDOM,
+                params=params,
+                headers=self.get_headers(include_auth=False)
+            )
+            return self.handle_response(response)
+        except Exception as e:
+            return None
+
+    def demo_analyze_prompt(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Analyze a prompt without generating a demo"""
+        try:
+            response = requests.post(
+                API_DEMO_ANALYZE,
+                params={"prompt": prompt},
+                headers=self.get_headers(include_auth=False)
+            )
+            return self.handle_response(response)
+        except Exception as e:
+            return None
+
+    def demo_get_styles(self) -> list:
+        """Get all available transformation styles"""
+        try:
+            response = requests.get(
+                API_DEMO_STYLES,
+                headers=self.get_headers(include_auth=False)
+            )
+            data = self.handle_response(response)
+            return data if data else []
+        except Exception as e:
+            return []
+
+    def demo_get_categories(self) -> list:
+        """Get all demo categories"""
+        try:
+            response = requests.get(
+                API_DEMO_CATEGORIES,
+                headers=self.get_headers(include_auth=False)
+            )
+            data = self.handle_response(response)
+            return data if data else []
+        except Exception as e:
+            return []
+
+    def demo_moderate_prompt(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Check if a prompt passes content moderation"""
+        try:
+            response = requests.post(
+                API_DEMO_MODERATE,
+                params={"prompt": prompt},
+                headers=self.get_headers(include_auth=False)
+            )
+            return self.handle_response(response)
+        except Exception as e:
+            return {"is_safe": False, "reason": str(e)}
+
+    def demo_get_block_cache_stats(self) -> Optional[Dict[str, Any]]:
+        """Get block cache statistics"""
+        try:
+            response = requests.get(
+                API_DEMO_BLOCK_CACHE_STATS,
+                headers=self.get_headers(include_auth=False)
+            )
+            return self.handle_response(response)
+        except Exception as e:
+            return None
+
+    def demo_check_block_cache(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Check if prompt is in block cache"""
+        try:
+            response = requests.post(
+                API_DEMO_BLOCK_CACHE_CHECK,
+                params={"prompt": prompt},
+                headers=self.get_headers(include_auth=False)
+            )
+            return self.handle_response(response)
+        except Exception as e:
+            return None

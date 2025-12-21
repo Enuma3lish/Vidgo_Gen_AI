@@ -4,19 +4,51 @@ from sqlalchemy.orm import relationship
 import uuid
 from app.core.database import Base
 
+
 class Plan(Base):
+    """
+    Subscription plans available for users.
+    """
     __tablename__ = "plans"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     name = Column(String, nullable=False)
-    slug = Column(String, unique=True, index=True)
+    slug = Column(String, unique=True, index=True, nullable=True)
+    plan_type = Column(String, nullable=False, default="free")  # free, basic, pro, enterprise
     description = Column(String, nullable=True)
-    price = Column(DECIMAL(10, 2), nullable=False)
-    currency = Column(String, default="TWD")
-    billing_cycle = Column(String, default="monthly") # monthly, yearly
+
+    # Pricing (keep old price for backward compat, add new monthly/yearly)
+    price = Column(DECIMAL(10, 2), nullable=True)  # Legacy field
+    price_monthly = Column(Float, default=0.0)
+    price_yearly = Column(Float, default=0.0)
+    currency = Column(String, default="USD")
+    billing_cycle = Column(String, default="monthly")
+
+    # Features & Limits
+    credits_per_month = Column(Integer, default=10)
+    max_video_length = Column(Integer, default=5)  # Seconds
+    max_resolution = Column(String, default="720p")
+    watermark = Column(Boolean, default=True)
+    priority_queue = Column(Boolean, default=False)
+    api_access = Column(Boolean, default=False)
+
+    # Feature flags
+    feature_clothing_transform = Column(Boolean, default=True)
+    feature_goenhance = Column(Boolean, default=True)
+    feature_video_gen = Column(Boolean, default=False)
+    feature_batch_processing = Column(Boolean, default=False)
+    feature_custom_styles = Column(Boolean, default=False)
+
+    # Legacy features JSON (for backward compat)
     features = Column(JSON, default={})
+
+    # Status
     is_active = Column(Boolean, default=True)
+    is_featured = Column(Boolean, default=False)
+
+    # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class Subscription(Base):
     __tablename__ = "subscriptions"

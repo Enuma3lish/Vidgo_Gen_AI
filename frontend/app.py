@@ -1,11 +1,18 @@
 """
 Streamlit Frontend - Main Application
+VidGo - AI Video Generation Platform
+
+Features:
+- Demo page with AI Clothing Transform & GoEnhance Effects
+- User authentication and subscription management
+- Multi-language support (EN, ZH-TW, JA, KO, ES)
 """
 import streamlit as st
 from streamlit_option_menu import option_menu
 from config import PAGE_TITLE, PAGE_ICON, LAYOUT
 from utils.api_client import APIClient
 from utils.auth import is_authenticated, get_current_user
+from pages.demo import show_demo_page
 
 # Page configuration
 st.set_page_config(
@@ -317,39 +324,72 @@ def show_plans_page():
     plans = api_client.get_plans()
 
     if not plans:
-        st.error("Failed to load plans")
+        st.info("Loading plans...")
         return
 
+    # Get current subscription
+    current_sub = api_client.get_current_subscription()
+    current_plan_id = current_sub.get('plan_id') if current_sub else None
+
     # Display plans in columns
-    cols = st.columns(min(len(plans), 3))
+    num_cols = min(len(plans), 4)
+    cols = st.columns(num_cols)
 
     for idx, plan in enumerate(plans):
-        with cols[idx % 3]:
+        with cols[idx % num_cols]:
             with st.container():
-                # Popular badge
-                if plan.get('is_popular'):
-                    st.markdown('<span class="popular-badge">⭐ POPULAR</span>', unsafe_allow_html=True)
+                # Featured/current badge
+                if str(plan.get('id')) == str(current_plan_id):
+                    st.markdown('<span class="popular-badge">✓ CURRENT</span>', unsafe_allow_html=True)
+                elif plan.get('is_featured'):
+                    st.markdown('<span class="popular-badge">⭐ RECOMMENDED</span>', unsafe_allow_html=True)
 
                 st.markdown(f"### {plan['name']}")
-                st.markdown(f"## ${plan['price']}")
-                st.markdown(f"*per {plan['billing_cycle']}*")
+
+                # Pricing
+                if plan.get('price_monthly', 0) == 0:
+                    st.markdown("## Free")
+                else:
+                    st.markdown(f"## ${plan['price_monthly']}/mo")
+                    st.caption(f"or ${plan['price_yearly']}/year")
+
+                st.markdown(f"*{plan.get('description', '')}*")
 
                 st.markdown("---")
 
                 # Features
-                if plan.get('features'):
-                    for key, value in plan['features'].items():
-                        st.markdown(f"✓ {key}: {value}")
+                st.markdown(f"✓ {plan['credits_per_month']} credits/month")
+                st.markdown(f"✓ Max {plan['max_video_length']}s videos")
+                st.markdown(f"✓ {plan['max_resolution']} resolution")
 
-                st.markdown(f"✓ Max {plan['max_users']} users")
-                st.markdown(f"✓ {plan['max_storage_gb']} GB storage")
+                if not plan.get('watermark'):
+                    st.markdown("✓ No watermark")
+                if plan.get('priority_queue'):
+                    st.markdown("✓ Priority queue")
+                if plan.get('api_access'):
+                    st.markdown("✓ API access")
+
+                # Feature flags
+                if plan.get('feature_clothing_transform'):
+                    st.markdown("✓ AI Clothing Transform")
+                if plan.get('feature_goenhance'):
+                    st.markdown("✓ GoEnhance Effects")
+                if plan.get('feature_video_gen'):
+                    st.markdown("✓ Video Generation")
+                if plan.get('feature_batch_processing'):
+                    st.markdown("✓ Batch Processing")
 
                 st.markdown("---")
 
-                if st.button("Subscribe", key=f"plan_{plan['id']}", use_container_width=True):
-                    st.session_state['selected_plan'] = plan
-                    st.session_state['page'] = 'checkout'
-                    st.rerun()
+                if str(plan.get('id')) == str(current_plan_id):
+                    st.button("Current Plan", key=f"plan_{plan['id']}", use_container_width=True, disabled=True)
+                elif plan.get('price_monthly', 0) == 0:
+                    st.button("Free Plan", key=f"plan_{plan['id']}", use_container_width=True, disabled=True)
+                else:
+                    if st.button("Subscribe", key=f"plan_{plan['id']}", use_container_width=True, type="primary" if plan.get('is_featured') else "secondary"):
+                        st.session_state['selected_plan'] = plan
+                        st.session_state['page'] = 'checkout'
+                        st.rerun()
 
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -926,17 +966,330 @@ def show_payment_result():
                 st.rerun()
 
 
+def show_landing_page():
+    """
+    Landing page for non-authenticated users.
+    Shows demo with login/register options.
+    """
+    # Initialize landing page state
+    if 'landing_view' not in st.session_state:
+        st.session_state['landing_view'] = 'demo'
+
+    # Top navigation bar
+    col1, col2, col3, col4, col5 = st.columns([2.5, 1, 1, 1, 1])
+
+    with col1:
+        st.markdown("### 🎬 VidGo")
+
+    with col2:
+        if st.button("Demo", use_container_width=True, type="secondary" if st.session_state['landing_view'] != 'demo' else "primary"):
+            st.session_state['landing_view'] = 'demo'
+            st.rerun()
+
+    with col3:
+        if st.button("Plans", use_container_width=True, type="secondary" if st.session_state['landing_view'] != 'plans' else "primary"):
+            st.session_state['landing_view'] = 'plans'
+            st.rerun()
+
+    with col4:
+        if st.button("Login", use_container_width=True, type="secondary" if st.session_state['landing_view'] != 'login' else "primary"):
+            st.session_state['landing_view'] = 'login'
+            st.rerun()
+
+    with col5:
+        if st.button("Register", use_container_width=True, type="secondary" if st.session_state['landing_view'] != 'register' else "primary"):
+            st.session_state['landing_view'] = 'register'
+            st.rerun()
+
+    st.markdown("---")
+
+    # Show selected view
+    if st.session_state['landing_view'] == 'demo':
+        show_demo_page(api_client)
+
+    elif st.session_state['landing_view'] == 'login':
+        show_login_form()
+
+    elif st.session_state['landing_view'] == 'register':
+        show_register_form()
+
+    elif st.session_state['landing_view'] == 'forgot_password':
+        show_forgot_password_form()
+
+    elif st.session_state['landing_view'] == 'reset_password':
+        show_reset_password_form()
+
+    elif st.session_state['landing_view'] == 'plans':
+        show_public_plans_page()
+
+
+def show_login_form():
+    """Show login form for landing page"""
+    st.markdown('<h1 class="main-header">🔐 Login</h1>', unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        # Show success message if redirected from registration
+        if 'registration_success' in st.session_state and st.session_state['registration_success']:
+            st.success("✅ Registration successful! Please check your email to verify your account before logging in.")
+            del st.session_state['registration_success']
+
+        # Show email verified message
+        if 'email_verified' in st.session_state and st.session_state['email_verified']:
+            st.success("✅ Email verified successfully! You can now log in.")
+            del st.session_state['email_verified']
+
+        with st.form("landing_login_form"):
+            st.subheader("Login to your account")
+            email = st.text_input("Email", placeholder="your@email.com")
+            password = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Login", use_container_width=True, type="primary")
+
+            if submit:
+                if not email or not password:
+                    st.error("Please fill in all fields")
+                else:
+                    with st.spinner("Logging in..."):
+                        result = api_client.login(email, password)
+                        if result:
+                            st.success("✅ Login successful!")
+                            import time
+                            time.sleep(0.5)
+                            st.rerun()
+
+        # Forgot password link
+        st.markdown("---")
+        if st.button("Forgot Password?", use_container_width=True, type="secondary"):
+            st.session_state['landing_view'] = 'forgot_password'
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown("Don't have an account?")
+        if st.button("Create Account", use_container_width=True):
+            st.session_state['landing_view'] = 'register'
+            st.rerun()
+
+
+def show_register_form():
+    """Show registration form for landing page"""
+    st.markdown('<h1 class="main-header">📝 Create Account</h1>', unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        with st.form("landing_register_form"):
+            st.subheader("Join VidGo today")
+            username = st.text_input("Username", placeholder="Choose a username")
+            email = st.text_input("Email", placeholder="your@email.com")
+            password = st.text_input("Password", type="password", help="At least 8 characters")
+            password_confirm = st.text_input("Confirm Password", type="password")
+
+            terms = st.checkbox("I agree to the Terms of Service and Privacy Policy")
+
+            submit = st.form_submit_button("Create Account", use_container_width=True, type="primary")
+
+            if submit:
+                if not all([username, email, password, password_confirm]):
+                    st.error("Please fill in all fields")
+                elif password != password_confirm:
+                    st.error("Passwords don't match")
+                elif len(password) < 8:
+                    st.error("Password must be at least 8 characters")
+                elif not terms:
+                    st.error("Please agree to the Terms of Service")
+                else:
+                    with st.spinner("Creating account..."):
+                        result = api_client.register(username, email, password)
+                        if result:
+                            st.success("✅ Account created successfully!")
+                            st.session_state['registration_success'] = True
+                            st.session_state['landing_view'] = 'login'
+                            import time
+                            time.sleep(1)
+                            st.rerun()
+
+        st.markdown("---")
+        st.markdown("Already have an account?")
+        if st.button("Login", use_container_width=True, key="go_to_login"):
+            st.session_state['landing_view'] = 'login'
+            st.rerun()
+
+
+def show_forgot_password_form():
+    """Show forgot password form"""
+    st.markdown('<h1 class="main-header">🔑 Forgot Password</h1>', unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        st.write("Enter your email address and we'll send you a link to reset your password.")
+
+        with st.form("forgot_password_form"):
+            email = st.text_input("Email", placeholder="your@email.com")
+            submit = st.form_submit_button("Send Reset Link", use_container_width=True, type="primary")
+
+            if submit:
+                if not email:
+                    st.error("Please enter your email address")
+                else:
+                    with st.spinner("Sending reset link..."):
+                        result = api_client.forgot_password(email)
+                        if result:
+                            st.success("📧 If an account with this email exists, a password reset link has been sent.")
+                            st.info("Please check your inbox and spam folder.")
+
+        st.markdown("---")
+        if st.button("← Back to Login", use_container_width=True):
+            st.session_state['landing_view'] = 'login'
+            st.rerun()
+
+
+def show_reset_password_form():
+    """Show reset password form (accessed via email link)"""
+    st.markdown('<h1 class="main-header">🔐 Reset Password</h1>', unsafe_allow_html=True)
+
+    # Get token from query params
+    query_params = st.query_params
+    token = query_params.get('reset_password', '')
+
+    if not token:
+        st.error("Invalid or missing reset token. Please request a new password reset.")
+        if st.button("← Back to Login", use_container_width=True):
+            st.session_state['landing_view'] = 'login'
+            st.query_params.clear()
+            st.rerun()
+        return
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        with st.form("reset_password_form"):
+            st.subheader("Enter your new password")
+            new_password = st.text_input("New Password", type="password", help="At least 8 characters")
+            confirm_password = st.text_input("Confirm Password", type="password")
+            submit = st.form_submit_button("Reset Password", use_container_width=True, type="primary")
+
+            if submit:
+                if not new_password or not confirm_password:
+                    st.error("Please fill in all fields")
+                elif new_password != confirm_password:
+                    st.error("Passwords don't match")
+                elif len(new_password) < 8:
+                    st.error("Password must be at least 8 characters")
+                else:
+                    with st.spinner("Resetting password..."):
+                        result = api_client.reset_password(token, new_password)
+                        if result:
+                            st.success("✅ Password reset successfully! You can now log in with your new password.")
+                            st.query_params.clear()
+                            import time
+                            time.sleep(2)
+                            st.session_state['landing_view'] = 'login'
+                            st.rerun()
+
+
+def show_public_plans_page():
+    """Show plans page for non-authenticated users"""
+    st.markdown('<h1 class="main-header">💎 Choose Your Plan</h1>', unsafe_allow_html=True)
+
+    plans = api_client.get_plans()
+
+    if not plans:
+        st.info("Plans loading...")
+        return
+
+    # Display plans in columns
+    num_cols = min(len(plans), 4)
+    cols = st.columns(num_cols)
+
+    for idx, plan in enumerate(plans):
+        with cols[idx % num_cols]:
+            with st.container():
+                # Featured badge
+                if plan.get('is_featured'):
+                    st.markdown('<span class="popular-badge">⭐ RECOMMENDED</span>', unsafe_allow_html=True)
+
+                st.markdown(f"### {plan['name']}")
+
+                # Pricing
+                if plan['price_monthly'] == 0:
+                    st.markdown("## Free")
+                else:
+                    st.markdown(f"## ${plan['price_monthly']}/mo")
+                    st.caption(f"or ${plan['price_yearly']}/year")
+
+                st.markdown(f"*{plan.get('description', '')}*")
+
+                st.markdown("---")
+
+                # Features
+                st.markdown(f"✓ {plan['credits_per_month']} credits/month")
+                st.markdown(f"✓ Max {plan['max_video_length']}s videos")
+                st.markdown(f"✓ {plan['max_resolution']} resolution")
+
+                if not plan.get('watermark'):
+                    st.markdown("✓ No watermark")
+                if plan.get('priority_queue'):
+                    st.markdown("✓ Priority queue")
+                if plan.get('api_access'):
+                    st.markdown("✓ API access")
+
+                # Feature flags
+                if plan.get('feature_clothing_transform'):
+                    st.markdown("✓ AI Clothing Transform")
+                if plan.get('feature_goenhance'):
+                    st.markdown("✓ GoEnhance Effects")
+                if plan.get('feature_video_gen'):
+                    st.markdown("✓ Video Generation")
+                if plan.get('feature_batch_processing'):
+                    st.markdown("✓ Batch Processing")
+
+                st.markdown("---")
+
+                if st.button("Get Started", key=f"plan_pub_{plan['id']}", use_container_width=True, type="primary" if plan.get('is_featured') else "secondary"):
+                    st.session_state['landing_view'] = 'register'
+                    st.rerun()
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown("---")
+    if st.button("← Back to Demo", use_container_width=True):
+        st.session_state['landing_view'] = 'demo'
+        st.rerun()
+
+
 def main():
     """Main application"""
-    # Check if we're on the payment result page (from ECPay redirect)
+    # Check query params for special actions
     query_params = st.query_params
+
+    # Handle email verification
+    if 'verify_email' in query_params:
+        token = query_params.get('verify_email', '')
+        if token:
+            with st.spinner("Verifying email..."):
+                result = api_client.verify_email(token)
+                if result:
+                    st.session_state['email_verified'] = True
+                st.query_params.clear()
+                st.session_state['landing_view'] = 'login'
+                st.rerun()
+
+    # Handle password reset (redirect to reset form)
+    if 'reset_password' in query_params:
+        st.session_state['landing_view'] = 'reset_password'
+        # Don't clear params - the form needs the token
+
+    # Check if we're on the payment result page (from ECPay redirect)
     if 'page' in query_params or 'RtnCode' in query_params or 'MerchantTradeNo' in query_params:
         show_payment_result()
         return
 
     # Check if user is authenticated
     if not is_authenticated():
-        show_login_page()
+        # Show landing page with demo and login options
+        show_landing_page()
         return
 
     # Check if we need to show payment form (hide sidebar for payment page)
@@ -944,7 +1297,7 @@ def main():
         show_payment_form()
         return
 
-    # Sidebar navigation
+    # Sidebar navigation for authenticated users
     with st.sidebar:
         user = get_current_user()
         st.write(f"👤 **{user['username']}**")
@@ -954,15 +1307,15 @@ def main():
         # Check if there's a selected page from session state
         default_idx = 0
         if 'selected_page' in st.session_state:
-            options = ["Dashboard", "Plans", "Subscriptions", "Orders", "Invoices", "Settings"]
+            options = ["Demo", "Dashboard", "Plans", "Subscriptions", "Orders", "Invoices", "Settings"]
             if st.session_state['selected_page'] in options:
                 default_idx = options.index(st.session_state['selected_page'])
             st.session_state.pop('selected_page', None)
 
         selected = option_menu(
             menu_title="Navigation",
-            options=["Dashboard", "Plans", "Subscriptions", "Orders", "Invoices", "Settings"],
-            icons=["speedometer2", "gem", "star", "box-seam", "file-text", "gear"],
+            options=["Demo", "Dashboard", "Plans", "Subscriptions", "Orders", "Invoices", "Settings"],
+            icons=["play-circle", "speedometer2", "gem", "star", "box-seam", "file-text", "gear"],
             default_index=default_idx,
         )
 
@@ -983,6 +1336,8 @@ def main():
     # Show selected page
     if 'page' in st.session_state and st.session_state['page'] == 'checkout':
         show_checkout_page()
+    elif selected == "Demo":
+        show_demo_page(api_client)
     elif selected == "Dashboard":
         show_dashboard()
     elif selected == "Plans":

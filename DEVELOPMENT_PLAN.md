@@ -1,6 +1,6 @@
 # VidGo Development Plan
 
-## 🎯 Project Summary
+## Project Summary
 
 | Item | Details |
 |------|---------|
@@ -12,12 +12,12 @@
 
 ---
 
-## 📅 Development Timeline
+## Development Timeline
 
 ```
-Dec 14-15  │ Phase 1: Core Infrastructure ✅ (4h)
+Dec 14-15  │ Phase 1: Core Infrastructure ✅ COMPLETE (4h)
            │
-Dec 16-20  │ Phase 2: Smart Demo + Gemini ✅ (15h)
+Dec 16-20  │ Phase 2: Smart Demo + Gemini ✅ COMPLETE (15h)
            │
 Dec 21-23  │ Phase 3: Leonardo + Runway (18h)
            │
@@ -37,23 +37,132 @@ Dec 28     │ Phase 9: Security + Deploy (12h)
 
 ---
 
-## ✅ Phase Checklist
+## Phase Checklist
 
 ### Phase 1: Core Infrastructure (4h) ✅ COMPLETE
-- [x] FastAPI project setup
-- [x] PostgreSQL database
-- [x] Redis configuration
-- [x] JWT authentication
-- [x] Basic API routes
+
+#### Backend Foundation
+- [x] FastAPI project setup with async support
+- [x] PostgreSQL database with async SQLAlchemy
+- [x] Redis configuration for caching
+- [x] Project structure (app/api, app/core, app/models, app/services, app/schemas)
+
+#### Authentication System
+- [x] JWT authentication with access + refresh tokens
+- [x] Token type validation (access vs refresh)
+- [x] Password hashing with bcrypt
+- [x] OAuth2 compatible login endpoints
+
+#### User Management
+- [x] User model with email verification fields
+- [x] User registration with email verification flow
+- [x] Email verification token generation
+- [x] Password reset flow (forgot/reset)
+- [x] User profile endpoints (GET/PUT /me)
+
+#### Email Service
+- [x] SMTP email service with HTML templates
+- [x] Verification email sending
+- [x] Password reset email sending
+- [x] Welcome email after verification
+- [x] Debug mode logging (when SMTP not configured)
+
+#### API Endpoints
+- [x] POST `/api/v1/auth/register` - User registration
+- [x] POST `/api/v1/auth/login` - Login with email/password
+- [x] POST `/api/v1/auth/logout` - Logout
+- [x] POST `/api/v1/auth/refresh` - Refresh access token
+- [x] POST `/api/v1/auth/verify-email` - Email verification
+- [x] POST `/api/v1/auth/resend-verification` - Resend verification
+- [x] POST `/api/v1/auth/forgot-password` - Request password reset
+- [x] POST `/api/v1/auth/reset-password` - Reset password
+- [x] GET `/api/v1/auth/me` - Get current user
+- [x] PUT `/api/v1/auth/me` - Update profile
+- [x] POST `/api/v1/auth/me/change-password` - Change password
+
+#### Plans System
+- [x] Plan model with feature flags and pricing
+- [x] Default plans seeding (Free, Basic, Pro, Enterprise)
+- [x] GET `/api/v1/plans` - List all plans (public)
+- [x] GET `/api/v1/plans/current` - Get current subscription
+- [x] GET `/api/v1/plans/with-subscription` - Plans with user subscription
+
+---
 
 ### Phase 2: Smart Demo + Content Moderation (15h) ✅ COMPLETE
-- [x] Demo database schema
-- [x] Prompt matching algorithm
-- [x] Demo video serving
-- [x] Watermark overlay
-- [x] Gemini API integration
-- [x] Keyword fallback filter
-- [x] Unit tests
+
+#### Demo System
+- [x] Demo database schema (DemoCategory, DemoVideo, DemoView)
+- [x] Prompt matching algorithm with multi-language support
+- [x] Demo video serving endpoints
+- [x] Random demo selection
+- [x] Style and category filtering
+
+#### Content Moderation - Gemini Integration
+- [x] Google Gemini API integration for content analysis
+- [x] Structured prompt analysis (intent, style, safety)
+- [x] Self-learning moderation from Gemini feedback
+- [x] Fallback to keyword filter when Gemini unavailable
+
+#### Content Moderation - Block Cache (Redis)
+- [x] Redis-based block cache for illegal words
+- [x] Multi-language support (EN, ZH-TW, JA, KO, ES)
+- [x] 200+ seed blocked words across 6 categories:
+  - Adult content
+  - Violence
+  - Hate speech
+  - Illegal activities
+  - Self-harm
+  - Dangerous content
+- [x] Self-learning cache updates from Gemini analysis
+- [x] Block cache management endpoints
+
+#### Content Moderation - Keyword Filter
+- [x] Pattern-based content filtering
+- [x] Multi-language keyword detection
+- [x] Category-based blocking reasons
+- [x] Fallback when other systems unavailable
+
+#### Demo API Endpoints
+- [x] POST `/api/v1/demo/search` - Search/generate demos
+- [x] GET `/api/v1/demo/random` - Get random demo
+- [x] GET `/api/v1/demo/analyze` - Analyze prompt
+- [x] GET `/api/v1/demo/styles` - List available styles
+- [x] GET `/api/v1/demo/categories` - List categories
+- [x] POST `/api/v1/demo/moderate` - Check content moderation
+- [x] GET `/api/v1/demo/block-cache/stats` - Block cache statistics
+- [x] POST `/api/v1/demo/block-cache/check` - Check prompt against cache
+
+#### GoEnhance Integration
+- [x] GoEnhance API client
+- [x] Style transformation effects
+- [x] Video enhancement capabilities
+
+#### Frontend - Demo Page
+- [x] Streamlit demo page with AI Clothing Transform showcase
+- [x] GoEnhance Effects showcase
+- [x] Multi-language prompt support
+- [x] Style gallery display
+- [x] Category browsing
+- [x] Content moderation feedback UI
+- [x] Dark mode styling
+
+#### Frontend - Authentication
+- [x] Landing page with Demo/Plans/Login/Register navigation
+- [x] Login form with email verification message handling
+- [x] Registration form with terms acceptance
+- [x] Forgot password flow
+- [x] Password reset form (from email link)
+- [x] Email verification handling (from email link)
+- [x] Session management with access/refresh tokens
+
+#### Frontend - Plans Display
+- [x] Public plans page (non-authenticated)
+- [x] Authenticated plans page with current subscription
+- [x] Plan feature display (credits, video length, resolution, etc.)
+- [x] Featured/recommended plan highlighting
+
+---
 
 ### Phase 3: Leonardo + Runway (18h) ⏳ PENDING
 - [ ] Leonardo API wrapper
@@ -68,14 +177,16 @@ Dec 28     │ Phase 9: Security + Deploy (12h)
 - [ ] Point balance system
 - [ ] Monthly reset logic
 - [ ] Pollo API integration
-- [ ] GoEnhance API integration
-- [ ] Style transformation
+- [ ] GoEnhance full integration
+- [ ] Style transformation UI
 - [ ] Point deduction logic
 
 ### Phase 5: UI/UX (10h) ⏳ PENDING
-- [ ] Streamlit main app
-- [ ] Generation interface
-- [ ] User dashboard
+- [x] Streamlit main app structure
+- [x] Demo interface
+- [x] User authentication UI
+- [ ] Full generation interface
+- [ ] User dashboard improvements
 - [ ] Style gallery carousel
 - [ ] Upgrade prompts
 
@@ -88,11 +199,12 @@ Dec 28     │ Phase 9: Security + Deploy (12h)
 - [ ] Receipt generation
 
 ### Phase 7: i18n (6h) ⏳ PENDING
-- [ ] English (en)
-- [ ] Japanese (ja)
-- [ ] Traditional Chinese (zh-TW)
-- [ ] Korean (ko)
-- [ ] Spanish (es)
+- [x] English (en) - Content moderation
+- [x] Japanese (ja) - Content moderation
+- [x] Traditional Chinese (zh-TW) - Content moderation
+- [x] Korean (ko) - Content moderation
+- [x] Spanish (es) - Content moderation
+- [ ] Full UI translation
 - [ ] Language detection
 
 ### Phase 8: Admin Dashboard (8h) ⏳ PENDING
@@ -103,19 +215,108 @@ Dec 28     │ Phase 9: Security + Deploy (12h)
 - [ ] System health
 
 ### Phase 9: Security + Deploy (12h) ⏳ PENDING
+- [x] Input validation (Pydantic schemas)
+- [x] Password hashing - Server (bcrypt 12 rounds)
+- [x] Password hashing - Client (SHA-256 with salt)
+- [x] JWT token security (access + refresh with type validation)
+- [x] Email verification (token-based, 24h expiry)
+- [x] Password reset flow (secure token, 1h expiry)
 - [ ] Rate limiting
 - [ ] CORS whitelist
-- [ ] Input validation
-- [ ] SQL injection prevention
+- [ ] SQL injection prevention (using ORM)
 - [ ] XSS protection
 - [ ] Docker setup
 - [ ] CI/CD pipeline
 - [ ] Production deploy
 - [ ] Monitoring setup
 
+#### Security Implementation Details
+
+**Defense in Depth (Password Security):**
+```
+User enters password
+        ↓
+[Layer 1] Client-side SHA-256 hash with salt (frontend)
+        ↓
+[Layer 2] HTTPS/TLS encryption in transit
+        ↓
+[Layer 3] Server-side bcrypt hash (12 rounds)
+        ↓
+Stored securely in PostgreSQL
+```
+
+**Email Verification Flow:**
+```
+1. User registers → Account created (is_active=False)
+                  → Verification token generated
+                  → Email sent with verification link
+
+2. User clicks link → Token validated (24h expiry)
+                    → Account activated (is_active=True)
+                    → Welcome email sent
+
+3. User can login → Access token (15-30min) + Refresh token (7 days)
+```
+
+**Token Security:**
+- Access tokens: Short-lived (15-30 min), used for API calls
+- Refresh tokens: Long-lived (7 days), used only to get new access tokens
+- Token type validation: Prevents using refresh token for API calls
+- Tokens include: user_id, type, expiry
+
 ---
 
-## 💰 Cost Optimization Strategy
+## Current Project Structure
+
+```
+vidgo/
+├── backend/
+│   ├── app/
+│   │   ├── main.py                    # FastAPI entry
+│   │   ├── api/
+│   │   │   ├── api.py                 # Router aggregation
+│   │   │   ├── deps.py                # Dependencies (auth, db, token validation)
+│   │   │   └── v1/
+│   │   │       ├── auth.py            # Auth endpoints (login, register, verify, reset)
+│   │   │       ├── demo.py            # Demo endpoints
+│   │   │       ├── plans.py           # Plans endpoints
+│   │   │       └── payments.py        # Payment endpoints
+│   │   ├── core/
+│   │   │   ├── config.py              # Settings (incl. SMTP, token expiry)
+│   │   │   ├── database.py            # Database connection
+│   │   │   └── security.py            # JWT (access+refresh), bcrypt, token generation
+│   │   ├── models/
+│   │   │   ├── user.py                # User model (email verification fields)
+│   │   │   ├── billing.py             # Plan, Subscription, Order
+│   │   │   └── demo.py                # Demo models
+│   │   ├── schemas/
+│   │   │   ├── user.py                # User schemas (LoginResponse, TokenPair)
+│   │   │   └── plan.py                # Plan schemas
+│   │   └── services/
+│   │       ├── moderation.py          # Content moderation (Gemini + keywords)
+│   │       ├── block_cache.py         # Redis block cache (multi-language)
+│   │       ├── prompt_matching.py     # Prompt matching
+│   │       ├── goenhance.py           # GoEnhance API
+│   │       ├── email_service.py       # Email sending (verification, reset, welcome)
+│   │       └── demo_service.py        # Demo service
+│   └── requirements.txt
+├── frontend/
+│   ├── app.py                         # Streamlit main (auth flows, plans)
+│   ├── config.py                      # Frontend config (API endpoints)
+│   ├── utils/
+│   │   ├── api_client.py              # API client (client-side password hashing)
+│   │   └── auth.py                    # Auth utilities
+│   └── pages/
+│       └── demo.py                    # Demo page
+├── docker-compose.yml
+├── pyproject.toml
+├── README.md
+└── README.zh-TW.md
+```
+
+---
+
+## Cost Optimization Strategy
 
 ### Initial Phase (Month 1-3)
 
@@ -141,59 +342,26 @@ Dec 28     │ Phase 9: Security + Deploy (12h)
 
 ---
 
-## 🔑 Critical Path Items
+## Critical Path Items
 
 ### Must-Have for Launch
-1. ✅ User authentication (JWT)
-2. ✅ Content moderation (Gemini)
-3. ⏳ Leonardo video generation
-4. ⏳ Basic payment (ECPay)
-5. ⏳ Point system
-6. ⏳ Streamlit UI
+1. ✅ User authentication (JWT + email verification)
+2. ✅ Content moderation (Gemini + Block Cache + Keywords)
+3. ✅ Demo showcase system
+4. ✅ Plans display
+5. ⏳ Leonardo video generation
+6. ⏳ Basic payment (ECPay)
+7. ⏳ Point system
 
 ### Nice-to-Have (Can Defer)
 - Runway backup (use points as fallback)
 - Paddle international payments
-- Full i18n (start with EN + ZH-TW)
+- Full i18n UI (content moderation already multi-language)
 - Admin dashboard (use DB directly)
 
 ---
 
-## 📁 Key Files to Create
-
-```
-vidgo/
-├── app/
-│   ├── main.py                 # FastAPI entry
-│   ├── config.py               # Settings
-│   ├── api/
-│   │   ├── auth.py             # Login/register
-│   │   ├── generation.py       # Video generation
-│   │   ├── points.py           # Point management
-│   │   └── payments.py         # ECPay/Paddle
-│   ├── services/
-│   │   ├── leonardo.py         # Leonardo API
-│   │   ├── runway.py           # Runway API (Phase 2)
-│   │   ├── pollo.py            # Pollo API
-│   │   ├── goenhance.py        # GoEnhance API
-│   │   └── moderation.py       # Gemini moderation
-│   └── core/
-│       ├── security.py         # JWT, hashing
-│       └── failover.py         # Auto-switch logic
-├── frontend/
-│   ├── app.py                  # Streamlit main
-│   └── pages/
-│       ├── generate.py         # Generation page
-│       ├── gallery.py          # Style gallery
-│       └── account.py          # User settings
-├── docker-compose.yml
-├── requirements.txt
-└── .env.example
-```
-
----
-
-## 🚀 Launch Checklist
+## Launch Checklist
 
 ### Pre-Launch (Dec 27)
 - [ ] All P0 features complete
@@ -218,18 +386,53 @@ vidgo/
 
 ---
 
-## 📞 API Keys Needed
+## API Keys Needed
 
-| Service | Where to Get | Priority |
-|---------|--------------|----------|
-| Leonardo AI | leonardo.ai | P0 |
-| Gemini | ai.google.dev | P0 |
-| ECPay | ecpay.com.tw | P0 |
-| Pollo AI | pollo.ai | P1 |
-| GoEnhance | goenhance.ai | P1 |
-| Paddle | paddle.com | P2 |
-| Runway | runway.ml | P2 |
+| Service | Where to Get | Priority | Status |
+|---------|--------------|----------|--------|
+| Gemini | ai.google.dev | P0 | ✅ Integrated |
+| GoEnhance | goenhance.ai | P0 | ✅ Integrated |
+| Leonardo AI | leonardo.ai | P0 | ⏳ Pending |
+| ECPay | ecpay.com.tw | P0 | ⏳ Pending |
+| Pollo AI | pollo.ai | P1 | ⏳ Pending |
+| Paddle | paddle.com | P2 | ⏳ Pending |
+| Runway | runway.ml | P2 | ⏳ Pending |
 
 ---
 
-*Last Updated: December 2024*
+## Environment Variables
+
+```env
+# Database
+DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/vidgo
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# Security
+SECRET_KEY=your-secret-key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# AI Services
+GEMINI_API_KEY=your-gemini-key
+GOENHANCE_API_KEY=your-goenhance-key
+LEONARDO_API_KEY=your-leonardo-key
+POLLO_API_KEY=your-pollo-key
+
+# Email (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email
+SMTP_PASSWORD=your-app-password
+SMTP_FROM_EMAIL=noreply@vidgo.ai
+EMAIL_VERIFICATION_EXPIRE_HOURS=24
+
+# Frontend
+FRONTEND_URL=http://localhost:8501
+```
+
+---
+
+*Last Updated: December 21, 2024*

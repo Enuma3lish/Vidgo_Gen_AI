@@ -1,6 +1,13 @@
 """
 Content Moderation Service
-Uses Gemini API as primary, with keyword fallback filter
+Uses Redis Block Cache + Gemini API for intelligent content moderation.
+
+Moderation Flow:
+1. Check Redis block cache for known illegal words/prompts (fastest)
+2. If not in cache, use keyword filter (fast)
+3. Check suspicious patterns (fast)
+4. Use Gemini API for deep analysis (slower but accurate)
+5. Update block cache with Gemini results (learning)
 """
 import re
 import logging
@@ -8,6 +15,7 @@ from typing import Optional, List, Tuple
 import httpx
 from app.core.config import get_settings
 from app.schemas.moderation import ModerationResult, ModerationCategory
+from app.services.block_cache import get_block_cache, BlockCacheResult
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -53,16 +61,24 @@ SUSPICIOUS_PATTERNS = [
 
 
 class ModerationService:
-    """Content moderation service with Gemini API and keyword fallback"""
+    """Content moderation service with Redis Block Cache + Gemini API"""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or getattr(settings, 'GEMINI_API_KEY', '')
         self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
         self._gemini_available = True
+        self._block_cache = get_block_cache()
 
     async def moderate(self, prompt: str, strict_mode: bool = False) -> ModerationResult:
         """
-        Moderate content using Gemini API with keyword fallback
+        Moderate content using Redis Block Cache + Gemini API with keyword fallback
+
+        Flow:
+        1. Check Redis block cache (fastest - cached known illegal words)
+        2. Quick keyword filter check (fast - local)
+        3. Check suspicious patterns (fast - regex)
+        4. Gemini API for deep analysis (slower - API call)
+        5. Update cache with results (learning)
 
         Args:
             prompt: The text to moderate
@@ -73,13 +89,40 @@ class ModerationService:
         """
         prompt_lower = prompt.lower()
 
-        # Step 1: Quick keyword filter check
+        # Step 1: Check Redis block cache FIRST (fastest)
+        try:
+            cache_result = await self._block_cache.check_prompt(prompt)
+            if cache_result.is_blocked:
+                logger.warning(f"Content blocked by block cache: {cache_result.blocked_words}")
+                return ModerationResult(
+                    is_safe=False,
+                    categories=[self._map_reason_to_category(cache_result.reason)],
+                    confidence=cache_result.confidence,
+                    reason=cache_result.reason or "Content blocked by cache",
+                    flagged_keywords=cache_result.blocked_words,
+                    source=f"block_cache:{cache_result.source}"
+                )
+            # If cache says safe with high confidence and source is "cache" or "gemini", trust it
+            if cache_result.source in ("cache", "gemini") and cache_result.confidence >= 0.8:
+                logger.debug(f"Content approved by block cache (confidence: {cache_result.confidence})")
+                return ModerationResult(
+                    is_safe=True,
+                    categories=[ModerationCategory.SAFE],
+                    confidence=cache_result.confidence,
+                    source=f"block_cache:{cache_result.source}"
+                )
+        except Exception as e:
+            logger.error(f"Block cache error (continuing with fallback): {e}")
+
+        # Step 2: Quick keyword filter check
         keyword_result = self._keyword_filter(prompt_lower)
         if not keyword_result.is_safe:
             logger.warning(f"Content blocked by keyword filter: {keyword_result.flagged_keywords}")
+            # Add blocked words to cache for future
+            await self._update_cache_from_keyword_filter(keyword_result)
             return keyword_result
 
-        # Step 2: Check suspicious patterns
+        # Step 3: Check suspicious patterns
         pattern_result = self._pattern_check(prompt_lower)
         if pattern_result.needs_manual_review:
             logger.info(f"Content flagged for manual review: {prompt[:50]}...")
@@ -87,11 +130,13 @@ class ModerationService:
                 pattern_result.is_safe = False
             return pattern_result
 
-        # Step 3: Try Gemini API for deeper analysis
+        # Step 4: Try Gemini API for deeper analysis
         if self.api_key and self._gemini_available:
             try:
                 gemini_result = await self._gemini_moderate(prompt)
                 if gemini_result:
+                    # Update cache with Gemini result
+                    await self._update_cache_from_gemini(prompt, gemini_result)
                     return gemini_result
             except Exception as e:
                 logger.error(f"Gemini API error: {e}")
@@ -104,6 +149,46 @@ class ModerationService:
             confidence=0.8,
             source="keyword_filter"
         )
+
+    def _map_reason_to_category(self, reason: Optional[str]) -> ModerationCategory:
+        """Map block cache reason to ModerationCategory"""
+        if not reason:
+            return ModerationCategory.SAFE
+
+        reason_lower = reason.lower()
+        if "adult" in reason_lower or "sexual" in reason_lower:
+            return ModerationCategory.ADULT
+        elif "violence" in reason_lower or "gore" in reason_lower:
+            return ModerationCategory.VIOLENCE
+        elif "hate" in reason_lower:
+            return ModerationCategory.HATE
+        elif "illegal" in reason_lower or "child" in reason_lower:
+            return ModerationCategory.ILLEGAL
+        elif "self" in reason_lower or "harm" in reason_lower:
+            return ModerationCategory.SELF_HARM
+        elif "dangerous" in reason_lower:
+            return ModerationCategory.DANGEROUS
+        return ModerationCategory.SAFE
+
+    async def _update_cache_from_keyword_filter(self, result: ModerationResult) -> None:
+        """Update block cache with keyword filter results"""
+        try:
+            if result.flagged_keywords:
+                for word in result.flagged_keywords:
+                    category = result.categories[0].value if result.categories else "custom"
+                    await self._block_cache.add_blocked_word(word, category, "keyword_filter")
+        except Exception as e:
+            logger.error(f"Failed to update cache from keyword filter: {e}")
+
+    async def _update_cache_from_gemini(self, prompt: str, result: ModerationResult) -> None:
+        """Update block cache with Gemini results"""
+        try:
+            if not result.is_safe and result.flagged_keywords:
+                for word in result.flagged_keywords:
+                    category = result.categories[0].value if result.categories else "gemini_detected"
+                    await self._block_cache.add_blocked_word(word, category, "gemini")
+        except Exception as e:
+            logger.error(f"Failed to update cache from Gemini: {e}")
 
     def _keyword_filter(self, prompt_lower: str) -> ModerationResult:
         """Check prompt against blocked keywords"""

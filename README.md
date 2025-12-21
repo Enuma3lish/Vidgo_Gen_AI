@@ -224,7 +224,7 @@ Leonardo ✗ + Runway ✗ → Activate point services (Pollo/GoEnhance)
 | # | Phase | Hours | Status | Priority |
 |---|-------|-------|--------|----------|
 | 1 | Core Infrastructure | 4h | ✅ Complete | P0 |
-| 2 | Smart Demo + Gemini Moderation | 15h | 🔄 In Progress | P0 |
+| 2 | Smart Demo + Gemini Moderation + Block Cache | 15h | ✅ Complete | P0 |
 | 3 | Leonardo + Runway + Auto-switch | 18h | ⏳ Pending | P0 |
 | 4 | Pollo + GoEnhance Points | 12h | ⏳ Pending | P1 |
 | 5 | Upgrade UI + Streamlit | 10h | ⏳ Pending | P1 |
@@ -233,7 +233,7 @@ Leonardo ✗ + Runway ✗ → Activate point services (Pollo/GoEnhance)
 | 8 | Admin Dashboard | 8h | ⏳ Pending | P2 |
 | 9 | Security + Testing + Deploy | 12h | ⏳ Pending | P0 |
 
-**Total: 105 hours (~13 working days)**  
+**Total: 105 hours (~13 working days)**
 **Target Launch: December 28, 2024**
 
 ---
@@ -294,42 +294,56 @@ vidgo/
 
 ---
 
-### Phase 2: Smart Demo + Content Moderation (15h) 🔄
+### Phase 2: Smart Demo + Content Moderation + Block Cache (15h) ✅
 
-**Tasks:**
-1. **Smart Demo Engine** (8h)
-   - Pre-generated demo database
-   - Prompt matching algorithm
-   - Demo video serving
-   - Watermark overlay system
+**Completed Components:**
+1. **Smart Demo Engine** (8h) ✅
+   - Pre-generated demo database with ImageDemo model
+   - Multi-language prompt matching (EN, ZH-TW, JA, KO, ES)
+   - Demo video serving with GoEnhance integration
+   - Watermark overlay system (placeholder)
+   - Category-based demo organization
 
-2. **Gemini Content Moderation** (5h)
-   - API integration
+2. **Gemini Content Moderation** (5h) ✅
+   - Gemini API integration for AI-powered moderation
    - 18+ content detection
    - Violence/illegal content filtering
-   - Keyword fallback filter
+   - Keyword fallback filter (40+ blocked keywords)
+   - Pattern matching for suspicious content
 
-3. **Testing & Integration** (2h)
-   - Unit tests
-   - Integration tests
-   - Edge case handling
+3. **Redis Block Cache** (2h) ✅
+   - Redis-based prompt block cache for fast illegal word detection
+   - Seed blocked words automatically loaded on startup
+   - Gemini-powered learning: unknown prompts analyzed and cached
+   - Cache statistics and admin management endpoints
+   - Self-learning system that improves over time
 
-**Implementation Priority:**
+**Block Cache Flow:**
 ```python
-# Moderation flow
+# Intelligent moderation with Redis block cache
 async def moderate_content(prompt: str) -> ModerationResult:
-    # 1. Try Gemini API
-    try:
-        result = await gemini_moderate(prompt)
-        return result
-    except GeminiError:
-        # 2. Fallback to keyword filter
-        result = keyword_filter(prompt)
-        if result.flagged:
-            return result
-        # 3. Pass through for manual review
-        return ModerationResult(passed=True, needs_review=True)
+    # 1. Check Redis block cache (fastest - cached known illegal words)
+    if cached_block := await block_cache.check(prompt):
+        return ModerationResult(blocked=True, reason=cached_block.reason)
+
+    # 2. Quick keyword filter check (fast - local)
+    if keyword_match := keyword_filter(prompt):
+        await block_cache.add(keyword_match)  # Learn for next time
+        return ModerationResult(blocked=True)
+
+    # 3. Gemini API for deep analysis (slower but accurate)
+    result = await gemini_moderate(prompt)
+    if not result.is_safe:
+        await block_cache.add(result.flagged_words)  # Learn for next time
+
+    return result
 ```
+
+**API Endpoints Added:**
+- `GET /api/v1/demo/block-cache/stats` - View cache statistics
+- `POST /api/v1/demo/block-cache/check` - Check if prompt is blocked
+- `POST /api/v1/demo/admin/block-cache/add` - Add blocked word
+- `DELETE /api/v1/demo/admin/block-cache/remove` - Remove blocked word
 
 ---
 
@@ -657,27 +671,80 @@ result = await goenhance.transform(
 ### Authentication & Authorization
 | Mechanism | Technology | Details |
 |-----------|------------|---------|
-| JWT Token | Access + Refresh | Access: 15min, Refresh: 7 days |
-| Password | bcrypt + salt | 12 rounds hashing |
+| JWT Token | Access + Refresh | Access: 15-30min, Refresh: 7 days |
+| Password (Server) | bcrypt + salt | 12 rounds hashing |
+| Password (Client) | SHA-256 + salt | Pre-transmission hashing |
+| Email Verification | Token-based | 24-hour expiry, required for activation |
+| Password Reset | Secure token | 1-hour expiry |
 | API Key | HMAC-SHA256 | External API verification |
-| OAuth 2.0 | Google/Facebook | Social login (optional) |
+
+### Defense in Depth (Password Security)
+
+```
+User enters password
+        ↓
+[Layer 1] Client-side SHA-256 hash with salt
+        ↓
+[Layer 2] HTTPS/TLS encryption in transit
+        ↓
+[Layer 3] Server-side bcrypt hash (12 rounds)
+        ↓
+Stored securely in database
+```
+
+**Client-Side Hashing Benefits:**
+- Password never transmitted in plain text
+- Protection against accidental logging
+- Additional security if TLS is compromised
+- Hashed value useless without salt
+
+### Email Verification Flow
+
+```
+1. User registers → Account created (inactive)
+                  → Verification email sent
+
+2. User clicks email link → Token validated
+                          → Account activated
+                          → Welcome email sent
+
+3. User can now login → Access + Refresh tokens issued
+```
 
 ### API Security
 | Protection | Setting | Purpose |
 |------------|---------|---------|
 | Rate Limiting | 100 req/min/IP | Prevent brute force |
 | CORS | Whitelist domains | Cross-origin restriction |
-| HTTPS | TLS 1.3 only | Encrypted transmission |
-| Input Validation | Pydantic/Zod | Strict validation |
+| HTTPS | TLS 1.2/1.3 | Encrypted transmission |
+| Input Validation | Pydantic | Strict validation |
 | SQL Injection | ORM + Parameterized | Prevent injection |
 | XSS | CSP Headers | Prevent script attacks |
+| Token Type Validation | access vs refresh | Prevent token misuse |
 
 ### Content & Payment Security
 - **Gemini API**: All prompts screened for 18+/violence/illegal content
+- **Redis Block Cache**: Fast illegal word detection with self-learning
 - **IP Ban**: Automatic ban after multiple violations
 - **PCI DSS**: Card numbers handled by ECPay/Paddle only
 - **Webhook Signature**: Verify payment callback signatures
 - **Database Encryption**: AES-256 at rest + daily backups
+
+### Authentication Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/auth/register` | POST | User registration (sends verification email) |
+| `/api/v1/auth/login` | POST | Login (returns user + tokens) |
+| `/api/v1/auth/logout` | POST | Logout |
+| `/api/v1/auth/refresh` | POST | Refresh access token |
+| `/api/v1/auth/verify-email` | POST | Verify email with token |
+| `/api/v1/auth/resend-verification` | POST | Resend verification email |
+| `/api/v1/auth/forgot-password` | POST | Request password reset |
+| `/api/v1/auth/reset-password` | POST | Reset password with token |
+| `/api/v1/auth/me` | GET | Get current user profile |
+| `/api/v1/auth/me` | PUT | Update user profile |
+| `/api/v1/auth/me/change-password` | POST | Change password |
 
 ---
 

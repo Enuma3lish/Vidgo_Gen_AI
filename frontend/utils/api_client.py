@@ -595,3 +595,17 @@ class APIClient:
             return self.handle_response(response)
         except Exception as e:
             return None
+
+    def demo_get_category_videos(self, category: str, limit: int = 10) -> Optional[Dict[str, Any]]:
+        """Get videos for a specific category"""
+        try:
+            response = requests.get(
+                f"{self.backend_url}/api/v1/demo/videos/{category}",
+                params={"limit": limit},
+                headers=self.get_headers(include_auth=False)
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            return None

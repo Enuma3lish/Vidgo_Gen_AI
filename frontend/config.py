@@ -68,8 +68,8 @@ DEMO_FEATURES = [
     },
     {
         "id": "goenhance",
-        "name": "GoEnhance Effects",
-        "name_zh": "GoEnhance 特效",
+        "name": "Special Effects",
+        "name_zh": "特殊特效",
         "description": "Apply stunning video style transformations",
         "icon": "✨"
     }

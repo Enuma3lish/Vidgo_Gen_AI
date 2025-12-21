@@ -91,6 +91,27 @@ class CategoryInfo(BaseModel):
     sample_topics: List[str]
 
 
+class VideoInfo(BaseModel):
+    """Video information for category display"""
+    id: str
+    title: str
+    description: Optional[str] = None
+    prompt: str
+    video_url: str
+    thumbnail_url: Optional[str] = None
+    duration_seconds: float = 5.0
+    style: Optional[str] = None
+    category_slug: Optional[str] = None
+
+
+class CategoryVideosResponse(BaseModel):
+    """Response for category videos"""
+    category: str
+    category_name: str
+    videos: List[VideoInfo]
+    total_count: int
+
+
 class PromptAnalysisResponse(BaseModel):
     """Response from prompt analysis"""
     original: str
@@ -279,6 +300,66 @@ async def get_category_topics(
     return topics[:limit]
 
 
+@router.get("/videos/{category}", response_model=CategoryVideosResponse)
+async def get_category_videos(
+    category: str,
+    limit: int = Query(10, ge=1, le=20),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get videos for a specific category.
+    Returns up to 10 demo videos related to the category.
+    """
+    # First try to get category from database
+    cat_query = select(DemoCategory).where(DemoCategory.slug == category)
+    cat_result = await db.execute(cat_query)
+    db_category = cat_result.scalar_one_or_none()
+
+    category_name = category.replace("_", " ").replace("-", " ").title()
+    if db_category:
+        category_name = db_category.name
+
+    # Get videos from database
+    video_query = select(DemoVideo).where(
+        DemoVideo.is_active == True
+    )
+
+    # Filter by category if we have a category record
+    if db_category:
+        video_query = video_query.where(DemoVideo.category_id == db_category.id)
+
+    video_query = video_query.order_by(
+        DemoVideo.popularity_score.desc(),
+        DemoVideo.created_at.desc()
+    ).limit(limit)
+
+    result = await db.execute(video_query)
+    videos = result.scalars().all()
+
+    # Convert to response format
+    video_list = [
+        VideoInfo(
+            id=str(video.id),
+            title=video.title,
+            description=video.description,
+            prompt=video.prompt,
+            video_url=video.video_url,
+            thumbnail_url=video.thumbnail_url,
+            duration_seconds=video.duration_seconds or 5.0,
+            style=video.style,
+            category_slug=category
+        )
+        for video in videos
+    ]
+
+    return CategoryVideosResponse(
+        category=category,
+        category_name=category_name,
+        videos=video_list,
+        total_count=len(video_list)
+    )
+
+
 @router.post("/moderate")
 async def moderate_prompt(
     prompt: str = Query(..., min_length=3, max_length=500)
@@ -292,7 +373,7 @@ async def moderate_prompt(
     return {
         "is_safe": result.is_safe,
         "reason": result.reason,
-        "category": result.category
+        "categories": result.categories
     }
 
 

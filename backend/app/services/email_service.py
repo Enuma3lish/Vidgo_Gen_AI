@@ -250,7 +250,7 @@ If you didn't request a password reset, please ignore this email.
                         Transform your photos with stunning AI-generated clothing styles.
                     </div>
                     <div class="feature">
-                        <strong>✨ GoEnhance Effects</strong><br>
+                        <strong>✨ Special Effects</strong><br>
                         Enhance your images with professional-grade AI effects.
                     </div>
                     <div class="feature">
@@ -277,7 +277,7 @@ Your email has been verified and your account is now active!
 Here's what you can do with VidGo:
 
 - AI Clothing Transform: Transform your photos with stunning AI-generated clothing styles.
-- GoEnhance Effects: Enhance your images with professional-grade AI effects.
+- Special Effects: Enhance your images with professional-grade AI effects.
 - Video Generation: Create amazing videos from your images with AI.
 
 Get started at: {self.frontend_url}

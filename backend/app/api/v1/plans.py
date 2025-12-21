@@ -23,26 +23,6 @@ router = APIRouter()
 # Default plans to seed if none exist
 DEFAULT_PLANS = [
     {
-        "name": "Free",
-        "slug": "free",
-        "plan_type": "free",
-        "description": "Get started with AI video generation",
-        "price_monthly": 0,
-        "price_yearly": 0,
-        "credits_per_month": 10,
-        "max_video_length": 3,
-        "max_resolution": "480p",
-        "watermark": True,
-        "priority_queue": False,
-        "api_access": False,
-        "feature_clothing_transform": True,
-        "feature_goenhance": True,
-        "feature_video_gen": False,
-        "feature_batch_processing": False,
-        "feature_custom_styles": False,
-        "is_featured": False,
-    },
-    {
         "name": "Basic",
         "slug": "basic",
         "plan_type": "basic",

@@ -3,7 +3,7 @@ Streamlit Frontend - Main Application
 VidGo - AI Video Generation Platform
 
 Features:
-- Demo page with AI Clothing Transform & GoEnhance Effects
+- Demo page with AI Clothing Transform & Special Effects
 - User authentication and subscription management
 - Multi-language support (EN, ZH-TW, JA, KO, ES)
 """
@@ -12,7 +12,7 @@ from streamlit_option_menu import option_menu
 from config import PAGE_TITLE, PAGE_ICON, LAYOUT
 from utils.api_client import APIClient
 from utils.auth import is_authenticated, get_current_user
-from pages.demo import show_demo_page
+from components.demo import show_demo_page
 
 # Page configuration
 st.set_page_config(
@@ -373,7 +373,7 @@ def show_plans_page():
                 if plan.get('feature_clothing_transform'):
                     st.markdown("✓ AI Clothing Transform")
                 if plan.get('feature_goenhance'):
-                    st.markdown("✓ GoEnhance Effects")
+                    st.markdown("✓ Special Effects")
                 if plan.get('feature_video_gen'):
                     st.markdown("✓ Video Generation")
                 if plan.get('feature_batch_processing'):
@@ -975,6 +975,32 @@ def show_landing_page():
     if 'landing_view' not in st.session_state:
         st.session_state['landing_view'] = 'demo'
 
+    # Initialize language in session state
+    if 'selected_language' not in st.session_state:
+        st.session_state['selected_language'] = 'en'
+
+    # Language selector at the top
+    languages = {
+        "en": "🇺🇸 EN",
+        "zh-TW": "🇹🇼 繁中",
+        "ja": "🇯🇵 日本語",
+        "ko": "🇰🇷 한국어",
+        "es": "🇪🇸 ES",
+    }
+
+    lang_cols = st.columns(5)
+    for i, (code, name) in enumerate(languages.items()):
+        with lang_cols[i]:
+            is_selected = st.session_state.selected_language == code
+            if st.button(
+                name,
+                key=f"nav_lang_{code}",
+                use_container_width=True,
+                type="primary" if is_selected else "secondary"
+            ):
+                st.session_state.selected_language = code
+                st.rerun()
+
     # Top navigation bar
     col1, col2, col3, col4, col5 = st.columns([2.5, 1, 1, 1, 1])
 
@@ -1239,7 +1265,7 @@ def show_public_plans_page():
                 if plan.get('feature_clothing_transform'):
                     st.markdown("✓ AI Clothing Transform")
                 if plan.get('feature_goenhance'):
-                    st.markdown("✓ GoEnhance Effects")
+                    st.markdown("✓ Special Effects")
                 if plan.get('feature_video_gen'):
                     st.markdown("✓ Video Generation")
                 if plan.get('feature_batch_processing'):

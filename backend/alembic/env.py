@@ -31,9 +31,9 @@ def do_run_migrations(connection: Connection) -> None:
         context.run_migrations()
 
 async def run_migrations_online() -> None:
-    configuration = config.get_section(config.config_section_name)
+    configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = settings.DATABASE_URL
-    
+
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",

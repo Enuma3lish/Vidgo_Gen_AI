@@ -2,20 +2,21 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-RUN pip install uv
-
 # Copy requirements first for caching
-COPY pyproject.toml ./
-COPY ../pyproject.toml /root/pyproject.toml
+COPY requirements.txt .
 
 # Install Python dependencies
-RUN uv pip install --system -r /root/pyproject.toml
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .

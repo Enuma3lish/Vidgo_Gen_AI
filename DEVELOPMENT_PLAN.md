@@ -173,12 +173,52 @@ Dec 28     │ Phase 9: Security + Deploy (12h)
 - [ ] Status monitoring
 - [ ] Integration tests
 
-### Phase 4: Pollo + GoEnhance (12h) ⏳ PENDING
+### Phase 4: Pollo + GoEnhance (12h) ✅ COMPLETE
+
+#### GoEnhance Nano Banana (Text-to-Image)
+- [x] GoEnhance API client with Nano Banana support
+- [x] Text-to-Image generation endpoint (`/nano-banana`)
+- [x] Async polling for image completion
+- [x] Image result retrieval (`/jobs/detail`)
+- [x] Style parameter support
+
+#### Pollo AI (Image-to-Video)
+- [x] Pollo AI API client with multiple model support
+- [x] Pixverse v4.5 integration (cheapest model)
+- [x] Image-to-Video generation (`/generation/pixverse/pixverse-v4-5`)
+- [x] Status polling (`/generation/{taskId}/status`)
+- [x] Video URL extraction from `generations[0].url`
+- [x] Length validation (5 or 8 seconds only)
+
+#### GoEnhance V2V (Video Enhancement)
+- [x] Video-to-Video style transformation
+- [x] 12+ style options (Anime, Pixar, Cyberpunk, etc.)
+- [x] Resolution support (540p, 720p)
+- [x] Video enhancement pipeline
+
+#### Demo Pipeline ("See It In Action")
+- [x] Full pipeline implementation:
+  ```
+  User Prompt
+      ↓
+  [Step 1] GoEnhance Nano Banana → Image (~30-60s)
+      ↓
+  [Step 2] Pollo AI Pixverse → Video (~1-3min)
+      ↓
+  [Step 3] GoEnhance V2V → Enhanced Video (~2-5min)
+      ↓
+  Final Demo Result
+  ```
+- [x] Real-time demo generation API endpoint
+- [x] Skip V2V option for faster results
+- [x] Frontend integration with progress display
+
+#### Demo API Endpoints (New)
+- [x] POST `/api/v1/demo/generate-realtime` - Real-time pipeline generation
+
+#### Point System (Pending)
 - [ ] Point balance system
 - [ ] Monthly reset logic
-- [ ] Pollo API integration
-- [ ] GoEnhance full integration
-- [ ] Style transformation UI
 - [ ] Point deduction logic
 
 ### Phase 5: UI/UX (10h) ⏳ PENDING
@@ -265,6 +305,10 @@ Stored securely in PostgreSQL
 - Tokens include: user_id, type, expiry
 
 ---
+ **Test Services Running:**
+
+  - Frontend: http://localhost:8501
+  - Backend: http://localhost:8000
 
 ## Current Project Structure
 
@@ -278,7 +322,7 @@ vidgo/
 │   │   │   ├── deps.py                # Dependencies (auth, db, token validation)
 │   │   │   └── v1/
 │   │   │       ├── auth.py            # Auth endpoints (login, register, verify, reset)
-│   │   │       ├── demo.py            # Demo endpoints
+│   │   │       ├── demo.py            # Demo endpoints (incl. real-time generation)
 │   │   │       ├── plans.py           # Plans endpoints
 │   │   │       └── payments.py        # Payment endpoints
 │   │   ├── core/
@@ -288,7 +332,7 @@ vidgo/
 │   │   ├── models/
 │   │   │   ├── user.py                # User model (email verification fields)
 │   │   │   ├── billing.py             # Plan, Subscription, Order
-│   │   │   └── demo.py                # Demo models
+│   │   │   └── demo.py                # Demo models (ImageDemo, DemoCategory, DemoVideo)
 │   │   ├── schemas/
 │   │   │   ├── user.py                # User schemas (LoginResponse, TokenPair)
 │   │   │   └── plan.py                # Plan schemas
@@ -296,22 +340,27 @@ vidgo/
 │   │       ├── moderation.py          # Content moderation (Gemini + keywords)
 │   │       ├── block_cache.py         # Redis block cache (multi-language)
 │   │       ├── prompt_matching.py     # Prompt matching
-│   │       ├── goenhance.py           # GoEnhance API
+│   │       ├── goenhance.py           # GoEnhance API (Nano Banana + V2V)
+│   │       ├── pollo_ai.py            # Pollo AI API (Image-to-Video)
 │   │       ├── email_service.py       # Email sending (verification, reset, welcome)
-│   │       └── demo_service.py        # Demo service
+│   │       └── demo_service.py        # Demo service (full pipeline orchestration)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app.py                         # Streamlit main (auth flows, plans)
 │   ├── config.py                      # Frontend config (API endpoints)
 │   ├── utils/
-│   │   ├── api_client.py              # API client (client-side password hashing)
+│   │   ├── api_client.py              # API client (incl. real-time demo generation)
 │   │   └── auth.py                    # Auth utilities
+│   ├── components/
+│   │   └── demo.py                    # Demo component (See It In Action)
 │   └── pages/
 │       └── demo.py                    # Demo page
 ├── docker-compose.yml
 ├── pyproject.toml
 ├── README.md
-└── README.zh-TW.md
+├── README.zh-TW.md
+├── DEVELOPMENT_PLAN.md                # This file
+└── ARCHITECTURE.md                    # System architecture
 ```
 
 ---
@@ -391,10 +440,10 @@ vidgo/
 | Service | Where to Get | Priority | Status |
 |---------|--------------|----------|--------|
 | Gemini | ai.google.dev | P0 | ✅ Integrated |
-| GoEnhance | goenhance.ai | P0 | ✅ Integrated |
-| Leonardo AI | leonardo.ai | P0 | ⏳ Pending |
+| GoEnhance | goenhance.ai | P0 | ✅ Integrated (Nano Banana + V2V) |
+| Pollo AI | pollo.ai | P0 | ✅ Integrated (Pixverse I2V) |
+| Leonardo AI | leonardo.ai | P1 | ⏳ Pending |
 | ECPay | ecpay.com.tw | P0 | ⏳ Pending |
-| Pollo AI | pollo.ai | P1 | ⏳ Pending |
 | Paddle | paddle.com | P2 | ⏳ Pending |
 | Runway | runway.ml | P2 | ⏳ Pending |
 
@@ -435,4 +484,4 @@ FRONTEND_URL=http://localhost:8501
 
 ---
 
-*Last Updated: December 21, 2024*
+*Last Updated: December 23, 2024*

@@ -1,13 +1,16 @@
 """
 Watermark Service
-Adds watermarks to demo videos for free tier users
+Adds watermarks to demo images and videos for free tier users
 """
+import io
 import logging
 from typing import Optional, Tuple
 from pathlib import Path
 import tempfile
 import subprocess
 import shutil
+import httpx
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +251,135 @@ class WatermarkService:
             "position": self.position,
             "ffmpeg_available": self._ffmpeg_available
         }
+
+    # =========================================================================
+    # Image Watermarking
+    # =========================================================================
+
+    async def add_watermark_to_image_url(
+        self,
+        image_url: str,
+        watermark_text: Optional[str] = None
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """
+        Download image from URL, add watermark, and return base64 encoded image.
+
+        Args:
+            image_url: URL of the image to watermark
+            watermark_text: Optional custom watermark text
+
+        Returns:
+            Tuple of (success, base64_data_url or error, mime_type)
+        """
+        try:
+            # Download image
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(image_url)
+                if response.status_code != 200:
+                    return False, f"Failed to download image: HTTP {response.status_code}", None
+
+                image_data = response.content
+
+            # Add watermark
+            watermarked_data = self._add_image_watermark(
+                image_data,
+                watermark_text or self.watermark_text
+            )
+
+            if watermarked_data is None:
+                # Return original URL if watermarking fails
+                return True, image_url, "image/png"
+
+            # Encode as base64 data URL
+            import base64
+            base64_image = base64.b64encode(watermarked_data).decode('utf-8')
+            data_url = f"data:image/png;base64,{base64_image}"
+
+            return True, data_url, "image/png"
+
+        except Exception as e:
+            logger.error(f"Image watermark error: {e}")
+            # Return original URL on error
+            return True, image_url, None
+
+    def _add_image_watermark(
+        self,
+        image_data: bytes,
+        watermark_text: str
+    ) -> Optional[bytes]:
+        """
+        Add watermark to image bytes using PIL.
+
+        Args:
+            image_data: Raw image bytes
+            watermark_text: Text to add as watermark
+
+        Returns:
+            Watermarked image bytes or None on error
+        """
+        try:
+            # Open image
+            image = Image.open(io.BytesIO(image_data)).convert("RGBA")
+            width, height = image.size
+
+            # Create watermark overlay
+            watermark = Image.new("RGBA", image.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(watermark)
+
+            # Try to use a nice font, fall back to default
+            try:
+                font = ImageFont.truetype("arial.ttf", self.font_size)
+            except OSError:
+                try:
+                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", self.font_size)
+                except OSError:
+                    font = ImageFont.load_default()
+
+            # Get text size
+            bbox = draw.textbbox((0, 0), watermark_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+
+            # Calculate position
+            padding = 20
+            if self.position == "top_left":
+                x, y = padding, padding
+            elif self.position == "top_right":
+                x, y = width - text_width - padding, padding
+            elif self.position == "bottom_left":
+                x, y = padding, height - text_height - padding
+            elif self.position == "bottom_right":
+                x, y = width - text_width - padding, height - text_height - padding
+            elif self.position == "center":
+                x, y = (width - text_width) // 2, (height - text_height) // 2
+            else:
+                x, y = width - text_width - padding, height - text_height - padding
+
+            # Draw shadow for better visibility
+            shadow_offset = 2
+            shadow_color = (0, 0, 0, int(255 * self.opacity * 0.7))
+            draw.text((x + shadow_offset, y + shadow_offset), watermark_text, font=font, fill=shadow_color)
+
+            # Draw text
+            text_color = (255, 255, 255, int(255 * self.opacity))
+            draw.text((x, y), watermark_text, font=font, fill=text_color)
+
+            # Composite watermark onto image
+            watermarked = Image.alpha_composite(image, watermark)
+
+            # Convert back to RGB for saving
+            watermarked_rgb = watermarked.convert("RGB")
+
+            # Save to bytes
+            output = io.BytesIO()
+            watermarked_rgb.save(output, format="PNG", quality=95)
+            output.seek(0)
+
+            return output.getvalue()
+
+        except Exception as e:
+            logger.error(f"Error adding image watermark: {e}")
+            return None
 
 
 # Default watermark service instance

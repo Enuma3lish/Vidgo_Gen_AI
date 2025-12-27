@@ -94,7 +94,7 @@ class ImageDemo(Base):
 
 
 class DemoVideo(Base):
-    """Pre-generated demo videos (kept for backward compatibility)"""
+    """Pre-generated demo videos for Explore Categories feature"""
     __tablename__ = "demo_videos"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -104,7 +104,10 @@ class DemoVideo(Base):
     keywords = Column(ARRAY(String), default=[])
 
     category_id = Column(UUID(as_uuid=True), ForeignKey("demo_categories.id"), nullable=True)
+    category_slug = Column(String(50), index=True)  # Denormalized for fast queries
 
+    # Image and Video URLs
+    image_url = Column(String(500), nullable=True)  # Source image
     video_url = Column(String(500), nullable=False)
     video_url_watermarked = Column(String(500), nullable=True)
     thumbnail_url = Column(String(500), nullable=True)
@@ -112,9 +115,10 @@ class DemoVideo(Base):
     duration_seconds = Column(Float, default=5.0)
     resolution = Column(String(20), default="720p")
     style = Column(String(50), nullable=True)
+    style_slug = Column(String(50), nullable=True)
 
-    source_service = Column(String(50), nullable=True)
-    generation_params = Column(Text, nullable=True)
+    source_service = Column(String(50), default="pollo_ai")
+    generation_params = Column(JSONB, default={})
 
     popularity_score = Column(Integer, default=0)
     quality_score = Column(Float, default=0.0)
@@ -125,6 +129,11 @@ class DemoVideo(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     category = relationship("DemoCategory", back_populates="video_demos")
+
+    # Indexes for fast queries
+    __table_args__ = (
+        Index('idx_demo_video_category', 'category_slug', 'is_active'),
+    )
 
 
 class DemoView(Base):

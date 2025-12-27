@@ -609,3 +609,176 @@ class APIClient:
             return None
         except Exception as e:
             return None
+
+    def demo_get_random_category_videos(self, category: str, count: int = 3) -> Optional[Dict[str, Any]]:
+        """
+        Get random videos for a category (for Explore Categories display).
+        Returns specified number of random videos for auto-play carousel.
+        """
+        try:
+            response = requests.get(
+                f"{self.backend_url}/api/v1/demo/videos/{category}/random",
+                params={"count": count},
+                headers=self.get_headers(include_auth=False)
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            return None
+
+    def demo_get_category_video_count(self, category: str) -> Optional[Dict[str, Any]]:
+        """Get count of videos for a category"""
+        try:
+            response = requests.get(
+                f"{self.backend_url}/api/v1/demo/videos/{category}/count",
+                headers=self.get_headers(include_auth=False)
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            return None
+
+    def demo_generate_image(
+        self,
+        prompt: str,
+        style: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate demo image only (with watermark).
+        This is the "Generate Demo" feature - Step 1.
+
+        Uses GoEnhance Nano Banana for text-to-image generation.
+        Processing time: ~30-60 seconds.
+
+        Args:
+            prompt: User's text prompt
+            style: Optional style slug for image generation
+
+        Returns:
+            Dict with success, image_url, style_name
+        """
+        try:
+            payload = {"prompt": prompt}
+            if style:
+                payload["style"] = style
+
+            response = requests.post(
+                f"{self.backend_url}/api/v1/demo/generate-image",
+                json=payload,
+                headers=self.get_headers(include_auth=False),
+                timeout=180  # 3 minute timeout
+            )
+
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 400:
+                data = response.json()
+                return {"success": False, "error": data.get("detail", "Content not allowed")}
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+        except requests.Timeout:
+            return {"success": False, "error": "Request timed out (>3 minutes)"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def demo_generate_video(
+        self,
+        prompt: str,
+        image_url: str,
+        style: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate video from an existing image.
+        This is the "See It In Action" feature - Step 2.
+
+        Uses Pollo AI Pixverse for image-to-video generation.
+        Processing time: ~1-3 minutes.
+
+        Args:
+            prompt: User's text prompt (for video motion)
+            image_url: Pre-generated image URL from Step 1
+            style: Optional style slug
+
+        Returns:
+            Dict with success, video_url
+        """
+        try:
+            payload = {
+                "prompt": prompt,
+                "image_url": image_url,
+                "skip_v2v": True  # V2V disabled for current version
+            }
+            if style:
+                payload["style"] = style
+
+            response = requests.post(
+                f"{self.backend_url}/api/v1/demo/generate-realtime",
+                json=payload,
+                headers=self.get_headers(include_auth=False),
+                timeout=360  # 6 minute timeout
+            )
+
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 400:
+                data = response.json()
+                return {"success": False, "error": data.get("detail", "Content not allowed")}
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+        except requests.Timeout:
+            return {"success": False, "error": "Request timed out (>6 minutes)"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def demo_generate_realtime(
+        self,
+        prompt: str,
+        style: str = None,
+        skip_v2v: bool = True,
+        image_url: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate demo in real-time (legacy method for backward compatibility).
+        If image_url is provided, uses that image; otherwise generates new image first.
+
+        NOTE: This can take 3-10 minutes to complete.
+
+        Args:
+            prompt: User's text prompt
+            style: Optional style slug
+            skip_v2v: Skip V2V enhancement (default True)
+            image_url: Optional pre-generated image URL
+
+        Returns:
+            Dict with image_url, video_url
+        """
+        try:
+            payload = {
+                "prompt": prompt,
+                "skip_v2v": skip_v2v
+            }
+            if style:
+                payload["style"] = style
+            if image_url:
+                payload["image_url"] = image_url
+
+            response = requests.post(
+                f"{self.backend_url}/api/v1/demo/generate-realtime",
+                json=payload,
+                headers=self.get_headers(include_auth=False),
+                timeout=600  # 10 minute timeout
+            )
+
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 400:
+                data = response.json()
+                return {"success": False, "error": data.get("detail", "Content not allowed")}
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+        except requests.Timeout:
+            return {"success": False, "error": "Request timed out (>10 minutes)"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

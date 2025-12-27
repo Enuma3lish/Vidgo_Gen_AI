@@ -27,7 +27,8 @@ class EmailService:
 
     def _is_configured(self) -> bool:
         """Check if SMTP is configured."""
-        return bool(self.smtp_host and self.smtp_user and self.smtp_password)
+        # Only require host - user/password optional for local dev (Mailpit)
+        return bool(self.smtp_host)
 
     def _create_message(
         self,
@@ -76,9 +77,13 @@ class EmailService:
                 server = smtplib.SMTP(self.smtp_host, self.smtp_port)
                 server.starttls()
             else:
-                server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
+                # For local development (Mailpit) or SSL
+                server = smtplib.SMTP(self.smtp_host, self.smtp_port)
 
-            server.login(self.smtp_user, self.smtp_password)
+            # Only login if credentials are provided
+            if self.smtp_user and self.smtp_password:
+                server.login(self.smtp_user, self.smtp_password)
+
             server.sendmail(self.from_email, to_email, message.as_string())
             server.quit()
 

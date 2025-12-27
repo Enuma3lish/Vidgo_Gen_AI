@@ -200,13 +200,33 @@ VidGo is a 4-tier AI video generation SaaS platform (Demo / Starter / Pro / Unli
 
 ### External AI Services
 
-| Service | Purpose | Billing Model |
-|---------|---------|---------------|
-| Leonardo AI | Primary video generation | Subscription ($60/mo) |
-| Runway | Backup video generation | On-demand |
-| Pollo AI | Premium video features | Pay-per-use (Points) |
-| GoEnhance | Style transformation | Pay-per-use (Points) |
-| Gemini API | Content moderation | Pay-per-use |
+| Service | Purpose | Billing Model | Status |
+|---------|---------|---------------|--------|
+| GoEnhance | Nano Banana (T2I) + V2V Style Transform | Pay-per-use | ✅ Integrated |
+| Pollo AI | Image-to-Video (Pixverse) | Pay-per-use | ✅ Integrated |
+| Leonardo AI | Primary video generation | Subscription ($60/mo) | ⏳ Pending |
+| Runway | Backup video generation | On-demand | ⏳ Pending |
+| Gemini API | Content moderation | Pay-per-use | ✅ Integrated |
+
+### Demo Pipeline ("See It In Action")
+
+```
+User Prompt
+    ↓
+[Step 1] GoEnhance Nano Banana → Image (~30-60 seconds)
+    ↓
+[Step 2] Pollo AI Pixverse → Video (~1-3 minutes)
+    ↓
+[Step 3] GoEnhance V2V → Enhanced Video (~2-5 minutes)
+    ↓
+Final Demo Result
+```
+
+| Step | Service | Input | Output | Time |
+|------|---------|-------|--------|------|
+| 1 | GoEnhance Nano Banana | Text Prompt | Image URL | 30-60s |
+| 2 | Pollo AI Pixverse v4.5 | Image URL | Video URL (5s) | 1-3min |
+| 3 | GoEnhance V2V | Video URL | Enhanced Video URL | 2-5min |
 
 ## Project Structure
 
@@ -223,37 +243,33 @@ vidgo/
 │   │   │   └── v1/
 │   │   │       ├── __init__.py
 │   │   │       ├── auth.py         # Authentication endpoints
-│   │   │       ├── generation.py   # Video generation endpoints
-│   │   │       ├── points.py       # Point management endpoints
+│   │   │       ├── demo.py         # Demo endpoints (incl. real-time generation)
+│   │   │       ├── plans.py        # Plan endpoints
 │   │   │       └── payments.py     # Payment endpoints
 │   │   ├── core/
 │   │   │   ├── __init__.py
 │   │   │   ├── config.py           # Settings management
 │   │   │   ├── database.py         # Async database setup
 │   │   │   ├── security.py         # JWT + password utilities
-│   │   │   ├── failover.py         # Smart failover logic
 │   │   │   └── rate_limit.py       # Rate limiting
 │   │   ├── models/
 │   │   │   ├── __init__.py
 │   │   │   ├── user.py             # User model
 │   │   │   ├── billing.py          # Plan, Subscription, Order, Invoice
-│   │   │   ├── generation.py       # Generation history
-│   │   │   └── transaction.py      # Point transactions
+│   │   │   └── demo.py             # Demo models (ImageDemo, DemoCategory)
 │   │   ├── schemas/
 │   │   │   ├── __init__.py
 │   │   │   ├── user.py             # User Pydantic schemas
-│   │   │   ├── payment.py          # Payment schemas
-│   │   │   └── generation.py       # Generation schemas
+│   │   │   └── plan.py             # Plan schemas
 │   │   ├── services/
 │   │   │   ├── __init__.py
-│   │   │   ├── leonardo.py         # Leonardo AI integration
-│   │   │   ├── runway.py           # Runway integration
-│   │   │   ├── pollo.py            # Pollo AI integration
-│   │   │   ├── goenhance.py        # GoEnhance integration
+│   │   │   ├── goenhance.py        # GoEnhance (Nano Banana + V2V)
+│   │   │   ├── pollo_ai.py         # Pollo AI (Image-to-Video)
 │   │   │   ├── moderation.py       # Gemini content moderation
-│   │   │   └── ecpay/
-│   │   │       ├── __init__.py
-│   │   │       └── client.py       # ECPay payment client
+│   │   │   ├── block_cache.py      # Redis block cache
+│   │   │   ├── prompt_matching.py  # Prompt matching service
+│   │   │   ├── demo_service.py     # Demo pipeline orchestration
+│   │   │   └── email_service.py    # Email notifications
 │   │   └── utils/
 │   │       ├── __init__.py
 │   │       └── helpers.py          # Utility functions
@@ -266,13 +282,15 @@ vidgo/
 │   ├── app.py                      # Streamlit main app
 │   ├── config.py                   # Frontend configuration
 │   ├── pages/                      # Streamlit pages
-│   ├── components/                 # Reusable components
+│   ├── components/
+│   │   └── demo.py                 # Demo component (See It In Action)
 │   └── utils/
 │       ├── auth.py                 # Auth utilities
-│       ├── api_client.py           # Backend API client
-│       └── session_manager.py      # Session management
+│       └── api_client.py           # Backend API client
 ├── docker-compose.yml
 ├── pyproject.toml
+├── DEVELOPMENT_PLAN.md             # Development timeline
+├── ARCHITECTURE.md                 # This file
 └── README.md
 ```
 
@@ -654,10 +672,10 @@ GET    /api/v1/admin/moderation    Content moderation queue
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Core Infrastructure (FastAPI, PostgreSQL, JWT) | ✅ Complete |
-| 2 | Smart Demo + Gemini Moderation | 🔄 In Progress |
+| 2 | Smart Demo + Gemini Moderation | ✅ Complete |
 | 3 | Leonardo + Runway + Auto-switch | ⏳ Pending |
-| 4 | Pollo + GoEnhance Points | ⏳ Pending |
-| 5 | Upgrade UI + Streamlit | ⏳ Pending |
+| 4 | Pollo + GoEnhance Demo Pipeline | ✅ Complete |
+| 5 | Upgrade UI + Streamlit | 🔄 In Progress |
 | 6 | Dual Payment (ECPay + Paddle) | ⏳ Pending |
 | 7 | i18n (5 languages) | ⏳ Pending |
 | 8 | Admin Dashboard | ⏳ Pending |

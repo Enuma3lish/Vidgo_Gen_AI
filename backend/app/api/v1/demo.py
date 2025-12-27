@@ -69,6 +69,51 @@ class DemoSearchResponse(BaseModel):
     suggestion: Optional[str] = None
 
 
+class GenerateImageRequest(BaseModel):
+    """Request for image-only generation (Generate Demo)"""
+    prompt: str = Field(..., min_length=2, max_length=500, description="User prompt for image")
+    style: Optional[str] = Field(None, description="Style slug for image generation")
+
+
+class GenerateImageResponse(BaseModel):
+    """Response from image generation"""
+    success: bool
+    prompt: str
+    image_url: Optional[str] = None  # Watermarked image (for display)
+    original_url: Optional[str] = None  # Original image (for video generation)
+    style_name: Optional[str] = None
+    error: Optional[str] = None
+
+
+class RealtimeDemoRequest(BaseModel):
+    """Request for real-time demo generation (See It In Action)"""
+    prompt: str = Field(..., min_length=2, max_length=500, description="User prompt for demo")
+    image_url: Optional[str] = Field(None, description="Pre-generated image URL to use for video")
+    style: Optional[str] = Field(None, description="Style slug for V2V enhancement")
+    skip_v2v: bool = Field(True, description="Skip V2V enhancement step (default True for current version)")
+
+
+class PipelineStep(BaseModel):
+    """A step in the demo pipeline"""
+    step: int
+    name: str
+    status: str  # "in_progress", "completed", "failed", "skipped"
+
+
+class RealtimeDemoResponse(BaseModel):
+    """Response from real-time demo generation"""
+    success: bool
+    prompt: str
+    style_name: Optional[str] = None
+    style_slug: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+    enhanced_video_url: Optional[str] = None
+    steps: List[PipelineStep] = []
+    partial: bool = False  # True if only some steps completed
+    error: Optional[str] = None
+
+
 class RandomDemoRequest(BaseModel):
     """Request for random demo"""
     category: Optional[str] = None
@@ -192,6 +237,102 @@ async def search_or_generate_demo(
         )
 
 
+@router.post("/generate-image", response_model=GenerateImageResponse)
+async def generate_demo_image(
+    request: GenerateImageRequest,
+):
+    """
+    Generate a demo image only (with watermark).
+    This is the "Generate Demo" feature - Step 1.
+
+    Uses GoEnhance Nano Banana for text-to-image generation.
+    Image includes watermark for demo purposes.
+
+    Processing time: ~30-60 seconds
+    """
+    # 1. Content moderation
+    moderation_service = get_moderation_service()
+    moderation_result = await moderation_service.moderate(request.prompt)
+
+    if not moderation_result.is_safe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Content not allowed: {moderation_result.reason}"
+        )
+
+    # 2. Generate image only
+    demo_service = get_demo_service()
+    result = await demo_service.generate_image_only(
+        prompt=request.prompt,
+        style_slug=request.style
+    )
+
+    return GenerateImageResponse(
+        success=result.get("success", False),
+        prompt=request.prompt,
+        image_url=result.get("image_url"),
+        original_url=result.get("original_url"),  # For video generation
+        style_name=result.get("style_name"),
+        error=result.get("error")
+    )
+
+
+@router.post("/generate-realtime", response_model=RealtimeDemoResponse)
+async def generate_demo_realtime(
+    request: RealtimeDemoRequest,
+):
+    """
+    Generate video from an existing image.
+    This is the "See It In Action" feature - Step 2.
+
+    If image_url is provided, uses that image directly.
+    Otherwise generates a new image first.
+
+    Uses Pollo AI Pixverse for image-to-video generation.
+    V2V enhancement is disabled in current version.
+
+    Processing time: ~1-3 minutes
+    """
+    # 1. Content moderation
+    moderation_service = get_moderation_service()
+    moderation_result = await moderation_service.moderate(request.prompt)
+
+    if not moderation_result.is_safe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Content not allowed: {moderation_result.reason}"
+        )
+
+    # 2. Generate video (and image if not provided)
+    demo_service = get_demo_service()
+    result = await demo_service.generate_video_from_image(
+        prompt=request.prompt,
+        image_url=request.image_url,
+        style_slug=request.style,
+        skip_v2v=request.skip_v2v
+    )
+
+    return RealtimeDemoResponse(
+        success=result.get("success", False),
+        prompt=result.get("prompt", request.prompt),
+        style_name=result.get("style_name"),
+        style_slug=result.get("style_slug"),
+        image_url=result.get("image_url"),
+        video_url=result.get("video_url"),
+        enhanced_video_url=result.get("enhanced_video_url"),
+        steps=[
+            PipelineStep(
+                step=s.get("step", 0),
+                name=s.get("name", ""),
+                status=s.get("status", "")
+            )
+            for s in result.get("steps", [])
+        ],
+        partial=result.get("partial", False),
+        error=result.get("error")
+    )
+
+
 @router.get("/random", response_model=ImageDemoResponse)
 async def get_random_demo(
     category: Optional[str] = Query(None, description="Filter by category"),
@@ -310,46 +451,26 @@ async def get_category_videos(
     Get videos for a specific category.
     Returns up to 10 demo videos related to the category.
     """
-    # First try to get category from database
-    cat_query = select(DemoCategory).where(DemoCategory.slug == category)
-    cat_result = await db.execute(cat_query)
-    db_category = cat_result.scalar_one_or_none()
-
     category_name = category.replace("_", " ").replace("-", " ").title()
-    if db_category:
-        category_name = db_category.name
 
-    # Get videos from database
-    video_query = select(DemoVideo).where(
-        DemoVideo.is_active == True
-    )
-
-    # Filter by category if we have a category record
-    if db_category:
-        video_query = video_query.where(DemoVideo.category_id == db_category.id)
-
-    video_query = video_query.order_by(
-        DemoVideo.popularity_score.desc(),
-        DemoVideo.created_at.desc()
-    ).limit(limit)
-
-    result = await db.execute(video_query)
-    videos = result.scalars().all()
+    # Use demo service to get videos
+    demo_service = get_demo_service()
+    videos = await demo_service.get_random_category_videos(db, category, limit)
 
     # Convert to response format
     video_list = [
         VideoInfo(
-            id=str(video.id),
-            title=video.title,
-            description=video.description,
-            prompt=video.prompt,
-            video_url=video.video_url,
-            thumbnail_url=video.thumbnail_url,
-            duration_seconds=video.duration_seconds or 5.0,
-            style=video.style,
+            id=v["id"],
+            title=v.get("title", ""),
+            description=None,
+            prompt=v.get("prompt", ""),
+            video_url=v["video_url"],
+            thumbnail_url=v.get("thumbnail_url"),
+            duration_seconds=v.get("duration", 5.0),
+            style=v.get("style"),
             category_slug=category
         )
-        for video in videos
+        for v in videos
     ]
 
     return CategoryVideosResponse(
@@ -358,6 +479,170 @@ async def get_category_videos(
         videos=video_list,
         total_count=len(video_list)
     )
+
+
+@router.get("/videos/{category}/random")
+async def get_random_category_videos(
+    category: str,
+    count: int = Query(3, ge=1, le=10),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get random videos for a category (for Explore Categories display).
+    Returns specified number of random videos for auto-play carousel.
+    """
+    demo_service = get_demo_service()
+
+    # Get video count
+    total = await demo_service.get_category_video_count(db, category)
+
+    # Get random videos
+    videos = await demo_service.get_random_category_videos(db, category, count)
+
+    return {
+        "category": category,
+        "videos": videos,
+        "total_available": total,
+        "has_enough": total >= 30  # Has enough videos for full carousel
+    }
+
+
+@router.get("/videos/{category}/count")
+async def get_category_video_count(
+    category: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get count of videos for a category.
+    Used to check if pre-generation is needed.
+    """
+    demo_service = get_demo_service()
+    count = await demo_service.get_category_video_count(db, category)
+
+    return {
+        "category": category,
+        "count": count,
+        "target": 30,
+        "needs_generation": count < 30
+    }
+
+
+@router.post("/videos/{category}/generate")
+async def generate_category_videos(
+    category: str,
+    count: int = Query(3, ge=1, le=10, description="Number of videos to generate"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate new videos for a category.
+    This is an admin endpoint for pre-populating category videos.
+
+    Each category needs ~30 videos for the Explore Categories feature.
+    This generates videos from the predefined prompts in DEMO_TOPICS.
+    """
+    if category not in DEMO_TOPICS:
+        raise HTTPException(status_code=404, detail=f"Category not found: {category}")
+
+    # Get prompts for this category
+    prompts = DEMO_TOPICS[category]
+
+    # Shuffle and take requested count
+    import random
+    selected_prompts = random.sample(prompts, min(count, len(prompts)))
+
+    demo_service = get_demo_service()
+    result = await demo_service.generate_category_videos_batch(
+        db=db,
+        category_slug=category,
+        prompts=selected_prompts,
+        target_count=30
+    )
+
+    return result
+
+
+@router.post("/videos/generate-all")
+async def generate_all_category_videos(
+    background_tasks: BackgroundTasks,
+    videos_per_category: int = Query(30, ge=1, le=50, description="Number of videos per category"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate videos for ALL categories (background task).
+    This is an admin endpoint for bulk pre-populating all category videos.
+
+    Will generate up to videos_per_category videos for each category.
+    Categories: animals, nature, urban, people, fantasy, sci-fi, food
+    """
+    import random
+    from app.services.goenhance import GOENHANCE_STYLES
+
+    demo_service = get_demo_service()
+    results = {}
+
+    # Available styles for variety
+    style_slugs = [info["slug"] for info in GOENHANCE_STYLES.values()]
+
+    for category, base_prompts in DEMO_TOPICS.items():
+        current_count = await demo_service.get_category_video_count(db, category)
+
+        if current_count >= videos_per_category:
+            results[category] = {
+                "status": "skipped",
+                "message": f"Already has {current_count} videos",
+                "count": current_count
+            }
+            continue
+
+        to_generate = videos_per_category - current_count
+
+        # Generate prompts with style variations
+        prompts_with_styles = []
+        for prompt in base_prompts:
+            for style in style_slugs[:3]:  # Use 3 different styles per prompt
+                prompts_with_styles.append({
+                    "prompt": prompt,
+                    "style": style
+                })
+
+        # Shuffle and select
+        random.shuffle(prompts_with_styles)
+        selected = prompts_with_styles[:to_generate]
+
+        generated = 0
+        failed = 0
+
+        for item in selected:
+            try:
+                result = await demo_service.generate_category_video(
+                    db=db,
+                    prompt=item["prompt"],
+                    category_slug=category,
+                    style_slug=item["style"]
+                )
+                if result.get("success"):
+                    generated += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                failed += 1
+
+            # Rate limiting
+            import asyncio
+            await asyncio.sleep(3)
+
+        final_count = await demo_service.get_category_video_count(db, category)
+        results[category] = {
+            "status": "completed",
+            "generated": generated,
+            "failed": failed,
+            "total": final_count
+        }
+
+    return {
+        "status": "completed",
+        "categories": results
+    }
 
 
 @router.post("/moderate")

@@ -2,12 +2,15 @@
 Demo Generation Service
 Handles demo creation, storage, and retrieval with prompt matching.
 
-Flow:
-1. User enters prompt (any language)
-2. Normalize prompt and extract keywords
-3. Search database for similar demos
-4. If found: return closest match
-5. If not found: generate new demo via GoEnhance, save to DB, return
+Full Pipeline Flow ("See It In Action"):
+1. User enters prompt → GoEnhance Nano Banana (text-to-image)
+2. Generated image → Pollo AI (image-to-video)
+3. Generated video → GoEnhance V2V (video enhancement with style)
+
+Pre-generated Demos ("Explore Categories"):
+- Demos are pre-generated for each category with multiple styles
+- Stored in PostgreSQL for instant retrieval
+- Randomly selected to save API credits
 
 Daily regeneration refreshes all demos with new styles.
 """
@@ -20,9 +23,11 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, func, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.demo import ImageDemo, DemoCategory, PromptCache
+from app.models.demo import ImageDemo, DemoCategory, DemoVideo, PromptCache
 from app.services.goenhance import get_goenhance_client, GOENHANCE_STYLES
+from app.services.pollo_ai import get_pollo_client, POLLO_MODELS
 from app.services.prompt_matching import get_prompt_matching_service, PromptAnalysis
+from app.services.watermark import get_watermark_service
 
 logger = logging.getLogger(__name__)
 
@@ -119,11 +124,17 @@ DEMO_TOPICS = {
 class DemoService:
     """
     Service for demo generation, storage, and retrieval.
-    Handles the full flow from prompt to displayed demo.
+    Handles the full pipeline from prompt to displayed demo.
+
+    Pipeline:
+    1. GoEnhance Nano Banana: Text → Image
+    2. Pollo AI: Image → Video
+    3. GoEnhance V2V: Video → Enhanced Video
     """
 
     def __init__(self):
         self.goenhance = get_goenhance_client()
+        self.pollo = get_pollo_client()
         self.matcher = get_prompt_matching_service()
 
     async def get_or_create_demo(
@@ -192,41 +203,87 @@ class DemoService:
         analysis: PromptAnalysis,
         preferred_style: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Generate new demo via GoEnhance and save to database"""
+        """
+        Generate new demo using the full pipeline and save to database.
 
-        # Select style (use preferred or random)
+        Pipeline:
+        1. GoEnhance Nano Banana: Prompt → Image
+        2. Pollo AI Pixverse: Image → Video
+        3. GoEnhance V2V: Video → Enhanced Video
+        """
+        # Select style for V2V enhancement
         style_id, style_info = self._select_style(analysis, preferred_style)
 
-        # Need source video - use a placeholder for now
-        # In production, you'd have a library of source videos per category
-        source_video = await self._get_source_video(analysis.category)
+        logger.info(f"Starting demo pipeline: {analysis.normalized[:50]}...")
+        logger.info(f"Selected style: {style_info['name']}")
 
-        if not source_video:
-            return {
-                "success": False,
-                "found_existing": False,
-                "error": "No source video available for generation",
-                "suggestion": "Please try a different prompt or style"
-            }
+        # =========================================
+        # Step 1: Generate Image (GoEnhance Nano Banana)
+        # =========================================
+        logger.info("Step 1: Generating image with GoEnhance Nano Banana...")
 
-        # Generate via GoEnhance
-        logger.info(f"Generating demo: {analysis.normalized[:50]}... with style {style_info['name']}")
-
-        result = await self.goenhance.generate_image_demo(
-            source_video_url=source_video,
-            model_id=style_id,
-            prompt=analysis.normalized
+        image_result = await self.goenhance.generate_image_and_wait(
+            prompt=analysis.normalized,
+            style=style_info.get("slug"),
+            timeout=120
         )
 
-        if not result.get("success"):
+        if not image_result.get("success"):
             return {
                 "success": False,
                 "found_existing": False,
-                "error": result.get("error", "Generation failed"),
-                "suggestion": "Please try again later or use a different style"
+                "error": f"Image generation failed: {image_result.get('error')}",
+                "suggestion": "Please try again with a different prompt"
             }
 
+        image_url = image_result.get("image_url")
+        logger.info(f"Step 1 complete: Image generated at {image_url}")
+
+        # =========================================
+        # Step 2: Generate Video (Pollo AI)
+        # =========================================
+        logger.info("Step 2: Generating video with Pollo AI...")
+
+        video_result = await self.pollo.generate_and_wait(
+            image_url=image_url,
+            prompt=analysis.normalized,
+            model="pixverse_v4.5",
+            timeout=300
+        )
+
+        if not video_result.get("success"):
+            # Even if video fails, we still have the image - save partial result
+            logger.warning(f"Video generation failed: {video_result.get('error')}")
+            video_url = None
+        else:
+            video_url = video_result.get("video_url")
+            logger.info(f"Step 2 complete: Video generated at {video_url}")
+
+        # =========================================
+        # Step 3: Enhance Video (GoEnhance V2V) - Optional
+        # =========================================
+        enhanced_video_url = None
+        if video_url:
+            logger.info(f"Step 3: Enhancing video with GoEnhance V2V ({style_info['name']})...")
+
+            enhance_result = await self.goenhance.enhance_video(
+                video_url=video_url,
+                model_id=style_id,
+                prompt=analysis.normalized,
+                timeout=300
+            )
+
+            if enhance_result.get("success"):
+                enhanced_video_url = enhance_result.get("video_url")
+                logger.info(f"Step 3 complete: Enhanced video at {enhanced_video_url}")
+            else:
+                logger.warning(f"Video enhancement failed: {enhance_result.get('error')}")
+                # Use original video if enhancement fails
+                enhanced_video_url = video_url
+
+        # =========================================
         # Save to database
+        # =========================================
         demo = ImageDemo(
             id=uuid4(),
             prompt_original=analysis.original,
@@ -235,23 +292,29 @@ class DemoService:
             keywords=analysis.keywords,
             keywords_json={"extracted": analysis.keywords},
             category_slug=analysis.category,
-            image_url_before=source_video,
-            image_url_after=result.get("video_url"),  # Video URL for GIF-like effect
-            thumbnail_url=result.get("thumbnail_url"),
+            image_url_before=image_url,  # Original generated image
+            image_url_after=enhanced_video_url or video_url,  # Enhanced or original video
+            thumbnail_url=image_url,  # Use image as thumbnail
             style_id=style_id,
             style_name=style_info["name"],
             style_slug=style_info["slug"],
-            task_id=result.get("task_id"),
-            generation_params={"prompt": analysis.normalized},
+            task_id=image_result.get("task_id"),
+            generation_params={
+                "prompt": analysis.normalized,
+                "pipeline": "nano_banana_to_pixverse_to_v2v",
+                "image_url": image_url,
+                "video_url": video_url,
+                "enhanced_video_url": enhanced_video_url
+            },
             status="completed",
             is_active=True,
-            expires_at=datetime.utcnow() + timedelta(days=1)  # Expire after 1 day
+            expires_at=datetime.utcnow() + timedelta(days=7)  # Expire after 7 days
         )
 
         db.add(demo)
         await db.commit()
 
-        logger.info(f"Demo saved: {demo.id}")
+        logger.info(f"Demo pipeline complete! Saved as: {demo.id}")
 
         return {
             "success": True,
@@ -264,6 +327,8 @@ class DemoService:
                 "prompt_normalized": demo.prompt_normalized,
                 "image_before": demo.image_url_before,
                 "image_after": demo.image_url_after,
+                "video_url": video_url,
+                "enhanced_video_url": enhanced_video_url,
                 "style_name": demo.style_name,
                 "style_slug": demo.style_slug,
                 "category": demo.category_slug,
@@ -292,19 +357,211 @@ class DemoService:
         style_id = random.choice(list(GOENHANCE_STYLES.keys()))
         return style_id, GOENHANCE_STYLES[style_id]
 
-    async def _get_source_video(self, category: Optional[str]) -> Optional[str]:
+    async def generate_image_only(
+        self,
+        prompt: str,
+        style_slug: Optional[str] = None,
+        add_watermark: bool = True
+    ) -> Dict[str, Any]:
         """
-        Get source video for transformation.
-        In production, this would select from a library of videos per category.
+        Generate image only (with watermark) for "Generate Demo" feature.
+        This is Step 1 of the demo flow.
+
+        Args:
+            prompt: User's prompt text
+            style_slug: Optional style for image generation
+            add_watermark: Whether to add watermark (default True for demos)
+
+        Returns:
+            Dict with image_url (watermarked if add_watermark=True)
         """
-        # Placeholder videos - you need to provide real source videos
-        source_videos = {
-            "animals": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
-            "nature": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
-            "default": "https://cdn.goenhance.ai/user/upload-data/video-to-video/333768e610e442d02e8030693def0b6e.mp4",
+        logger.info(f"Generating image only: {prompt[:50]}...")
+
+        # Select style
+        style_id = 2000  # Default: Anime Style
+        style_info = GOENHANCE_STYLES.get(style_id, {"name": "Anime Style", "slug": "anime_v5"})
+
+        if style_slug:
+            for sid, info in GOENHANCE_STYLES.items():
+                if info["slug"] == style_slug:
+                    style_id = sid
+                    style_info = info
+                    break
+
+        # Generate image with GoEnhance Nano Banana
+        image_result = await self.goenhance.generate_image_and_wait(
+            prompt=prompt,
+            style=style_info.get("slug"),
+            timeout=120
+        )
+
+        if not image_result.get("success"):
+            return {
+                "success": False,
+                "error": f"Image generation failed: {image_result.get('error')}"
+            }
+
+        image_url = image_result.get("image_url")
+        original_url = image_url
+        logger.info(f"Image generated: {image_url}")
+
+        # Add watermark for demo images
+        if add_watermark and image_url:
+            watermark_service = get_watermark_service()
+            success, watermarked_url, _ = await watermark_service.add_watermark_to_image_url(
+                image_url,
+                watermark_text="VidGo Demo"
+            )
+            if success and watermarked_url:
+                image_url = watermarked_url
+                logger.info("Watermark added to image")
+
+        return {
+            "success": True,
+            "image_url": image_url,
+            "original_url": original_url,  # Keep original for video generation
+            "style_name": style_info["name"],
+            "style_slug": style_info["slug"]
         }
 
-        return source_videos.get(category, source_videos["default"])
+    async def generate_video_from_image(
+        self,
+        prompt: str,
+        image_url: Optional[str] = None,
+        style_slug: Optional[str] = None,
+        skip_v2v: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate video from an existing image for "See It In Action" feature.
+        This is Step 2 of the demo flow.
+
+        If image_url is not provided, generates a new image first.
+
+        Args:
+            prompt: User's prompt text (for video motion description)
+            image_url: Pre-generated image URL (from Step 1)
+            style_slug: Optional style for V2V enhancement
+            skip_v2v: Skip V2V enhancement (default True for current version)
+
+        Returns:
+            Dict with video_url
+        """
+        logger.info(f"Generating video from image: {prompt[:50]}...")
+
+        # Select style
+        style_id = 2000  # Default: Anime Style
+        style_info = GOENHANCE_STYLES.get(style_id, {"name": "Anime Style", "slug": "anime_v5"})
+
+        if style_slug:
+            for sid, info in GOENHANCE_STYLES.items():
+                if info["slug"] == style_slug:
+                    style_id = sid
+                    style_info = info
+                    break
+
+        result = {
+            "success": False,
+            "prompt": prompt,
+            "style_name": style_info["name"],
+            "style_slug": style_info["slug"],
+            "steps": []
+        }
+
+        # =========================================
+        # Step 1: Generate Image if not provided
+        # =========================================
+        if not image_url:
+            logger.info("No image provided, generating new image...")
+            result["steps"].append({"step": 1, "name": "Image Generation", "status": "in_progress"})
+
+            image_result = await self.goenhance.generate_image_and_wait(
+                prompt=prompt,
+                style=style_info.get("slug"),
+                timeout=120
+            )
+
+            if not image_result.get("success"):
+                result["steps"][-1]["status"] = "failed"
+                result["error"] = f"Image generation failed: {image_result.get('error')}"
+                return result
+
+            image_url = image_result.get("image_url")
+            result["steps"][-1]["status"] = "completed"
+            logger.info(f"Image generated: {image_url}")
+        else:
+            logger.info(f"Using provided image: {image_url}")
+            result["steps"].append({"step": 1, "name": "Image (Pre-generated)", "status": "completed"})
+
+        result["image_url"] = image_url
+
+        # =========================================
+        # Step 2: Generate Video (Pollo AI)
+        # =========================================
+        logger.info("Generating video with Pollo AI...")
+        result["steps"].append({"step": 2, "name": "Video Generation", "status": "in_progress"})
+
+        video_result = await self.pollo.generate_and_wait(
+            image_url=image_url,
+            prompt=prompt,
+            model="pixverse_v4.5",
+            timeout=300
+        )
+
+        if not video_result.get("success"):
+            result["steps"][-1]["status"] = "failed"
+            result["error"] = f"Video generation failed: {video_result.get('error')}"
+            # Still return partial success with image
+            result["success"] = True
+            result["partial"] = True
+            return result
+
+        video_url = video_result.get("video_url")
+        result["video_url"] = video_url
+        result["steps"][-1]["status"] = "completed"
+        logger.info(f"Video generated: {video_url}")
+
+        # =========================================
+        # Step 3: Enhance Video (GoEnhance V2V) - Optional
+        # Current version: skip_v2v=True by default
+        # =========================================
+        if not skip_v2v and video_url:
+            logger.info(f"Enhancing video with GoEnhance V2V ({style_info['name']})...")
+            result["steps"].append({"step": 3, "name": "Video Enhancement", "status": "in_progress"})
+
+            enhance_result = await self.goenhance.enhance_video(
+                video_url=video_url,
+                model_id=style_id,
+                prompt=prompt,
+                timeout=300
+            )
+
+            if enhance_result.get("success"):
+                result["enhanced_video_url"] = enhance_result.get("video_url")
+                result["steps"][-1]["status"] = "completed"
+                logger.info(f"Video enhanced: {result['enhanced_video_url']}")
+            else:
+                result["steps"][-1]["status"] = "skipped"
+                logger.warning("V2V enhancement failed, using original video")
+
+        result["success"] = True
+        logger.info("Video generation complete!")
+        return result
+
+    async def generate_demo_realtime(
+        self,
+        prompt: str,
+        style_slug: Optional[str] = None,
+        skip_v2v: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Legacy method - calls generate_video_from_image for backward compatibility.
+        """
+        return await self.generate_video_from_image(
+            prompt=prompt,
+            image_url=None,
+            style_slug=style_slug,
+            skip_v2v=skip_v2v
+        )
 
     async def _increment_popularity(self, db: AsyncSession, demo_id) -> None:
         """Increment demo popularity score"""
@@ -441,6 +698,220 @@ class DemoService:
         logger.info(f"Cleaned up {count} expired demos")
 
         return count
+
+    # =========================================================================
+    # Category Video Methods (Explore Categories)
+    # =========================================================================
+
+    async def get_category_video_count(
+        self,
+        db: AsyncSession,
+        category_slug: str
+    ) -> int:
+        """Get count of active videos for a category"""
+        query = select(func.count(DemoVideo.id)).where(
+            and_(
+                DemoVideo.category_slug == category_slug,
+                DemoVideo.is_active == True
+            )
+        )
+        result = await db.execute(query)
+        return result.scalar() or 0
+
+    async def get_random_category_videos(
+        self,
+        db: AsyncSession,
+        category_slug: str,
+        count: int = 3
+    ) -> List[Dict[str, Any]]:
+        """
+        Get random videos for a category for Explore Categories display.
+
+        Args:
+            db: Database session
+            category_slug: Category slug (e.g., "animals", "nature")
+            count: Number of videos to return (default 3)
+
+        Returns:
+            List of video dictionaries
+        """
+        query = select(DemoVideo).where(
+            and_(
+                DemoVideo.category_slug == category_slug,
+                DemoVideo.is_active == True
+            )
+        ).order_by(func.random()).limit(count)
+
+        result = await db.execute(query)
+        videos = result.scalars().all()
+
+        return [
+            {
+                "id": str(v.id),
+                "title": v.title,
+                "prompt": v.prompt,
+                "video_url": v.video_url,
+                "thumbnail_url": v.thumbnail_url or v.image_url,
+                "duration": v.duration_seconds,
+                "style": v.style,
+                "category": v.category_slug
+            }
+            for v in videos
+        ]
+
+    async def generate_category_video(
+        self,
+        db: AsyncSession,
+        prompt: str,
+        category_slug: str,
+        style_slug: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate a single video for a category and save to database.
+
+        Args:
+            db: Database session
+            prompt: Prompt for video generation
+            category_slug: Category this video belongs to
+            style_slug: Optional style for image generation
+
+        Returns:
+            Dict with video info or error
+        """
+        logger.info(f"Generating category video: {prompt[:50]}... [{category_slug}]")
+
+        # Step 1: Generate image (without watermark for video)
+        image_result = await self.goenhance.generate_image_and_wait(
+            prompt=prompt,
+            style=style_slug,
+            timeout=120
+        )
+
+        if not image_result.get("success"):
+            return {
+                "success": False,
+                "error": f"Image generation failed: {image_result.get('error')}"
+            }
+
+        image_url = image_result.get("image_url")
+        logger.info(f"Image generated: {image_url}")
+
+        # Step 2: Generate video (5 seconds)
+        video_result = await self.pollo.generate_and_wait(
+            image_url=image_url,
+            prompt=prompt,
+            model="pixverse_v4.5",
+            timeout=300
+        )
+
+        if not video_result.get("success"):
+            return {
+                "success": False,
+                "error": f"Video generation failed: {video_result.get('error')}"
+            }
+
+        video_url = video_result.get("video_url")
+        logger.info(f"Video generated: {video_url}")
+
+        # Step 3: Save to database
+        video = DemoVideo(
+            id=uuid4(),
+            title=prompt[:100],
+            prompt=prompt,
+            category_slug=category_slug,
+            image_url=image_url,
+            video_url=video_url,
+            thumbnail_url=image_url,
+            duration_seconds=5.0,
+            style=style_slug,
+            style_slug=style_slug,
+            source_service="pollo_ai",
+            generation_params={
+                "prompt": prompt,
+                "style": style_slug,
+                "model": "pixverse_v4.5"
+            },
+            is_active=True
+        )
+
+        db.add(video)
+        await db.commit()
+
+        logger.info(f"Category video saved: {video.id}")
+
+        return {
+            "success": True,
+            "video_id": str(video.id),
+            "video_url": video_url,
+            "image_url": image_url,
+            "prompt": prompt,
+            "category": category_slug
+        }
+
+    async def generate_category_videos_batch(
+        self,
+        db: AsyncSession,
+        category_slug: str,
+        prompts: List[str],
+        target_count: int = 30
+    ) -> Dict[str, Any]:
+        """
+        Generate multiple videos for a category.
+        Will stop when target_count is reached.
+
+        Args:
+            db: Database session
+            category_slug: Category to generate for
+            prompts: List of prompts to use
+            target_count: Target number of videos (default 30)
+
+        Returns:
+            Dict with generation results
+        """
+        current_count = await self.get_category_video_count(db, category_slug)
+
+        if current_count >= target_count:
+            return {
+                "success": True,
+                "message": f"Category {category_slug} already has {current_count} videos",
+                "generated": 0,
+                "total": current_count
+            }
+
+        to_generate = min(len(prompts), target_count - current_count)
+        generated = 0
+        failed = 0
+
+        for i, prompt in enumerate(prompts[:to_generate]):
+            try:
+                result = await self.generate_category_video(
+                    db=db,
+                    prompt=prompt,
+                    category_slug=category_slug
+                )
+
+                if result.get("success"):
+                    generated += 1
+                else:
+                    failed += 1
+                    logger.warning(f"Failed to generate video {i+1}: {result.get('error')}")
+
+                # Rate limiting - 2 second delay between generations
+                await asyncio.sleep(2)
+
+            except Exception as e:
+                logger.error(f"Error generating video {i+1}: {e}")
+                failed += 1
+
+        final_count = await self.get_category_video_count(db, category_slug)
+
+        return {
+            "success": True,
+            "message": f"Generated {generated} videos for {category_slug}",
+            "generated": generated,
+            "failed": failed,
+            "total": final_count
+        }
 
 
 # Singleton instance

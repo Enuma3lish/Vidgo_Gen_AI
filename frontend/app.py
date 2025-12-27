@@ -970,64 +970,24 @@ def show_landing_page():
     """
     Landing page for non-authenticated users.
     Shows demo with login/register options.
+    Layout like douhuiai.com - NO language buttons at top
     """
     # Initialize landing page state
     if 'landing_view' not in st.session_state:
         st.session_state['landing_view'] = 'demo'
 
     # Initialize language in session state
-    if 'selected_language' not in st.session_state:
-        st.session_state['selected_language'] = 'en'
+    if 'lang' not in st.session_state:
+        st.session_state['lang'] = 'en'
 
-    # Language selector at the top
+    # Language options for dropdown
     languages = {
-        "en": "🇺🇸 EN",
-        "zh-TW": "🇹🇼 繁中",
+        "en": "🇺🇸 English",
+        "zh-TW": "🇹🇼 繁體中文",
         "ja": "🇯🇵 日本語",
         "ko": "🇰🇷 한국어",
-        "es": "🇪🇸 ES",
+        "es": "🇪🇸 Español",
     }
-
-    lang_cols = st.columns(5)
-    for i, (code, name) in enumerate(languages.items()):
-        with lang_cols[i]:
-            is_selected = st.session_state.selected_language == code
-            if st.button(
-                name,
-                key=f"nav_lang_{code}",
-                use_container_width=True,
-                type="primary" if is_selected else "secondary"
-            ):
-                st.session_state.selected_language = code
-                st.rerun()
-
-    # Top navigation bar
-    col1, col2, col3, col4, col5 = st.columns([2.5, 1, 1, 1, 1])
-
-    with col1:
-        st.markdown("### 🎬 VidGo")
-
-    with col2:
-        if st.button("Demo", use_container_width=True, type="secondary" if st.session_state['landing_view'] != 'demo' else "primary"):
-            st.session_state['landing_view'] = 'demo'
-            st.rerun()
-
-    with col3:
-        if st.button("Plans", use_container_width=True, type="secondary" if st.session_state['landing_view'] != 'plans' else "primary"):
-            st.session_state['landing_view'] = 'plans'
-            st.rerun()
-
-    with col4:
-        if st.button("Login", use_container_width=True, type="secondary" if st.session_state['landing_view'] != 'login' else "primary"):
-            st.session_state['landing_view'] = 'login'
-            st.rerun()
-
-    with col5:
-        if st.button("Register", use_container_width=True, type="secondary" if st.session_state['landing_view'] != 'register' else "primary"):
-            st.session_state['landing_view'] = 'register'
-            st.rerun()
-
-    st.markdown("---")
 
     # Show selected view
     if st.session_state['landing_view'] == 'demo':

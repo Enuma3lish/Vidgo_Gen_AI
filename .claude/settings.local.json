@@ -31,7 +31,14 @@
       "Bash(git remote rename:*)",
       "Bash(git remote add:*)",
       "Bash(git push:*)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "WebFetch(domain:www.douhuiai.com)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(cmd /c \"tasklist /FI \"\"PID eq 7604\"\"\")",
+      "Bash(taskkill //F //PID 7604)",
+      "Bash(cmd /c \"taskkill /F /PID 7604\")",
+      "Bash(ping:*)"
     ]
   }
 }

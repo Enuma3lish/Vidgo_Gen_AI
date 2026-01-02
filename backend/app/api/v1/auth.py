@@ -27,9 +27,21 @@ from app.schemas.user import (
     PasswordReset,
 )
 from app.services.email_service import email_service
+from app.services.email_verify import EmailVerificationService
+import redis.asyncio as redis
 
 settings = get_settings()
 router = APIRouter()
+
+
+# Redis client for verification service
+async def get_redis_client():
+    """Get Redis client for verification service."""
+    try:
+        client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        return client
+    except Exception:
+        return None
 
 
 # ============== Login / Logout ==============
@@ -473,3 +485,72 @@ async def change_password(
     await db.commit()
 
     return MessageResponse(message="Password changed successfully")
+
+
+# ============== 6-Digit Code Verification (New System) ==============
+
+class VerifyCodeRequest(BaseModel):
+    """Request body for 6-digit code verification."""
+    email: EmailStr
+    code: str
+
+
+class ResendCodeRequest(BaseModel):
+    """Request body for resending verification code."""
+    email: EmailStr
+
+
+@router.post("/verify-code", response_model=MessageResponse)
+async def verify_email_code(
+    db: AsyncSession = Depends(deps.get_db),
+    request: VerifyCodeRequest = Body(...)
+) -> Any:
+    """
+    Verify email using 6-digit code.
+
+    This is the new verification system using 6-digit codes instead of links.
+    - Code expires in 15 minutes
+    - Maximum 3 attempts per code
+    """
+    redis_client = await get_redis_client()
+    verify_service = EmailVerificationService(db, redis_client, email_service)
+
+    success, message = await verify_service.verify_code(request.email, request.code)
+
+    if redis_client:
+        await redis_client.close()
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+
+    return MessageResponse(message=message)
+
+
+@router.post("/resend-code", response_model=MessageResponse)
+async def resend_verification_code(
+    db: AsyncSession = Depends(deps.get_db),
+    request: ResendCodeRequest = Body(...)
+) -> Any:
+    """
+    Resend 6-digit verification code.
+
+    Rate limited to 5 requests per hour.
+    """
+    redis_client = await get_redis_client()
+    verify_service = EmailVerificationService(db, redis_client, email_service)
+
+    success, message = await verify_service.resend_code(request.email)
+
+    if redis_client:
+        await redis_client.close()
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS if "Too many" in message else status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+
+    return MessageResponse(message=message)

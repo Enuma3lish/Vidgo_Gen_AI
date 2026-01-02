@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     POLLO_API_KEY: str = ""
     GOENHANCE_API_KEY: str = ""
 
+    # Taiwanese TTS (台語/閩南語 TTS)
+    # Option 1: Taigi TTS API (https://learn-language.tokyo/en/taiwanese-taigi-tts-api)
+    TAIGI_TTS_API_KEY: str = ""
+    # Option 2: Self-hosted tai5-uan5 (https://github.com/i3thuan5/tai5-uan5_gian5-gi2_hok8-bu7)
+    TAI5UAN5_BASE_URL: str = ""
+
     # Payment - ECPay (Taiwan)
     ECPAY_MERCHANT_ID: str = ""
     ECPAY_HASH_KEY: str = ""
@@ -71,3 +77,7 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings():
     return Settings()
+
+
+# Create settings instance for easy import
+settings = get_settings()

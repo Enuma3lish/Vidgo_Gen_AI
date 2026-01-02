@@ -1,0 +1,130 @@
+{
+  "app": {
+    "name": "VidGo AI",
+    "tagline": "Plataforma Creativa con IA"
+  },
+  "nav": {
+    "home": "Inicio",
+    "pricing": "Precios",
+    "api": "API",
+    "login": "Iniciar sesión",
+    "register": "Registrarse",
+    "logout": "Cerrar sesión",
+    "dashboard": "Panel",
+    "myWorks": "Mis trabajos"
+  },
+  "hero": {
+    "title": "Crea contenido increíble con IA",
+    "subtitle": "Transforma tus ideas en imágenes y videos impresionantes con nuestras herramientas de IA",
+    "cta": "Empezar a crear",
+    "secondaryCta": "Ver precios"
+  },
+  "tools": {
+    "backgroundRemoval": {
+      "name": "Eliminar fondo",
+      "desc": "Elimina fondos al instante con IA",
+      "longDesc": "Detecta y elimina automáticamente fondos de cualquier imagen con un clic"
+    },
+    "productScene": {
+      "name": "Escena de producto",
+      "desc": "Genera fotos de productos increíbles",
+      "longDesc": "Crea fotografía profesional de productos con escenas y fondos generados por IA"
+    },
+    "tryOn": {
+      "name": "Prueba virtual",
+      "desc": "Probador virtual de ropa",
+      "longDesc": "Ve cómo se ve la ropa en diferentes modelos con prueba virtual con IA"
+    },
+    "roomRedesign": {
+      "name": "Rediseño de habitación",
+      "desc": "Transforma espacios interiores",
+      "longDesc": "Rediseña cualquier habitación con sugerencias de decoración interior con IA"
+    },
+    "shortVideo": {
+      "name": "Video corto",
+      "desc": "Crea videos cortos atractivos",
+      "longDesc": "Genera videos cortos cautivadores a partir de descripciones de texto o imágenes"
+    }
+  },
+  "categories": {
+    "aiCreate": "Creación IA",
+    "editing": "Apps de edición",
+    "video": "Creación de video",
+    "architecture": "Arquitectura",
+    "product": "E-commerce",
+    "portrait": "Retrato"
+  },
+  "badges": {
+    "free": "Gratis",
+    "beta": "Beta",
+    "hot": "Popular",
+    "new": "Nuevo"
+  },
+  "common": {
+    "upload": "Subir",
+    "generate": "Generar",
+    "download": "Descargar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "loading": "Cargando...",
+    "processing": "Procesando...",
+    "success": "Éxito",
+    "error": "Error",
+    "dragDrop": "Arrastra y suelta archivos aquí o haz clic para subir",
+    "supportedFormats": "Formatos soportados: JPG, PNG, WEBP",
+    "maxSize": "Tamaño máximo: 10MB",
+    "credits": "Créditos",
+    "estimatedCost": "Costo estimado"
+  },
+  "auth": {
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "confirmPassword": "Confirmar contraseña",
+    "verificationCode": "Código de verificación",
+    "sendCode": "Enviar código",
+    "resendCode": "Reenviar",
+    "loginTitle": "Bienvenido de vuelta",
+    "loginSubtitle": "Inicia sesión en tu cuenta",
+    "registerTitle": "Crear cuenta",
+    "registerSubtitle": "Únete a VidGo AI hoy",
+    "verifyTitle": "Verificar correo",
+    "verifySubtitle": "Ingresa el código de 6 dígitos enviado a tu correo",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "noAccount": "¿No tienes cuenta?",
+    "hasAccount": "¿Ya tienes cuenta?",
+    "signUp": "Registrarse",
+    "signIn": "Iniciar sesión"
+  },
+  "dashboard": {
+    "welcome": "Bienvenido de vuelta",
+    "totalCredits": "Créditos totales",
+    "usedThisWeek": "Usados esta semana",
+    "recentWorks": "Trabajos recientes",
+    "quickActions": "Acciones rápidas",
+    "viewAll": "Ver todo"
+  },
+  "pricing": {
+    "title": "Elige tu plan",
+    "subtitle": "Comienza gratis y escala según crezcas",
+    "monthly": "Mensual",
+    "yearly": "Anual",
+    "demo": "Demo",
+    "starter": "Inicial",
+    "pro": "Pro",
+    "proPlus": "Pro+",
+    "free": "Gratis",
+    "currentPlan": "Plan actual",
+    "upgrade": "Mejorar",
+    "features": "Características"
+  },
+  "footer": {
+    "about": "Acerca de",
+    "terms": "Términos",
+    "privacy": "Privacidad",
+    "contact": "Contacto",
+    "copyright": "© 2024 VidGo AI. Todos los derechos reservados."
+  }
+}

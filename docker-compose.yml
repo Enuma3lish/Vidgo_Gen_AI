@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -103,21 +101,68 @@ services:
     networks:
       - vidgo_network
 
-  # Streamlit Frontend
+  # Material Initialization (runs once on startup to seed and generate showcases)
+  # IMPORTANT: Frontend waits for this to complete before starting
+  init-materials:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vidgo_init_materials
+    command: >
+      sh -c "echo '========================================' &&
+             echo 'VidGo Material Pre-generation Pipeline' &&
+             echo '========================================' &&
+             echo '' &&
+             echo 'Step 1: Seeding unified Material model...' &&
+             python -m scripts.seed_materials --clear &&
+             echo '' &&
+             echo 'Step 2: Seeding legacy tool showcases...' &&
+             python -m scripts.seed_tool_showcases --clear 2>/dev/null || echo 'Legacy seeding skipped' &&
+             echo '' &&
+             echo 'Step 3: Running startup pre-generation...' &&
+             echo '(Validates APIs and pre-generates materials)' &&
+             python -m scripts.startup_pregenerate --limit 15 2>/dev/null || echo 'Pre-generation skipped' &&
+             echo '' &&
+             echo 'Step 4: Final material status check...' &&
+             python -m scripts.seed_materials --check &&
+             echo '' &&
+             echo '========================================' &&
+             echo 'Material initialization complete!' &&
+             echo 'Materials seeded and ready for use' &&
+             echo '========================================'"
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/vidgo
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - vidgo_network
+    restart: "no"
+
+  # Vue 3 Frontend
   frontend:
     build:
-      context: ./frontend
+      context: ./frontend-vue
       dockerfile: Dockerfile
     container_name: vidgo_frontend
-    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
     volumes:
-      - ./frontend:/app
+      - ./frontend-vue:/app
+      - /app/node_modules
     ports:
-      - "8501:8501"
+      - "8501:5173"
     environment:
-      - BACKEND_URL=http://backend:8000
+      # Empty so Vite proxy handles /api requests
+      - VITE_API_BASE_URL=
+      # Flag to indicate Docker environment for proxy config
+      - DOCKER_ENV=true
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - vidgo_network
 

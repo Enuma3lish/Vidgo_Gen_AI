@@ -1,8 +1,17 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, payments, demo, plans
+from app.api.v1 import auth, payments, demo, plans, promotions, credits, effects, generation, landing, quota, tools, admin, session
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
 api_router.include_router(demo.router, prefix="/demo", tags=["demo"])
 api_router.include_router(plans.router, prefix="/plans", tags=["plans"])
+api_router.include_router(promotions.router, prefix="/promotions", tags=["promotions"])
+api_router.include_router(credits.router, tags=["credits"])
+api_router.include_router(effects.router, tags=["effects"])
+api_router.include_router(generation.router, prefix="/generate", tags=["generation"])
+api_router.include_router(landing.router, prefix="/landing", tags=["landing"])
+api_router.include_router(quota.router, prefix="/quota", tags=["quota"])
+api_router.include_router(tools.router, prefix="/tools", tags=["tools"])
+api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(session.router, prefix="/session", tags=["session"])

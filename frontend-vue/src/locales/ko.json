@@ -1,0 +1,130 @@
+{
+  "app": {
+    "name": "VidGo AI",
+    "tagline": "AI 기반 크리에이티브 플랫폼"
+  },
+  "nav": {
+    "home": "홈",
+    "pricing": "가격",
+    "api": "API",
+    "login": "로그인",
+    "register": "회원가입",
+    "logout": "로그아웃",
+    "dashboard": "대시보드",
+    "myWorks": "내 작업"
+  },
+  "hero": {
+    "title": "AI로 놀라운 콘텐츠 만들기",
+    "subtitle": "강력한 AI 도구로 아이디어를 멋진 이미지와 동영상으로 변환하세요",
+    "cta": "만들기 시작",
+    "secondaryCta": "가격 보기"
+  },
+  "tools": {
+    "backgroundRemoval": {
+      "name": "배경 제거",
+      "desc": "AI로 즉시 배경 제거",
+      "longDesc": "한 번의 클릭으로 모든 이미지에서 배경을 자동 감지하고 제거"
+    },
+    "productScene": {
+      "name": "제품 장면",
+      "desc": "멋진 제품 사진 생성",
+      "longDesc": "AI 생성 장면과 배경으로 전문적인 제품 촬영 제작"
+    },
+    "tryOn": {
+      "name": "가상 피팅",
+      "desc": "가상 의류 피팅",
+      "longDesc": "AI 기반 가상 피팅으로 다양한 모델에서 의류가 어떻게 보이는지 확인"
+    },
+    "roomRedesign": {
+      "name": "공간 리디자인",
+      "desc": "인테리어 공간 변환",
+      "longDesc": "AI 기반 인테리어 디자인 제안으로 모든 방을 리디자인"
+    },
+    "shortVideo": {
+      "name": "쇼트 비디오",
+      "desc": "매력적인 쇼트 비디오 제작",
+      "longDesc": "텍스트 설명이나 이미지에서 매력적인 쇼트 비디오 생성"
+    }
+  },
+  "categories": {
+    "aiCreate": "AI 생성",
+    "editing": "편집 앱",
+    "video": "비디오 생성",
+    "architecture": "건축",
+    "product": "이커머스",
+    "portrait": "인물사진"
+  },
+  "badges": {
+    "free": "무료",
+    "beta": "베타",
+    "hot": "인기",
+    "new": "신규"
+  },
+  "common": {
+    "upload": "업로드",
+    "generate": "생성",
+    "download": "다운로드",
+    "cancel": "취소",
+    "confirm": "확인",
+    "save": "저장",
+    "delete": "삭제",
+    "edit": "편집",
+    "loading": "로딩 중...",
+    "processing": "처리 중...",
+    "success": "성공",
+    "error": "오류",
+    "dragDrop": "파일을 드래그 앤 드롭하거나 클릭하여 업로드",
+    "supportedFormats": "지원 형식: JPG, PNG, WEBP",
+    "maxSize": "최대 크기: 10MB",
+    "credits": "크레딧",
+    "estimatedCost": "예상 비용"
+  },
+  "auth": {
+    "email": "이메일",
+    "password": "비밀번호",
+    "confirmPassword": "비밀번호 확인",
+    "verificationCode": "인증 코드",
+    "sendCode": "코드 전송",
+    "resendCode": "재전송",
+    "loginTitle": "다시 오신 것을 환영합니다",
+    "loginSubtitle": "계정에 로그인하세요",
+    "registerTitle": "계정 만들기",
+    "registerSubtitle": "VidGo AI에 가입하세요",
+    "verifyTitle": "이메일 인증",
+    "verifySubtitle": "이메일로 전송된 6자리 코드를 입력하세요",
+    "forgotPassword": "비밀번호를 잊으셨나요?",
+    "noAccount": "계정이 없으신가요?",
+    "hasAccount": "이미 계정이 있으신가요?",
+    "signUp": "가입",
+    "signIn": "로그인"
+  },
+  "dashboard": {
+    "welcome": "다시 오신 것을 환영합니다",
+    "totalCredits": "총 크레딧",
+    "usedThisWeek": "이번 주 사용량",
+    "recentWorks": "최근 작업",
+    "quickActions": "빠른 작업",
+    "viewAll": "모두 보기"
+  },
+  "pricing": {
+    "title": "플랜 선택",
+    "subtitle": "무료로 시작하고 필요에 따라 확장",
+    "monthly": "월간",
+    "yearly": "연간",
+    "demo": "데모",
+    "starter": "스타터",
+    "pro": "프로",
+    "proPlus": "프로+",
+    "free": "무료",
+    "currentPlan": "현재 플랜",
+    "upgrade": "업그레이드",
+    "features": "기능"
+  },
+  "footer": {
+    "about": "회사 소개",
+    "terms": "이용약관",
+    "privacy": "개인정보처리방침",
+    "contact": "문의하기",
+    "copyright": "© 2024 VidGo AI. All rights reserved."
+  }
+}

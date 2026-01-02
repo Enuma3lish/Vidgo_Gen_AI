@@ -1,0 +1,130 @@
+{
+  "app": {
+    "name": "VidGo AI",
+    "tagline": "AIパワード創作プラットフォーム"
+  },
+  "nav": {
+    "home": "ホーム",
+    "pricing": "料金",
+    "api": "API",
+    "login": "ログイン",
+    "register": "登録",
+    "logout": "ログアウト",
+    "dashboard": "ダッシュボード",
+    "myWorks": "作品一覧"
+  },
+  "hero": {
+    "title": "AIで素晴らしいコンテンツを作成",
+    "subtitle": "強力なAIツールでアイデアを素晴らしい画像や動画に変換",
+    "cta": "作成開始",
+    "secondaryCta": "料金を見る"
+  },
+  "tools": {
+    "backgroundRemoval": {
+      "name": "背景除去",
+      "desc": "AIで瞬時に背景を除去",
+      "longDesc": "ワンクリックで任意の画像から背景を自動検出して除去"
+    },
+    "productScene": {
+      "name": "商品シーン",
+      "desc": "素晴らしい商品写真を生成",
+      "longDesc": "AI生成のシーンと背景でプロフェッショナルな商品撮影を作成"
+    },
+    "tryOn": {
+      "name": "バーチャル試着",
+      "desc": "仮想衣装試着",
+      "longDesc": "AIパワードのバーチャル試着で異なるモデルでの着用イメージを確認"
+    },
+    "roomRedesign": {
+      "name": "ルームリデザイン",
+      "desc": "インテリア空間を変換",
+      "longDesc": "AIパワードのインテリアデザイン提案で任意の部屋をリデザイン"
+    },
+    "shortVideo": {
+      "name": "ショート動画",
+      "desc": "魅力的なショート動画を作成",
+      "longDesc": "テキスト説明や画像から魅力的なショート動画を生成"
+    }
+  },
+  "categories": {
+    "aiCreate": "AI作成",
+    "editing": "編集アプリ",
+    "video": "動画作成",
+    "architecture": "建築",
+    "product": "EC商品",
+    "portrait": "ポートレート"
+  },
+  "badges": {
+    "free": "無料",
+    "beta": "ベータ",
+    "hot": "人気",
+    "new": "新機能"
+  },
+  "common": {
+    "upload": "アップロード",
+    "generate": "生成",
+    "download": "ダウンロード",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "save": "保存",
+    "delete": "削除",
+    "edit": "編集",
+    "loading": "読み込み中...",
+    "processing": "処理中...",
+    "success": "成功",
+    "error": "エラー",
+    "dragDrop": "ファイルをドラッグ＆ドロップまたはクリックしてアップロード",
+    "supportedFormats": "対応形式：JPG、PNG、WEBP",
+    "maxSize": "最大サイズ：10MB",
+    "credits": "クレジット",
+    "estimatedCost": "推定コスト"
+  },
+  "auth": {
+    "email": "メールアドレス",
+    "password": "パスワード",
+    "confirmPassword": "パスワード確認",
+    "verificationCode": "認証コード",
+    "sendCode": "コードを送信",
+    "resendCode": "再送信",
+    "loginTitle": "おかえりなさい",
+    "loginSubtitle": "アカウントにログイン",
+    "registerTitle": "アカウント作成",
+    "registerSubtitle": "VidGo AIに参加",
+    "verifyTitle": "メール認証",
+    "verifySubtitle": "メールに送信された6桁のコードを入力",
+    "forgotPassword": "パスワードをお忘れですか？",
+    "noAccount": "アカウントをお持ちでないですか？",
+    "hasAccount": "すでにアカウントをお持ちですか？",
+    "signUp": "登録",
+    "signIn": "ログイン"
+  },
+  "dashboard": {
+    "welcome": "おかえりなさい",
+    "totalCredits": "総クレジット",
+    "usedThisWeek": "今週の使用量",
+    "recentWorks": "最近の作品",
+    "quickActions": "クイックアクション",
+    "viewAll": "すべて表示"
+  },
+  "pricing": {
+    "title": "プランを選択",
+    "subtitle": "無料で始めて必要に応じて拡張",
+    "monthly": "月額",
+    "yearly": "年額",
+    "demo": "デモ",
+    "starter": "スターター",
+    "pro": "プロ",
+    "proPlus": "プロ+",
+    "free": "無料",
+    "currentPlan": "現在のプラン",
+    "upgrade": "アップグレード",
+    "features": "機能"
+  },
+  "footer": {
+    "about": "会社概要",
+    "terms": "利用規約",
+    "privacy": "プライバシーポリシー",
+    "contact": "お問い合わせ",
+    "copyright": "© 2024 VidGo AI. All rights reserved."
+  }
+}

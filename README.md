@@ -1,6 +1,6 @@
-# VidGo - Smart Demo AI Video Generation Platform
+# VidGo - AI Product Ads Video Generation Platform
 
-> AI-powered video generation SaaS platform with intelligent failover, multi-tier subscriptions, and style transformation features.
+> AI-powered product advertising video generation SaaS platform with intelligent prompt caching, multi-tier subscriptions, and style transformation features.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
@@ -26,18 +26,18 @@
 
 ## Overview
 
-VidGo is a 4-tier AI video generation platform (Demo / Starter / Pro / Unlimited) built with **Leonardo AI + Runway** as unlimited core services, complemented by **Pollo AI + GoEnhance** point-based premium features. GoEnhance's unique style transformation serves as the primary upgrade incentive.
+VidGo is a 4-tier AI **product advertising video generation platform** (Demo / Starter / Pro / Unlimited) that helps users create professional product introduction and advertising videos from text prompts or product images. Built with **Leonardo AI** as the primary generation service, featuring **Gemini AI** for intelligent prompt enhancement and content moderation, and **prompt similarity caching** to optimize costs.
 
 ### Core Design Principles
 
 | Principle | Implementation |
 |-----------|----------------|
+| **Product Focus** | Create product ads videos from text or images |
 | 4-Tier Service | Demo → Starter → Pro → Unlimited |
-| Unlimited Services | Leonardo + Runway (mutual failover) |
-| Point Services | Pollo + GoEnhance (monthly allocation + purchasable) |
-| Smart Failover | Auto-detect failures, dual-down triggers point services |
-| Upgrade Incentive | GoEnhance style showcase attracts upgrades |
-| Content Moderation | Gemini API (18+ / illegal content) |
+| Primary Service | Leonardo AI (image + video generation) |
+| Prompt Enhancement | Gemini AI improves user prompts |
+| Content Moderation | Gemini AI (18+ / illegal content detection) |
+| Similarity Caching | 85% similar prompts reuse cached results |
 | Multi-language | EN / JA / ZH-TW / KO / ES |
 | Dual Payment | ECPay (Taiwan) + Paddle (International) |
 
@@ -45,11 +45,17 @@ VidGo is a 4-tier AI video generation platform (Demo / Starter / Pro / Unlimited
 
 ## Key Features
 
-### 🎬 Video Generation
-- **Leonardo AI** - Primary generation platform (720p/1080p unlimited)
-- **Runway** - Automatic backup for Leonardo
-- **Pollo AI** - Advanced models and high-quality output (point-based)
-- **GoEnhance AI** - Unique style transformation (core selling point)
+### 🎬 Product Ads Video Generation
+- **Leonardo AI** - Primary generation platform (image + video, 720p/1080p)
+- **Text to Video** - Describe your product, AI generates professional ad videos
+- **Image to Video** - Upload product image, AI animates it into video
+- **Prompt Enhancement** - Gemini AI improves prompts for better results
+
+### 🧠 Smart Caching System
+- **Prompt Similarity Matching** - Uses text embeddings for semantic matching
+- **85% Threshold** - Similar prompts reuse cached results
+- **Cost Optimization** - Reduces API calls and credit usage
+- **Continuous Learning** - Cache grows with each generation
 
 ### 🎨 Style Transformation (GoEnhance)
 | Style Category | Styles | Use Cases |
@@ -61,12 +67,26 @@ VidGo is a 4-tier AI video generation platform (Demo / Starter / Pro / Unlimited
 | Retro | 80s, VHS effects | Nostalgic content, Music videos |
 | Gaming | Pixel art, Cyberpunk | Game promotion, Tech content |
 
-### 🛡️ Smart Failover System
+### 🛡️ Demo Tier Generation Flow
 ```
-Leonardo ✓ + Runway ✓ → Use Leonardo (primary)
-Leonardo ✗ + Runway ✓ → Auto-switch to Runway
-Leonardo ✓ + Runway ✗ → Continue with Leonardo
-Leonardo ✗ + Runway ✗ → Activate point services (Pollo/GoEnhance)
+1. User enters prompt
+        ↓
+2. Content Moderation (Gemini AI)
+   - Detect illegal/18+ content
+   - Block if unsafe
+        ↓
+3. Prompt Enhancement (Gemini AI)
+   - Improve prompt for better results
+   - Generate embedding for similarity matching
+        ↓
+4. Similarity Check
+   - Search cached prompts (>85% match)
+   - If found: return cached result (0 credits)
+        ↓
+5. Generate New Content (Leonardo AI)
+   - Generate product image
+   - Generate video from image
+   - Cache result for future matching
 ```
 
 ---
@@ -135,11 +155,11 @@ Leonardo ✗ + Runway ✗ → Activate point services (Pollo/GoEnhance)
 ### External APIs
 | Service | Purpose | Billing |
 |---------|---------|---------|
-| Leonardo AI | Primary video generation | Subscription ($60/mo) |
-| Runway | Backup generation | On-demand (Phase 2) |
-| Pollo AI | Premium features | Pay-per-use |
+| Leonardo AI | Primary image & video generation | Subscription ($60/mo) |
+| Gemini API | Prompt enhancement, moderation, embeddings | Pay-per-use |
+| Pollo AI | Premium video features | Pay-per-use |
 | GoEnhance | Style transformation | Pay-per-use |
-| Gemini API | Content moderation | Pay-per-use |
+| Runway | Backup generation (Phase 2) | On-demand |
 | ECPay | Taiwan payments | Transaction fee |
 | Paddle | International payments | Transaction fee |
 
@@ -159,9 +179,12 @@ Leonardo ✗ + Runway ✗ → Activate point services (Pollo/GoEnhance)
 ### Tier Details
 
 #### Demo (Free)
-- Smart Demo engine with pre-generated samples
+- 2 credits for product ads video generation
 - 720p output with watermark
-- Limited daily generations
+- Gemini prompt enhancement included
+- Content moderation (18+ / illegal)
+- Prompt similarity caching (saves credits)
+- 30 pre-generated examples per topic for inspiration
 - GoEnhance style preview (upgrade teaser)
 
 #### Starter (NT$299/month)

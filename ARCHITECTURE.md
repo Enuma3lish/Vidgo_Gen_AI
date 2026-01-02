@@ -2,20 +2,26 @@
 
 ## System Overview
 
-VidGo is a 4-tier AI video generation SaaS platform (Demo / Starter / Pro / Unlimited) built with **Leonardo AI + Runway** as unlimited core services, complemented by **Pollo AI + GoEnhance** point-based premium features. The platform features intelligent failover, multi-tier subscriptions, and style transformation capabilities.
+VidGo is a 4-tier **AI Product Ads Video Generation Platform** (Demo / Starter / Pro / Pro+) that helps users create professional product advertising videos from text prompts or product images. Built with **Leonardo AI** as the primary generation service, featuring **Gemini AI** for intelligent prompt enhancement and content moderation, and **prompt similarity caching** to optimize costs.
 
 ### Core Design Principles
 
 | Principle | Implementation |
 |-----------|----------------|
-| 4-Tier Service | Demo → Starter → Pro → Unlimited |
-| Unlimited Services | Leonardo + Runway (mutual failover) |
-| Point Services | Pollo + GoEnhance (monthly allocation + purchasable) |
-| Smart Failover | Auto-detect failures, dual-down triggers point services |
-| Upgrade Incentive | GoEnhance style showcase attracts upgrades |
-| Content Moderation | Gemini API (18+ / illegal content) |
+| **Product Focus** | Create product ads videos from text or images |
+| 4-Tier Service | Demo → Starter → Pro → Pro+ |
+| Primary Generation | Leonardo AI (image + video generation) |
+| Enhancement Effects | VidGo Effects (powered by GoEnhance, subscribers only) |
+| Future Multi-Model | VidGo Advanced Models (via Pollo API aggregator) |
+| Prompt Enhancement | Gemini AI improves user prompts |
+| Content Moderation | Gemini AI (18+ / illegal content detection) |
+| Similarity Caching | 85% similar prompts reuse cached results |
+| **Weekly Credit System** | All services consume credits, refresh weekly |
 | Multi-language | EN / JA / ZH-TW / KO / ES |
 | Dual Payment | ECPay (Taiwan) + Paddle (International) |
+| **Email Verification** | 6-digit code verification to activate account |
+
+---
 
 ## Architecture Diagram
 
@@ -28,13 +34,13 @@ VidGo is a 4-tier AI video generation SaaS platform (Demo / Starter / Pro / Unli
 │  │                         (Port 8501)                                 │    │
 │  │                                                                     │    │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │    │
-│  │  │ Demo Showcase│  │  Generation  │  │    User      │             │    │
-│  │  │              │  │      UI      │  │  Dashboard   │             │    │
+│  │  │Product Ads   │  │ Inspiration  │  │    User      │             │    │
+│  │  │Video Creator │  │   Gallery    │  │  Dashboard   │             │    │
 │  │  └──────────────┘  └──────────────┘  └──────────────┘             │    │
 │  │                                                                     │    │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │    │
-│  │  │Style Gallery │  │ Subscription │  │   Payment    │             │    │
-│  │  │  (GoEnhance) │  │  Management  │  │   Checkout   │             │    │
+│  │  │ 5-Language   │  │ Subscription │  │VidGo Effects │             │    │
+│  │  │   Support    │  │  Management  │  │(Subscribers) │             │    │
 │  │  └──────────────┘  └──────────────┘  └──────────────┘             │    │
 │  └────────────────────────────────────────────────────────────────────┘    │
 │                                    │                                        │
@@ -49,15 +55,15 @@ VidGo is a 4-tier AI video generation SaaS platform (Demo / Starter / Pro / Unli
 │  │                     FastAPI Backend (Port 8000)                        │ │
 │  │                                                                        │ │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
-│  │  │    Auth     │  │ Generation  │  │   Points    │  │  Payments   │  │ │
-│  │  │   Service   │  │   Service   │  │ Management  │  │  (ECPay/    │  │ │
-│  │  │   (JWT)     │  │ (Failover)  │  │             │  │   Paddle)   │  │ │
+│  │  │    Auth     │  │ Generation  │  │   Credit    │  │  Payments   │  │ │
+│  │  │   Service   │  │   Service   │  │   Service   │  │  (ECPay/    │  │ │
+│  │  │(JWT+Email)  │  │ (Leonardo)  │  │  (Weekly)   │  │   Paddle)   │  │ │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
 │  │                                                                        │ │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
-│  │  │   Content   │  │   Smart     │  │    User     │  │    Admin    │  │ │
-│  │  │ Moderation  │  │    Demo     │  │   Profile   │  │   (Future)  │  │ │
-│  │  │  (Gemini)   │  │   Engine    │  │             │  │             │  │ │
+│  │  │   Content   │  │  Prompt     │  │ Similarity  │  │VidGo Effects│  │ │
+│  │  │ Moderation  │  │Enhancement  │  │   Cache     │  │  Service    │  │ │
+│  │  │  (Gemini)   │  │  (Gemini)   │  │  Service    │  │ (GoEnhance) │  │ │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 │                                    │                                         │
@@ -67,91 +73,88 @@ VidGo is a 4-tier AI video generation SaaS platform (Demo / Starter / Pro / Unli
 │                           AI SERVICES LAYER                                  │
 │                                    │                                         │
 │      ┌─────────────────────────────┴─────────────────────────────────┐     │
-│      │                   Smart Failover Controller                    │     │
+│      │                   Credit-Based Generation Flow                 │     │
 │      │                                                                │     │
-│      │   Leonardo ✓ + Runway ✓ → Use Leonardo (primary)              │     │
-│      │   Leonardo ✗ + Runway ✓ → Auto-switch to Runway               │     │
-│      │   Leonardo ✓ + Runway ✗ → Continue with Leonardo              │     │
-│      │   Leonardo ✗ + Runway ✗ → Activate point services             │     │
+│      │   1. Check Weekly Credit Balance                               │     │
+│      │   2. Content Moderation (Gemini) - Block unsafe content       │     │
+│      │   3. Prompt Enhancement (Gemini) - Improve for better results │     │
+│      │   4. Similarity Check - Find cached results (>85% match)      │     │
+│      │   5. Generate New (Leonardo) - If no cache hit               │     │
+│      │   6. Deduct Credits - Record transaction                      │     │
+│      │   7. Cache Result - Store for future matching                 │     │
 │      └────────────────────────────────────────────────────────────────┘     │
 │                                    │                                         │
 │              ┌─────────────────────┴─────────────────────┐                  │
 │              │                                           │                  │
 │   ┌──────────┴──────────┐                   ┌───────────┴───────────┐      │
-│   │  UNLIMITED SERVICES │                   │    POINT SERVICES     │      │
-│   │                     │                   │                       │      │
-│   │  ┌───────────────┐  │                   │  ┌─────────────────┐  │      │
-│   │  │  Leonardo AI  │◄─┼─── Failover ──────┼─►│    Pollo AI     │  │      │
-│   │  │   (Primary)   │  │                   │  │  (High Quality) │  │      │
-│   │  │  720p/1080p   │  │                   │  │    4K Video     │  │      │
-│   │  └───────────────┘  │                   │  └─────────────────┘  │      │
-│   │         ↕           │                   │                       │      │
-│   │  ┌───────────────┐  │                   │  ┌─────────────────┐  │      │
-│   │  │    Runway     │  │                   │  │   GoEnhance     │  │      │
-│   │  │   (Backup)    │  │                   │  │Style Transform  │  │      │
-│   │  │  720p/1080p   │  │                   │  │  4K Upscale     │  │      │
-│   │  └───────────────┘  │                   │  └─────────────────┘  │      │
-│   └─────────────────────┘                   └───────────────────────┘      │
-│                                                                             │
-│   ┌─────────────────────────────────────────────────────────────────────┐  │
-│   │                         Gemini API                                   │  │
-│   │                    (Content Moderation)                              │  │
-│   │           18+ Detection | Violence Filter | Illegal Content         │  │
-│   └─────────────────────────────────────────────────────────────────────┘  │
+│   │  GENERATION SERVICES│                   │   ENHANCEMENT SERVICES │      │
+│   │  (All Tiers)        │                   │   (Subscribers Only)   │      │
+│   │                     │                   │                        │      │
+│   │  ┌───────────────┐  │                   │  ┌─────────────────┐   │      │
+│   │  │  Leonardo AI  │  │                   │  │   Gemini AI     │   │      │
+│   │  │   (Primary)   │  │                   │  │ - Enhancement   │   │      │
+│   │  │  Image+Video  │  │                   │  │ - Moderation    │   │      │
+│   │  │  Phoenix+SVD  │  │                   │  │ - Embeddings    │   │      │
+│   │  └───────────────┘  │                   │  └─────────────────┘   │      │
+│   │                     │                   │                        │      │
+│   │  ┌───────────────┐  │                   │  ┌─────────────────┐   │      │
+│   │  │   Runway      │  │                   │  │  VidGo Effects  │   │      │
+│   │  │  (Fallback)   │  │                   │  │ (GoEnhance API) │   │      │
+│   │  └───────────────┘  │                   │  │ - Style Transfer│   │      │
+│   │                     │                   │  │ - 4K Upscale    │   │      │
+│   └─────────────────────┘                   │  │ - Video Enhance │   │      │
+│                                             │  └─────────────────┘   │      │
+│   ┌─────────────────────┐                   │                        │      │
+│   │ FUTURE: VidGo       │                   └────────────────────────┘      │
+│   │ Advanced Models     │                                                   │
+│   │ (Pollo API)         │                                                   │
+│   │ - Wan 2.2           │                                                   │
+│   │ - Veo 3.1           │                                                   │
+│   │ - Kling             │                                                   │
+│   │ - Other models      │                                                   │
+│   └─────────────────────┘                                                   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         TASK PROCESSING LAYER                                │
+│                              DATA LAYER                                      │
 │                                                                              │
-│   ┌───────────────────────────────┐     ┌───────────────────────────────┐  │
-│   │        Celery Worker          │     │       Celery Beat             │  │
-│   │                               │     │       (Scheduler)             │  │
-│   │  - Video Processing           │     │                               │  │
-│   │  - Email Notifications        │     │  - Subscription Renewal       │  │
-│   │  - Point Deduction            │     │  - Monthly Point Reset        │  │
-│   │  - Invoice Generation         │     │  - Health Checks              │  │
-│   │  - Webhook Processing         │     │  - Cleanup Tasks              │  │
-│   └───────────────────────────────┘     └───────────────────────────────┘  │
-│                         │                             │                     │
-└─────────────────────────┼─────────────────────────────┼─────────────────────┘
-                          │                             │
-┌─────────────────────────┼─────────────────────────────┼─────────────────────┐
-│                         DATA LAYER                    │                      │
-│                         │                             │                      │
-│           ┌─────────────┴─────────────┬───────────────┴─────────────┐       │
-│           │                           │                             │       │
-│           ▼                           ▼                             ▼       │
+│           ┌─────────────────────┬───────────────────────┐                   │
+│           │                     │                       │                   │
+│           ▼                     ▼                       ▼                   │
 │  ┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────┐   │
 │  │   PostgreSQL 15     │   │      Redis 7        │   │  Object Storage │   │
-│  │   (Port 5432)       │   │   (Port 6379)       │   │   (S3/Minio)    │   │
+│  │   (Port 5432)       │   │   (Port 6379)       │   │   (CDN URLs)    │   │
 │  │                     │   │                     │   │                 │   │
-│  │  - Users            │   │  - Session Cache    │   │  - Videos       │   │
+│  │  - Users            │   │  - Session Cache    │   │  - Images       │   │
+│  │  - EmailVerification│   │  - Block Cache      │   │  - Videos       │   │
 │  │  - Plans            │   │  - Rate Limiting    │   │  - Thumbnails   │   │
-│  │  - Subscriptions    │   │  - Celery Broker    │   │  - User Uploads │   │
-│  │  - Orders           │   │  - API Responses    │   │                 │   │
-│  │  - Invoices         │   │  - Point Balances   │   │                 │   │
-│  │  - Generations      │   │  - Health Status    │   │                 │   │
-│  │  - Point Txns       │   │                     │   │                 │   │
+│  │  - Subscriptions    │   │  - Credit Lock      │   │                 │   │
+│  │  - CreditTransactions│  │  - Weekly Reset Job │   │                 │   │
+│  │  - CreditPackages   │   │                     │   │                 │   │
+│  │  - ServicePricing   │   │                     │   │                 │   │
+│  │  - PromptCache      │   │                     │   │                 │   │
 │  └─────────────────────┘   └─────────────────────┘   └─────────────────┘   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         EXTERNAL SERVICES                                    │
-│                                                                              │
-│  ┌─────────────────────────────┐   ┌─────────────────────────────┐         │
-│  │          ECPay              │   │          Paddle             │         │
-│  │    (Taiwan Payments)        │   │  (International Payments)   │         │
-│  │                             │   │                             │         │
-│  │  - Credit Card              │   │  - Credit Card              │         │
-│  │  - ATM Transfer             │   │  - PayPal                   │         │
-│  │  - CVS Payment              │   │  - Apple Pay                │         │
-│  │  - LINE Pay                 │   │  - Google Pay               │         │
-│  └─────────────────────────────┘   └─────────────────────────────┘         │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## White-Label Service Mapping
+
+> **Important**: All external APIs are white-labeled as VidGo's own features to users.
+
+| User-Facing Name | Internal Service | API Provider |
+|------------------|------------------|--------------|
+| **VidGo Video** | Primary video generation | Leonardo AI |
+| **VidGo Image** | Primary image generation | Leonardo AI |
+| **VidGo Style Effects** | Style transformation | GoEnhance API |
+| **VidGo HD Enhance** | 4K upscale | GoEnhance API |
+| **VidGo Video Pro** | Video enhancement | GoEnhance API |
+| **VidGo Advanced Models** (Future) | Multi-model hub | Pollo API |
+
+---
 
 ## Technology Stack
 
@@ -167,68 +170,632 @@ VidGo is a 4-tier AI video generation SaaS platform (Demo / Starter / Pro / Unli
 | Validation | Pydantic 2.5.3 | Request/response validation |
 | Auth | python-jose + passlib | JWT tokens + password hashing |
 | HTTP Client | httpx 0.26.0 | Async HTTP for external APIs |
+| Task Queue | Celery + Redis | Weekly credit reset job |
 
 ### Frontend (Streamlit)
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | Framework | Streamlit 1.30.0 | Rapid UI development |
-| Navigation | streamlit-option-menu | Enhanced navigation |
-| Session | extra-streamlit-components | Session management |
-| HTTP | requests 2.31.0 | API communication |
-| Styling | Custom CSS | Brand consistency |
-
-### Task Queue
-
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Queue | Celery 5.3.6 | Distributed task processing |
-| Broker | Redis 5.0.1 | Message broker |
-| Scheduler | Celery Beat | Periodic tasks |
+| Main App | front_app.py | Product Ads Video creator |
+| i18n | Built-in translations | 5-language support |
+| Styling | Custom CSS | Light theme, brand consistency |
 
 ### Infrastructure
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | Database | PostgreSQL 15 | Primary data storage |
-| Cache | Redis 7 | Cache + queue + rate limiting |
-| Storage | S3-compatible | Video file storage |
+| Cache | Redis 7 | Cache + queue + rate limiting + credit locks |
+| Containers | Docker + docker-compose | Service orchestration |
 | Hosting | Hetzner/Linode | Cost-effective VPS |
-| CDN | Cloudflare | Asset delivery + DDoS protection |
-| SSL | Let's Encrypt | HTTPS certificates |
-| Monitoring | Sentry (Free) | Error tracking |
+| CDN | Leonardo AI CDN | Image/video delivery |
+| Scheduler | Celery Beat | Weekly credit reset |
 
 ### External AI Services
 
-| Service | Purpose | Billing Model | Status |
-|---------|---------|---------------|--------|
-| GoEnhance | Nano Banana (T2I) + V2V Style Transform | Pay-per-use | ✅ Integrated |
-| Pollo AI | Image-to-Video (Pixverse) | Pay-per-use | ✅ Integrated |
-| Leonardo AI | Primary video generation | Subscription ($60/mo) | ⏳ Pending |
-| Runway | Backup video generation | On-demand | ⏳ Pending |
-| Gemini API | Content moderation | Pay-per-use | ✅ Integrated |
+| Service | Purpose | User-Facing Name | Status |
+|---------|---------|------------------|--------|
+| Leonardo AI | Primary image & video generation | VidGo Video/Image | ✅ Integrated |
+| Gemini API | Prompt enhancement, moderation, embeddings | (Internal) | ✅ Integrated |
+| GoEnhance | Style transfer, 4K upscale, video enhance | VidGo Effects | ✅ Integrated |
+| Runway | Fallback video generation | (Fallback) | ✅ Integrated |
+| Pollo AI | Future multi-model hub | VidGo Advanced Models | 🔮 Future |
 
-### Demo Pipeline ("See It In Action")
+---
+
+## Weekly Credit System Architecture
+
+### Credit Refresh Schedule
 
 ```
-User Prompt
-    ↓
-[Step 1] GoEnhance Nano Banana → Image (~30-60 seconds)
-    ↓
-[Step 2] Pollo AI Pixverse → Video (~1-3 minutes)
-    ↓
-[Step 3] GoEnhance V2V → Enhanced Video (~2-5 minutes)
-    ↓
-Final Demo Result
+Every Monday 00:00 UTC:
+┌─────────────────────────────────────────────────────────┐
+│                  WEEKLY CREDIT RESET JOB                 │
+│                                                          │
+│  1. Query all active subscribers                        │
+│  2. Reset subscription_credits to plan's weekly_credits │
+│  3. Record reset in credit_transactions                 │
+│  4. Send email notification (optional)                  │
+│                                                          │
+│  Starter: Reset to 25 pts                               │
+│  Pro:     Reset to 60 pts                               │
+│  Pro+:    Reset to 125 pts                              │
+│  Demo:    No reset (one-time 2 free uses)               │
+└─────────────────────────────────────────────────────────┘
 ```
 
-| Step | Service | Input | Output | Time |
-|------|---------|-------|--------|------|
-| 1 | GoEnhance Nano Banana | Text Prompt | Image URL | 30-60s |
-| 2 | Pollo AI Pixverse v4.5 | Image URL | Video URL (5s) | 1-3min |
-| 3 | GoEnhance V2V | Video URL | Enhanced Video URL | 2-5min |
+### Credit Flow Diagram
 
-## Project Structure
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      CREDIT ACQUISITION                          │
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │ Subscription │  │   Top-up     │  │    Bonus     │          │
+│  │   Credits    │  │   Credits    │  │   Credits    │          │
+│  │ (Weekly)     │  │ (Permanent)  │  │ (90 days)    │          │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
+│         │                 │                 │                   │
+│         └─────────────────┼─────────────────┘                   │
+│                           ▼                                     │
+│                  ┌─────────────────┐                           │
+│                  │  Credit Wallet  │                           │
+│                  │ (Total Balance) │                           │
+│                  └────────┬────────┘                           │
+└───────────────────────────┼─────────────────────────────────────┘
+                            │
+                            ▼
+┌───────────────────────────┼─────────────────────────────────────┐
+│                      CREDIT CONSUMPTION                          │
+│                            │                                     │
+│         ┌──────────────────┼──────────────────┐                 │
+│         ▼                  ▼                  ▼                 │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐           │
+│  │  Leonardo   │   │VidGo Effects│   │   Runway    │           │
+│  │ 5-8 pts/vid │   │ 8-12 pts    │   │  (Fallback) │           │
+│  │ (All users) │   │(Subscribers)│   │  15 pts     │           │
+│  └─────────────┘   └─────────────┘   └─────────────┘           │
+│                                                                  │
+│  Deduction Priority: Bonus → Subscription → Purchased           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Service Access Control
+
+| Service | Demo | Starter | Pro | Pro+ |
+|---------|------|---------|-----|------|
+| Leonardo Video 720p | ✅ (cached only) | ✅ | ✅ | ✅ |
+| Leonardo Video 1080p | ❌ | ✅ | ✅ | ✅ |
+| Leonardo Video 4K | ❌ | ❌ | ✅ | ✅ |
+| VidGo Style Effects | ❌ | ✅ | ✅ | ✅ |
+| VidGo HD Enhance | ❌ | ✅ | ✅ | ✅ |
+| VidGo Video Pro | ❌ | ❌ | ✅ | ✅ |
+| Priority Queue | ❌ | ❌ | ✅ | ✅ |
+
+---
+
+## Email Verification System
+
+### Verification Flow
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    EMAIL VERIFICATION FLOW                        │
+│                                                                   │
+│  ┌─────────┐    ┌─────────────┐    ┌─────────────┐              │
+│  │  User   │───▶│  Register   │───▶│  Generate   │              │
+│  │ Submit  │    │   (POST)    │    │ 6-digit Code│              │
+│  └─────────┘    └─────────────┘    └──────┬──────┘              │
+│                                           │                      │
+│                                           ▼                      │
+│                                    ┌─────────────┐              │
+│                                    │ Store Code  │              │
+│                                    │ in Redis    │              │
+│                                    │ (15 min TTL)│              │
+│                                    └──────┬──────┘              │
+│                                           │                      │
+│                                           ▼                      │
+│                                    ┌─────────────┐              │
+│                                    │ Send Email  │              │
+│                                    │ with Code   │              │
+│                                    └──────┬──────┘              │
+│                                           │                      │
+│                                           ▼                      │
+│  ┌─────────┐    ┌─────────────┐    ┌─────────────┐              │
+│  │  User   │───▶│  Verify     │───▶│  Activate   │              │
+│  │Input Code│   │  (POST)     │    │   Account   │              │
+│  └─────────┘    └─────────────┘    └─────────────┘              │
+│                                                                   │
+│  Security:                                                        │
+│  - 6-digit numeric code                                          │
+│  - 15 minute expiration                                          │
+│  - Max 3 attempts per code                                       │
+│  - Max 5 resend requests per hour                                │
+│  - Account locked until verified                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Verification Code Storage (Redis)
+
+```
+Key:    email_verify:{email}
+Value:  {
+          "code": "123456",
+          "attempts": 0,
+          "created_at": "2024-12-28T10:00:00Z"
+        }
+TTL:    900 seconds (15 minutes)
+
+Key:    email_resend_count:{email}
+Value:  3
+TTL:    3600 seconds (1 hour)
+```
+
+---
+
+## Database Schema
+
+### User Model (Updated)
+
+```sql
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    is_verified BOOLEAN DEFAULT FALSE,           -- Must verify email to use
+    
+    -- Credit System Fields (Weekly)
+    subscription_credits INTEGER DEFAULT 0,      -- Weekly credits (reset each week)
+    purchased_credits INTEGER DEFAULT 0,         -- Top-up credits (never expire)
+    bonus_credits INTEGER DEFAULT 0,             -- Promotional credits
+    bonus_credits_expiry TIMESTAMPTZ,            -- When bonus credits expire
+    credits_reset_at TIMESTAMPTZ,                -- Last weekly reset timestamp
+    
+    -- Plan Info
+    current_plan_id UUID REFERENCES plans(id),
+    plan_started_at TIMESTAMPTZ,
+    plan_expires_at TIMESTAMPTZ,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_plan ON users(current_plan_id);
+CREATE INDEX idx_users_verified ON users(is_verified);
+```
+
+### Email Verification Model (New)
+
+```sql
+-- Note: Primary verification uses Redis for speed
+-- This table stores verification history for audit
+
+CREATE TABLE email_verifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    code_hash VARCHAR(255) NOT NULL,             -- Hashed 6-digit code
+    attempts INTEGER DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'pending',        -- pending, verified, expired, failed
+    expires_at TIMESTAMPTZ NOT NULL,
+    verified_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_email_verify_user ON email_verifications(user_id, created_at DESC);
+CREATE INDEX idx_email_verify_status ON email_verifications(status, expires_at);
+```
+
+### Plan Model (Updated for Weekly Credits)
+
+```sql
+CREATE TABLE plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(50) NOT NULL,                    -- demo, starter, pro, pro_plus
+    display_name VARCHAR(100) NOT NULL,           -- Display name (i18n key)
+    price_twd DECIMAL(10,2) DEFAULT 0,            -- Monthly price in TWD
+    price_usd DECIMAL(10,2) DEFAULT 0,            -- Monthly price in USD
+    
+    -- Credit Allocation (WEEKLY)
+    weekly_credits INTEGER DEFAULT 0,             -- Credits per week
+    
+    -- Discounts
+    topup_discount_rate DECIMAL(3,2) DEFAULT 0,   -- 0.00 = no discount, 0.20 = 20% off
+    
+    -- Features
+    max_resolution VARCHAR(20) DEFAULT '720p',    -- 720p, 1080p, 4k
+    has_watermark BOOLEAN DEFAULT TRUE,
+    priority_queue BOOLEAN DEFAULT FALSE,
+    can_use_effects BOOLEAN DEFAULT FALSE,        -- VidGo Effects (GoEnhance) access
+    
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed Plans (Weekly Credits)
+INSERT INTO plans (name, display_name, price_twd, weekly_credits, topup_discount_rate, max_resolution, has_watermark, priority_queue, can_use_effects) VALUES
+('demo', 'Demo', 0, 0, 0, '720p', true, false, false),
+('starter', 'Starter', 299, 25, 0, '1080p', false, false, true),
+('pro', 'Pro', 599, 60, 0.10, '4k', false, true, true),
+('pro_plus', 'Pro+', 999, 125, 0.20, '4k', false, true, true);
+```
+
+### Credit Transaction Model
+
+```sql
+CREATE TABLE credit_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- Transaction Details
+    amount INTEGER NOT NULL,                      -- Positive = credit, Negative = debit
+    balance_after INTEGER NOT NULL,               -- Balance after transaction
+    
+    -- Transaction Type
+    transaction_type VARCHAR(50) NOT NULL,        -- generation, purchase, weekly_reset, refund, bonus, expiry
+    
+    -- For generation transactions
+    service_type VARCHAR(50),                     -- leonardo_video, vidgo_style, runway
+    generation_id UUID,                           -- Reference to generation record
+    
+    -- For purchase transactions
+    package_id UUID REFERENCES credit_packages(id),
+    payment_id VARCHAR(255),                      -- External payment reference
+    
+    -- Metadata
+    description TEXT,
+    metadata JSONB,                               -- Additional data (resolution, duration, etc.)
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_credit_tx_user ON credit_transactions(user_id, created_at DESC);
+CREATE INDEX idx_credit_tx_type ON credit_transactions(transaction_type, created_at DESC);
+```
+
+### Service Pricing Model (Updated)
+
+```sql
+CREATE TABLE service_pricing (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_type VARCHAR(50) NOT NULL UNIQUE,     -- leonardo_720p, vidgo_style, etc.
+    display_name VARCHAR(100) NOT NULL,           -- User-facing name
+    
+    -- Credit Cost
+    credit_cost INTEGER NOT NULL,                 -- Credits per use
+    
+    -- API Cost (for internal tracking)
+    api_cost_usd DECIMAL(10,4) NOT NULL,          -- Actual API cost in USD
+    
+    -- Access Control
+    min_plan VARCHAR(50),                         -- Minimum plan required (NULL = all)
+    subscribers_only BOOLEAN DEFAULT FALSE,       -- Requires paid subscription
+    
+    -- Metadata
+    description TEXT,
+    resolution VARCHAR(20),
+    max_duration INTEGER,                         -- Max duration in seconds
+    
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ
+);
+
+-- Seed Service Pricing (White-labeled names)
+INSERT INTO service_pricing (service_type, display_name, credit_cost, api_cost_usd, resolution, max_duration, subscribers_only) VALUES
+-- Leonardo Services (All tiers)
+('leonardo_video_720p', 'VidGo Video 720p', 5, 0.05, '720p', 8, false),
+('leonardo_video_1080p', 'VidGo Video 1080p', 8, 0.08, '1080p', 8, false),
+('leonardo_video_4k', 'VidGo Video 4K', 12, 0.12, '4k', 8, false),
+('leonardo_image_512', 'VidGo Image 512px', 2, 0.015, '512x512', NULL, false),
+('leonardo_image_1024', 'VidGo Image 1024px', 3, 0.025, '1024x1024', NULL, false),
+
+-- VidGo Effects (GoEnhance - Subscribers Only)
+('vidgo_style', 'VidGo Style Effects', 8, 0.15, NULL, NULL, true),
+('vidgo_hd_enhance', 'VidGo HD Enhance', 10, 0.20, '4k', NULL, true),
+('vidgo_video_pro', 'VidGo Video Pro', 12, 0.25, NULL, NULL, true),
+
+-- Runway (Fallback - internal use)
+('runway_720p', 'Runway Fallback 720p', 15, 0.50, '720p', 8, false);
+```
+
+---
+
+## API Endpoints
+
+### Authentication (Updated)
+
+```
+POST   /api/v1/auth/register            Register new user (sends verification code)
+POST   /api/v1/auth/verify-email        Verify email with 6-digit code
+POST   /api/v1/auth/resend-code         Resend verification code
+POST   /api/v1/auth/login               Login (requires verified email)
+POST   /api/v1/auth/refresh             Refresh access token
+GET    /api/v1/auth/me                  Get current user info
+POST   /api/v1/auth/forgot-password     Request password reset
+POST   /api/v1/auth/reset-password      Reset password with token
+```
+
+### Credit System Endpoints
+
+```
+GET    /api/v1/credits/balance          Get current credit balance breakdown
+GET    /api/v1/credits/transactions     Get credit transaction history
+POST   /api/v1/credits/estimate         Estimate credits for a generation
+GET    /api/v1/credits/packages         Get available credit packages
+POST   /api/v1/credits/purchase         Purchase credit package
+GET    /api/v1/credits/pricing          Get service pricing table
+GET    /api/v1/credits/reset-schedule   Get next weekly reset time
+```
+
+### Demo & Generation
+
+```
+GET    /api/v1/demo/inspiration         Get random examples for gallery
+POST   /api/v1/demo/generate            Generate product ads video
+GET    /api/v1/demo/topics              Get available topics with counts
+```
+
+### VidGo Effects (Subscribers Only)
+
+```
+GET    /api/v1/effects/styles           Get available style effects
+POST   /api/v1/effects/apply-style      Apply style to image/video
+POST   /api/v1/effects/hd-enhance       Upscale to 4K
+POST   /api/v1/effects/video-enhance    Enhance video quality
+```
+
+### Plans & Subscriptions
+
+```
+GET    /api/v1/plans                    List all plans (public)
+GET    /api/v1/plans/current            Get current subscription
+POST   /api/v1/plans/subscribe          Subscribe to a plan
+POST   /api/v1/plans/cancel             Cancel subscription
+```
+
+---
+
+## Service Tiers (Updated - Weekly Credits)
+
+| Tier | Price (Monthly) | Credits/Week | Top-up Discount | Max Resolution | VidGo Effects |
+|------|-----------------|--------------|-----------------|----------------|---------------|
+| **Demo** | $0 | 2 (one-time) | — | 720p + Watermark | ❌ |
+| **Starter** | NT$299 | 25 pts | Standard | 1080p | ✅ |
+| **Pro** | NT$599 | 60 pts | 10% off | 4K | ✅ |
+| **Pro+** | NT$999 | 125 pts | 20% off | 4K 60fps | ✅ |
+
+### Service Credit Costs
+
+| Service | User-Facing Name | Credits | API Cost | Access |
+|---------|------------------|---------|----------|--------|
+| Leonardo Video 720p | VidGo Video 720p | 5 pts | ~$0.05 | All |
+| Leonardo Video 1080p | VidGo Video 1080p | 8 pts | ~$0.08 | Starter+ |
+| Leonardo Video 4K | VidGo Video 4K | 12 pts | ~$0.12 | Pro+ |
+| Leonardo Image 512px | VidGo Image | 2 pts | ~$0.015 | All |
+| Leonardo Image 1024px | VidGo Image HD | 3 pts | ~$0.025 | All |
+| GoEnhance Style | VidGo Style Effects | 8 pts | ~$0.15 | Subscribers |
+| GoEnhance 4K | VidGo HD Enhance | 10 pts | ~$0.20 | Subscribers |
+| GoEnhance Video | VidGo Video Pro | 12 pts | ~$0.25 | Subscribers |
+| Runway Fallback | (Internal) | 15 pts | ~$0.50 | Fallback |
+
+---
+
+## Implementation Code
+
+### Email Verification Service
+
+```python
+import secrets
+import hashlib
+from datetime import datetime, timedelta
+from typing import Optional, Tuple
+import redis.asyncio as redis
+
+class EmailVerificationService:
+    CODE_LENGTH = 6
+    CODE_EXPIRY_MINUTES = 15
+    MAX_ATTEMPTS = 3
+    MAX_RESEND_PER_HOUR = 5
+    
+    def __init__(self, redis_client: redis.Redis, email_service):
+        self.redis = redis_client
+        self.email_service = email_service
+    
+    def _generate_code(self) -> str:
+        """Generate 6-digit numeric code."""
+        return ''.join([str(secrets.randbelow(10)) for _ in range(self.CODE_LENGTH)])
+    
+    def _hash_code(self, code: str) -> str:
+        """Hash code for storage."""
+        return hashlib.sha256(code.encode()).hexdigest()
+    
+    async def send_verification_code(self, email: str) -> Tuple[bool, str]:
+        """Send verification code to email."""
+        # Check resend limit
+        resend_key = f"email_resend_count:{email}"
+        resend_count = await self.redis.get(resend_key)
+        
+        if resend_count and int(resend_count) >= self.MAX_RESEND_PER_HOUR:
+            return False, "Too many resend requests. Please wait 1 hour."
+        
+        # Generate code
+        code = self._generate_code()
+        
+        # Store in Redis
+        verify_key = f"email_verify:{email}"
+        await self.redis.setex(
+            verify_key,
+            self.CODE_EXPIRY_MINUTES * 60,
+            json.dumps({
+                "code_hash": self._hash_code(code),
+                "attempts": 0,
+                "created_at": datetime.utcnow().isoformat()
+            })
+        )
+        
+        # Increment resend counter
+        await self.redis.incr(resend_key)
+        await self.redis.expire(resend_key, 3600)  # 1 hour TTL
+        
+        # Send email
+        await self.email_service.send_verification_email(email, code)
+        
+        return True, "Verification code sent"
+    
+    async def verify_code(self, email: str, code: str) -> Tuple[bool, str]:
+        """Verify the submitted code."""
+        verify_key = f"email_verify:{email}"
+        data = await self.redis.get(verify_key)
+        
+        if not data:
+            return False, "Verification code expired. Please request a new one."
+        
+        verify_data = json.loads(data)
+        
+        # Check attempts
+        if verify_data["attempts"] >= self.MAX_ATTEMPTS:
+            await self.redis.delete(verify_key)
+            return False, "Too many failed attempts. Please request a new code."
+        
+        # Verify code
+        if self._hash_code(code) == verify_data["code_hash"]:
+            await self.redis.delete(verify_key)
+            return True, "Email verified successfully"
+        
+        # Increment attempts
+        verify_data["attempts"] += 1
+        await self.redis.setex(
+            verify_key,
+            self.CODE_EXPIRY_MINUTES * 60,
+            json.dumps(verify_data)
+        )
+        
+        remaining = self.MAX_ATTEMPTS - verify_data["attempts"]
+        return False, f"Invalid code. {remaining} attempts remaining."
+```
+
+### Weekly Credit Reset Service
+
+```python
+from celery import Celery
+from celery.schedules import crontab
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
+from datetime import datetime
+
+celery_app = Celery('vidgo')
+
+@celery_app.on_after_configure.connect
+def setup_periodic_tasks(sender, **kwargs):
+    # Weekly credit reset - Every Monday at 00:00 UTC
+    sender.add_periodic_task(
+        crontab(hour=0, minute=0, day_of_week=1),
+        weekly_credit_reset.s(),
+        name='weekly-credit-reset'
+    )
+
+@celery_app.task
+async def weekly_credit_reset():
+    """Reset subscription credits for all active subscribers."""
+    async with get_db_session() as db:
+        # Get all active subscribers with their plans
+        query = """
+            UPDATE users u
+            SET 
+                subscription_credits = p.weekly_credits,
+                credits_reset_at = NOW()
+            FROM plans p
+            WHERE u.current_plan_id = p.id
+            AND u.is_active = true
+            AND u.is_verified = true
+            AND p.name != 'demo'
+            RETURNING u.id, u.email, p.weekly_credits
+        """
+        
+        result = await db.execute(text(query))
+        reset_users = result.fetchall()
+        
+        # Record transactions
+        for user_id, email, weekly_credits in reset_users:
+            transaction = CreditTransaction(
+                user_id=user_id,
+                amount=weekly_credits,
+                balance_after=weekly_credits,  # Note: purchased credits not included here
+                transaction_type="weekly_reset",
+                description=f"Weekly credit reset: {weekly_credits} pts"
+            )
+            db.add(transaction)
+        
+        await db.commit()
+        
+        return f"Reset credits for {len(reset_users)} users"
+```
+
+### Credit Service (Updated for Weekly)
+
+```python
+class CreditService:
+    def __init__(self, db: AsyncSession, redis_client: redis.Redis):
+        self.db = db
+        self.redis = redis_client
+    
+    async def get_balance(self, user_id: str) -> dict:
+        """Get user's credit balance breakdown."""
+        user = await self.db.get(User, user_id)
+        return {
+            "subscription": user.subscription_credits,
+            "purchased": user.purchased_credits,
+            "bonus": user.bonus_credits,
+            "total": user.subscription_credits + user.purchased_credits + user.bonus_credits,
+            "next_reset": self._get_next_monday()
+        }
+    
+    def _get_next_monday(self) -> datetime:
+        """Get next Monday 00:00 UTC."""
+        today = datetime.utcnow()
+        days_until_monday = (7 - today.weekday()) % 7
+        if days_until_monday == 0 and today.hour >= 0:
+            days_until_monday = 7
+        next_monday = today + timedelta(days=days_until_monday)
+        return next_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    async def check_service_access(self, user_id: str, service_type: str) -> Tuple[bool, str]:
+        """Check if user can access a service."""
+        user = await self.db.get(User, user_id)
+        plan = await self.db.get(Plan, user.current_plan_id) if user.current_plan_id else None
+        
+        # Get service pricing
+        result = await self.db.execute(
+            select(ServicePricing).where(ServicePricing.service_type == service_type)
+        )
+        pricing = result.scalar_one_or_none()
+        
+        if not pricing:
+            return False, "Service not found"
+        
+        # Check if service requires subscription
+        if pricing.subscribers_only:
+            if not plan or plan.name == 'demo':
+                return False, "This feature requires a paid subscription"
+            if not plan.can_use_effects:
+                return False, "Your plan does not include VidGo Effects"
+        
+        # Check credit balance
+        balance = await self.get_balance(user_id)
+        if balance["total"] < pricing.credit_cost:
+            return False, f"Insufficient credits. Need {pricing.credit_cost}, have {balance['total']}"
+        
+        return True, "OK"
+```
+
+---
+
+## Project Structure (Updated)
 
 ```
 vidgo/
@@ -242,448 +809,78 @@ vidgo/
 │   │   │   ├── deps.py             # Dependency injection
 │   │   │   └── v1/
 │   │   │       ├── __init__.py
-│   │   │       ├── auth.py         # Authentication endpoints
-│   │   │       ├── demo.py         # Demo endpoints (incl. real-time generation)
+│   │   │       ├── auth.py         # Auth + Email verification
+│   │   │       ├── credits.py      # Credit system endpoints
+│   │   │       ├── demo.py         # Demo + Generation endpoints
+│   │   │       ├── effects.py      # VidGo Effects (GoEnhance) - NEW
 │   │   │       ├── plans.py        # Plan endpoints
-│   │   │       └── payments.py     # Payment endpoints
+│   │   │       ├── payments.py     # Payment endpoints
+│   │   │       └── promotions.py   # Promotion endpoints
 │   │   ├── core/
 │   │   │   ├── __init__.py
 │   │   │   ├── config.py           # Settings management
 │   │   │   ├── database.py         # Async database setup
-│   │   │   ├── security.py         # JWT + password utilities
-│   │   │   └── rate_limit.py       # Rate limiting
+│   │   │   └── security.py         # JWT + password utilities
 │   │   ├── models/
 │   │   │   ├── __init__.py
-│   │   │   ├── user.py             # User model
-│   │   │   ├── billing.py          # Plan, Subscription, Order, Invoice
-│   │   │   └── demo.py             # Demo models (ImageDemo, DemoCategory)
+│   │   │   ├── user.py             # User model (weekly credits)
+│   │   │   ├── billing.py          # Plan, Subscription, CreditTransaction
+│   │   │   ├── verification.py     # EmailVerification model - NEW
+│   │   │   └── demo.py             # DemoExample, PromptCache, Generation
 │   │   ├── schemas/
 │   │   │   ├── __init__.py
 │   │   │   ├── user.py             # User Pydantic schemas
-│   │   │   └── plan.py             # Plan schemas
-│   │   ├── services/
-│   │   │   ├── __init__.py
-│   │   │   ├── goenhance.py        # GoEnhance (Nano Banana + V2V)
-│   │   │   ├── pollo_ai.py         # Pollo AI (Image-to-Video)
-│   │   │   ├── moderation.py       # Gemini content moderation
-│   │   │   ├── block_cache.py      # Redis block cache
-│   │   │   ├── prompt_matching.py  # Prompt matching service
-│   │   │   ├── demo_service.py     # Demo pipeline orchestration
-│   │   │   └── email_service.py    # Email notifications
-│   │   └── utils/
+│   │   │   ├── auth.py             # Auth schemas (verification) - NEW
+│   │   │   ├── credit.py           # Credit schemas
+│   │   │   ├── effects.py          # Effects schemas - NEW
+│   │   │   ├── plan.py             # Plan schemas
+│   │   │   └── promotion.py        # Promotion schemas
+│   │   └── services/
 │   │       ├── __init__.py
-│   │       └── helpers.py          # Utility functions
+│   │       ├── credit_service.py   # Credit management (weekly)
+│   │       ├── email_verify.py     # Email verification service - NEW
+│   │       ├── leonardo.py         # Leonardo AI (Image + Video)
+│   │       ├── gemini_service.py   # Gemini (Enhancement + Moderation)
+│   │       ├── similarity.py       # Prompt similarity matching
+│   │       ├── effects_service.py  # VidGo Effects (GoEnhance wrapper) - NEW
+│   │       ├── goenhance.py        # GoEnhance API client
+│   │       ├── pollo_ai.py         # Pollo AI (Future multi-model)
+│   │       ├── runway.py           # Runway (Fallback)
+│   │       ├── moderation.py       # Content moderation
+│   │       ├── block_cache.py      # Redis block cache
+│   │       └── email_service.py    # Email sending
+│   ├── tasks/
+│   │   ├── __init__.py
+│   │   ├── celery_app.py           # Celery configuration - NEW
+│   │   └── credit_reset.py         # Weekly credit reset task - NEW
+│   ├── scripts/
+│   │   ├── seed_demo_examples.py   # Seed demo examples
+│   │   └── seed_service_pricing.py # Seed service pricing
 │   ├── alembic/
 │   │   ├── env.py                  # Alembic configuration
 │   │   └── versions/               # Migration files
 │   ├── alembic.ini
 │   └── requirements.txt
 ├── frontend/
-│   ├── app.py                      # Streamlit main app
-│   ├── config.py                   # Frontend configuration
-│   ├── pages/                      # Streamlit pages
+│   ├── front_app.py                # Streamlit main app
 │   ├── components/
-│   │   └── demo.py                 # Demo component (See It In Action)
-│   └── utils/
-│       ├── auth.py                 # Auth utilities
-│       └── api_client.py           # Backend API client
+│   │   ├── demo.py                 # Demo component
+│   │   └── effects.py              # VidGo Effects component - NEW
+│   ├── translations/               # i18n files
+│   └── .streamlit/
+│       └── config.toml             # Theme configuration
 ├── docker-compose.yml
-├── pyproject.toml
 ├── DEVELOPMENT_PLAN.md             # Development timeline
 ├── ARCHITECTURE.md                 # This file
+├── CREDIT_CONSUMPTION_SPEC.md      # Credit system specification
+├── BREAK_EVEN_ANALYSIS.md          # Financial analysis
+├── CHANGELOG.md                    # Modification history
 └── README.md
 ```
 
-## Data Flow
+---
 
-### Video Generation Flow (with Failover)
-
-```
-1. User submits prompt (Streamlit)
-   ↓
-2. POST /api/v1/generation/create (FastAPI)
-   ↓
-3. Content Moderation (Gemini API)
-   │  - Check for 18+ content
-   │  - Check for violence/illegal content
-   │  - Keyword fallback filter
-   ↓
-4. If flagged → Return rejection with reason
-   ↓
-5. Check user tier & points
-   │  - Validate subscription status
-   │  - Check resolution permissions
-   ↓
-6. Smart Failover Logic
-   │
-   ├─► Leonardo Healthy?
-   │   YES → Generate with Leonardo
-   │   │     └─► Success → Return video
-   │   │     └─► Failure → Try Runway
-   │   │
-   │   NO → Check Runway
-   │
-   ├─► Runway Healthy?
-   │   YES → Generate with Runway
-   │   │     └─► Success → Return video
-   │   │     └─► Failure → Check Points
-   │   │
-   │   NO → Both Down
-   │
-   └─► User has points?
-       YES → Deduct points → Use Pollo/GoEnhance
-       NO  → Return ServiceUnavailableError
-   ↓
-7. Store video in Object Storage
-   ↓
-8. Create Generation record in DB
-   ↓
-9. Return video URL to user
-```
-
-### Payment Flow (ECPay)
-
-```
-1. User selects subscription plan (Streamlit)
-   ↓
-2. POST /api/v1/payments/create (FastAPI)
-   ↓
-3. Verify user authentication
-   ↓
-4. Create Order (status: pending)
-   ↓
-5. Generate ECPay payment parameters
-   │  - MerchantTradeNo (unique)
-   │  - CheckMacValue (SHA256)
-   │  - Return/Callback URLs
-   ↓
-6. Return payment form data
-   ↓
-7. Submit form to ECPay (Client-side redirect)
-   ↓
-8. User completes payment on ECPay
-   ↓
-9. ECPay POST /api/v1/payments/callback (webhook)
-   ↓
-10. Verify CheckMacValue signature
-    ↓
-11. Update Order status to 'paid'
-    ↓
-12. Activate/Extend Subscription
-    ↓
-13. Allocate monthly points
-    ↓
-14. Send confirmation email
-    ↓
-15. ECPay redirects user to success page
-```
-
-### Point Consumption Flow
-
-```
-1. User requests premium feature (e.g., 4K upscale)
-   ↓
-2. Check feature availability for tier
-   ↓
-3. Calculate point cost
-   │  - GoEnhance Style Transform 1080p: 10 pts
-   │  - GoEnhance Style Transform 4K: 25 pts
-   │  - GoEnhance 4K Upscale: 15 pts
-   ↓
-4. Check point balance
-   │  - Monthly points first
-   │  - Then purchased points
-   ↓
-5. Deduct points
-   ↓
-6. Execute premium feature
-   ↓
-7. Record transaction
-   ↓
-8. Return result to user
-```
-
-## Database Schema
-
-### User Model
-
-```sql
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    username VARCHAR(150),
-    hashed_password VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255),
-    is_active BOOLEAN DEFAULT TRUE,
-    is_superuser BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ
-);
-
-CREATE INDEX idx_users_email ON users(email);
-```
-
-### Plan Model
-
-```sql
-CREATE TABLE plans (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    slug VARCHAR(50) UNIQUE NOT NULL,
-    description TEXT,
-    price DECIMAL(10, 2) NOT NULL,
-    currency VARCHAR(3) DEFAULT 'TWD',
-    billing_cycle VARCHAR(20) DEFAULT 'monthly',
-    features JSONB DEFAULT '{}',
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Features JSON structure:
--- {
---   "unlimited_720p": true,
---   "unlimited_1080p": false,
---   "monthly_pollo_points": 30,
---   "monthly_goenhance_points": 0,
---   "max_resolution": "1080p",
---   "priority_queue": false,
---   "point_discount": 0
--- }
-```
-
-### Subscription Model
-
-```sql
-CREATE TABLE subscriptions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id),
-    plan_id UUID NOT NULL REFERENCES plans(id),
-    status VARCHAR(20) DEFAULT 'pending',
-    start_date TIMESTAMPTZ,
-    end_date TIMESTAMPTZ,
-    auto_renew BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ
-);
-
-CREATE INDEX idx_subscriptions_user ON subscriptions(user_id, status);
-CREATE INDEX idx_subscriptions_end ON subscriptions(status, end_date);
-```
-
-### Order Model
-
-```sql
-CREATE TABLE orders (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_number VARCHAR(50) UNIQUE NOT NULL,
-    user_id UUID NOT NULL REFERENCES users(id),
-    subscription_id UUID REFERENCES subscriptions(id),
-    amount DECIMAL(10, 2) NOT NULL,
-    status VARCHAR(20) DEFAULT 'pending',
-    payment_method VARCHAR(20),
-    payment_data JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    paid_at TIMESTAMPTZ
-);
-
-CREATE INDEX idx_orders_user ON orders(user_id, status);
-CREATE INDEX idx_orders_number ON orders(order_number);
-```
-
-### Invoice Model
-
-```sql
-CREATE TABLE invoices (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id UUID UNIQUE NOT NULL REFERENCES orders(id),
-    user_id UUID NOT NULL REFERENCES users(id),
-    invoice_number VARCHAR(50) UNIQUE NOT NULL,
-    amount DECIMAL(10, 2) NOT NULL,
-    pdf_url VARCHAR(255),
-    issued_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-### Point Balance Model (Future)
-
-```sql
-CREATE TABLE point_balances (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID UNIQUE NOT NULL REFERENCES users(id),
-    monthly_pollo_points INTEGER DEFAULT 0,
-    monthly_goenhance_points INTEGER DEFAULT 0,
-    purchased_points INTEGER DEFAULT 0,
-    last_reset_at TIMESTAMPTZ,
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-### Point Transaction Model (Future)
-
-```sql
-CREATE TABLE point_transactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id),
-    type VARCHAR(20) NOT NULL,  -- 'deduct', 'allocate', 'purchase', 'refund'
-    points INTEGER NOT NULL,
-    source VARCHAR(20),  -- 'monthly', 'purchased'
-    description TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_point_txns_user ON point_transactions(user_id, created_at);
-```
-
-### Generation History Model (Future)
-
-```sql
-CREATE TABLE generations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id),
-    prompt TEXT NOT NULL,
-    service VARCHAR(20) NOT NULL,  -- 'leonardo', 'runway', 'pollo', 'goenhance'
-    resolution VARCHAR(10),
-    style VARCHAR(50),
-    video_url VARCHAR(500),
-    thumbnail_url VARCHAR(500),
-    status VARCHAR(20) DEFAULT 'pending',
-    points_used INTEGER DEFAULT 0,
-    error_message TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    completed_at TIMESTAMPTZ
-);
-
-CREATE INDEX idx_generations_user ON generations(user_id, created_at);
-```
-
-## API Endpoints
-
-### Authentication
-
-```
-POST   /api/v1/auth/login          Login (returns JWT tokens)
-POST   /api/v1/auth/register       Register new user
-POST   /api/v1/auth/refresh        Refresh JWT token
-GET    /api/v1/auth/me             Get current user info
-```
-
-### Video Generation (Phase 2-3)
-
-```
-POST   /api/v1/generation/create   Create new video generation
-GET    /api/v1/generation/         List user's generations
-GET    /api/v1/generation/{id}     Get generation details
-GET    /api/v1/generation/status   Check AI service health status
-```
-
-### Points (Phase 4)
-
-```
-GET    /api/v1/points/balance      Get user point balance
-GET    /api/v1/points/history      Get point transaction history
-POST   /api/v1/points/purchase     Purchase point package
-```
-
-### Payments
-
-```
-POST   /api/v1/payments/create     Create ECPay payment
-POST   /api/v1/payments/callback   ECPay callback (webhook)
-GET    /api/v1/payments/history    Get payment history
-```
-
-### Subscriptions (Phase 6)
-
-```
-GET    /api/v1/subscriptions/      List user subscriptions
-POST   /api/v1/subscriptions/      Create subscription
-GET    /api/v1/subscriptions/{id}  Get subscription details
-POST   /api/v1/subscriptions/cancel Cancel subscription
-```
-
-### Admin (Phase 8)
-
-```
-GET    /api/v1/admin/users         List all users
-GET    /api/v1/admin/stats         System statistics
-GET    /api/v1/admin/moderation    Content moderation queue
-```
-
-## Security Features
-
-### Authentication & Authorization
-
-| Mechanism | Technology | Details |
-|-----------|------------|---------|
-| JWT Token | Access + Refresh | Access: 30min, Refresh: 7 days |
-| Password | bcrypt + salt | Secure password hashing |
-| API Key | HMAC-SHA256 | External API verification |
-
-### API Security
-
-| Protection | Setting | Purpose |
-|------------|---------|---------|
-| Rate Limiting | 100 req/min/IP | Prevent brute force |
-| CORS | Whitelist domains | Cross-origin restriction |
-| HTTPS | TLS 1.3 only | Encrypted transmission |
-| Input Validation | Pydantic | Strict schema validation |
-| SQL Injection | SQLAlchemy ORM | Parameterized queries |
-
-### Content Security
-
-| Feature | Implementation |
-|---------|----------------|
-| Gemini Moderation | 18+ / violence / illegal content detection |
-| Keyword Filter | Fallback when Gemini unavailable |
-| IP Banning | Auto-ban after violations |
-| Webhook Signature | Verify ECPay/Paddle callbacks |
-
-## Service Tiers
-
-| Tier | Price | Unlimited Services | Point Services | Max Resolution |
-|------|-------|-------------------|----------------|----------------|
-| **Demo** | $0 | Smart Demo Only | — | 720p + Watermark |
-| **Starter** | NT$299/mo | Leonardo 720p + Runway | 50 + 30 pts | 1080p |
-| **Pro** | NT$599/mo | Leonardo 720p/1080p + Runway | 100 + 50 pts | 4K |
-| **Unlimited** | NT$999/mo | Pro + Priority Queue | 300 + 150 pts + 20% off | 4K 60fps |
-
-## Point System
-
-### Consumption Table
-
-| Platform | Feature | Resolution | Points |
-|----------|---------|------------|--------|
-| Leonardo AI | Image Gen | 1080p | 2 |
-| Leonardo AI | Video Gen | 1080p | 10 |
-| Pollo AI | Basic Effects | 1080p | 5 |
-| Pollo AI | 4K Video | 4K | 15 |
-| GoEnhance | Style Transform | 1080p | 10 |
-| GoEnhance | Style Transform | 4K | 25 |
-| GoEnhance | 4K Upscale | → 4K | 15 |
-
-### Point Rules
-
-- **Monthly allocation**: Resets on 1st of each month
-- **Purchased points**: Never expire
-- **Consumption order**: Monthly points first, then purchased
-
-## Development Phases
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 1 | Core Infrastructure (FastAPI, PostgreSQL, JWT) | ✅ Complete |
-| 2 | Smart Demo + Gemini Moderation | ✅ Complete |
-| 3 | Leonardo + Runway + Auto-switch | ⏳ Pending |
-| 4 | Pollo + GoEnhance Demo Pipeline | ✅ Complete |
-| 5 | Upgrade UI + Streamlit | 🔄 In Progress |
-| 6 | Dual Payment (ECPay + Paddle) | ⏳ Pending |
-| 7 | i18n (5 languages) | ⏳ Pending |
-| 8 | Admin Dashboard | ⏳ Pending |
-| 9 | Security + Testing + Deploy | ⏳ Pending |
-
-## Deployment
-
-### Environment Variables
+## Environment Variables
 
 ```env
 # Database
@@ -692,62 +889,54 @@ DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/vidgo
 # Redis
 REDIS_URL=redis://localhost:6379/0
 
-# JWT
+# Security
 SECRET_KEY=your-secret-key
 ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # AI Services
 LEONARDO_API_KEY=your-leonardo-key
-RUNWAY_API_KEY=your-runway-key
-POLLO_API_KEY=your-pollo-key
-GOENHANCE_API_KEY=your-goenhance-key
 GEMINI_API_KEY=your-gemini-key
+GOENHANCE_API_KEY=your-goenhance-key
+POLLO_API_KEY=your-pollo-key          # Future use
+RUNWAY_API_KEY=your-runway-key
+
+# Email (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email
+SMTP_PASSWORD=your-app-password
+EMAIL_FROM=noreply@vidgo.ai
 
 # Payments
 ECPAY_MERCHANT_ID=your-merchant-id
 ECPAY_HASH_KEY=your-hash-key
 ECPAY_HASH_IV=your-hash-iv
+PADDLE_VENDOR_ID=your-vendor-id
 PADDLE_API_KEY=your-paddle-key
 
-# App
-APP_ENV=development
-DEBUG=true
+# Celery (for scheduled tasks)
+CELERY_BROKER_URL=redis://localhost:6379/1
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
 ```
 
-### Docker Deployment
+---
 
-```bash
-# Build and start all services
-docker-compose up -d
+## Development Status
 
-# View logs
-docker-compose logs -f
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Core Infrastructure (FastAPI, PostgreSQL, JWT) | ✅ Complete |
+| 2 | Content Moderation + Prompt Enhancement | ✅ Complete |
+| 3 | Leonardo AI + Similarity Caching | ✅ Complete |
+| 4 | GoEnhance Integration (VidGo Effects) | ✅ Complete |
+| 5 | UI/UX (Product Ads Video, 5 Languages) | ✅ Complete |
+| 6 | **Weekly Credit System** | 🔄 Updated |
+| 7 | **Email Verification (6-digit code)** | 🔄 Updated |
+| 8 | Payment Integration | ⏳ Pending |
+| 9 | i18n Completion | ✅ Complete |
+| 10 | Admin Dashboard | ⏳ Pending |
+| 11 | Security + Production Deploy | ⏳ Pending |
 
-# Stop services
-docker-compose down
-```
+---
 
-### Local Development
-
-```bash
-# Install dependencies
-uv sync
-
-# Run backend
-cd backend && uv run uvicorn app.main:app --reload
-
-# Run frontend
-cd frontend && uv run streamlit run app.py
-```
-
-## Future Enhancements
-
-- [ ] WebSocket for real-time generation progress
-- [ ] Multi-region deployment
-- [ ] Usage analytics dashboard
-- [ ] Webhook support for third-party integrations
-- [ ] Mobile app (React Native)
-- [ ] Advanced video editing features
-- [ ] Team/Organization accounts
-- [ ] API access for developers
+*Last Updated: December 28, 2024*

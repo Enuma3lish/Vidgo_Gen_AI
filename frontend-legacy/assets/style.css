@@ -1,0 +1,346 @@
+/* Global Reset & Variables */
+:root {
+    --vidgo-primary: #10b981;
+    --vidgo-primary-hover: #059669;
+    --vidgo-blue: #2d5cf6;
+    --vidgo-bg: #f5f6f8;
+    --vidgo-text: #333333;
+    --vidgo-gray: #888888;
+    --vidgo-border: #e0e0e0;
+    --header-height: 64px;
+    --sidebar-width: 80px;
+}
+
+/* Aggressively Hide Streamlit Default Elements */
+#MainMenu {
+    visibility: hidden !important;
+}
+
+header {
+    visibility: hidden !important;
+}
+
+footer {
+    visibility: hidden !important;
+}
+
+.stApp>header {
+    display: none !important;
+}
+
+div[data-testid="stHeader"] {
+    display: none !important;
+}
+
+div[data-testid="stDecoration"] {
+    display: none !important;
+}
+
+div[data-testid="stToolbar"] {
+    display: none !important;
+}
+
+/* Main App Container Override */
+.block-container {
+    padding-top: var(--header-height) !important;
+    padding-left: calc(var(--sidebar-width) + 2rem) !important;
+    padding-right: 2rem !important;
+    max-width: 100% !important;
+}
+
+/* Custom Sticky Header */
+.vidgo-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--header-height);
+    background: white;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.vidgo-logo-section {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+}
+
+.vidgo-logo {
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.vidgo-logo img {
+    height: 32px;
+}
+
+.vidgo-nav {
+    display: flex;
+    gap: 24px;
+}
+
+.vidgo-nav-item {
+    color: #333;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 500;
+    padding: 20px 0;
+    position: relative;
+    cursor: pointer;
+}
+
+.vidgo-nav-item:hover,
+.vidgo-nav-item.active {
+    color: var(--vidgo-primary);
+}
+
+.vidgo-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.vidgo-btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+}
+
+.vidgo-btn-primary {
+    background: var(--vidgo-primary);
+    color: white;
+    border: none;
+}
+
+.vidgo-btn-primary:hover {
+    background: var(--vidgo-primary-hover);
+}
+
+.vidgo-btn-light {
+    background: #f0f2f5;
+    color: #333;
+    border: none;
+}
+
+.vidgo-language-select {
+    border: 1px solid var(--vidgo-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    background: white;
+}
+
+/* Custom Sidebar (Left Rail) */
+.vidgo-sidebar {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: #1a1b1e;
+    z-index: 99998;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 20px;
+    gap: 8px;
+}
+
+.vidgo-sidebar-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    color: #999;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.vidgo-sidebar-item:hover,
+.vidgo-sidebar-item.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.vidgo-sidebar-icon {
+    font-size: 20px;
+    margin-bottom: 4px;
+}
+
+.vidgo-sidebar-text {
+    font-size: 10px;
+}
+
+/* Feature Cards (Home Grid) */
+.feature-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid transparent;
+    transition: all 0.3s;
+    height: 100%;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.feature-card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+    border-color: #e6e6e6;
+}
+
+.feature-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    background: #f0fdf4;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--vidgo-primary);
+}
+
+.feature-title {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+}
+
+.feature-desc {
+    color: #666;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+/* Hero Section */
+.hero-input-container {
+    background: white;
+    border-radius: 16px;
+    padding: 6px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #eee;
+    margin-bottom: 30px;
+}
+
+/* Custom st.text_area wrapper to look like the hero input */
+.stTextArea textarea {
+    border: none;
+    background: transparent;
+    font-size: 1.1rem;
+    padding: 1rem;
+}
+
+.stTextArea textarea:focus {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+/* Inspiration Gallery Grid */
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    padding-bottom: 40px;
+}
+
+.gallery-item {
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
+}
+
+.gallery-item img {
+    width: 100%;
+    height: auto;
+    display: block;
+    transition: transform 0.3s;
+}
+
+.gallery-item:hover img {
+    transform: scale(1.05);
+}
+
+/* Upload area */
+.upload-area {
+    border: 2px dashed #e0e0e0;
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #fafafa;
+}
+
+.upload-area:hover {
+    border-color: var(--vidgo-primary);
+    background: #f0fdf4;
+}
+
+.upload-icon {
+    font-size: 48px;
+    color: #ccc;
+    margin-bottom: 10px;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #999;
+}
+
+.empty-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+}
+
+/* Works gallery */
+.works-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.work-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    transition: all 0.3s;
+}
+
+.work-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+/* Streamlit specific hacks */
+div[data-testid="stSidebar"] {
+    display: block !important;
+    /* Show sidebar for navigation */
+}

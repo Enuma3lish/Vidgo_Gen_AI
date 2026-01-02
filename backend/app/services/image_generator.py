@@ -1,6 +1,7 @@
 """
 Image Generation Service using Gemini (Nano Banana)
 Generates images from text prompts using Google's Gemini API.
+Updated for Gemini 2.0 Flash image generation.
 """
 import logging
 import base64
@@ -15,12 +16,12 @@ settings = get_settings()
 class ImageGeneratorService:
     """
     Image generation service using Gemini (Nano Banana).
-    Supports text-to-image generation.
+    Supports text-to-image generation using Gemini 2.0 Flash.
     """
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or getattr(settings, 'GEMINI_API_KEY', '')
-        # Use gemini-2.0-flash-exp for image generation
+        # Use gemini-2.0-flash-exp for image generation (supports responseModalities)
         self.model = "gemini-2.0-flash-exp"
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -50,18 +51,20 @@ class ImageGeneratorService:
         full_prompt = self._build_prompt(prompt, style, negative_prompt)
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                # Gemini 2.0 Flash image generation format
+                # responseModalities must be ["TEXT", "IMAGE"] (uppercase, both required)
                 response = await client.post(
                     f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}",
                     json={
                         "contents": [{
                             "parts": [{
-                                "text": full_prompt
+                                "text": f"Generate an image: {full_prompt}"
                             }]
                         }],
                         "generationConfig": {
-                            "responseModalities": ["image", "text"],
-                            "responseMimeType": "image/png"
+                            "responseModalities": ["TEXT", "IMAGE"],
+                            "temperature": 1.0
                         }
                     }
                 )
@@ -72,7 +75,7 @@ class ImageGeneratorService:
                 else:
                     error_msg = f"Gemini API error: {response.status_code}"
                     logger.error(f"{error_msg} - {response.text[:200]}")
-                    return {"success": False, "error": error_msg}
+                    return {"success": False, "error": error_msg, "details": response.text[:500]}
 
         except httpx.TimeoutException:
             return {"success": False, "error": "Image generation timed out"}

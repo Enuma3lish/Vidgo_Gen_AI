@@ -1,0 +1,403 @@
+{
+  "app": {
+    "name": "VidGo AI",
+    "tagline": "AI 驅動創意平台"
+  },
+  "nav": {
+    "home": "首頁",
+    "pricing": "定價",
+    "api": "API",
+    "login": "登入",
+    "register": "註冊",
+    "logout": "登出",
+    "dashboard": "控制台",
+    "myWorks": "我的作品"
+  },
+  "hero": {
+    "title": "用 AI 創造驚艷視覺內容",
+    "subtitle": "專業圖案設計、電商產品攝影、AI影片製作，一站式解決方案",
+    "cta": "免費體驗",
+    "secondaryCta": "查看方案"
+  },
+  "topics": {
+    "pattern": {
+      "name": "圖案設計",
+      "desc": "AI 智能圖案生成與轉印",
+      "longDesc": "運用 AI 技術快速生成獨特圖案，支援無縫圖案、花卉、幾何等多種風格",
+      "ctaTitle": "開始創建獨特圖案",
+      "ctaDesc": "使用 AI 生成專業圖案，多種風格可供選擇"
+    },
+    "product": {
+      "name": "電商產品圖",
+      "desc": "專業級產品攝影解決方案",
+      "longDesc": "智能去背、場景生成、商品增強，讓您的產品照片脫穎而出",
+      "processDesc": "一鍵處理，打造專業產品圖",
+      "ctaTitle": "升級您的產品圖片",
+      "ctaDesc": "專業去背和場景生成，助力電商成功"
+    },
+    "video": {
+      "name": "AI影片",
+      "desc": "靜態圖片變動態影片",
+      "longDesc": "圖片轉影片、風格轉換，多種藝術風格任您選擇",
+      "imageToVideo": "圖轉影片",
+      "styleTransform": "風格轉換",
+      "stylesDesc": "多種藝術風格，讓影片更具特色",
+      "ctaTitle": "讓您的圖片動起來",
+      "ctaDesc": "一鍵生成影片，多種風格任選"
+    }
+  },
+  "tools": {
+    "patternGenerate": {
+      "name": "圖案生成",
+      "desc": "從文字描述生成獨特圖案",
+      "longDesc": "使用 AI 從文字描述創建美麗獨特的圖案"
+    },
+    "patternTransfer": {
+      "name": "圖案轉印",
+      "desc": "將圖案套用到產品上",
+      "longDesc": "無縫地將圖案套用到產品表面"
+    },
+    "patternSeamless": {
+      "name": "無縫圖案",
+      "desc": "生成可無縫拼接的圖案",
+      "longDesc": "創建完美無縫拼接的圖案"
+    },
+    "removeBackground": {
+      "name": "智能去背",
+      "desc": "一鍵移除圖片背景"
+    },
+    "productScene": {
+      "name": "場景生成",
+      "desc": "為產品生成專業場景",
+      "longDesc": "將您的產品放置在專業的 AI 生成場景中"
+    },
+    "productEnhance": {
+      "name": "商品增強",
+      "desc": "提升產品圖片品質",
+      "longDesc": "使用 AI 增強產品圖片品質"
+    },
+    "imageToVideo": {
+      "name": "圖轉影片",
+      "desc": "將靜態圖片轉為動態影片",
+      "longDesc": "將靜態圖片轉換為引人注目的動態影片"
+    },
+    "videoTransform": {
+      "name": "風格轉換",
+      "desc": "將影片轉換為藝術風格",
+      "longDesc": "為您的影片套用動漫、吉卜力或水彩等藝術風格"
+    },
+    "productVideo": {
+      "name": "商品動態",
+      "desc": "製作產品展示動態影片",
+      "longDesc": "自動生成動態產品展示影片"
+    },
+    "backgroundRemoval": {
+      "name": "智能去背",
+      "desc": "一鍵移除圖片背景",
+      "longDesc": "自動檢測並一鍵移除任何圖片的背景"
+    },
+    "tryOn": {
+      "name": "虛擬試穿",
+      "desc": "虛擬服裝試穿",
+      "longDesc": "使用 AI 虛擬試穿，查看服裝在不同模特上的效果"
+    },
+    "roomRedesign": {
+      "name": "空間改造",
+      "desc": "改造室內空間",
+      "longDesc": "使用 AI 室內裝飾建議重新設計任何房間"
+    },
+    "shortVideo": {
+      "name": "短視頻",
+      "desc": "創建引人入勝的短視頻",
+      "longDesc": "從文字描述或圖片生成精彩短視頻"
+    },
+    "common": {
+      "uploadImage": "上傳圖片",
+      "uploadVideo": "上傳影片",
+      "settings": "設定",
+      "motionStrength": "動態強度",
+      "gentle": "微動",
+      "intense": "劇烈",
+      "styleTransform": "風格轉換（可選）",
+      "originalStyle": "原始風格",
+      "processingTime": "處理中（約1-3分鐘）",
+      "processingTimeLong": "處理中（約3-10分鐘）",
+      "generatedResult": "生成結果",
+      "transformResult": "轉換結果",
+      "selectScene": "選擇場景",
+      "customPrompt": "自訂提示詞",
+      "describeScene": "描述您的場景",
+      "scenePlaceholder": "例如：大理石表面，柔和的晨光...",
+      "generatedScenes": "生成的場景",
+      "productImage": "產品圖片",
+      "changeImage": "更換圖片",
+      "additionalPrompt": "額外提示詞（可選）",
+      "promptPlaceholder": "例如：增加細節、更飽和的顏色...",
+      "startTransform": "開始轉換",
+      "examplePrompt": "例如：優雅的玫瑰花卉圖案，金色與深藍色配色..."
+    },
+    "scenes": {
+      "studio": { "name": "攝影棚", "desc": "乾淨的棚拍燈光" },
+      "nature": { "name": "自然", "desc": "自然戶外場景" },
+      "luxury": { "name": "奢華", "desc": "高端優雅風格" },
+      "minimal": { "name": "極簡", "desc": "乾淨極簡背景" },
+      "lifestyle": { "name": "生活", "desc": "居家環境" },
+      "custom": { "name": "自訂", "desc": "您自己的提示詞" }
+    }
+  },
+  "styles": {
+    "seamless": "無縫圖案",
+    "floral": "花卉風格",
+    "geometric": "幾何圖形",
+    "abstract": "抽象藝術",
+    "traditional": "傳統紋樣",
+    "studio": "攝影棚",
+    "nature": "自然風光",
+    "luxury": "奢華質感",
+    "minimal": "極簡風格",
+    "lifestyle": "生活場景",
+    "anime": "動漫風格",
+    "ghibli": "吉卜力風格",
+    "pixar": "皮克斯風格",
+    "clay": "黏土動畫",
+    "watercolor": "水彩風格"
+  },
+  "examples": {
+    "title": "精選案例",
+    "before": "處理前",
+    "after": "處理後",
+    "viewMore": "查看更多案例",
+    "loading": "範例載入中..."
+  },
+  "sections": {
+    "availableTools": "可用工具",
+    "quickGenerate": "快速生成",
+    "quickProcess": "快速處理",
+    "popularStyles": "熱門風格展示",
+    "readyToStart": "準備開始了嗎？",
+    "freeToTry": "免費體驗 AI 工具，創造無限可能",
+    "startFree": "免費開始"
+  },
+  "whyChoose": {
+    "title": "為什麼選擇 VidGo AI？",
+    "subtitle": "專業 AI 工具，讓創意無限可能",
+    "features": {
+      "fast": {
+        "title": "快速生成",
+        "desc": "優化的 AI 模型，秒級出圖"
+      },
+      "quality": {
+        "title": "專業品質",
+        "desc": "商業級輸出，滿足專業需求"
+      },
+      "cost": {
+        "title": "靈活計費",
+        "desc": "按需付費，無隱藏費用"
+      },
+      "cache": {
+        "title": "智能快取",
+        "desc": "相同請求快速回應，節省時間"
+      },
+      "api": {
+        "title": "API 整合",
+        "desc": "完整 API 支援，輕鬆整合"
+      }
+    }
+  },
+  "categories": {
+    "aiCreate": "AI創作",
+    "editing": "編輯應用",
+    "video": "視頻創作",
+    "architecture": "建築室內",
+    "product": "產品電商",
+    "portrait": "人像寫真"
+  },
+  "badges": {
+    "free": "免費版",
+    "beta": "實驗版",
+    "hot": "熱門",
+    "new": "新功能",
+    "cached": "已快取"
+  },
+  "common": {
+    "upload": "上傳",
+    "generate": "生成",
+    "download": "下載",
+    "cancel": "取消",
+    "confirm": "確認",
+    "save": "儲存",
+    "delete": "刪除",
+    "edit": "編輯",
+    "loading": "載入中...",
+    "processing": "處理中...",
+    "success": "成功",
+    "error": "錯誤",
+    "dragDrop": "拖放檔案到此處或點擊上傳",
+    "supportedFormats": "支援格式：JPG、PNG、WEBP",
+    "supportedVideoFormats": "支援格式：MP4、MOV、WEBM",
+    "maxSize": "最大檔案：10MB",
+    "credits": "點數",
+    "estimatedCost": "預估消耗",
+    "tryExample": "試試範例",
+    "selectStyle": "選擇風格",
+    "enterPrompt": "輸入描述",
+    "uploadImage": "上傳圖片",
+    "uploadVideo": "上傳影片",
+    "result": "結果",
+    "previewComingSoon": "預覽即將推出",
+    "startFree": "免費開始"
+  },
+  "auth": {
+    "email": "電子郵件",
+    "password": "密碼",
+    "confirmPassword": "確認密碼",
+    "verificationCode": "驗證碼",
+    "sendCode": "發送驗證碼",
+    "resendCode": "重新發送",
+    "loginTitle": "歡迎回來",
+    "loginSubtitle": "登入您的帳戶",
+    "registerTitle": "建立帳戶",
+    "registerSubtitle": "立即加入 VidGo AI",
+    "verifyTitle": "驗證郵箱",
+    "verifySubtitle": "輸入發送到您郵箱的 6 位數驗證碼",
+    "forgotPassword": "忘記密碼？",
+    "noAccount": "還沒有帳戶？",
+    "hasAccount": "已經有帳戶？",
+    "signUp": "註冊",
+    "signIn": "登入"
+  },
+  "dashboard": {
+    "welcome": "歡迎回來",
+    "totalCredits": "總點數",
+    "usedThisWeek": "本週已用",
+    "recentWorks": "最近作品",
+    "quickActions": "快速操作",
+    "viewAll": "查看全部"
+  },
+  "pricing": {
+    "title": "選擇您的方案",
+    "subtitle": "免費開始，隨需擴展",
+    "monthly": "月付",
+    "yearly": "年付",
+    "demo": "體驗版",
+    "starter": "入門版",
+    "pro": "專業版",
+    "proPlus": "旗艦版",
+    "free": "免費",
+    "currentPlan": "目前方案",
+    "upgrade": "升級",
+    "features": "功能特色"
+  },
+  "footer": {
+    "about": "關於我們",
+    "terms": "服務條款",
+    "privacy": "隱私政策",
+    "contact": "聯繫我們",
+    "copyright": "© 2024 VidGo AI. 保留所有權利。"
+  },
+  "landing": {
+    "badge": "AI 驅動的廣告生成平台",
+    "headline1": "AI 自動生成",
+    "headline2": "高效能影片廣告",
+    "subtitle": "只需幾分鐘，讓 AI 為您打造專業級的影片廣告。",
+    "highlight": "提升轉換率，節省 80% 的製作時間與成本",
+    "tryFree": "立即免費試用",
+    "watchDemo": "觀看示範",
+    "stats": {
+      "users": "活躍用戶",
+      "timeSaved": "時間節省",
+      "conversion": "轉換率提升"
+    },
+    "features": {
+      "title": "強大功能，",
+      "titleHighlight": "一應俱全",
+      "subtitle": "整合 AI 技術與專業行銷工具，提供全方位的廣告製作解決方案",
+      "ai": { "title": "AI 智能生成", "desc": "先進的 AI 技術自動分析您的需求，生成符合品牌調性的專業影片廣告" },
+      "fast": { "title": "快速製作", "desc": "只需 3 分鐘即可完成影片廣告製作，大幅縮短傳統製作流程" },
+      "target": { "title": "精準投放", "desc": "智能分析目標受眾，優化廣告內容以提升點擊率和轉換率" },
+      "data": { "title": "數據分析", "desc": "即時追蹤廣告成效，提供深度數據分析和優化建議" },
+      "lang": { "title": "多語言支援", "desc": "支援 30+ 種語言，輕鬆拓展全球市場" },
+      "team": { "title": "團隊協作", "desc": "支援多人協作，讓團隊共同打造完美廣告內容" }
+    },
+    "howItWorks": {
+      "badge": "如何運作",
+      "title": "四步驟",
+      "titleHighlight": "輕鬆完成",
+      "subtitle": "簡單直觀的操作流程，讓您快速上手，即刻開始創作",
+      "step1": { "title": "上傳素材", "desc": "上傳您的產品圖片、影片或文字內容，支援多種格式" },
+      "step2": { "title": "AI 生成", "desc": "AI 自動分析內容並生成專業的廣告腳本和視覺效果" },
+      "step3": { "title": "客製化調整", "desc": "根據需求調整風格、文案、配樂等細節參數" },
+      "step4": { "title": "匯出投放", "desc": "下載成品或直接整合投放至各大廣告平台" }
+    },
+    "examples": {
+      "badge": "作品展示",
+      "title": "AI 生成的精彩範例",
+      "subtitle": "查看各種類型的影片廣告範例，體驗 AI 的創作能力",
+      "viewMore": "查看更多範例",
+      "categories": {
+        "all": "全部",
+        "ecommerce": "電商",
+        "social": "社群",
+        "brand": "品牌",
+        "app": "應用程式",
+        "promo": "促銷",
+        "service": "服務"
+      }
+    },
+    "comparison": {
+      "badge": "前後對比",
+      "title": "傳統 vs ",
+      "titleHighlight": "AI 智能製作",
+      "subtitle": "看看 VIDGO 如何革新廣告製作流程，為您節省時間與成本",
+      "traditional": "傳統方式",
+      "aiWay": "VIDGO AI",
+      "recommend": "推薦",
+      "traditionalItems": ["需要專業團隊", "製作週期 2-4 週", "成本高昂 $5000+", "修改困難且耗時", "需要專業設備", "人力成本高"],
+      "aiItems": ["無需專業技能", "3 分鐘快速完成", "月費 $49 起", "隨時調整優化", "線上即可操作", "AI 自動化處理"],
+      "statTimeSaved": "時間節省",
+      "statCostReduced": "成本降低",
+      "statEfficiency": "產出效率"
+    },
+    "testimonials": {
+      "badge": "客戶見證",
+      "title": "超過 ",
+      "titleHighlight": "10,000+",
+      "titleEnd": " 企業的信賴選擇",
+      "subtitle": "聽聽來自各行各業客戶的真實分享",
+      "avgRating": "平均評分",
+      "activeUsers": "活躍用戶",
+      "generatedVideos": "生成影片",
+      "satisfaction": "滿意度"
+    },
+    "pricing": {
+      "badge": "定價方案",
+      "title": "選擇適合您的",
+      "titleHighlight": "完美方案",
+      "subtitle": "靈活的定價選項，滿足不同規模企業的需求",
+      "mostPopular": "最受歡迎",
+      "perMonth": "/月",
+      "originalPrice": "原價",
+      "startNow": "立即開始",
+      "learnMore": "了解更多"
+    },
+    "faq": {
+      "badge": "常見問題",
+      "title": "常見問題",
+      "titleHighlight": "解答",
+      "subtitle": "找不到答案？歡迎聯繫我們的客服團隊",
+      "moreQuestions": "還有其他問題？",
+      "contactSupport": "聯繫客服團隊"
+    },
+    "cta": {
+      "title": "準備好開始了嗎？",
+      "subtitle": "立即開始免費試用，體驗 AI 驅動的廣告生成平台",
+      "highlight": "無需信用卡，14 天完整功能體驗",
+      "noCreditCard": "無需信用卡",
+      "freeTrial": "14天免費試用",
+      "cancelAnytime": "隨時取消",
+      "tryNow": "立即免費試用",
+      "contactSales": "聯繫銷售團隊",
+      "socialProof": "超過 500+ 企業選擇 VIDGO"
+    }
+  }
+}

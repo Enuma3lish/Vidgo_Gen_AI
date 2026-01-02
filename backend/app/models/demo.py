@@ -152,18 +152,176 @@ class DemoView(Base):
 
 class PromptCache(Base):
     """
-    Cache for prompt translations and keyword extractions.
-    Speeds up multi-language prompt processing.
+    Cache for user prompts and generated results.
+    Supports similarity matching to reuse existing results.
     """
     __tablename__ = "prompt_cache"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prompt_hash = Column(String(64), unique=True, index=True)  # SHA256 of original prompt
     prompt_original = Column(Text, nullable=False)
-    prompt_normalized = Column(Text, nullable=False)
+    prompt_normalized = Column(Text, nullable=False)  # Cleaned/enhanced prompt
+    prompt_enhanced = Column(Text, nullable=True)  # Gemini-enhanced prompt
     detected_language = Column(String(10), nullable=True)
+
+    # Embedding for similarity search (stored as JSON array of floats)
+    prompt_embedding = Column(JSONB, nullable=True)  # Vector embedding for similarity
+
+    # Generated results
+    image_url = Column(String(500), nullable=True)
+    video_url = Column(String(500), nullable=True)
+    video_url_watermarked = Column(String(500), nullable=True)
+
+    # Matching keywords
     keywords = Column(ARRAY(String), default=[])
     category_hints = Column(ARRAY(String), default=[])
     style_hints = Column(ARRAY(String), default=[])
+
+    # Stats
+    usage_count = Column(Integer, default=0)  # How many times this result was reused
+    hit_count = Column(Integer, default=0)  # Legacy field for backward compat
+
+    # Generation metadata
+    source_service = Column(String(50), default="leonardo")
+    generation_cost = Column(Float, default=0.0)
+
+    # Status
+    status = Column(String(20), default="completed")  # pending, completed, failed
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    hit_count = Column(Integer, default=0)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class DemoExample(Base):
+    """
+    Pre-generated examples for the AI Creation Inspiration gallery.
+    Organized by topic with high-quality sample images and videos.
+    """
+    __tablename__ = "demo_examples"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Topic categorization
+    topic = Column(String(50), nullable=False, index=True)  # product, fashion, food, tech, beauty, home, sports, travel
+    topic_zh = Column(String(50), nullable=True)  # Chinese topic name
+    topic_en = Column(String(50), nullable=True)  # English topic name
+
+    # Prompt data
+    prompt = Column(Text, nullable=False)  # Original prompt used
+    prompt_enhanced = Column(Text, nullable=True)  # Enhanced version
+
+    # Generated content
+    image_url = Column(String(500), nullable=False)
+    video_url = Column(String(500), nullable=True)
+    video_url_watermarked = Column(String(500), nullable=True)
+    thumbnail_url = Column(String(500), nullable=True)
+
+    # Metadata
+    duration_seconds = Column(Float, default=5.0)
+    resolution = Column(String(20), default="720p")
+
+    # Display info
+    title = Column(String(255), nullable=True)
+    title_zh = Column(String(255), nullable=True)
+    title_en = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+
+    # Tags for filtering
+    style_tags = Column(ARRAY(String), default=[])
+
+    # Stats & ranking
+    popularity_score = Column(Integer, default=0)
+    quality_score = Column(Float, default=0.8)
+    sort_order = Column(Integer, default=0)
+
+    # Generation source
+    source_service = Column(String(50), default="leonardo")
+    generation_params = Column(JSONB, default={})
+
+    # Status
+    is_featured = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Indexes for fast queries
+    __table_args__ = (
+        Index('idx_demo_example_topic', 'topic', 'is_active'),
+        Index('idx_demo_example_featured', 'is_featured', 'is_active'),
+    )
+
+
+class ToolShowcase(Base):
+    """
+    Pre-generated showcases for tool collection pages.
+    Shows the full workflow: source image → prompt → result (image/video)
+    Organized by tool category and specific tool type.
+    """
+    __tablename__ = "tool_showcases"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Tool categorization
+    tool_category = Column(String(50), nullable=False, index=True)  # edit_tools, ecommerce, architecture, portrait
+    tool_id = Column(String(50), nullable=False, index=True)  # product_ads_video, style_transfer, etc.
+    tool_name = Column(String(100), nullable=False)  # Display name
+    tool_name_zh = Column(String(100), nullable=True)  # Chinese name
+
+    # Source content (before)
+    # NOTE: nullable=True for TEXT-TO-IMAGE tools (e.g., pattern_generate) that don't need source
+    source_image_url = Column(String(500), nullable=True)  # Original input image (None for text-to-image)
+    source_thumbnail_url = Column(String(500), nullable=True)
+
+    # Prompt used for generation
+    prompt = Column(Text, nullable=False)
+    prompt_zh = Column(Text, nullable=True)  # Chinese prompt
+
+    # Result content (after)
+    result_image_url = Column(String(500), nullable=True)  # For image transformation tools
+    result_video_url = Column(String(500), nullable=True)  # For video generation tools
+    result_thumbnail_url = Column(String(500), nullable=True)
+
+    # Display info
+    title = Column(String(255), nullable=True)
+    title_zh = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    description_zh = Column(Text, nullable=True)
+
+    # Video metadata
+    duration_seconds = Column(Float, default=5.0)
+    resolution = Column(String(20), default="720p")
+
+    # Tags for filtering
+    style_tags = Column(ARRAY(String), default=[])
+
+    # Stats & ranking
+    popularity_score = Column(Integer, default=0)
+    quality_score = Column(Float, default=0.8)
+    sort_order = Column(Integer, default=0)
+
+    # Generation source
+    source_service = Column(String(50), default="leonardo")
+    generation_params = Column(JSONB, default={})
+
+    # User-generated flag (for saving user prompts as examples)
+    is_user_generated = Column(Boolean, default=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    # Status
+    is_featured = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Indexes for fast queries
+    __table_args__ = (
+        Index('idx_tool_showcase_category', 'tool_category', 'is_active'),
+        Index('idx_tool_showcase_tool', 'tool_id', 'is_active'),
+        Index('idx_tool_showcase_featured', 'is_featured', 'is_active'),
+    )

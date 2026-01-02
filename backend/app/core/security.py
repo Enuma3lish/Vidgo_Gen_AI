@@ -3,11 +3,26 @@ from typing import Optional, Union, Any, Tuple
 from jose import jwt
 from passlib.context import CryptContext
 import secrets
+import hashlib
+import base64
 from app.core.config import get_settings
 
 settings = get_settings()
 
+# Use bcrypt with SHA256 pre-hashing to handle passwords > 72 bytes
+# This is more secure than truncation for long passwords
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _prehash_password(password: str) -> str:
+    """
+    Pre-hash password with SHA256 before bcrypt.
+    This handles bcrypt's 72-byte limit securely.
+    """
+    # SHA256 hash the password and base64 encode it
+    # This produces a consistent 44-character string
+    sha256_hash = hashlib.sha256(password.encode('utf-8')).digest()
+    return base64.b64encode(sha256_hash).decode('ascii')
 
 
 def create_access_token(
@@ -70,12 +85,16 @@ def decode_token(token: str) -> Optional[dict]:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    # Pre-hash with SHA256 to handle bcrypt's 72-byte limit
+    prehashed = _prehash_password(plain_password)
+    return pwd_context.verify(prehashed, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
     """Hash a password."""
-    return pwd_context.hash(password)
+    # Pre-hash with SHA256 to handle bcrypt's 72-byte limit
+    prehashed = _prehash_password(password)
+    return pwd_context.hash(prehashed)
 
 
 def generate_verification_token() -> str:

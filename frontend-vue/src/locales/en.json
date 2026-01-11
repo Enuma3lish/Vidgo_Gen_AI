@@ -44,9 +44,38 @@
       "stylesDesc": "Multiple artistic styles to make your videos stand out",
       "ctaTitle": "Bring Your Images to Life",
       "ctaDesc": "One-click video generation with multiple styles to choose from"
+    },
+    "avatar": {
+      "name": "AI Avatar",
+      "desc": "Photo-to-avatar with natural lip sync",
+      "longDesc": "Transform photos into talking avatar videos with AI voice and expressions"
+    },
+    "interior": {
+      "name": "Interior Design",
+      "desc": "AI-powered room redesign",
+      "longDesc": "Transform any room with AI. Upload a photo and describe your dream space."
     }
   },
   "tools": {
+    "avatar": {
+      "name": "AI Avatar",
+      "desc": "Photo to talking avatar video",
+      "longDesc": "Transform photos into talking avatar videos with natural lip sync",
+      "avatarPhoto": "Avatar Photo",
+      "script": "Script",
+      "scriptPlaceholder": "Enter the text you want your avatar to speak...",
+      "maxSpeech": "Max 120 seconds of speech",
+      "voiceSettings": "Voice Settings",
+      "language": "Language",
+      "voice": "Voice",
+      "female": "Female",
+      "male": "Male",
+      "defaultAvatars": "Or choose a default avatar:",
+      "changePhoto": "Change Photo",
+      "generatedVideo": "Generated Avatar Video",
+      "videoPlaceholder": "Avatar video will appear here",
+      "processing": "Generating avatar video... This may take a few minutes"
+    },
     "patternGenerate": {
       "name": "Pattern Generate",
       "desc": "Generate unique patterns from text descriptions",
@@ -151,6 +180,9 @@
     "geometric": "Geometric",
     "abstract": "Abstract",
     "traditional": "Traditional",
+    "3d": "3D Design",
+    "interior": "Interior Design",
+    "mockup": "Product Mockup",
     "studio": "Studio",
     "nature": "Nature",
     "luxury": "Luxury",
@@ -212,6 +244,92 @@
     "product": "E-commerce",
     "portrait": "Portrait"
   },
+  "homepage": {
+    "topics": {
+      "aiImage": {
+        "title": "AI Image Creation",
+        "desc": "Create stunning images with AI"
+      },
+      "aiVideo": {
+        "title": "AI Video Creation",
+        "desc": "Generate videos from images and text"
+      },
+      "ecommerce": {
+        "title": "Product & E-commerce",
+        "desc": "Enhance product photos for e-commerce"
+      },
+      "architecture": {
+        "title": "Architecture & Interior",
+        "desc": "Redesign rooms and spaces with AI"
+      },
+      "quickTools": {
+        "title": "Quick Tools",
+        "desc": "Fast editing tools for everyday use"
+      },
+      "inspiration": {
+        "title": "Work Inspiration",
+        "desc": "Browse creative examples for inspiration"
+      }
+    },
+    "tools": {
+      "textToImage": "Text to Image",
+      "imageEnhancement": "Image Enhancement",
+      "patternDesign": "Pattern Design",
+      "styleTransfer": "Style Transfer",
+      "imageToVideo": "Image to Video",
+      "videoStyleTransfer": "Video Style Transfer",
+      "aiAvatar": "AI Avatar",
+      "productVideo": "Product Video",
+      "productScene": "Product Scene",
+      "backgroundRemoval": "Background Removal",
+      "productEnhancement": "Product Enhancement",
+      "virtualTryOn": "Virtual Try-On",
+      "roomRedesign": "Room Redesign",
+      "interiorStyle": "Interior Style Transfer",
+      "archVisualization": "Architecture Visualization",
+      "furniturePlacement": "Furniture Placement",
+      "hdUpscaling": "HD Upscaling",
+      "watermarkRemoval": "Watermark Removal",
+      "objectRemoval": "Object Removal",
+      "imageCompression": "Image Compression"
+    },
+    "gallery": {
+      "video": "Video",
+      "recommended": "Recommended",
+      "portrait": "Portrait",
+      "photography": "Photography",
+      "animation": "Animation",
+      "poster": "Poster & Illustration",
+      "anime": "Anime",
+      "ecommerceDesign": "E-commerce Design",
+      "chinese": "Chinese Style",
+      "female": "Female",
+      "male": "Male",
+      "interior": "Interior",
+      "architectureLandscape": "Architecture & Landscape",
+      "toys": "Toys & Figures",
+      "art": "Art",
+      "productDesign": "Product Design",
+      "gameCG": "Game CG",
+      "nature": "Nature",
+      "threeD": "3D",
+      "logoUI": "Logo/UI",
+      "character": "Character IP",
+      "animals": "Animals & Plants",
+      "fantasy": "Fantasy",
+      "scifi": "Sci-Fi"
+    },
+    "promptModal": {
+      "title": "Generation Prompt",
+      "copyPrompt": "Copy Prompt",
+      "tryThis": "Try This",
+      "copied": "Copied!",
+      "close": "Close"
+    },
+    "viewMore": "View More",
+    "seeAll": "See All Examples",
+    "tryNow": "Try Now"
+  },
   "badges": {
     "free": "Free",
     "beta": "Beta",
@@ -220,6 +338,7 @@
     "cached": "Cached"
   },
   "common": {
+    "back": "Back",
     "upload": "Upload",
     "generate": "Generate",
     "download": "Download",
@@ -286,7 +405,40 @@
     "free": "Free",
     "currentPlan": "Current Plan",
     "upgrade": "Upgrade",
-    "features": "Features"
+    "getStarted": "Get Started",
+    "features": "Features",
+    "status": "Status",
+    "validUntil": "Valid until",
+    "daysLeft": "days left",
+    "processing": "Processing...",
+    "subscribing": "Subscribing...",
+    "cancelSubscription": "Cancel Subscription",
+    "cancelWithRefund": "Cancel with Refund",
+    "subscribeSuccess": "Subscription activated successfully!",
+    "redirectingToPayment": "Redirecting to payment...",
+    "subscribeFailed": "Failed to subscribe. Please try again.",
+    "refundProcessed": "Refund processed successfully. Your subscription has been cancelled.",
+    "subscriptionCancelled": "Subscription cancelled. You can continue using credits until the end of your billing period.",
+    "cancelFailed": "Failed to cancel subscription. Please try again.",
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "credits": {
+        "q": "What are credits?",
+        "a": "Credits are used to generate content. Different tools consume different amounts of credits based on complexity."
+      },
+      "rollover": {
+        "q": "Do unused credits roll over?",
+        "a": "Monthly credits reset at the end of each billing period. Purchased credit packs never expire."
+      },
+      "change": {
+        "q": "Can I upgrade or downgrade?",
+        "a": "Yes, you can change your plan at any time. Changes take effect at the next billing cycle."
+      },
+      "refund": {
+        "q": "What is the refund policy?",
+        "a": "You can request a full refund within 7 days of subscribing. After 7 days, you can still cancel but will retain access until the end of your billing period."
+      }
+    }
   },
   "footer": {
     "about": "About",
@@ -294,6 +446,53 @@
     "privacy": "Privacy",
     "contact": "Contact",
     "copyright": "© 2024 VidGo AI. All rights reserved."
+  },
+  "interior": {
+    "badge": "AI Interior Design",
+    "title": "AI Interior Design",
+    "subtitle": "Transform any room with AI-powered interior design. Upload a photo and describe your dream space.",
+    "processing": "Generating design...",
+    "tabs": {
+      "redesign": "Redesign Room",
+      "generate": "Generate Design",
+      "styleTransfer": "Style Transfer"
+    },
+    "uploadTitle": "Upload Room Photo",
+    "roomType": "Room Type",
+    "designStyle": "Design Style",
+    "prompt": "Describe Your Changes",
+    "promptPlaceholder": "e.g., Modern minimalist with grey sofa, wooden coffee table, and indoor plants...",
+    "examplePrompts": "Try these examples",
+    "result": "Design Result",
+    "resultPlaceholder": "Your redesigned room will appear here",
+    "resultHint": "Upload a room photo or describe your dream design",
+    "before": "Before",
+    "after": "After",
+    "tryAnother": "Try Another",
+    "actions": {
+      "redesign": "Redesign Room",
+      "generate": "Generate Design",
+      "applyStyle": "Apply Style"
+    },
+    "success": {
+      "redesigned": "Room redesigned successfully!",
+      "generated": "Design generated successfully!",
+      "styleApplied": "Style applied successfully!"
+    },
+    "errors": {
+      "imageRequired": "Please upload a room image",
+      "promptRequired": "Please describe your design",
+      "imageAndPromptRequired": "Please upload an image and describe your changes",
+      "styleRequired": "Please select a design style",
+      "failed": "Design generation failed. Please try again."
+    },
+    "features": {
+      "title": "Powered by Gemini AI",
+      "imageText": "Image + Text: Upload room photo with description",
+      "textOnly": "Text Only: Generate design from description",
+      "multiStyle": "10 design styles: Modern, Nordic, Japanese, and more",
+      "keepLayout": "Preserves room layout and window positions"
+    }
   },
   "landing": {
     "badge": "AI-Powered Ad Generation Platform",

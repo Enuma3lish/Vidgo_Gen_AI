@@ -1,10 +1,10 @@
 """
-VidGo Effects Service - White-labeled wrapper for GoEnhance API.
+VidGo Effects Service - White-labeled wrapper for PiAPI Wan API.
 
 User-Facing Names:
-- VidGo Style Effects (GoEnhance Style Transfer)
-- VidGo HD Enhance (GoEnhance 4K Upscale)
-- VidGo Video Pro (GoEnhance Video Enhancement)
+- VidGo Style Effects (PiAPI Wan Style Transfer)
+- VidGo HD Enhance (PiAPI Wan Upscale)
+- VidGo Video Pro (PiAPI Wan Video Enhancement)
 
 Access Control:
 - Subscribers only (Starter/Pro/Pro+)
@@ -17,29 +17,14 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.billing import Plan, ServicePricing
-from app.services.goenhance import GoEnhanceClient
+from app.providers import ProviderRouter, TaskType
 from app.services.credit_service import CreditService
 
 settings = get_settings()
 
 
-# Unified style effects with VERIFIED GoEnhance model IDs (white-labeled)
+# Unified style effects for VidGo (white-labeled)
 # This is the single source of truth for all styles across the application
-# Model IDs verified from GoEnhance API /video2video/modellist
-#
-# Available GoEnhance Models:
-#   1016: Anime Style 3 (v4)
-#   1033: GPT Anime Style (v4) - closest to Ghibli
-#   5: Cute Anime Style (v1)
-#   2: Anime Style 2 (v1)
-#   2000: Anime Style (v5) - main anime
-#   2004: Pixar Style (v5) - cartoon/3D
-#   2005: Clay Style (v5)
-#   2006: Oil Painting (v5)
-#   2007: Watercolor (v5)
-#   2008: Cyberpunk (v5)
-#   2009: Realistic (v5)
-#   2010: Cinematic (v5)
 #
 VIDGO_STYLES = [
     # === Artistic styles ===
@@ -48,8 +33,7 @@ VIDGO_STYLES = [
         "name": "VidGo Anime",
         "name_zh": "動漫風格",
         "category": "artistic",
-        "preview_url": "/static/previews/anime.jpg",
-        "goenhance_model_id": 2000,  # Anime Style v5 ✓
+        "preview_url": "https://cdn.pixabay.com/photo/2022/08/09/16/19/anime-7375400_640.jpg",
         "prompt": "anime style"
     },
     {
@@ -57,8 +41,7 @@ VIDGO_STYLES = [
         "name": "VidGo Ghibli",
         "name_zh": "吉卜力風格",
         "category": "artistic",
-        "preview_url": "/static/previews/ghibli.jpg",
-        "goenhance_model_id": 1033,  # GPT Anime Style - closest to Ghibli! FIXED
+        "preview_url": "https://cdn.pixabay.com/photo/2020/06/14/03/55/anime-5296573_640.jpg",
         "prompt": "studio ghibli anime style, hayao miyazaki"
     },
     {
@@ -66,8 +49,7 @@ VIDGO_STYLES = [
         "name": "VidGo Cartoon",
         "name_zh": "卡通風格",
         "category": "artistic",
-        "preview_url": "/static/previews/cartoon.jpg",
-        "goenhance_model_id": 2004,  # Pixar Style v5 ✓
+        "preview_url": "https://cdn.pixabay.com/photo/2017/07/03/20/17/colorful-2468874_640.jpg",
         "prompt": "cartoon pixar 3d animation style"
     },
     {
@@ -75,8 +57,7 @@ VIDGO_STYLES = [
         "name": "VidGo Clay",
         "name_zh": "黏土動畫",
         "category": "artistic",
-        "preview_url": "/static/previews/clay.jpg",
-        "goenhance_model_id": 2005,  # Clay Style v5 ✓ FIXED from 2003
+        "preview_url": "https://cdn.pixabay.com/photo/2018/03/07/17/36/clay-3206587_640.jpg",
         "prompt": "claymation stop motion clay animation style"
     },
     {
@@ -84,8 +65,7 @@ VIDGO_STYLES = [
         "name": "VidGo Cute Anime",
         "name_zh": "可愛動漫",
         "category": "artistic",
-        "preview_url": "/static/previews/cute_anime.jpg",
-        "goenhance_model_id": 5,  # Cute Anime Style v1 ✓
+        "preview_url": "https://cdn.pixabay.com/photo/2022/12/01/15/38/ai-generated-7629380_640.jpg",
         "prompt": "cute kawaii anime style"
     },
     {
@@ -93,8 +73,7 @@ VIDGO_STYLES = [
         "name": "VidGo Oil Painting",
         "name_zh": "油畫風格",
         "category": "artistic",
-        "preview_url": "/static/previews/oil_painting.jpg",
-        "goenhance_model_id": 2006,  # Oil Painting v5 ✓ FIXED from 1005
+        "preview_url": "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=300&fit=crop",
         "prompt": "oil painting artistic van gogh style"
     },
     {
@@ -102,8 +81,7 @@ VIDGO_STYLES = [
         "name": "VidGo Watercolor",
         "name_zh": "水彩風格",
         "category": "artistic",
-        "preview_url": "/static/previews/watercolor.jpg",
-        "goenhance_model_id": 2007,  # Watercolor v5 ✓ FIXED from 1031
+        "preview_url": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=400&h=300&fit=crop",
         "prompt": "watercolor painting soft artistic style"
     },
     # === Modern styles ===
@@ -112,8 +90,7 @@ VIDGO_STYLES = [
         "name": "VidGo Cyberpunk",
         "name_zh": "賽博朋克",
         "category": "modern",
-        "preview_url": "/static/previews/cyberpunk.jpg",
-        "goenhance_model_id": 2008,  # Cyberpunk v5 ✓ FIXED from 1013
+        "preview_url": "https://images.unsplash.com/photo-1515705576963-95cad62945b6?w=400&h=300&fit=crop",
         "prompt": "cyberpunk neon futuristic sci-fi style"
     },
     {
@@ -121,8 +98,7 @@ VIDGO_STYLES = [
         "name": "VidGo Realistic",
         "name_zh": "寫實風格",
         "category": "modern",
-        "preview_url": "/static/previews/realistic.jpg",
-        "goenhance_model_id": 2009,  # Realistic v5 ✓
+        "preview_url": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=300&fit=crop",
         "prompt": "realistic photorealistic high quality style"
     },
     # === Professional styles ===
@@ -131,8 +107,7 @@ VIDGO_STYLES = [
         "name": "VidGo Cinematic",
         "name_zh": "電影質感",
         "category": "professional",
-        "preview_url": "/static/previews/cinematic.jpg",
-        "goenhance_model_id": 2010,  # Cinematic v5 ✓ FIXED from 1016
+        "preview_url": "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=300&fit=crop",
         "prompt": "cinematic movie film hollywood style"
     },
     {
@@ -140,8 +115,7 @@ VIDGO_STYLES = [
         "name": "VidGo Anime Classic",
         "name_zh": "經典動漫",
         "category": "professional",
-        "preview_url": "/static/previews/anime_classic.jpg",
-        "goenhance_model_id": 1016,  # Anime Style 3 v4 ✓
+        "preview_url": "https://images.unsplash.com/photo-1613376023733-0a73315d9b06?w=400&h=300&fit=crop",
         "prompt": "classic anime high quality style"
     },
 ]
@@ -154,21 +128,21 @@ def get_style_by_id(style_id: str) -> Optional[Dict[str, Any]]:
             return style
     return None
 
-# Helper function to get GoEnhance model ID for a style
-def get_goenhance_model_id(style_id: str) -> Optional[int]:
-    """Get GoEnhance model ID for a style"""
+# Helper function to get style prompt for a style
+def get_style_prompt(style_id: str) -> Optional[str]:
+    """Get style prompt for a style"""
     style = get_style_by_id(style_id)
     if style:
-        return style.get("goenhance_model_id")
+        return style.get("prompt")
     return None
 
 
 class VidGoEffectsService:
-    """VidGo Effects service wrapper for GoEnhance API."""
+    """VidGo Effects service wrapper for PiAPI Wan API."""
 
-    def __init__(self, db: AsyncSession, goenhance_client: Optional[GoEnhanceClient] = None):
+    def __init__(self, db: AsyncSession, router: Optional[ProviderRouter] = None):
         self.db = db
-        self.goenhance = goenhance_client or GoEnhanceClient()
+        self.router = router or ProviderRouter()
 
     async def check_access(self, user_id: str, service_type: str) -> Tuple[bool, str]:
         """
@@ -240,7 +214,7 @@ class VidGoEffectsService:
         intensity: float = 1.0
     ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Apply style effect to image using GoEnhance v2v API.
+        Apply style effect to image using PiAPI Wan API.
 
         Args:
             user_id: User ID
@@ -265,15 +239,19 @@ class VidGoEffectsService:
             return False, {"error": f"Invalid style. Available: {', '.join(valid_styles)}"}
 
         try:
-            # Use GoEnhance with the style's prompt from unified definition
+            # Use PiAPI with the style's prompt from unified definition
             prompt = style_def.get("prompt", "artistic style")
-            result = await self.goenhance.generate_image_and_wait(
-                prompt=prompt,
-                image_url=image_url,
-                strength=intensity
+            result = await self.router.route(
+                TaskType.T2I,
+                {
+                    "prompt": prompt,
+                    "image_url": image_url,
+                    "strength": intensity
+                }
             )
 
-            if result.get("status") == "completed":
+            output_url = result.get("image_url") or result.get("output_url")
+            if output_url:
                 # Deduct credits
                 credit_service = CreditService(self.db)
                 await credit_service.deduct_credits(
@@ -284,7 +262,7 @@ class VidGoEffectsService:
                 )
 
                 return True, {
-                    "output_url": result.get("image_url"),
+                    "output_url": output_url,
                     "style": style_id,
                     "credits_used": 8
                 }
@@ -301,7 +279,7 @@ class VidGoEffectsService:
         target_resolution: str = "4k"
     ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Upscale image to 4K resolution using GoEnhance.
+        Upscale image to 4K resolution using PiAPI Wan.
 
         Args:
             user_id: User ID
@@ -319,14 +297,17 @@ class VidGoEffectsService:
             return False, {"error": message}
 
         try:
-            # Use GoEnhance enhance_video for upscaling
-            # The enhance_video method can handle upscaling
-            result = await self.goenhance.enhance_video(
-                video_url=image_url,  # Works with images too
-                upscale=4 if target_resolution == "4k" else 2
+            # Use PiAPI for upscaling
+            result = await self.router.route(
+                TaskType.UPSCALE,
+                {
+                    "image_url": image_url,
+                    "scale": 4 if target_resolution == "4k" else 2
+                }
             )
 
-            if result.get("status") == "completed":
+            output_url = result.get("image_url") or result.get("output_url")
+            if output_url:
                 # Deduct credits
                 credit_service = CreditService(self.db)
                 await credit_service.deduct_credits(
@@ -337,7 +318,7 @@ class VidGoEffectsService:
                 )
 
                 return True, {
-                    "output_url": result.get("video_url") or result.get("output_url"),
+                    "output_url": output_url,
                     "resolution": target_resolution,
                     "credits_used": 10
                 }
@@ -354,7 +335,7 @@ class VidGoEffectsService:
         enhancement_type: str = "quality"
     ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Enhance video quality using GoEnhance API.
+        Enhance video quality using PiAPI Wan API.
 
         Args:
             user_id: User ID
@@ -391,13 +372,17 @@ class VidGoEffectsService:
             return False, {"error": message}
 
         try:
-            # Call GoEnhance enhance_video API
-            result = await self.goenhance.enhance_video(
-                video_url=video_url,
-                upscale=2 if enhancement_type == "quality" else 1
+            # Call PiAPI V2V for video enhancement
+            result = await self.router.route(
+                TaskType.V2V,
+                {
+                    "video_url": video_url,
+                    "prompt": "high quality enhanced video"
+                }
             )
 
-            if result.get("status") == "completed":
+            output_url = result.get("video_url") or result.get("output_url")
+            if output_url:
                 # Deduct credits
                 credit_service = CreditService(self.db)
                 await credit_service.deduct_credits(
@@ -408,7 +393,7 @@ class VidGoEffectsService:
                 )
 
                 return True, {
-                    "output_url": result.get("video_url") or result.get("output_url"),
+                    "output_url": output_url,
                     "enhancement": enhancement_type,
                     "credits_used": 12
                 }

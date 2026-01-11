@@ -176,7 +176,7 @@ async def register(
 ) -> Any:
     """
     Register a new user.
-    Sends verification email - user must verify before logging in.
+    Sends 6-digit verification code - user must verify before logging in.
     """
     # Check password confirmation if provided
     if user_in.password_confirm and user_in.password != user_in.password_confirm:
@@ -196,24 +196,19 @@ async def register(
                 detail="An account with this email already exists"
             )
         else:
-            # Resend verification email for unverified account
-            verification_token = security.generate_verification_token()
-            existing_user.email_verification_token = verification_token
-            existing_user.email_verification_sent_at = datetime.now(timezone.utc)
-            await db.commit()
-
-            await email_service.send_verification_email(
-                to_email=existing_user.email,
-                token=verification_token,
-                username=existing_user.username
+            # Resend verification code for unverified account
+            redis_client = await get_redis_client()
+            verify_service = EmailVerificationService(db, redis_client, email_service)
+            success, message = await verify_service.send_verification_code(
+                existing_user.email,
+                str(existing_user.id)
             )
+            if redis_client:
+                await redis_client.close()
 
             return MessageResponse(
-                message="A verification email has been sent. Please check your inbox."
+                message="A verification code has been sent to your email. Please check your inbox."
             )
-
-    # Generate verification token
-    verification_token = security.generate_verification_token()
 
     # Create new user
     user = User(
@@ -223,7 +218,6 @@ async def register(
         hashed_password=security.get_password_hash(user_in.password),
         is_active=False,  # Will be activated after email verification
         email_verified=False,
-        email_verification_token=verification_token,
         email_verification_sent_at=datetime.now(timezone.utc)
     )
 
@@ -231,15 +225,18 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    # Send verification email
-    await email_service.send_verification_email(
-        to_email=user.email,
-        token=verification_token,
-        username=user.username
+    # Send 6-digit verification code
+    redis_client = await get_redis_client()
+    verify_service = EmailVerificationService(db, redis_client, email_service)
+    success, message = await verify_service.send_verification_code(
+        user.email,
+        str(user.id)
     )
+    if redis_client:
+        await redis_client.close()
 
     return MessageResponse(
-        message="Registration successful! Please check your email to verify your account."
+        message="Registration successful! Please check your email for the 6-digit verification code."
     )
 
 
@@ -299,7 +296,7 @@ async def resend_verification(
     request: ResendVerificationRequest = Body(...)
 ) -> Any:
     """
-    Resend verification email.
+    Resend 6-digit verification code.
     """
     result = await db.execute(select(User).where(User.email == request.email))
     user = result.scalars().first()
@@ -307,7 +304,7 @@ async def resend_verification(
     if not user:
         # Don't reveal if email exists
         return MessageResponse(
-            message="If an account with this email exists, a verification email will be sent."
+            message="If an account with this email exists, a verification code will be sent."
         )
 
     if user.email_verified:
@@ -319,24 +316,25 @@ async def resend_verification(
         if time_since_last < timedelta(minutes=2):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Please wait before requesting another verification email."
+                detail="Please wait before requesting another verification code."
             )
 
-    # Generate new token
-    verification_token = security.generate_verification_token()
-    user.email_verification_token = verification_token
+    # Update sent timestamp
     user.email_verification_sent_at = datetime.now(timezone.utc)
-
     await db.commit()
 
-    await email_service.send_verification_email(
-        to_email=user.email,
-        token=verification_token,
-        username=user.username
+    # Send 6-digit verification code
+    redis_client = await get_redis_client()
+    verify_service = EmailVerificationService(db, redis_client, email_service)
+    success, message = await verify_service.send_verification_code(
+        user.email,
+        str(user.id)
     )
+    if redis_client:
+        await redis_client.close()
 
     return MessageResponse(
-        message="If an account with this email exists, a verification email will be sent."
+        message="If an account with this email exists, a verification code will be sent."
     )
 
 
@@ -554,3 +552,106 @@ async def resend_verification_code(
         )
 
     return MessageResponse(message=message)
+
+
+# ============== IP-based Language Detection ==============
+
+from fastapi import Request
+
+# Country code to language mapping
+COUNTRY_LANGUAGE_MAP = {
+    "TW": "zh-TW",  # Taiwan
+    "HK": "zh-TW",  # Hong Kong (use Traditional Chinese)
+    "MO": "zh-TW",  # Macau
+    "JP": "ja",     # Japan
+    "KR": "ko",     # Korea
+    "ES": "es",     # Spain
+    "MX": "es",     # Mexico
+    "AR": "es",     # Argentina
+    "CO": "es",     # Colombia
+    "CL": "es",     # Chile
+    "PE": "es",     # Peru
+    "VE": "es",     # Venezuela
+}
+
+# Default language if country not in map
+DEFAULT_LANGUAGE = "en"
+
+
+class GeoLanguageResponse(BaseModel):
+    """Response for geo-based language detection."""
+    language: str
+    country: str = ""
+    ip: str = ""
+    detected: bool = True
+
+
+@router.get("/geo-language", response_model=GeoLanguageResponse)
+async def detect_language_by_ip(request: Request) -> Any:
+    """
+    Detect user's preferred language based on IP geolocation.
+
+    Uses the client IP to determine country and suggests appropriate language:
+    - Taiwan, Hong Kong, Macau → zh-TW (Traditional Chinese)
+    - Japan → ja (Japanese)
+    - Korea → ko (Korean)
+    - Spain and Latin America → es (Spanish)
+    - Others → en (English, default)
+
+    The frontend should call this once on initial load and store the result.
+    """
+    import httpx
+
+    # Get client IP
+    client_ip = request.client.host if request.client else ""
+
+    # Check for forwarded IP (behind proxy/load balancer)
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+
+    # Also check X-Real-IP header
+    real_ip = request.headers.get("X-Real-IP", "")
+    if real_ip:
+        client_ip = real_ip
+
+    # Skip geolocation for localhost/private IPs
+    private_prefixes = ("127.", "192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.",
+                        "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+                        "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
+                        "localhost", "::1")
+    if not client_ip or client_ip.startswith(private_prefixes):
+        return GeoLanguageResponse(
+            language=DEFAULT_LANGUAGE,
+            country="",
+            ip=client_ip,
+            detected=False
+        )
+
+    try:
+        # Use ip-api.com for free geolocation (no API key needed)
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"http://ip-api.com/json/{client_ip}?fields=countryCode")
+
+        if response.status_code == 200:
+            data = response.json()
+            country_code = data.get("countryCode", "")
+            language = COUNTRY_LANGUAGE_MAP.get(country_code, DEFAULT_LANGUAGE)
+
+            return GeoLanguageResponse(
+                language=language,
+                country=country_code,
+                ip=client_ip,
+                detected=True
+            )
+    except Exception as e:
+        # Log error but don't fail
+        pass
+
+    # Fallback to default
+    return GeoLanguageResponse(
+        language=DEFAULT_LANGUAGE,
+        country="",
+        ip=client_ip,
+        detected=False
+    )

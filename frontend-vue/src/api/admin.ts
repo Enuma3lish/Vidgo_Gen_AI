@@ -102,6 +102,29 @@ export interface SystemHealth {
   api_services: Record<string, { status: string; error?: string }>
 }
 
+export interface AIServiceStatus {
+  status: string
+  message?: string
+  error?: string
+}
+
+export interface AIServicesResponse {
+  services: {
+    wan: AIServiceStatus
+    fal: AIServiceStatus
+    gemini: AIServiceStatus
+    goenhance: AIServiceStatus
+    a2e: AIServiceStatus
+  }
+  rescue_config: {
+    t2i: { primary: string; rescue: string | null }
+    i2v: { primary: string; rescue: string | null }
+    interior: { primary: string; rescue: string | null }
+    style_transfer: { primary: string; rescue: string | null }
+    avatar: { primary: string; rescue: string | null }
+  }
+}
+
 // ============================================================================
 // Admin API
 // ============================================================================
@@ -207,6 +230,12 @@ export const adminApi = {
   // System Health
   async getSystemHealth(): Promise<SystemHealth> {
     const response = await apiClient.get('/api/v1/admin/health')
+    return response.data
+  },
+
+  // AI Service Status
+  async getAIServicesStatus(): Promise<AIServicesResponse> {
+    const response = await apiClient.get('/api/v1/admin/ai-services')
     return response.data
   }
 }

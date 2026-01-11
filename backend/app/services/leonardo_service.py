@@ -556,18 +556,26 @@ class LeonardoService:
         - abstract: Abstract artistic patterns
         - traditional: Traditional/cultural motifs
         """
-        # Detailed style prompts for accurate pattern generation
+        # Detailed style prompts for accurate pattern/design generation
         style_prompts = {
             "seamless": "seamless tileable pattern design, perfectly repeating, continuous pattern, textile design",
             "floral": "floral pattern design with flowers, botanical illustration, flower arrangement pattern, rose peony cherry blossom, nature inspired textile pattern",
             "geometric": "geometric pattern design, precise shapes, triangles circles squares, modern minimalist pattern, mathematical symmetry, architectural pattern",
             "abstract": "abstract artistic pattern, creative texture design, modern art inspired, unique visual pattern",
-            "traditional": "traditional ornamental pattern, cultural motifs, classic decorative design, heritage pattern"
+            "traditional": "traditional ornamental pattern, cultural motifs, classic decorative design, heritage pattern",
+            "3d": "3D rendered design, three-dimensional illustration, 3D modeling, realistic 3D graphics, photorealistic render, high quality 3D visualization",
+            "interior": "interior design visualization, room design, modern interior, architectural interior rendering, home decor design, professional interior photography style",
+            "mockup": "product mockup design, product placement, professional product photography, commercial product display, e-commerce product visualization, product showcase"
         }
 
-        # Build comprehensive prompt for pattern generation
+        # Build comprehensive prompt based on style type
         style_desc = style_prompts.get(style, style_prompts['seamless'])
-        full_prompt = f"{prompt}, {style_desc}, pattern design, repeating motif, high resolution, professional textile design, vector-like quality"
+
+        # For 3D/interior/mockup styles, don't add pattern-specific keywords
+        if style in ['3d', 'interior', 'mockup']:
+            full_prompt = f"{prompt}, {style_desc}, high resolution, professional quality, detailed"
+        else:
+            full_prompt = f"{prompt}, {style_desc}, pattern design, repeating motif, high resolution, professional textile design, vector-like quality"
 
         params = {
             "prompt": full_prompt,

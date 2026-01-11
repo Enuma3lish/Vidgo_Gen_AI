@@ -1,61 +1,93 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
+import { useDemoMode } from '@/composables'
 import { demoApi } from '@/api'
-import UploadZone from '@/components/tools/UploadZone.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
+const isZh = computed(() => locale.value.startsWith('zh'))
 
+// Demo mode
+const {
+  isDemoUser,
+  canUseCustomInputs,
+  loadDemoTemplates,
+  demoTemplates,
+  isLoadingTemplates
+} = useDemoMode()
+
+// State
 const clothingImage = ref<string | null>(null)
+const selectedClothingId = ref<string | null>(null)
 const modelImage = ref<string | null>(null)
 const resultImage = ref<string | null>(null)
 const isProcessing = ref(false)
 const selectedModel = ref('female-1')
 
-const modelOptions = [
-  { id: 'female-1', name: 'Female Model 1', preview: 'https://picsum.photos/seed/model1/100/150' },
-  { id: 'female-2', name: 'Female Model 2', preview: 'https://picsum.photos/seed/model2/100/150' },
-  { id: 'male-1', name: 'Male Model 1', preview: 'https://picsum.photos/seed/model3/100/150' },
-  { id: 'male-2', name: 'Male Model 2', preview: 'https://picsum.photos/seed/model4/100/150' },
-  { id: 'custom', name: 'Upload Custom', preview: null }
-]
+// Default model options (5 models for demo users)
+const modelOptions = ref([
+  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=225&fit=crop' },
+  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=225&fit=crop' },
+  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=225&fit=crop' },
+  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=225&fit=crop' },
+  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=225&fit=crop' }
+])
 
-function handleClothingSelected(files: File[]) {
-  const file = files[0]
-  if (file) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      clothingImage.value = e.target?.result as string
-      resultImage.value = null
-    }
-    reader.readAsDataURL(file)
-  }
-}
+// Default clothing items for demo users (from presets)
+const demoClothingItems = computed(() => {
+  return demoTemplates.value
+    .filter(t => t.input_image_url)
+    .map(t => ({
+      id: t.id,
+      name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
+      preview: t.input_image_url,
+      watermarked_result: t.result_watermarked_url
+    }))
+})
 
-function handleModelSelected(files: File[]) {
-  const file = files[0]
-  if (file) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      modelImage.value = e.target?.result as string
-    }
-    reader.readAsDataURL(file)
-  }
+// Load demo presets on mount
+onMounted(async () => {
+  await loadDemoTemplates('try_on')
+})
+
+function selectDemoClothing(item: { id: string; preview?: string; watermarked_result?: string }) {
+  selectedClothingId.value = item.id
+  clothingImage.value = item.preview || null
+  resultImage.value = null
 }
 
 async function generateTryOn() {
-  if (!clothingImage.value) return
+  if (!clothingImage.value && !selectedClothingId.value) return
 
   isProcessing.value = true
   try {
-    const uploadResult = await demoApi.uploadImage(
-      dataURItoBlob(clothingImage.value) as File
-    )
+    // For demo users with selected template, use cached result
+    if (isDemoUser.value && selectedClothingId.value) {
+      const template = demoTemplates.value.find(t => t.id === selectedClothingId.value)
+      if (template?.result_watermarked_url) {
+        resultImage.value = template.result_watermarked_url
+        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+        return
+      }
+    }
+
+    // For subscribed users or if no cached result
+    let imageUrl = clothingImage.value
+
+    // Upload if custom image
+    if (clothingImage.value && !clothingImage.value.startsWith('http')) {
+      const uploadResult = await demoApi.uploadImage(
+        dataURItoBlob(clothingImage.value) as File
+      )
+      imageUrl = uploadResult.url
+    }
 
     let modelUrl = null
     if (selectedModel.value === 'custom' && modelImage.value) {
@@ -67,7 +99,7 @@ async function generateTryOn() {
 
     const result = await demoApi.generate({
       tool: 'virtual_try_on',
-      image_url: uploadResult.url,
+      image_url: imageUrl!,
       params: {
         model_id: selectedModel.value,
         model_image: modelUrl
@@ -76,14 +108,20 @@ async function generateTryOn() {
 
     if (result.success && result.image_url) {
       resultImage.value = result.image_url
-      creditsStore.deductCredits(result.credits_used)
+      if (result.credits_used) {
+        creditsStore.deductCredits(result.credits_used)
+      }
       uiStore.showSuccess(t('common.success'))
     }
   } catch (error) {
-    uiStore.showError('Generation failed')
+    uiStore.showError(isZh.value ? '生成失敗' : 'Generation failed')
   } finally {
     isProcessing.value = false
   }
+}
+
+function handleBack() {
+  router.back()
 }
 
 function dataURItoBlob(dataURI: string): Blob {
@@ -103,6 +141,17 @@ function dataURItoBlob(dataURI: string): Blob {
     <LoadingOverlay :show="isProcessing" :message="t('common.processing')" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Back Button -->
+      <button
+        @click="handleBack"
+        class="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        {{ t('common.back') }}
+      </button>
+
       <!-- Header -->
       <div class="text-center mb-12">
         <h1 class="text-4xl font-bold text-white mb-4">
@@ -111,32 +160,73 @@ function dataURItoBlob(dataURI: string): Blob {
         <p class="text-xl text-gray-400">
           {{ t('tools.tryOn.longDesc') }}
         </p>
+
+        <!-- Subscribe Notice for Demo Users -->
+        <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
+          <RouterLink to="/pricing" class="hover:underline">
+            {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+          </RouterLink>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Left Panel - Clothing Upload -->
+        <!-- Left Panel - Clothing Selection -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-white mb-4">Clothing Item</h3>
+          <h3 class="text-lg font-semibold text-white mb-4">
+            {{ isZh ? '選擇服裝' : 'Select Clothing' }}
+          </h3>
 
-          <div v-if="!clothingImage">
-            <UploadZone
-              accept="image/*"
-              @files="handleClothingSelected"
-              @error="(msg) => uiStore.showError(msg)"
-            />
+          <!-- Demo Clothing Items -->
+          <div v-if="isDemoUser || demoClothingItems.length > 0" class="mb-4">
+            <p class="text-sm text-gray-400 mb-3">
+              {{ isZh ? '預設服裝（示範）' : 'Preset Clothing (Demo)' }}
+            </p>
+            <div v-if="isLoadingTemplates" class="flex justify-center py-8">
+              <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
+            </div>
+            <div v-else class="grid grid-cols-2 gap-2">
+              <button
+                v-for="item in demoClothingItems"
+                :key="item.id"
+                @click="selectDemoClothing(item)"
+                class="aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all"
+                :class="selectedClothingId === item.id
+                  ? 'border-primary-500'
+                  : 'border-dark-600 hover:border-dark-500'"
+              >
+                <img
+                  v-if="item.preview"
+                  :src="item.preview"
+                  :alt="item.name"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
+                  <span class="text-3xl">👔</span>
+                </div>
+              </button>
+            </div>
           </div>
 
-          <div v-else class="space-y-4">
+          <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use presets -->
+
+          <!-- Selected Clothing Preview -->
+          <div v-if="clothingImage" class="mt-4 space-y-2">
             <img :src="clothingImage" alt="Clothing" class="w-full rounded-xl" />
-            <button @click="clothingImage = null" class="btn-ghost text-sm w-full">
-              Change Clothing
+            <button
+              v-if="canUseCustomInputs"
+              @click="clothingImage = null; selectedClothingId = null"
+              class="btn-ghost text-sm w-full"
+            >
+              {{ isZh ? '更換服裝' : 'Change Clothing' }}
             </button>
           </div>
         </div>
 
         <!-- Middle Panel - Model Selection -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-white mb-4">Select Model</h3>
+          <h3 class="text-lg font-semibold text-white mb-4">
+            {{ isZh ? '選擇模特' : 'Select Model' }}
+          </h3>
 
           <div class="grid grid-cols-2 gap-3">
             <button
@@ -148,23 +238,13 @@ function dataURItoBlob(dataURI: string): Blob {
                 ? 'border-primary-500 bg-primary-500/10'
                 : 'border-dark-600 hover:border-dark-500'"
             >
-              <div v-if="model.preview" class="aspect-[2/3] rounded-lg overflow-hidden mb-2">
-                <img :src="model.preview" :alt="model.name" class="w-full h-full object-cover" />
+              <div class="aspect-[2/3] rounded-lg overflow-hidden mb-2">
+                <img :src="model.preview" :alt="isZh ? model.name_zh : model.name" class="w-full h-full object-cover" />
               </div>
-              <div v-else class="aspect-[2/3] rounded-lg bg-dark-700 flex items-center justify-center mb-2">
-                <span class="text-3xl">📤</span>
-              </div>
-              <p class="text-xs text-center">{{ model.name }}</p>
+              <p class="text-xs text-center text-white">{{ isZh ? model.name_zh : model.name }}</p>
             </button>
-          </div>
 
-          <!-- Custom Model Upload -->
-          <div v-if="selectedModel === 'custom'" class="mt-4">
-            <UploadZone
-              accept="image/*"
-              @files="handleModelSelected"
-              @error="(msg) => uiStore.showError(msg)"
-            />
+            <!-- PRESET-ONLY MODE: Custom model upload REMOVED -->
           </div>
 
           <!-- Credit Cost & Generate -->
@@ -172,7 +252,7 @@ function dataURItoBlob(dataURI: string): Blob {
             <CreditCost service="virtual_try_on" />
             <button
               @click="generateTryOn"
-              :disabled="!clothingImage || isProcessing"
+              :disabled="(!clothingImage && !selectedClothingId) || isProcessing"
               class="btn-primary w-full mt-4"
             >
               {{ t('common.generate') }}
@@ -182,19 +262,26 @@ function dataURItoBlob(dataURI: string): Blob {
 
         <!-- Right Panel - Result -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-white mb-4">Try-On Result</h3>
+          <h3 class="text-lg font-semibold text-white mb-4">
+            {{ isZh ? '試穿結果' : 'Try-On Result' }}
+          </h3>
 
           <div v-if="resultImage" class="space-y-4">
             <img :src="resultImage" alt="Result" class="w-full rounded-xl" />
-            <button class="btn-primary w-full">
-              {{ t('common.download') }}
-            </button>
+
+            <!-- Watermark badge -->
+            <div class="text-center text-xs text-gray-500">vidgo.ai</div>
+
+            <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
+            <RouterLink to="/pricing" class="btn-primary w-full text-center block">
+              {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+            </RouterLink>
           </div>
 
           <div v-else class="h-64 flex items-center justify-center text-gray-500">
             <div class="text-center">
               <span class="text-5xl block mb-4">👔</span>
-              <p>Virtual try-on result will appear here</p>
+              <p>{{ isZh ? '試穿結果將在此顯示' : 'Try-on result will appear here' }}</p>
             </div>
           </div>
         </div>

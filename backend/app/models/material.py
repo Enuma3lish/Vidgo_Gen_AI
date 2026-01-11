@@ -44,16 +44,30 @@ class Material(Base):
     """
     Unified Material model for pre-generated examples and user content.
 
+    PRESET-ONLY MODE:
+    - All materials are pre-generated before service starts
+    - lookup_hash enables fast O(1) lookup for preset selection
+    - Users can only select from pre-defined presets, no custom generation
+    - All results are watermarked, downloads are blocked
+
     Supports:
-    - 5 tool types (background_removal, product_scene, try_on, room_redesign, short_video)
+    - 6 tool types (background_removal, product_scene, try_on, room_redesign, short_video, ai_avatar)
     - Multi-step generation tracking via generation_steps JSON
-    - Multi-language titles (en, zh, ja)
-    - Demo user restrictions (watermarked results, no download)
-    - Personalized recommendations (track views per user)
+    - Multi-language titles (en, zh, ja, ko, es)
+    - Watermarked results for all users (no original downloads)
+
+    Primary Key Strategy:
+    - lookup_hash: SHA256 hash of (tool_type + prompt + effect_prompt + input_image_id)
+    - Used for deterministic preset-to-result mapping
     """
     __tablename__ = "materials"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # === Lookup Hash for Preset-Only Mode ===
+    # Hash = SHA256(tool_type + prompt + effect_prompt + input_image_id)
+    # Enables fast O(1) lookup for preset selection
+    lookup_hash = Column(String(64), nullable=True, unique=True, index=True)
 
     # === Classification ===
     tool_type = Column(
@@ -61,8 +75,13 @@ class Material(Base):
         nullable=False,
         index=True
     )
-    topic = Column(String(100), nullable=False, index=True)  # e.g., "electronics", "fashion", "food"
-    language = Column(String(10), default="en", index=True)  # en, zh-TW, ja, ko, es - for language-specific content
+    # Main topic category (e.g., "產品電商", "Product E-commerce")
+    main_topic = Column(String(100), nullable=True, index=True)
+    main_topic_zh = Column(String(100), nullable=True)  # Chinese version
+    # Sub-topic (e.g., "AI product designed", "AI產品設計")
+    topic = Column(String(100), nullable=False, index=True)
+    topic_zh = Column(String(100), nullable=True)  # Chinese version
+    language = Column(String(10), default="en", index=True)  # en, zh-TW, ja, ko, es
     tags = Column(ARRAY(String), default=[])
     source = Column(
         Enum(MaterialSource, values_callable=lambda x: [e.value for e in x]),
@@ -78,9 +97,14 @@ class Material(Base):
     )
 
     # === Input Data ===
-    prompt = Column(Text, nullable=False)
-    prompt_enhanced = Column(Text, nullable=True)  # Gemini-enhanced version
-    input_image_url = Column(String(500), nullable=True)  # Source image (nullable for text-to-image)
+    prompt = Column(Text, nullable=False)  # Main generation prompt
+    prompt_zh = Column(Text, nullable=True)  # Chinese translation
+    prompt_en = Column(Text, nullable=True)  # English translation
+    prompt_enhanced = Column(Text, nullable=True)  # LLM-enhanced version
+    effect_prompt = Column(Text, nullable=True)  # Effect/enhancement prompt (for V2V, style transfer)
+    effect_prompt_zh = Column(Text, nullable=True)  # Chinese translation
+    input_image_url = Column(String(500), nullable=True)  # Source image
+    input_video_url = Column(String(500), nullable=True)  # Source video (for V2V)
     input_params = Column(JSONB, default={})  # Parameters used for generation
 
     # === Generation Pipeline ===
@@ -158,11 +182,30 @@ class Material(Base):
     # === Indexes ===
     __table_args__ = (
         Index('idx_material_tool_topic', 'tool_type', 'topic', 'is_active'),
+        Index('idx_material_main_topic', 'main_topic', 'topic', 'is_active'),
         Index('idx_material_status', 'status', 'is_active'),
         Index('idx_material_featured', 'is_featured', 'is_active'),
         Index('idx_material_tags', 'tags', postgresql_using='gin'),
         Index('idx_material_source', 'source', 'source_user_id'),
+        Index('idx_material_prompt_effect', 'prompt', 'effect_prompt'),  # For deduplication
+        Index('idx_material_lookup_hash', 'lookup_hash'),  # For preset-only mode fast lookup
     )
+
+    @staticmethod
+    def generate_lookup_hash(
+        tool_type: str,
+        prompt: str,
+        effect_prompt: str = None,
+        input_image_id: str = None
+    ) -> str:
+        """
+        Generate lookup hash for preset-only mode.
+
+        Hash = SHA256(tool_type + prompt + effect_prompt + input_image_id)
+        """
+        import hashlib
+        content = f"{tool_type}:{prompt}:{effect_prompt or ''}:{input_image_id or ''}"
+        return hashlib.sha256(content.encode()).hexdigest()[:64]
 
 
 class MaterialView(Base):
@@ -271,28 +314,36 @@ MATERIAL_TOPICS = {
     ],
 }
 
-# Language-specific avatar scripts for pre-generation (4 topics only)
+# Language-specific avatar scripts for pre-generation (4 topics, 5 scripts each)
 AVATAR_SCRIPTS = {
     "en": {
         "spokesperson": [
             "Welcome to our brand! I'm excited to introduce our latest innovations that will transform your daily life.",
             "Hello everyone! Today I'll be sharing something truly special with you. Let's discover what makes our products unique.",
             "Thank you for joining us! We've been working hard to bring you the best quality and experience.",
+            "Greetings! As your brand ambassador, I'm thrilled to present our newest collection designed just for you.",
+            "Hi there! Let me personally welcome you and show you why our customers keep coming back for more.",
         ],
         "product_intro": [
             "Let me show you the amazing features of this product. It's designed with you in mind.",
             "This innovative product combines cutting-edge technology with user-friendly design.",
             "Discover why thousands of customers love this product and how it can benefit you.",
+            "Today I'm presenting our flagship product that has revolutionized the industry with its unique features.",
+            "Allow me to walk you through every detail of this incredible product that our team has crafted with passion.",
         ],
         "customer_service": [
             "Hello! I'm here to help you with any questions you may have about our services.",
             "Welcome to our support center. How may I assist you today?",
             "Thank you for reaching out! Let me guide you through our solutions.",
+            "I'm your dedicated customer service representative. Don't worry, we'll solve any issue together.",
+            "Hello and welcome! Your satisfaction is our top priority. Let me help you find what you need.",
         ],
         "social_media": [
             "Hey everyone! Don't forget to like and subscribe for more amazing content!",
             "What's up! Today I'm going to share some exciting news with you all.",
             "Hi friends! Thanks for watching. Let me tell you about something cool.",
+            "Hello fam! Make sure to hit that notification bell so you never miss our updates!",
+            "Hey there, awesome people! Today's video is going to blow your mind. Let's dive in!",
         ],
     },
     "zh-TW": {
@@ -300,21 +351,29 @@ AVATAR_SCRIPTS = {
             "歡迎來到我們的品牌！我很高興為您介紹我們最新的創新產品，將改變您的日常生活。",
             "大家好！今天我要與您分享一些真正特別的東西。讓我們一起發現我們產品的獨特之處。",
             "感謝您的加入！我們一直努力為您帶來最好的品質和體驗。",
+            "您好！作為品牌代言人，我很榮幸向您展示我們專為您設計的最新系列。",
+            "嗨！讓我親自歡迎您，並向您展示為什麼我們的顧客總是回來購買更多。",
         ],
         "product_intro": [
             "讓我為您展示這款產品的驚人功能。它是專為您設計的。",
             "這款創新產品結合了尖端技術與人性化設計。",
             "探索為什麼成千上萬的客戶喜愛這款產品，以及它如何為您帶來好處。",
+            "今天我要介紹我們的旗艦產品，它以獨特的功能革新了整個行業。",
+            "讓我帶您了解這款令人驚艷的產品的每一個細節，這是我們團隊用心打造的傑作。",
         ],
         "customer_service": [
             "您好！我在這裡為您解答任何關於我們服務的問題。",
             "歡迎來到我們的客服中心。今天有什麼可以為您效勞的嗎？",
             "感謝您的聯繫！讓我為您介紹我們的解決方案。",
+            "我是您的專屬客服代表。別擔心，我們會一起解決任何問題。",
+            "您好，歡迎光臨！您的滿意是我們的首要目標。讓我幫您找到您需要的。",
         ],
         "social_media": [
             "嗨大家好！記得按讚訂閱，獲得更多精彩內容！",
             "哈囉！今天我要跟大家分享一些令人興奮的消息。",
             "嗨朋友們！感謝收看。讓我告訴你一些很酷的事情。",
+            "哈囉大家！記得開啟通知小鈴鐺，這樣就不會錯過我們的更新！",
+            "嗨各位！今天的影片一定會讓你大開眼界。讓我們開始吧！",
         ],
     },
 }

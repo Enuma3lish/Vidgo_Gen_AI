@@ -23,12 +23,21 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8501"]
 
-    # AI Services
-    GEMINI_API_KEY: str = ""
-    LEONARDO_API_KEY: str = ""
-    RUNWAY_API_KEY: str = ""
-    POLLO_API_KEY: str = ""
-    GOENHANCE_API_KEY: str = ""
+    # AI Services - Provider Configuration
+    # Primary: PiAPI (Wan API access)
+    PIAPI_KEY: str = ""  # PiAPI for Wan T2I, I2V, T2V, Interior
+
+    # Backup: Pollo.ai (Advanced features + backup)
+    POLLO_API_KEY: str = ""  # Pollo for keyframes, effects, multi-model
+
+    # Specialized Providers
+    A2E_API_KEY: str = ""  # A2E.ai for Avatar/Digital Human
+    A2E_DEFAULT_ANCHOR_ID: str = ""  # A2E anchor ID (create at video.a2e.ai)
+    GEMINI_API_KEY: str = ""  # Gemini for moderation + emergency backup
+
+    # Legacy (deprecated)
+    WAN_API_KEY: str = ""  # Deprecated - use PIAPI_API_KEY instead
+    RUNWAY_API_KEY: str = ""  # Not used
 
     # Taiwanese TTS (台語/閩南語 TTS)
     # Option 1: Taigi TTS API (https://learn-language.tokyo/en/taiwanese-taigi-tts-api)
@@ -55,6 +64,9 @@ class Settings(BaseSettings):
     # Watermark
     WATERMARK_TEXT: str = "VidGo Demo"
     WATERMARK_IMAGE_PATH: Optional[str] = None
+
+    # Material Generation
+    AUTO_GENERATE_MATERIALS: bool = True  # Auto-generate showcase materials on startup
 
     # Email Configuration (for email verification)
     SMTP_HOST: str = ""

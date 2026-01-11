@@ -1,20 +1,32 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
+import { useDemoMode } from '@/composables'
 import { demoApi } from '@/api'
-import UploadZone from '@/components/tools/UploadZone.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
+const isZh = computed(() => locale.value.startsWith('zh'))
+
+// PRESET-ONLY MODE: All users use presets, no custom input
+const {
+  isDemoUser,
+  canUseCustomInputs,
+  loadDemoTemplates,
+  demoTemplates,
+  isLoadingTemplates
+} = useDemoMode()
 
 const uploadedImage = ref<string | null>(null)
 const resultVideo = ref<string | null>(null)
 const isProcessing = ref(false)
-const prompt = ref('')
+// prompt is readonly in preset-only mode - users select from presets
 const selectedDuration = ref(5)
 const selectedMotion = ref('auto')
 
@@ -29,26 +41,51 @@ const motionOptions = [
   { id: 'rotate', name: 'Rotate', desc: 'Circular motion' }
 ]
 
-function handleFilesSelected(files: File[]) {
-  const file = files[0]
-  if (file) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      uploadedImage.value = e.target?.result as string
-      resultVideo.value = null
-    }
-    reader.readAsDataURL(file)
-  }
+// Demo images for demo users
+const selectedDemoImageId = ref<string | null>(null)
+
+const demoImages = computed(() => {
+  return demoTemplates.value
+    .filter(t => t.input_image_url)
+    .map(t => ({
+      id: t.id,
+      name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
+      preview: t.input_image_url,
+      watermarked_result: t.result_watermarked_url
+    }))
+})
+
+// Load demo presets on mount
+onMounted(async () => {
+  await loadDemoTemplates('short_video')
+})
+
+function selectDemoImage(item: { id: string; preview?: string }) {
+  selectedDemoImageId.value = item.id
+  uploadedImage.value = item.preview || null
+  resultVideo.value = null
 }
 
+
+
 async function generateVideo() {
-  if (!uploadedImage.value && !prompt.value) {
-    uiStore.showError('Please upload an image or enter a prompt')
+  if (!uploadedImage.value) {
+    uiStore.showError('Please upload an image')
     return
   }
 
   isProcessing.value = true
   try {
+    // For demo users with selected template, use cached result
+    if (isDemoUser.value && selectedDemoImageId.value) {
+      const template = demoTemplates.value.find(t => t.id === selectedDemoImageId.value)
+      if (template?.result_video_url || template?.result_watermarked_url) {
+        resultVideo.value = template.result_video_url || template.result_watermarked_url || null
+        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+        return
+      }
+    }
+
     let imageUrl = null
     if (uploadedImage.value) {
       const uploadResult = await demoApi.uploadImage(
@@ -60,7 +97,6 @@ async function generateVideo() {
     const result = await demoApi.generate({
       tool: 'short_video',
       image_url: imageUrl || undefined,
-      prompt: prompt.value || undefined,
       params: {
         duration: selectedDuration.value,
         motion: selectedMotion.value
@@ -90,11 +126,7 @@ function dataURItoBlob(dataURI: string): Blob {
   return new Blob([ab], { type: mimeString })
 }
 
-function reset() {
-  uploadedImage.value = null
-  resultVideo.value = null
-  prompt.value = ''
-}
+
 </script>
 
 <template>
@@ -102,6 +134,17 @@ function reset() {
     <LoadingOverlay :show="isProcessing" :message="'Generating video... This may take a few minutes'" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Back Button -->
+      <button
+        @click="router.back()"
+        class="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        {{ t('common.back') }}
+      </button>
+
       <!-- Header -->
       <div class="text-center mb-12">
         <h1 class="text-4xl font-bold text-white mb-4">
@@ -110,6 +153,13 @@ function reset() {
         <p class="text-xl text-gray-400">
           {{ t('tools.shortVideo.longDesc') }}
         </p>
+
+        <!-- Subscribe Notice for Demo Users -->
+        <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
+          <RouterLink to="/pricing" class="hover:underline">
+            {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+          </RouterLink>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -119,31 +169,62 @@ function reset() {
           <div class="card">
             <h3 class="text-lg font-semibold text-white mb-4">Source Image (Optional)</h3>
 
-            <div v-if="!uploadedImage">
-              <UploadZone
-                accept="image/*"
-                @files="handleFilesSelected"
-                @error="(msg) => uiStore.showError(msg)"
-              />
+            <!-- Demo Images for demo users -->
+            <div v-if="isDemoUser || demoImages.length > 0" class="mb-4">
+              <p class="text-sm text-gray-400 mb-3">
+                {{ isZh ? '預設圖片（示範）' : 'Preset Images (Demo)' }}
+              </p>
+              <div v-if="isLoadingTemplates" class="flex justify-center py-8">
+                <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
+              </div>
+              <div v-else class="grid grid-cols-2 gap-2">
+                <button
+                  v-for="item in demoImages"
+                  :key="item.id"
+                  @click="selectDemoImage(item)"
+                  class="aspect-video rounded-lg overflow-hidden border-2 transition-all"
+                  :class="selectedDemoImageId === item.id
+                    ? 'border-primary-500'
+                    : 'border-dark-600 hover:border-dark-500'"
+                >
+                  <img
+                    v-if="item.preview"
+                    :src="item.preview"
+                    :alt="item.name"
+                    class="w-full h-full object-cover"
+                  />
+                  <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
+                    <span class="text-3xl">🎬</span>
+                  </div>
+                </button>
+              </div>
             </div>
 
-            <div v-else class="space-y-4">
+            <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use presets -->
+
+            <!-- Selected Image Preview -->
+            <div v-if="uploadedImage" class="space-y-4 mt-4">
               <img :src="uploadedImage" alt="Source" class="w-full rounded-xl" />
-              <button @click="uploadedImage = null" class="btn-ghost text-sm w-full">
-                Remove Image
+              <button v-if="canUseCustomInputs" @click="uploadedImage = null; selectedDemoImageId = null" class="btn-ghost text-sm w-full">
+                {{ isZh ? '移除圖片' : 'Remove Image' }}
               </button>
             </div>
           </div>
 
-          <!-- Prompt -->
+          <!-- PRESET-ONLY MODE: No custom prompt input -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">Video Description</h3>
-            <textarea
-              v-model="prompt"
-              class="input-field resize-none"
-              rows="4"
-              placeholder="Describe the video you want to create..."
-            />
+            <h3 class="text-lg font-semibold text-white mb-4">
+              {{ isZh ? '選擇預設風格' : 'Select Preset Style' }}
+            </h3>
+
+            <!-- PRESET-ONLY Notice -->
+            <div class="mb-4 p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+              <p class="text-sm text-primary-400">
+                {{ isZh ? '從上方預設圖片中選擇一個來查看效果' : 'Select a preset image above to see the result' }}
+              </p>
+            </div>
+
+            <!-- Custom prompt input REMOVED in preset-only mode -->
           </div>
 
           <!-- Settings -->
@@ -191,7 +272,7 @@ function reset() {
               <CreditCost service="short_video" />
               <button
                 @click="generateVideo"
-                :disabled="(!uploadedImage && !prompt) || isProcessing"
+                :disabled="!uploadedImage || isProcessing"
                 class="btn-primary w-full mt-4"
               >
                 {{ t('common.generate') }}
@@ -212,9 +293,12 @@ function reset() {
               autoplay
               loop
             />
-            <button class="btn-primary w-full">
-              {{ t('common.download') }}
-            </button>
+            <!-- Watermark badge -->
+            <div class="text-center text-xs text-gray-500">vidgo.ai</div>
+            <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
+            <RouterLink to="/pricing" class="btn-primary w-full text-center block">
+              {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+            </RouterLink>
           </div>
 
           <div v-else class="aspect-video flex items-center justify-center bg-dark-700 rounded-xl text-gray-500">

@@ -49,17 +49,21 @@ services:
       - MP_SMTP_AUTH_ACCEPT_ANY=true
       - MP_SMTP_AUTH_ALLOW_INSECURE=true
 
-  # FastAPI Backend
+  # FastAPI Backend with Pre-generation
+  # IMPORTANT: Entrypoint runs pre-generation pipeline before starting server
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vidgo_backend
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    # Command is passed to entrypoint script
+    # Entrypoint runs: migrations -> seeding -> pre-generation -> validation -> uvicorn
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
       - ./backend:/app
+      # Persist generated materials across restarts
+      - vidgo_generated:/app/static/generated
+      - vidgo_materials:/app/static/materials
     ports:
       - "8001:8000"
     env_file:
@@ -67,6 +71,25 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/vidgo
       - REDIS_URL=redis://redis:6379/0
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - REDIS_HOST=redis
+      # Pre-generation control
+      # Set to 'true' to skip pre-generation (uses existing materials)
+      - SKIP_PREGENERATION=${SKIP_PREGENERATION:-false}
+      # Number of materials to generate per tool (default: 10)
+      - PREGENERATION_LIMIT=${PREGENERATION_LIMIT:-10}
+      # Skip avatar generation to save A2E API costs
+      - SKIP_AVATAR=${SKIP_AVATAR:-}
+      # Skip video generation to save Pollo API costs
+      - SKIP_VIDEO=${SKIP_VIDEO:-}
+      # Allow service to start without materials (dev mode only)
+      - ALLOW_EMPTY_MATERIALS=${ALLOW_EMPTY_MATERIALS:-false}
+      # Minimum templates required per group
+      - MIN_TEMPLATES=${MIN_TEMPLATES:-1}
+      # Startup validation timeout in seconds
+      - STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-300}
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,17 +101,21 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 120s  # Allow time for pre-generation
 
-  # ARQ Worker (Background Tasks - Demo Generation)
+  # ARQ Worker (Background Tasks)
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vidgo_worker
+    entrypoint: []  # Skip entrypoint for worker
     command: arq app.worker.WorkerSettings
     volumes:
       - ./backend:/app
+      - vidgo_generated:/app/static/generated
+      - vidgo_materials:/app/static/materials
     env_file:
       - ./backend/.env
     environment:
@@ -101,48 +128,53 @@ services:
     networks:
       - vidgo_network
 
-  # Material Initialization (runs once on startup to seed and generate showcases)
-  # IMPORTANT: Frontend waits for this to complete before starting
+  # Material Pre-generation Job (runs once on first startup)
+  # Use this for initial bulk generation or to regenerate all materials
   init-materials:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vidgo_init_materials
+    entrypoint: []  # Override entrypoint for init container
     command: >
       sh -c "echo '========================================' &&
              echo 'VidGo Material Pre-generation Pipeline' &&
              echo '========================================' &&
              echo '' &&
-             echo 'Step 1: Seeding unified Material model...' &&
-             python -m scripts.seed_materials --clear &&
+             echo 'Step 1: Checking API keys...' &&
+             python -m scripts.pregenerate_all --check-apis &&
              echo '' &&
-             echo 'Step 2: Seeding legacy tool showcases...' &&
-             python -m scripts.seed_tool_showcases --clear 2>/dev/null || echo 'Legacy seeding skipped' &&
+             echo 'Step 2: Running full pre-generation...' &&
+             echo '(This may take 10-30 minutes depending on API limits)' &&
+             python -m scripts.pregenerate_all --limit ${PREGENERATION_LIMIT:-30} &&
              echo '' &&
-             echo 'Step 3: Running startup pre-generation...' &&
-             echo '(Validates APIs and pre-generates materials)' &&
-             python -m scripts.startup_pregenerate --limit 15 2>/dev/null || echo 'Pre-generation skipped' &&
-             echo '' &&
-             echo 'Step 4: Final material status check...' &&
-             python -m scripts.seed_materials --check &&
+             echo 'Step 3: Final validation...' &&
+             python -m scripts.startup_check --min-templates 3 &&
              echo '' &&
              echo '========================================' &&
-             echo 'Material initialization complete!' &&
-             echo 'Materials seeded and ready for use' &&
+             echo 'Pre-generation complete!' &&
+             echo 'All demo materials are ready' &&
              echo '========================================'"
     volumes:
       - ./backend:/app
+      - vidgo_generated:/app/static/generated
+      - vidgo_materials:/app/static/materials
     env_file:
       - ./backend/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/vidgo
       - REDIS_URL=redis://redis:6379/0
+      - PREGENERATION_LIMIT=${PREGENERATION_LIMIT:-30}
     depends_on:
-      backend:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - vidgo_network
     restart: "no"
+    profiles:
+      - init  # Only run with: docker-compose --profile init up init-materials
 
   # Vue 3 Frontend
   frontend:
@@ -173,3 +205,5 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  vidgo_generated:    # Persist generated images/videos
+  vidgo_materials:    # Persist avatar and other materials

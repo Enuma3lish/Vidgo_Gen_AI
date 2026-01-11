@@ -4,18 +4,24 @@ Generation API Endpoints for 3 Topics:
 2. 電商產品圖 (E-commerce Product Images)
 3. AI影片 (AI Video)
 
-Uses Leonardo AI and GoEnhance AI with Redis caching
-Supports similarity-based prompt caching to save credits
+AI Service Provider Routing:
+- T2I: PiAPI (primary) → Pollo (backup)
+- I2V: PiAPI (primary) → Pollo (backup)
+- T2V: PiAPI (primary) → Pollo (backup)
+- V2V: PiAPI (primary) → Pollo (backup)
+- Interior: PiAPI Doodle (primary) → Gemini (backup)
+- Avatar: A2E.ai (no backup)
+
+Uses Provider Router for smart failover
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, Field
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
-from app.services.leonardo_service import leonardo_service
-from app.services.goenhance_service import goenhance_service
-from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_goenhance_model_id
+from app.providers.provider_router import get_provider_router, TaskType
+from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.similarity import get_similarity_service
 from app.api.deps import get_current_user_optional, get_db
 from app.models.demo import ToolShowcase, PromptCache
@@ -24,6 +30,223 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Initialize provider router singleton
+provider_router = get_provider_router()
+
+
+# ============================================================================
+# Rescue-Enabled Generation Models
+# ============================================================================
+
+class T2IRequest(BaseModel):
+    """Text-to-Image with rescue mechanism."""
+    prompt: str = Field(..., description="Text description of image to generate")
+    width: int = Field(1024, ge=512, le=1440, description="Image width")
+    height: int = Field(1024, ge=512, le=1440, description="Image height")
+
+
+class T2IResponse(BaseModel):
+    """T2I response with service info."""
+    success: bool
+    image_url: Optional[str] = None
+    images: Optional[List[Dict]] = None
+    service_used: Optional[str] = None
+    rescue_used: Optional[str] = None
+    model: Optional[str] = None
+    error: Optional[str] = None
+
+
+class I2VRequest(BaseModel):
+    """Image-to-Video with rescue mechanism."""
+    image_url: str = Field(..., description="URL of source image")
+    prompt: str = Field(..., description="Animation/motion description")
+    length: int = Field(5, ge=3, le=10, description="Video length in seconds")
+
+
+class I2VResponse(BaseModel):
+    """I2V response with service info."""
+    success: bool
+    video_url: Optional[str] = None
+    task_id: Optional[str] = None
+    service_used: Optional[str] = None
+    rescue_used: Optional[str] = None
+    model: Optional[str] = None
+    error: Optional[str] = None
+
+
+class InteriorRequest(BaseModel):
+    """Interior design with rescue mechanism."""
+    image_url: Optional[str] = Field(None, description="URL of room image")
+    image_base64: Optional[str] = Field(None, description="Base64-encoded room image")
+    prompt: str = Field("", description="Design description")
+    style_id: Optional[str] = Field(None, description="Design style ID")
+    room_type: Optional[str] = Field(None, description="Type of room")
+
+
+class InteriorResponse(BaseModel):
+    """Interior design response with service info."""
+    success: bool
+    image_url: Optional[str] = None
+    description: Optional[str] = None
+    service_used: Optional[str] = None
+    rescue_used: Optional[str] = None
+    error: Optional[str] = None
+
+
+class ServiceStatusResponse(BaseModel):
+    """AI service status response."""
+    piapi: Dict
+    pollo: Dict
+    goenhance: Dict
+    a2e: Dict
+    gemini: Dict
+
+
+# ============================================================================
+# Rescue-Enabled Generation Endpoints
+# ============================================================================
+
+@router.post("/t2i", response_model=T2IResponse)
+async def text_to_image_with_rescue(request: T2IRequest):
+    """
+    Generate image from text prompt.
+
+    Uses PiAPI (Wan) as primary with Pollo as backup.
+    """
+    try:
+        result = await provider_router.route(
+            TaskType.T2I,
+            {
+                "prompt": request.prompt,
+                "size": f"{request.width}*{request.height}"
+            }
+        )
+
+        output = result.get("output", {})
+        image_url = output.get("image_url") or (output.get("images", [{}])[0].get("url") if output.get("images") else None)
+
+        return T2IResponse(
+            success=result.get("success", False),
+            image_url=image_url,
+            images=output.get("images"),
+            service_used="piapi" if not result.get("used_backup") else result.get("backup_provider"),
+            rescue_used=result.get("backup_provider") if result.get("used_backup") else None,
+            model="wan2.5-t2i",
+            error=result.get("error")
+        )
+
+    except Exception as e:
+        logger.error(f"T2I endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/i2v", response_model=I2VResponse)
+async def image_to_video_with_rescue(request: I2VRequest):
+    """
+    Generate video from image.
+
+    Uses PiAPI (Wan I2V) as primary with Pollo as backup.
+    """
+    try:
+        result = await provider_router.route(
+            TaskType.I2V,
+            {
+                "image_url": request.image_url,
+                "prompt": request.prompt,
+                "duration": request.length
+            }
+        )
+
+        output = result.get("output", {})
+        video_url = output.get("video_url")
+
+        return I2VResponse(
+            success=result.get("success", False),
+            video_url=video_url,
+            task_id=result.get("task_id"),
+            service_used="piapi" if not result.get("used_backup") else result.get("backup_provider"),
+            rescue_used=result.get("backup_provider") if result.get("used_backup") else None,
+            model="wan2.6-i2v",
+            error=result.get("error")
+        )
+
+    except Exception as e:
+        logger.error(f"I2V endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/interior", response_model=InteriorResponse)
+async def interior_design_with_rescue(request: InteriorRequest):
+    """
+    Generate interior design.
+
+    Uses PiAPI (Wan Doodle) as primary with Gemini as backup.
+    """
+    try:
+        result = await provider_router.route(
+            TaskType.INTERIOR,
+            {
+                "image_url": request.image_url,
+                "prompt": request.prompt,
+                "style": request.style_id or "modern",
+                "room_type": request.room_type or "living_room"
+            }
+        )
+
+        output = result.get("output", {})
+        image_url = output.get("image_url")
+        description = output.get("description")
+
+        return InteriorResponse(
+            success=result.get("success", False),
+            image_url=image_url,
+            description=description,
+            service_used="piapi" if not result.get("used_backup") else result.get("backup_provider"),
+            rescue_used=result.get("backup_provider") if result.get("used_backup") else None,
+            error=result.get("error")
+        )
+
+    except Exception as e:
+        logger.error(f"Interior endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/service-status", response_model=ServiceStatusResponse)
+async def check_service_status():
+    """
+    Check status of all AI services.
+
+    Returns status of PiAPI, Pollo, GoEnhance, A2E, and Gemini.
+    """
+    try:
+        status = await provider_router.check_service_status()
+
+        return ServiceStatusResponse(
+            piapi=status.get("piapi", {"status": "unknown"}),
+            pollo=status.get("pollo", {"status": "unknown"}),
+            goenhance=status.get("goenhance", {"status": "unknown"}),
+            a2e=status.get("a2e", {"status": "unknown"}),
+            gemini=status.get("gemini", {"status": "unknown"})
+        )
+
+    except Exception as e:
+        logger.error(f"Status check error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/interior-styles")
+async def get_interior_styles():
+    """Get available interior design styles."""
+    from app.services.interior_design_service import DESIGN_STYLES
+    return {"styles": list(DESIGN_STYLES.values())}
+
+
+@router.get("/room-types")
+async def get_room_types():
+    """Get available room types for interior design."""
+    from app.services.interior_design_service import ROOM_TYPES
+    return {"room_types": list(ROOM_TYPES.values())}
 
 
 # ============================================================================
@@ -101,17 +324,33 @@ async def generate_pattern(
     - traditional: Cultural/traditional motifs
     """
     try:
-        result = await leonardo_service.generate_pattern(
-            prompt=request.prompt,
-            style=request.style,
-            use_cache=True
+        style_prompts = {
+            "seamless": "seamless tileable repeating pattern",
+            "floral": "floral botanical flower pattern",
+            "geometric": "geometric abstract shapes pattern",
+            "abstract": "artistic abstract texture pattern",
+            "traditional": "cultural traditional motifs pattern"
+        }
+        style_desc = style_prompts.get(request.style, "seamless pattern")
+
+        result = await provider_router.route(
+            TaskType.T2I,
+            {
+                "prompt": f"{request.prompt}, {style_desc}, high quality, detailed",
+                "size": f"{request.width}*{request.height}"
+            }
         )
 
         if result.get("success"):
-            images = result.get("images", [])
+            output = result.get("output", {})
+            image_url = output.get("image_url")
+            images = output.get("images", [])
+            if not images and image_url:
+                images = [{"url": image_url}]
+
             return GenerationResponse(
                 success=True,
-                result_url=images[0]["url"] if images else None,
+                result_url=images[0]["url"] if images else image_url,
                 results=images,
                 credits_used=5,
                 message="Pattern generated successfully"
@@ -136,19 +375,24 @@ async def transfer_pattern(
     Blends pattern with product while maintaining product shape
     """
     try:
-        # Use Leonardo to generate pattern-applied product
-        result = await leonardo_service.generate_image(
-            prompt=f"Product with pattern overlay, seamless integration, professional product photography",
-            width=1024,
-            height=1024,
-            use_cache=True
+        result = await provider_router.route(
+            TaskType.T2I,
+            {
+                "prompt": "Product with pattern overlay, seamless integration, professional product photography",
+                "size": "1024*1024"
+            }
         )
 
         if result.get("success"):
-            images = result.get("images", [])
+            output = result.get("output", {})
+            image_url = output.get("image_url")
+            images = output.get("images", [])
+            if not images and image_url:
+                images = [{"url": image_url}]
+
             return GenerationResponse(
                 success=True,
-                result_url=images[0]["url"] if images else None,
+                result_url=images[0]["url"] if images else image_url,
                 results=images,
                 credits_used=8,
                 message="Pattern transferred successfully"
@@ -177,15 +421,17 @@ async def remove_background(
     Returns transparent PNG
     """
     try:
-        result = await leonardo_service.remove_background(
-            image_url=str(request.image_url),
-            use_cache=True
+        # Use provider router for background removal (GoEnhance)
+        result = await provider_router.route(
+            TaskType.BACKGROUND_REMOVAL,
+            {"image_url": str(request.image_url)}
         )
 
         if result.get("success"):
+            output = result.get("output", {})
             return GenerationResponse(
                 success=True,
-                result_url=result.get("image_url"),
+                result_url=output.get("image_url"),
                 credits_used=3,
                 message="Background removed successfully"
             )
@@ -228,17 +474,25 @@ async def generate_product_scene(
     )
 
     try:
-        result = await leonardo_service.generate_product_scene(
-            product_image_url=str(request.product_image_url),
-            scene_prompt=scene_prompt,
-            use_cache=True
+        full_prompt = f"Product photography, {scene_prompt}, professional quality"
+        result = await provider_router.route(
+            TaskType.T2I,
+            {
+                "prompt": full_prompt,
+                "size": "1024*1024"
+            }
         )
 
         if result.get("success"):
-            images = result.get("images", [])
+            output = result.get("output", {})
+            image_url = output.get("image_url")
+            images = output.get("images", [])
+            if not images and image_url:
+                images = [{"url": image_url}]
+
             return GenerationResponse(
                 success=True,
-                result_url=images[0]["url"] if images else None,
+                result_url=images[0]["url"] if images else image_url,
                 results=images,
                 credits_used=10,
                 message="Product scene generated successfully"
@@ -262,10 +516,9 @@ async def enhance_product_image(
     Enhance product image quality (HD upscale, color correction)
     """
     try:
-        # Use Leonardo upscaler
-        result = await leonardo_service.remove_background(
-            image_url=str(request.image_url),
-            use_cache=True
+        # Use GoEnhance for image enhancement
+        result = await goenhance_service.enhance_image(
+            image_url=str(request.image_url)
         )
 
         if result.get("success"):
@@ -297,21 +550,24 @@ async def image_to_video(
     """
     Convert static image to animated video
 
-    Uses Leonardo Motion for natural motion generation.
+    Uses PiAPI (Wan I2V) as primary with Pollo as backup.
     Optional style transformation via GoEnhance.
     """
     try:
-        # Generate motion video with Leonardo
-        result = await leonardo_service.image_to_video(
-            image_url=str(request.image_url),
-            motion_strength=request.motion_strength,
-            use_cache=True
+        result = await provider_router.route(
+            TaskType.I2V,
+            {
+                "image_url": str(request.image_url),
+                "prompt": "Natural camera motion, smooth animation",
+                "duration": 5
+            }
         )
 
         if result.get("success"):
-            video_url = result.get("video_url")
+            output = result.get("output", {})
+            video_url = output.get("video_url")
 
-            # Optional: Apply style transformation with GoEnhance using unified styles
+            # Optional: Apply style transformation with GoEnhance
             if request.style:
                 model_id = get_goenhance_model_id(request.style)
                 if model_id:
@@ -555,39 +811,17 @@ async def get_topic_examples(
 @router.get("/api-status")
 async def get_api_status():
     """
-    Check status of all AI APIs
+    Check status of all AI providers (PiAPI, Pollo, GoEnhance, A2E, Gemini)
     """
-    status = {
-        "leonardo": {"available": False, "tokens": 0},
-        "goenhance": {"available": False, "models": 0}
-    }
-
     try:
-        # Check Leonardo
-        user_info = await leonardo_service.get_user_info()
-        if user_info.get("user_details"):
-            details = user_info["user_details"][0]
-            status["leonardo"] = {
-                "available": True,
-                "tokens": details.get("subscriptionTokens", 0),
-                "api_tokens": details.get("apiSubscriptionTokens", 0)
-            }
+        status = await provider_router.get_all_status()
+        return status
     except Exception as e:
-        logger.error(f"Leonardo status check failed: {e}")
-
-    try:
-        # Check GoEnhance
-        models = await goenhance_service.get_model_list()
-        if models.get("code") == 0:
-            model_count = sum(
-                len(cat.get("list", []))
-                for cat in models.get("data", [])
-            )
-            status["goenhance"] = {
-                "available": True,
-                "models": model_count
-            }
-    except Exception as e:
-        logger.error(f"GoEnhance status check failed: {e}")
-
-    return status
+        logger.error(f"API status check failed: {e}")
+        return {
+            "piapi": {"status": "unknown", "error": str(e)},
+            "pollo": {"status": "unknown"},
+            "goenhance": {"status": "unknown"},
+            "a2e": {"status": "unknown"},
+            "gemini": {"status": "unknown"}
+        }

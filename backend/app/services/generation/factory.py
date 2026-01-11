@@ -2,14 +2,13 @@
 Generation Service Factory
 
 Provides unified access to all generation services and handles service selection.
+NOTE: This is legacy code - prefer using ProviderRouter for new implementations.
 """
 import logging
 from typing import Optional, Dict, Type
 
 from app.services.base import BaseGenerationService, GenerationType
-from .goenhance_service import GoEnhanceGenerationService, get_goenhance_service
 from .pollo_service import PolloGenerationService, get_pollo_service
-from .leonardo_service import LeonardoGenerationService, get_leonardo_service
 
 logger = logging.getLogger(__name__)
 
@@ -18,27 +17,30 @@ class GenerationServiceFactory:
     """
     Factory for creating and managing generation services.
 
+    NOTE: Prefer using ProviderRouter instead. This factory is kept for
+    backward compatibility with existing code. Use ProviderRouter with
+    PiAPI for T2I, I2V, T2V, V2V, Interior, and Background Removal.
+
     Provides:
     - Service selection by name or capability
     - Optimal service selection for generation types
     - Service fallback handling
     """
 
-    # Service registry
+    # Service registry - Use ProviderRouter with PiAPI for most operations
     _services: Dict[str, Type[BaseGenerationService]] = {
-        "goenhance": GoEnhanceGenerationService,
         "pollo_ai": PolloGenerationService,
-        "leonardo": LeonardoGenerationService,
     }
 
     # Preferred services for each generation type
+    # NOTE: Use ProviderRouter (PiAPI primary) for T2I, I2V, T2V, V2V, Interior
     _preferred_services: Dict[GenerationType, list] = {
-        GenerationType.TEXT_TO_IMAGE: ["leonardo", "goenhance"],
-        GenerationType.IMAGE_TO_IMAGE: ["goenhance"],
-        GenerationType.IMAGE_TO_VIDEO: ["pollo_ai", "leonardo"],
-        GenerationType.VIDEO_TO_VIDEO: ["goenhance"],
-        GenerationType.IMAGE_UPSCALE: ["goenhance"],
-        GenerationType.VIDEO_UPSCALE: ["goenhance"],
+        GenerationType.TEXT_TO_IMAGE: ["pollo_ai"],
+        GenerationType.IMAGE_TO_IMAGE: ["pollo_ai"],
+        GenerationType.IMAGE_TO_VIDEO: ["pollo_ai"],
+        GenerationType.VIDEO_TO_VIDEO: ["pollo_ai"],
+        GenerationType.IMAGE_UPSCALE: ["pollo_ai"],
+        GenerationType.VIDEO_UPSCALE: ["pollo_ai"],
     }
 
     @classmethod
@@ -47,19 +49,15 @@ class GenerationServiceFactory:
         Get a specific generation service by name.
 
         Args:
-            service_name: Service identifier (goenhance, pollo_ai, leonardo)
+            service_name: Service identifier (pollo_ai)
 
         Returns:
             BaseGenerationService instance or None
         """
-        if service_name == "goenhance":
-            return get_goenhance_service()
-        elif service_name == "pollo_ai":
+        if service_name == "pollo_ai":
             return get_pollo_service()
-        elif service_name == "leonardo":
-            return get_leonardo_service()
         else:
-            logger.warning(f"Unknown service: {service_name}")
+            logger.warning(f"Unknown service: {service_name}. Use ProviderRouter instead.")
             return None
 
     @classmethod
@@ -99,9 +97,7 @@ class GenerationServiceFactory:
     def get_all_services(cls) -> Dict[str, BaseGenerationService]:
         """Get all available services"""
         return {
-            "goenhance": get_goenhance_service(),
             "pollo_ai": get_pollo_service(),
-            "leonardo": get_leonardo_service(),
         }
 
     @classmethod
@@ -120,6 +116,9 @@ def get_generation_service(
     """
     Convenience function to get a generation service.
 
+    NOTE: Prefer using ProviderRouter for new implementations.
+    Use ProviderRouter with PiAPI for T2I, I2V, T2V, V2V, Interior.
+
     Args:
         service_name: Specific service to get
         generation_type: Type of generation (if no service specified, finds best match)
@@ -132,5 +131,5 @@ def get_generation_service(
     elif generation_type:
         return GenerationServiceFactory.get_service_for_type(generation_type)
     else:
-        # Default to Leonardo for general use
-        return get_leonardo_service()
+        # Default to Pollo for legacy compatibility
+        return get_pollo_service()

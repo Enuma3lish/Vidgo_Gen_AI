@@ -43,6 +43,58 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tools/ShortVideo.vue'),
     meta: { requiresAuth: false }
   },
+  // Tool: Product Enhancement (產品增強)
+  {
+    path: '/tools/product-enhance',
+    name: 'product-enhance',
+    component: () => import('@/views/tools/ProductScene.vue'),
+    meta: { requiresAuth: false }
+  },
+  // Video tools (redirects to short-video for now)
+  {
+    path: '/tools/image-to-video',
+    name: 'image-to-video',
+    component: () => import('@/views/tools/ShortVideo.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/tools/video-transform',
+    name: 'video-transform',
+    component: () => import('@/views/tools/ShortVideo.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/tools/product-video',
+    name: 'product-video',
+    component: () => import('@/views/tools/ShortVideo.vue'),
+    meta: { requiresAuth: false }
+  },
+  // Tool 6: AI Avatar (AI數位人)
+  {
+    path: '/tools/avatar',
+    name: 'avatar',
+    component: () => import('@/views/tools/AIAvatar.vue'),
+    meta: { requiresAuth: false }
+  },
+  // Pattern tools
+  {
+    path: '/tools/pattern-generate',
+    name: 'pattern-generate',
+    component: () => import('@/views/topics/PatternTopic.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/tools/pattern-transfer',
+    name: 'pattern-transfer',
+    component: () => import('@/views/topics/PatternTopic.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/tools/pattern-seamless',
+    name: 'pattern-seamless',
+    component: () => import('@/views/topics/PatternTopic.vue'),
+    meta: { requiresAuth: false }
+  },
   // Topic pages (navigation categories)
   {
     path: '/topics/pattern',
@@ -153,7 +205,7 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior(to, from, savedPosition) {
+  scrollBehavior(_to, _from, savedPosition) {
     if (savedPosition) {
       return savedPosition
     } else {
@@ -163,7 +215,7 @@ const router = createRouter({
 })
 
 // Navigation guards
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('access_token')
   const isAuthenticated = !!token
 

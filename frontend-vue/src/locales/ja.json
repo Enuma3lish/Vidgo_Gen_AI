@@ -14,21 +14,116 @@
     "myWorks": "作品一覧"
   },
   "hero": {
-    "title": "AIで素晴らしいコンテンツを作成",
-    "subtitle": "強力なAIツールでアイデアを素晴らしい画像や動画に変換",
-    "cta": "作成開始",
+    "title": "AIで素晴らしいビジュアルを作成",
+    "subtitle": "プロフェッショナルなパターンデザイン、EC商品撮影、AI動画作成 - ワンプラットフォームで",
+    "cta": "無料で試す",
     "secondaryCta": "料金を見る"
   },
+  "topics": {
+    "pattern": {
+      "name": "パターンデザイン",
+      "desc": "AIパワードパターン生成と転写",
+      "longDesc": "AIを使って独自のパターンを素早く生成。シームレス、花柄、幾何学など多様なスタイルに対応",
+      "ctaTitle": "ユニークなパターンを作成開始",
+      "ctaDesc": "AIでプロフェッショナルなパターンを生成、多様なスタイルから選択"
+    },
+    "product": {
+      "name": "商品写真",
+      "desc": "プロフェッショナルな商品撮影ソリューション",
+      "longDesc": "スマート背景除去、シーン生成、商品強化 - 商品を際立たせる",
+      "processDesc": "ワンクリックでプロフェッショナルな商品画像を処理",
+      "ctaTitle": "商品画像をアップグレード",
+      "ctaDesc": "プロフェッショナルな背景除去とシーン生成でEC成功を"
+    },
+    "video": {
+      "name": "AI動画",
+      "desc": "静止画をダイナミックな動画に",
+      "longDesc": "画像から動画へ、スタイル変換、多様なアートスタイルから選択",
+      "imageToVideo": "画像から動画",
+      "styleTransform": "スタイル変換",
+      "stylesDesc": "多様なアートスタイルで動画を際立たせる",
+      "ctaTitle": "画像に命を吹き込む",
+      "ctaDesc": "ワンクリックで動画生成、多様なスタイルから選択"
+    },
+    "avatar": {
+      "name": "AIアバター",
+      "desc": "写真からアバター、自然なリップシンク",
+      "longDesc": "写真をAI音声と表情で話すアバター動画に変換"
+    },
+    "interior": {
+      "name": "インテリアデザイン",
+      "desc": "AIパワードルームリデザイン",
+      "longDesc": "AIで任意の部屋を変換。写真をアップロードして夢の空間を記述。"
+    }
+  },
   "tools": {
+    "avatar": {
+      "name": "AIアバター",
+      "desc": "写真から話すアバター動画へ",
+      "longDesc": "自然なリップシンクで写真を話すアバター動画に変換",
+      "avatarPhoto": "アバター写真",
+      "script": "スクリプト",
+      "scriptPlaceholder": "アバターに話させたいテキストを入力...",
+      "maxSpeech": "最大120秒のスピーチ",
+      "voiceSettings": "音声設定",
+      "language": "言語",
+      "voice": "音声",
+      "female": "女性",
+      "male": "男性",
+      "defaultAvatars": "またはデフォルトアバターを選択：",
+      "changePhoto": "写真を変更",
+      "generatedVideo": "生成されたアバター動画",
+      "videoPlaceholder": "アバター動画がここに表示されます",
+      "processing": "アバター動画を生成中... 数分かかる場合があります"
+    },
+    "patternGenerate": {
+      "name": "パターン生成",
+      "desc": "テキスト説明からユニークなパターンを生成",
+      "longDesc": "AIでテキスト説明から美しくユニークなパターンを作成"
+    },
+    "patternTransfer": {
+      "name": "パターン転写",
+      "desc": "パターンを商品に適用",
+      "longDesc": "パターンを商品表面にシームレスに適用"
+    },
+    "patternSeamless": {
+      "name": "シームレスパターン",
+      "desc": "タイル可能なシームレスパターンを生成",
+      "longDesc": "継ぎ目なく完璧にタイルできるパターンを作成"
+    },
+    "removeBackground": {
+      "name": "背景除去",
+      "desc": "ワンクリックで画像背景を除去"
+    },
+    "productScene": {
+      "name": "シーン生成",
+      "desc": "商品用プロフェッショナルシーンを生成",
+      "longDesc": "商品をプロフェッショナルなAI生成シーンに配置"
+    },
+    "productEnhance": {
+      "name": "商品強化",
+      "desc": "商品画像品質を向上",
+      "longDesc": "AIパワード品質向上で商品画像を強化"
+    },
+    "imageToVideo": {
+      "name": "画像から動画",
+      "desc": "静止画をダイナミック動画に変換",
+      "longDesc": "静止画を魅力的なアニメーション動画に変換"
+    },
+    "videoTransform": {
+      "name": "スタイル変換",
+      "desc": "動画をアートスタイルに変換",
+      "longDesc": "アニメ、ジブリ、水彩などのアートスタイルを動画に適用"
+    },
+    "productVideo": {
+      "name": "商品動画",
+      "desc": "商品ショーケース動画を作成",
+      "longDesc": "ダイナミックな商品ショーケース動画を自動生成"
+    },
     "backgroundRemoval": {
       "name": "背景除去",
       "desc": "AIで瞬時に背景を除去",
       "longDesc": "ワンクリックで任意の画像から背景を自動検出して除去"
-    },
-    "productScene": {
-      "name": "商品シーン",
-      "desc": "素晴らしい商品写真を生成",
-      "longDesc": "AI生成のシーンと背景でプロフェッショナルな商品撮影を作成"
     },
     "tryOn": {
       "name": "バーチャル試着",
@@ -44,6 +139,101 @@
       "name": "ショート動画",
       "desc": "魅力的なショート動画を作成",
       "longDesc": "テキスト説明や画像から魅力的なショート動画を生成"
+    },
+    "common": {
+      "uploadImage": "画像をアップロード",
+      "uploadVideo": "動画をアップロード",
+      "settings": "設定",
+      "motionStrength": "モーション強度",
+      "gentle": "穏やか",
+      "intense": "激しい",
+      "styleTransform": "スタイル変換（オプション）",
+      "originalStyle": "オリジナルスタイル",
+      "processingTime": "処理中（1-3分）",
+      "processingTimeLong": "処理中（3-10分）",
+      "generatedResult": "生成結果",
+      "transformResult": "変換結果",
+      "selectScene": "シーンを選択",
+      "customPrompt": "カスタムプロンプト",
+      "describeScene": "シーンを記述",
+      "scenePlaceholder": "例：大理石の表面に柔らかい朝の光...",
+      "generatedScenes": "生成されたシーン",
+      "productImage": "商品画像",
+      "changeImage": "画像を変更",
+      "additionalPrompt": "追加プロンプト（オプション）",
+      "promptPlaceholder": "例：詳細を追加、より鮮やかな色...",
+      "startTransform": "変換開始",
+      "examplePrompt": "例：エレガントなバラの花柄パターン、ゴールドとネイビーの配色..."
+    },
+    "scenes": {
+      "studio": { "name": "スタジオ", "desc": "クリーンなスタジオ照明" },
+      "nature": { "name": "自然", "desc": "自然なアウトドア設定" },
+      "luxury": { "name": "ラグジュアリー", "desc": "プレミアムエレガントスタイル" },
+      "minimal": { "name": "ミニマル", "desc": "クリーンミニマル背景" },
+      "lifestyle": { "name": "ライフスタイル", "desc": "家庭環境" },
+      "custom": { "name": "カスタム", "desc": "独自のプロンプト" }
+    }
+  },
+  "styles": {
+    "seamless": "シームレス",
+    "floral": "花柄",
+    "geometric": "幾何学",
+    "abstract": "抽象",
+    "traditional": "伝統的",
+    "3d": "3Dデザイン",
+    "interior": "インテリアデザイン",
+    "mockup": "商品モックアップ",
+    "studio": "スタジオ",
+    "nature": "自然",
+    "luxury": "ラグジュアリー",
+    "minimal": "ミニマル",
+    "lifestyle": "ライフスタイル",
+    "anime": "アニメスタイル",
+    "ghibli": "ジブリスタイル",
+    "pixar": "ピクサースタイル",
+    "clay": "クレイアニメーション",
+    "watercolor": "水彩"
+  },
+  "examples": {
+    "title": "注目の例",
+    "before": "ビフォー",
+    "after": "アフター",
+    "viewMore": "もっと見る",
+    "loading": "例を読み込み中..."
+  },
+  "sections": {
+    "availableTools": "利用可能なツール",
+    "quickGenerate": "クイック生成",
+    "quickProcess": "クイック処理",
+    "popularStyles": "人気スタイル",
+    "readyToStart": "始める準備はできましたか？",
+    "freeToTry": "AIツールを無料で試して、無限の可能性を解き放つ",
+    "startFree": "無料で開始"
+  },
+  "whyChoose": {
+    "title": "なぜVidGo AIを選ぶのか？",
+    "subtitle": "無限のクリエイティブ可能性のためのプロフェッショナルAIツール",
+    "features": {
+      "fast": {
+        "title": "高速生成",
+        "desc": "最適化されたAIモデル、秒単位で結果"
+      },
+      "quality": {
+        "title": "プロ品質",
+        "desc": "プロフェッショナルニーズのための商用グレード出力"
+      },
+      "cost": {
+        "title": "柔軟な価格設定",
+        "desc": "従量課金、隠れた費用なし"
+      },
+      "cache": {
+        "title": "スマートキャッシュ",
+        "desc": "同じリクエストはより速く応答、時間を節約"
+      },
+      "api": {
+        "title": "API統合",
+        "desc": "簡単な統合のための完全なAPIサポート"
+      }
     }
   },
   "categories": {
@@ -54,13 +244,101 @@
     "product": "EC商品",
     "portrait": "ポートレート"
   },
+  "homepage": {
+    "topics": {
+      "aiImage": {
+        "title": "AI画像作成",
+        "desc": "AIで素晴らしい画像を作成"
+      },
+      "aiVideo": {
+        "title": "AI動画作成",
+        "desc": "画像とテキストから動画を生成"
+      },
+      "ecommerce": {
+        "title": "商品・EC",
+        "desc": "ECのための商品写真を強化"
+      },
+      "architecture": {
+        "title": "建築・インテリア",
+        "desc": "AIで空間をリデザイン"
+      },
+      "quickTools": {
+        "title": "クイックツール",
+        "desc": "日常使用の高速編集ツール"
+      },
+      "inspiration": {
+        "title": "作品インスピレーション",
+        "desc": "インスピレーションのためのクリエイティブ例を閲覧"
+      }
+    },
+    "tools": {
+      "textToImage": "テキストから画像",
+      "imageEnhancement": "画像強化",
+      "patternDesign": "パターンデザイン",
+      "styleTransfer": "スタイル変換",
+      "imageToVideo": "画像から動画",
+      "videoStyleTransfer": "動画スタイル変換",
+      "aiAvatar": "AIアバター",
+      "productVideo": "商品動画",
+      "productScene": "商品シーン",
+      "backgroundRemoval": "背景除去",
+      "productEnhancement": "商品強化",
+      "virtualTryOn": "バーチャル試着",
+      "roomRedesign": "ルームリデザイン",
+      "interiorStyle": "インテリアスタイル変換",
+      "archVisualization": "建築ビジュアライゼーション",
+      "furniturePlacement": "家具配置",
+      "hdUpscaling": "HD拡大",
+      "watermarkRemoval": "透かし除去",
+      "objectRemoval": "オブジェクト除去",
+      "imageCompression": "画像圧縮"
+    },
+    "gallery": {
+      "video": "動画",
+      "recommended": "おすすめ",
+      "portrait": "ポートレート",
+      "photography": "リアル写真",
+      "animation": "アニメーション",
+      "poster": "ポスター・イラスト",
+      "anime": "アニメ",
+      "ecommerceDesign": "ECデザイン",
+      "chinese": "中国風",
+      "female": "女性",
+      "male": "男性",
+      "interior": "インテリア",
+      "architectureLandscape": "建築・景観",
+      "toys": "トイ・フィギュア",
+      "art": "アート",
+      "productDesign": "商品デザイン",
+      "gameCG": "ゲームCG",
+      "nature": "自然",
+      "threeD": "3D",
+      "logoUI": "ロゴ/UI",
+      "character": "キャラクターIP",
+      "animals": "動植物",
+      "fantasy": "ファンタジー",
+      "scifi": "SF"
+    },
+    "promptModal": {
+      "title": "生成プロンプト",
+      "copyPrompt": "プロンプトをコピー",
+      "tryThis": "これを試す",
+      "copied": "コピーしました！",
+      "close": "閉じる"
+    },
+    "viewMore": "もっと見る",
+    "seeAll": "すべての例を見る",
+    "tryNow": "今すぐ試す"
+  },
   "badges": {
     "free": "無料",
     "beta": "ベータ",
     "hot": "人気",
-    "new": "新機能"
+    "new": "新機能",
+    "cached": "キャッシュ済み"
   },
   "common": {
+    "back": "戻る",
     "upload": "アップロード",
     "generate": "生成",
     "download": "ダウンロード",
@@ -75,9 +353,18 @@
     "error": "エラー",
     "dragDrop": "ファイルをドラッグ＆ドロップまたはクリックしてアップロード",
     "supportedFormats": "対応形式：JPG、PNG、WEBP",
+    "supportedVideoFormats": "対応形式：MP4、MOV、WEBM",
     "maxSize": "最大サイズ：10MB",
     "credits": "クレジット",
-    "estimatedCost": "推定コスト"
+    "estimatedCost": "推定コスト",
+    "tryExample": "例を試す",
+    "selectStyle": "スタイルを選択",
+    "enterPrompt": "説明を入力",
+    "uploadImage": "画像をアップロード",
+    "uploadVideo": "動画をアップロード",
+    "result": "結果",
+    "previewComingSoon": "プレビュー近日公開",
+    "startFree": "無料で開始"
   },
   "auth": {
     "email": "メールアドレス",
@@ -118,7 +405,40 @@
     "free": "無料",
     "currentPlan": "現在のプラン",
     "upgrade": "アップグレード",
-    "features": "機能"
+    "getStarted": "始める",
+    "features": "機能",
+    "status": "ステータス",
+    "validUntil": "有効期限",
+    "daysLeft": "日残り",
+    "processing": "処理中...",
+    "subscribing": "登録中...",
+    "cancelSubscription": "登録をキャンセル",
+    "cancelWithRefund": "払い戻しでキャンセル",
+    "subscribeSuccess": "登録が正常に有効化されました！",
+    "redirectingToPayment": "支払いページにリダイレクト中...",
+    "subscribeFailed": "登録に失敗しました。もう一度お試しください。",
+    "refundProcessed": "払い戻しが正常に処理されました。登録はキャンセルされました。",
+    "subscriptionCancelled": "登録がキャンセルされました。請求期間終了までクレジットを引き続き使用できます。",
+    "cancelFailed": "登録のキャンセルに失敗しました。もう一度お試しください。",
+    "faq": {
+      "title": "よくある質問",
+      "credits": {
+        "q": "クレジットとは何ですか？",
+        "a": "クレジットはコンテンツを生成するために使用されます。異なるツールは複雑さに基づいて異なる量のクレジットを消費します。"
+      },
+      "rollover": {
+        "q": "未使用のクレジットは繰り越されますか？",
+        "a": "月間クレジットは各請求期間の終わりにリセットされます。購入したクレジットパックは有効期限がありません。"
+      },
+      "change": {
+        "q": "アップグレードまたはダウングレードできますか？",
+        "a": "はい、いつでもプランを変更できます。変更は次の請求サイクルで有効になります。"
+      },
+      "refund": {
+        "q": "返金ポリシーは何ですか？",
+        "a": "登録後7日以内に全額返金をリクエストできます。7日後もキャンセルできますが、請求期間終了までアクセスを保持します。"
+      }
+    }
   },
   "footer": {
     "about": "会社概要",
@@ -126,5 +446,157 @@
     "privacy": "プライバシーポリシー",
     "contact": "お問い合わせ",
     "copyright": "© 2024 VidGo AI. All rights reserved."
+  },
+  "interior": {
+    "badge": "AIインテリアデザイン",
+    "title": "AIインテリアデザイン",
+    "subtitle": "AIパワードインテリアデザインで任意の部屋を変換。写真をアップロードして夢の空間を記述。",
+    "processing": "デザインを生成中...",
+    "tabs": {
+      "redesign": "部屋をリデザイン",
+      "generate": "デザインを生成",
+      "styleTransfer": "スタイル転送"
+    },
+    "uploadTitle": "部屋の写真をアップロード",
+    "roomType": "部屋のタイプ",
+    "designStyle": "デザインスタイル",
+    "prompt": "変更を記述",
+    "promptPlaceholder": "例：グレーのソファ、木製コーヒーテーブル、観葉植物のあるモダンミニマリスト...",
+    "examplePrompts": "これらの例を試す",
+    "result": "デザイン結果",
+    "resultPlaceholder": "リデザインされた部屋がここに表示されます",
+    "resultHint": "部屋の写真をアップロードするか、夢のデザインを記述",
+    "before": "ビフォー",
+    "after": "アフター",
+    "tryAnother": "別を試す",
+    "actions": {
+      "redesign": "部屋をリデザイン",
+      "generate": "デザインを生成",
+      "applyStyle": "スタイルを適用"
+    },
+    "success": {
+      "redesigned": "部屋のリデザインが成功しました！",
+      "generated": "デザインの生成が成功しました！",
+      "styleApplied": "スタイルの適用が成功しました！"
+    },
+    "errors": {
+      "imageRequired": "部屋の画像をアップロードしてください",
+      "promptRequired": "デザインを記述してください",
+      "imageAndPromptRequired": "画像をアップロードして変更を記述してください",
+      "styleRequired": "デザインスタイルを選択してください",
+      "failed": "デザイン生成に失敗しました。もう一度お試しください。"
+    },
+    "features": {
+      "title": "Gemini AIパワード",
+      "imageText": "画像 + テキスト：部屋の写真と説明をアップロード",
+      "textOnly": "テキストのみ：説明からデザインを生成",
+      "multiStyle": "10種類のデザインスタイル：モダン、北欧、和風など",
+      "keepLayout": "部屋のレイアウトと窓の位置を保持"
+    }
+  },
+  "landing": {
+    "badge": "AIパワード広告生成プラットフォーム",
+    "headline1": "AI自動生成",
+    "headline2": "高性能動画広告",
+    "subtitle": "わずか数分でAIにプロフェッショナルな動画広告を作成させましょう。",
+    "highlight": "コンバージョン率向上、制作時間とコストを80%削減",
+    "tryFree": "今すぐ無料で試す",
+    "watchDemo": "デモを見る",
+    "stats": {
+      "users": "アクティブユーザー",
+      "timeSaved": "時間節約",
+      "conversion": "コンバージョン向上"
+    },
+    "features": {
+      "title": "パワフルな機能、",
+      "titleHighlight": "オールインワン",
+      "subtitle": "AI技術とプロフェッショナルマーケティングツールを統合し、包括的な広告制作ソリューションを提供",
+      "ai": { "title": "AIスマート生成", "desc": "高度なAI技術がニーズを自動分析し、ブランドアイデンティティに合ったプロフェッショナルな動画広告を生成" },
+      "fast": { "title": "高速制作", "desc": "わずか3分で動画広告制作を完了、従来の制作時間を大幅に短縮" },
+      "target": { "title": "精密ターゲティング", "desc": "インテリジェントなオーディエンス分析で広告コンテンツを最適化し、クリック率とコンバージョン率を向上" },
+      "data": { "title": "データ分析", "desc": "リアルタイム広告パフォーマンス追跡と詳細なデータ分析、最適化提案" },
+      "lang": { "title": "多言語サポート", "desc": "30以上の言語をサポート、グローバル市場への展開が容易" },
+      "team": { "title": "チームコラボレーション", "desc": "複数ユーザーのコラボレーションをサポート、チームで完璧な広告コンテンツを作成" }
+    },
+    "howItWorks": {
+      "badge": "使い方",
+      "title": "4ステップで",
+      "titleHighlight": "簡単完了",
+      "subtitle": "シンプルで直感的なワークフローで、すぐに始めてすぐに作成",
+      "step1": { "title": "アセットをアップロード", "desc": "商品画像、動画、またはテキストコンテンツをアップロード、複数のフォーマットをサポート" },
+      "step2": { "title": "AI生成", "desc": "AIが自動でコンテンツを分析し、プロフェッショナルな広告スクリプトと視覚効果を生成" },
+      "step3": { "title": "カスタマイズ", "desc": "ニーズに応じてスタイル、コピー、音楽などの詳細を調整" },
+      "step4": { "title": "エクスポート＆デプロイ", "desc": "完成品をダウンロードするか、主要な広告プラットフォームに直接統合" }
+    },
+    "examples": {
+      "badge": "ショーケース",
+      "title": "素晴らしいAI生成例",
+      "subtitle": "様々なタイプの動画広告例を見て、AIの創造性を体験",
+      "viewMore": "もっと例を見る",
+      "categories": {
+        "all": "すべて",
+        "ecommerce": "EC",
+        "social": "ソーシャル",
+        "brand": "ブランド",
+        "app": "アプリ",
+        "promo": "プロモ",
+        "service": "サービス"
+      }
+    },
+    "comparison": {
+      "badge": "ビフォー＆アフター",
+      "title": "従来 vs ",
+      "titleHighlight": "AIスマート制作",
+      "subtitle": "VIDGOが広告制作をどう革新するか、時間とコストを節約",
+      "traditional": "従来の方法",
+      "aiWay": "VIDGO AI",
+      "recommend": "おすすめ",
+      "traditionalItems": ["専門チームが必要", "制作期間2-4週間", "高コスト $5000+", "修正が困難", "専門機材が必要", "人件費が高い"],
+      "aiItems": ["専門スキル不要", "3分で完了", "月額$49から", "いつでも調整可能", "オンライン操作", "AI自動化"],
+      "statTimeSaved": "時間節約",
+      "statCostReduced": "コスト削減",
+      "statEfficiency": "出力効率"
+    },
+    "testimonials": {
+      "badge": "お客様の声",
+      "title": "",
+      "titleHighlight": "10,000+",
+      "titleEnd": "企業に信頼されています",
+      "subtitle": "様々な業界のお客様からの実際のストーリー",
+      "avgRating": "平均評価",
+      "activeUsers": "アクティブユーザー",
+      "generatedVideos": "生成された動画",
+      "satisfaction": "満足度"
+    },
+    "pricing": {
+      "badge": "料金プラン",
+      "title": "最適な",
+      "titleHighlight": "プランを選択",
+      "subtitle": "あらゆる規模のビジネスに対応する柔軟な価格オプション",
+      "mostPopular": "最も人気",
+      "perMonth": "/月",
+      "originalPrice": "元の価格",
+      "startNow": "今すぐ始める",
+      "learnMore": "詳細を見る"
+    },
+    "faq": {
+      "badge": "FAQ",
+      "title": "よくある",
+      "titleHighlight": "質問",
+      "subtitle": "回答が見つかりませんか？サポートチームにお問い合わせください",
+      "moreQuestions": "他に質問がありますか？",
+      "contactSupport": "サポートチームに連絡"
+    },
+    "cta": {
+      "title": "始める準備はできましたか？",
+      "subtitle": "今すぐ無料トライアルを開始し、AIパワード広告生成プラットフォームを体験",
+      "highlight": "クレジットカード不要、14日間フル機能トライアル",
+      "noCreditCard": "クレジットカード不要",
+      "freeTrial": "14日間無料トライアル",
+      "cancelAnytime": "いつでもキャンセル可能",
+      "tryNow": "今すぐ無料で試す",
+      "contactSales": "営業に連絡",
+      "socialProof": "500以上の企業がVIDGOを選択"
+    }
   }
 }

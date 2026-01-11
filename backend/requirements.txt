@@ -16,3 +16,5 @@ python-decouple==3.8
 email-validator>=2.3.0
 pillow>=10.2.0
 rembg[cpu]>=2.0.50
+pytest>=8.0.0
+pytest-asyncio>=0.23.5

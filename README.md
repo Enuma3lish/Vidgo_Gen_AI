@@ -1,561 +1,170 @@
-# VidGo - AI Product Ads Video Generation Platform
+# VidGo Gen AI Platform
 
-> AI-powered product advertising video generation SaaS platform with intelligent prompt caching, multi-tier subscriptions, and style transformation features.
+**AI-Powered Visual Content Generation for E-commerce**
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-teal.svg)](https://fastapi.tiangolo.com)
+VidGo is a comprehensive AI platform that enables e-commerce businesses to create professional visual content using cutting-edge generative AI technology. The platform operates in **PRESET-ONLY mode**, providing instant access to pre-generated high-quality examples while driving conversions to paid subscriptions.
 
-## 📋 Table of Contents
+---
 
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [System Architecture](#system-architecture)
-- [Tech Stack](#tech-stack)
-- [Service Tiers](#service-tiers)
-- [Point System](#point-system)
-- [Development Plan](#development-plan)
-- [Cost Analysis](#cost-analysis)
+## Table of Contents
+
+- [Architecture Overview](#architecture-overview)
+- [Core Features](#core-features)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
-- [API Integrations](#api-integrations)
-- [Security](#security)
-- [Internationalization](#internationalization)
-- [Contributing](#contributing)
+- [Configuration](#configuration)
+- [Docker Services](#docker-services)
+- [Development](#development)
+- [Documentation](#documentation)
 
 ---
 
-## Overview
+## Architecture Overview
 
-VidGo is a 4-tier AI **product advertising video generation platform** (Demo / Starter / Pro / Unlimited) that helps users create professional product introduction and advertising videos from text prompts or product images. Built with **Leonardo AI** as the primary generation service, featuring **Gemini AI** for intelligent prompt enhancement and content moderation, and **prompt similarity caching** to optimize costs.
+```
+                    +------------------+
+                    |    Frontend      |
+                    |    (Vue 3)       |
+                    |   Port: 8501     |
+                    +--------+---------+
+                             |
+                             | HTTP/WebSocket
+                             v
+                    +------------------+
+                    |    Backend       |
+                    |   (FastAPI)      |
+                    |   Port: 8001     |
+                    +--------+---------+
+                             |
+         +-------------------+-------------------+
+         |                   |                   |
+         v                   v                   v
++----------------+  +----------------+  +----------------+
+|   PostgreSQL   |  |     Redis      |  |  AI Services   |
+|  (Database)    |  |  (Cache/Queue) |  |  (External)    |
+|  Port: 5432    |  |  Port: 6379    |  |                |
++----------------+  +----------------+  +----------------+
+                                               |
+                    +--------------------------+
+                    |          |               |
+         +----------+--+  +----+-----+  +------+-------+
+         |  PiAPI/Wan  |  | Pollo AI |  |    A2E.ai    |
+         | - T2I       |  | - I2V    |  | - Avatar     |
+         | - I2V       |  | - T2V    |  | - Lip-sync   |
+         +-------------+  +----------+  +--------------+
+```
 
-### Core Design Principles
+### PRESET-ONLY Mode
 
-| Principle | Implementation |
-|-----------|----------------|
-| **Product Focus** | Create product ads videos from text or images |
-| 4-Tier Service | Demo → Starter → Pro → Unlimited |
-| Primary Service | Leonardo AI (image + video generation) |
-| Prompt Enhancement | Gemini AI improves user prompts |
-| Content Moderation | Gemini AI (18+ / illegal content detection) |
-| Similarity Caching | 85% similar prompts reuse cached results |
-| Multi-language | EN / JA / ZH-TW / KO / ES |
-| Dual Payment | ECPay (Taiwan) + Paddle (International) |
+VidGo operates in **PRESET-ONLY mode** for demo users:
+
+1. **No Runtime API Calls**: All demo content is pre-generated before service starts
+2. **Instant Experience**: Users see results immediately without waiting for AI processing
+3. **Cost Control**: Zero API costs for demo usage - only pre-generation costs
+4. **Watermarked Results**: All demo outputs have watermarks; full downloads require subscription
+5. **Conversion-Focused**: Demo experience drives users toward paid subscriptions
 
 ---
 
-## Key Features
+## Core Features
 
-### 🎬 Product Ads Video Generation
-- **Leonardo AI** - Primary generation platform (image + video, 720p/1080p)
-- **Text to Video** - Describe your product, AI generates professional ad videos
-- **Image to Video** - Upload product image, AI animates it into video
-- **Prompt Enhancement** - Gemini AI improves prompts for better results
+### 6 Core AI Tools
 
-### 🧠 Smart Caching System
-- **Prompt Similarity Matching** - Uses text embeddings for semantic matching
-- **85% Threshold** - Similar prompts reuse cached results
-- **Cost Optimization** - Reduces API calls and credit usage
-- **Continuous Learning** - Cache grows with each generation
-
-### 🎨 Style Transformation (GoEnhance)
-| Style Category | Styles | Use Cases |
-|----------------|--------|-----------|
-| Anime | Japanese Anime, Makoto Shinkai | Personal creation, Social media |
-| 3D Animation | Pixar, Disney | Children's content, Advertising |
-| Claymation | Stop-motion, Claymation | Creative ads, Art projects |
-| Artistic | Oil painting, Watercolor, Sketch | Art display, Brand image |
-| Retro | 80s, VHS effects | Nostalgic content, Music videos |
-| Gaming | Pixel art, Cyberpunk | Game promotion, Tech content |
-
-### 🛡️ Demo Tier Generation Flow
-```
-1. User enters prompt
-        ↓
-2. Content Moderation (Gemini AI)
-   - Detect illegal/18+ content
-   - Block if unsafe
-        ↓
-3. Prompt Enhancement (Gemini AI)
-   - Improve prompt for better results
-   - Generate embedding for similarity matching
-        ↓
-4. Similarity Check
-   - Search cached prompts (>85% match)
-   - If found: return cached result (0 credits)
-        ↓
-5. Generate New Content (Leonardo AI)
-   - Generate product image
-   - Generate video from image
-   - Cache result for future matching
-```
+| Tool | Description | API Provider |
+|------|-------------|--------------|
+| **Background Removal** | Remove backgrounds from product images | PiAPI Wan / Gemini |
+| **Product Scene** | Place products in professional settings | PiAPI Wan T2I |
+| **Virtual Try-On** | Virtual clothing try-on for fashion | Pollo AI |
+| **Room Redesign** | 2D-to-3D Visualization (Plan to Render) | PiAPI Wan / Trellis |
+| **Short Video** | Image-to-video, Text-to-video | Pollo AI |
+| **AI Avatar** | Talking avatar with lip-sync TTS | A2E.ai |
 
 ---
 
-## System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         VidGo Platform                          │
-├─────────────────────────────────────────────────────────────────┤
-│  Frontend (Streamlit)                                           │
-│  ├── Demo Showcase                                              │
-│  ├── Video Generation UI                                        │
-│  ├── Style Gallery                                              │
-│  └── User Dashboard                                             │
-├─────────────────────────────────────────────────────────────────┤
-│  Backend (FastAPI)                                              │
-│  ├── Auth Service (JWT)                                         │
-│  ├── Generation Service                                         │
-│  ├── Point Management                                           │
-│  ├── Payment Processing                                         │
-│  └── Content Moderation                                         │
-├─────────────────────────────────────────────────────────────────┤
-│  AI Services Layer                                              │
-│  ├── Leonardo AI (Primary)     ←→ Runway (Backup)              │
-│  ├── Pollo AI (Points)         ←→ GoEnhance (Points)           │
-│  └── Gemini API (Moderation)                                    │
-├─────────────────────────────────────────────────────────────────┤
-│  Data Layer                                                     │
-│  ├── PostgreSQL (Primary DB)                                    │
-│  ├── Redis (Cache + Queue)                                      │
-│  └── Object Storage (Videos)                                    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Tech Stack
-
-### Backend
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Framework | FastAPI | High-performance async API |
-| Database | PostgreSQL | Primary data storage |
-| Cache | Redis | Session, queue, rate limiting |
-| Task Queue | Celery + Redis | Async video processing |
-| ORM | SQLAlchemy | Database operations |
-| Validation | Pydantic | Request/response validation |
+## Technology Stack
 
 ### Frontend
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Framework | Streamlit | Rapid UI development |
-| Styling | Custom CSS | Brand consistency |
-| i18n | streamlit-i18n | Multi-language support |
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Vue 3 | 3.4+ | UI Framework |
+| TypeScript | 5.0+ | Type Safety |
+| Pinia | 2.0+ | State Management |
+| Vue Router | 4.0+ | Routing |
+| Tailwind CSS | 3.0+ | Styling |
+| Vue I18n | 9.0+ | Internationalization |
+
+### Backend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Python | 3.12+ | Runtime |
+| FastAPI | 0.109+ | API Framework |
+| SQLAlchemy | 2.0+ | ORM |
+| Alembic | 1.13+ | Database Migrations |
+| ARQ | 0.26+ | Background Tasks |
+| httpx | 0.27+ | HTTP Client |
 
 ### Infrastructure
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Hosting | Hetzner/Linode | Cost-effective VPS |
-| CDN | Cloudflare | Asset delivery + DDoS protection |
-| Storage | S3-compatible | Video file storage |
-| Monitoring | Sentry (Free) | Error tracking |
-| SSL | Let's Encrypt | HTTPS certificates |
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| PostgreSQL | 15+ | Primary Database |
+| Redis | 7+ | Cache & Task Queue |
+| Docker | 24+ | Containerization |
+| Docker Compose | 2.0+ | Orchestration |
 
-### External APIs
-| Service | Purpose | Billing |
-|---------|---------|---------|
-| Leonardo AI | Primary image & video generation | Subscription ($60/mo) |
-| Gemini API | Prompt enhancement, moderation, embeddings | Pay-per-use |
-| Pollo AI | Premium video features | Pay-per-use |
-| GoEnhance | Style transformation | Pay-per-use |
-| Runway | Backup generation (Phase 2) | On-demand |
-| ECPay | Taiwan payments | Transaction fee |
-| Paddle | International payments | Transaction fee |
+### AI Providers
+| Provider | API | Purpose |
+|----------|-----|---------|
+| PiAPI | Wan API | Text-to-Image, Image-to-Video, Interior Design |
+| Pollo AI | Pixverse, Pollo | Image-to-Video, Text-to-Video |
+| A2E.ai | Lip-sync API | Avatar Video with TTS |
+| Google Gemini | Generative AI | Moderation, Backup Image |
 
----
-
-## Service Tiers
-
-### Tier Comparison
-
-| Tier | Monthly | Unlimited Services | Point Services | Max Resolution |
-|------|---------|-------------------|----------------|----------------|
-| **Demo** | $0 | Smart Demo Only | — | 720p + Watermark |
-| **Starter** | NT$299 | Leonardo 720p + Runway | Leonardo 1080p 50pts + Pollo Basic 30pts | 1080p |
-| **Pro** | NT$599 | Leonardo 720p/1080p + Runway | Pollo Full 100pts + GoEnhance 50pts | 4K |
-| **Unlimited** | NT$999 | Same as Pro + Priority | Pollo 300pts + GoEnhance 150pts + 20% discount | 4K 60fps |
-
-### Tier Details
-
-#### Demo (Free)
-- 2 credits for product ads video generation
-- 720p output with watermark
-- Gemini prompt enhancement included
-- Content moderation (18+ / illegal)
-- Prompt similarity caching (saves credits)
-- 30 pre-generated examples per topic for inspiration
-- GoEnhance style preview (upgrade teaser)
-
-#### Starter (NT$299/month)
-- Unlimited Leonardo 720p generation
-- Runway 720p backup
-- 50 points for Leonardo 1080p upgrades
-- 30 points for Pollo Basic features
-
-#### Pro (NT$599/month)
-- Unlimited Leonardo 720p/1080p (selectable)
-- Full Runway backup
-- 100 Pollo points (all features)
-- 50 GoEnhance points (style transformation)
-- 4K output capability
-
-#### Unlimited (NT$999/month)
-- Everything in Pro
-- Priority processing queue
-- 300 Pollo points
-- 150 GoEnhance points
-- 20% discount on point purchases
+### Payment Providers
+| Provider | Region | Features |
+|----------|--------|----------|
+| ECPay | Taiwan | Credit card, ATM, CVS |
+| Paddle | International | Credit card, PayPal |
 
 ---
 
-## Point System
+## Project Structure
 
-### Point Consumption Table
-
-| Platform | Feature | Resolution | Points | Available From |
-|----------|---------|------------|--------|----------------|
-| Leonardo AI | Image Generation | 1080p | 2 | Starter |
-| Leonardo AI | Video Generation | 1080p | 10 | Starter |
-| Pollo AI | Basic Effects | 1080p | 5 | Starter |
-| Pollo AI | 4K Video | 4K | 15 | Pro |
-| GoEnhance | Style Transform | 1080p | 10 | Pro |
-| GoEnhance | Style Transform | 4K | 25 | Pro |
-| GoEnhance | 4K Upscale | → 4K | 15 | Pro |
-| GoEnhance | AI Face Swap | Any | 20 | Pro |
-
-### Point Packages
-
-| Package | Price (TWD/USD) | Points | Available To |
-|---------|-----------------|--------|--------------|
-| Small | NT$99 / $2.99 | 50 | Starter+ |
-| Medium | NT$249 / $7.99 | 150 | Starter+ |
-| Large | NT$699 / $22.99 | 500 | Pro+ |
-| Value | NT$559 / $18.39 | 500 (20% off) | Unlimited only |
-
-### Point Rules
-- **Monthly allocation**: Resets on 1st of each month, unused points do not carry over
-- **Purchased points**: Never expire
-- **Consumption order**: Monthly points first, then purchased points
-
----
-
-## Development Plan
-
-### Phase Overview
-
-| # | Phase | Hours | Status | Priority |
-|---|-------|-------|--------|----------|
-| 1 | Core Infrastructure | 4h | ✅ Complete | P0 |
-| 2 | Smart Demo + Gemini Moderation + Block Cache | 15h | ✅ Complete | P0 |
-| 3 | Leonardo + Runway + Auto-switch | 18h | ⏳ Pending | P0 |
-| 4 | Pollo + GoEnhance Points | 12h | ⏳ Pending | P1 |
-| 5 | Upgrade UI + Streamlit | 10h | ⏳ Pending | P1 |
-| 6 | Dual Payment (ECPay + Paddle) | 20h | ⏳ Pending | P1 |
-| 7 | i18n (5 languages) | 6h | ⏳ Pending | P2 |
-| 8 | Admin Dashboard | 8h | ⏳ Pending | P2 |
-| 9 | Security + Testing + Deploy | 12h | ⏳ Pending | P0 |
-
-**Total: 105 hours (~13 working days)**
-**Target Launch: December 28, 2024**
-
----
-
-### Phase 1: Core Infrastructure (4h) ✅
-
-**Completed Components:**
-- FastAPI project structure
-- PostgreSQL database setup
-- Redis configuration
-- JWT authentication system
-- Basic API endpoints
-
-**Directory Structure:**
 ```
-vidgo/
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── config.py
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── auth.py
-│   │   ├── generation.py
-│   │   ├── points.py
-│   │   └── payments.py
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── user.py
-│   │   ├── generation.py
-│   │   └── transaction.py
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── leonardo.py
-│   │   ├── runway.py
-│   │   ├── pollo.py
-│   │   ├── goenhance.py
-│   │   └── moderation.py
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── security.py
-│   │   ├── failover.py
-│   │   └── rate_limit.py
-│   └── utils/
-│       ├── __init__.py
-│       └── helpers.py
-├── frontend/
-│   ├── app.py
-│   ├── pages/
-│   └── components/
-├── tests/
-├── alembic/
+Vidgo_Gen_AI/
+├── backend/
+│   ├── app/
+│   │   ├── api/v1/             # API endpoints (17 routers)
+│   │   ├── core/               # Config, database, security
+│   │   ├── models/             # SQLAlchemy models
+│   │   ├── providers/          # AI provider integrations
+│   │   ├── schemas/            # Pydantic schemas
+│   │   ├── services/           # Business logic
+│   │   └── main.py             # FastAPI app
+│   ├── alembic/                # Database migrations
+│   ├── scripts/                # Startup & pre-generation scripts
+│   ├── static/                 # Generated files storage
+│   └── Dockerfile
+│
+├── frontend-vue/
+│   ├── src/
+│   │   ├── api/                # API clients
+│   │   ├── components/         # Vue components
+│   │   ├── composables/        # Composition API hooks
+│   │   ├── locales/            # i18n (en, zh-TW, ja, ko, es)
+│   │   ├── stores/             # Pinia stores
+│   │   ├── views/              # Page components
+│   │   │   ├── tools/          # 6 tool pages
+│   │   │   ├── admin/          # Admin dashboard
+│   │   │   └── auth/           # Auth pages
+│   │   └── router/             # Vue Router
+│   └── Dockerfile
+│
 ├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
+├── vidgo-backend-architecture.md
+├── vidgo-frontend-architecture.md
 └── README.md
 ```
-
----
-
-### Phase 2: Smart Demo + Content Moderation + Block Cache (15h) ✅
-
-**Completed Components:**
-1. **Smart Demo Engine** (8h) ✅
-   - Pre-generated demo database with ImageDemo model
-   - Multi-language prompt matching (EN, ZH-TW, JA, KO, ES)
-   - Demo video serving with GoEnhance integration
-   - Watermark overlay system (placeholder)
-   - Category-based demo organization
-
-2. **Gemini Content Moderation** (5h) ✅
-   - Gemini API integration for AI-powered moderation
-   - 18+ content detection
-   - Violence/illegal content filtering
-   - Keyword fallback filter (40+ blocked keywords)
-   - Pattern matching for suspicious content
-
-3. **Redis Block Cache** (2h) ✅
-   - Redis-based prompt block cache for fast illegal word detection
-   - Seed blocked words automatically loaded on startup
-   - Gemini-powered learning: unknown prompts analyzed and cached
-   - Cache statistics and admin management endpoints
-   - Self-learning system that improves over time
-
-**Block Cache Flow:**
-```python
-# Intelligent moderation with Redis block cache
-async def moderate_content(prompt: str) -> ModerationResult:
-    # 1. Check Redis block cache (fastest - cached known illegal words)
-    if cached_block := await block_cache.check(prompt):
-        return ModerationResult(blocked=True, reason=cached_block.reason)
-
-    # 2. Quick keyword filter check (fast - local)
-    if keyword_match := keyword_filter(prompt):
-        await block_cache.add(keyword_match)  # Learn for next time
-        return ModerationResult(blocked=True)
-
-    # 3. Gemini API for deep analysis (slower but accurate)
-    result = await gemini_moderate(prompt)
-    if not result.is_safe:
-        await block_cache.add(result.flagged_words)  # Learn for next time
-
-    return result
-```
-
-**API Endpoints Added:**
-- `GET /api/v1/demo/block-cache/stats` - View cache statistics
-- `POST /api/v1/demo/block-cache/check` - Check if prompt is blocked
-- `POST /api/v1/demo/admin/block-cache/add` - Add blocked word
-- `DELETE /api/v1/demo/admin/block-cache/remove` - Remove blocked word
-
----
-
-### Phase 3: Leonardo + Runway Integration (18h)
-
-**Tasks:**
-1. **Leonardo AI Integration** (8h)
-   - API wrapper
-   - 720p/1080p generation
-   - Queue management
-   - Error handling
-
-2. **Runway Integration** (6h)
-   - API wrapper
-   - Failover trigger logic
-   - Same resolution matching
-
-3. **Auto-switch System** (4h)
-   - Health check service
-   - Automatic failover
-   - Status monitoring
-   - Alert system
-
-**Failover Logic:**
-```python
-class GenerationService:
-    async def generate(self, request: GenerationRequest) -> Video:
-        # Check Leonardo health
-        if await self.leonardo.is_healthy():
-            try:
-                return await self.leonardo.generate(request)
-            except LeonardoError:
-                pass
-        
-        # Fallback to Runway
-        if await self.runway.is_healthy():
-            return await self.runway.generate(request)
-        
-        # Both down - use point services
-        if request.user.has_points():
-            return await self.point_service.generate(request)
-        
-        raise ServiceUnavailableError()
-```
-
----
-
-### Phase 4: Pollo + GoEnhance Points (12h)
-
-**Tasks:**
-1. **Point System Backend** (4h)
-   - Point balance tracking
-   - Monthly reset logic
-   - Consumption recording
-   - Package purchases
-
-2. **Pollo AI Integration** (4h)
-   - API wrapper
-   - Feature mapping
-   - Point deduction
-
-3. **GoEnhance Integration** (4h)
-   - Style transformation API
-   - 4K upscaling
-   - Face swap feature
-   - Point deduction
-
----
-
-### Phase 5: UI/UX with Streamlit (10h)
-
-**Tasks:**
-1. **Main Pages** (6h)
-   - Home with style showcase
-   - Generation interface
-   - User dashboard
-   - Subscription management
-
-2. **Upgrade Incentive Areas** (4h)
-   - GoEnhance style carousel (homepage)
-   - "Unlock More Styles" preview
-   - Weekly popular styles
-   - Floating upgrade button
-
----
-
-### Phase 6: Dual Payment System (20h)
-
-**Tasks:**
-1. **ECPay Integration** (10h)
-   - Credit card
-   - ATM transfer
-   - Convenience store
-   - LINE Pay
-   - Webhook handling
-
-2. **Paddle Integration** (8h)
-   - International credit cards
-   - PayPal
-   - Apple Pay
-   - Webhook handling
-
-3. **Payment Logic** (2h)
-   - Region detection
-   - Currency conversion
-   - Receipt generation
-
----
-
-### Phase 7: Internationalization (6h)
-
-**Supported Languages:**
-| Language | Code | Priority | Auto-detect Region |
-|----------|------|----------|-------------------|
-| English | en | Primary | US, UK, AU, Default |
-| Japanese | ja | High | JP |
-| Traditional Chinese | zh-TW | High | TW, HK |
-| Korean | ko | Medium | KR |
-| Spanish | es | Medium | ES, MX, AR |
-
----
-
-### Phase 8: Admin Dashboard (8h)
-
-**Features:**
-- User management
-- Generation statistics
-- Revenue reports
-- Content moderation queue
-- System health monitoring
-
----
-
-### Phase 9: Security + Testing + Deploy (12h)
-
-**Security Checklist:**
-- [ ] JWT token rotation
-- [ ] Rate limiting (100 req/min/IP)
-- [ ] CORS whitelist
-- [ ] HTTPS enforcement (TLS 1.3)
-- [ ] Input validation (Pydantic)
-- [ ] SQL injection prevention (ORM)
-- [ ] XSS protection (CSP headers)
-- [ ] Webhook signature verification
-- [ ] Database encryption (AES-256)
-
-**Deployment:**
-- Docker containerization
-- CI/CD pipeline
-- Monitoring setup
-- Backup automation
-
----
-
-## Cost Analysis
-
-### Optimized Monthly Costs (Initial Phase)
-
-| Item | Original | Optimized | Savings |
-|------|----------|-----------|---------|
-| Leonardo AI | $60 | $60 | $0 |
-| Runway | $76 | $0 (Phase 2) | $76 |
-| Infrastructure | $80 | $40-50 | $30-40 |
-| Gemini API | $20 | $5-10 | $10-15 |
-| Pollo AI | $40 | $15 | $25 |
-| GoEnhance | $60 | $25 | $35 |
-| Whisper API | $30 | $0-10 | $20-30 |
-| Other | $20 | $10 | $10 |
-| **Total** | **$386** | **$150-200** | **$186-236** |
-
-### Revenue Projection
-
-| Tier | Users | Subscription | Add-ons | Total Revenue |
-|------|-------|--------------|---------|---------------|
-| Free | 200 | $0 | $0 | $0 |
-| Starter | 50 | NT$14,950 | NT$2,500 | NT$17,450 |
-| Pro | 15 | NT$8,985 | NT$2,000 | NT$10,985 |
-| Unlimited | 8 | NT$7,992 | NT$1,500 | NT$9,492 |
-| **Total** | **273** | **NT$31,927** | **NT$6,000** | **NT$37,927** |
-
-### Profit Analysis (Optimized)
-
-| Metric | Value |
-|--------|-------|
-| Monthly Revenue | NT$37,927 (~$1,185) |
-| Monthly Cost | NT$4,800-6,400 (~$150-200) |
-| Monthly Profit | NT$31,527-33,127 (~$985-1,035) |
-| Profit Margin | **83-87%** |
-| Break-even Users | **10-15 paid users** |
 
 ---
 
@@ -563,289 +172,172 @@ class GenerationService:
 
 ### Prerequisites
 
-- Python 3.11+
-- PostgreSQL 15+
-- Redis 7+
-- Docker & Docker Compose (recommended)
+- Docker 24+ and Docker Compose 2.0+
+- API Keys for: PiAPI, Pollo AI, A2E.ai
+- (Optional) Gemini API key for backup
 
 ### Quick Start
 
-```bash
-# Clone repository
-git clone https://github.com/yourusername/vidgo.git
-cd vidgo
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-org/vidgo-gen-ai.git
+   cd vidgo-gen-ai
+   ```
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-.\venv\Scripts\activate  # Windows
+2. **Configure environment variables**
+   ```bash
+   cp backend/.env.example backend/.env
+   # Edit .env and add your API keys
+   ```
 
-# Install dependencies
-pip install -r requirements.txt
+3. **Start the services**
+   ```bash
+   # Standard startup (includes pre-generation)
+   docker-compose up -d
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your API keys
+   # First-time bulk generation (30 materials per tool)
+   docker-compose --profile init up init-materials
+   ```
 
-# Run database migrations
-alembic upgrade head
+4. **Access the application**
+   - Frontend: http://localhost:8501
+   - Backend API: http://localhost:8001
+   - API Docs: http://localhost:8001/docs
+   - Email Testing: http://localhost:8025 (Mailpit)
 
-# Start development server
-uvicorn app.main:app --reload
+---
+
+## Configuration
+
+### Required API Keys
+
+```env
+# backend/.env
+
+# AI Providers
+PIAPI_KEY=your_piapi_key
+POLLO_API_KEY=your_pollo_key
+A2E_API_KEY=your_a2e_key
+GEMINI_API_KEY=your_gemini_key
+
+# Payment - Taiwan
+ECPAY_MERCHANT_ID=
+ECPAY_HASH_KEY=
+ECPAY_HASH_IV=
+
+# Payment - International
+PADDLE_API_KEY=
+PADDLE_PUBLIC_KEY=
+
+# Security
+SECRET_KEY=your-secret-key-here
+
+# Email (dev uses Mailpit)
+SMTP_HOST=mailpit
+SMTP_PORT=1025
 ```
 
-### Docker Deployment
+### Pre-generation Control
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SKIP_PREGENERATION` | `false` | Skip AI API calls on startup |
+| `PREGENERATION_LIMIT` | `10` | Materials per tool |
+| `SKIP_AVATAR` | - | Skip A2E avatar generation |
+| `SKIP_VIDEO` | - | Skip Pollo video generation |
+| `ALLOW_EMPTY_MATERIALS` | `false` | Allow startup without materials |
+
+---
+
+## Docker Services
+
+```yaml
+services:
+  postgres:        # PostgreSQL 15 - Primary database
+  redis:           # Redis 7 - Cache & task queue
+  mailpit:         # Email testing (dev only)
+  backend:         # FastAPI application (port 8001)
+  worker:          # ARQ background worker
+  init-materials:  # Initial pre-generation (runs once)
+  frontend:        # Vue 3 frontend (port 8501)
+```
+
+### Commands
 
 ```bash
-# Build and start all services
+# Start all services
 docker-compose up -d
 
 # View logs
-docker-compose logs -f
+docker-compose logs -f backend
 
-# Stop services
-docker-compose down
-```
+# Run pre-generation
+docker-compose --profile init up init-materials
 
-### Environment Variables
+# Skip pre-generation (use cached materials)
+SKIP_PREGENERATION=true docker-compose up -d
 
-```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/vidgo
+# Development mode (allow empty materials)
+ALLOW_EMPTY_MATERIALS=true docker-compose up -d
 
-# Redis
-REDIS_URL=redis://localhost:6379/0
-
-# JWT
-JWT_SECRET_KEY=your-secret-key
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=15
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# AI Services
-LEONARDO_API_KEY=your-leonardo-key
-RUNWAY_API_KEY=your-runway-key
-POLLO_API_KEY=your-pollo-key
-GOENHANCE_API_KEY=your-goenhance-key
-GEMINI_API_KEY=your-gemini-key
-
-# Payments
-ECPAY_MERCHANT_ID=your-merchant-id
-ECPAY_HASH_KEY=your-hash-key
-ECPAY_HASH_IV=your-hash-iv
-PADDLE_API_KEY=your-paddle-key
-PADDLE_PUBLIC_KEY=your-public-key
-
-# App
-APP_ENV=development
-DEBUG=true
+# Skip expensive operations
+SKIP_VIDEO=true SKIP_AVATAR=true docker-compose up -d
 ```
 
 ---
 
-## API Integrations
+## Development
 
-### Leonardo AI
-```python
-from app.services.leonardo import LeonardoService
+### Local Development (Without Docker)
 
-leonardo = LeonardoService(api_key=settings.LEONARDO_API_KEY)
+```bash
+# Backend
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 
-# Generate video
-result = await leonardo.generate(
-    prompt="A cat playing piano",
-    resolution="720p",
-    duration=5
-)
+# Frontend
+cd frontend-vue
+npm install
+npm run dev
 ```
 
-### Runway
-```python
-from app.services.runway import RunwayService
+### API Endpoints
 
-runway = RunwayService(api_key=settings.RUNWAY_API_KEY)
-
-# Generate as backup
-result = await runway.generate(
-    prompt="A cat playing piano",
-    resolution="720p"
-)
-```
-
-### GoEnhance
-```python
-from app.services.goenhance import GoEnhanceService
-
-goenhance = GoEnhanceService(api_key=settings.GOENHANCE_API_KEY)
-
-# Style transformation
-result = await goenhance.transform(
-    video_url="https://...",
-    style="anime_shinkai",
-    resolution="4K"
-)
-```
+| Prefix | Description |
+|--------|-------------|
+| `/api/v1/auth` | Authentication |
+| `/api/v1/demo` | Demo/preset endpoints |
+| `/api/v1/generate` | Content generation |
+| `/api/v1/tools` | Tool operations |
+| `/api/v1/credits` | Credit management |
+| `/api/v1/admin` | Admin dashboard |
+| `/api/v1/interior` | Interior design |
+| `/api/v1/workflow` | Workflow management |
 
 ---
 
-## Security
+## Documentation
 
-### Authentication & Authorization
-| Mechanism | Technology | Details |
-|-----------|------------|---------|
-| JWT Token | Access + Refresh | Access: 15-30min, Refresh: 7 days |
-| Password (Server) | bcrypt + salt | 12 rounds hashing |
-| Password (Client) | SHA-256 + salt | Pre-transmission hashing |
-| Email Verification | Token-based | 24-hour expiry, required for activation |
-| Password Reset | Secure token | 1-hour expiry |
-| API Key | HMAC-SHA256 | External API verification |
-
-### Defense in Depth (Password Security)
-
-```
-User enters password
-        ↓
-[Layer 1] Client-side SHA-256 hash with salt
-        ↓
-[Layer 2] HTTPS/TLS encryption in transit
-        ↓
-[Layer 3] Server-side bcrypt hash (12 rounds)
-        ↓
-Stored securely in database
-```
-
-**Client-Side Hashing Benefits:**
-- Password never transmitted in plain text
-- Protection against accidental logging
-- Additional security if TLS is compromised
-- Hashed value useless without salt
-
-### Email Verification Flow
-
-```
-1. User registers → Account created (inactive)
-                  → Verification email sent
-
-2. User clicks email link → Token validated
-                          → Account activated
-                          → Welcome email sent
-
-3. User can now login → Access + Refresh tokens issued
-```
-
-### API Security
-| Protection | Setting | Purpose |
-|------------|---------|---------|
-| Rate Limiting | 100 req/min/IP | Prevent brute force |
-| CORS | Whitelist domains | Cross-origin restriction |
-| HTTPS | TLS 1.2/1.3 | Encrypted transmission |
-| Input Validation | Pydantic | Strict validation |
-| SQL Injection | ORM + Parameterized | Prevent injection |
-| XSS | CSP Headers | Prevent script attacks |
-| Token Type Validation | access vs refresh | Prevent token misuse |
-
-### Content & Payment Security
-- **Gemini API**: All prompts screened for 18+/violence/illegal content
-- **Redis Block Cache**: Fast illegal word detection with self-learning
-- **IP Ban**: Automatic ban after multiple violations
-- **PCI DSS**: Card numbers handled by ECPay/Paddle only
-- **Webhook Signature**: Verify payment callback signatures
-- **Database Encryption**: AES-256 at rest + daily backups
-
-### Authentication Endpoints
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/v1/auth/register` | POST | User registration (sends verification email) |
-| `/api/v1/auth/login` | POST | Login (returns user + tokens) |
-| `/api/v1/auth/logout` | POST | Logout |
-| `/api/v1/auth/refresh` | POST | Refresh access token |
-| `/api/v1/auth/verify-email` | POST | Verify email with token |
-| `/api/v1/auth/resend-verification` | POST | Resend verification email |
-| `/api/v1/auth/forgot-password` | POST | Request password reset |
-| `/api/v1/auth/reset-password` | POST | Reset password with token |
-| `/api/v1/auth/me` | GET | Get current user profile |
-| `/api/v1/auth/me` | PUT | Update user profile |
-| `/api/v1/auth/me/change-password` | POST | Change password |
+- **Backend Architecture**: [vidgo-backend-architecture.md](./vidgo-backend-architecture.md)
+- **Frontend Architecture**: [vidgo-frontend-architecture.md](./vidgo-frontend-architecture.md)
+- **API Documentation**: http://localhost:8001/docs (when running)
 
 ---
 
-## Internationalization
+## Supported Languages
 
-### Implementation
-```python
-# i18n structure
-locales/
-├── en.json
-├── ja.json
-├── zh-TW.json
-├── ko.json
-└── es.json
-```
-
-### Auto-detection Logic
-```python
-def detect_language(request):
-    # 1. User preference (if logged in)
-    if user.language_preference:
-        return user.language_preference
-    
-    # 2. Browser/Accept-Language header
-    accept_lang = request.headers.get('Accept-Language')
-    
-    # 3. IP geolocation
-    country = geolocate(request.ip)
-    
-    # 4. Default to English
-    return 'en'
-```
+| Code | Language |
+|------|----------|
+| `en` | English |
+| `zh-TW` | Traditional Chinese |
+| `ja` | Japanese |
+| `ko` | Korean |
+| `es` | Spanish |
 
 ---
 
-## Contributing
+*Last Updated: January 12, 2026*
 
-### Development Workflow
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-### Code Style
-
-- Follow PEP 8 for Python
-- Use type hints
-- Write docstrings for public methods
-- Add tests for new features
-
-### Commit Convention
-
-```
-feat: Add new feature
-fix: Bug fix
-docs: Documentation update
-style: Code style (no logic change)
-refactor: Code refactoring
-test: Add tests
-chore: Build/config changes
-```
-
----
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Contact
-
-- **Project**: VidGo AI Video Generation Platform
-- **Target Launch**: December 28, 2024
-- **Total Development**: 105 hours
-
----
-
-*Built with ❤️ for creators worldwide*

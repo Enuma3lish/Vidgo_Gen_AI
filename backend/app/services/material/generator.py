@@ -6,7 +6,8 @@ Creates proper before/after relationships where the result is truly
 derived from the source image.
 
 Key Features:
-- Uses real APIs (GoEnhance, Pollo AI, Leonardo)
+- Uses ProviderRouter (PiAPI primary, Pollo backup)
+- Uses real APIs (GoEnhance, Pollo AI, PiAPI)
 - Maintains source-to-result relationships
 - Supports both image and video generation
 - Tracks generation progress and handles failures
@@ -22,10 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.base import GenerationType, GenerationResult, MaterialItem, MaterialType, MaterialStatus
 from app.services.generation import (
     GenerationServiceFactory,
-    GoEnhanceGenerationService,
     PolloGenerationService,
-    LeonardoGenerationService,
 )
+from app.providers.provider_router import get_provider_router, TaskType
 from .library import MaterialLibraryService
 from .requirements import MATERIAL_REQUIREMENTS, ToolRequirement
 

@@ -1,7 +1,16 @@
 """
-Demo API Endpoints
+Demo API Endpoints - PRESET-ONLY MODE
 Smart Demo Engine for showcasing AI style transformation
 Supports multi-language prompts (EN, ZH-TW, JA, KO, ES)
+
+PRESET-ONLY MODE:
+- ALL users (subscribed and non-subscribed) have the SAME experience
+- Users can ONLY select from pre-defined prompts/presets
+- NO custom text input allowed (no script, no description)
+- ALL results come from Material DB (pre-generated)
+- ALL results are watermarked
+- Downloads are BLOCKED for everyone
+- NO external API calls during user sessions
 
 Features:
 - Smart prompt matching with multi-language support
@@ -18,14 +27,13 @@ from sqlalchemy import select
 
 from app.api.deps import get_db
 from app.models.demo import ImageDemo, DemoCategory, DemoVideo, DemoExample, PromptCache, ToolShowcase
-from app.services.demo_service import get_demo_service, DEMO_TOPICS
+from app.services.demo_service import get_demo_service, DEMO_TOPICS, DEMO_STYLES
 from app.services.prompt_matching import get_prompt_matching_service
 from app.services.moderation import get_moderation_service
-from app.services.goenhance import GOENHANCE_STYLES
 from app.services.block_cache import get_block_cache
 from app.services.gemini_service import get_gemini_service
 from app.services.similarity import get_similarity_service
-from app.services.leonardo import get_leonardo_client
+from app.services.rescue_service import get_rescue_service
 from app.services.material import MaterialLibraryService, UserContentCollector, MATERIAL_REQUIREMENTS
 
 router = APIRouter()
@@ -311,6 +319,128 @@ class SaveShowcaseRequest(BaseModel):
 # =============================================================================
 
 # =============================================================================
+# PRESET-ONLY MODE ENDPOINTS (NEW)
+# =============================================================================
+
+class UsePresetRequest(BaseModel):
+    """Request to use a preset template"""
+    preset_id: str = Field(..., description="Preset template ID or material ID")
+    tool_type: Optional[str] = Field(None, description="Tool type for filtering")
+    session_id: Optional[str] = Field(None, description="Session ID for tracking")
+
+
+class PresetResultResponse(BaseModel):
+    """Response from using a preset - always watermarked"""
+    success: bool
+    preset_id: str
+    result_watermarked_url: Optional[str] = None
+    result_thumbnail_url: Optional[str] = None
+    can_download: bool = False  # ALWAYS false in preset-only mode
+    message: str = "Subscribe for full access"
+    error: Optional[str] = None
+
+
+@router.post("/use-preset", response_model=PresetResultResponse)
+async def use_preset(
+    request: UsePresetRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Use a preset template - Material DB lookup only.
+
+    PRESET-ONLY MODE:
+    - ALL users use this endpoint (no distinction)
+    - Returns watermarked results from Material DB
+    - NO external API calls
+    - NO custom prompts allowed
+    """
+    from app.services.material_lookup import get_material_lookup_service
+
+    lookup_service = get_material_lookup_service(db)
+
+    # Look up material by ID
+    material = await lookup_service.lookup_by_id(request.preset_id)
+
+    if not material:
+        return PresetResultResponse(
+            success=False,
+            preset_id=request.preset_id,
+            error="Preset result not found"
+        )
+
+    # Increment use count
+    await lookup_service.increment_use_count(str(material.id))
+
+    # Return watermarked result only
+    return PresetResultResponse(
+        success=True,
+        preset_id=request.preset_id,
+        result_watermarked_url=material.result_watermarked_url or material.result_video_url or material.result_image_url,
+        result_thumbnail_url=material.result_thumbnail_url,
+        can_download=False,  # ALWAYS false
+        message="Subscribe for full access"
+    )
+
+
+@router.get("/presets/{tool_type}")
+async def get_presets(
+    tool_type: str,
+    topic: Optional[str] = Query(None, description="Topic filter"),
+    limit: int = Query(20, ge=1, le=50, description="Maximum number of presets"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get available presets for a tool.
+
+    Returns list of preset templates with thumbnails.
+    Users can only select from these presets - no custom input allowed.
+    """
+    from app.services.material_lookup import get_material_lookup_service
+
+    lookup_service = get_material_lookup_service(db)
+    presets = await lookup_service.get_presets_for_tool(tool_type, topic, limit)
+
+    return {
+        "success": True,
+        "tool_type": tool_type,
+        "topic": topic,
+        "presets": [
+            {
+                "id": str(p.id),
+                "prompt": p.prompt,
+                "prompt_zh": p.prompt_zh,
+                "input_image_url": p.input_image_url,
+                "input_video_url": p.input_video_url,
+                "result_image_url": p.result_image_url,
+                "result_video_url": p.result_video_url,
+                "result_watermarked_url": p.result_watermarked_url,
+                "thumbnail_url": p.result_thumbnail_url or p.result_watermarked_url or p.result_image_url,
+                "topic": p.topic,
+                "input_params": p.input_params or {},
+                "style_tags": p.tags or []
+            }
+            for p in presets
+        ],
+        "count": len(presets)
+    }
+
+
+@router.get("/download/{preset_id}")
+async def download_result(preset_id: str):
+    """
+    Download is BLOCKED for ALL users in preset-only mode.
+    """
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": "download_blocked",
+            "message": "Downloads are not available. Subscribe for full access.",
+            "redirect": "/pricing"
+        }
+    )
+
+
+# =============================================================================
 # NEW ENDPOINTS - Demo Tier with Leonardo AI
 # =============================================================================
 
@@ -402,7 +532,7 @@ async def generate_product_video(
 
     gemini = get_gemini_service()
     similarity = get_similarity_service()
-    leonardo = get_leonardo_client()
+    rescue_service = get_rescue_service()
 
     # Step 0: Check demo usage limit if user_id provided
     user = None
@@ -476,27 +606,35 @@ async def generate_product_video(
             credits_used=0
         )
 
-    # Step 4: Generate new content with Leonardo AI
+    # Step 4: Generate new content with rescue service (Wan primary, fal.ai rescue)
     try:
-        result = await leonardo.generate_product_video(
+        # First generate image
+        image_result = await rescue_service.generate_image(
             prompt=enhanced_prompt,
-            model="phoenix",
-            motion_strength=5,
-            timeout=300
+            width=1024,
+            height=1024
         )
 
-        if not result.get("success"):
+        if not image_result.get("success"):
             return ProductVideoResponse(
                 success=False,
                 from_cache=False,
                 original_prompt=request.prompt,
                 enhanced_prompt=enhanced_prompt,
-                error=result.get("error", "Generation failed"),
+                error=image_result.get("error", "Image generation failed"),
                 credits_used=1  # Still costs credit even if failed
             )
 
-        image_url = result.get("image_url")
-        video_url = result.get("video_url")
+        image_url = image_result.get("image_url")
+
+        # Then generate video from image
+        video_result = await rescue_service.generate_video(
+            image_url=image_url,
+            prompt=enhanced_prompt,
+            length=5
+        )
+
+        video_url = video_result.get("video_url") if video_result.get("success") else None
 
         # Step 5: Cache result for future similarity matching
         await similarity.cache_generation_result(
@@ -526,7 +664,7 @@ async def generate_product_video(
             gen_result = GenerationResult(
                 success=True,
                 task_id=str(uuid.uuid4()),
-                service_name="leonardo",
+                service_name="wan",  # Using Wan as primary service
                 generation_type=GenerationType.TEXT_TO_IMAGE,
                 prompt=request.prompt,
                 source_image_url=image_url,  # Source is the generated image
@@ -597,7 +735,7 @@ async def generate_paid_tier(
     import time
 
     gemini = get_gemini_service()
-    leonardo = get_leonardo_client()
+    rescue_service = get_rescue_service()
 
     generation_steps = []
     total_cost = 0.0
@@ -727,22 +865,30 @@ async def generate_paid_tier(
                     "duration_ms": int((time.time() - start_time) * 1000)
                 })
         else:
-            # Image generation/transformation with Leonardo
-            result = await leonardo.generate_product_video(
+            # Image generation with rescue service (Wan primary, fal.ai rescue)
+            image_result = await rescue_service.generate_image(
                 prompt=enhanced_prompt,
-                model="phoenix",
-                motion_strength=5,
-                timeout=300
+                width=1024,
+                height=1024
             )
 
-            if result.get("success"):
-                result_image_url = result.get("image_url")
-                result_video_url = result.get("video_url")
-                total_cost += 0.02
+            if image_result.get("success"):
+                result_image_url = image_result.get("image_url")
+                total_cost += 0.01
+
+                # Generate video from image
+                video_result = await rescue_service.generate_video(
+                    image_url=result_image_url,
+                    prompt=enhanced_prompt,
+                    length=5
+                )
+                result_video_url = video_result.get("video_url") if video_result.get("success") else None
+                if result_video_url:
+                    total_cost += 0.01
 
                 generation_steps.append({
                     "step": len(generation_steps) + 1,
-                    "api": "leonardo",
+                    "api": "wan",
                     "action": "generate",
                     "input": {"prompt": enhanced_prompt},
                     "result_image_url": result_image_url,
@@ -1273,7 +1419,7 @@ async def analyze_prompt(
 @router.get("/styles", response_model=List[StyleInfo])
 async def get_available_styles():
     """
-    Get all available transformation styles from GoEnhance.
+    Get all available transformation styles.
     """
     return [
         StyleInfo(
@@ -1282,7 +1428,7 @@ async def get_available_styles():
             slug=info["slug"],
             version=info.get("version")
         )
-        for style_id, info in GOENHANCE_STYLES.items()
+        for style_id, info in DEMO_STYLES.items()
     ]
 
 
@@ -1451,13 +1597,12 @@ async def generate_all_category_videos(
     Categories: animals, nature, urban, people, fantasy, sci-fi, food
     """
     import random
-    from app.services.goenhance import GOENHANCE_STYLES
 
     demo_service = get_demo_service()
     results = {}
 
     # Available styles for variety
-    style_slugs = [info["slug"] for info in GOENHANCE_STYLES.values()]
+    style_slugs = [info["slug"] for info in DEMO_STYLES.values()]
 
     for category, base_prompts in DEMO_TOPICS.items():
         current_count = await demo_service.get_category_video_count(db, category)
@@ -2000,3 +2145,378 @@ async def promote_material_to_showcase(
         return {"success": True, "message": "Material promoted to showcase"}
     else:
         return {"success": False, "message": "Failed to promote material"}
+
+
+# =============================================================================
+# INSPIRATION GALLERY - 24 Categories
+# =============================================================================
+
+# Map gallery categories to material topics
+GALLERY_CATEGORY_MAP = {
+    "video": ["short_video", "video"],
+    "recommended": ["product", "ecommerce", "brand"],
+    "portrait": ["portrait", "people", "human"],
+    "photography": ["photography", "realistic"],
+    "animation": ["animation", "cartoon", "animated"],
+    "poster": ["poster", "illustration", "design"],
+    "anime": ["anime", "manga", "2d"],
+    "ecommerceDesign": ["ecommerce", "product", "shopping"],
+    "chinese": ["chinese", "oriental", "asian"],
+    "female": ["female", "woman", "girl"],
+    "male": ["male", "man", "boy"],
+    "interior": ["interior", "room", "home"],
+    "architectureLandscape": ["architecture", "landscape", "building"],
+    "toys": ["toys", "figures", "collectibles"],
+    "art": ["art", "painting", "artistic"],
+    "productDesign": ["product", "industrial", "design"],
+    "gameCG": ["game", "cg", "gaming"],
+    "nature": ["nature", "natural", "landscape"],
+    "threeD": ["3d", "render", "dimensional"],
+    "logoUI": ["logo", "ui", "branding"],
+    "character": ["character", "ip", "mascot"],
+    "animals": ["animals", "pets", "wildlife"],
+    "fantasy": ["fantasy", "magical", "mythical"],
+    "scifi": ["scifi", "futuristic", "tech"]
+}
+
+
+@router.get("/inspirations")
+async def get_inspirations(
+    category: str = Query("recommended", description="Gallery category"),
+    language: str = Query("en", description="Language code for prompts"),
+    limit: int = Query(8, ge=4, le=20, description="Number of items to return"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get inspiration gallery items for the homepage.
+
+    Returns images with prompts organized by category.
+    Clicking an item shows the generation prompt in the user's language.
+
+    Categories:
+    - video, recommended, portrait, photography, animation, poster
+    - anime, ecommerceDesign, chinese, female, male, interior
+    - architectureLandscape, toys, art, productDesign, gameCG, nature
+    - threeD, logoUI, character, animals, fantasy, scifi
+    """
+    from sqlalchemy import func, or_
+    from app.models.material import Material, MaterialStatus
+
+    # Get topic keywords for this category
+    topic_keywords = GALLERY_CATEGORY_MAP.get(category, [category])
+
+    # Build query to find materials matching any of the topic keywords
+    conditions = []
+    for keyword in topic_keywords:
+        conditions.append(Material.topic.ilike(f"%{keyword}%"))
+        conditions.append(Material.tags.contains([keyword]))
+
+    # Query materials with images
+    result = await db.execute(
+        select(Material)
+        .where(
+            or_(*conditions) if conditions else True,
+            Material.is_active == True,
+            or_(
+                Material.result_image_url.isnot(None),
+                Material.input_image_url.isnot(None)
+            )
+        )
+        .order_by(func.random())
+        .limit(limit)
+    )
+    materials = result.scalars().all()
+
+    # Format response based on language
+    items = []
+    for m in materials:
+        # Determine title based on language
+        if language.startswith("zh"):
+            title = m.title_zh or m.title_en or f"{category} #{len(items) + 1}"
+        elif language.startswith("ja"):
+            title = m.title_en or f"{category} #{len(items) + 1}"  # TODO: Add ja titles
+        elif language.startswith("ko"):
+            title = m.title_en or f"{category} #{len(items) + 1}"  # TODO: Add ko titles
+        elif language.startswith("es"):
+            title = m.title_en or f"{category} #{len(items) + 1}"  # TODO: Add es titles
+        else:
+            title = m.title_en or f"{category} #{len(items) + 1}"
+
+        # Get the prompt (prefer localized if available)
+        prompt = m.prompt or m.prompt_enhanced or ""
+
+        # Get best available image
+        thumb = m.result_image_url or m.input_image_url or m.result_thumbnail_url
+
+        if thumb:  # Only include items with images
+            items.append({
+                "id": str(m.id),
+                "title": title,
+                "thumb": thumb,
+                "prompt": prompt,
+                "category": category
+            })
+
+    return {
+        "success": True,
+        "items": items,
+        "category": category,
+        "language": language,
+        "total": len(items)
+    }
+
+
+# =============================================================================
+# LANDING PAGE EXAMPLES
+# =============================================================================
+
+# Map material topics to landing page categories
+TOPIC_TO_CATEGORY = {
+    "spokesperson": "brand",
+    "product_intro": "ecommerce",
+    "customer_service": "service",
+    "social_media": "social",
+    "education": "app",
+    "marketing": "promo",
+    "tutorial": "app",
+    "announcement": "promo"
+}
+
+
+@router.get("/landing/examples")
+async def get_landing_examples(
+    language: str = Query("en", description="Language code"),
+    page: int = Query(1, description="Page number (1-based)"),
+    per_page: int = Query(6, description="Examples per page"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get examples for landing page gallery organized by category.
+    Returns materials from DB with both product videos and avatars per category.
+    Avatar MUST match the same topic as product video for coherent content.
+    Supports pagination for View More functionality.
+    """
+    from sqlalchemy import func, or_
+    from app.models.material import Material, MaterialStatus, ToolType
+
+    # Determine avatar language based on user's language
+    avatar_lang = "zh-TW" if language.startswith("zh") else "en"
+
+    # Landing page categories we want
+    landing_topics = ["ecommerce", "social", "brand", "app", "promo", "service"]
+
+    # Query ALL avatars for the user's language, grouped by topic
+    avatars_result = await db.execute(
+        select(Material)
+        .where(
+            Material.tool_type == ToolType.AI_AVATAR,
+            Material.language == avatar_lang,
+            Material.result_video_url.isnot(None),
+            Material.is_active == True,
+            Material.topic.in_(landing_topics)
+        )
+    )
+    avatars = avatars_result.scalars().all()
+
+    # Create lookup of avatars by topic (list to support multiple per topic)
+    avatar_by_topic = {}
+    for a in avatars:
+        if a.topic not in avatar_by_topic:
+            avatar_by_topic[a.topic] = []
+        avatar_by_topic[a.topic].append(a)
+
+    # Query ALL product videos for landing topics
+    videos_result = await db.execute(
+        select(Material)
+        .where(
+            Material.tool_type == ToolType.SHORT_VIDEO,
+            Material.result_video_url.isnot(None),
+            Material.is_active == True,
+            Material.topic.in_(landing_topics)
+        )
+        .order_by(Material.created_at.desc())
+    )
+    videos = videos_result.scalars().all()
+
+    # Track which avatars we've used per topic for matching
+    avatar_index_by_topic = {topic: 0 for topic in landing_topics}
+
+    # Build examples list with matched avatars
+    all_examples = []
+    for video in videos:
+        topic = video.topic
+
+        # Get next avatar for this topic (rotating through available avatars)
+        topic_avatars = avatar_by_topic.get(topic, [])
+        avatar = None
+        if topic_avatars:
+            idx = avatar_index_by_topic[topic] % len(topic_avatars)
+            avatar = topic_avatars[idx]
+            avatar_index_by_topic[topic] += 1
+
+        avatar_video = avatar.result_video_url if avatar else None
+
+        all_examples.append({
+            "id": str(video.id),
+            "category": topic,
+            "title": video.title_zh if language.startswith("zh") else (video.title_en or topic.replace("_", " ").title()),
+            "title_zh": video.title_zh,
+            "title_en": video.title_en or topic.replace("_", " ").title(),
+            "prompt": video.prompt[:100] if video.prompt else "",
+            "thumb": video.input_image_url or f"https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600",
+            "video": video.result_video_url,
+            "avatar_video": avatar_video,
+            "duration": "8s",
+            "topic": topic
+        })
+
+    # Paginate
+    total = len(all_examples)
+    start = (page - 1) * per_page
+    end = start + per_page
+    examples = all_examples[start:end]
+
+    return {
+        "success": True,
+        "examples": examples,
+        "avatar_language": avatar_lang,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 1,
+            "has_more": end < total
+        }
+    }
+
+
+@router.get("/landing/watch-demo")
+async def get_watch_demo(
+    language: str = Query("en", description="Language code"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get a random ad video for Watch Demo button.
+    Returns a random material with video from the DB.
+    """
+    from sqlalchemy import func
+    from app.models.material import Material
+
+    # Query random material with video
+    result = await db.execute(
+        select(Material)
+        .where(
+            Material.result_video_url.isnot(None),
+            Material.is_active == True,
+            Material.language == language if language else True
+        )
+        .order_by(func.random())
+        .limit(1)
+    )
+    material = result.scalar_one_or_none()
+
+    if material:
+        return {
+            "success": True,
+            "video": {
+                "id": str(material.id),
+                "title": material.title_zh if language.startswith("zh") else (material.title_en or "AI Generated Video"),
+                "video_url": material.result_video_url,
+                "thumb": material.input_image_url,
+                "prompt": material.prompt,
+                "topic": material.topic
+            }
+        }
+
+    # Fallback if no materials
+    return {
+        "success": False,
+        "error": "No demo videos available"
+    }
+
+
+@router.get("/landing/view-more")
+async def get_view_more_examples(
+    language: str = Query("en", description="Language code"),
+    category: str = Query(None, description="Filter by category (optional)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get 6 random short videos with AI Avatar for "View More Examples" modal.
+    Each video is paired with an AI Avatar from the same topic.
+    """
+    from sqlalchemy import func
+    from app.models.material import Material, ToolType
+
+    # Determine avatar language
+    avatar_lang = "zh-TW" if language.startswith("zh") else "en"
+
+    # Landing page categories
+    landing_topics = ["ecommerce", "social", "brand", "app", "promo", "service"]
+
+    # Filter by category if provided
+    if category and category != "all" and category in landing_topics:
+        topics_to_query = [category]
+    else:
+        topics_to_query = landing_topics
+
+    # Get random product videos
+    videos_result = await db.execute(
+        select(Material)
+        .where(
+            Material.tool_type == ToolType.SHORT_VIDEO,
+            Material.result_video_url.isnot(None),
+            Material.is_active == True,
+            Material.topic.in_(topics_to_query)
+        )
+        .order_by(func.random())
+        .limit(6)
+    )
+    videos = videos_result.scalars().all()
+
+    # Get all avatars for the language
+    avatars_result = await db.execute(
+        select(Material)
+        .where(
+            Material.tool_type == ToolType.AI_AVATAR,
+            Material.language == avatar_lang,
+            Material.result_video_url.isnot(None),
+            Material.is_active == True,
+            Material.topic.in_(landing_topics)
+        )
+    )
+    avatars = avatars_result.scalars().all()
+
+    # Create lookup by topic
+    avatar_by_topic = {}
+    for a in avatars:
+        if a.topic not in avatar_by_topic:
+            avatar_by_topic[a.topic] = []
+        avatar_by_topic[a.topic].append(a)
+
+    # Build response with video + matching avatar
+    import random
+    examples = []
+    for video in videos:
+        # Get random avatar from same topic
+        topic_avatars = avatar_by_topic.get(video.topic, [])
+        avatar = random.choice(topic_avatars) if topic_avatars else None
+        avatar_video = avatar.result_video_url if avatar else None
+
+        examples.append({
+            "id": str(video.id),
+            "category": video.topic,
+            "title": video.title_zh if language.startswith("zh") else (video.title_en or video.topic.replace("_", " ").title()),
+            "prompt": video.prompt[:100] if video.prompt else "",
+            "thumb": video.input_image_url,
+            "video": video.result_video_url,
+            "avatar_video": avatar_video,
+            "duration": "8s"
+        })
+
+    return {
+        "success": True,
+        "examples": examples,
+        "total": len(examples),
+        "avatar_language": avatar_lang
+    }

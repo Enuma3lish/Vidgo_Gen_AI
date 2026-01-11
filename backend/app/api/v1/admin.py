@@ -386,6 +386,82 @@ async def get_system_health(
     return await service.get_system_health()
 
 
+@router.get("/ai-services")
+async def get_ai_services_status(
+    admin: User = Depends(require_admin)
+):
+    """
+    Check status of all AI services.
+
+    Returns status of:
+    - Wan 2.6 (T2I and I2V primary)
+    - fal.ai (T2I and I2V rescue for Pro/Pro+)
+    - Gemini (Interior Design rescue)
+    - PiAPI (T2I, I2V, V2V, Interior)
+    - A2E.ai (Avatar Lip-Sync)
+    """
+    from app.services.rescue_service import get_rescue_service
+
+    rescue_service = get_rescue_service()
+    status = await rescue_service.check_service_status()
+
+    # Add A2E status
+    try:
+        from app.services.a2e_service import A2EAvatarService
+        a2e = A2EAvatarService()
+        a2e_test = await a2e.test_connection()
+        status["a2e"] = {
+            "status": "ok" if a2e_test.get("success") else "pending",
+            "message": a2e_test.get("message") or a2e_test.get("error")
+        }
+    except Exception as e:
+        status["a2e"] = {"status": "error", "error": str(e)}
+
+    return {
+        "services": status,
+        "rescue_config": {
+            "t2i": {"primary": "piapi_wan", "rescue": "pollo"},
+            "i2v": {"primary": "piapi_wan", "rescue": "pollo"},
+            "v2v": {"primary": "piapi_wan", "rescue": "pollo"},
+            "interior": {"primary": "piapi_wan_doodle", "rescue": "gemini"},
+            "avatar": {"primary": "a2e", "rescue": None}
+        }
+    }
+
+
+@router.get("/generations")
+async def get_recent_generations(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    Get recent generation history for monitoring.
+
+    Shows which services were used and any rescue fallbacks.
+    """
+    service = AdminDashboardService(db)
+    # Get recent generations from the materials table
+    materials = await service.get_moderation_queue(limit)
+
+    return {
+        "generations": [
+            {
+                "id": str(m.id),
+                "tool_type": m.tool_type.value if m.tool_type else None,
+                "topic": m.topic,
+                "status": m.status.value if m.status else None,
+                "result_image_url": m.result_image_url,
+                "result_video_url": m.result_video_url,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "generation_steps": m.generation_steps if hasattr(m, 'generation_steps') else None
+            }
+            for m in materials
+        ],
+        "count": len(materials)
+    }
+
+
 # ============================================================================
 # WebSocket for Real-time Updates
 # ============================================================================

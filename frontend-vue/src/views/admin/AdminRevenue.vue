@@ -1,15 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAdminStore } from '@/stores/admin'
 
 const adminStore = useAdminStore()
 
 const selectedPeriod = ref<'7d' | '30d' | '90d' | '1y'>('30d')
-
-const periodDays = computed(() => {
-  const map = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 }
-  return map[selectedPeriod.value]
-})
 
 onMounted(async () => {
   await Promise.all([

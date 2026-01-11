@@ -6,27 +6,53 @@ const adminStore = useAdminStore()
 const lastRefresh = ref<Date | null>(null)
 
 onMounted(async () => {
-  await refreshHealth()
+  await refreshAll()
 })
 
-async function refreshHealth() {
-  await adminStore.fetchSystemHealth()
+async function refreshAll() {
+  await Promise.all([
+    adminStore.fetchSystemHealth(),
+    adminStore.fetchAIServicesStatus()
+  ])
   lastRefresh.value = new Date()
 }
 
 const health = computed(() => adminStore.systemHealth)
+const aiServices = computed(() => adminStore.aiServices)
 
 function getStatusClass(status: string): string {
-  return status === 'healthy' ? 'healthy' : 'unhealthy'
+  if (status === 'healthy' || status === 'ok' || status === 'configured') return 'healthy'
+  if (status === 'pending') return 'pending'
+  return 'unhealthy'
 }
 
 function getStatusIcon(status: string): string {
-  return status === 'healthy' ? '✓' : '✕'
+  if (status === 'healthy' || status === 'ok' || status === 'configured') return '✓'
+  if (status === 'pending') return '⏳'
+  return '✕'
 }
 
 function formatTime(date: Date | null): string {
   if (!date) return '-'
   return date.toLocaleTimeString()
+}
+
+function getServiceDisplayName(key: string): string {
+  const names: Record<string, string> = {
+    wan: 'Wan AI (T2I/I2V Primary)',
+    fal: 'fal.ai (T2I/I2V Rescue)',
+    gemini: 'Gemini API (Interior Rescue)',
+    goenhance: 'GoEnhance (V2V)',
+    a2e: 'A2E.ai (Avatar)'
+  }
+  return names[key] || key
+}
+
+function getRescueLabel(config: { primary: string; rescue: string | null }): string {
+  if (config.rescue) {
+    return `${config.primary} → ${config.rescue}`
+  }
+  return `${config.primary} only`
 }
 </script>
 
@@ -35,12 +61,12 @@ function formatTime(date: Date | null): string {
     <header class="page-header">
       <div class="header-content">
         <div>
-          <h1>System Health</h1>
-          <p class="subtitle">Monitor platform infrastructure</p>
+          <h1>System Health & AI Services</h1>
+          <p class="subtitle">Monitor platform infrastructure and AI service status</p>
         </div>
-        <button @click="refreshHealth" class="refresh-btn" :disabled="adminStore.isLoading">
+        <button @click="refreshAll" class="refresh-btn" :disabled="adminStore.isLoading">
           <span v-if="adminStore.isLoading">Refreshing...</span>
-          <span v-else>Refresh</span>
+          <span v-else>Refresh All</span>
         </button>
       </div>
     </header>
@@ -99,6 +125,44 @@ function formatTime(date: Date | null): string {
         </div>
       </div>
     </div>
+
+    <!-- AI Services Status -->
+    <section class="ai-services-section" v-if="aiServices">
+      <h2>AI Services Status</h2>
+      <p class="section-desc">External AI service status with rescue mechanism configuration</p>
+
+      <div class="ai-services-grid">
+        <div
+          v-for="(service, key) in aiServices.services"
+          :key="key"
+          class="service-card"
+          :class="getStatusClass(service.status)"
+        >
+          <div class="service-icon">
+            <span>{{ getStatusIcon(service.status) }}</span>
+          </div>
+          <div class="service-info">
+            <h3>{{ getServiceDisplayName(key as string) }}</h3>
+            <span class="service-status">{{ service.status }}</span>
+            <p v-if="service.message" class="service-message">{{ service.message }}</p>
+            <p v-if="service.error" class="service-error">{{ service.error }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rescue Configuration -->
+      <div class="rescue-config" v-if="aiServices.rescue_config">
+        <h3>Rescue Mechanism Configuration</h3>
+        <div class="rescue-grid">
+          <div class="rescue-item" v-for="(config, feature) in aiServices.rescue_config" :key="feature">
+            <span class="feature-name">{{ feature.toString().toUpperCase().replace('_', ' ') }}</span>
+            <span class="rescue-chain" :class="{ 'has-rescue': config.rescue }">
+              {{ getRescueLabel(config) }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- System Info -->
     <section class="info-section">
@@ -271,6 +335,15 @@ function formatTime(date: Date | null): string {
   color: #f44336;
 }
 
+.health-card.pending {
+  border-left-color: #ff9800;
+}
+
+.health-card.pending .health-icon {
+  background: #fff3e0;
+  color: #ff9800;
+}
+
 .health-info h3 {
   margin: 0;
   font-size: 1rem;
@@ -408,4 +481,157 @@ function formatTime(date: Date | null): string {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* AI Services Section */
+.ai-services-section {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 1.5rem;
+}
+
+.ai-services-section h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #1a1a2e;
+}
+
+.section-desc {
+  color: #666;
+  font-size: 0.875rem;
+  margin: 0 0 1.5rem;
+}
+
+.ai-services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.service-card {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border-left: 4px solid;
+}
+
+.service-card.healthy {
+  border-left-color: #4caf50;
+}
+
+.service-card.unhealthy {
+  border-left-color: #f44336;
+}
+
+.service-card.pending {
+  border-left-color: #ff9800;
+}
+
+.service-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.service-card.healthy .service-icon {
+  background: #e8f5e9;
+  color: #4caf50;
+}
+
+.service-card.unhealthy .service-icon {
+  background: #ffebee;
+  color: #f44336;
+}
+
+.service-card.pending .service-icon {
+  background: #fff3e0;
+  color: #ff9800;
+}
+
+.service-info h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.service-status {
+  font-size: 0.75rem;
+  color: #666;
+  text-transform: capitalize;
+}
+
+.service-message {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.service-error {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: #f44336;
+  background: #ffebee;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.rescue-config {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.rescue-config h3 {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.rescue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.rescue-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.feature-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #666;
+}
+
+.rescue-chain {
+  font-size: 0.875rem;
+  color: #1a1a2e;
+  font-family: monospace;
+  background: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+}
+
+.rescue-chain.has-rescue {
+  color: #667eea;
+  border-color: #667eea;
+}
+
+.legend-dot.pending { background: #ff9800; }
 </style>

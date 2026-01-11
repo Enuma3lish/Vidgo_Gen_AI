@@ -15,10 +15,10 @@ from pydantic import BaseModel, HttpUrl
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.leonardo_service import leonardo_service
-from app.services.goenhance_service import goenhance_service, STYLE_MODELS
-from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_goenhance_model_id
-from app.services.pollo_avatar import get_avatar_service, AVATAR_VOICES
+from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
+from app.services.a2e_service import get_a2e_service, A2E_VOICES
+from app.services.rescue_service import get_rescue_service
+from app.providers.provider_router import get_provider_router, TaskType
 from app.api.deps import get_current_user_optional, get_db
 import logging
 
@@ -182,15 +182,18 @@ async def remove_background(
     Credits: 3 per image
     """
     try:
-        result = await leonardo_service.remove_background(
-            image_url=str(request.image_url),
-            use_cache=True
+        # Use provider router for background removal (GoEnhance)
+        provider_router = get_provider_router()
+        result = await provider_router.route(
+            TaskType.BACKGROUND_REMOVAL,
+            {"image_url": str(request.image_url)}
         )
 
         if result.get("success"):
+            output = result.get("output", {})
             return ToolResponse(
                 success=True,
-                result_url=result.get("image_url"),
+                result_url=output.get("image_url"),
                 credits_used=3,
                 message="Background removed successfully"
             )
@@ -220,17 +223,20 @@ async def remove_background_batch(
 
     results = []
     credits_used = 0
+    provider_router = get_provider_router()
 
     for image_url in request.image_urls:
         try:
-            result = await leonardo_service.remove_background(
-                image_url=str(image_url),
-                use_cache=True
+            # Use provider router for background removal (GoEnhance)
+            result = await provider_router.route(
+                TaskType.BACKGROUND_REMOVAL,
+                {"image_url": str(image_url)}
             )
             if result.get("success"):
+                output = result.get("output", {})
                 results.append({
                     "input_url": str(image_url),
-                    "result_url": result.get("image_url"),
+                    "result_url": output.get("image_url"),
                     "success": True
                 })
                 credits_used += 3
@@ -278,17 +284,21 @@ async def generate_product_scene(
     scene_prompt = request.custom_prompt or scene["prompt"]
 
     try:
-        result = await leonardo_service.generate_product_scene(
-            product_image_url=str(request.product_image_url),
-            scene_prompt=scene_prompt,
-            use_cache=True
+        # Use rescue service for T2I generation (Wan primary, fal.ai rescue)
+        rescue_service = get_rescue_service()
+        full_prompt = f"Product photography, {scene_prompt}, professional quality"
+        result = await rescue_service.generate_image(
+            prompt=full_prompt,
+            width=1024,
+            height=1024
         )
 
         if result.get("success"):
+            image_url = result.get("image_url")
             images = result.get("images", [])
             return ToolResponse(
                 success=True,
-                result_url=images[0]["url"] if images else None,
+                result_url=image_url or (images[0]["url"] if images else None),
                 results=images,
                 credits_used=10,
                 message="Product scene generated successfully"
@@ -331,17 +341,22 @@ async def ai_try_on(
             # Use default female model
             model_url = TRYON_MODELS[0]["preview_url"]
 
-        # Use GoEnhance face_swap for try-on effect
-        result = await goenhance_service.face_swap(
-            source_image_url=str(request.garment_image_url),
-            target_image_url=model_url,
-            use_cache=True
+        # Use ProviderRouter for try-on effect
+        router = get_provider_router()
+        result = await router.route(
+            TaskType.T2I,
+            {
+                "prompt": f"Virtual try-on of garment on model",
+                "image_url": str(request.garment_image_url),
+                "reference_url": model_url
+            }
         )
 
-        if result.get("success"):
+        output_url = result.get("image_url") or result.get("output_url")
+        if output_url:
             return ToolResponse(
                 success=True,
-                result_url=result.get("video_url") or result.get("image_url"),
+                result_url=output_url,
                 credits_used=15,
                 message="Try-on generated successfully"
             )
@@ -381,35 +396,22 @@ async def room_redesign(
     style_prompt = request.custom_prompt or interior["prompt"]
 
     try:
-        # Use GoEnhance for style transformation
-        # Map interior styles to closest GoEnhance models
-        style_model_map = {
-            "modern": 2010,      # Cinematic
-            "nordic": 2007,     # Watercolor (soft tones)
-            "japanese": 2009,   # Realistic
-            "industrial": 2008, # Cyberpunk
-            "minimalist": 2009, # Realistic
-            "luxury": 2010,     # Cinematic
-            "bohemian": 2007,   # Watercolor
-            "coastal": 2007,    # Watercolor
-        }
-
-        model_id = style_model_map.get(request.style, 2009)
-
-        # First create a video from image, then apply style
-        # Or use image-to-video with style
-        result = await goenhance_service.image_to_video(
-            image_url=str(request.room_image_url),
-            model_id=model_id,
-            prompt=style_prompt,
-            duration=4,
-            use_cache=True
+        # Use ProviderRouter for interior design
+        router = get_provider_router()
+        result = await router.route(
+            TaskType.INTERIOR,
+            {
+                "image_url": str(request.room_image_url),
+                "prompt": style_prompt,
+                "style": request.style
+            }
         )
 
-        if result.get("success"):
+        output_url = result.get("image_url") or result.get("output_url")
+        if output_url:
             return ToolResponse(
                 success=True,
-                result_url=result.get("video_url"),
+                result_url=output_url,
                 credits_used=20,
                 message=f"Room redesigned to {interior['name']} style"
             )
@@ -441,11 +443,12 @@ async def generate_short_video(
     try:
         credits_used = 25
 
-        # Generate motion video with Leonardo
-        result = await leonardo_service.image_to_video(
+        # Generate motion video with rescue service (Wan primary, fal.ai rescue)
+        rescue_service = get_rescue_service()
+        result = await rescue_service.generate_video(
             image_url=str(request.image_url),
-            motion_strength=request.motion_strength,
-            use_cache=True
+            prompt="Natural camera motion, smooth animation",
+            length=5
         )
 
         if not result.get("success"):
@@ -456,17 +459,21 @@ async def generate_short_video(
 
         video_url = result.get("video_url")
 
-        # Optional: Apply style transformation with GoEnhance
+        # Optional: Apply style transformation with ProviderRouter V2V
         if request.style:
-            model_id = get_goenhance_model_id(request.style)
-            if model_id:
-                style_result = await goenhance_service.video_to_video(
-                    video_url=video_url,
-                    model_id=model_id,
-                    use_cache=True
+            style_prompt = get_style_prompt(request.style)
+            if style_prompt:
+                router = get_provider_router()
+                style_result = await router.route(
+                    TaskType.V2V,
+                    {
+                        "video_url": video_url,
+                        "prompt": style_prompt
+                    }
                 )
-                if style_result.get("success"):
-                    video_url = style_result.get("video_url")
+                output_url = style_result.get("video_url") or style_result.get("output_url")
+                if output_url:
+                    video_url = output_url
                     credits_used += 5
 
         # TODO: Add TTS if script is provided
@@ -501,7 +508,7 @@ async def generate_avatar_video(
     Generate AI Avatar video from photo with lip sync.
     Transforms a headshot into a talking avatar video.
 
-    IMPORTANT: This calls the REAL Pollo AI API - not searching in DB.
+    Uses A2E.ai API for avatar generation with native lip-sync.
     After generation, the result is saved to material DB for demo examples.
 
     Supported languages: 'en' (English), 'zh-TW' (Traditional Chinese)
@@ -511,10 +518,10 @@ async def generate_avatar_video(
 
     try:
         # Validate language
-        if request.language not in ["en", "zh-TW"]:
+        if request.language not in ["en", "zh-TW", "ja", "ko"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported language: {request.language}. Supported: en, zh-TW"
+                detail=f"Unsupported language: {request.language}. Supported: en, zh-TW, ja, ko"
             )
 
         # Validate duration
@@ -524,10 +531,10 @@ async def generate_avatar_video(
                 detail="Duration must be between 5 and 120 seconds"
             )
 
-        avatar_service = get_avatar_service()
+        avatar_service = get_a2e_service()
 
-        # Call REAL Pollo AI API to generate avatar
-        logger.info(f"Calling Pollo AI Avatar API for user request: {request.script[:50]}...")
+        # Call A2E.ai API to generate avatar
+        logger.info(f"Calling A2E.ai Avatar API for user request: {request.script[:50]}...")
 
         result = await avatar_service.generate_and_wait(
             image_url=str(request.image_url),
@@ -566,15 +573,15 @@ async def generate_avatar_video(
                     input_image_url=str(request.image_url),
                     generation_steps=[{
                         "step": 1,
-                        "api": "pollo-avatar",
+                        "api": "a2e-avatar",
                         "action": "photo_to_avatar",
                         "language": request.language,
                         "input": {"script": request.script, "image": str(request.image_url)},
                         "result_url": video_url,
-                        "cost": 0.15
+                        "cost": 0.10
                     }],
                     result_video_url=video_url,
-                    generation_cost_usd=0.15,
+                    generation_cost_usd=0.10,
                     quality_score=0.8,
                     is_active=True
                 )
@@ -620,11 +627,11 @@ async def get_avatar_voices(
 ):
     """
     Get available avatar voices.
-    Filter by language: 'en' or 'zh-TW'
+    Filter by language: 'en', 'zh-TW', 'ja', 'ko'
     """
-    if language and language in AVATAR_VOICES:
-        return AVATAR_VOICES[language]
-    return AVATAR_VOICES
+    if language and language in A2E_VOICES:
+        return A2E_VOICES[language]
+    return A2E_VOICES
 
 
 # ============================================================================

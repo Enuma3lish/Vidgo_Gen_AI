@@ -4,7 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useCreditsStore } from '@/stores'
 
 const props = defineProps<{
-  service: string
+  service?: string
+  cost?: number
   count?: number
 }>()
 
@@ -12,6 +13,11 @@ const { t } = useI18n()
 const creditsStore = useCreditsStore()
 
 const cost = computed(() => {
+  if (props.cost !== undefined) {
+    return props.cost * (props.count || 1)
+  }
+  if (!props.service) return 0
+  
   const baseCost = creditsStore.getServiceCost(props.service)
   return baseCost * (props.count || 1)
 })

@@ -3,9 +3,9 @@ Demo Generation Service
 Handles demo creation, storage, and retrieval with prompt matching.
 
 Full Pipeline Flow ("See It In Action"):
-1. User enters prompt → GoEnhance Nano Banana (text-to-image)
+1. User enters prompt → PiAPI Wan (text-to-image)
 2. Generated image → Pollo AI (image-to-video)
-3. Generated video → GoEnhance V2V (video enhancement with style)
+3. Generated video → PiAPI Wan VACE (video enhancement with style)
 
 Pre-generated Demos ("Explore Categories"):
 - Demos are pre-generated for each category with multiple styles
@@ -24,13 +24,21 @@ from sqlalchemy import select, func, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.demo import ImageDemo, DemoCategory, DemoVideo, PromptCache
-from app.services.goenhance import get_goenhance_client, GOENHANCE_STYLES
 from app.services.pollo_ai import get_pollo_client, POLLO_MODELS
 from app.services.prompt_matching import get_prompt_matching_service, PromptAnalysis
 from app.services.watermark import get_watermark_service
+from app.providers import ProviderRouter, TaskType
 
 logger = logging.getLogger(__name__)
 
+# Style definitions for demo generation (replaces GOENHANCE_STYLES)
+DEMO_STYLES = {
+    "anime": {"name": "Anime Style", "slug": "anime", "prompt": "anime style"},
+    "realistic": {"name": "Realistic", "slug": "realistic", "prompt": "realistic photorealistic"},
+    "cinematic": {"name": "Cinematic", "slug": "cinematic", "prompt": "cinematic movie style"},
+    "cartoon": {"name": "Cartoon", "slug": "cartoon", "prompt": "cartoon style"},
+    "watercolor": {"name": "Watercolor", "slug": "watercolor", "prompt": "watercolor painting style"},
+}
 
 # Demo topics for each category (will be randomly selected for demo page)
 DEMO_TOPICS = {
@@ -127,13 +135,13 @@ class DemoService:
     Handles the full pipeline from prompt to displayed demo.
 
     Pipeline:
-    1. GoEnhance Nano Banana: Text → Image
+    1. PiAPI Wan: Text → Image
     2. Pollo AI: Image → Video
-    3. GoEnhance V2V: Video → Enhanced Video
+    3. PiAPI Wan VACE: Video → Enhanced Video (optional)
     """
 
     def __init__(self):
-        self.goenhance = get_goenhance_client()
+        self.router = ProviderRouter()
         self.pollo = get_pollo_client()
         self.matcher = get_prompt_matching_service()
 
@@ -207,28 +215,35 @@ class DemoService:
         Generate new demo using the full pipeline and save to database.
 
         Pipeline:
-        1. GoEnhance Nano Banana: Prompt → Image
+        1. PiAPI Wan: Prompt → Image
         2. Pollo AI Pixverse: Image → Video
-        3. GoEnhance V2V: Video → Enhanced Video
+        3. PiAPI Wan VACE: Video → Enhanced Video (optional)
         """
-        # Select style for V2V enhancement
+        # Select style for generation
         style_id, style_info = self._select_style(analysis, preferred_style)
 
         logger.info(f"Starting demo pipeline: {analysis.normalized[:50]}...")
         logger.info(f"Selected style: {style_info['name']}")
 
         # =========================================
-        # Step 1: Generate Image (GoEnhance Nano Banana)
+        # Step 1: Generate Image (PiAPI Wan T2I)
         # =========================================
-        logger.info("Step 1: Generating image with GoEnhance Nano Banana...")
+        logger.info("Step 1: Generating image with PiAPI Wan...")
 
-        image_result = await self.goenhance.generate_image_and_wait(
-            prompt=analysis.normalized,
-            style=style_info.get("slug"),
-            timeout=120
-        )
+        try:
+            image_result = await self.router.route(
+                TaskType.T2I,
+                {"prompt": f"{analysis.normalized}, {style_info.get('prompt', '')}"}
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "found_existing": False,
+                "error": f"Image generation failed: {str(e)}",
+                "suggestion": "Please try again with a different prompt"
+            }
 
-        if not image_result.get("success"):
+        if not image_result.get("success") and not image_result.get("image_url"):
             return {
                 "success": False,
                 "found_existing": False,
@@ -236,7 +251,7 @@ class DemoService:
                 "suggestion": "Please try again with a different prompt"
             }
 
-        image_url = image_result.get("image_url")
+        image_url = image_result.get("image_url") or image_result.get("output_url")
         logger.info(f"Step 1 complete: Image generated at {image_url}")
 
         # =========================================
@@ -260,24 +275,29 @@ class DemoService:
             logger.info(f"Step 2 complete: Video generated at {video_url}")
 
         # =========================================
-        # Step 3: Enhance Video (GoEnhance V2V) - Optional
+        # Step 3: Enhance Video (PiAPI Wan VACE) - Optional
         # =========================================
         enhanced_video_url = None
         if video_url:
-            logger.info(f"Step 3: Enhancing video with GoEnhance V2V ({style_info['name']})...")
+            logger.info(f"Step 3: Enhancing video with PiAPI Wan VACE ({style_info['name']})...")
 
-            enhance_result = await self.goenhance.enhance_video(
-                video_url=video_url,
-                model_id=style_id,
-                prompt=analysis.normalized,
-                timeout=300
-            )
+            try:
+                enhance_result = await self.router.route(
+                    TaskType.V2V,
+                    {
+                        "video_url": video_url,
+                        "prompt": f"{analysis.normalized}, {style_info.get('prompt', '')}"
+                    }
+                )
 
-            if enhance_result.get("success"):
-                enhanced_video_url = enhance_result.get("video_url")
-                logger.info(f"Step 3 complete: Enhanced video at {enhanced_video_url}")
-            else:
-                logger.warning(f"Video enhancement failed: {enhance_result.get('error')}")
+                if enhance_result.get("video_url") or enhance_result.get("output_url"):
+                    enhanced_video_url = enhance_result.get("video_url") or enhance_result.get("output_url")
+                    logger.info(f"Step 3 complete: Enhanced video at {enhanced_video_url}")
+                else:
+                    logger.warning("Video enhancement failed, using original video")
+                    enhanced_video_url = video_url
+            except Exception as e:
+                logger.warning(f"Video enhancement failed: {e}")
                 # Use original video if enhancement fails
                 enhanced_video_url = video_url
 
@@ -339,23 +359,23 @@ class DemoService:
         self,
         analysis: PromptAnalysis,
         preferred_style: Optional[str] = None
-    ) -> Tuple[int, Dict[str, Any]]:
+    ) -> Tuple[str, Dict[str, Any]]:
         """Select style for generation"""
         # If preferred style specified
         if preferred_style:
-            for style_id, info in GOENHANCE_STYLES.items():
+            for style_id, info in DEMO_STYLES.items():
                 if info["slug"] == preferred_style or info["name"].lower() == preferred_style.lower():
                     return style_id, info
 
         # If style detected from prompt
         if analysis.style:
-            for style_id, info in GOENHANCE_STYLES.items():
+            for style_id, info in DEMO_STYLES.items():
                 if info["slug"] == analysis.style:
                     return style_id, info
 
         # Random selection
-        style_id = random.choice(list(GOENHANCE_STYLES.keys()))
-        return style_id, GOENHANCE_STYLES[style_id]
+        style_id = random.choice(list(DEMO_STYLES.keys()))
+        return style_id, DEMO_STYLES[style_id]
 
     async def generate_image_only(
         self,
@@ -378,30 +398,33 @@ class DemoService:
         logger.info(f"Generating image only: {prompt[:50]}...")
 
         # Select style
-        style_id = 2000  # Default: Anime Style
-        style_info = GOENHANCE_STYLES.get(style_id, {"name": "Anime Style", "slug": "anime_v5"})
+        style_info = DEMO_STYLES.get("anime", {"name": "Anime Style", "slug": "anime", "prompt": "anime style"})
 
         if style_slug:
-            for sid, info in GOENHANCE_STYLES.items():
+            for sid, info in DEMO_STYLES.items():
                 if info["slug"] == style_slug:
-                    style_id = sid
                     style_info = info
                     break
 
-        # Generate image with GoEnhance Nano Banana
-        image_result = await self.goenhance.generate_image_and_wait(
-            prompt=prompt,
-            style=style_info.get("slug"),
-            timeout=120
-        )
+        # Generate image with PiAPI Wan T2I
+        try:
+            image_result = await self.router.route(
+                TaskType.T2I,
+                {"prompt": f"{prompt}, {style_info.get('prompt', '')}"}
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Image generation failed: {str(e)}"
+            }
 
-        if not image_result.get("success"):
+        image_url = image_result.get("image_url") or image_result.get("output_url")
+        if not image_url:
             return {
                 "success": False,
                 "error": f"Image generation failed: {image_result.get('error')}"
             }
 
-        image_url = image_result.get("image_url")
         original_url = image_url
         logger.info(f"Image generated: {image_url}")
 
@@ -449,13 +472,11 @@ class DemoService:
         logger.info(f"Generating video from image: {prompt[:50]}...")
 
         # Select style
-        style_id = 2000  # Default: Anime Style
-        style_info = GOENHANCE_STYLES.get(style_id, {"name": "Anime Style", "slug": "anime_v5"})
+        style_info = DEMO_STYLES.get("anime", {"name": "Anime Style", "slug": "anime", "prompt": "anime style"})
 
         if style_slug:
-            for sid, info in GOENHANCE_STYLES.items():
+            for sid, info in DEMO_STYLES.items():
                 if info["slug"] == style_slug:
-                    style_id = sid
                     style_info = info
                     break
 
@@ -474,18 +495,21 @@ class DemoService:
             logger.info("No image provided, generating new image...")
             result["steps"].append({"step": 1, "name": "Image Generation", "status": "in_progress"})
 
-            image_result = await self.goenhance.generate_image_and_wait(
-                prompt=prompt,
-                style=style_info.get("slug"),
-                timeout=120
-            )
-
-            if not image_result.get("success"):
+            try:
+                image_result = await self.router.route(
+                    TaskType.T2I,
+                    {"prompt": f"{prompt}, {style_info.get('prompt', '')}"}
+                )
+                image_url = image_result.get("image_url") or image_result.get("output_url")
+                if not image_url:
+                    result["steps"][-1]["status"] = "failed"
+                    result["error"] = f"Image generation failed: {image_result.get('error')}"
+                    return result
+            except Exception as e:
                 result["steps"][-1]["status"] = "failed"
-                result["error"] = f"Image generation failed: {image_result.get('error')}"
+                result["error"] = f"Image generation failed: {str(e)}"
                 return result
 
-            image_url = image_result.get("image_url")
             result["steps"][-1]["status"] = "completed"
             logger.info(f"Image generated: {image_url}")
         else:
@@ -521,27 +545,33 @@ class DemoService:
         logger.info(f"Video generated: {video_url}")
 
         # =========================================
-        # Step 3: Enhance Video (GoEnhance V2V) - Optional
+        # Step 3: Enhance Video (PiAPI Wan VACE) - Optional
         # Current version: skip_v2v=True by default
         # =========================================
         if not skip_v2v and video_url:
-            logger.info(f"Enhancing video with GoEnhance V2V ({style_info['name']})...")
+            logger.info(f"Enhancing video with PiAPI Wan VACE ({style_info['name']})...")
             result["steps"].append({"step": 3, "name": "Video Enhancement", "status": "in_progress"})
 
-            enhance_result = await self.goenhance.enhance_video(
-                video_url=video_url,
-                model_id=style_id,
-                prompt=prompt,
-                timeout=300
-            )
+            try:
+                enhance_result = await self.router.route(
+                    TaskType.V2V,
+                    {
+                        "video_url": video_url,
+                        "prompt": f"{prompt}, {style_info.get('prompt', '')}"
+                    }
+                )
 
-            if enhance_result.get("success"):
-                result["enhanced_video_url"] = enhance_result.get("video_url")
-                result["steps"][-1]["status"] = "completed"
-                logger.info(f"Video enhanced: {result['enhanced_video_url']}")
-            else:
+                enhanced_url = enhance_result.get("video_url") or enhance_result.get("output_url")
+                if enhanced_url:
+                    result["enhanced_video_url"] = enhanced_url
+                    result["steps"][-1]["status"] = "completed"
+                    logger.info(f"Video enhanced: {result['enhanced_video_url']}")
+                else:
+                    result["steps"][-1]["status"] = "skipped"
+                    logger.warning("V2V enhancement failed, using original video")
+            except Exception as e:
                 result["steps"][-1]["status"] = "skipped"
-                logger.warning("V2V enhancement failed, using original video")
+                logger.warning(f"V2V enhancement failed: {e}, using original video")
 
         result["success"] = True
         logger.info("Video generation complete!")
@@ -604,7 +634,7 @@ class DemoService:
             topics = all_topics
 
         sample_prompt = random.choice(topics)
-        sample_style = random.choice(list(GOENHANCE_STYLES.values()))
+        sample_style = random.choice(list(DEMO_STYLES.values()))
 
         return {
             "id": None,
@@ -644,7 +674,7 @@ class DemoService:
 
             for topic in selected_topics:
                 # Select random styles
-                style_ids = random.sample(list(GOENHANCE_STYLES.keys()), min(styles_per_topic, len(GOENHANCE_STYLES)))
+                style_ids = random.sample(list(DEMO_STYLES.keys()), min(styles_per_topic, len(DEMO_STYLES)))
 
                 for style_id in style_ids:
                     try:
@@ -654,7 +684,7 @@ class DemoService:
                         result = await self._generate_and_save_demo(
                             db=db,
                             analysis=analysis,
-                            preferred_style=GOENHANCE_STYLES[style_id]["slug"]
+                            preferred_style=DEMO_STYLES[style_id]["slug"]
                         )
 
                         if result.get("success"):
@@ -781,19 +811,27 @@ class DemoService:
         logger.info(f"Generating category video: {prompt[:50]}... [{category_slug}]")
 
         # Step 1: Generate image (without watermark for video)
-        image_result = await self.goenhance.generate_image_and_wait(
-            prompt=prompt,
-            style=style_slug,
-            timeout=120
-        )
+        try:
+            style_prompt = ""
+            if style_slug and style_slug in DEMO_STYLES:
+                style_prompt = DEMO_STYLES[style_slug].get("prompt", "")
 
-        if not image_result.get("success"):
+            image_result = await self.router.route(
+                TaskType.T2I,
+                {"prompt": f"{prompt}, {style_prompt}".strip(", ")}
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Image generation failed: {str(e)}"
+            }
+
+        image_url = image_result.get("image_url") or image_result.get("output_url")
+        if not image_url:
             return {
                 "success": False,
                 "error": f"Image generation failed: {image_result.get('error')}"
             }
-
-        image_url = image_result.get("image_url")
         logger.info(f"Image generated: {image_url}")
 
         # Step 2: Generate video (5 seconds)

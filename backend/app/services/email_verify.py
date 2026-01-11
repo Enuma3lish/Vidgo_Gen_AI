@@ -97,9 +97,9 @@ class EmailVerificationService:
         self.db.add(verification)
         await self.db.commit()
 
-        # Send email
+        # Send email with 6-digit code
         if self.email_service:
-            await self.email_service.send_verification_email(email, code)
+            await self.email_service.send_verification_code_email(email, code)
 
         return True, "Verification code sent"
 

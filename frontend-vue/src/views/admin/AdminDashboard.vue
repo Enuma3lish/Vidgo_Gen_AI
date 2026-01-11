@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed } from 'vue'
 import { useAdminStore } from '@/stores/admin'
-import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
 const adminStore = useAdminStore()
 
 const stats = computed(() => adminStore.dashboardStats)

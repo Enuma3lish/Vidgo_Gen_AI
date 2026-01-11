@@ -7,6 +7,9 @@ export interface CreditBalance {
   weekly_limit: number
   weekly_used: number
   reset_date: string
+  subscription_credits?: number
+  purchased_credits?: number
+  bonus_credits?: number
 }
 
 export interface CreditPackage {
@@ -53,5 +56,9 @@ export const creditsApi = {
       params: { page, limit }
     })
     return response.data
+  },
+
+  async consumeCredits(data: { service_type: string; generation_id: string; credit_cost: number }): Promise<void> {
+    await apiClient.post('/api/v1/credits/consume', data)
   }
 }

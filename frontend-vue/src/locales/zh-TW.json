@@ -44,9 +44,38 @@
       "stylesDesc": "多種藝術風格，讓影片更具特色",
       "ctaTitle": "讓您的圖片動起來",
       "ctaDesc": "一鍵生成影片，多種風格任選"
+    },
+    "avatar": {
+      "name": "AI數位人",
+      "desc": "照片轉數位人，自然唇形同步",
+      "longDesc": "將照片轉換為會說話的數位人影片，AI語音與表情"
+    },
+    "interior": {
+      "name": "室內設計",
+      "desc": "AI 智能空間改造",
+      "longDesc": "使用 AI 改造任何房間。上傳照片並描述您的夢想空間。"
     }
   },
   "tools": {
+    "avatar": {
+      "name": "AI 數位人",
+      "desc": "照片轉會說話的數位人影片",
+      "longDesc": "將照片轉換為會說話的數位人影片，具有自然的唇形同步",
+      "avatarPhoto": "人物照片",
+      "script": "腳本文字",
+      "scriptPlaceholder": "輸入您希望數位人說的話...",
+      "maxSpeech": "最長 120 秒語音",
+      "voiceSettings": "語音設定",
+      "language": "語言",
+      "voice": "聲音",
+      "female": "女",
+      "male": "男",
+      "defaultAvatars": "或選擇預設頭像：",
+      "changePhoto": "更換照片",
+      "generatedVideo": "生成的數位人影片",
+      "videoPlaceholder": "數位人影片將顯示在這裡",
+      "processing": "正在生成數位人影片... 這可能需要幾分鐘"
+    },
     "patternGenerate": {
       "name": "圖案生成",
       "desc": "從文字描述生成獨特圖案",
@@ -151,6 +180,9 @@
     "geometric": "幾何圖形",
     "abstract": "抽象藝術",
     "traditional": "傳統紋樣",
+    "3d": "3D設計",
+    "interior": "室內設計",
+    "mockup": "產品展示",
     "studio": "攝影棚",
     "nature": "自然風光",
     "luxury": "奢華質感",
@@ -212,6 +244,92 @@
     "product": "產品電商",
     "portrait": "人像寫真"
   },
+  "homepage": {
+    "topics": {
+      "aiImage": {
+        "title": "AI圖像創作",
+        "desc": "用AI創造驚艷圖像"
+      },
+      "aiVideo": {
+        "title": "AI視頻創作",
+        "desc": "從圖片和文字生成視頻"
+      },
+      "ecommerce": {
+        "title": "產品電商",
+        "desc": "為電商增強產品照片"
+      },
+      "architecture": {
+        "title": "建築室內",
+        "desc": "用AI重新設計房間與空間"
+      },
+      "quickTools": {
+        "title": "快捷工具",
+        "desc": "日常快速編輯工具"
+      },
+      "inspiration": {
+        "title": "作品靈感",
+        "desc": "瀏覽創意案例獲取靈感"
+      }
+    },
+    "tools": {
+      "textToImage": "文字生成圖像",
+      "imageEnhancement": "圖像增強",
+      "patternDesign": "圖案設計",
+      "styleTransfer": "風格轉換",
+      "imageToVideo": "圖像轉視頻",
+      "videoStyleTransfer": "視頻風格轉換",
+      "aiAvatar": "AI數位人",
+      "productVideo": "產品視頻",
+      "productScene": "產品場景",
+      "backgroundRemoval": "背景移除",
+      "productEnhancement": "產品增強",
+      "virtualTryOn": "虛擬試穿",
+      "roomRedesign": "房間重新設計",
+      "interiorStyle": "室內風格轉換",
+      "archVisualization": "建築可視化",
+      "furniturePlacement": "家具擺放",
+      "hdUpscaling": "高清放大",
+      "watermarkRemoval": "去水印",
+      "objectRemoval": "物體移除",
+      "imageCompression": "圖片壓縮"
+    },
+    "gallery": {
+      "video": "視頻",
+      "recommended": "推薦",
+      "portrait": "人物寫真",
+      "photography": "寫實攝影",
+      "animation": "動畫卡通",
+      "poster": "海報插畫",
+      "anime": "動漫二次元",
+      "ecommerceDesign": "電商設計",
+      "chinese": "中國風",
+      "female": "女生",
+      "male": "男生",
+      "interior": "室內家居",
+      "architectureLandscape": "建築景觀",
+      "toys": "玩具手辦",
+      "art": "繪畫藝術",
+      "productDesign": "產品設計攝影",
+      "gameCG": "遊戲CG",
+      "nature": "自然人文",
+      "threeD": "3D立體",
+      "logoUI": "logo/UI",
+      "character": "角色IP",
+      "animals": "動植物",
+      "fantasy": "玄幻魔幻",
+      "scifi": "科幻未來"
+    },
+    "promptModal": {
+      "title": "生成提示詞",
+      "copyPrompt": "複製提示詞",
+      "tryThis": "試試這個",
+      "copied": "已複製！",
+      "close": "關閉"
+    },
+    "viewMore": "查看更多",
+    "seeAll": "查看所有案例",
+    "tryNow": "立即試用"
+  },
   "badges": {
     "free": "免費版",
     "beta": "實驗版",
@@ -220,6 +338,7 @@
     "cached": "已快取"
   },
   "common": {
+    "back": "返回",
     "upload": "上傳",
     "generate": "生成",
     "download": "下載",
@@ -286,7 +405,40 @@
     "free": "免費",
     "currentPlan": "目前方案",
     "upgrade": "升級",
-    "features": "功能特色"
+    "getStarted": "立即開始",
+    "features": "功能特色",
+    "status": "狀態",
+    "validUntil": "有效期至",
+    "daysLeft": "天",
+    "processing": "處理中...",
+    "subscribing": "訂閱中...",
+    "cancelSubscription": "取消訂閱",
+    "cancelWithRefund": "取消並退款",
+    "subscribeSuccess": "訂閱成功！",
+    "redirectingToPayment": "正在跳轉至付款頁面...",
+    "subscribeFailed": "訂閱失敗，請重試。",
+    "refundProcessed": "退款已處理。您的訂閱已取消。",
+    "subscriptionCancelled": "訂閱已取消。您可以繼續使用點數直到計費週期結束。",
+    "cancelFailed": "取消訂閱失敗，請重試。",
+    "faq": {
+      "title": "常見問題",
+      "credits": {
+        "q": "什麼是點數？",
+        "a": "點數用於生成內容。不同的工具根據複雜度消耗不同數量的點數。"
+      },
+      "rollover": {
+        "q": "未使用的點數會累計嗎？",
+        "a": "每月點數會在計費週期結束時重置。購買的點數包則永不過期。"
+      },
+      "change": {
+        "q": "可以升級或降級嗎？",
+        "a": "可以，您可以隨時更改方案。更改將在下一個計費週期生效。"
+      },
+      "refund": {
+        "q": "退款政策是什麼？",
+        "a": "您可以在訂閱後 7 天內申請全額退款。7 天後仍可取消訂閱，但將保留存取權限直到計費週期結束。"
+      }
+    }
   },
   "footer": {
     "about": "關於我們",
@@ -294,6 +446,53 @@
     "privacy": "隱私政策",
     "contact": "聯繫我們",
     "copyright": "© 2024 VidGo AI. 保留所有權利。"
+  },
+  "interior": {
+    "badge": "AI 室內設計",
+    "title": "AI 室內設計",
+    "subtitle": "使用 AI 改造任何房間。上傳照片並描述您的夢想空間。",
+    "processing": "正在生成設計...",
+    "tabs": {
+      "redesign": "改造房間",
+      "generate": "生成設計",
+      "styleTransfer": "風格轉換"
+    },
+    "uploadTitle": "上傳房間照片",
+    "roomType": "房間類型",
+    "designStyle": "設計風格",
+    "prompt": "描述您想要的改變",
+    "promptPlaceholder": "例如：現代極簡風格，灰色沙發、木質咖啡桌和室內植物...",
+    "examplePrompts": "試試這些範例",
+    "result": "設計結果",
+    "resultPlaceholder": "重新設計的房間將顯示在這裡",
+    "resultHint": "上傳房間照片或描述您的夢想設計",
+    "before": "改造前",
+    "after": "改造後",
+    "tryAnother": "重新嘗試",
+    "actions": {
+      "redesign": "改造房間",
+      "generate": "生成設計",
+      "applyStyle": "套用風格"
+    },
+    "success": {
+      "redesigned": "房間改造成功！",
+      "generated": "設計生成成功！",
+      "styleApplied": "風格套用成功！"
+    },
+    "errors": {
+      "imageRequired": "請上傳房間圖片",
+      "promptRequired": "請描述您的設計需求",
+      "imageAndPromptRequired": "請上傳圖片並描述您想要的改變",
+      "styleRequired": "請選擇設計風格",
+      "failed": "設計生成失敗，請重試。"
+    },
+    "features": {
+      "title": "由 Gemini AI 驅動",
+      "imageText": "圖片 + 文字：上傳房間照片並描述改變",
+      "textOnly": "純文字：從描述生成設計",
+      "multiStyle": "10 種設計風格：現代、北歐、日式等",
+      "keepLayout": "保留房間佈局和窗戶位置"
+    }
   },
   "landing": {
     "badge": "AI 驅動的廣告生成平台",

@@ -12,13 +12,6 @@ const authStore = useAuthStore()
 const isScrolled = ref(false)
 const mobileMenuOpen = ref(false)
 
-// 3 Main Topics
-const topics = [
-  { key: 'pattern', icon: '🎨', route: '/topics/pattern' },
-  { key: 'product', icon: '🛍️', route: '/topics/product' },
-  { key: 'video', icon: '🎬', route: '/topics/video' }
-]
-
 function handleScroll() {
   isScrolled.value = window.scrollY > 20
 }
@@ -44,67 +37,41 @@ onUnmounted(() => {
     :class="[
       isScrolled
         ? 'bg-dark-900/95 backdrop-blur-lg border-b border-dark-700'
-        : 'bg-transparent'
+        : 'bg-dark-900/80 backdrop-blur-sm'
     ]"
   >
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex items-center justify-between h-14">
         <!-- Logo -->
         <RouterLink to="/" class="flex items-center gap-2">
-          <span class="text-2xl">🎨</span>
-          <span class="text-xl font-bold gradient-text">{{ t('app.name') }}</span>
+          <span class="text-2xl">🎬</span>
+          <span class="text-xl font-bold gradient-text">VidGo</span>
         </RouterLink>
 
-        <!-- Desktop Navigation -->
-        <nav class="hidden md:flex items-center gap-6">
-          <RouterLink to="/" class="btn-ghost">{{ t('nav.home') }}</RouterLink>
-
-          <!-- Topics Dropdown -->
-          <div class="relative group">
-            <button class="btn-ghost flex items-center gap-1">
-              {{ t('categories.aiCreate') }}
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            <div class="absolute top-full left-0 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-              <div class="bg-dark-800 border border-dark-700 rounded-xl py-2 min-w-56 shadow-xl">
-                <RouterLink
-                  v-for="topic in topics"
-                  :key="topic.key"
-                  :to="topic.route"
-                  class="flex items-center gap-3 px-4 py-3 hover:bg-dark-700 transition-colors"
-                >
-                  <span class="text-xl">{{ topic.icon }}</span>
-                  <div>
-                    <div class="text-white font-medium">{{ t(`topics.${topic.key}.name`) }}</div>
-                    <div class="text-xs text-gray-500">{{ t(`topics.${topic.key}.desc`) }}</div>
-                  </div>
-                </RouterLink>
-              </div>
-            </div>
-          </div>
-
-          <RouterLink to="/pricing" class="btn-ghost">{{ t('nav.pricing') }}</RouterLink>
+        <!-- Center: Home only -->
+        <nav class="hidden md:flex items-center">
+          <RouterLink to="/" class="px-4 py-2 text-gray-300 hover:text-white transition-colors">
+            {{ t('nav.home') }}
+          </RouterLink>
         </nav>
 
-        <!-- Right Side -->
-        <div class="flex items-center gap-4">
+        <!-- Right Side: Language + Auth -->
+        <div class="flex items-center gap-3">
           <LanguageSelector />
 
           <template v-if="authStore.isAuthenticated">
-            <RouterLink to="/dashboard" class="btn-ghost hidden md:flex">
+            <RouterLink to="/dashboard" class="px-3 py-1.5 text-sm text-gray-300 hover:text-white transition-colors">
               {{ t('nav.dashboard') }}
             </RouterLink>
-            <button @click="handleLogout" class="btn-secondary">
+            <button @click="handleLogout" class="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors">
               {{ t('nav.logout') }}
             </button>
           </template>
           <template v-else>
-            <RouterLink to="/auth/login" class="btn-ghost hidden md:flex">
+            <RouterLink to="/auth/login" class="px-3 py-1.5 text-sm text-gray-300 hover:text-white transition-colors">
               {{ t('nav.login') }}
             </RouterLink>
-            <RouterLink to="/auth/register" class="btn-primary">
+            <RouterLink to="/auth/register" class="px-4 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors">
               {{ t('nav.register') }}
             </RouterLink>
           </template>
@@ -143,45 +110,27 @@ onUnmounted(() => {
       <div class="px-4 py-4 space-y-2">
         <RouterLink
           to="/"
-          class="block px-4 py-2 rounded-lg hover:bg-dark-700"
+          class="block px-4 py-2 rounded-lg hover:bg-dark-700 text-white"
           @click="mobileMenuOpen = false"
         >
           {{ t('nav.home') }}
         </RouterLink>
 
-        <!-- Topic Links -->
-        <div class="pt-2 border-t border-dark-700">
-          <div class="px-4 py-2 text-xs text-gray-500 uppercase tracking-wider">
-            {{ t('categories.aiCreate') }}
-          </div>
-          <RouterLink
-            v-for="topic in topics"
-            :key="topic.key"
-            :to="topic.route"
-            class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-dark-700"
-            @click="mobileMenuOpen = false"
-          >
-            <span class="text-xl">{{ topic.icon }}</span>
-            <span class="text-white">{{ t(`topics.${topic.key}.name`) }}</span>
-          </RouterLink>
-        </div>
-
-        <RouterLink
-          to="/pricing"
-          class="block px-4 py-2 rounded-lg hover:bg-dark-700"
-          @click="mobileMenuOpen = false"
-        >
-          {{ t('nav.pricing') }}
-        </RouterLink>
-
         <!-- Auth links for mobile -->
-        <div v-if="!authStore.isAuthenticated" class="pt-2 border-t border-dark-700">
+        <div v-if="!authStore.isAuthenticated" class="pt-2 border-t border-dark-700 space-y-2">
           <RouterLink
             to="/auth/login"
-            class="block px-4 py-2 rounded-lg hover:bg-dark-700"
+            class="block px-4 py-2 rounded-lg hover:bg-dark-700 text-gray-300"
             @click="mobileMenuOpen = false"
           >
             {{ t('nav.login') }}
+          </RouterLink>
+          <RouterLink
+            to="/auth/register"
+            class="block px-4 py-2 rounded-lg bg-primary-500 text-white text-center"
+            @click="mobileMenuOpen = false"
+          >
+            {{ t('nav.register') }}
           </RouterLink>
         </div>
       </div>

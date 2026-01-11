@@ -158,6 +158,65 @@ If you didn't create an account with VidGo, please ignore this email.
 
         return await self.send_email(to_email, subject, html_content, text_content)
 
+    async def send_verification_code_email(self, to_email: str, code: str, username: Optional[str] = None) -> bool:
+        """Send 6-digit verification code email."""
+        subject = "Your VidGo verification code"
+
+        greeting = f"Hi {username}," if username else "Hi,"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }}
+                .code-box {{ background: #1f2937; color: #ffffff; font-size: 36px; font-weight: bold; letter-spacing: 8px; padding: 20px 40px; border-radius: 12px; text-align: center; margin: 30px 0; font-family: 'Courier New', monospace; }}
+                .footer {{ text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🎬 VidGo Verification Code</h1>
+                </div>
+                <div class="content">
+                    <p>{greeting}</p>
+                    <p>Thank you for registering with VidGo - AI Video Generation Platform!</p>
+                    <p>Your verification code is:</p>
+                    <div class="code-box">{code}</div>
+                    <p style="text-align: center; color: #6b7280;">Enter this code in the app to verify your email address.</p>
+                    <p style="color: #ef4444; font-size: 14px;">⏰ This code will expire in 15 minutes.</p>
+                    <p>If you didn't create an account with VidGo, please ignore this email.</p>
+                </div>
+                <div class="footer">
+                    <p>© 2024 VidGo. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+{greeting}
+
+Thank you for registering with VidGo - AI Video Generation Platform!
+
+Your verification code is: {code}
+
+Enter this code in the app to verify your email address.
+
+This code will expire in 15 minutes.
+
+If you didn't create an account with VidGo, please ignore this email.
+
+© 2024 VidGo. All rights reserved.
+        """
+
+        return await self.send_email(to_email, subject, html_content, text_content)
+
     async def send_password_reset_email(self, to_email: str, token: str, username: Optional[str] = None) -> bool:
         """Send password reset link."""
         reset_url = f"{self.frontend_url}?reset_password={token}"

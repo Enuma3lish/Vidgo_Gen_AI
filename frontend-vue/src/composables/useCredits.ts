@@ -37,7 +37,7 @@ export function useCredits() {
 
   async function fetchPricing() {
     try {
-      servicePricing.value = await creditsApi.getServicePricing()
+      servicePricing.value = await creditsApi.getPricing()
       return servicePricing.value
     } catch (e: any) {
       error.value = e.message || 'Failed to fetch pricing'
@@ -46,8 +46,8 @@ export function useCredits() {
   }
 
   function getCostForService(serviceType: string): number {
-    const pricing = servicePricing.value.find(p => p.service_type === serviceType)
-    return pricing?.credit_cost || 0
+    const pricing = servicePricing.value.find(p => p.service === serviceType)
+    return pricing?.credits_per_use || 0
   }
 
   function hasEnoughCredits(requiredCredits: number): boolean {

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { adminApi, createAdminWebSocket } from '@/api/admin'
-import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint } from '@/api/admin'
+import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse } from '@/api/admin'
 
 export const useAdminStore = defineStore('admin', () => {
   // State
@@ -14,6 +14,7 @@ export const useAdminStore = defineStore('admin', () => {
   const materialsPage = ref(1)
   const moderationQueue = ref<ModerationItem[]>([])
   const systemHealth = ref<SystemHealth | null>(null)
+  const aiServices = ref<AIServicesResponse | null>(null)
   const generationChart = ref<ChartDataPoint[]>([])
   const revenueChart = ref<ChartDataPoint[]>([])
   const userGrowthChart = ref<ChartDataPoint[]>([])
@@ -152,6 +153,18 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function fetchAIServicesStatus() {
+    isLoading.value = true
+    error.value = null
+    try {
+      aiServices.value = await adminApi.getAIServicesStatus()
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch AI services status'
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   async function fetchCharts(days: number = 30, months: number = 12) {
     isLoading.value = true
     error.value = null
@@ -204,6 +217,7 @@ export const useAdminStore = defineStore('admin', () => {
     materialsPage,
     moderationQueue,
     systemHealth,
+    aiServices,
     generationChart,
     revenueChart,
     userGrowthChart,
@@ -226,6 +240,7 @@ export const useAdminStore = defineStore('admin', () => {
     reviewMaterial,
     fetchModerationQueue,
     fetchSystemHealth,
+    fetchAIServicesStatus,
     fetchCharts,
     connectWebSocket,
     disconnectWebSocket

@@ -1,16 +1,26 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
+import { useDemoMode } from '@/composables'
 import { demoApi } from '@/api'
-import UploadZone from '@/components/tools/UploadZone.vue'
-import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
-import CreditCost from '@/components/tools/CreditCost.vue'
+// PRESET-ONLY MODE: UploadZone removed - all users use presets
+
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
+const isZh = computed(() => locale.value.startsWith('zh'))
+
+// Demo mode
+const {
+  isDemoUser,
+  loadDemoTemplates,
+  demoTemplates
+} = useDemoMode()
 
 const uploadedImage = ref<string | null>(null)
 const resultImage = ref<string | null>(null)
@@ -18,29 +28,127 @@ const isProcessing = ref(false)
 const selectedBgType = ref<'transparent' | 'white' | 'custom'>('transparent')
 const customBgColor = ref('#ffffff')
 
-const bgOptions = [
-  { value: 'transparent', label: 'Transparent', icon: '🔲' },
-  { value: 'white', label: 'White', icon: '⬜' },
-  { value: 'custom', label: 'Custom Color', icon: '🎨' }
+// Default images for demo users (5 examples) - with paired input/result URLs
+// These should be pre-generated and stored in the static folder
+const demoExamples = [
+  {
+    id: 'demo-1',
+    input: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
+    prompt: 'Remove the background from this product image',
+    promptZh: '移除這張產品圖片的背景',
+    result: null as string | null
+  },
+  {
+    id: 'demo-2',
+    input: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
+    prompt: 'Remove background and create transparent PNG',
+    promptZh: '移除背景並創建透明PNG圖片',
+    result: null as string | null
+  },
+  {
+    id: 'demo-3',
+    input: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
+    prompt: 'Remove background from shoes image',
+    promptZh: '移除鞋子圖片的背景',
+    result: null as string | null
+  },
+  {
+    id: 'demo-4',
+    input: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800',
+    prompt: 'Create clean product cutout with transparent background',
+    promptZh: '創建乾淨的產品剪影，透明背景',
+    result: null as string | null
+  },
+  {
+    id: 'demo-5',
+    input: 'https://images.unsplash.com/photo-1541643600914-78b084683601?w=800',
+    prompt: 'Extract product from background for e-commerce',
+    promptZh: '為電商提取產品，移除背景',
+    result: null as string | null
+  }
 ]
 
-async function handleFilesSelected(files: File[]) {
-  const file = files[0]
-  if (file) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      uploadedImage.value = e.target?.result as string
-      resultImage.value = null
-    }
-    reader.readAsDataURL(file)
+// Demo images from database
+const selectedDemoIndex = ref<number>(0)
+
+const demoImages = computed(() => {
+  const templates = demoTemplates.value
+    .filter(t => t.input_image_url)
+    .map(t => ({
+      id: t.id,
+      input: t.input_image_url,
+      result: t.result_watermarked_url || t.result_image_url
+    }))
+  return templates.length > 0 ? templates : demoExamples
+})
+
+// Load demo templates on mount
+onMounted(async () => {
+  await loadDemoTemplates('background_removal')
+
+  // For demo users, auto-select first example
+  if (isDemoUser.value && demoImages.value.length > 0) {
+    uploadedImage.value = demoImages.value[0].input || null
+  }
+})
+
+function selectDemoExample(index: number) {
+  selectedDemoIndex.value = index
+  const example = demoImages.value[index]
+  if (example) {
+    uploadedImage.value = example.input || null
+    resultImage.value = null
   }
 }
 
-async function processImage() {
+
+
+async function removeBackground() {
   if (!uploadedImage.value) return
+
+  // Demo users cannot use custom background
+  if (isDemoUser.value && selectedBgType.value === 'custom') {
+    uiStore.showError(isZh.value ? '請訂閱以使用自訂背景' : 'Please subscribe to use custom background')
+    return
+  }
 
   isProcessing.value = true
   try {
+    // For demo users, use cached result from database templates
+    if (isDemoUser.value) {
+      // First check if we have templates from database
+      const selectedExample = demoImages.value[selectedDemoIndex.value]
+
+      // Check for result_watermarked_url or result from database template
+      if (selectedExample?.result) {
+        // Simulate processing delay for demo effect
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        resultImage.value = selectedExample.result
+        uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
+        return
+      }
+
+      // Try to find matching template from loaded templates
+      const matchingTemplate = demoTemplates.value.find(t =>
+        t.id === selectedExample?.id ||
+        t.input_image_url === uploadedImage.value
+      )
+
+      if (matchingTemplate?.result_watermarked_url || matchingTemplate?.result_image_url) {
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        resultImage.value = matchingTemplate.result_watermarked_url || matchingTemplate.result_image_url || null
+        uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
+        return
+      }
+
+      // No pre-generated result available - show demo preview
+      // Use the input image as a preview with demo overlay message
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      resultImage.value = uploadedImage.value
+      uiStore.showInfo(isZh.value ? '這是示範預覽，訂閱後可使用完整去背功能' : 'This is a demo preview. Subscribe for full background removal.')
+      return
+    }
+
     // Upload image first
     const uploadResult = await demoApi.uploadImage(
       dataURItoBlob(uploadedImage.value) as File
@@ -81,18 +189,7 @@ function dataURItoBlob(dataURI: string): Blob {
   return new Blob([ab], { type: mimeString })
 }
 
-function downloadResult() {
-  if (!resultImage.value) return
-  const link = document.createElement('a')
-  link.href = resultImage.value
-  link.download = 'background-removed.png'
-  link.click()
-}
 
-function reset() {
-  uploadedImage.value = null
-  resultImage.value = null
-}
 </script>
 
 <template>
@@ -100,6 +197,17 @@ function reset() {
     <LoadingOverlay :show="isProcessing" :message="t('common.processing')" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Back Button -->
+      <button
+        @click="router.back()"
+        class="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        {{ t('common.back') }}
+      </button>
+
       <!-- Header -->
       <div class="text-center mb-12">
         <h1 class="text-4xl font-bold text-white mb-4">
@@ -108,109 +216,117 @@ function reset() {
         <p class="text-xl text-gray-400">
           {{ t('tools.backgroundRemoval.longDesc') }}
         </p>
+
+        <!-- Subscribe Notice for Demo Users -->
+        <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
+          <RouterLink to="/pricing" class="hover:underline">
+            {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+          </RouterLink>
+        </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Left Panel - Upload & Settings -->
-        <div class="space-y-6">
-          <!-- Upload Zone -->
-          <div class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">{{ t('common.upload') }}</h3>
-
-            <div v-if="!uploadedImage">
-              <UploadZone
-                accept="image/*"
-                @files="handleFilesSelected"
-                @error="(msg) => uiStore.showError(msg)"
-              />
-            </div>
-
-            <div v-else class="space-y-4">
-              <img
-                :src="uploadedImage"
-                alt="Uploaded"
-                class="w-full rounded-xl"
-              />
-              <button @click="reset" class="btn-ghost text-sm">
-                Upload Different Image
-              </button>
-            </div>
-          </div>
-
-          <!-- Settings -->
-          <div v-if="uploadedImage" class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">Background Type</h3>
-
-            <div class="grid grid-cols-3 gap-3">
-              <button
-                v-for="option in bgOptions"
-                :key="option.value"
-                @click="selectedBgType = option.value as any"
-                class="p-4 rounded-xl border-2 transition-all text-center"
-                :class="selectedBgType === option.value
-                  ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-dark-600 hover:border-dark-500'"
-              >
-                <span class="text-2xl block mb-2">{{ option.icon }}</span>
-                <span class="text-sm">{{ option.label }}</span>
-              </button>
-            </div>
-
-            <!-- Custom Color Picker -->
-            <div v-if="selectedBgType === 'custom'" class="mt-4">
-              <label class="label">Select Color</label>
-              <input
-                type="color"
-                v-model="customBgColor"
-                class="w-full h-12 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            <!-- Credit Cost -->
-            <div class="mt-6 pt-4 border-t border-dark-700">
-              <CreditCost service="background_removal" />
-            </div>
-
-            <!-- Generate Button -->
+      <!-- PRESET-ONLY MODE: All users see the same preset-based layout -->
+      <div class="space-y-8">
+        <!-- Example Selection -->
+        <div class="card">
+          <h3 class="text-lg font-semibold text-white mb-4">
+            {{ isZh ? '選擇範例圖片' : 'Select Example Image' }}
+          </h3>
+          <div class="grid grid-cols-5 gap-3">
             <button
-              @click="processImage"
-              :disabled="isProcessing"
-              class="btn-primary w-full mt-4"
+              v-for="(example, idx) in demoImages"
+              :key="example.id || idx"
+              @click="selectDemoExample(idx)"
+              class="aspect-square rounded-lg overflow-hidden border-2 transition-all"
+              :class="selectedDemoIndex === idx
+                ? 'border-primary-500 ring-2 ring-primary-500/50'
+                : 'border-dark-600 hover:border-dark-500'"
             >
-              {{ t('common.generate') }}
+              <img
+                :src="example.input"
+                alt="Example"
+                class="w-full h-full object-cover"
+              />
             </button>
           </div>
         </div>
 
-        <!-- Right Panel - Results -->
-        <div>
-          <div class="card h-full">
-            <h3 class="text-lg font-semibold text-white mb-4">Result</h3>
-
-            <div v-if="resultImage && uploadedImage" class="space-y-4">
-              <BeforeAfterSlider
-                :before-image="uploadedImage"
-                :after-image="resultImage"
-                before-label="Before"
-                after-label="After"
-              />
-
-              <button @click="downloadResult" class="btn-primary w-full">
-                {{ t('common.download') }}
-              </button>
+        <!-- Input and Result Side by Side -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Input -->
+          <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">
+              {{ isZh ? '原始圖片' : 'Original Image' }}
+            </h3>
+            <div v-if="uploadedImage" class="rounded-xl overflow-hidden">
+              <img :src="uploadedImage" alt="Original" class="w-full" />
             </div>
+            <div v-else class="h-64 flex items-center justify-center bg-dark-700 rounded-xl">
+              <span class="text-gray-500">{{ isZh ? '請選擇圖片' : 'Select an image' }}</span>
+            </div>
+          </div>
 
-            <div v-else class="h-64 flex items-center justify-center text-gray-500">
-              <div class="text-center">
-                <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <p>Upload an image to see the result</p>
+          <!-- Result -->
+          <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">
+              {{ isZh ? '去背結果' : 'Result' }}
+            </h3>
+            <div v-if="resultImage" class="space-y-4">
+              <div class="rounded-xl overflow-hidden bg-checkered relative">
+                <img :src="resultImage" alt="Result" class="w-full" />
               </div>
+
+              <!-- Watermark badge -->
+              <div class="text-center text-xs text-gray-500">vidgo.ai</div>
+
+              <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
+              <RouterLink
+                to="/pricing"
+                class="btn-primary w-full text-center block"
+              >
+                {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+              </RouterLink>
+            </div>
+            <div v-else class="h-64 flex items-center justify-center bg-dark-700 rounded-xl">
+              <span class="text-gray-500">{{ isZh ? '點擊下方按鈕去除背景' : 'Click button below to remove background' }}</span>
             </div>
           </div>
         </div>
+
+        <!-- Remove Button -->
+        <div class="flex justify-center">
+          <button
+            @click="removeBackground"
+            :disabled="!uploadedImage || isProcessing"
+            class="btn-primary px-12 py-4 text-lg font-semibold"
+          >
+            <span v-if="isProcessing" class="flex items-center gap-2">
+              <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              {{ t('common.processing') }}
+            </span>
+            <span v-else class="flex items-center gap-2">
+              <span>✨</span>
+              {{ isZh ? '去除背景' : 'Remove Background' }}
+            </span>
+          </button>
+        </div>
       </div>
+      <!-- PRESET-ONLY MODE: Subscribed user layout REMOVED - all users use presets -->
     </div>
   </div>
 </template>
+
+<style scoped>
+.bg-checkered {
+  background-image: linear-gradient(45deg, #374151 25%, transparent 25%),
+    linear-gradient(-45deg, #374151 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #374151 75%),
+    linear-gradient(-45deg, transparent 75%, #374151 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-color: #1f2937;
+}
+</style>

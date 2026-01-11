@@ -14,53 +14,331 @@
     "myWorks": "Mis trabajos"
   },
   "hero": {
-    "title": "Crea contenido increíble con IA",
-    "subtitle": "Transforma tus ideas en imágenes y videos impresionantes con nuestras herramientas de IA",
-    "cta": "Empezar a crear",
+    "title": "Crea visuales impresionantes con IA",
+    "subtitle": "Diseño de patrones profesional, fotografía de productos para e-commerce y creación de videos con IA - todo en una plataforma",
+    "cta": "Probar gratis",
     "secondaryCta": "Ver precios"
   },
+  "topics": {
+    "pattern": {
+      "name": "Diseño de Patrones",
+      "desc": "Generación y transferencia de patrones con IA",
+      "longDesc": "Usa IA para generar patrones únicos rápidamente. Soporta sin costuras, florales, geométricos y más estilos",
+      "ctaTitle": "Comienza a crear patrones únicos",
+      "ctaDesc": "Genera patrones profesionales con IA, múltiples estilos para elegir"
+    },
+    "product": {
+      "name": "Fotos de Productos",
+      "desc": "Soluciones profesionales de fotografía de productos",
+      "longDesc": "Eliminación inteligente de fondos, generación de escenas, mejora de productos - haz que tus productos destaquen",
+      "processDesc": "Procesamiento con un clic para imágenes de productos profesionales",
+      "ctaTitle": "Mejora tus imágenes de productos",
+      "ctaDesc": "Eliminación de fondo profesional y generación de escenas para el éxito del e-commerce"
+    },
+    "video": {
+      "name": "Video IA",
+      "desc": "Convierte imágenes estáticas en videos dinámicos",
+      "longDesc": "De imagen a video, transformación de estilos, múltiples estilos artísticos para elegir",
+      "imageToVideo": "Imagen a Video",
+      "styleTransform": "Transformar Estilo",
+      "stylesDesc": "Múltiples estilos artísticos para hacer que tus videos destaquen",
+      "ctaTitle": "Da vida a tus imágenes",
+      "ctaDesc": "Generación de video con un clic, múltiples estilos para elegir"
+    },
+    "avatar": {
+      "name": "Avatar IA",
+      "desc": "De foto a avatar con sincronización labial natural",
+      "longDesc": "Transforma fotos en videos de avatares parlantes con voz y expresiones de IA"
+    },
+    "interior": {
+      "name": "Diseño de Interiores",
+      "desc": "Rediseño de espacios con IA",
+      "longDesc": "Transforma cualquier habitación con IA. Sube una foto y describe tu espacio soñado."
+    }
+  },
   "tools": {
+    "avatar": {
+      "name": "Avatar IA",
+      "desc": "De foto a video de avatar parlante",
+      "longDesc": "Transforma fotos en videos de avatares parlantes con sincronización labial natural",
+      "avatarPhoto": "Foto del Avatar",
+      "script": "Guión",
+      "scriptPlaceholder": "Ingresa el texto que quieres que diga tu avatar...",
+      "maxSpeech": "Máximo 120 segundos de voz",
+      "voiceSettings": "Configuración de Voz",
+      "language": "Idioma",
+      "voice": "Voz",
+      "female": "Femenina",
+      "male": "Masculina",
+      "defaultAvatars": "O elige un avatar predeterminado:",
+      "changePhoto": "Cambiar Foto",
+      "generatedVideo": "Video de Avatar Generado",
+      "videoPlaceholder": "El video del avatar aparecerá aquí",
+      "processing": "Generando video de avatar... Esto puede tomar unos minutos"
+    },
+    "patternGenerate": {
+      "name": "Generar Patrón",
+      "desc": "Genera patrones únicos desde descripciones de texto",
+      "longDesc": "Crea patrones hermosos y únicos desde descripciones de texto usando IA"
+    },
+    "patternTransfer": {
+      "name": "Transferir Patrón",
+      "desc": "Aplica patrones a productos",
+      "longDesc": "Aplica patrones de forma perfecta en superficies de productos"
+    },
+    "patternSeamless": {
+      "name": "Patrón Sin Costuras",
+      "desc": "Genera patrones que se repiten perfectamente",
+      "longDesc": "Crea patrones que se repiten sin costuras visibles"
+    },
+    "removeBackground": {
+      "name": "Eliminar Fondo",
+      "desc": "Elimina fondos de imágenes con un clic"
+    },
+    "productScene": {
+      "name": "Escena de Producto",
+      "desc": "Genera escenas profesionales para productos",
+      "longDesc": "Coloca tus productos en escenas profesionales generadas por IA"
+    },
+    "productEnhance": {
+      "name": "Mejorar Producto",
+      "desc": "Mejora la calidad de imágenes de productos",
+      "longDesc": "Mejora imágenes de productos con mejora de calidad por IA"
+    },
+    "imageToVideo": {
+      "name": "Imagen a Video",
+      "desc": "Convierte imágenes estáticas en videos dinámicos",
+      "longDesc": "Transforma imágenes estáticas en videos animados cautivadores"
+    },
+    "videoTransform": {
+      "name": "Transformar Estilo",
+      "desc": "Transforma videos en estilos artísticos",
+      "longDesc": "Aplica estilos artísticos como anime, Ghibli o acuarela a tus videos"
+    },
+    "productVideo": {
+      "name": "Video de Producto",
+      "desc": "Crea videos de presentación de productos",
+      "longDesc": "Genera videos dinámicos de presentación de productos automáticamente"
+    },
     "backgroundRemoval": {
-      "name": "Eliminar fondo",
+      "name": "Eliminar Fondo",
       "desc": "Elimina fondos al instante con IA",
       "longDesc": "Detecta y elimina automáticamente fondos de cualquier imagen con un clic"
     },
-    "productScene": {
-      "name": "Escena de producto",
-      "desc": "Genera fotos de productos increíbles",
-      "longDesc": "Crea fotografía profesional de productos con escenas y fondos generados por IA"
-    },
     "tryOn": {
-      "name": "Prueba virtual",
+      "name": "Prueba Virtual",
       "desc": "Probador virtual de ropa",
       "longDesc": "Ve cómo se ve la ropa en diferentes modelos con prueba virtual con IA"
     },
     "roomRedesign": {
-      "name": "Rediseño de habitación",
+      "name": "Rediseño de Habitación",
       "desc": "Transforma espacios interiores",
       "longDesc": "Rediseña cualquier habitación con sugerencias de decoración interior con IA"
     },
     "shortVideo": {
-      "name": "Video corto",
+      "name": "Video Corto",
       "desc": "Crea videos cortos atractivos",
       "longDesc": "Genera videos cortos cautivadores a partir de descripciones de texto o imágenes"
+    },
+    "common": {
+      "uploadImage": "Subir Imagen",
+      "uploadVideo": "Subir Video",
+      "settings": "Configuración",
+      "motionStrength": "Intensidad de Movimiento",
+      "gentle": "Suave",
+      "intense": "Intenso",
+      "styleTransform": "Transformar Estilo (Opcional)",
+      "originalStyle": "Estilo Original",
+      "processingTime": "Procesando (1-3 min)",
+      "processingTimeLong": "Procesando (3-10 min)",
+      "generatedResult": "Resultado Generado",
+      "transformResult": "Resultado de Transformación",
+      "selectScene": "Seleccionar Escena",
+      "customPrompt": "Prompt Personalizado",
+      "describeScene": "Describe tu escena",
+      "scenePlaceholder": "Ej: Sobre una superficie de mármol con suave luz matutina...",
+      "generatedScenes": "Escenas Generadas",
+      "productImage": "Imagen de Producto",
+      "changeImage": "Cambiar Imagen",
+      "additionalPrompt": "Prompt Adicional (Opcional)",
+      "promptPlaceholder": "Ej: Añadir más detalles, colores más saturados...",
+      "startTransform": "Iniciar Transformación",
+      "examplePrompt": "Ej: Elegante patrón de rosas florales, esquema de colores dorado y azul marino..."
+    },
+    "scenes": {
+      "studio": { "name": "Estudio", "desc": "Iluminación limpia de estudio" },
+      "nature": { "name": "Naturaleza", "desc": "Entorno natural al aire libre" },
+      "luxury": { "name": "Lujo", "desc": "Estilo premium elegante" },
+      "minimal": { "name": "Minimalista", "desc": "Fondo minimalista limpio" },
+      "lifestyle": { "name": "Lifestyle", "desc": "Ambiente hogareño" },
+      "custom": { "name": "Personalizado", "desc": "Tu propio prompt" }
+    }
+  },
+  "styles": {
+    "seamless": "Sin Costuras",
+    "floral": "Floral",
+    "geometric": "Geométrico",
+    "abstract": "Abstracto",
+    "traditional": "Tradicional",
+    "3d": "Diseño 3D",
+    "interior": "Diseño de Interiores",
+    "mockup": "Mockup de Producto",
+    "studio": "Estudio",
+    "nature": "Naturaleza",
+    "luxury": "Lujo",
+    "minimal": "Minimalista",
+    "lifestyle": "Lifestyle",
+    "anime": "Estilo Anime",
+    "ghibli": "Estilo Ghibli",
+    "pixar": "Estilo Pixar",
+    "clay": "Animación de Arcilla",
+    "watercolor": "Acuarela"
+  },
+  "examples": {
+    "title": "Ejemplos Destacados",
+    "before": "Antes",
+    "after": "Después",
+    "viewMore": "Ver Más Ejemplos",
+    "loading": "Cargando ejemplos..."
+  },
+  "sections": {
+    "availableTools": "Herramientas Disponibles",
+    "quickGenerate": "Generación Rápida",
+    "quickProcess": "Procesamiento Rápido",
+    "popularStyles": "Estilos Populares",
+    "readyToStart": "¿Listo para empezar?",
+    "freeToTry": "Prueba herramientas de IA gratis, desbloquea posibilidades ilimitadas",
+    "startFree": "Empezar Gratis"
+  },
+  "whyChoose": {
+    "title": "¿Por qué elegir VidGo AI?",
+    "subtitle": "Herramientas de IA profesionales para posibilidades creativas ilimitadas",
+    "features": {
+      "fast": {
+        "title": "Generación Rápida",
+        "desc": "Modelos de IA optimizados, resultados en segundos"
+      },
+      "quality": {
+        "title": "Calidad Profesional",
+        "desc": "Salida de grado comercial para necesidades profesionales"
+      },
+      "cost": {
+        "title": "Precios Flexibles",
+        "desc": "Paga según uso, sin tarifas ocultas"
+      },
+      "cache": {
+        "title": "Caché Inteligente",
+        "desc": "Mismas solicitudes responden más rápido, ahorra tiempo"
+      },
+      "api": {
+        "title": "Integración API",
+        "desc": "Soporte completo de API para fácil integración"
+      }
     }
   },
   "categories": {
     "aiCreate": "Creación IA",
-    "editing": "Apps de edición",
-    "video": "Creación de video",
+    "editing": "Apps de Edición",
+    "video": "Creación de Video",
     "architecture": "Arquitectura",
     "product": "E-commerce",
     "portrait": "Retrato"
+  },
+  "homepage": {
+    "topics": {
+      "aiImage": {
+        "title": "Creación de Imágenes IA",
+        "desc": "Crea imágenes impresionantes con IA"
+      },
+      "aiVideo": {
+        "title": "Creación de Videos IA",
+        "desc": "Genera videos desde imágenes y texto"
+      },
+      "ecommerce": {
+        "title": "Producto y E-commerce",
+        "desc": "Mejora fotos de productos para e-commerce"
+      },
+      "architecture": {
+        "title": "Arquitectura e Interiores",
+        "desc": "Rediseña espacios con IA"
+      },
+      "quickTools": {
+        "title": "Herramientas Rápidas",
+        "desc": "Herramientas de edición rápida para uso diario"
+      },
+      "inspiration": {
+        "title": "Inspiración de Obras",
+        "desc": "Explora ejemplos creativos para inspiración"
+      }
+    },
+    "tools": {
+      "textToImage": "Texto a Imagen",
+      "imageEnhancement": "Mejora de Imagen",
+      "patternDesign": "Diseño de Patrones",
+      "styleTransfer": "Transferencia de Estilo",
+      "imageToVideo": "Imagen a Video",
+      "videoStyleTransfer": "Estilo de Video",
+      "aiAvatar": "Avatar IA",
+      "productVideo": "Video de Producto",
+      "productScene": "Escena de Producto",
+      "backgroundRemoval": "Eliminar Fondo",
+      "productEnhancement": "Mejora de Producto",
+      "virtualTryOn": "Prueba Virtual",
+      "roomRedesign": "Rediseño de Habitación",
+      "interiorStyle": "Estilo de Interiores",
+      "archVisualization": "Visualización Arquitectónica",
+      "furniturePlacement": "Colocación de Muebles",
+      "hdUpscaling": "Escalado HD",
+      "watermarkRemoval": "Eliminar Marca de Agua",
+      "objectRemoval": "Eliminar Objeto",
+      "imageCompression": "Compresión de Imagen"
+    },
+    "gallery": {
+      "video": "Video",
+      "recommended": "Recomendados",
+      "portrait": "Retrato",
+      "photography": "Fotografía",
+      "animation": "Animación",
+      "poster": "Póster e Ilustración",
+      "anime": "Anime",
+      "ecommerceDesign": "Diseño E-commerce",
+      "chinese": "Estilo Chino",
+      "female": "Femenino",
+      "male": "Masculino",
+      "interior": "Interiores",
+      "architectureLandscape": "Arquitectura y Paisaje",
+      "toys": "Juguetes y Figuras",
+      "art": "Arte",
+      "productDesign": "Diseño de Producto",
+      "gameCG": "CG de Juegos",
+      "nature": "Naturaleza",
+      "threeD": "3D",
+      "logoUI": "Logo/UI",
+      "character": "Personaje IP",
+      "animals": "Animales y Plantas",
+      "fantasy": "Fantasía",
+      "scifi": "Ciencia Ficción"
+    },
+    "promptModal": {
+      "title": "Prompt de Generación",
+      "copyPrompt": "Copiar Prompt",
+      "tryThis": "Probar Esto",
+      "copied": "¡Copiado!",
+      "close": "Cerrar"
+    },
+    "viewMore": "Ver Más",
+    "seeAll": "Ver Todos los Ejemplos",
+    "tryNow": "Probar Ahora"
   },
   "badges": {
     "free": "Gratis",
     "beta": "Beta",
     "hot": "Popular",
-    "new": "Nuevo"
+    "new": "Nuevo",
+    "cached": "En Caché"
   },
   "common": {
+    "back": "Atrás",
     "upload": "Subir",
     "generate": "Generar",
     "download": "Descargar",
@@ -75,9 +353,18 @@
     "error": "Error",
     "dragDrop": "Arrastra y suelta archivos aquí o haz clic para subir",
     "supportedFormats": "Formatos soportados: JPG, PNG, WEBP",
+    "supportedVideoFormats": "Formatos soportados: MP4, MOV, WEBM",
     "maxSize": "Tamaño máximo: 10MB",
     "credits": "Créditos",
-    "estimatedCost": "Costo estimado"
+    "estimatedCost": "Costo estimado",
+    "tryExample": "Probar Ejemplo",
+    "selectStyle": "Seleccionar Estilo",
+    "enterPrompt": "Ingresar Descripción",
+    "uploadImage": "Subir Imagen",
+    "uploadVideo": "Subir Video",
+    "result": "Resultado",
+    "previewComingSoon": "Vista previa próximamente",
+    "startFree": "Empezar Gratis"
   },
   "auth": {
     "email": "Correo electrónico",
@@ -118,7 +405,40 @@
     "free": "Gratis",
     "currentPlan": "Plan actual",
     "upgrade": "Mejorar",
-    "features": "Características"
+    "getStarted": "Comenzar",
+    "features": "Características",
+    "status": "Estado",
+    "validUntil": "Válido hasta",
+    "daysLeft": "días restantes",
+    "processing": "Procesando...",
+    "subscribing": "Suscribiendo...",
+    "cancelSubscription": "Cancelar suscripción",
+    "cancelWithRefund": "Cancelar con reembolso",
+    "subscribeSuccess": "¡Suscripción activada con éxito!",
+    "redirectingToPayment": "Redirigiendo al pago...",
+    "subscribeFailed": "Error al suscribirse. Por favor intenta de nuevo.",
+    "refundProcessed": "Reembolso procesado con éxito. Tu suscripción ha sido cancelada.",
+    "subscriptionCancelled": "Suscripción cancelada. Puedes seguir usando créditos hasta el final de tu período de facturación.",
+    "cancelFailed": "Error al cancelar suscripción. Por favor intenta de nuevo.",
+    "faq": {
+      "title": "Preguntas Frecuentes",
+      "credits": {
+        "q": "¿Qué son los créditos?",
+        "a": "Los créditos se usan para generar contenido. Diferentes herramientas consumen diferentes cantidades de créditos según la complejidad."
+      },
+      "rollover": {
+        "q": "¿Se acumulan los créditos no usados?",
+        "a": "Los créditos mensuales se reinician al final de cada período de facturación. Los paquetes de créditos comprados nunca expiran."
+      },
+      "change": {
+        "q": "¿Puedo mejorar o degradar mi plan?",
+        "a": "Sí, puedes cambiar tu plan en cualquier momento. Los cambios se aplican en el próximo ciclo de facturación."
+      },
+      "refund": {
+        "q": "¿Cuál es la política de reembolso?",
+        "a": "Puedes solicitar un reembolso completo dentro de los 7 días de la suscripción. Después de 7 días, aún puedes cancelar pero mantendrás acceso hasta el final de tu período de facturación."
+      }
+    }
   },
   "footer": {
     "about": "Acerca de",
@@ -126,5 +446,157 @@
     "privacy": "Privacidad",
     "contact": "Contacto",
     "copyright": "© 2024 VidGo AI. Todos los derechos reservados."
+  },
+  "interior": {
+    "badge": "Diseño de Interiores IA",
+    "title": "Diseño de Interiores IA",
+    "subtitle": "Transforma cualquier habitación con diseño de interiores impulsado por IA. Sube una foto y describe tu espacio soñado.",
+    "processing": "Generando diseño...",
+    "tabs": {
+      "redesign": "Rediseñar Habitación",
+      "generate": "Generar Diseño",
+      "styleTransfer": "Transferir Estilo"
+    },
+    "uploadTitle": "Subir Foto de Habitación",
+    "roomType": "Tipo de Habitación",
+    "designStyle": "Estilo de Diseño",
+    "prompt": "Describe tus Cambios",
+    "promptPlaceholder": "Ej: Minimalista moderno con sofá gris, mesa de café de madera y plantas de interior...",
+    "examplePrompts": "Prueba estos ejemplos",
+    "result": "Resultado del Diseño",
+    "resultPlaceholder": "Tu habitación rediseñada aparecerá aquí",
+    "resultHint": "Sube una foto de habitación o describe tu diseño soñado",
+    "before": "Antes",
+    "after": "Después",
+    "tryAnother": "Probar Otro",
+    "actions": {
+      "redesign": "Rediseñar Habitación",
+      "generate": "Generar Diseño",
+      "applyStyle": "Aplicar Estilo"
+    },
+    "success": {
+      "redesigned": "¡Habitación rediseñada con éxito!",
+      "generated": "¡Diseño generado con éxito!",
+      "styleApplied": "¡Estilo aplicado con éxito!"
+    },
+    "errors": {
+      "imageRequired": "Por favor sube una imagen de habitación",
+      "promptRequired": "Por favor describe tu diseño",
+      "imageAndPromptRequired": "Por favor sube una imagen y describe tus cambios",
+      "styleRequired": "Por favor selecciona un estilo de diseño",
+      "failed": "Error en la generación del diseño. Por favor intenta de nuevo."
+    },
+    "features": {
+      "title": "Impulsado por Gemini AI",
+      "imageText": "Imagen + Texto: Sube foto de habitación con descripción",
+      "textOnly": "Solo Texto: Genera diseño desde descripción",
+      "multiStyle": "10 estilos de diseño: Moderno, Nórdico, Japonés y más",
+      "keepLayout": "Preserva el diseño de la habitación y posiciones de ventanas"
+    }
+  },
+  "landing": {
+    "badge": "Plataforma de Generación de Anuncios con IA",
+    "headline1": "IA Auto-Genera",
+    "headline2": "Anuncios de Video de Alto Rendimiento",
+    "subtitle": "Deja que la IA cree anuncios de video profesionales para ti en solo minutos.",
+    "highlight": "Aumenta tasas de conversión, ahorra 80% de tiempo y costo de producción",
+    "tryFree": "Probar Gratis Ahora",
+    "watchDemo": "Ver Demo",
+    "stats": {
+      "users": "Usuarios Activos",
+      "timeSaved": "Tiempo Ahorrado",
+      "conversion": "Aumento de Conversión"
+    },
+    "features": {
+      "title": "Funciones Potentes,",
+      "titleHighlight": "Todo en Uno",
+      "subtitle": "Integrando tecnología de IA con herramientas de marketing profesional para soluciones completas de producción de anuncios",
+      "ai": { "title": "Generación Inteligente IA", "desc": "Tecnología de IA avanzada analiza automáticamente tus necesidades y genera anuncios de video profesionales que coinciden con tu identidad de marca" },
+      "fast": { "title": "Producción Rápida", "desc": "Completa la producción de anuncios de video en solo 3 minutos, reduciendo significativamente el tiempo de producción tradicional" },
+      "target": { "title": "Segmentación Precisa", "desc": "Análisis inteligente de audiencia para optimizar contenido de anuncios para mejores tasas de clics y conversión" },
+      "data": { "title": "Análisis de Datos", "desc": "Seguimiento de rendimiento de anuncios en tiempo real con análisis de datos profundo y sugerencias de optimización" },
+      "lang": { "title": "Soporte Multiidioma", "desc": "Soporte para 30+ idiomas para expandirse fácilmente a mercados globales" },
+      "team": { "title": "Colaboración en Equipo", "desc": "Soporte de colaboración multiusuario para que los equipos creen contenido de anuncios perfecto juntos" }
+    },
+    "howItWorks": {
+      "badge": "Cómo Funciona",
+      "title": "Cuatro Pasos",
+      "titleHighlight": "Fácil Completar",
+      "subtitle": "Flujo de trabajo simple e intuitivo para comenzar rápidamente y crear inmediatamente",
+      "step1": { "title": "Subir Activos", "desc": "Sube tus imágenes de productos, videos o contenido de texto, soportando múltiples formatos" },
+      "step2": { "title": "Generación IA", "desc": "La IA analiza automáticamente el contenido y genera guiones de anuncios profesionales y efectos visuales" },
+      "step3": { "title": "Personalizar", "desc": "Ajusta estilo, texto, música y otros detalles según tus necesidades" },
+      "step4": { "title": "Exportar y Desplegar", "desc": "Descarga el producto terminado o integra directamente con las principales plataformas de anuncios" }
+    },
+    "examples": {
+      "badge": "Exhibición",
+      "title": "Ejemplos Increíbles Generados por IA",
+      "subtitle": "Ve varios tipos de ejemplos de anuncios de video y experimenta la creatividad de la IA",
+      "viewMore": "Ver Más Ejemplos",
+      "categories": {
+        "all": "Todos",
+        "ecommerce": "E-commerce",
+        "social": "Social",
+        "brand": "Marca",
+        "app": "Apps",
+        "promo": "Promo",
+        "service": "Servicio"
+      }
+    },
+    "comparison": {
+      "badge": "Antes y Después",
+      "title": "Tradicional vs ",
+      "titleHighlight": "Producción Inteligente IA",
+      "subtitle": "Ve cómo VIDGO revoluciona la producción de anuncios, ahorrándote tiempo y costo",
+      "traditional": "Método Tradicional",
+      "aiWay": "VIDGO AI",
+      "recommend": "Recomendado",
+      "traditionalItems": ["Requiere equipo profesional", "Producción de 2-4 semanas", "Alto costo $5000+", "Revisiones difíciles", "Necesita equipo profesional", "Altos costos laborales"],
+      "aiItems": ["No requiere habilidades profesionales", "Completo en 3 minutos", "Desde $49/mes", "Ajusta en cualquier momento", "Operación en línea", "Automatización IA"],
+      "statTimeSaved": "Tiempo Ahorrado",
+      "statCostReduced": "Costo Reducido",
+      "statEfficiency": "Eficiencia de Producción"
+    },
+    "testimonials": {
+      "badge": "Testimonios",
+      "title": "Confiado por ",
+      "titleHighlight": "10,000+",
+      "titleEnd": " Empresas",
+      "subtitle": "Escucha historias reales de clientes de diversas industrias",
+      "avgRating": "Calificación Promedio",
+      "activeUsers": "Usuarios Activos",
+      "generatedVideos": "Videos Generados",
+      "satisfaction": "Satisfacción"
+    },
+    "pricing": {
+      "badge": "Planes de Precios",
+      "title": "Elige Tu",
+      "titleHighlight": "Plan Perfecto",
+      "subtitle": "Opciones de precios flexibles para empresas de todos los tamaños",
+      "mostPopular": "Más Popular",
+      "perMonth": "/mes",
+      "originalPrice": "Original",
+      "startNow": "Comenzar Ahora",
+      "learnMore": "Saber Más"
+    },
+    "faq": {
+      "badge": "FAQ",
+      "title": "Preguntas",
+      "titleHighlight": "Frecuentes",
+      "subtitle": "¿No encuentras una respuesta? Contacta a nuestro equipo de soporte",
+      "moreQuestions": "¿Tienes más preguntas?",
+      "contactSupport": "Contactar Equipo de Soporte"
+    },
+    "cta": {
+      "title": "¿Listo para Empezar?",
+      "subtitle": "Comienza tu prueba gratuita ahora y experimenta la plataforma de generación de anuncios impulsada por IA",
+      "highlight": "No requiere tarjeta de crédito, prueba de 14 días con todas las funciones",
+      "noCreditCard": "Sin tarjeta de crédito",
+      "freeTrial": "Prueba gratuita de 14 días",
+      "cancelAnytime": "Cancela en cualquier momento",
+      "tryNow": "Probar Gratis Ahora",
+      "contactSales": "Contactar Ventas",
+      "socialProof": "Más de 500+ empresas eligen VIDGO"
+    }
   }
 }

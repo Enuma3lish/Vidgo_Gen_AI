@@ -1,10 +1,11 @@
 """
-Gemini Provider - Content Moderation and Emergency Backup.
+Gemini Provider - Content Moderation and Image Editing.
 
 Supports:
 - Content moderation (NSFW detection)
 - Interior design (emergency backup for PiAPI)
 - Image analysis
+- Image editing (Gemini 2.0 Flash Exp with native image output)
 """
 import httpx
 import asyncio
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class GeminiProvider(BaseProvider):
     """
-    Gemini Provider - Content moderation and emergency interior design backup.
+    Gemini Provider - Content moderation and image editing.
     """
 
     name = "gemini"
@@ -261,6 +262,122 @@ Format your response as JSON:
         except Exception as e:
             self._log_response("interior_design", False, str(e))
             raise Exception(f"Gemini interior design failed: {e}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # IMAGE EDITING (Gemini 2.0 Flash Exp with native image output)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def edit_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Edit image using Gemini 2.0 Flash Experimental with native image output.
+
+        IMPORTANT: Only gemini-2.0-flash-exp supports image generation.
+        The production gemini-2.0-flash does NOT support image output.
+
+        Args:
+            params: {
+                "image_url": str,  # Input image URL
+                "prompt": str,  # Transformation instruction
+            }
+
+        Returns:
+            {"success": True, "output": {"image_url": str}}
+        """
+        self._log_request("edit_image", params)
+
+        try:
+            from google import genai
+            from google.genai import types
+            from PIL import Image
+            import io
+            import uuid
+            from pathlib import Path
+
+            # Initialize Gemini client
+            client = genai.Client(api_key=self.api_key)
+
+            # Fetch and load input image
+            img_response = await self.client.get(params["image_url"])
+            if img_response.status_code != 200:
+                raise Exception(f"Failed to fetch image: HTTP {img_response.status_code}")
+
+            input_image = Image.open(io.BytesIO(img_response.content))
+
+            # Create transformation prompt
+            prompt = f"Transform this image into: {params['prompt']}. Create a photorealistic rendering."
+
+            # CRITICAL: Must use gemini-2.0-flash-exp for image generation
+            # The production model (gemini-2.0-flash) does NOT support image output
+            model_name = "gemini-2.0-flash-exp"
+
+            logger.info(f"[Gemini] Editing image with: {prompt[:100]}...")
+            logger.info(f"[Gemini] Using model: {model_name} (experimental - required for image output)")
+
+            # Generate content with image output
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[prompt, input_image],
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE"]  # Only request IMAGE to avoid modality conflicts
+                )
+            )
+
+            logger.info(f"[Gemini] Response received, checking for image...")
+
+            # Extract generated image from response
+            if response.candidates and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, 'inline_data') and part.inline_data:
+                        # Save generated image
+                        output_dir = Path("/app/static/generated")
+                        output_dir.mkdir(parents=True, exist_ok=True)
+
+                        filename = f"gemini_{uuid.uuid4().hex[:8]}.png"
+                        filepath = output_dir / filename
+
+                        generated_img = Image.open(io.BytesIO(part.inline_data.data))
+                        generated_img.save(filepath)
+
+                        local_url = f"/static/generated/{filename}"
+
+                        logger.info(f"[Gemini] Successfully generated image: {local_url}")
+                        self._log_response("edit_image", True)
+
+                        return {
+                            "success": True,
+                            "output": {
+                                "image_url": local_url
+                            }
+                        }
+
+            # No image in response - log the actual response for debugging
+            logger.error(f"[Gemini] No image in response. Response: {response}")
+            raise Exception("No image found in Gemini response - model may not support image generation")
+
+        except ImportError as e:
+            error_msg = f"google-genai package import failed: {e}"
+            logger.error(f"[Gemini] {error_msg}")
+            self._log_response("edit_image", False, error_msg)
+            return {"success": False, "error": error_msg, "error_type": "ImportError"}
+        except AttributeError as e:
+            error_msg = f"SDK method not found (check syntax): {e}"
+            logger.error(f"[Gemini] {error_msg}")
+            self._log_response("edit_image", False, error_msg)
+            return {"success": False, "error": error_msg, "error_type": "AttributeError"}
+        except Exception as e:
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            logger.error(f"[Gemini] Image editing failed - {error_msg}")
+
+            # Log additional details if available
+            if hasattr(e, 'response'):
+                logger.error(f"[Gemini] HTTP Response: {e.response}")
+            if hasattr(e, 'status_code'):
+                logger.error(f"[Gemini] Status Code: {e.status_code}")
+
+            self._log_response("edit_image", False, error_msg)
+            return {"success": False, "error": error_msg, "error_type": type(e).__name__}
+
+
 
     async def close(self):
         """Close HTTP client."""

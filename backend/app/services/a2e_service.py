@@ -75,19 +75,41 @@ class A2EAvatarService:
     """
     A2E.ai Avatar Service for generating talking avatar videos with native lip-sync.
 
+    Workflow:
+    1. Generate TTS audio: POST /api/v1/video/send_tts
+    2. Generate video: POST /api/v1/video/generate (with audioSrc)
+    3. Check status: GET /api/v1/video/awsResult?_id={task_id}
+
     Features:
     - Native lip-sync with text-to-speech
     - 50+ voice personas across multiple languages
     - High-quality video output
-    - Fast generation (~1:10 ratio)
+    - Fast generation (~1:5 ratio for processing)
     - 99.99% SLA guaranteed
+
+    API Documentation: https://api.a2e.ai/
     """
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or getattr(settings, 'A2E_API_KEY', '')
+    # Default TTS voice ID (Brian - English)
+    DEFAULT_TTS_ID = "6625ebd4613f49985c349f95"
+
+    def __init__(self, api_key: Optional[str] = None, anchor_id: Optional[str] = None):
+        """
+        Initialize A2E Avatar Service.
+
+        Args:
+            api_key: A2E API Bearer token (from settings.A2E_API_KEY)
+            anchor_id: Default anchor/avatar ID (from settings.A2E_DEFAULT_CREATOR_ID)
+        """
+        self.api_key = api_key or settings.A2E_API_KEY
+        # Default anchor_id for avatars
+        self.default_anchor_id = anchor_id or settings.A2E_DEFAULT_CREATOR_ID
+
+        # Headers for Bearer token auth
         self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}" if self.api_key else "",
+            "x-lang": "en-US"
         }
 
     def get_voices(self, language: str = "en") -> List[Dict[str, str]]:
@@ -98,6 +120,84 @@ class A2EAvatarService:
         """Get default avatar images for a language."""
         return DEFAULT_AVATARS.get(language, DEFAULT_AVATARS["en"])
 
+    async def get_character_list(self) -> Dict[str, Any]:
+        """
+        Get list of available avatar characters/anchors.
+
+        Returns:
+            Dict with success status and list of anchors
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{A2E_BASE_URL}/api/v1/anchor/character_list",
+                    headers=self.headers
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info(f"A2E character list: {len(data.get('data', []))} anchors found")
+                    return {"success": True, "anchors": data.get("data", [])}
+                else:
+                    logger.error(f"A2E character list failed: {response.status_code}")
+                    return {"success": False, "error": f"HTTP {response.status_code}"}
+
+        except Exception as e:
+            logger.error(f"A2E character list error: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def generate_tts_audio(
+        self,
+        text: str,
+        tts_id: Optional[str] = None,
+        speech_rate: float = 1.0
+    ) -> Tuple[bool, str]:
+        """
+        Generate TTS audio from text.
+
+        Args:
+            text: Text to convert to speech
+            tts_id: TTS voice ID (24-char hex, default: Brian)
+            speech_rate: Speech speed (1.0 = normal)
+
+        Returns:
+            Tuple of (success, audio_url or error)
+        """
+        tts_id = tts_id or self.DEFAULT_TTS_ID
+
+        payload = {
+            "msg": text,
+            "tts_id": tts_id,
+            "speechRate": speech_rate
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{A2E_BASE_URL}/api/v1/video/send_tts",
+                    headers=self.headers,
+                    json=payload
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("code") == 0:
+                        audio_url = data.get("data")
+                        logger.info(f"A2E TTS generated: {audio_url[:50]}...")
+                        return True, audio_url
+                    else:
+                        error = data.get("msg", "TTS generation failed")
+                        logger.error(f"A2E TTS error: {error}")
+                        return False, error
+                else:
+                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    logger.error(f"A2E TTS error: {error}")
+                    return False, error
+
+        except Exception as e:
+            logger.error(f"A2E TTS error: {e}")
+            return False, str(e)
+
     async def generate_avatar_video(
         self,
         image_url: str,
@@ -105,18 +205,24 @@ class A2EAvatarService:
         language: str = "en",
         voice_id: Optional[str] = None,
         aspect_ratio: str = "9:16",
-        resolution: str = "720p"
+        resolution: str = "720p",
+        anchor_id: Optional[str] = None
     ) -> Tuple[bool, str, Optional[str]]:
         """
         Generate a talking avatar video with lip-sync.
 
+        Workflow:
+        1. Generate TTS audio from text
+        2. Submit video generation with audio and anchor
+
         Args:
-            image_url: URL of the avatar photo (clear headshot recommended)
+            image_url: Not used (kept for compatibility)
             text: The text script for the avatar to speak
             language: Language code ('en', 'zh-TW', 'ja', 'ko')
-            voice_id: Voice ID to use (defaults to first voice for language)
-            aspect_ratio: Video aspect ratio ('9:16', '16:9', '1:1')
-            resolution: Video resolution ('720p', '1080p')
+            voice_id: TTS voice ID (24-char hex string)
+            aspect_ratio: Not used by this endpoint
+            resolution: Not used by this endpoint
+            anchor_id: Specific anchor/avatar ID (uses default if not provided)
 
         Returns:
             Tuple of (success, task_id or error, None)
@@ -124,134 +230,130 @@ class A2EAvatarService:
         if not self.api_key:
             return False, "A2E API key not configured", None
 
-        # Validate language and get default voice
-        if language not in A2E_VOICES:
-            language = "en"
+        # Use provided anchor_id or default
+        use_anchor_id = anchor_id or self.default_anchor_id
+        if not use_anchor_id:
+            return False, "No anchor_id configured. Get one from /api/v1/anchor/character_list", None
 
-        if not voice_id:
-            voices = self.get_voices(language)
-            voice_id = voices[0]["id"] if voices else "en-US-alloy"
+        # Step 1: Generate TTS audio
+        logger.info(f"Step 1: Generating TTS audio for: {text[:50]}...")
+        tts_success, audio_result = await self.generate_tts_audio(text, voice_id)
+        if not tts_success:
+            return False, f"TTS failed: {audio_result}", None
 
-        # Map aspect ratio to dimensions
-        dimensions = {
-            "9:16": {"width": 720, "height": 1280},
-            "16:9": {"width": 1280, "height": 720},
-            "1:1": {"width": 720, "height": 720},
-        }
-        dims = dimensions.get(aspect_ratio, dimensions["9:16"])
+        audio_url = audio_result
 
-        # A2E API requires: text, creator_id (avatar ID), aspect_ratio
-        # For default avatars, we use a preset creator_id
+        # Step 2: Generate video
+        logger.info(f"Step 2: Generating video with anchor_id={use_anchor_id}")
         payload = {
-            "text": text,
-            "aspect_ratio": aspect_ratio,
-            "image_url": image_url,  # For custom avatar from image
-            "voice_id": voice_id,
-            "language": language,
+            "anchor_id": use_anchor_id,
+            "audioSrc": audio_url,
+            "anchor_type": 0  # 0 = public/shared anchor
         }
-
-        # Try multiple endpoint formats
-        endpoints_to_try = [
-            "/api/v1/lipsyncs/",
-            "/api/v1/lipsync/generate",
-            "/api/lipsyncs/",
-            "/api/v1/talkingPhoto",
-        ]
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                for endpoint in endpoints_to_try:
-                    logger.info(f"Trying A2E endpoint: {A2E_BASE_URL}{endpoint}")
-                    response = await client.post(
-                        f"{A2E_BASE_URL}{endpoint}",
-                        headers=self.headers,
-                        json=payload
-                    )
+                response = await client.post(
+                    f"{A2E_BASE_URL}/api/v1/video/generate",
+                    headers=self.headers,
+                    json=payload
+                )
 
-                    # If not 404, we found the right endpoint
-                    if response.status_code != 404:
-                        break
-                    logger.warning(f"A2E endpoint {endpoint} returned 404, trying next...")
+                logger.info(f"A2E video generate status: {response.status_code}")
+                logger.debug(f"A2E video generate response: {response.text[:500]}")
 
-                logger.info(f"A2E API response status: {response.status_code}")
-                logger.info(f"A2E API response text: {response.text[:500] if response.text else '(empty)'}")
-
-                if response.status_code in [200, 201, 202]:
-                    # Handle empty response
-                    if not response.text or not response.text.strip():
-                        logger.warning("A2E API returned empty response body")
-                        return False, "A2E API returned empty response - API may be unavailable", None
-
-                    try:
-                        data = response.json()
-                    except Exception as json_err:
-                        logger.error(f"A2E API JSON parse error: {json_err}, raw: {response.text[:200]}")
-                        return False, f"Invalid JSON response: {response.text[:100]}", None
-
-                    logger.info(f"A2E API response: {data}")
-
-                    # A2E returns task_id for async processing
-                    task_id = data.get("task_id") or data.get("id") or data.get("job_id")
-                    if task_id:
-                        logger.info(f"A2E task created: {task_id}")
-                        return True, str(task_id), None
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("code") == 0:
+                        task_data = data.get("data", {})
+                        task_id = task_data.get("_id")
+                        if task_id:
+                            logger.info(f"A2E video task created: {task_id}")
+                            return True, str(task_id), None
+                        return False, "No task ID in response", None
                     else:
-                        # Immediate result (unlikely but handle it)
-                        video_url = data.get("video_url") or data.get("output_url")
-                        if video_url:
-                            return True, video_url, video_url
-                        return False, f"No task ID or video URL in response: {data}", None
+                        error = data.get("msg", "Video generation failed")
+                        logger.error(f"A2E video error: {error}")
+                        return False, error, None
                 else:
-                    error = f"HTTP {response.status_code}: {response.text[:200] if response.text else '(empty)'}"
-                    logger.error(f"A2E API error: {error}")
+                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    logger.error(f"A2E video error: {error}")
                     return False, error, None
 
         except Exception as e:
-            logger.error(f"A2E API error: {e}")
+            logger.error(f"A2E video error: {e}")
             return False, str(e), None
 
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """
         Check avatar generation task status.
 
+        A2E Status: POST /api/v1/video/awsResult with {"_id": task_id}
+        Status values: init, process, success, failed
+
         Returns:
             Dict with status, video_url when complete
         """
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"{A2E_BASE_URL}/api/lipsyncs/{task_id}/",
-                    headers=self.headers
+                # A2E requires POST with _id in body
+                response = await client.post(
+                    f"{A2E_BASE_URL}/api/v1/video/awsResult",
+                    headers=self.headers,
+                    json={"_id": task_id}
                 )
+
+                logger.debug(f"A2E status check for {task_id}: HTTP {response.status_code}")
 
                 if response.status_code == 200:
                     data = response.json()
-                    logger.debug(f"A2E status response: {data}")
 
-                    status = data.get("status", "").lower()
-                    video_url = data.get("video_url") or data.get("output_url") or data.get("result_url")
-                    error_msg = data.get("error") or data.get("error_message") or data.get("fail_reason")
+                    if data.get("code") == 0:
+                        # Response is in data array
+                        tasks = data.get("data", [])
+                        if tasks:
+                            task = tasks[0]  # First matching task
+                            status = task.get("status", "").lower()
+                            video_url = task.get("result")
+                            error_msg = task.get("error") or task.get("fail_reason")
+                            progress = task.get("process", 0)
 
-                    # Normalize status
-                    if status in ["completed", "success", "succeed", "done"]:
-                        status = "succeed"
-                    elif status in ["failed", "error"]:
-                        status = "failed"
-                    elif status in ["pending", "processing", "running", "queued"]:
-                        status = "pending"
+                            logger.debug(f"A2E task {task_id}: status={status}, progress={progress}%")
 
-                    return {
-                        "success": True,
-                        "status": status,
-                        "video_url": video_url if video_url else None,
-                        "error": error_msg if error_msg else None,
-                        "raw": data
-                    }
+                            # Normalize status
+                            if status == "success":
+                                status = "succeed"
+                            elif status in ["failed", "error", "fail"]:
+                                status = "failed"
+                            elif status in ["init", "process", "processing"]:
+                                status = "pending"
+
+                            return {
+                                "success": True,
+                                "status": status,
+                                "video_url": video_url if video_url else None,
+                                "progress": progress,
+                                "error": error_msg if error_msg else None,
+                                "raw": task
+                            }
+                        else:
+                            return {
+                                "success": False,
+                                "status": "error",
+                                "error": "Task not found"
+                            }
+                    else:
+                        error = data.get("msg", "Status check failed")
+                        return {
+                            "success": False,
+                            "status": "error",
+                            "error": error
+                        }
                 else:
                     return {
                         "success": False,
                         "status": "error",
-                        "error": f"HTTP {response.status_code}"
+                        "error": f"HTTP {response.status_code}: {response.text[:100] if response.text else ''}"
                     }
 
         except Exception as e:
@@ -385,31 +487,47 @@ class A2EAvatarService:
             }
 
     async def test_connection(self) -> Dict:
-        """Test API connection and key validity"""
+        """Test API connection and configuration validity"""
+        # Check required configuration
         if not self.api_key:
-            return {"success": False, "error": "A2E API key not configured"}
+            return {
+                "success": False,
+                "error": "A2E_API_KEY not configured",
+                "config": {
+                    "api_key_set": False,
+                    "anchor_id_set": bool(self.default_anchor_id)
+                }
+            }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                # Try to access the API - the lipsyncs endpoint
-                # A valid key should not return 401
-                response = await client.get(
-                    f"{A2E_BASE_URL}/api/lipsyncs/",
-                    headers=self.headers
-                )
+            # Test by fetching the character list - validates connection and bearer auth
+            result = await self.get_character_list()
 
-                if response.status_code == 200:
-                    return {"success": True, "message": "A2E.ai API key is valid"}
-                elif response.status_code == 401:
-                    return {"success": False, "error": "Invalid API key"}
-                elif response.status_code == 404:
-                    # 404 on GET might be normal - test via POST behavior
-                    return {"success": True, "message": "A2E.ai connected (test via actual generation)"}
-                elif response.status_code == 405:
-                    # Method not allowed means endpoint exists
-                    return {"success": True, "message": "A2E.ai API key is valid (endpoint exists)"}
-                else:
-                    return {"success": False, "error": f"HTTP {response.status_code}"}
+            if result.get("success"):
+                anchors = result.get("anchors", [])
+                anchor_info = f"{len(anchors)} anchors available"
+
+                if not self.default_anchor_id:
+                    return {
+                        "success": True,
+                        "message": f"A2E.ai connected - {anchor_info}",
+                        "warning": "A2E_DEFAULT_CREATOR_ID not set. Using first available anchor.",
+                        "suggested_anchor": anchors[0].get("_id") if anchors else None
+                    }
+
+                return {
+                    "success": True,
+                    "message": f"A2E.ai connected - {anchor_info}",
+                    "config": {
+                        "anchor_id": self.default_anchor_id
+                    }
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error", "Failed to fetch character list"),
+                    "note": "Check if A2E_API_KEY is valid"
+                }
 
         except Exception as e:
             return {"success": False, "error": str(e)}

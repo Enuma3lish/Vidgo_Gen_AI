@@ -96,9 +96,9 @@
       "desc": "Remove image backgrounds with one click"
     },
     "productScene": {
-      "name": "Scene Generation",
-      "desc": "Generate professional scenes for products",
-      "longDesc": "Place your products in professional, AI-generated scenes"
+      "name": "Product Photography Inspiration",
+      "desc": "Browse professional product photography examples",
+      "longDesc": "Explore AI-generated product photography concepts. Subscribe to upload your own products for custom scene generation."
     },
     "productEnhance": {
       "name": "Product Enhancement",
@@ -126,19 +126,40 @@
       "longDesc": "Automatically detect and remove backgrounds from any image with one click"
     },
     "tryOn": {
-      "name": "Virtual Try-On",
-      "desc": "Virtual clothing try-on",
-      "longDesc": "See how clothing looks on different models with AI-powered virtual try-on"
+      "name": "Fashion Model Showcase",
+      "desc": "Browse fashion model styling examples",
+      "longDesc": "View AI-generated fashion model styling inspiration. Subscribe to use virtual try-on with your own photos."
     },
     "roomRedesign": {
-      "name": "Room Redesign",
-      "desc": "Transform interior spaces",
-      "longDesc": "Redesign any room with AI-powered interior decoration suggestions"
+      "name": "Interior Design Gallery",
+      "desc": "Browse interior design inspiration",
+      "longDesc": "Explore AI-generated interior design examples. Subscribe to upload your own room photos for custom designs."
     },
     "shortVideo": {
       "name": "Short Video",
       "desc": "Create engaging short videos",
-      "longDesc": "Generate captivating short videos from text descriptions or images"
+      "longDesc": "Generate captivating short videos from text descriptions or images",
+      "tryExamples": "Please try our amazing examples",
+      "clickToSee": "Click to see different motion effects",
+      "selectExample": "Select an Example",
+      "selectExampleHint": "Select an example video above to see the result",
+      "selectedExample": "Selected Example",
+      "motionEffect": "Motion Effect",
+      "videoSettings": "Video Settings",
+      "subscribersOnly": "Subscribers Only",
+      "duration": "Duration",
+      "subscribeToDuration": "Subscribe to customize video duration",
+      "motionType": "Motion Type",
+      "subscribeToMotion": "Subscribe to choose motion effects",
+      "upgradeSettings": "Upgrade to use custom settings",
+      "viewPlans": "View Plans",
+      "viewResult": "View Result",
+      "aiModelSelection": "AI Model Selection",
+      "chooseAiModel": "Choose different AI models for different generation effects",
+      "upgradeToModel": "Upgrade to choose different AI models",
+      "generatedVideo": "Generated Video",
+      "videoPlaceholder": "Generated video will appear here",
+      "subscribeAdvanced": "Subscribe to unlock advanced settings & AI model selection"
     },
     "common": {
       "uploadImage": "Upload Image",
@@ -448,31 +469,31 @@
     "copyright": "© 2024 VidGo AI. All rights reserved."
   },
   "interior": {
-    "badge": "AI Interior Design",
-    "title": "AI Interior Design",
-    "subtitle": "Transform any room with AI-powered interior design. Upload a photo and describe your dream space.",
-    "processing": "Generating design...",
+    "badge": "Interior Design Gallery",
+    "title": "Interior Design Inspiration",
+    "subtitle": "Browse AI-generated interior design examples. Free users can view curated examples. Subscribe to upload your own room photos for custom designs.",
+    "processing": "Loading examples...",
     "tabs": {
-      "redesign": "Redesign Room",
-      "generate": "Generate Design",
-      "styleTransfer": "Style Transfer"
+      "redesign": "Browse Examples",
+      "generate": "Generate Design (Requires Subscription)",
+      "styleTransfer": "Style Transfer (Requires Subscription)"
     },
-    "uploadTitle": "Upload Room Photo",
-    "roomType": "Room Type",
+    "uploadTitle": "Choose Reference Example",
+    "roomType": "Space Type",
     "designStyle": "Design Style",
     "prompt": "Describe Your Changes",
     "promptPlaceholder": "e.g., Modern minimalist with grey sofa, wooden coffee table, and indoor plants...",
     "examplePrompts": "Try these examples",
-    "result": "Design Result",
-    "resultPlaceholder": "Your redesigned room will appear here",
-    "resultHint": "Upload a room photo or describe your dream design",
-    "before": "Before",
-    "after": "After",
-    "tryAnother": "Try Another",
+    "result": "Example Result",
+    "resultPlaceholder": "Design example will appear here",
+    "resultHint": "Select a design style to view AI-generated examples, or subscribe to upload your room photo",
+    "before": "Reference Image",
+    "after": "Design Example",
+    "tryAnother": "View Other Examples",
     "actions": {
-      "redesign": "Redesign Room",
-      "generate": "Generate Design",
-      "applyStyle": "Apply Style"
+      "redesign": "View Example",
+      "generate": "Generate Design (Requires Subscription)",
+      "applyStyle": "Apply Style (Requires Subscription)"
     },
     "success": {
       "redesigned": "Room redesigned successfully!",

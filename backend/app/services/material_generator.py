@@ -41,31 +41,46 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Avatar images per topic category
-AVATAR_IMAGES = {
-    "ecommerce": [
-        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512",  # Professional business woman
-        "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512",  # Business man in suit
-    ],
-    "social": [
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=512",  # Young influencer woman
-        "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=512",  # Young influencer man
-    ],
-    "brand": [
-        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512",  # Professional woman
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512",  # Professional man
-    ],
-    "app": [
-        "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=512",  # Tech-savvy woman
-        "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512",  # Young tech man
-    ],
-    "promo": [
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=512",  # Enthusiastic woman
-        "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=512",  # Enthusiastic man
-    ],
-    "service": [
-        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512",  # Service professional woman
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512",  # Service professional man
-    ]
+# Avatar images organized by gender and style (for gender consistency with voice)
+AVATAR_IMAGES_BY_GENDER = {
+    "female": {
+        "professional": [
+            "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512",  # Professional business woman
+            "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=512",  # Tech-savvy woman
+        ],
+        "young": [
+            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=512",  # Young influencer woman
+            "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=512",  # Young woman portrait
+        ],
+        "business": [
+            "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512",  # Business woman portrait
+            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=512",  # Professional woman headshot
+        ]
+    },
+    "male": {
+        "professional": [
+            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512",  # Professional man
+            "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512",  # Business man in suit
+        ],
+        "young": [
+            "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=512",  # Young influencer man
+            "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=512",  # Young man portrait
+        ],
+        "business": [
+            "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512",  # Business man portrait
+        ]
+    }
+}
+
+# Legacy structure maintained for backward compatibility (maps topic to gender-style pairs)
+# Format: topic -> [(gender, style), ...]
+AVATAR_IMAGE_TOPIC_MAPPING = {
+    "ecommerce": [("female", "professional"), ("male", "professional")],
+    "social": [("female", "young"), ("male", "young")],
+    "brand": [("female", "business"), ("male", "business")],
+    "app": [("female", "professional"), ("male", "young")],
+    "promo": [("female", "young"), ("male", "young")],
+    "service": [("female", "professional"), ("male", "professional")]
 }
 
 # Landing Page Examples - 6 per topic with related avatars (to avoid repetition)
@@ -75,40 +90,40 @@ LANDING_EXAMPLES = {
         "name_zh": "電商廣告",
         "examples": [
             {
-                "prompt_en": "Professional e-commerce product video, luxury wristwatch on marble surface, elegant lighting, premium brand feel",
-                "prompt_zh": "專業電商產品影片，奢華手錶在大理石表面，優雅燈光，高端品牌質感",
-                "avatar_en": "Introducing our premium luxury watch collection. Crafted with precision and elegance, this timepiece is perfect for those who appreciate fine craftsmanship.",
-                "avatar_zh": "為您介紹我們的頂級奢華手錶系列。精工打造，優雅設計，適合品味獨特的您。"
+                "prompt_en": "Student backpack with multiple compartments, durable and lightweight design, bright colorful style",
+                "prompt_zh": "學生書包配多層收納，耐用輕量設計，鮮豔色彩風格",
+                "avatar_en": "Perfect for students! This backpack has enough space for all your books and supplies, designed for comfort and style.",
+                "avatar_zh": "學生最佳選擇！這款書包有充足空間放書本和用品，兼具舒適與時尚。"
             },
             {
-                "prompt_en": "Premium skincare product showcase, elegant cream jar on white background, soft studio lighting",
-                "prompt_zh": "高端護膚產品展示，精緻乳霜瓶在白色背景，柔和攝影棚燈光",
-                "avatar_en": "Discover our revolutionary skincare line. Each product is formulated with the finest ingredients to give you radiant, youthful skin.",
-                "avatar_zh": "探索我們革命性的護膚系列。每款產品都採用頂級成分，讓您擁有光彩照人的年輕肌膚。"
+                "prompt_en": "Stainless steel thermos bottle, keeps drinks hot or cold, practical daily item",
+                "prompt_zh": "不鏽鋼保溫杯，保溫保冷效果好，實用日常用品",
+                "avatar_en": "Stay hydrated throughout the day! This thermos keeps your drinks at the perfect temperature for hours.",
+                "avatar_zh": "整天保持水分！這款保溫杯讓您的飲品長時間維持完美溫度。"
             },
             {
-                "prompt_en": "Fashion accessories display, designer handbag with gold details, luxury boutique setting",
-                "prompt_zh": "時尚配件展示，設計師手袋配金色細節，奢華精品店環境",
-                "avatar_en": "Elevate your style with our exclusive designer collection. Each piece tells a story of elegance and sophistication.",
-                "avatar_zh": "用我們的獨家設計師系列提升您的品味。每件作品都訴說著優雅與精緻的故事。"
+                "prompt_en": "Compact folding umbrella, windproof and waterproof, convenient to carry",
+                "prompt_zh": "輕巧折疊雨傘，防風防水，方便攜帶",
+                "avatar_en": "Don't let the rain stop you! This compact umbrella fits in any bag and keeps you dry in any weather.",
+                "avatar_zh": "別讓雨天阻擋你！這款輕巧雨傘放進任何包包，任何天氣都能保持乾爽。"
             },
             {
-                "prompt_en": "Electronic gadget showcase, wireless earbuds in charging case, sleek minimalist design",
-                "prompt_zh": "電子產品展示，無線耳機在充電盒中，簡約時尚設計",
-                "avatar_en": "Experience crystal-clear audio with our latest wireless earbuds. Designed for music lovers who demand the best.",
-                "avatar_zh": "體驗我們最新無線耳機的水晶般清晰音質。專為追求極致的音樂愛好者設計。"
+                "prompt_en": "USB charging cable, fast charging and durable, compatible with multiple devices",
+                "prompt_zh": "USB充電線，快速充電耐用，相容多種裝置",
+                "avatar_en": "Never run out of battery! This fast-charging cable is durable and works with all your devices.",
+                "avatar_zh": "電池永不耗盡！這款快充線耐用且適用於您的所有裝置。"
             },
             {
-                "prompt_en": "Gourmet coffee beans in premium packaging, artisanal coffee brand, warm rustic ambiance",
-                "prompt_zh": "精品咖啡豆高級包裝，手工咖啡品牌，溫暖鄉村風情",
-                "avatar_en": "Awaken your senses with our artisanal coffee collection. Sourced from the finest estates around the world.",
-                "avatar_zh": "用我們的手工咖啡系列喚醒您的感官。精選自世界各地最優質的莊園。"
+                "prompt_en": "Instant coffee packets, convenient and affordable, perfect for busy mornings",
+                "prompt_zh": "即溶咖啡包，方便實惠，忙碌早晨的完美選擇",
+                "avatar_en": "Quick and delicious coffee! Just add hot water and enjoy your perfect cup in seconds.",
+                "avatar_zh": "快速美味的咖啡！只需加熱水，幾秒鐘就能享受完美的一杯。"
             },
             {
-                "prompt_en": "Smart home device display, modern voice assistant speaker, futuristic home environment",
-                "prompt_zh": "智能家居設備展示，現代語音助手音箱，未來感家居環境",
-                "avatar_en": "Transform your home with our smart assistant. Control everything with just your voice.",
-                "avatar_zh": "用我們的智能助手改變您的家。只需語音即可控制一切。"
+                "prompt_en": "Digital alarm clock with LED display, simple and practical, reliable wake-up tool",
+                "prompt_zh": "LED顯示數位鬧鐘，簡單實用，可靠的叫醒工具",
+                "avatar_en": "Wake up on time every day! This reliable alarm clock has a clear display and multiple alarm settings.",
+                "avatar_zh": "每天準時起床！這款可靠鬧鐘有清晰顯示和多組鬧鈴設定。"
             }
         ]
     },
@@ -147,10 +162,10 @@ LANDING_EXAMPLES = {
                 "avatar_zh": "跟我一起準備！我會向您展示這一季最熱門的妝容趨勢！"
             },
             {
-                "prompt_en": "Food photography content, artisan pasta dish, rustic Italian restaurant ambiance",
-                "prompt_zh": "美食攝影內容，手工義大利麵料理，鄉村義大利餐廳氛圍",
-                "avatar_en": "Foodies, this one is for you! The most authentic Italian pasta you'll ever taste!",
-                "avatar_zh": "美食家們，這是為你們準備的！最正宗的義大利麵，讓您難以忘懷！"
+                "prompt_en": "Home-cooked bento box, healthy lunch meal prep, convenient daily food",
+                "prompt_zh": "家庭便當盒，健康午餐備餐，方便的日常飲食",
+                "avatar_en": "Meal prepping made easy! Here's my go-to bento recipe that's both delicious and nutritious!",
+                "avatar_zh": "簡單備餐教學！這是我最常做的便當食譜，既美味又營養！"
             }
         ]
     },
@@ -159,16 +174,16 @@ LANDING_EXAMPLES = {
         "name_zh": "品牌推廣",
         "examples": [
             {
-                "prompt_en": "Corporate brand video, modern office environment, professional team collaboration",
-                "prompt_zh": "企業品牌影片，現代辦公環境，專業團隊協作",
-                "avatar_en": "At our company, innovation meets excellence. We're dedicated to delivering outstanding results for every client.",
-                "avatar_zh": "在我們公司，創新與卓越相遇。我們致力於為每位客戶提供卓越的成果。"
+                "prompt_en": "Community store showcase, friendly neighborhood shop, local business spirit",
+                "prompt_zh": "社區小店展示，親切鄰里商店，在地商業精神",
+                "avatar_en": "Supporting local businesses makes our community stronger. Visit your neighborhood stores today!",
+                "avatar_zh": "支持在地商家讓我們的社區更強大。今天就去您的社區小店逛逛！"
             },
             {
-                "prompt_en": "Tech startup showcase, innovative product launch, futuristic design elements",
-                "prompt_zh": "科技新創展示，創新產品發布，未來感設計元素",
-                "avatar_en": "Introducing our groundbreaking technology that will revolutionize the industry.",
-                "avatar_zh": "為您介紹我們將徹底改變行業的突破性技術。"
+                "prompt_en": "Tutoring center showcase, students studying happily, educational success stories",
+                "prompt_zh": "補習班展示，學生快樂學習，教育成功案例",
+                "avatar_en": "Help your child excel in school! Our experienced teachers provide personalized tutoring.",
+                "avatar_zh": "幫助您的孩子在學校裡脫穎而出！我們經驗豐富的教師提供個人化輔導。"
             },
             {
                 "prompt_en": "Sustainable business showcase, eco-friendly products, green environment",
@@ -177,22 +192,22 @@ LANDING_EXAMPLES = {
                 "avatar_zh": "永續發展是我們一切行動的核心。加入我們，一起創造改變。"
             },
             {
-                "prompt_en": "Luxury hotel brand, elegant lobby with chandelier, premium hospitality",
-                "prompt_zh": "豪華酒店品牌，優雅大廳配水晶吊燈，頂級款待服務",
-                "avatar_en": "Welcome to our five-star hotel. Experience luxury and comfort like never before.",
-                "avatar_zh": "歡迎來到我們的五星級酒店。體驗前所未有的奢華與舒適。"
+                "prompt_en": "Cozy guesthouse, warm hospitality, comfortable accommodation",
+                "prompt_zh": "溫馨民宿，溫暖款待，舒適住宿環境",
+                "avatar_en": "Welcome to our family-run guesthouse. Experience the warmth of home away from home.",
+                "avatar_zh": "歡迎來到我們的家庭民宿。體驗家一般的溫馨感覺。"
             },
             {
-                "prompt_en": "Fashion brand identity, runway show highlights, haute couture aesthetics",
-                "prompt_zh": "時尚品牌形象，時裝秀精華，高級訂製美學",
-                "avatar_en": "Fashion is art. Our new collection redefines elegance for the modern era.",
-                "avatar_zh": "時尚即藝術。我們的新系列為現代時代重新定義優雅。"
+                "prompt_en": "Clothing store showcase, trendy apparel display, affordable fashion",
+                "prompt_zh": "服飾店展示，時尚服飾陳列，平價時尚",
+                "avatar_en": "Update your wardrobe with our latest collection! Quality fashion at honest prices.",
+                "avatar_zh": "用我們的最新系列更新您的衣櫥！優質時尚，實在價格。"
             },
             {
-                "prompt_en": "Financial services brand, trustworthy advisors, sophisticated office space",
-                "prompt_zh": "金融服務品牌，值得信賴的顧問，精緻辦公空間",
-                "avatar_en": "Your financial future matters. Let our experts guide you to success.",
-                "avatar_zh": "您的財務未來很重要。讓我們的專家引導您走向成功。"
+                "prompt_en": "Convenience store, everyday essentials, friendly service",
+                "prompt_zh": "便利商店，日常生活必需品，親切服務",
+                "avatar_en": "We're here 24/7 for all your daily needs. Your neighborhood convenience store!",
+                "avatar_zh": "我們全天候為您的日常需求服務。您的鄰里便利商店！"
             }
         ]
     },
@@ -201,22 +216,22 @@ LANDING_EXAMPLES = {
         "name_zh": "應用推廣",
         "examples": [
             {
-                "prompt_en": "Mobile app showcase, smartphone displaying app interface, modern UI design",
-                "prompt_zh": "手機應用展示，智慧型手機顯示應用介面，現代UI設計",
-                "avatar_en": "Download our app today and experience the future of productivity!",
-                "avatar_zh": "立即下載我們的應用程式，體驗生產力的未來！"
+                "prompt_en": "Expense tracking app, budget management interface, practical finance tool",
+                "prompt_zh": "記帳應用程式，預算管理介面，實用理財工具",
+                "avatar_en": "Keep track of your spending easily! Our app helps you save money every day.",
+                "avatar_zh": "輕鬆記錄每筆花費！我們的應用幫助您每天省錢。"
             },
             {
-                "prompt_en": "Gaming app promotion, exciting game graphics, immersive gaming experience",
-                "prompt_zh": "遊戲應用推廣，精彩遊戲畫面，沉浸式遊戲體驗",
-                "avatar_en": "Ready for adventure? Our new game will take you to worlds beyond imagination!",
-                "avatar_zh": "準備好冒險了嗎？我們的新遊戲將帶您進入超乎想像的世界！"
+                "prompt_en": "Bus arrival app, real-time public transport info, convenient commuting tool",
+                "prompt_zh": "公車到站應用，即時交通資訊，方便通勤工具",
+                "avatar_en": "Never miss your bus again! Check arrival times in real-time and plan your commute.",
+                "avatar_zh": "再也不會錯過公車！即時查看到站時間，規劃您的通勤。"
             },
             {
-                "prompt_en": "Finance app showcase, clean interface showing charts and analytics",
-                "prompt_zh": "金融應用展示，乾淨介面顯示圖表和分析",
-                "avatar_en": "Take control of your finances with our smart money management app.",
-                "avatar_zh": "用我們的智能理財應用掌控您的財務。"
+                "prompt_en": "Receipt lottery app, invoice scanning and prize checking, practical daily tool",
+                "prompt_zh": "發票對獎應用，發票掃描對獎功能，實用日常工具",
+                "avatar_en": "Check your receipts and win prizes! Scan invoices instantly and never miss a reward.",
+                "avatar_zh": "對獎發票贏獎品！即時掃描發票，不錯過任何獲獎機會。"
             },
             {
                 "prompt_en": "Health tracking app, fitness statistics dashboard, motivational design",
@@ -267,16 +282,16 @@ LANDING_EXAMPLES = {
                 "avatar_zh": "只剩24小時！趕快搶購這些優惠，錯過就沒有了！"
             },
             {
-                "prompt_en": "Loyalty rewards program, golden membership card, exclusive benefits",
-                "prompt_zh": "忠誠獎勵計劃，金色會員卡，專屬福利",
-                "avatar_en": "Join our VIP program and enjoy exclusive rewards and discounts!",
-                "avatar_zh": "加入我們的VIP計劃，享受獨家獎勵和折扣！"
+                "prompt_en": "Points collection program, reward card, customer loyalty benefits",
+                "prompt_zh": "集點活動計劃，集點卡片，顧客忠誠度優惠",
+                "avatar_en": "Collect points with every purchase! Redeem for great rewards and discounts.",
+                "avatar_zh": "每次購買都能集點！兌換超值獎勵和折扣。"
             },
             {
-                "prompt_en": "Bundle deal promotion, multiple products grouped together, value showcase",
-                "prompt_zh": "組合優惠促銷，多款產品組合，價值展示",
-                "avatar_en": "Get more for less with our exclusive bundle deals! Save up to 40%!",
-                "avatar_zh": "用我們的獨家組合優惠花更少買更多！最高省40%！"
+                "prompt_en": "Buy one get one free promotion, special offer display, great value deals",
+                "prompt_zh": "買一送一促銷，特別優惠展示，超值劃算",
+                "avatar_en": "Double the value! Buy one get one free on selected items. Limited time only!",
+                "avatar_zh": "加倍超值！選定商品買一送一。限時優惠！"
             }
         ]
     },
@@ -285,16 +300,16 @@ LANDING_EXAMPLES = {
         "name_zh": "服務介紹",
         "examples": [
             {
-                "prompt_en": "Professional consulting service, business meeting scene, confident presentation",
-                "prompt_zh": "專業顧問服務，商務會議場景，自信簡報",
-                "avatar_en": "Our expert consultants are here to help your business grow and succeed.",
-                "avatar_zh": "我們的專家顧問在這裡幫助您的企業成長和成功。"
+                "prompt_en": "Tutoring service, student learning scene, friendly teacher",
+                "prompt_zh": "家教服務，學生學習場景，友善老師",
+                "avatar_en": "Professional tutoring to help students excel. Flexible schedule, proven results!",
+                "avatar_zh": "專業家教服務幫助學生優異表現。彈性時間，實證成效！"
             },
             {
-                "prompt_en": "Healthcare service intro, modern clinic environment, caring professionals",
-                "prompt_zh": "醫療服務介紹，現代診所環境，關懷專業人員",
-                "avatar_en": "Your health is our priority. Experience world-class care at our facility.",
-                "avatar_zh": "您的健康是我們的首要任務。在我們的機構體驗世界級的照護。"
+                "prompt_en": "Clinic appointment service, friendly reception, convenient booking",
+                "prompt_zh": "診所掛號服務，親切櫃台，方便預約",
+                "avatar_en": "Easy online appointment booking! Visit our clinic for quality healthcare.",
+                "avatar_zh": "輕鬆線上掛號！到我們診所享受優質醫療服務。"
             },
             {
                 "prompt_en": "Education service, online learning platform, engaging course content",
@@ -303,22 +318,22 @@ LANDING_EXAMPLES = {
                 "avatar_zh": "向最優秀的人學習！我們的專家課程將幫助您掌握新技能。"
             },
             {
-                "prompt_en": "Legal services introduction, professional law office, trustworthy attorneys",
-                "prompt_zh": "法律服務介紹，專業律師事務所，值得信賴的律師",
-                "avatar_en": "Protect your rights with our experienced legal team. We're here for you.",
-                "avatar_zh": "讓我們經驗豐富的法律團隊保護您的權益。我們在這裡為您服務。"
+                "prompt_en": "Home repair service, handyman fixing issues, reliable solutions",
+                "prompt_zh": "居家修繕服務，師傅維修問題，可靠解決方案",
+                "avatar_en": "Leaky faucet? Broken door? Our skilled team handles all home repairs!",
+                "avatar_zh": "水龍頭漏水？門壞了？我們熟練的團隊處理所有居家修繕！"
             },
             {
-                "prompt_en": "IT support services, tech team solving problems, efficient solutions",
-                "prompt_zh": "IT支援服務，技術團隊解決問題，高效解決方案",
-                "avatar_en": "Technical issues? Our IT experts provide fast, reliable support 24/7.",
-                "avatar_zh": "技術問題？我們的IT專家全天候提供快速可靠的支援。"
+                "prompt_en": "Computer repair service, tech fixing laptop, affordable pricing",
+                "prompt_zh": "電腦維修服務，技師修理筆電，親民價格",
+                "avatar_en": "Slow computer? Virus problems? We fix all computer issues quickly!",
+                "avatar_zh": "電腦很慢？病毒問題？我們快速修復所有電腦問題！"
             },
             {
-                "prompt_en": "Real estate services, beautiful property showcase, professional agent",
-                "prompt_zh": "房地產服務，精美房產展示，專業經紀人",
-                "avatar_en": "Find your dream home with our expert real estate team. Let's start today!",
-                "avatar_zh": "讓我們專業的房地產團隊幫您找到夢想中的家。今天就開始吧！"
+                "prompt_en": "Rental apartment service, cozy room viewing, affordable housing",
+                "prompt_zh": "租屋服務，溫馨房間瀏覽，經濟實惠住宅",
+                "avatar_en": "Looking for a place to rent? Browse our affordable apartments today!",
+                "avatar_zh": "在找租屋嗎？立即瀏覽我們經濟實惠的公寓！"
             }
         ]
     }
@@ -377,6 +392,72 @@ SCENE_PROMPTS = {
 }
 
 
+# =============================================================================
+# HELPER FUNCTIONS FOR GENDER CONSISTENCY
+# =============================================================================
+
+def assign_voice_for_example(language: str, index: int) -> tuple[str, str]:
+    """
+    Assign voice ID for an example, alternating between genders.
+    
+    Args:
+        language: Language code (e.g., "en", "zh-TW")
+        index: Example index (0-based)
+        
+    Returns:
+        Tuple of (voice_id, gender)
+    """
+    from app.services.a2e_service import A2E_VOICES
+    
+    voices = A2E_VOICES.get(language, A2E_VOICES["en"])
+    voice = voices[index % len(voices)]
+    return voice["id"], voice["gender"]
+
+
+def select_avatar_by_gender(gender: str, style: str = "professional") -> str:
+    """
+    Select avatar image URL based on gender and style.
+    
+    Args:
+        gender: Gender ("male" or "female")
+        style: Avatar style ("professional", "young", or "business")
+        
+    Returns:
+        Avatar image URL
+    """
+    import random
+    
+    # Default to professional if style not found
+    available_styles = AVATAR_IMAGES_BY_GENDER.get(gender, AVATAR_IMAGES_BY_GENDER["female"])
+    images = available_styles.get(style, available_styles["professional"])
+    
+    return random.choice(images)
+
+
+def get_avatar_for_topic_example(topic: str, index: int) -> str:
+    """
+    Get avatar image for a specific topic and example index.
+    Uses gender-style mapping to ensure variety.
+    
+    Args:
+        topic: Topic key (e.g., "ecommerce", "social")
+        index: Example index (0-based)
+        
+    Returns:
+        Avatar image URL
+    """
+    # Get gender-style pairs for this topic
+    gender_style_pairs = AVATAR_IMAGE_TOPIC_MAPPING.get(
+        topic,
+        AVATAR_IMAGE_TOPIC_MAPPING["ecommerce"]
+    )
+    
+    # Select gender-style pair based on index
+    gender, style = gender_style_pairs[index % len(gender_style_pairs)]
+    
+    return select_avatar_by_gender(gender, style)
+
+
 class MaterialGenerator:
     """
     Unified material generation service.
@@ -424,6 +505,7 @@ class MaterialGenerator:
         """Check if enough materials exist for a category."""
         if category == 'landing':
             # Landing materials are stored in Material table with SHORT_VIDEO and AI_AVATAR types
+            # Topics must match LANDING_EXAMPLES keys used in _generate_landing_materials()
             landing_topics = ["ecommerce", "social", "brand", "app", "promo", "service"]
 
             # Check for SHORT_VIDEO materials
@@ -446,8 +528,48 @@ class MaterialGenerator:
 
             logger.info(f"Landing: {video_count} videos, {avatar_count} avatars (min: {min_count} each)")
             return video_count >= min_count and avatar_count >= min_count
+        elif category == 'pattern':
+            # Pattern/effect materials - check BACKGROUND_REMOVAL
+            result = await session.execute(
+                select(func.count(Material.id))
+                .where(Material.tool_type == ToolType.BACKGROUND_REMOVAL)
+                .where(Material.is_active == True)
+            )
+            count = result.scalar() or 0
+            logger.info(f"Pattern (background_removal): {count} materials (min: {min_count})")
+            return count >= min_count
+        elif category == 'product':
+            # Product materials - check PRODUCT_SCENE
+            result = await session.execute(
+                select(func.count(Material.id))
+                .where(Material.tool_type == ToolType.PRODUCT_SCENE)
+                .where(Material.is_active == True)
+            )
+            count = result.scalar() or 0
+            logger.info(f"Product (product_scene): {count} materials (min: {min_count})")
+            return count >= min_count
+        elif category == 'video':
+            # Video materials - check SHORT_VIDEO
+            result = await session.execute(
+                select(func.count(Material.id))
+                .where(Material.tool_type == ToolType.SHORT_VIDEO)
+                .where(Material.is_active == True)
+            )
+            count = result.scalar() or 0
+            logger.info(f"Video (short_video): {count} materials (min: {min_count})")
+            return count >= min_count
+        elif category == 'avatar':
+            # Avatar materials - check AI_AVATAR
+            result = await session.execute(
+                select(func.count(Material.id))
+                .where(Material.tool_type == ToolType.AI_AVATAR)
+                .where(Material.is_active == True)
+            )
+            count = result.scalar() or 0
+            logger.info(f"Avatar (ai_avatar): {count} materials (min: {min_count})")
+            return count >= min_count
         else:
-            # Other categories use ToolShowcase table
+            # Fallback to ToolShowcase table for legacy categories
             result = await session.execute(
                 select(func.count(ToolShowcase.id))
                 .where(ToolShowcase.tool_category == category)
@@ -460,11 +582,11 @@ class MaterialGenerator:
     async def check_all_materials(self, session: AsyncSession) -> Dict[str, bool]:
         """Check material status for all categories."""
         categories = {
-            'landing': 6,      # 6 topics
-            'pattern': 10,     # 10 patterns
-            'product': 6,      # 6 product examples
-            'video': 5,        # 5 video styles
-            'avatar': 6        # 6 avatar examples
+            'landing': 6,      # 6 videos + 6 avatars with correct topics
+            'pattern': 10,     # background_removal materials
+            'product': 6,      # product_scene materials
+            'video': 5,        # short_video materials
+            'avatar': 6        # ai_avatar materials
         }
 
         status = {}

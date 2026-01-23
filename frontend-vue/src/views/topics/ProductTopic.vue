@@ -55,7 +55,10 @@ const sceneTypes = [
   { key: 'nature', icon: '🌿' },
   { key: 'luxury', icon: '💎' },
   { key: 'minimal', icon: '⬜' },
-  { key: 'lifestyle', icon: '🏠' }
+  { key: 'lifestyle', icon: '🏠' },
+  { key: 'urban', icon: '🏙️', nameZh: '都市', nameEn: 'Urban', descZh: '現代都市背景', descEn: 'Modern city backdrop' },
+  { key: 'seasonal', icon: '🍂', nameZh: '季節', nameEn: 'Seasonal', descZh: '季節性背景', descEn: 'Seasonal backgrounds' },
+  { key: 'holiday', icon: '🎄', nameZh: '節日', nameEn: 'Holiday', descZh: '節日慶典氛圍', descEn: 'Festive celebration' }
 ]
 
 const selectedScene = ref('studio')
@@ -67,16 +70,38 @@ const examples = ref<any[]>([])
 const selectedDemoImageId = ref<string | null>(null)
 
 // Demo images from database
+// Each unique product (by input_image_url) with its scene results
 const demoImages = computed(() => {
-  return demoTemplates.value
-    .filter(t => t.group === 'product_scene' || t.group === 'background_removal')
-    .map(t => ({
-      id: t.id,
-      name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
-      preview: t.input_image_url,
-      result_image_url: t.result_image_url,
-      result_watermarked_url: t.result_watermarked_url
-    }))
+  // Group templates by product (input_image_url) to show unique products
+  const productMap = new Map<string, {
+    id: string
+    name: string
+    preview: string
+    input_params: any
+    result_image_url: string | null
+    result_watermarked_url: string | null
+  }>()
+
+  demoTemplates.value.forEach(t => {
+    if (!t.input_image_url) return
+
+    const params = (t as any).input_params || {}
+    const productId = params.product_id || t.input_image_url
+
+    // Only add first occurrence of each product
+    if (!productMap.has(productId)) {
+      productMap.set(productId, {
+        id: t.id,
+        name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
+        preview: t.input_image_url,
+        input_params: params,
+        result_image_url: t.result_image_url || null,
+        result_watermarked_url: t.result_watermarked_url || null
+      })
+    }
+  })
+
+  return Array.from(productMap.values())
 })
 
 // Fallback examples if API returns empty
@@ -117,7 +142,7 @@ async function loadExamples() {
   }
 }
 
-function selectDemoImage(item: { id: string; preview?: string; result_image_url?: string; result_watermarked_url?: string }) {
+function selectDemoImage(item: { id: string; preview?: string; input_params?: any; result_image_url?: string | null; result_watermarked_url?: string | null }) {
   selectedDemoImageId.value = item.id
   uploadedImage.value = item.preview || null
   uploadedFile.value = null
@@ -160,17 +185,38 @@ async function generateScene() {
   result.value = null
 
   try {
-    // For demo users with selected template, use cached result
-    if (isDemoUser.value && selectedDemoImageId.value) {
-      const template = demoTemplates.value.find(t => t.id === selectedDemoImageId.value)
+    // For demo users, find the pre-generated result matching BOTH product AND scene
+    if (isDemoUser.value) {
+      // Simulate processing delay for demo effect
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Get the selected product's input_image_url
+      const selectedProduct = demoImages.value.find(p => p.id === selectedDemoImageId.value)
+      const productInputUrl = selectedProduct?.preview || uploadedImage.value
+
+      // Find template matching the product input URL AND selected scene
+      const template = demoTemplates.value.find(t => {
+        const params = (t as any).input_params || {}
+        // Match by product_id OR input_image_url
+        const matchesProduct = params.product_id === selectedProduct?.input_params?.product_id ||
+                              t.input_image_url === productInputUrl
+        // Match by scene_type OR topic
+        const matchesScene = params.scene_type === selectedScene.value || t.topic === selectedScene.value
+        return matchesProduct && matchesScene && (t.result_watermarked_url || t.result_image_url)
+      })
+
       if (template?.result_watermarked_url || template?.result_image_url) {
         result.value = template.result_watermarked_url || template.result_image_url || null
         uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
         return
       }
+
+      // No matching pre-generated result found
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      return
     }
 
-    // First upload the image to get an HTTP URL
+    // For subscribed users, upload and call API
     const imageUrl = await uploadImageFirst()
     if (!imageUrl) {
       uiStore.showError(isZh.value ? '圖片上傳失敗' : 'Failed to upload image')
@@ -371,8 +417,8 @@ onMounted(async () => {
                   : 'bg-dark-700 border-2 border-transparent hover:border-dark-600'"
               >
                 <span class="text-2xl block mb-2">{{ scene.icon }}</span>
-                <span class="text-white font-medium">{{ t(`tools.scenes.${scene.key}.name`) }}</span>
-                <span class="text-gray-500 text-sm block">{{ t(`tools.scenes.${scene.key}.desc`) }}</span>
+                <span class="text-white font-medium">{{ (scene as any).nameZh && isZh ? (scene as any).nameZh : (scene as any).nameEn || t(`tools.scenes.${scene.key}.name`) }}</span>
+                <span class="text-gray-500 text-sm block">{{ (scene as any).descZh && isZh ? (scene as any).descZh : (scene as any).descEn || t(`tools.scenes.${scene.key}.desc`) }}</span>
               </button>
             </div>
 

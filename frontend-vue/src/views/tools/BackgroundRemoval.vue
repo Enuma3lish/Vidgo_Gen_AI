@@ -116,36 +116,43 @@ async function removeBackground() {
   try {
     // For demo users, use cached result from database templates
     if (isDemoUser.value) {
-      // First check if we have templates from database
+      // Simulate processing delay for demo effect
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // First check if we have result for the selected example
       const selectedExample = demoImages.value[selectedDemoIndex.value]
 
-      // Check for result_watermarked_url or result from database template
+      // Check if the selected example has a pre-paired result
       if (selectedExample?.result) {
-        // Simulate processing delay for demo effect
-        await new Promise(resolve => setTimeout(resolve, 1500))
         resultImage.value = selectedExample.result
         uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
         return
       }
 
-      // Try to find matching template from loaded templates
+      // Try to find matching template from loaded templates by ID first (exact match)
       const matchingTemplate = demoTemplates.value.find(t =>
-        t.id === selectedExample?.id ||
-        t.input_image_url === uploadedImage.value
+        t.id === selectedExample?.id
       )
 
       if (matchingTemplate?.result_watermarked_url || matchingTemplate?.result_image_url) {
-        await new Promise(resolve => setTimeout(resolve, 1500))
         resultImage.value = matchingTemplate.result_watermarked_url || matchingTemplate.result_image_url || null
         uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
         return
       }
 
-      // No pre-generated result available - show demo preview
-      // Use the input image as a preview with demo overlay message
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      resultImage.value = uploadedImage.value
-      uiStore.showInfo(isZh.value ? '這是示範預覽，訂閱後可使用完整去背功能' : 'This is a demo preview. Subscribe for full background removal.')
+      // Then try to match by input_image_url (exact match only)
+      const matchByInput = demoTemplates.value.find(t =>
+        t.input_image_url === selectedExample?.input
+      )
+
+      if (matchByInput?.result_watermarked_url || matchByInput?.result_image_url) {
+        resultImage.value = matchByInput.result_watermarked_url || matchByInput.result_image_url || null
+        uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
+        return
+      }
+
+      // No pre-generated result available - show info message (NOT the input image as fake result)
+      uiStore.showInfo(isZh.value ? '此圖片尚未生成結果，請訂閱以使用完整功能' : 'This image is not pre-generated. Subscribe for full features.')
       return
     }
 

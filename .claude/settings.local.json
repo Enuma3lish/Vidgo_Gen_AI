@@ -110,7 +110,11 @@
       "Bash(docker start:*)",
       "Bash(for tool in background_removal product_scene try_on room_redesign short_video ai_avatar)",
       "Bash(done)",
-      "WebFetch(domain:www.a2e.ai)"
+      "WebFetch(domain:www.a2e.ai)",
+      "Bash(docker build:*)",
+      "Bash(docker run:*)",
+      "Bash(more:*)",
+      "Bash(SKIP_PREGENERATION=true docker-compose up:*)"
     ]
   }
 }

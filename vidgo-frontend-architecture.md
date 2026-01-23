@@ -1,7 +1,7 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 4.0
-**Last Updated:** January 12, 2026
+**Version:** 4.3
+**Last Updated:** January 18, 2026
 **Framework:** Vue 3 + Vite + TypeScript
 **Mode:** Preset-Only (No Custom Input)
 
@@ -38,6 +38,7 @@
 |  |  |  |   - Room Redesign      |  |                                  |  |  | |
 |  |  |  |   - Short Video        |  |                                  |  |  | |
 |  |  |  |   - AI Avatar          |  |                                  |  |  | |
+|  |  |  |   - Pattern Design     |  |                                  |  |  | |
 |  |  |  +------------------------+  +----------------------------------+  |  | |
 |  |  |                                                                    |  | |
 |  |  +------------------------------------------------------------------+  | |
@@ -189,13 +190,14 @@ frontend-vue/
 │   │   │   ├── Dashboard.vue
 │   │   │   └── MyWorks.vue
 │   │   │
-│   │   ├── tools/                   # 6 Core Tool Pages
+│   │   ├── tools/                   # 7 Core Tool Pages
 │   │   │   ├── BackgroundRemoval.vue
 │   │   │   ├── ProductScene.vue
 │   │   │   ├── TryOn.vue
 │   │   │   ├── RoomRedesign.vue
 │   │   │   ├── ShortVideo.vue
-│   │   │   └── AIAvatar.vue
+│   │   │   ├── AIAvatar.vue
+│   │   │   └── PatternDesign.vue
 │   │   │
 │   │   └── topics/                  # Topic category pages
 │   │       ├── PatternTopic.vue
@@ -229,13 +231,14 @@ const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', component: LandingPage },
   { path: '/pricing', name: 'pricing', component: Pricing },
 
-  // ===== 6 Core Tools =====
+  // ===== 7 Core Tools =====
   { path: '/tools/background-removal', name: 'background-removal', component: BackgroundRemoval },
   { path: '/tools/product-scene', name: 'product-scene', component: ProductScene },
   { path: '/tools/try-on', name: 'try-on', component: TryOn },
   { path: '/tools/room-redesign', name: 'room-redesign', component: RoomRedesign },
   { path: '/tools/short-video', name: 'short-video', component: ShortVideo },
   { path: '/tools/avatar', name: 'avatar', component: AIAvatar },
+  { path: '/tools/pattern-design', name: 'pattern-design', component: PatternDesign },
 
   // ===== Video Tool Aliases =====
   { path: '/tools/image-to-video', redirect: '/tools/short-video' },
@@ -469,7 +472,7 @@ export const useCreditsStore = defineStore('credits', () => {
 
 ---
 
-## 7. Tool Pages (6 Core Tools)
+## 7. Tool Pages (7 Core Tools)
 
 ### 7.1 Tool Feature Map
 
@@ -479,31 +482,65 @@ export const useCreditsStore = defineStore('credits', () => {
 +-----------------------------------------------------------------------------+
 |                                                                              |
 |  Tool 1: Background Removal (一鍵白底圖)                                     |
-|  └── API: PiAPI Wan / Gemini                                                 |
-|  └── Route: /tools/background-removal                                        |
+|  ├─ Backend: PiAPI T2I + Rembg / Gemini backup                               |
+|  ├─ Route: /tools/background-removal                                         |
+|  ├─ Topics: electronics, fashion, jewelry, food, cosmetics, furniture...     |
+|  └─ Mode: Pre-generated examples from Material DB                            |
 |                                                                              |
-|  Tool 2: Product Scene (商品場景圖)                                          |
-|  └── API: PiAPI Wan T2I                                                      |
-|  └── Route: /tools/product-scene                                             |
+|  Tool 2: Product Scene (產品攝影靈感)                                        |
+|  ├─ Backend: PiAPI T2I (Flux model)                                          |
+|  ├─ Route: /tools/product-scene                                              |
+|  ├─ Topics: studio, nature, luxury, minimal, lifestyle, urban...             |
+|  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
-|  Tool 3: AI Try-On (AI試穿)                                                  |
-|  └── API: Pollo AI                                                           |
-|  └── Route: /tools/try-on                                                    |
+|  Tool 3: Virtual Try-On (時尚穿搭展示)                                       |
+|  ├─ Backend: Kling AI Try-On via PiAPI (with T2I fallback)                   |
+|  ├─ Route: /tools/try-on                                                     |
+|  ├─ Topics: casual, formal, dresses, sportswear, outerwear, accessories      |
+|  ├─ Model Library: AI-generated full-body models (3 female, 3 male)          |
+|  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
-|  Tool 4: Room Redesign (毛坯精裝)                                            |
-|  └── API: PiAPI Wan (2D-to-3D Visualization)                                 |
-|  └── Route: /tools/room-redesign                                             |
+|  Tool 4: Room Redesign (室內設計範例)                                        |
+|  ├─ Backend: PiAPI T2I (Flux model)                                          |
+|  ├─ Route: /tools/room-redesign                                              |
+|  ├─ Topics: modern, nordic, japanese, industrial, minimalist, luxury         |
+|  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
 |  Tool 5: Short Video (短影片)                                                |
-|  └── API: Pollo AI (I2V, T2V)                                                |
-|  └── Route: /tools/short-video                                               |
+|  ├─ Backend: Pollo AI I2V (Pixverse v4.5 default)                            |
+|  ├─ Route: /tools/short-video                                                |
+|  ├─ Topics: product_showcase, brand_story, tutorial, promo                   |
+|  ├─ Landing Topics: ecommerce, social, brand, app, promo, service            |
+|  └─ Mode: Pre-generated videos from Material DB                              |
 |                                                                              |
 |  Tool 6: AI Avatar (AI數位人)                                                |
-|  └── API: A2E.ai (Lip-sync + TTS)                                            |
-|  └── Route: /tools/avatar                                                    |
+|  ├─ Backend: A2E.ai (TTS + Lip-sync)                                         |
+|  ├─ Route: /tools/avatar                                                     |
+|  ├─ Topics: spokesperson, product_intro, customer_service, social_media      |
+|  ├─ Landing Topics: ecommerce, social, brand, app, promo, service            |
+|  ├─ Languages: en, zh-TW, ja, ko                                             |
+|  └─ Mode: Pre-generated avatar videos from Material DB                       |
+|                                                                              |
+|  Tool 7: Pattern Design (印花設計)                                           |
+|  ├─ Backend: PiAPI T2I (Flux model)                                          |
+|  ├─ Route: /tools/pattern-design                                             |
+|  ├─ Topics: floral, geometric, abstract, traditional, modern                 |
+|  └─ Mode: Pre-generated seamless patterns from Material DB                   |
 |                                                                              |
 +-----------------------------------------------------------------------------+
 ```
+
+### 7.2 Backend API Integration
+
+| Tool | API Endpoint | Backend Provider | Pre-generation |
+|------|--------------|------------------|----------------|
+| Background Removal | `/api/v1/demo/presets/background_removal` | PiAPI T2I | Yes |
+| Product Scene | `/api/v1/demo/presets/product_scene` | PiAPI T2I | Yes |
+| Try-On | `/api/v1/demo/presets/try_on` | Kling AI + T2I fallback | Yes |
+| Room Redesign | `/api/v1/demo/presets/room_redesign` | PiAPI T2I | Yes |
+| Short Video | `/api/v1/demo/presets/short_video` | Pollo AI I2V | Yes |
+| AI Avatar | `/api/v1/demo/presets/ai_avatar` | A2E.ai TTS+Lipsync | Yes |
+| Pattern Design | `/api/v1/demo/presets/pattern_generate` | PiAPI T2I | Yes |
 
 ### 7.2 Tool Page Template (Preset-Only Mode)
 
@@ -704,6 +741,159 @@ npm run lint
 
 ---
 
-*Document Version: 4.0*
-*Last Updated: January 12, 2026*
+## 12. Full Stack Testing
+
+### 12.1 Development Setup
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Check service health
+docker-compose ps
+
+# View logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+```
+
+### 12.2 Access URLs
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Frontend | http://localhost:8501 | Vue 3 application |
+| Backend API | http://localhost:8001 | FastAPI server |
+| API Docs | http://localhost:8001/docs | Swagger UI |
+| Mailpit | http://localhost:8025 | Email testing UI |
+
+### 12.3 Test Flow
+
+```
++----------------------------------------------------------+
+|                   FULL STACK TEST FLOW                    |
++----------------------------------------------------------+
+|                                                          |
+|  1. START SERVICES                                       |
+|     docker-compose up -d                                 |
+|                                                          |
+|  2. VERIFY BACKEND                                       |
+|     curl http://localhost:8001/health                    |
+|     # Expected: {"status": "healthy"}                    |
+|                                                          |
+|  3. VERIFY FRONTEND                                      |
+|     open http://localhost:8501                           |
+|     # Expected: Landing page loads with videos/avatars   |
+|                                                          |
+|  4. TEST TOOL PAGES                                      |
+|     /tools/background-removal → Select preset → View     |
+|     /tools/product-scene → Select topic → View           |
+|     /tools/short-video → Select video → Play             |
+|     /tools/avatar → Select avatar → Play                 |
+|                                                          |
+|  5. TEST API ENDPOINTS                                   |
+|     GET /api/v1/demo/presets/short_video                 |
+|     GET /api/v1/landing/materials                        |
+|                                                          |
++----------------------------------------------------------+
+```
+
+### 12.4 Common Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Frontend blank | Backend not ready | Wait for backend health check |
+| No materials | Pre-generation skipped | Run `python -m scripts.main_pregenerate` |
+| API 401 | Missing auth token | Check localStorage for access_token |
+| Videos not playing | CORS or URL issues | Check browser console for errors |
+
+---
+
+## 13. Virtual Try-On with Model Library
+
+### 13.1 Model Library Overview
+
+The Virtual Try-On feature uses an AI-generated Model Library to provide full-body models that meet Kling AI API requirements.
+
+```
++---------------------------------------------------------------------+
+|                     MODEL LIBRARY ARCHITECTURE                       |
++---------------------------------------------------------------------+
+|                                                                      |
+|  PRE-GENERATION PHASE (Backend)                                      |
+|  ├─ Generate 6 full-body models (3 female, 3 male)                   |
+|  ├─ Store in /static/models/{gender}/                                |
+|  └─ Requirements: Full-body, visible torso, neutral background       |
+|                                                                      |
+|  TRY-ON GENERATION                                                   |
+|  ├─ Load model from Model Library                                    |
+|  ├─ Attempt Kling AI Virtual Try-On API                              |
+|  │   └─ If fails: Fallback to T2I with model+garment prompt          |
+|  └─ Store result in Material DB                                      |
+|                                                                      |
+|  FRONTEND DISPLAY                                                    |
+|  ├─ Show pre-generated try-on results                                |
+|  ├─ Before/After comparison                                          |
+|  └─ Watermarked output                                               |
+|                                                                      |
++---------------------------------------------------------------------+
+```
+
+### 13.2 Model Types
+
+| ID | Gender | Description |
+| --- | --- | --- |
+| female-fullbody-1 | Female | Young Asian woman - casual white tank top |
+| female-fullbody-2 | Female | European woman - business casual |
+| female-fullbody-3 | Female | Multi-ethnic woman - athleisure |
+| male-fullbody-1 | Male | Asian man - casual polo shirt |
+| male-fullbody-2 | Male | European man - smart casual |
+| male-fullbody-3 | Male | Multi-ethnic man - urban streetwear |
+
+### 13.3 API Flow
+
+```
+Frontend                    Backend                     External APIs
+   │                           │                             │
+   │ GET /presets/try_on       │                             │
+   │──────────────────────────>│                             │
+   │                           │                             │
+   │   [Material DB Lookup]    │                             │
+   │                           │                             │
+   │<─────────────────────────-│                             │
+   │   Pre-generated results   │                             │
+   │   (watermarked)           │                             │
+   │                           │                             │
+   │   Display in gallery      │                             │
+   │   with model + garment    │                             │
+```
+
+---
+
+## 14. Pattern Design Feature
+
+### 14.1 Overview
+
+Pattern Design generates seamless textile patterns for fashion and interior design applications.
+
+### 14.2 Topics
+
+| Topic ID | Chinese Name | Description |
+| --- | --- | --- |
+| floral | 花卉印花 | Floral and botanical patterns |
+| geometric | 幾何圖案 | Geometric and abstract shapes |
+| abstract | 抽象藝術 | Abstract artistic patterns |
+| traditional | 傳統紋樣 | Traditional cultural patterns |
+| modern | 現代設計 | Contemporary modern designs |
+
+### 14.3 Backend Integration
+
+- **Tool Type**: `pattern_generate`
+- **API Endpoint**: `/api/v1/demo/presets/pattern_generate`
+- **Provider**: PiAPI T2I (Flux model)
+- **Output**: Seamless tileable patterns
+
+---
+
+*Document Version: 4.3*
+*Last Updated: January 18, 2026*
 *Mode: Preset-Only (No Custom Input)*

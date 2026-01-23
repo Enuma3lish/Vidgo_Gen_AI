@@ -2,54 +2,48 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Install system dependencies
-# - curl: for health checks
-# - postgresql-client: for pg_isready
-# - redis-tools: for redis-cli
-# - ffmpeg: for video processing (watermarking)
+# 系統依賴
 RUN apt-get update && apt-get install -y \
-    curl \
-    postgresql-client \
-    redis-tools \
-    ffmpeg \
+    curl postgresql-client redis-tools ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for caching
+# 1. 先複製 requirements
 COPY requirements.txt .
 
-# Install Python dependencies
+# 2. 核彈級清理 (Nuclear Cleanup)
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip uninstall -y \
+    google-genai \
+    google-generativeai \
+    google-ai-generativelanguage \
+    google-api-core \
+    protobuf \
+    || true
 
-# Copy application code
+# 3. 安裝所有依賴 (包含 requirements.txt 裡的 google-genai)
+# 因為你的 requirements.txt 已經包含 google-genai>=0.2.0，這裡直接跑這行即可
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 4. 第一次檢查 (確認套件安裝成功)
+RUN python -c "from google import genai; print('✅ Check 1: Packages installed successfully')"
+
+# =========================================================
+# 5. 關鍵修改：先 COPY 程式碼，再做最後檢查！
+# =========================================================
 COPY . .
 
-# Create static directories for generated content
+# 建立靜態目錄
 RUN mkdir -p /app/static/generated /app/static/materials
-
-# Make entrypoint script executable
 RUN chmod +x /app/scripts/docker_entrypoint.sh
 
-# Expose port
+# 6. 最終檢查 (Final Verification)
+# 如果這裡失敗，代表你 COPY 進來的檔案裡有 "google" 資料夾或 "google.py" 蓋掉了套件
+RUN python -c "from google import genai; print('✅ Final Check: Import works with project files!')"
+
 EXPOSE 8000
-
-# Environment variables for pre-generation control
-# SKIP_PREGENERATION=true - Skip AI API calls (use existing materials)
-# PREGENERATION_LIMIT=10  - Number of materials to generate per tool
-# SKIP_AVATAR=true        - Skip avatar generation (saves A2E API costs)
-# SKIP_VIDEO=true         - Skip video generation (saves Pollo API costs)
-# ALLOW_EMPTY_MATERIALS=true - Allow service to start without materials (dev mode)
-# MIN_TEMPLATES=1         - Minimum templates required per group
-# STARTUP_TIMEOUT=300     - Timeout for startup validation in seconds
-
-# Use entrypoint script for startup validation
-# IMPORTANT: Service will NOT start if demo materials are not ready
 ENTRYPOINT ["/app/scripts/docker_entrypoint.sh"]
-
-# Default command (passed to entrypoint)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

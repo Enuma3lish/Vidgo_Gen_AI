@@ -29,9 +29,9 @@ class PiAPIProvider(BaseProvider):
     BASE_URL = "https://api.piapi.ai/api/v1"
 
     def __init__(self):
-        self.api_key = os.getenv("PiAPI_KEY", "")
+        self.api_key = os.getenv("PIAPI_KEY", "")
         if not self.api_key:
-            logger.warning("PiAPI_KEY not set in environment")
+            logger.warning("PIAPI_KEY not set in environment")
 
         self.client = httpx.AsyncClient(
             timeout=300.0,  # 5 minutes for video generation
@@ -97,6 +97,141 @@ class PiAPIProvider(BaseProvider):
                 "width": width,
                 "height": height
             }
+        }
+
+        return await self._submit_and_poll(payload)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # IMAGE TO IMAGE (using Flux via PiAPI)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def image_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Transform image using Flux img2img via PiAPI.
+        Reference: https://piapi.ai/docs/flux-api/image-to-image
+
+        Args:
+            params: {
+                "image_url": str,  # Input image URL
+                "prompt": str,
+                "negative_prompt": str (optional),
+                "strength": float (optional, 0.0-1.0, default 0.75),
+                "width": int (optional, default 1024),
+                "height": int (optional, default 768)
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"image_url": str}}
+        """
+        self._log_request("image_to_image", params)
+
+        payload = {
+            "model": "Qubico/flux1-schnell",
+            "task_type": "img2img",
+            "input": {
+                "image": params["image_url"],  # PiAPI uses "image" not "image_url"
+                "prompt": params["prompt"],
+                "negative_prompt": params.get("negative_prompt", ""),
+                "strength": params.get("strength", 0.75),
+                "width": params.get("width", 1024),
+                "height": params.get("height", 768)
+            }
+        }
+
+        return await self._submit_and_poll(payload)
+
+    async def kontext_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Edit image using Kontext (context-aware editing) via PiAPI.
+        Alternative to img2img that might be available on more plans.
+        Reference: https://piapi.ai/docs/flux-api/kontext
+
+        Args:
+            params: {
+                "image_url": str,  # Input image URL
+                "prompt": str,  # Editing instruction
+                "width": int (optional, default 1024),
+                "height": int (optional, default 768),
+                "steps": int (optional, default 10)
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"image_url": str}}
+        """
+        self._log_request("kontext_image", params)
+
+        payload = {
+            "model": "Qubico/flux1-dev-advanced",
+            "task_type": "kontext",
+            "input": {
+                "image": params["image_url"],
+                "prompt": params["prompt"],
+                "width": params.get("width", 1024),
+                "height": params.get("height", 768),
+                "steps": params.get("steps", 10),
+                "seed": -1
+            }
+        }
+
+        return await self._submit_and_poll(payload)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # VIRTUAL TRY-ON (Kling AI via PiAPI)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def virtual_try_on(
+        self,
+        model_image_url: str,
+        garment_image_url: Optional[str] = None,
+        upper_garment_url: Optional[str] = None,
+        lower_garment_url: Optional[str] = None,
+        batch_size: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Virtual Try-On using Kling AI via PiAPI.
+        Reference: https://piapi.ai/docs/kling-api/virtual-try-on-api
+
+        This is a TRUE virtual try-on that overlays clothing onto a model photo,
+        NOT just generating a new image from text.
+
+        Args:
+            model_image_url: Photo of person/model
+            garment_image_url: Clothing image (full body garment)
+            upper_garment_url: Upper body garment only (optional)
+            lower_garment_url: Lower body garment only (optional)
+            batch_size: Number of output images (1-4, default 1)
+
+        Notes:
+            - Either garment_image_url OR (upper_garment_url + lower_garment_url) must be provided
+            - garment_image_url is for full-body garments (dress_input in API)
+            - upper/lower for separate top/bottom
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"image_url": str, "images": [...]}}
+        """
+        self._log_request("virtual_try_on", {
+            "model_image_url": model_image_url,
+            "garment_image_url": garment_image_url
+        })
+
+        input_data = {
+            "model_input": model_image_url,
+            "batch_size": batch_size
+        }
+
+        # Add garment input - either full body or upper/lower
+        if garment_image_url:
+            input_data["dress_input"] = garment_image_url
+        else:
+            if upper_garment_url:
+                input_data["upper_input"] = upper_garment_url
+            if lower_garment_url:
+                input_data["lower_input"] = lower_garment_url
+
+        payload = {
+            "model": "kling",
+            "task_type": "ai_try_on",
+            "input": input_data
         }
 
         return await self._submit_and_poll(payload)
@@ -179,8 +314,8 @@ class PiAPIProvider(BaseProvider):
 
     async def doodle_interior(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate interior design from image.
-        Uses Flux img2img for interior redesign.
+        Generate interior design from image using TRUE Image-to-Image.
+        Now uses Flux img2img to actually process the input image.
 
         Args:
             params: {
@@ -201,17 +336,15 @@ class PiAPIProvider(BaseProvider):
 
         full_prompt = f"{style} {room_type} interior design, professional architectural rendering, {prompt}"
 
-        payload = {
-            "model": "Qubico/flux1-schnell",
-            "task_type": "txt2img",
-            "input": {
-                "prompt": full_prompt,
-                "width": 1024,
-                "height": 768
-            }
-        }
+        # Try kontext first (more likely to be available)
+        return await self.kontext_image({
+            "image_url": params["image_url"],
+            "prompt": full_prompt,
+            "width": 1024,
+            "height": 768,
+            "steps": 10
+        })
 
-        return await self._submit_and_poll(payload)
 
     # ─────────────────────────────────────────────────────────────────────────
     # UPSCALE

@@ -143,6 +143,124 @@ class PolloClient:
             logger.exception(f"[Pollo] Exception: {e}")
             return {"success": False, "error": str(e)}
 
+    async def generate_image_from_image(
+        self,
+        image_url: str,
+        prompt: str,
+        save_locally: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate image from image using Pollo AI img2img.
+        
+        Args:
+            image_url: Source image URL
+            prompt: Transformation prompt
+            save_locally: Save to local file (default True)
+        
+        Returns:
+            {
+                "success": True/False,
+                "image_url": str (local path or remote URL),
+                "error": str (if failed)
+            }
+        """
+        if not self.api_key:
+            return {"success": False, "error": "Pollo API key not configured"}
+
+        logger.info(f"[Pollo img2img]: {prompt[:50]}...")
+
+        # Build payload matching Pollo API format
+        payload = {
+            "input": {
+                "configType": "image2image",  # or "img2img"
+                "prompt": prompt,
+                "image_url": image_url,
+                "resolution": "1024x1024",
+                "published": False,
+                "protectionMode": True,
+                "entryCode": "api-platform",
+                "numOutputs": 1
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                # Use the same generation endpoint as video
+                response = await client.post(
+                    f"{self.BASE_URL}/generation",  # Generic generation endpoint
+                    headers=self.headers,
+                    json=payload
+                )
+
+                if response.status_code not in [200, 201, 202]:
+                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    logger.error(f"[Pollo img2img] Create task failed: {error}")
+                    return {"success": False, "error": error}
+
+                data = response.json()
+                task_id = data.get("id") or data.get("data", {}).get("taskId")
+
+                if not task_id:
+                    return {"success": False, "error": "No task_id in response"}
+
+                logger.info(f"[Pollo img2img] Task created: {task_id}")
+
+                # Poll for result
+                for attempt in range(40):  # Img2img is faster than video
+                    await asyncio.sleep(3)
+
+                    status_resp = await client.get(
+                        f"{self.BASE_URL}/generation/{task_id}/status",
+                        headers=self.headers
+                    )
+
+                    if status_resp.status_code != 200:
+                        continue
+
+                    status_data = status_resp.json()
+                    generations = status_data.get("data", {}).get("generations", [])
+
+                    if generations:
+                        gen = generations[0]
+                        status = gen.get("status", "")
+
+                        if status == "succeed":
+                            image_url = gen.get("url")
+
+                            if save_locally:
+                                local_path = await self._download_image(client, image_url)
+                                if local_path:
+                                    logger.info(f"[Pollo img2img] Saved: {local_path}")
+                                    return {"success": True, "image_url": local_path}
+
+                            return {"success": True, "image_url": image_url}
+
+                        elif status == "failed":
+                            error = gen.get("failMsg", "Unknown error")
+                            logger.error(f"[Pollo img2img] Task failed: {error}")
+                            return {"success": False, "error": error}
+
+                return {"success": False, "error": "Timeout (2 min)"}
+
+        except Exception as e:
+            logger.exception(f"[Pollo img2img] Exception: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _download_image(self, client: httpx.AsyncClient, url: str) -> Optional[str]:
+        """Download image and save locally."""
+        try:
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            response = await client.get(url, follow_redirects=True)
+            if response.status_code == 200:
+                filename = f"pollo_img_{uuid.uuid4().hex[:8]}.png"
+                filepath = OUTPUT_DIR / filename
+                filepath.write_bytes(response.content)
+                return f"/static/generated/{filename}"
+        except Exception as e:
+            logger.warning(f"[Pollo img2img] Download failed: {e}")
+        return None
+
+
     async def _download(self, client: httpx.AsyncClient, url: str, task_id: str) -> Optional[str]:
         """Download video and save locally."""
         try:

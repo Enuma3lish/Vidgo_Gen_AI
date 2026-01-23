@@ -67,6 +67,20 @@ VidGo operates in **PRESET-ONLY mode** for demo users:
 
 ---
 
+**Note on Free vs Paid Features**
+
+*Current Implementation (Free Users)*:
+- Free users can browse pre-generated AI example galleries
+- Examples are created using Text-to-Image generation
+- Results are watermarked and downloads are restricted
+
+*Roadmap (Paid Users)*:
+- Upload custom images for processing
+- True Image-to-Image transformations using PiAPI I2I/ControlNet
+- Room Redesign: Process actual floor plans into 3D renders
+- Product Scene: Composite real products into custom scenes
+- Virtual Try-On: Apply clothing to user-selected models
+
 ## Core Features
 
 ### 6 Core AI Tools
@@ -74,9 +88,9 @@ VidGo operates in **PRESET-ONLY mode** for demo users:
 | Tool | Description | API Provider |
 |------|-------------|--------------|
 | **Background Removal** | Remove backgrounds from product images | PiAPI Wan / Gemini |
-| **Product Scene** | Place products in professional settings | PiAPI Wan T2I |
-| **Virtual Try-On** | Virtual clothing try-on for fashion | Pollo AI |
-| **Room Redesign** | 2D-to-3D Visualization (Plan to Render) | PiAPI Wan / Trellis |
+| **Product Scene** | Product Photography Inspiration Gallery | PiAPI Wan T2I |
+| **Virtual Try-On** | Fashion Model Showcase | PiAPI Wan T2I |
+| **Room Redesign** | Interior Design Example Gallery | PiAPI Wan T2I |
 | **Short Video** | Image-to-video, Text-to-video | Pollo AI |
 | **AI Avatar** | Talking avatar with lip-sync TTS | A2E.ai |
 

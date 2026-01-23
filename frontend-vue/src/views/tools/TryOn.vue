@@ -40,16 +40,76 @@ const modelOptions = ref([
   { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=225&fit=crop' }
 ])
 
-// Default clothing items for demo users (from presets)
+// Clothing types that are restricted for male models
+const femaleOnlyClothingTypes = ['dress', 'skirt', 'short_skirt', 'mini_skirt']
+
+// Check if selected model is male
+const isMaleModel = computed(() => selectedModel.value.startsWith('male'))
+
+// Get unique clothing items from database (grouped by clothing_id)
+// Each clothing item may have multiple results for different models
 const demoClothingItems = computed(() => {
-  return demoTemplates.value
+  // Group templates by clothing_id to get unique clothing items
+  const clothingMap = new Map<string, {
+    id: string
+    name: string
+    preview: string
+    clothingType: string
+    genderRestriction: string | null
+  }>()
+
+  demoTemplates.value
     .filter(t => t.input_image_url)
-    .map(t => ({
-      id: t.id,
-      name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
-      preview: t.input_image_url,
-      watermarked_result: t.result_watermarked_url
-    }))
+    .forEach(t => {
+      const params = (t as any).input_params || {}
+      const clothingId = params.clothing_id || t.id
+
+      // Only add if not already in map (to avoid duplicates)
+      if (!clothingMap.has(clothingId)) {
+        // Get clothing type from input_params (set by backend) or detect from prompt
+        let clothingType = params.clothing_type || 'general'
+        if (clothingType === 'general') {
+          // Fallback: detect from prompt/style_tags
+          const prompt = (t.prompt || '').toLowerCase()
+          const promptZh = (t.prompt_zh || '').toLowerCase()
+          const styleTags = (t.style_tags || []).map((tag: string) => tag.toLowerCase())
+
+          if (prompt.includes('dress') || promptZh.includes('裙') || promptZh.includes('洋裝') ||
+              styleTags.some((tag: string) => tag.includes('dress'))) {
+            clothingType = 'dress'
+          } else if (prompt.includes('skirt') || promptZh.includes('短裙') || promptZh.includes('裙子') ||
+              styleTags.some((tag: string) => tag.includes('skirt'))) {
+            clothingType = 'skirt'
+          }
+        }
+
+        clothingMap.set(clothingId, {
+          id: clothingId,
+          name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
+          preview: t.input_image_url || '',
+          clothingType,
+          genderRestriction: params.gender_restriction || null
+        })
+      }
+    })
+
+  return Array.from(clothingMap.values())
+})
+
+// Get selected clothing type
+const selectedClothingType = computed(() => {
+  if (!selectedClothingId.value) return null
+  const item = demoClothingItems.value.find(c => c.id === selectedClothingId.value)
+  return item?.clothingType || 'general'
+})
+
+// Check if current combination is valid (male + dress/skirt = invalid)
+const isValidCombination = computed(() => {
+  if (!selectedClothingType.value) return true
+  if (isMaleModel.value && femaleOnlyClothingTypes.includes(selectedClothingType.value)) {
+    return false
+  }
+  return true
 })
 
 // Load demo presets on mount
@@ -66,16 +126,50 @@ function selectDemoClothing(item: { id: string; preview?: string; watermarked_re
 async function generateTryOn() {
   if (!clothingImage.value && !selectedClothingId.value) return
 
+  // Validate: Male models cannot wear dresses/skirts
+  if (!isValidCombination.value) {
+    uiStore.showError(isZh.value
+      ? '男性模特不能穿著裙子或洋裝，請選擇其他服裝或女性模特'
+      : 'Male models cannot wear dresses or skirts. Please select different clothing or a female model.')
+    return
+  }
+
   isProcessing.value = true
   try {
-    // For demo users with selected template, use cached result
+    // For demo users, find the result matching BOTH model AND clothing
     if (isDemoUser.value && selectedClothingId.value) {
-      const template = demoTemplates.value.find(t => t.id === selectedClothingId.value)
-      if (template?.result_watermarked_url) {
-        resultImage.value = template.result_watermarked_url
+      // Simulate processing delay for demo effect
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Find template matching the selected model AND clothing combination
+      const template = demoTemplates.value.find(t => {
+        const params = (t as any).input_params || {}
+        const matchesClothing = params.clothing_id === selectedClothingId.value
+        const matchesModel = params.model_id === selectedModel.value
+        return matchesClothing && matchesModel && (t.result_watermarked_url || t.result_image_url)
+      })
+
+      if (template?.result_watermarked_url || template?.result_image_url) {
+        resultImage.value = template.result_watermarked_url || template.result_image_url || null
         uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
         return
       }
+
+      // Fallback: Find any template with this clothing (different model is OK for demo)
+      const fallbackTemplate = demoTemplates.value.find(t => {
+        const params = (t as any).input_params || {}
+        return params.clothing_id === selectedClothingId.value && (t.result_watermarked_url || t.result_image_url)
+      })
+
+      if (fallbackTemplate?.result_watermarked_url || fallbackTemplate?.result_image_url) {
+        resultImage.value = fallbackTemplate.result_watermarked_url || fallbackTemplate.result_image_url || null
+        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+        return
+      }
+
+      // No pre-generated result available
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      return
     }
 
     // For subscribed users or if no cached result
@@ -250,10 +344,19 @@ function dataURItoBlob(dataURI: string): Blob {
           <!-- Credit Cost & Generate -->
           <div class="mt-6 pt-4 border-t border-dark-700">
             <CreditCost service="virtual_try_on" />
+
+            <!-- Warning message for invalid combination -->
+            <div v-if="!isValidCombination" class="mt-3 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+              <p class="text-sm text-red-400">
+                {{ isZh ? '⚠️ 男性模特不能穿著裙子或洋裝' : '⚠️ Male models cannot wear dresses or skirts' }}
+              </p>
+            </div>
+
             <button
               @click="generateTryOn"
-              :disabled="(!clothingImage && !selectedClothingId) || isProcessing"
+              :disabled="(!clothingImage && !selectedClothingId) || isProcessing || !isValidCombination"
               class="btn-primary w-full mt-4"
+              :class="{ 'opacity-50 cursor-not-allowed': !isValidCombination }"
             >
               {{ t('common.generate') }}
             </button>

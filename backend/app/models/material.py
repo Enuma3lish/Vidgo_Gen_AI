@@ -16,13 +16,14 @@ from app.core.database import Base
 
 
 class ToolType(str, enum.Enum):
-    """6 Core Tools as specified in ARCHITECTURE_FINAL.md"""
+    """Core Tools for VidGo Platform"""
     BACKGROUND_REMOVAL = "background_removal"
     PRODUCT_SCENE = "product_scene"
     TRY_ON = "try_on"
     ROOM_REDESIGN = "room_redesign"
     SHORT_VIDEO = "short_video"
-    AI_AVATAR = "ai_avatar"  # NEW: AI Avatar video generation
+    AI_AVATAR = "ai_avatar"  # AI Avatar video generation
+    PATTERN_GENERATE = "pattern_generate"  # Pattern design generation
 
 
 class MaterialSource(str, enum.Enum):
@@ -311,6 +312,13 @@ MATERIAL_TOPICS = {
         {"topic_id": "product_intro", "name_en": "Product Introduction", "name_zh": "產品介紹"},
         {"topic_id": "customer_service", "name_en": "Customer Service", "name_zh": "客服助理"},
         {"topic_id": "social_media", "name_en": "Social Media", "name_zh": "社群媒體"},
+    ],
+    ToolType.PATTERN_GENERATE: [
+        {"topic_id": "seamless", "name_en": "Seamless Pattern", "name_zh": "無縫圖案"},
+        {"topic_id": "floral", "name_en": "Floral Pattern", "name_zh": "花卉圖案"},
+        {"topic_id": "geometric", "name_en": "Geometric Pattern", "name_zh": "幾何圖案"},
+        {"topic_id": "abstract", "name_en": "Abstract Pattern", "name_zh": "抽象圖案"},
+        {"topic_id": "traditional", "name_en": "Traditional Pattern", "name_zh": "傳統紋樣"},
     ],
 }
 

@@ -35,6 +35,9 @@ const sceneTemplates = computed(() => [
   { id: 'luxury', icon: '✨', name: t('tools.scenes.luxury.name'), desc: t('tools.scenes.luxury.desc') },
   { id: 'minimal', icon: '⬜', name: t('tools.scenes.minimal.name'), desc: t('tools.scenes.minimal.desc') },
   { id: 'lifestyle', icon: '🏠', name: t('tools.scenes.lifestyle.name'), desc: t('tools.scenes.lifestyle.desc') },
+  { id: 'urban', icon: '🏙️', name: isZh.value ? '都市' : 'Urban', desc: isZh.value ? '現代都市背景' : 'Modern city backdrop' },
+  { id: 'seasonal', icon: '🍂', name: isZh.value ? '季節' : 'Seasonal', desc: isZh.value ? '季節性背景' : 'Seasonal backgrounds' },
+  { id: 'holiday', icon: '🎄', name: isZh.value ? '節日' : 'Holiday', desc: isZh.value ? '節日慶典氛圍' : 'Festive celebration' },
   { id: 'custom', icon: '🎨', name: t('tools.scenes.custom.name'), desc: t('tools.scenes.custom.desc'), proOnly: true }
 ])
 
@@ -86,7 +89,10 @@ const demoSceneTypes = [
   { id: 'nature', name: 'Nature', nameZh: '自然場景' },
   { id: 'luxury', name: 'Luxury', nameZh: '奢華場景' },
   { id: 'minimal', name: 'Minimal', nameZh: '極簡風格' },
-  { id: 'lifestyle', name: 'Lifestyle', nameZh: '生活情境' }
+  { id: 'lifestyle', name: 'Lifestyle', nameZh: '生活情境' },
+  { id: 'urban', name: 'Urban', nameZh: '都市' },
+  { id: 'seasonal', name: 'Seasonal', nameZh: '季節' },
+  { id: 'holiday', name: 'Holiday', nameZh: '節日' }
 ]
 
 // Track which demo product is selected
@@ -179,21 +185,27 @@ async function generateScenes() {
         return
       }
 
-      // Fallback: try to find any preset matching the scene
-      const template = demoTemplates.value.find(t =>
-        ((t as any).input_params?.scene_type === selectedScene.value ||
-         t.topic === selectedScene.value)
-      )
+      // Try to find a preset that matches BOTH the selected product AND scene
+      const selectedProduct = defaultProducts.find(p => p.id === selectedProductId.value)
+      const template = demoTemplates.value.find(t => {
+        const params = (t as any).input_params || {}
+        const matchesProduct = params.product_id === selectedProductId.value ||
+                               params.input_url === selectedProduct?.input ||
+                               t.input_image_url === selectedProduct?.input
+        const matchesScene = params.scene_type === selectedScene.value || t.topic === selectedScene.value
+        return matchesProduct && matchesScene
+      })
 
       if (template?.result_watermarked_url || template?.result_image_url) {
         resultImages.value = [template.result_watermarked_url || template.result_image_url || '']
+        // Cache this result for future use
+        preGeneratedResults.value[currentResultKey.value] = template.result_watermarked_url || template.result_image_url || ''
         uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
         return
       }
 
-      // No pre-generated result - show the input image as demo preview
-      resultImages.value = [uploadedImage.value!]
-      uiStore.showInfo(isZh.value ? '這是示範預覽，訂閱後可生成實際場景' : 'This is a demo preview. Subscribe to generate actual scenes.')
+      // No matching pre-generated result found - show info message
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
       return
     }
 
@@ -301,7 +313,7 @@ function dataURItoBlob(dataURI: string): Blob {
               </button>
             </div>
             <p class="text-xs text-gray-500 mt-2">
-              {{ isZh ? '5個產品 × 5個場景 = 25種組合' : '5 products × 5 scenes = 25 combinations' }}
+              {{ isZh ? '5個產品 × 8個場景 = 40種組合' : '5 products × 8 scenes = 40 combinations' }}
             </p>
           </div>
 

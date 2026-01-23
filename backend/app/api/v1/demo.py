@@ -2302,8 +2302,9 @@ async def get_landing_examples(
     # Determine avatar language based on user's language
     avatar_lang = "zh-TW" if language.startswith("zh") else "en"
 
-    # Landing page categories we want
-    landing_topics = ["ecommerce", "social", "brand", "app", "promo", "service"]
+    # Landing page categories we want - must match MATERIAL_TOPICS in architecture
+    # short_video topics: product_showcase, brand_story, tutorial, promo
+    landing_topics = ["product_showcase", "brand_story", "tutorial", "promo"]
 
     # Query ALL avatars for the user's language, grouped by topic
     avatars_result = await db.execute(
@@ -2356,14 +2357,36 @@ async def get_landing_examples(
 
         avatar_video = avatar.result_video_url if avatar else None
 
+        # Topic display names for UI
+        topic_names = {
+            "product_showcase": {"en": "Product Showcase", "zh": "產品展示"},
+            "brand_story": {"en": "Brand Story", "zh": "品牌故事"},
+            "tutorial": {"en": "Tutorial", "zh": "教學影片"},
+            "promo": {"en": "Promotion", "zh": "促銷活動"}
+        }
+        topic_display = topic_names.get(topic, {"en": topic.replace("_", " ").title(), "zh": topic})
+
+        # Use prompt as description, create title from topic
+        title_en = video.title_en or topic_display["en"]
+        title_zh = video.title_zh or topic_display["zh"]
+
+        # For thumb: use video URL as poster (browser will extract first frame)
+        # Or use a topic-specific Unsplash image
+        topic_images = {
+            "product_showcase": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600",
+            "brand_story": "https://images.unsplash.com/photo-1552664730-d307ca884978?w=600",
+            "tutorial": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600",
+            "promo": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?w=600"
+        }
+
         all_examples.append({
             "id": str(video.id),
             "category": topic,
-            "title": video.title_zh if language.startswith("zh") else (video.title_en or topic.replace("_", " ").title()),
-            "title_zh": video.title_zh,
-            "title_en": video.title_en or topic.replace("_", " ").title(),
+            "title": title_zh if language.startswith("zh") else title_en,
+            "title_zh": title_zh,
+            "title_en": title_en,
             "prompt": video.prompt[:100] if video.prompt else "",
-            "thumb": video.input_image_url or f"https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600",
+            "thumb": video.input_image_url or topic_images.get(topic, "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600"),
             "video": video.result_video_url,
             "avatar_video": avatar_video,
             "duration": "8s",

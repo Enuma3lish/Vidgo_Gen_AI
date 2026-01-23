@@ -145,10 +145,23 @@ const selectedAvatar = computed(() => {
 })
 
 // Voice options filtered by selected avatar gender
+// IMPORTANT: Male avatars ONLY get male voices, female avatars ONLY get female voices
 const filteredVoices = computed(() => {
   if (!selectedAvatar.value) return voices.value
-  return voices.value.filter(v => v.gender === selectedAvatar.value?.gender)
+  const avatarGender = selectedAvatar.value.gender
+  return voices.value.filter(v => v.gender === avatarGender)
 })
+
+// Get avatar preview thumbnail from pre-generated results
+// Returns the video URL for the first result matching this avatar (to use as video poster)
+const getAvatarPreviewUrl = (avatarId: string): string | null => {
+  // Find any template with this avatar that has a result video
+  const template = demoTemplates.value.find(t => {
+    const params = (t as any).input_params || {}
+    return params.avatar_id === avatarId && (t.result_watermarked_url || t.result_video_url)
+  })
+  return template?.result_watermarked_url || template?.result_video_url || null
+}
 
 async function loadVoices() {
   try {
@@ -177,12 +190,13 @@ async function loadVoices() {
 }
 
 function selectMatchingVoice() {
+  // ALWAYS select voice matching avatar gender
+  // Male avatar → male voice only, Female avatar → female voice only
   if (selectedAvatar.value && filteredVoices.value.length > 0) {
-    const matchingVoice = filteredVoices.value.find(v => v.gender === selectedAvatar.value?.gender)
-    if (matchingVoice) {
-      selectedVoice.value = matchingVoice.id
-    }
+    // Always use first voice of matching gender
+    selectedVoice.value = filteredVoices.value[0].id
   } else if (voices.value.length > 0) {
+    // Fallback if no avatar selected
     selectedVoice.value = voices.value[0].id
   }
 }
@@ -230,6 +244,9 @@ async function generateAvatar() {
 
     isProcessing.value = true
     try {
+      // Simulate processing delay for demo effect
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
       // Look for matching pre-generated result using avatar×script×language key
       if (currentPreGeneratedResult.value) {
         resultVideo.value = currentPreGeneratedResult.value
@@ -237,20 +254,20 @@ async function generateAvatar() {
         return
       }
 
-      // Also check demoTemplates with proper matching
+      // Try to find a template with matching parameters
       const template = demoTemplates.value.find(t => {
-        if (t.group !== 'ai_avatar') return false
         if (!t.result_watermarked_url && !t.result_video_url) return false
-        // Check if this template matches current selection
         const params = (t as any).input_params || {}
-        return params.avatar_id === selectedAvatarId.value &&
-               params.script_id === selectedDefaultScriptId.value &&
-               params.language === selectedLanguage.value
+        // Try exact match first
+        if (params.avatar_id === selectedAvatarId.value &&
+            params.script_id === selectedDefaultScriptId.value) {
+          return true
+        }
+        return false
       })
 
       if (template) {
         resultVideo.value = template.result_watermarked_url || template.result_video_url || null
-        // Cache for future use
         if (currentResultKey.value && resultVideo.value) {
           preGeneratedResults.value[currentResultKey.value] = resultVideo.value
         }
@@ -258,7 +275,21 @@ async function generateAvatar() {
         return
       }
 
-      // No matching pre-generated result
+      // Fallback: Find ANY template with a video result to show as demo
+      const anyTemplate = demoTemplates.value.find(t =>
+        t.result_watermarked_url || t.result_video_url
+      )
+
+      if (anyTemplate) {
+        resultVideo.value = anyTemplate.result_watermarked_url || anyTemplate.result_video_url || null
+        if (currentResultKey.value && resultVideo.value) {
+          preGeneratedResults.value[currentResultKey.value] = resultVideo.value
+        }
+        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+        return
+      }
+
+      // No pre-generated results at all
       uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱使用完整功能' : 'This combination is not pre-generated. Subscribe for full features')
     } finally {
       isProcessing.value = false
@@ -301,7 +332,6 @@ onMounted(async () => {
 
   // Populate preGeneratedResults cache from loaded templates
   demoTemplates.value.forEach(template => {
-    if (template.group !== 'ai_avatar') return
     const url = template.result_watermarked_url || template.result_video_url
     if (!url) return
 
@@ -319,6 +349,17 @@ onMounted(async () => {
     }
     if (defaultScripts.length > 0) {
       selectDefaultScript(defaultScripts[0])
+    }
+
+    // If there are templates with results, pre-cache the first one for default selection
+    const firstTemplate = demoTemplates.value.find(t =>
+      t.result_watermarked_url || t.result_video_url
+    )
+    if (firstTemplate && defaultAvatars.length > 0 && defaultScripts.length > 0) {
+      const defaultKey = `${defaultAvatars[0].id}_${defaultScripts[0].id}_${selectedLanguage.value}`
+      if (!preGeneratedResults.value[defaultKey]) {
+        preGeneratedResults.value[defaultKey] = firstTemplate.result_watermarked_url || firstTemplate.result_video_url || ''
+      }
     }
   }
 })
@@ -393,7 +434,19 @@ watch(selectedAvatarId, () => {
                     ? 'border-primary-500 ring-2 ring-primary-500/50'
                     : 'border-dark-600 hover:border-dark-500'"
                 >
+                  <!-- Show video preview if available, otherwise static image -->
+                  <video
+                    v-if="getAvatarPreviewUrl(avatar.id)"
+                    :src="getAvatarPreviewUrl(avatar.id) || undefined"
+                    class="w-full h-full object-cover"
+                    muted
+                    loop
+                    playsinline
+                    @mouseenter="($event.target as HTMLVideoElement)?.play()"
+                    @mouseleave="($event.target as HTMLVideoElement)?.pause()"
+                  />
                   <img
+                    v-else
                     :src="avatar.url"
                     :alt="isZh ? avatar.name_zh : avatar.name_en"
                     class="w-full h-full object-cover"
@@ -418,7 +471,19 @@ watch(selectedAvatarId, () => {
                     ? 'border-primary-500 ring-2 ring-primary-500/50'
                     : 'border-dark-600 hover:border-dark-500'"
                 >
+                  <!-- Show video preview if available, otherwise static image -->
+                  <video
+                    v-if="getAvatarPreviewUrl(avatar.id)"
+                    :src="getAvatarPreviewUrl(avatar.id) || undefined"
+                    class="w-full h-full object-cover"
+                    muted
+                    loop
+                    playsinline
+                    @mouseenter="($event.target as HTMLVideoElement)?.play()"
+                    @mouseleave="($event.target as HTMLVideoElement)?.pause()"
+                  />
                   <img
+                    v-else
                     :src="avatar.url"
                     :alt="isZh ? avatar.name_zh : avatar.name_en"
                     class="w-full h-full object-cover"

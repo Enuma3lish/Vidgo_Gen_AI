@@ -32,7 +32,8 @@ class Settings(BaseSettings):
 
     # Specialized Providers
     A2E_API_KEY: str = ""  # A2E.ai for Avatar/Digital Human
-    A2E_DEFAULT_ANCHOR_ID: str = ""  # A2E anchor ID (create at video.a2e.ai)
+    A2E_API_ID: str = ""  # A2E.ai API ID (required for authentication)
+    A2E_DEFAULT_CREATOR_ID: str = ""  # A2E creator/anchor ID (create at video.a2e.ai)
     GEMINI_API_KEY: str = ""  # Gemini for moderation + emergency backup
 
     # Legacy (deprecated)

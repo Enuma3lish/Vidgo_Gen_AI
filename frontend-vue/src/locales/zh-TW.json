@@ -96,9 +96,9 @@
       "desc": "一鍵移除圖片背景"
     },
     "productScene": {
-      "name": "場景生成",
-      "desc": "為產品生成專業場景",
-      "longDesc": "將您的產品放置在專業的 AI 生成場景中"
+      "name": "產品攝影靈感庫",
+      "desc": "瀏覽專業產品攝影範例",
+      "longDesc": "探索 AI 生成的產品攝影概念。訂閱後可上傳自己的產品進行自定義場景生成。"
     },
     "productEnhance": {
       "name": "商品增強",
@@ -126,19 +126,40 @@
       "longDesc": "自動檢測並一鍵移除任何圖片的背景"
     },
     "tryOn": {
-      "name": "虛擬試穿",
-      "desc": "虛擬服裝試穿",
-      "longDesc": "使用 AI 虛擬試穿，查看服裝在不同模特上的效果"
+      "name": "時尚穿搭展示",
+      "desc": "瀏覽時尚模特穿搭範例",
+      "longDesc": "查看 AI 生成的時尚模特穿搭靈感。訂閱後可使用自己的照片進行虛擬試穿。"
     },
     "roomRedesign": {
-      "name": "空間改造",
-      "desc": "改造室內空間",
-      "longDesc": "使用 AI 室內裝飾建議重新設計任何房間"
+      "name": "室內設計範例庫",
+      "desc": "瀏覽室內設計靈感",
+      "longDesc": "探索 AI 生成的室內設計範例。訂閱後可上傳自己的房間照片進行自定義設計。"
     },
     "shortVideo": {
       "name": "短視頻",
       "desc": "創建引人入勝的短視頻",
-      "longDesc": "從文字描述或圖片生成精彩短視頻"
+      "longDesc": "從文字描述或圖片生成精彩短視頻",
+      "tryExamples": "請試試我們精彩的範例",
+      "clickToSee": "點擊查看不同動態效果",
+      "selectExample": "選擇一個範例",
+      "selectExampleHint": "從上方範例影片中選擇一個來查看效果",
+      "selectedExample": "已選擇的範例",
+      "motionEffect": "動態效果",
+      "videoSettings": "影片設定",
+      "subscribersOnly": "訂閱專屬",
+      "duration": "影片長度",
+      "subscribeToDuration": "訂閱後可自訂影片長度",
+      "motionType": "動態類型",
+      "subscribeToMotion": "訂閱後可選擇動態效果",
+      "upgradeSettings": "升級訂閱以使用自訂設定",
+      "viewPlans": "查看方案",
+      "viewResult": "查看結果",
+      "aiModelSelection": "AI 模型選擇",
+      "chooseAiModel": "選擇不同的 AI 模型以獲得不同的生成效果",
+      "upgradeToModel": "升級訂閱以選擇不同 AI 模型",
+      "generatedVideo": "生成的影片",
+      "videoPlaceholder": "生成的影片將顯示在這裡",
+      "subscribeAdvanced": "訂閱以解鎖進階設定與 AI 模型選擇"
     },
     "common": {
       "uploadImage": "上傳圖片",
@@ -448,31 +469,31 @@
     "copyright": "© 2024 VidGo AI. 保留所有權利。"
   },
   "interior": {
-    "badge": "AI 室內設計",
-    "title": "AI 室內設計",
-    "subtitle": "使用 AI 改造任何房間。上傳照片並描述您的夢想空間。",
-    "processing": "正在生成設計...",
+    "badge": "室內設計範例庫",
+    "title": "室內設計靈感庫",
+    "subtitle": "瀏覽 AI 生成的室內設計範例。免費用戶可查看精選範例，訂閱後可上傳自己的房間照片進行自定義設計。",
+    "processing": "正在載入範例...",
     "tabs": {
-      "redesign": "改造房間",
-      "generate": "生成設計",
-      "styleTransfer": "風格轉換"
+      "redesign": "瀏覽範例",
+      "generate": "設計生成（需訂閱）",
+      "styleTransfer": "風格轉換（需訂閱）"
     },
-    "uploadTitle": "上傳房間照片",
-    "roomType": "房間類型",
+    "uploadTitle": "選擇參考範例",
+    "roomType": "空間類型",
     "designStyle": "設計風格",
     "prompt": "描述您想要的改變",
     "promptPlaceholder": "例如：現代極簡風格，灰色沙發、木質咖啡桌和室內植物...",
     "examplePrompts": "試試這些範例",
-    "result": "設計結果",
-    "resultPlaceholder": "重新設計的房間將顯示在這裡",
-    "resultHint": "上傳房間照片或描述您的夢想設計",
-    "before": "改造前",
-    "after": "改造後",
-    "tryAnother": "重新嘗試",
+    "result": "範例結果",
+    "resultPlaceholder": "設計範例將顯示在這裡",
+    "resultHint": "選擇設計風格查看 AI 生成的範例，或訂閱後上傳您的房間照片",
+    "before": "參考圖",
+    "after": "設計範例",
+    "tryAnother": "查看其他範例",
     "actions": {
-      "redesign": "改造房間",
-      "generate": "生成設計",
-      "applyStyle": "套用風格"
+      "redesign": "查看範例",
+      "generate": "生成設計（需訂閱）",
+      "applyStyle": "套用風格（需訂閱）"
     },
     "success": {
       "redesigned": "房間改造成功！",

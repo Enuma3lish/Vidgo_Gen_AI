@@ -53,19 +53,31 @@ echo ""
 # Check if pre-generation should run
 SKIP_PREGENERATION=${SKIP_PREGENERATION:-false}
 PREGENERATION_LIMIT=${PREGENERATION_LIMIT:-10}
+PREGENERATION_TIMEOUT=${PREGENERATION_TIMEOUT:-300}  # 5 minutes default
 
 if [ "$SKIP_PREGENERATION" = "true" ]; then
     echo "  Skipping pre-generation (SKIP_PREGENERATION=true)"
 else
-    # Run the new unified pre-generation script
-    # --limit controls how many materials to generate per tool
-    python -m scripts.pregenerate \
-        --limit ${PREGENERATION_LIMIT} \
-        2>&1 || {
-            echo ""
-            echo "  Pre-generation encountered errors"
-            echo "  This is not fatal - checking minimum requirements..."
-        }
+    echo "  Timeout: ${PREGENERATION_TIMEOUT}s (set PREGENERATION_TIMEOUT to change)"
+    echo "  Limit: ${PREGENERATION_LIMIT} materials per tool"
+    echo ""
+
+    # Run pre-generation with timeout to prevent blocking forever
+    # Use timeout command with SIGTERM, then SIGKILL after 10s grace period
+    timeout --signal=TERM --kill-after=10 ${PREGENERATION_TIMEOUT} \
+        python -m scripts.main_pregenerate \
+            --limit ${PREGENERATION_LIMIT} \
+            2>&1 || {
+                EXIT_CODE=$?
+                echo ""
+                if [ $EXIT_CODE -eq 124 ]; then
+                    echo "  Pre-generation TIMED OUT after ${PREGENERATION_TIMEOUT}s"
+                    echo "  This is expected for slow API calls - continuing with existing materials"
+                else
+                    echo "  Pre-generation encountered errors (exit code: $EXIT_CODE)"
+                fi
+                echo "  Checking minimum requirements..."
+            }
 fi
 echo ""
 
@@ -103,7 +115,7 @@ else
     echo "     - POLLO_API_KEY (for video)"
     echo "     - A2E_API_KEY (for avatar)"
     echo "  2. Run pre-generation manually:"
-    echo "     python -m scripts.pregenerate --all"
+    echo "     python -m scripts.main_pregenerate --all"
     echo "  3. Set SKIP_PREGENERATION=true to skip (dev mode only)"
     echo ""
 

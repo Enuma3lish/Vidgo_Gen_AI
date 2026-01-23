@@ -371,15 +371,26 @@ watch(locale, () => {
               class="group relative aspect-video rounded-xl overflow-hidden bg-dark-700 cursor-pointer"
               @click="playVideo(video)"
             >
-              <!-- Thumbnail -->
+              <!-- Video preview with hover-to-play -->
+              <video
+                v-if="video.video"
+                :src="video.video"
+                class="w-full h-full object-cover"
+                muted
+                preload="metadata"
+                @mouseenter="($event.target as HTMLVideoElement).play()"
+                @mouseleave="($event.target as HTMLVideoElement).pause(); ($event.target as HTMLVideoElement).currentTime = 0"
+              />
+              <!-- Fallback to image thumbnail -->
               <img
+                v-else
                 :src="video.thumb || video.image_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400'"
                 :alt="video.title"
                 class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
 
               <!-- Play Overlay -->
-              <div class="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <div class="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 <div class="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center">
                   <svg class="w-6 h-6 text-primary-600 ml-1" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
@@ -387,15 +398,15 @@ watch(locale, () => {
                 </div>
               </div>
 
-              <!-- Video Badge (shows if video is available) -->
-              <div v-if="video.video_url || video.result_video_url" class="absolute top-2 right-2 px-2 py-1 bg-primary-500 text-white text-xs rounded-full">
-                {{ isZh ? '影片' : 'Video' }}
+              <!-- Topic Badge -->
+              <div class="absolute top-2 left-2 px-2 py-1 bg-black/70 text-white text-xs rounded-full">
+                {{ video.title || video.topic }}
               </div>
 
-              <!-- Title Overlay -->
+              <!-- Title Overlay with prompt -->
               <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
-                <p class="text-white text-sm font-medium truncate">
-                  {{ video.title || (isZh ? '精選案例' : 'Featured Example') }}
+                <p class="text-white text-xs line-clamp-2">
+                  {{ video.prompt || (isZh ? '精選案例' : 'Featured Example') }}
                 </p>
               </div>
             </div>

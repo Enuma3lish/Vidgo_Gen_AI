@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { useUIStore, useCreditsStore } from '@/stores'
+import { useUIStore, useCreditsStore, useAuthStore } from '@/stores'
 import { useDemoMode } from '@/composables'
 import { demoApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
@@ -12,7 +12,13 @@ const { t, locale } = useI18n()
 const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
+const authStore = useAuthStore()
 const isZh = computed(() => locale.value.startsWith('zh'))
+
+// Check if user is subscribed (has paid plan)
+const isSubscribed = computed(() => {
+  return authStore.user?.subscription_tier && authStore.user.subscription_tier !== 'demo'
+})
 
 // PRESET-ONLY MODE: All users use presets, no custom input
 const {
@@ -26,19 +32,74 @@ const {
 const uploadedImage = ref<string | null>(null)
 const resultVideo = ref<string | null>(null)
 const isProcessing = ref(false)
-// prompt is readonly in preset-only mode - users select from presets
+// Settings - only for subscribed users
 const selectedDuration = ref(5)
 const selectedMotion = ref('auto')
+const selectedModel = ref('pixverse_v4.5')
 
-const durationOptions = [3, 5, 10]
+// Duration options vary by model
+const durationOptions = computed(() => {
+  const modelInfo = aiModelOptions.find(m => m.id === selectedModel.value)
+  return modelInfo?.lengths || [5, 8]
+})
 
+// Motion types - all motion options available in examples
 const motionOptions = [
-  { id: 'auto', name: 'Auto', desc: 'AI decides motion' },
-  { id: 'zoom-in', name: 'Zoom In', desc: 'Gradual zoom effect' },
-  { id: 'zoom-out', name: 'Zoom Out', desc: 'Pull back effect' },
-  { id: 'pan-left', name: 'Pan Left', desc: 'Horizontal movement' },
-  { id: 'pan-right', name: 'Pan Right', desc: 'Horizontal movement' },
-  { id: 'rotate', name: 'Rotate', desc: 'Circular motion' }
+  { id: 'auto', nameEn: 'Auto', nameZh: '自動', descEn: 'AI decides motion', descZh: 'AI 自動選擇動態' },
+  { id: 'zoom-in', nameEn: 'Zoom In', nameZh: '放大', descEn: 'Gradual zoom effect', descZh: '逐漸放大效果' },
+  { id: 'zoom-out', nameEn: 'Zoom Out', nameZh: '縮小', descEn: 'Pull back effect', descZh: '拉遠效果' },
+  { id: 'pan-left', nameEn: 'Pan Left', nameZh: '左移', descEn: 'Horizontal movement left', descZh: '向左平移' },
+  { id: 'pan-right', nameEn: 'Pan Right', nameZh: '右移', descEn: 'Horizontal movement right', descZh: '向右平移' },
+  { id: 'rotate', nameEn: 'Rotate', nameZh: '旋轉', descEn: 'Circular motion', descZh: '旋轉動態' }
+]
+
+// AI Model options from Pollo AI - subscriber only feature
+const aiModelOptions = [
+  {
+    id: 'pixverse_v4.5',
+    nameEn: 'Pixverse 4.5',
+    nameZh: 'Pixverse 4.5',
+    descEn: 'Fast & Affordable - Good quality',
+    descZh: '快速實惠 - 品質優良',
+    lengths: [5, 8],
+    badge: 'default'
+  },
+  {
+    id: 'pixverse_v5',
+    nameEn: 'Pixverse 5.0',
+    nameZh: 'Pixverse 5.0',
+    descEn: 'Creative animations',
+    descZh: '創意動畫風格',
+    lengths: [5, 8],
+    badge: 'new'
+  },
+  {
+    id: 'kling_v2',
+    nameEn: 'Kling AI 2.0',
+    nameZh: 'Kling AI 2.0',
+    descEn: 'High quality, lifelike movements',
+    descZh: '高品質，逼真動態',
+    lengths: [5, 10],
+    badge: 'pro'
+  },
+  {
+    id: 'kling_v1.5',
+    nameEn: 'Kling AI 1.5',
+    nameZh: 'Kling AI 1.5',
+    descEn: 'Fast generation, good quality',
+    descZh: '快速生成，品質好',
+    lengths: [5, 10],
+    badge: null
+  },
+  {
+    id: 'luma_ray2',
+    nameEn: 'Luma Ray 2.0',
+    nameZh: 'Luma Ray 2.0',
+    descEn: 'Cinematic quality',
+    descZh: '電影級品質',
+    lengths: [5, 10],
+    badge: 'premium'
+  }
 ]
 
 // Demo images for demo users
@@ -46,12 +107,18 @@ const selectedDemoImageId = ref<string | null>(null)
 
 const demoImages = computed(() => {
   return demoTemplates.value
-    .filter(t => t.input_image_url)
+    .filter(t => t.result_video_url || t.result_watermarked_url)
     .map(t => ({
       id: t.id,
+      // Always show prompt in user's current language
       name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
-      preview: t.input_image_url,
-      watermarked_result: t.result_watermarked_url
+      // Use thumbnail, input_image, or generate from video URL
+      preview: t.thumbnail_url || t.input_image_url || undefined,
+      video_url: t.result_video_url || t.result_watermarked_url,
+      watermarked_result: t.result_watermarked_url,
+      topic: t.topic,
+      // Extract motion type from input_params (API returns metadata in input_params)
+      motion: t.input_params?.motion || t.topic || 'auto'
     }))
 })
 
@@ -60,17 +127,23 @@ onMounted(async () => {
   await loadDemoTemplates('short_video')
 })
 
-function selectDemoImage(item: { id: string; preview?: string }) {
+function selectDemoImage(item: { id: string; preview?: string; video_url?: string; motion?: string }) {
   selectedDemoImageId.value = item.id
-  uploadedImage.value = item.preview || null
-  resultVideo.value = null
+  uploadedImage.value = item.preview || item.video_url || null
+  // Auto-show the result video for demo items
+  const template = demoTemplates.value.find(t => t.id === item.id)
+  if (template?.result_video_url || template?.result_watermarked_url) {
+    resultVideo.value = template.result_video_url || template.result_watermarked_url || null
+  } else {
+    resultVideo.value = null
+  }
 }
 
 
 
 async function generateVideo() {
   if (!uploadedImage.value) {
-    uiStore.showError('Please upload an image')
+    uiStore.showError(isZh.value ? '請選擇一個範例' : 'Please select an example')
     return
   }
 
@@ -99,7 +172,8 @@ async function generateVideo() {
       image_url: imageUrl || undefined,
       params: {
         duration: selectedDuration.value,
-        motion: selectedMotion.value
+        motion: selectedMotion.value,
+        model: selectedModel.value
       }
     })
 
@@ -109,7 +183,7 @@ async function generateVideo() {
       uiStore.showSuccess(t('common.success'))
     }
   } catch (error) {
-    uiStore.showError('Generation failed')
+    uiStore.showError(isZh.value ? '生成失敗' : 'Generation failed')
   } finally {
     isProcessing.value = false
   }
@@ -131,7 +205,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
 <template>
   <div class="min-h-screen pt-24 pb-20">
-    <LoadingOverlay :show="isProcessing" :message="'Generating video... This may take a few minutes'" />
+    <LoadingOverlay :show="isProcessing" :message="isZh ? '正在生成影片... 這可能需要幾分鐘' : 'Generating video... This may take a few minutes'" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
@@ -157,7 +231,7 @@ function dataURItoBlob(dataURI: string): Blob {
         <!-- Subscribe Notice for Demo Users -->
         <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
           <RouterLink to="/pricing" class="hover:underline">
-            {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+            {{ isZh ? '訂閱以解鎖進階設定與 AI 模型選擇' : 'Subscribe to unlock advanced settings & AI model selection' }}
           </RouterLink>
         </div>
       </div>
@@ -165,14 +239,16 @@ function dataURItoBlob(dataURI: string): Blob {
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Left Panel - Input -->
         <div class="space-y-6">
-          <!-- Source Selection -->
+          <!-- Example Selection -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">Source Image (Optional)</h3>
+            <h3 class="text-lg font-semibold text-white mb-4">
+              {{ isZh ? '請試試我們精彩的範例' : 'Please try our amazing examples' }}
+            </h3>
 
-            <!-- Demo Images for demo users -->
-            <div v-if="isDemoUser || demoImages.length > 0" class="mb-4">
+            <!-- Demo Images for all users -->
+            <div v-if="demoImages.length > 0" class="mb-4">
               <p class="text-sm text-gray-400 mb-3">
-                {{ isZh ? '預設圖片（示範）' : 'Preset Images (Demo)' }}
+                {{ isZh ? '點擊查看不同動態效果' : 'Click to see different motion effects' }}
               </p>
               <div v-if="isLoadingTemplates" class="flex justify-center py-8">
                 <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
@@ -182,13 +258,23 @@ function dataURItoBlob(dataURI: string): Blob {
                   v-for="item in demoImages"
                   :key="item.id"
                   @click="selectDemoImage(item)"
-                  class="aspect-video rounded-lg overflow-hidden border-2 transition-all"
+                  class="aspect-video rounded-lg overflow-hidden border-2 transition-all relative group"
                   :class="selectedDemoImageId === item.id
                     ? 'border-primary-500'
                     : 'border-dark-600 hover:border-dark-500'"
                 >
+                  <!-- Video preview with poster -->
+                  <video
+                    v-if="item.video_url"
+                    :src="item.video_url"
+                    class="w-full h-full object-cover"
+                    muted
+                    preload="metadata"
+                    @mouseenter="($event.target as HTMLVideoElement).play()"
+                    @mouseleave="($event.target as HTMLVideoElement).pause(); ($event.target as HTMLVideoElement).currentTime = 0"
+                  />
                   <img
-                    v-if="item.preview"
+                    v-else-if="item.preview"
                     :src="item.preview"
                     :alt="item.name"
                     class="w-full h-full object-cover"
@@ -196,11 +282,26 @@ function dataURItoBlob(dataURI: string): Blob {
                   <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
                     <span class="text-3xl">🎬</span>
                   </div>
+                  <!-- Motion type badge -->
+                  <div class="absolute top-1 left-1 px-2 py-0.5 bg-primary-500/80 rounded text-xs text-white">
+                    {{ isZh
+                      ? motionOptions.find(m => m.id === item.motion)?.nameZh || item.topic
+                      : motionOptions.find(m => m.id === item.motion)?.nameEn || item.topic
+                    }}
+                  </div>
+                  <!-- Prompt description overlay -->
+                  <div class="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                    <p class="text-white text-xs line-clamp-2">
+                      {{ item.name }}
+                    </p>
+                  </div>
+                  <!-- Play icon overlay -->
+                  <div class="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <span class="text-4xl">▶️</span>
+                  </div>
                 </button>
               </div>
             </div>
-
-            <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use presets -->
 
             <!-- Selected Image Preview -->
             <div v-if="uploadedImage" class="space-y-4 mt-4">
@@ -211,34 +312,57 @@ function dataURItoBlob(dataURI: string): Blob {
             </div>
           </div>
 
-          <!-- PRESET-ONLY MODE: No custom prompt input -->
-          <div class="card">
+          <!-- Selected Video Info - shows when a preset is selected -->
+          <div v-if="selectedDemoImageId" class="card">
             <h3 class="text-lg font-semibold text-white mb-4">
-              {{ isZh ? '選擇預設風格' : 'Select Preset Style' }}
+              {{ isZh ? '已選擇的範例' : 'Selected Example' }}
             </h3>
-
-            <!-- PRESET-ONLY Notice -->
-            <div class="mb-4 p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-              <p class="text-sm text-primary-400">
-                {{ isZh ? '從上方預設圖片中選擇一個來查看效果' : 'Select a preset image above to see the result' }}
+            <div class="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+              <p class="text-sm text-white mb-2">
+                <span class="text-primary-400 font-medium">{{ isZh ? '動態效果：' : 'Motion Effect: ' }}</span>
+                {{ isZh
+                  ? motionOptions.find(m => m.id === demoImages.find(d => d.id === selectedDemoImageId)?.motion)?.nameZh || '自動'
+                  : motionOptions.find(m => m.id === demoImages.find(d => d.id === selectedDemoImageId)?.motion)?.nameEn || 'Auto'
+                }}
+              </p>
+              <p class="text-sm text-gray-300">
+                <span class="text-primary-400 font-medium">{{ isZh ? '描述：' : 'Prompt: ' }}</span>
+                {{ demoImages.find(d => d.id === selectedDemoImageId)?.name }}
               </p>
             </div>
-
-            <!-- Custom prompt input REMOVED in preset-only mode -->
           </div>
 
-          <!-- Settings -->
-          <div class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">Video Settings</h3>
+          <!-- Prompt to select - shows when nothing selected -->
+          <div v-else class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">
+              {{ isZh ? '選擇一個範例' : 'Select an Example' }}
+            </h3>
+            <div class="p-3 bg-dark-700/50 border border-dark-600 rounded-lg">
+              <p class="text-sm text-gray-400">
+                {{ isZh ? '👆 從上方範例影片中選擇一個來查看效果' : '👆 Select an example video above to see the result' }}
+              </p>
+            </div>
+          </div>
 
-            <!-- Duration -->
-            <div class="mb-6">
-              <label class="label">Duration</label>
+          <!-- Video Settings - Subscriber Only -->
+          <div class="card">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold text-white">
+                {{ isZh ? '影片設定' : 'Video Settings' }}
+              </h3>
+              <span v-if="!isSubscribed" class="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded">
+                {{ isZh ? '訂閱專屬' : 'Subscribers Only' }}
+              </span>
+            </div>
+
+            <!-- Duration - Subscriber only -->
+            <div class="mb-6" :class="{ 'opacity-50 pointer-events-none': !isSubscribed }">
+              <label class="label">{{ isZh ? '影片長度' : 'Duration' }}</label>
               <div class="flex gap-3">
                 <button
                   v-for="dur in durationOptions"
                   :key="dur"
-                  @click="selectedDuration = dur"
+                  @click="isSubscribed && (selectedDuration = dur)"
                   class="flex-1 py-3 rounded-xl border-2 transition-all"
                   :class="selectedDuration === dur
                     ? 'border-primary-500 bg-primary-500/10'
@@ -247,24 +371,41 @@ function dataURItoBlob(dataURI: string): Blob {
                   {{ dur }}s
                 </button>
               </div>
+              <p v-if="!isSubscribed" class="text-xs text-gray-500 mt-2">
+                {{ isZh ? '訂閱後可自訂影片長度' : 'Subscribe to customize video duration' }}
+              </p>
             </div>
 
-            <!-- Motion Type -->
-            <div>
-              <label class="label">Motion Type</label>
+            <!-- Motion Type - Subscriber only -->
+            <div :class="{ 'opacity-50 pointer-events-none': !isSubscribed }">
+              <label class="label">{{ isZh ? '動態類型' : 'Motion Type' }}</label>
               <div class="grid grid-cols-3 gap-2">
                 <button
                   v-for="motion in motionOptions"
                   :key="motion.id"
-                  @click="selectedMotion = motion.id"
+                  @click="isSubscribed && (selectedMotion = motion.id)"
                   class="p-3 rounded-xl border-2 transition-all text-center"
                   :class="selectedMotion === motion.id
                     ? 'border-primary-500 bg-primary-500/10'
                     : 'border-dark-600 hover:border-dark-500'"
                 >
-                  <p class="text-sm font-medium">{{ motion.name }}</p>
+                  <p class="text-sm font-medium">{{ isZh ? motion.nameZh : motion.nameEn }}</p>
+                  <p class="text-xs text-gray-500 mt-1">{{ isZh ? motion.descZh : motion.descEn }}</p>
                 </button>
               </div>
+              <p v-if="!isSubscribed" class="text-xs text-gray-500 mt-2">
+                {{ isZh ? '訂閱後可選擇動態效果' : 'Subscribe to choose motion effects' }}
+              </p>
+            </div>
+
+            <!-- Not subscribed notice -->
+            <div v-if="!isSubscribed" class="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <p class="text-sm text-amber-400">
+                {{ isZh ? '🔒 升級訂閱以使用自訂設定' : '🔒 Upgrade to use custom settings' }}
+              </p>
+              <RouterLink to="/pricing" class="text-sm text-primary-400 hover:underline mt-1 inline-block">
+                {{ isZh ? '查看方案 →' : 'View Plans →' }}
+              </RouterLink>
             </div>
 
             <!-- Credit Cost & Generate -->
@@ -272,18 +413,73 @@ function dataURItoBlob(dataURI: string): Blob {
               <CreditCost service="short_video" />
               <button
                 @click="generateVideo"
-                :disabled="!uploadedImage || isProcessing"
+                :disabled="!selectedDemoImageId || isProcessing"
                 class="btn-primary w-full mt-4"
               >
-                {{ t('common.generate') }}
+                {{ isZh ? '查看結果' : 'View Result' }}
               </button>
+            </div>
+          </div>
+
+          <!-- AI Model Selection - Subscriber Only -->
+          <div class="card">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold text-white">
+                {{ isZh ? 'AI 模型選擇' : 'AI Model Selection' }}
+              </h3>
+              <span v-if="!isSubscribed" class="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded">
+                {{ isZh ? '訂閱專屬' : 'Subscribers Only' }}
+              </span>
+            </div>
+
+            <div :class="{ 'opacity-50 pointer-events-none': !isSubscribed }">
+              <p class="text-sm text-gray-400 mb-3">
+                {{ isZh ? '選擇不同的 AI 模型以獲得不同的生成效果' : 'Choose different AI models for different generation effects' }}
+              </p>
+              <div class="space-y-2">
+                <button
+                  v-for="model in aiModelOptions"
+                  :key="model.id"
+                  @click="isSubscribed && (selectedModel = model.id)"
+                  class="w-full p-3 rounded-xl border-2 transition-all text-left flex items-center justify-between"
+                  :class="selectedModel === model.id
+                    ? 'border-primary-500 bg-primary-500/10'
+                    : 'border-dark-600 hover:border-dark-500'"
+                >
+                  <div>
+                    <p class="text-sm font-medium text-white">{{ isZh ? model.nameZh : model.nameEn }}</p>
+                    <p class="text-xs text-gray-500">{{ isZh ? model.descZh : model.descEn }}</p>
+                    <p class="text-xs text-gray-600 mt-1">
+                      {{ isZh ? `支援長度: ${model.lengths.join('s, ')}s` : `Lengths: ${model.lengths.join('s, ')}s` }}
+                    </p>
+                  </div>
+                  <div v-if="model.badge" class="ml-2">
+                    <span v-if="model.badge === 'default'" class="text-xs px-2 py-0.5 bg-gray-500/20 text-gray-400 rounded">Default</span>
+                    <span v-else-if="model.badge === 'new'" class="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded">New</span>
+                    <span v-else-if="model.badge === 'pro'" class="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">Pro</span>
+                    <span v-else-if="model.badge === 'premium'" class="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">Premium</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Not subscribed notice -->
+            <div v-if="!isSubscribed" class="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <p class="text-sm text-amber-400">
+                {{ isZh ? '🔒 升級訂閱以選擇不同 AI 模型' : '🔒 Upgrade to choose different AI models' }}
+              </p>
+              <RouterLink to="/pricing" class="text-sm text-primary-400 hover:underline mt-1 inline-block">
+                {{ isZh ? '查看方案 →' : 'View Plans →' }}
+              </RouterLink>
             </div>
           </div>
         </div>
 
         <!-- Right Panel - Result -->
         <div class="card h-fit sticky top-24">
-          <h3 class="text-lg font-semibold text-white mb-4">Generated Video</h3>
+          <h3 class="text-lg font-semibold text-white mb-4">
+            {{ isZh ? '生成的影片' : 'Generated Video' }}
+          </h3>
 
           <div v-if="resultVideo" class="space-y-4">
             <video
@@ -304,7 +500,7 @@ function dataURItoBlob(dataURI: string): Blob {
           <div v-else class="aspect-video flex items-center justify-center bg-dark-700 rounded-xl text-gray-500">
             <div class="text-center">
               <span class="text-5xl block mb-4">🎬</span>
-              <p>Generated video will appear here</p>
+              <p>{{ isZh ? '生成的影片將顯示在這裡' : 'Generated video will appear here' }}</p>
             </div>
           </div>
         </div>

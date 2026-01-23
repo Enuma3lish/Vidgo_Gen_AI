@@ -144,24 +144,27 @@ async def check_materials() -> Tuple[bool, Dict[str, int]]:
             tool_counts = {row.tool_type.value: row.count for row in result.all()}
 
             # Minimum required materials per tool
-            # Critical tools (must have): BACKGROUND_REMOVAL, SHORT_VIDEO
-            # Optional tools (nice to have): PRODUCT_SCENE, TRY_ON, ROOM_REDESIGN, AI_AVATAR
+            # We need at least SOME materials to show demos
+            # All tools are optional individually, but we need at least 1 total
             min_required = {
-                ToolType.BACKGROUND_REMOVAL: 1,  # Required: landing page
-                ToolType.SHORT_VIDEO: 1,          # Required: landing page
+                # No individual tool is strictly required
+                # As long as we have SOME materials, we can start
             }
 
-            # Optional tools - log but don't block startup
+            # All tools are optional - log counts for info
             optional_tools = {
+                ToolType.BACKGROUND_REMOVAL: 0,
                 ToolType.PRODUCT_SCENE: 0,
                 ToolType.TRY_ON: 0,
                 ToolType.ROOM_REDESIGN: 0,
+                ToolType.SHORT_VIDEO: 0,
                 ToolType.AI_AVATAR: 0,
             }
 
             all_ready = True
+            total_materials = sum(tool_counts.values())
 
-            # Check required tools
+            # Check required tools (currently none are strictly required)
             for tool, min_count in min_required.items():
                 count = tool_counts.get(tool.value, 0)
                 if count < min_count:
@@ -174,13 +177,21 @@ async def check_materials() -> Tuple[bool, Dict[str, int]]:
                         f"✅ Tool '{tool.value}': {count} materials ready"
                     )
 
-            # Log optional tools (info only, don't block startup)
+            # Log all tools with their counts
             for tool, _ in optional_tools.items():
                 count = tool_counts.get(tool.value, 0)
                 if count > 0:
                     logger.info(f"✅ Tool '{tool.value}': {count} materials ready")
                 else:
                     logger.info(f"ℹ️  Tool '{tool.value}': 0 materials (optional)")
+
+            # Check total materials - need at least 1 to show any demos
+            logger.info(f"\n📊 Total materials: {total_materials}")
+            if total_materials == 0:
+                logger.warning("⚠️  No materials found - demos will show placeholders only")
+                # Don't block startup, just warn
+            else:
+                logger.info(f"✅ {total_materials} materials available for demos")
 
             return all_ready, tool_counts
 

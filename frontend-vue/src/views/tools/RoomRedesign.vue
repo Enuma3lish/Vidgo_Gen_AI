@@ -77,39 +77,48 @@ interface DemoRoom {
 
 const defaultRooms: DemoRoom[] = [
   {
-    id: 'plan-1',
-    input: 'https://images.unsplash.com/photo-1599809275372-b4036ffd5e94?w=800',
-    name: 'Architectural Drawing',
-    nameZh: '建築圖紙'
-  },
-  {
-    id: 'plan-2',
-    input: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800',
-    name: 'Technical Sketch',
-    nameZh: '技術草圖'
-  },
-  {
-    id: 'plan-3',
+    id: 'room-1',
     input: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800',
-    name: 'Apartment Plan',
-    nameZh: '公寓平面圖'
+    name: 'Living Room',
+    nameZh: '客廳'
   },
   {
-    id: 'plan-4',
-    input: 'https://images.unsplash.com/photo-1581093196277-9f608eeae92d?w=800',
-    name: 'Blueprint',
-    nameZh: '藍圖'
+    id: 'room-2',
+    input: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800',
+    name: 'Bedroom',
+    nameZh: '臥室'
+  },
+  {
+    id: 'room-3',
+    input: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800',
+    name: 'Kitchen',
+    nameZh: '廚房'
+  },
+  {
+    id: 'room-4',
+    input: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800',
+    name: 'Bathroom',
+    nameZh: '浴室'
   }
 ]
 
-// Demo design styles (5 styles for demo users)
-const demoStyles = [
-  { id: 'modern_minimalist', name: 'Modern Minimalist', nameZh: '現代極簡' },
-  { id: 'scandinavian', name: 'Scandinavian', nameZh: '北歐風格' },
-  { id: 'japanese', name: 'Japanese', nameZh: '日式風格' },
-  { id: 'industrial', name: 'Industrial', nameZh: '工業風' },
-  { id: 'mid_century_modern', name: 'Mid-Century Modern', nameZh: '中世紀現代' }
+// Demo design styles - only relevant interior design styles for demo users
+// These are the style IDs that make sense for interior design transformation
+const allowedDemoStyleIds = [
+  'modern_minimalist',
+  'scandinavian',
+  'japanese',
+  'industrial',
+  'mid_century_modern'
 ]
+
+// Filtered styles for display - in demo mode, only show relevant styles
+const displayStyles = computed(() => {
+  if (isDemoUser.value) {
+    return styles.value.filter(s => allowedDemoStyleIds.includes(s.id))
+  }
+  return styles.value
+})
 
 // Track which demo room is selected
 const selectedDemoRoomId = ref<string | null>('room-1')
@@ -174,7 +183,7 @@ function loadAllPreGeneratedResults() {
   // For demo, we'll check templates that match room input + room type + style
   for (const room of defaultRooms) {
     for (const roomType of roomTypes.value) {
-      for (const style of demoStyles) {
+      for (const style of displayStyles.value) {
         const resultKey = `${room.id}_${roomType.id}_${style.id}`
 
         // Find matching preset in database
@@ -221,23 +230,29 @@ async function handleRedesign() {
         return
       }
 
-      // Fallback: try to find any preset matching the style or room type
-      const template = demoTemplates.value.find(t =>
-        ((t as any).input_params?.style_id === selectedStyle.value ||
-         (t as any).input_params?.room_type === selectedRoomType.value ||
-         t.topic === selectedRoomType.value)
-      )
+      // Try to find a preset that matches the selected room, room type, AND style
+      const selectedRoom = defaultRooms.find(r => r.id === selectedDemoRoomId.value)
+      const template = demoTemplates.value.find(t => {
+        const params = (t as any).input_params || {}
+        const matchesRoom = params.room_id === selectedDemoRoomId.value ||
+                            params.input_url === selectedRoom?.input ||
+                            t.input_image_url === selectedRoom?.input
+        const matchesRoomType = params.room_type === selectedRoomType.value || t.topic === selectedRoomType.value
+        const matchesStyle = params.style_id === selectedStyle.value
+        return matchesRoom && matchesRoomType && matchesStyle
+      })
 
       if (template?.result_watermarked_url || template?.result_image_url) {
         resultImage.value = template.result_watermarked_url || template.result_image_url || null
         resultDescription.value = (template as any).result_description || ''
+        // Cache for future use
+        preGeneratedResults.value[currentResultKey.value] = template.result_watermarked_url || template.result_image_url || ''
         uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
         return
       }
 
-      // No pre-generated result - show demo preview
-      resultImage.value = uploadedImage.value
-      uiStore.showInfo(isZh.value ? '這是示範預覽，訂閱後可生成實際設計' : 'This is a demo preview. Subscribe to generate actual designs.')
+      // No matching pre-generated result - show info message
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
     } finally {
       isProcessing.value = false
     }
@@ -337,21 +352,28 @@ async function handleStyleTransfer() {
         return
       }
 
-      // Fallback: try to find any preset matching the style
-      const template = demoTemplates.value.find(t =>
-        (t as any).input_params?.style_id === selectedStyle.value
-      )
+      // Try to find a preset that matches the selected room AND style
+      const selectedRoom = defaultRooms.find(r => r.id === selectedDemoRoomId.value)
+      const template = demoTemplates.value.find(t => {
+        const params = (t as any).input_params || {}
+        const matchesRoom = params.room_id === selectedDemoRoomId.value ||
+                            params.input_url === selectedRoom?.input ||
+                            t.input_image_url === selectedRoom?.input
+        const matchesStyle = params.style_id === selectedStyle.value
+        return matchesRoom && matchesStyle
+      })
 
       if (template?.result_watermarked_url || template?.result_image_url) {
         resultImage.value = template.result_watermarked_url || template.result_image_url || null
         resultDescription.value = (template as any).result_description || ''
+        // Cache for future use
+        preGeneratedResults.value[currentResultKey.value] = template.result_watermarked_url || template.result_image_url || ''
         uiStore.showSuccess(isZh.value ? '風格轉換成功（示範）' : 'Style applied successfully (Demo)')
         return
       }
 
-      // No pre-generated result - show demo preview
-      resultImage.value = uploadedImage.value
-      uiStore.showInfo(isZh.value ? '這是示範預覽，訂閱後可應用風格' : 'This is a demo preview. Subscribe to apply styles.')
+      // No matching pre-generated result - show info message
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
     } finally {
       isProcessing.value = false
     }
@@ -544,7 +566,7 @@ watch(activeTab, (newTab) => {
                 </button>
               </div>
               <p class="text-xs text-gray-500 mt-2">
-                {{ isZh ? '5個房間 × 7種類型 × 5種風格 = 多種組合' : '5 rooms × 7 types × 5 styles = many combinations' }}
+                {{ isZh ? '4個房間 × 多種類型 × 多種風格 = 多種組合' : '4 rooms × multiple types × multiple styles = many combinations' }}
               </p>
             </div>
 
@@ -586,7 +608,7 @@ watch(activeTab, (newTab) => {
             </h3>
             <div class="grid grid-cols-2 gap-3">
               <button
-                v-for="style in styles"
+                v-for="style in displayStyles"
                 :key="style.id"
                 @click="selectedStyle = style.id"
                 class="p-4 rounded-xl border-2 transition-all text-left"

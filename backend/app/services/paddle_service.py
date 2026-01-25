@@ -522,6 +522,57 @@ class PaddleService:
         except Exception as e:
             logger.error(f"Portal session error: {e}")
             return {"success": False, "error": str(e)}
+    # =========================================================================
+    # INVOICE PDF
+    # =========================================================================
+
+    async def get_invoice_pdf_url(
+        self,
+        transaction_id: str,
+        disposition: str = "inline"
+    ) -> Dict[str, Any]:
+        """
+        Get invoice PDF URL for a transaction.
+
+        Args:
+            transaction_id: Paddle transaction ID
+            disposition: 'inline' (open in browser) or 'attachment' (download)
+
+        Returns:
+            Dict with pdf_url (expires in 1 hour)
+        """
+        if self.is_mock:
+            return {
+                "success": True,
+                "is_mock": True,
+                "pdf_url": f"{settings.FRONTEND_URL}/mock-invoice-{transaction_id}.pdf",
+                "message": "Mock invoice PDF URL"
+            }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/transactions/{transaction_id}/invoice",
+                    headers=self._get_headers(),
+                    params={"disposition": disposition}
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "success": True,
+                        "pdf_url": data.get("data", {}).get("url")
+                    }
+                else:
+                    logger.error(f"Get invoice failed: {response.text}")
+                    return {
+                        "success": False,
+                        "error": f"Invoice retrieval failed: {response.status_code}"
+                    }
+
+        except Exception as e:
+            logger.error(f"Invoice PDF error: {e}")
+            return {"success": False, "error": str(e)}
 
 
 # Singleton instance

@@ -144,21 +144,20 @@ async def check_materials() -> Tuple[bool, Dict[str, int]]:
             tool_counts = {row.tool_type.value: row.count for row in result.all()}
 
             # Minimum required materials per tool
-            # We need at least SOME materials to show demos
-            # All tools are optional individually, but we need at least 1 total
+            # These are the minimum examples needed for a good demo experience
+            # If any required tool falls below minimum, startup will warn (or block if ALLOW_EMPTY_MATERIALS=false)
             min_required = {
-                # No individual tool is strictly required
-                # As long as we have SOME materials, we can start
+                ToolType.BACKGROUND_REMOVAL: 3,   # Need at least 3 background removal examples
+                ToolType.PRODUCT_SCENE: 3,        # Need at least 3 product scene examples
+                ToolType.SHORT_VIDEO: 3,          # Need at least 3 video examples
+                ToolType.AI_AVATAR: 3,            # Need at least 3 avatar examples
             }
 
-            # All tools are optional - log counts for info
+            # Optional tools - nice to have but not required for startup
             optional_tools = {
-                ToolType.BACKGROUND_REMOVAL: 0,
-                ToolType.PRODUCT_SCENE: 0,
                 ToolType.TRY_ON: 0,
                 ToolType.ROOM_REDESIGN: 0,
-                ToolType.SHORT_VIDEO: 0,
-                ToolType.AI_AVATAR: 0,
+                ToolType.PATTERN_GENERATE: 0,
             }
 
             all_ready = True

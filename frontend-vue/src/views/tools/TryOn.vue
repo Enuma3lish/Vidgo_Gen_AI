@@ -7,6 +7,7 @@ import { useDemoMode } from '@/composables'
 import { demoApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -24,20 +25,20 @@ const {
 } = useDemoMode()
 
 // State
-const clothingImage = ref<string | null>(null)
+const clothingImage = ref<string | undefined>(undefined)
 const selectedClothingId = ref<string | null>(null)
-const modelImage = ref<string | null>(null)
+const modelImage = ref<string | undefined>(undefined)
 const resultImage = ref<string | null>(null)
 const isProcessing = ref(false)
 const selectedModel = ref('female-1')
 
 // Default model options (5 models for demo users)
 const modelOptions = ref([
-  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=225&fit=crop' },
-  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=225&fit=crop' },
-  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=225&fit=crop' },
-  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=225&fit=crop' },
-  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=225&fit=crop' }
+  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: '/static/models/female/female-1.png' },
+  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: '/static/models/female/female-2.png' },
+  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: '/static/models/female/female-3.png' },
+  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: '/static/models/male/male-1.png' },
+  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: '/static/models/male/male-2.png' }
 ])
 
 // Clothing types that are restricted for male models
@@ -119,7 +120,7 @@ onMounted(async () => {
 
 function selectDemoClothing(item: { id: string; preview?: string; watermarked_result?: string }) {
   selectedClothingId.value = item.id
-  clothingImage.value = item.preview || null
+  clothingImage.value = item.preview || undefined
   resultImage.value = null
 }
 
@@ -301,15 +302,23 @@ function dataURItoBlob(dataURI: string): Blob {
             </div>
           </div>
 
-          <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use presets -->
+          <!-- Subscriber Interface: Upload Zone -->
+          <div v-if="!isDemoUser" class="mb-4">
+             <h4 class="text-sm font-medium text-gray-400 mb-2">{{ isZh ? '上傳服裝' : 'Upload Clothing' }}</h4>
+             <ImageUploader 
+               v-model="clothingImage" 
+               :label="isZh ? '點擊上傳或拖放服裝圖片' : 'Drop clothing image here'"
+               class="mb-4"
+             />
+          </div>
 
           <!-- Selected Clothing Preview -->
           <div v-if="clothingImage" class="mt-4 space-y-2">
             <img :src="clothingImage" alt="Clothing" class="w-full rounded-xl" />
             <button
-              v-if="canUseCustomInputs"
-              @click="clothingImage = null; selectedClothingId = null"
-              class="btn-ghost text-sm w-full"
+               v-if="canUseCustomInputs"
+               @click="clothingImage = undefined; selectedClothingId = null"
+               class="btn-ghost text-sm w-full"
             >
               {{ isZh ? '更換服裝' : 'Change Clothing' }}
             </button>
@@ -338,7 +347,30 @@ function dataURItoBlob(dataURI: string): Blob {
               <p class="text-xs text-center text-white">{{ isZh ? model.name_zh : model.name }}</p>
             </button>
 
-            <!-- PRESET-ONLY MODE: Custom model upload REMOVED -->
+            <!-- Subscriber Interface: Custom Model Upload -->
+             <div v-if="!isDemoUser" class="col-span-2 mt-2">
+               <button 
+                 v-if="selectedModel !== 'custom'"
+                 @click="selectedModel = 'custom'" 
+                 class="w-full py-2 border-2 border-dashed border-gray-600 rounded-xl hover:border-primary-500 hover:text-primary-500 transition-colors text-gray-400 text-sm flex items-center justify-center gap-2"
+               >
+                 <span>➕</span> {{ isZh ? '上傳自定義模特' : 'Upload Custom Model' }}
+               </button>
+
+               <div v-else class="space-y-2">
+                 <div class="flex justify-between items-center mb-1">
+                   <span class="text-sm font-medium text-white">{{ isZh ? '自定義模特' : 'Custom Model' }}</span>
+                   <button @click="selectedModel = 'female-1'; modelImage = undefined" class="text-xs text-gray-400 hover:text-white">
+                     {{ isZh ? '取消' : 'Cancel' }}
+                   </button>
+                 </div>
+                 <ImageUploader 
+                   v-model="modelImage" 
+                   :label="isZh ? '上傳全身模特照片' : 'Upload full-body model photo'"
+                   height="h-48"
+                 />
+               </div>
+             </div>
           </div>
 
           <!-- Credit Cost & Generate -->
@@ -375,10 +407,21 @@ function dataURItoBlob(dataURI: string): Blob {
             <!-- Watermark badge -->
             <div class="text-center text-xs text-gray-500">vidgo.ai</div>
 
-            <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
-            <RouterLink to="/pricing" class="btn-primary w-full text-center block">
-              {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
-            </RouterLink>
+            <!-- Download / Action Buttons -->
+            <div class="flex gap-2">
+               <a
+                 v-if="!isDemoUser"
+                 :href="resultImage"
+                 download="vidgo_tryon_result.png"
+                 class="btn-primary flex-1 text-center py-2"
+               >
+                 {{ t('common.download') }}
+               </a>
+
+               <RouterLink v-else to="/pricing" class="btn-primary w-full text-center block">
+                 {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+               </RouterLink>
+            </div>
           </div>
 
           <div v-else class="h-64 flex items-center justify-center text-gray-500">

@@ -19,8 +19,12 @@ Features:
 - GoEnhance style transformation demos
 """
 from typing import Optional, List, Dict, Any
+import uuid
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Request, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, BackgroundTasks, UploadFile, File
+import shutil
+import os
+from pathlib import Path
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -35,6 +39,14 @@ from app.services.gemini_service import get_gemini_service
 from app.services.similarity import get_similarity_service
 from app.services.rescue_service import get_rescue_service
 from app.services.material import MaterialLibraryService, UserContentCollector, MATERIAL_REQUIREMENTS
+from app.config.topic_registry import (
+    get_topics_for_tool,
+    get_topic_ids_for_tool,
+    is_valid_topic,
+    get_all_tool_types,
+    get_landing_topics,
+    TOOL_TOPICS,
+)
 
 router = APIRouter()
 
@@ -382,6 +394,59 @@ async def use_preset(
     )
 
 
+# =============================================================================
+# TOPIC REGISTRY ENDPOINTS
+# =============================================================================
+
+@router.get("/topics")
+async def get_all_topics():
+    """
+    Get all available topics grouped by tool type.
+    
+    Returns the complete topic registry for frontend initialization.
+    """
+    return {
+        "success": True,
+        "tool_types": get_all_tool_types(),
+        "topics": TOOL_TOPICS,
+        "landing_topics": get_landing_topics()
+    }
+
+
+@router.get("/topics/{tool_type}")
+async def get_tool_topics(tool_type: str):
+    """
+    Get valid topics for a specific tool type.
+    
+    IMPORTANT: Use this API to get the correct topic list.
+    Do NOT hardcode topic values in frontend.
+    
+    Args:
+        tool_type: Tool type (e.g., 'ai_avatar', 'background_removal')
+        
+    Returns:
+        List of valid topics with id, name_en, name_zh
+    """
+    topics = get_topics_for_tool(tool_type)
+    
+    if not topics:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "invalid_tool_type",
+                "message": f"Unknown tool type: {tool_type}",
+                "valid_tool_types": get_all_tool_types()
+            }
+        )
+    
+    return {
+        "success": True,
+        "tool_type": tool_type,
+        "topics": topics,
+        "count": len(topics)
+    }
+
+
 @router.get("/presets/{tool_type}")
 async def get_presets(
     tool_type: str,
@@ -394,8 +459,34 @@ async def get_presets(
 
     Returns list of preset templates with thumbnails.
     Users can only select from these presets - no custom input allowed.
+    
+    Topic validation: If topic is provided, it must be a valid topic from Topic Registry.
     """
     from app.services.material_lookup import get_material_lookup_service
+    
+    # Validate tool_type
+    valid_tool_types = get_all_tool_types()
+    if tool_type not in valid_tool_types:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "invalid_tool_type",
+                "message": f"Unknown tool type: {tool_type}",
+                "valid_tool_types": valid_tool_types
+            }
+        )
+    
+    # Validate topic if provided
+    if topic and not is_valid_topic(tool_type, topic):
+        valid_topics = get_topic_ids_for_tool(tool_type)
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "invalid_topic",
+                "message": f"Invalid topic '{topic}' for tool '{tool_type}'",
+                "valid_topics": valid_topics
+            }
+        )
 
     lookup_service = get_material_lookup_service(db)
     presets = await lookup_service.get_presets_for_tool(tool_type, topic, limit)
@@ -2543,3 +2634,35 @@ async def get_view_more_examples(
         "total": len(examples),
         "avatar_language": avatar_lang
     }
+
+# ============================================================================
+# Utility Endpoints
+# ============================================================================
+
+@router.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """
+    General file upload endpoint for demo tools.
+    Saves file to static uploads directory and returns publicly accessible URL.
+    """
+    try:
+        # Create uploads directory if not exists
+        upload_dir = Path("/app/static/uploads")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate safe filename
+        ext = os.path.splitext(file.filename)[1]
+        if not ext:
+            ext = ".png"
+        
+        filename = f"{uuid.uuid4()}{ext}"
+        filepath = upload_dir / filename
+        
+        # Save file
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {"url": f"/static/uploads/{filename}"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

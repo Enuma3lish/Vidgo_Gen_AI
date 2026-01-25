@@ -1,7 +1,7 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 4.3
-**Last Updated:** January 18, 2026
+**Version:** 4.4
+**Last Updated:** January 25, 2026
 **Framework:** Vue 3 + Vite + TypeScript
 **Mode:** Preset-Only (No Custom Input)
 
@@ -188,7 +188,8 @@ frontend-vue/
 │   │   │
 │   │   ├── dashboard/               # User dashboard
 │   │   │   ├── Dashboard.vue
-│   │   │   └── MyWorks.vue
+│   │   │   ├── MyWorks.vue
+│   │   │   └── Invoices.vue             # Invoice history & download
 │   │   │
 │   │   ├── tools/                   # 7 Core Tool Pages
 │   │   │   ├── BackgroundRemoval.vue
@@ -259,6 +260,7 @@ const routes: RouteRecordRaw[] = [
   // ===== Dashboard Routes (Auth Required) =====
   { path: '/dashboard', name: 'dashboard', component: Dashboard, meta: { requiresAuth: true } },
   { path: '/dashboard/my-works', name: 'my-works', component: MyWorks, meta: { requiresAuth: true } },
+  { path: '/dashboard/invoices', name: 'invoices', component: Invoices, meta: { requiresAuth: true } },
 
   // ===== Admin Routes (Admin Only) =====
   { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresAuth: true, requiresAdmin: true } },
@@ -328,14 +330,25 @@ export { useDemoMode } from './useDemoMode'        // Demo mode logic
 // src/composables/useDemoMode.ts
 
 export function useDemoMode(toolType: string) {
+  const topics = ref<Topic[]>([])        // Valid topics from API
+  const selectedTopic = ref<string>('')  // Current topic filter
   const presets = ref<Preset[]>([])
   const selectedPreset = ref<Preset | null>(null)
   const result = ref<DemoResult | null>(null)
   const isLoading = ref(false)
 
-  // Load available presets from Material DB
-  const loadPresets = async () => {
-    const response = await demoApi.getPresets(toolType)
+  // Load valid topics from Topic Registry API
+  const loadTopics = async () => {
+    const response = await demoApi.getToolTopics(toolType)
+    topics.value = response.data.topics
+    if (topics.value.length > 0) {
+      selectedTopic.value = topics.value[0].id
+    }
+  }
+
+  // Load available presets from Material DB (filtered by topic)
+  const loadPresets = async (topic?: string) => {
+    const response = await demoApi.getPresets(toolType, topic || selectedTopic.value)
     presets.value = response.data
     if (presets.value.length > 0) {
       selectedPreset.value = presets.value[0]
@@ -355,9 +368,19 @@ export function useDemoMode(toolType: string) {
   // Download blocked for all users
   const canDownload = computed(() => false)
 
-  onMounted(loadPresets)
+  // Watch topic change and reload presets
+  watch(selectedTopic, (newTopic) => {
+    loadPresets(newTopic)
+  })
+
+  onMounted(async () => {
+    await loadTopics()
+    await loadPresets()
+  })
 
   return {
+    topics,
+    selectedTopic,
     presets,
     selectedPreset,
     result,
@@ -415,6 +438,48 @@ export * from './subscription'
 export * from './quota'
 export * from './effects'
 ```
+
+### 5.3 Demo API (Topic Registry)
+
+```typescript
+// src/api/demo.ts
+
+/**
+ * Get valid topics for a specific tool type.
+ * IMPORTANT: Use this API to get the correct topic list,
+ * do NOT hardcode topic values in frontend.
+ */
+export const getToolTopics = async (toolType: string) => {
+  return client.get(`/demo/topics/${toolType}`)
+  // Returns: { success: true, tool_type: "ai_avatar", topics: [...] }
+}
+
+export const getPresets = async (toolType: string, topic?: string) => {
+  const params = topic ? { topic } : {}
+  return client.get(`/demo/presets/${toolType}`, { params })
+}
+
+export const usePreset = async (toolType: string, presetId: string) => {
+  return client.post(`/demo/use-preset`, { tool_type: toolType, preset_id: presetId })
+}
+```
+
+### 5.4 Topic System Overview
+
+⚠️ **IMPORTANT**: Topics must match what's stored in the Material DB.
+
+| Tool Type | Valid Topics (from API) |
+|-----------|-------------------------|
+| `background_removal` | electronics, fashion, jewelry, food, cosmetics, furniture, toys, sports |
+| `product_scene` | studio, nature, luxury, minimal, lifestyle, urban, seasonal, holiday |
+| `try_on` | casual, formal, sportswear, outerwear, accessories, dresses |
+| `room_redesign` | modern, nordic, japanese, industrial, minimalist, luxury |
+| `short_video` | product_showcase, brand_story, tutorial, promo |
+| `ai_avatar` | spokesperson, product_intro, customer_service, social_media |
+| `pattern_generate` | seamless, floral, geometric, abstract, traditional |
+
+**Landing Page Topics** (separate system):
+- ecommerce, social, brand, app, promo, service
 
 ---
 
@@ -524,7 +589,7 @@ export const useCreditsStore = defineStore('credits', () => {
 |  Tool 7: Pattern Design (印花設計)                                           |
 |  ├─ Backend: PiAPI T2I (Flux model)                                          |
 |  ├─ Route: /tools/pattern-design                                             |
-|  ├─ Topics: floral, geometric, abstract, traditional, modern                 |
+|  ├─ Topics: seamless, floral, geometric, abstract, traditional               |
 |  └─ Mode: Pre-generated seamless patterns from Material DB                   |
 |                                                                              |
 +-----------------------------------------------------------------------------+
@@ -879,21 +944,22 @@ Pattern Design generates seamless textile patterns for fashion and interior desi
 
 | Topic ID | Chinese Name | Description |
 | --- | --- | --- |
+| seamless | 無縫圖案 | Seamless repeating patterns |
 | floral | 花卉印花 | Floral and botanical patterns |
 | geometric | 幾何圖案 | Geometric and abstract shapes |
 | abstract | 抽象藝術 | Abstract artistic patterns |
 | traditional | 傳統紋樣 | Traditional cultural patterns |
-| modern | 現代設計 | Contemporary modern designs |
 
 ### 14.3 Backend Integration
 
 - **Tool Type**: `pattern_generate`
 - **API Endpoint**: `/api/v1/demo/presets/pattern_generate`
+- **Topics API**: `/api/v1/demo/topics/pattern_generate`
 - **Provider**: PiAPI T2I (Flux model)
 - **Output**: Seamless tileable patterns
 
 ---
 
-*Document Version: 4.3*
-*Last Updated: January 18, 2026*
+*Document Version: 4.4*
+*Last Updated: January 24, 2026*
 *Mode: Preset-Only (No Custom Input)*

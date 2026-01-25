@@ -114,7 +114,8 @@
       "Bash(docker build:*)",
       "Bash(docker run:*)",
       "Bash(more:*)",
-      "Bash(SKIP_PREGENERATION=true docker-compose up:*)"
+      "Bash(SKIP_PREGENERATION=true docker-compose up:*)",
+      "Bash(python3:*)"
     ]
   }
 }

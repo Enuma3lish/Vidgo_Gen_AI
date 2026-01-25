@@ -1,7 +1,7 @@
 # VidGo AI Platform - Infrastructure Architecture
 
-**Version:** 3.0  
-**Last Updated:** January 8, 2026  
+**Version:** 3.1  
+**Last Updated:** January 24, 2026  
 **Cloud Provider:** Google Cloud Platform (GCP)  
 **DNS Provider:** GoDaddy  
 **Max Concurrent Users:** 1,000

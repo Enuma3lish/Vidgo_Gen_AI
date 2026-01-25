@@ -85,7 +85,7 @@ class Subscription(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
-    user = relationship("app.models.user.User", backref="subscriptions")
+    user = relationship("app.models.user.User", backref="subscription_list")
     plan = relationship("Plan")
 
 class Order(Base):
@@ -337,4 +337,4 @@ class Generation(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    user = relationship("app.models.user.User", backref="generations")
+    user = relationship("app.models.user.User", backref="video_generations")

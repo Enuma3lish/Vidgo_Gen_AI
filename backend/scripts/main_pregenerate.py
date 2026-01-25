@@ -49,6 +49,15 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
 
+# Import Topic Registry - Single Source of Truth for topics
+from app.config.topic_registry import (
+    TOOL_TOPICS,
+    get_topics_for_tool,
+    get_topic_ids_for_tool,
+    get_landing_topics,
+    get_landing_topic_ids,
+)
+
 # Import service clients
 from scripts.services import PiAPIClient, PolloClient, A2EClient, RembgClient
 
@@ -268,13 +277,13 @@ ROOM_REDESIGN_MAPPING = {
         }
     },
     "styles": {
-        "modern_minimalist": {
-            "name": "Modern Minimalist",
-            "name_zh": "現代簡約",
-            "prompt": "modern minimalist interior design, clean lines, neutral colors, contemporary furniture"
+        "modern": {
+            "name": "Modern",
+            "name_zh": "現代風格",
+            "prompt": "modern interior design, clean lines, neutral colors, contemporary furniture"
         },
-        "scandinavian": {
-            "name": "Scandinavian",
+        "nordic": {
+            "name": "Nordic",
             "name_zh": "北歐風格",
             "prompt": "scandinavian nordic interior design, hygge, wood textures, bright, cozy, white walls"
         },
@@ -288,10 +297,15 @@ ROOM_REDESIGN_MAPPING = {
             "name_zh": "工業風格",
             "prompt": "industrial interior design, exposed brick, metal accents, loft style, raw materials"
         },
-        "mid_century_modern": {
-            "name": "Mid-Century Modern",
-            "name_zh": "中世紀現代",
-            "prompt": "mid-century modern interior design, retro furniture, warm wood tones, organic shapes"
+        "minimalist": {
+            "name": "Minimalist",
+            "name_zh": "極簡主義",
+            "prompt": "minimalist interior design, ultra clean, sparse furniture, monochromatic, space and light"
+        },
+        "luxury": {
+            "name": "Luxury",
+            "name_zh": "奢華風格",
+            "prompt": "luxury interior design, premium materials, elegant furnishings, gold accents, high-end decor"
         }
     }
 }
@@ -378,15 +392,13 @@ PRODUCT_SCENE_MAPPING = {
 # SHORT VIDEO MAPPING
 # ============================================================================
 
-# Motion types available for video generation
-# Each example should showcase a different motion effect
-MOTION_TYPES = ["auto", "zoom-in", "zoom-out", "pan-left", "pan-right", "rotate"]
+# Topics MUST match MATERIAL_TOPICS in material.py:
+# product_showcase, brand_story, tutorial, promo
 
 SHORT_VIDEO_MAPPING = {
-    "auto": {
-        "name": "Auto Motion",
-        "name_zh": "自動動態",
-        "motion": "auto",
+    "product_showcase": {
+        "name": "Product Showcase",
+        "name_zh": "產品展示",
         "prompts": [
             {
                 "en": "Cinematic product showcase, luxury watch rotating slowly, golden hour lighting, 4K quality, smooth natural motion",
@@ -395,28 +407,16 @@ SHORT_VIDEO_MAPPING = {
             {
                 "en": "Premium cosmetics product video, beauty items arranged artistically, soft lighting, natural movement",
                 "zh": "高級化妝品產品影片，美妝產品藝術陳列，柔和光線，自然動態"
-            }
-        ]
-    },
-    "zoom-in": {
-        "name": "Zoom In",
-        "name_zh": "放大效果",
-        "motion": "zoom-in",
-        "prompts": [
+            },
             {
                 "en": "Elegant jewelry close-up, diamond ring sparkling, gradual zoom revealing intricate details, luxury commercial",
                 "zh": "優雅珠寶特寫，鑽戒閃耀，逐漸放大展現精緻細節，奢華廣告"
-            },
-            {
-                "en": "Gourmet food presentation, delicious dish, camera zooming in to show texture and steam, appetizing video",
-                "zh": "美食展示，美味料理，鏡頭放大展示質感與蒸氣，令人垂涎的影片"
             }
         ]
     },
-    "zoom-out": {
-        "name": "Zoom Out",
-        "name_zh": "縮小效果",
-        "motion": "zoom-out",
+    "brand_intro": {
+        "name": "Brand Introduction",
+        "name_zh": "品牌介紹",
         "prompts": [
             {
                 "en": "Fashion model full reveal, starting from elegant shoes, pulling back to show complete outfit, runway style",
@@ -425,51 +425,46 @@ SHORT_VIDEO_MAPPING = {
             {
                 "en": "Interior design showcase, room reveal from furniture detail to full space, architectural video",
                 "zh": "室內設計展示，從家具細節到完整空間的房間呈現，建築影片"
+            },
+            {
+                "en": "Artisan craftsman workshop, handcrafted products being made, authentic brand storytelling",
+                "zh": "工匠工作室，手工製品製作過程，品牌故事傳遞"
             }
         ]
     },
-    "pan-left": {
-        "name": "Pan Left",
-        "name_zh": "左移效果",
-        "motion": "pan-left",
+    "tutorial": {
+        "name": "Tutorial",
+        "name_zh": "教學影片",
         "prompts": [
             {
-                "en": "Product line showcase, multiple items displayed, smooth left pan revealing collection, commercial catalog",
-                "zh": "產品線展示，多款商品陳列，平滑左移展現系列，商業目錄"
+                "en": "Step by step product usage demonstration, clear close-up shots, educational content style",
+                "zh": "產品使用步驟教學，清晰特寫鏡頭，教育內容風格"
             },
             {
-                "en": "Skincare routine display, bottles arranged in sequence, camera panning left through products, beauty brand video",
-                "zh": "護膚流程展示，瓶瓶罐罐依序排列，鏡頭向左平移穿過產品，美妝品牌影片"
+                "en": "Skincare routine display, bottles arranged in sequence, camera panning through products, beauty tutorial video",
+                "zh": "護膚流程展示，瓶瓶罐罐依序排列，鏡頭平移穿過產品，美妝教學影片"
+            },
+            {
+                "en": "Gourmet food preparation, delicious dish being cooked, step by step cooking tutorial",
+                "zh": "美食準備過程，美味料理烹飪中，步驟式烹飪教學"
             }
         ]
     },
-    "pan-right": {
-        "name": "Pan Right",
-        "name_zh": "右移效果",
-        "motion": "pan-right",
+    "promo": {
+        "name": "Promotion",
+        "name_zh": "促銷廣告",
         "prompts": [
             {
-                "en": "Fashion accessories collection, sunglasses and bags displayed, smooth right pan, luxury brand showcase",
-                "zh": "時尚配件系列，太陽眼鏡與包包陳列，平滑右移，奢侈品牌展示"
+                "en": "Flash sale countdown, exciting discount graphics, festive atmosphere, limited time offer",
+                "zh": "限時特賣倒計時，精彩折扣圖形，節慶氛圍，限時優惠"
             },
             {
-                "en": "Tech gadgets lineup, smartphones and tablets arranged, panoramic right movement, electronics commercial",
-                "zh": "科技產品陣列，智慧型手機與平板電腦排列，全景右移，電子產品廣告"
-            }
-        ]
-    },
-    "rotate": {
-        "name": "Rotate",
-        "name_zh": "旋轉效果",
-        "motion": "rotate",
-        "prompts": [
-            {
-                "en": "360 degree product view, sleek wireless earbuds in case, rotating showcase, tech product reveal",
-                "zh": "360度產品展示，時尚無線耳機及充電盒，旋轉展示，科技產品揭曉"
+                "en": "New product launch, dramatic reveal with spotlight, anticipation building",
+                "zh": "新品發布，聚光燈下的戲劇性揭幕，期待感營造"
             },
             {
-                "en": "Perfume bottle showcase, elegant glass design, slow rotation revealing all angles, luxury fragrance video",
-                "zh": "香水瓶展示，優雅玻璃設計，慢速旋轉呈現各個角度，奢華香氛影片"
+                "en": "Seasonal campaign, holiday themed decorations, warm festive mood, special offers",
+                "zh": "季節性活動，節日主題裝飾，溫暖節慶氛圍，特別優惠"
             }
         ]
     }
@@ -624,11 +619,40 @@ TRYON_MAPPING = {
         "outerwear": [
             {
                 "id": "outerwear-1",
+                "name": "Trench Coat",
+                "name_zh": "風衣外套",
+                "prompt": "classic beige trench coat, timeless style",
+                "clothing_type": "general",
+                "image_url": "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400",
+                "gender_restriction": None
+            },
+            {
+                "id": "outerwear-2",
+                "name": "Puffer Jacket",
+                "name_zh": "羽絨外套",
+                "prompt": "warm puffer jacket, winter style",
+                "clothing_type": "general",
+                "image_url": "https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=400",
+                "gender_restriction": None
+            }
+        ],
+        "accessories": [
+            {
+                "id": "accessories-1",
                 "name": "Sunglasses",
                 "name_zh": "太陽眼鏡",
                 "prompt": "fashionable sunglasses, summer style",
                 "clothing_type": "general",
                 "image_url": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400",
+                "gender_restriction": None
+            },
+            {
+                "id": "accessories-2",
+                "name": "Watch",
+                "name_zh": "手錶",
+                "prompt": "elegant wristwatch, luxury accessory",
+                "clothing_type": "general",
+                "image_url": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400",
                 "gender_restriction": None
             }
         ],
@@ -838,87 +862,119 @@ class VidGoPreGenerator:
         """
         Generate AI Avatar videos.
 
-        Combinations: Avatar × Script × Language
-        Total potential: 6 avatars × 8 scripts × 2 languages = 96
+        Uses A2E API with pre-created characters (anchors).
+        Iterates through available characters × scripts × languages.
         """
         logger.info("=" * 60)
-        logger.info("AI AVATAR - Mapping Based Generation")
-        logger.info("Avatars and Scripts are DECOUPLED")
+        logger.info("AI AVATAR - Using A2E Pre-created Characters")
         logger.info("=" * 60)
 
         self.stats["by_tool"]["ai_avatar"] = {"success": 0, "failed": 0}
         self.local_results["ai_avatar"] = []
         count = 0
 
-        for avatar_id, avatar_data in AVATAR_MAPPING.items():
+        # Get available characters from A2E
+        characters = await self.a2e.get_characters()
+        if not characters:
+            logger.error("No A2E characters available! Create characters via A2E web interface first.")
+            return
+
+        logger.info(f"Found {len(characters)} A2E characters")
+        for char in characters[:3]:
+            logger.info(f"  - {char.get('_id')}: {char.get('name')}")
+
+        # Iterate through characters, scripts, and languages
+        char_index = 0
+        for topic, scripts in SCRIPT_MAPPING.items():
             if count >= limit:
                 break
 
-            for topic, scripts in SCRIPT_MAPPING.items():
+            for script in scripts:
                 if count >= limit:
                     break
 
-                for script in scripts:
+                for language in ["en", "zh-TW"]:
                     if count >= limit:
                         break
 
-                    for language in ["en", "zh-TW"]:
-                        if count >= limit:
-                            break
+                    # Cycle through available characters
+                    char = characters[char_index % len(characters)]
+                    anchor_id = char.get("_id")
+                    input_image_url = char.get("video_cover")
 
-                        script_text = script["text_zh"] if language == "zh-TW" else script["text_en"]
+                    script_text = script["text_zh"] if language == "zh-TW" else script["text_en"]
 
-                        logger.info(f"[{count+1}] Avatar: {avatar_id} | Topic: {topic} | Script: {script['id']} | Lang: {language}")
-                        logger.info(f"  Script: {script_text[:40]}...")
+                    logger.info(f"[{count+1}] Character: {char.get('name')} | Topic: {topic} | Script: {script['id']} | Lang: {language}")
+                    logger.info(f"  Script: {script_text[:40]}...")
 
-                        start_time = time.time()
+                    start_time = time.time()
 
-                        # Call A2E API
-                        result = await self.a2e.generate_avatar(
-                            script=script_text,
-                            language=language,
-                            image_url=avatar_data["url"],
-                            gender=avatar_data["gender"],
-                            save_locally=True
-                        )
+                    # Call A2E API with the character's anchor_id
+                    result = await self.a2e.generate_avatar(
+                        script=script_text,
+                        language=language,
+                        anchor_id=anchor_id,
+                        save_locally=True
+                    )
 
-                        if not result["success"]:
-                            logger.error(f"  Failed: {result.get('error', 'Unknown')}")
-                            self.stats["failed"] += 1
-                            self.stats["by_tool"]["ai_avatar"]["failed"] += 1
-                            count += 1
-                            continue
-
-                        # Store locally
-                        local_entry = {
-                            "avatar_id": avatar_id,
-                            "script_id": script["id"],
-                            "topic": topic,
-                            "language": language,
-                            "prompt": script_text,
-                            "input_image_url": avatar_data["url"],
-                            "result_video_url": result["video_url"],
-                            "input_params": {
-                                "avatar_id": avatar_id,
-                                "script_id": script["id"],
-                                "language": language
-                            },
-                            "generation_steps": [{
-                                "step": 1,
-                                "api": "a2e",
-                                "action": "avatar_generation",
-                                "result_url": result["video_url"],
-                                "duration_ms": int((time.time() - start_time) * 1000)
-                            }],
-                            "generation_cost": 0.10
-                        }
-                        self.local_results["ai_avatar"].append(local_entry)
-
-                        logger.info(f"  Success: {result['video_url']}")
-                        self.stats["success"] += 1
-                        self.stats["by_tool"]["ai_avatar"]["success"] += 1
+                    if not result["success"]:
+                        logger.error(f"  Failed: {result.get('error', 'Unknown')}")
+                        self.stats["failed"] += 1
+                        self.stats["by_tool"]["ai_avatar"]["failed"] += 1
                         count += 1
-                        await asyncio.sleep(2)
+                        continue
+
+                    # Determine avatar gender from A2E character name or default to alternating
+                    # Map A2E characters to frontend avatar IDs (female-1, male-1, etc.)
+                    char_name_lower = (char.get("name") or "").lower()
+                    if any(kw in char_name_lower for kw in ["女", "female", "woman", "girl", "小美", "小雅", "小玲"]):
+                        avatar_gender = "female"
+                    elif any(kw in char_name_lower for kw in ["男", "male", "man", "guy", "建明", "志偉", "俊傑"]):
+                        avatar_gender = "male"
+                    else:
+                        # Default alternating based on index
+                        avatar_gender = "female" if char_index % 2 == 0 else "male"
+                    
+                    # Generate frontend-compatible avatar_id
+                    gender_count = sum(1 for e in self.local_results.get("ai_avatar", []) 
+                                      if e.get("input_params", {}).get("voice_gender") == avatar_gender) + 1
+                    frontend_avatar_id = f"{avatar_gender}-{min(gender_count, 3)}"  # female-1, male-1, etc.
+                    
+                    # Store locally - input_image_url matches the character used
+                    local_entry = {
+                        "avatar_id": anchor_id,
+                        "script_id": script["id"],
+                        "topic": topic,
+                        "language": language,
+                        "prompt": script_text,
+                        "input_image_url": result.get("input_image_url") or input_image_url,
+                        "result_video_url": result["video_url"],
+                        "input_params": {
+                            "anchor_id": anchor_id,
+                            "character_name": char.get("name"),
+                            "script_id": script["id"],
+                            "language": language,
+                            # NEW: Frontend-compatible fields
+                            "avatar_id": frontend_avatar_id,
+                            "voice_gender": avatar_gender
+                        },
+                        "generation_steps": [{
+                            "step": 1,
+                            "api": "a2e",
+                            "action": "avatar_generation",
+                            "result_url": result["video_url"],
+                            "duration_ms": int((time.time() - start_time) * 1000)
+                        }],
+                        "generation_cost": 0.10
+                    }
+                    self.local_results["ai_avatar"].append(local_entry)
+
+                    logger.info(f"  Success: {result['video_url']} (avatar_id={frontend_avatar_id}, gender={avatar_gender})")
+                    self.stats["success"] += 1
+                    self.stats["by_tool"]["ai_avatar"]["success"] += 1
+                    count += 1
+                    char_index += 1  # Move to next character for variety
+                    await asyncio.sleep(2)
 
         await self._store_local_to_db("ai_avatar")
 
@@ -1077,13 +1133,16 @@ class VidGoPreGenerator:
         """
         Generate Short Video examples.
 
-        Flow: Prompt → Pollo T2V → Video
+        Flow: Prompt → T2I → I2V → Video
+        
+        This provides both a before image and an after video for proper
+        before/after display in the frontend.
 
         Each motion type gets its own examples to showcase the effect.
         Prompts are bilingual (en/zh) for proper display in frontend.
         """
         logger.info("=" * 60)
-        logger.info("SHORT VIDEO - Pollo T2V with Motion Types")
+        logger.info("SHORT VIDEO - T2I + I2V with Motion Types")
         logger.info("=" * 60)
 
         self.stats["by_tool"]["short_video"] = {"success": 0, "failed": 0}
@@ -1109,11 +1168,30 @@ class VidGoPreGenerator:
                 logger.info(f"  Prompt (EN): {prompt_en[:50]}...")
                 logger.info(f"  Prompt (ZH): {prompt_zh[:30]}...")
 
-                # Use English prompt for generation (better results)
-                result = await self.pollo.generate_video(prompt=prompt_en, length=5)
+                # Step 1: Generate T2I image first (for before/after display)
+                logger.info("  Step 1: T2I...")
+                t2i = await self.piapi.generate_image(prompt=prompt_en, width=1024, height=1024)
+
+                if not t2i["success"]:
+                    logger.error(f"  T2I Failed: {t2i.get('error')}")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["short_video"]["failed"] += 1
+                    count += 1
+                    continue
+
+                source_image_url = t2i["image_url"]
+                logger.info(f"  Source image: {source_image_url}")
+
+                # Step 2: Convert T2I image to video using I2V
+                logger.info("  Step 2: I2V...")
+                result = await self.pollo.generate_video(
+                    prompt=prompt_en,
+                    image_url=source_image_url,
+                    length=5
+                )
 
                 if not result["success"]:
-                    logger.error(f"  Failed: {result.get('error')}")
+                    logger.error(f"  I2V Failed: {result.get('error')}")
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["short_video"]["failed"] += 1
                     count += 1
@@ -1123,8 +1201,13 @@ class VidGoPreGenerator:
                     "topic": motion_id,  # Use motion_id as topic
                     "prompt": prompt_en,
                     "prompt_zh": prompt_zh,  # Store Chinese prompt for frontend
+                    "input_image_url": source_image_url,  # Before image for frontend
                     "result_video_url": result["video_url"],
-                    "generation_cost": 0.10,
+                    "generation_steps": [
+                        {"step": 1, "api": "piapi", "action": "t2i", "result_url": source_image_url},
+                        {"step": 2, "api": "pollo", "action": "i2v", "result_url": result["video_url"]}
+                    ],
+                    "generation_cost": 0.12,  # T2I + I2V cost
                     "metadata": {
                         "motion": motion_id,
                         "motion_name": motion_name,
@@ -1173,36 +1256,167 @@ class VidGoPreGenerator:
 
                 logger.info(f"[{count+1}] Product: {prod_data['name']} -> Scene: {scene_data['name']}")
 
-                prompt = f"Professional product photography of a {prod_data['name']}, {scene_data['prompt']}, commercial lighting, 8K"
+                # TRUE Product Scene: 3-step process
+                # 1. Remove background from product image
+                # 2. Generate new scene background with T2I
+                # 3. Composite product onto scene using PIL
 
-                t2i = await self.piapi.generate_image(prompt=prompt)
+                product_url = prod_data["url"]
 
-                if not t2i["success"]:
+                # Step 1: Remove product background using Rembg
+                logger.info("  Step 1: Removing product background...")
+                if product_url.startswith("/static"):
+                    local_path = f"/app{product_url}"
+                    rembg_result = await self.rembg.remove_background_local(local_path)
+                else:
+                    rembg_result = await self.rembg.remove_background(product_url)
+
+                if not rembg_result["success"]:
+                    logger.warning(f"  Rembg failed: {rembg_result.get('error')}, skipping...")
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["product_scene"]["failed"] += 1
                     count += 1
                     continue
 
+                product_no_bg_url = rembg_result["image_url"]
+                logger.info(f"  Product (no bg): {product_no_bg_url}")
+
+                # Step 2: Generate scene background image
+                logger.info("  Step 2: Generating scene background...")
+                scene_prompt = f"{scene_data['prompt']}, empty background for product placement, professional studio lighting, high-end commercial photography, 8K quality"
+                t2i = await self.piapi.generate_image(prompt=scene_prompt, width=1024, height=1024)
+
+                if not t2i["success"]:
+                    logger.warning(f"  Scene T2I failed: {t2i.get('error')}, skipping...")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["product_scene"]["failed"] += 1
+                    count += 1
+                    continue
+
+                scene_url = t2i["image_url"]
+                logger.info(f"  Scene background: {scene_url}")
+
+                # Step 3: Composite product onto scene using PIL
+                logger.info("  Step 3: Compositing product onto scene...")
+                composite_result = await self._composite_product_scene(
+                    product_no_bg_url, scene_url, prod_data["name"]
+                )
+
+                if not composite_result["success"]:
+                    logger.warning(f"  Compositing failed: {composite_result.get('error')}, using scene as result...")
+                    result_url = scene_url
+                else:
+                    result_url = composite_result["image_url"]
+                    logger.info(f"  Composited: {result_url}")
+
                 local_entry = {
                     "topic": scene_id,
-                    "prompt": prompt,
-                    "input_image_url": prod_data["url"],
-                    "result_image_url": t2i["image_url"],
+                    "prompt": scene_prompt,
+                    "input_image_url": product_url,  # Original product image
+                    "result_image_url": result_url,  # Product in new scene
                     "input_params": {
                         "product_id": prod_id,
-                        "scene_type": scene_id
+                        "scene_type": scene_id,
+                        "method": "rembg_composite"
                     },
-                    "generation_cost": 0.005
+                    "generation_steps": [
+                        {"step": 1, "action": "rembg", "result": product_no_bg_url},
+                        {"step": 2, "action": "t2i_scene", "result": scene_url},
+                        {"step": 3, "action": "composite", "result": result_url}
+                    ],
+                    "generation_cost": 0.015  # Rembg + T2I + composite
                 }
                 self.local_results["product_scene"].append(local_entry)
 
-                logger.info(f"  Result: {t2i['image_url']}")
+                logger.info(f"  Success: {result_url}")
                 self.stats["success"] += 1
                 self.stats["by_tool"]["product_scene"]["success"] += 1
                 count += 1
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
 
         await self._store_local_to_db("product_scene")
+
+    async def _composite_product_scene(
+        self,
+        product_no_bg_url: str,
+        scene_url: str,
+        product_name: str
+    ) -> dict:
+        """
+        Composite a transparent product image onto a scene background.
+        
+        Args:
+            product_no_bg_url: URL/path to product image with transparent background
+            scene_url: URL/path to scene background image
+            product_name: Name of product for logging
+            
+        Returns:
+            {"success": True, "image_url": str} or {"success": False, "error": str}
+        """
+        from PIL import Image
+        import requests
+        from io import BytesIO
+        import uuid
+        from pathlib import Path
+        
+        try:
+            # Load product image (with transparent background)
+            if product_no_bg_url.startswith("/static"):
+                product_path = f"/app{product_no_bg_url}"
+                product_img = Image.open(product_path).convert("RGBA")
+            else:
+                response = requests.get(product_no_bg_url)
+                product_img = Image.open(BytesIO(response.content)).convert("RGBA")
+            
+            # Load scene background
+            if scene_url.startswith("/static"):
+                scene_path = f"/app{scene_url}"
+                scene_img = Image.open(scene_path).convert("RGBA")
+            else:
+                response = requests.get(scene_url)
+                scene_img = Image.open(BytesIO(response.content)).convert("RGBA")
+            
+            # Resize product to fit nicely in scene (60% of scene width, centered)
+            scene_w, scene_h = scene_img.size
+            target_w = int(scene_w * 0.6)
+            
+            prod_w, prod_h = product_img.size
+            scale = target_w / prod_w
+            new_w = target_w
+            new_h = int(prod_h * scale)
+            
+            # Ensure product doesn't exceed scene height
+            if new_h > scene_h * 0.8:
+                scale = (scene_h * 0.8) / prod_h
+                new_h = int(prod_h * scale)
+                new_w = int(prod_w * scale)
+            
+            product_resized = product_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            
+            # Center product on scene
+            x_offset = (scene_w - new_w) // 2
+            y_offset = (scene_h - new_h) // 2
+            
+            # Composite: paste product onto scene using alpha channel
+            scene_img.paste(product_resized, (x_offset, y_offset), product_resized)
+            
+            # Convert back to RGB for saving as PNG (no alpha)
+            final_img = scene_img.convert("RGB")
+            
+            # Save result
+            output_dir = Path("/app/static/generated")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
+            output_path = output_dir / filename
+            final_img.save(output_path, "PNG", quality=95)
+            
+            result_url = f"/static/generated/{filename}"
+            logger.info(f"  [Composite] Saved: {result_url}")
+            return {"success": True, "image_url": result_url}
+            
+        except Exception as e:
+            logger.error(f"  [Composite] Error: {e}")
+            return {"success": False, "error": str(e)}
 
     # ========================================================================
     # TRY-ON GENERATOR
@@ -1444,27 +1658,30 @@ class VidGoPreGenerator:
             gender_dir = self.MODEL_LIBRARY_DIR / gender
             gender_dir.mkdir(parents=True, exist_ok=True)
 
-            for prompt_data in prompts:
+            for i, prompt_data in enumerate(prompts): # Added enumerate to get index 'i'
                 if count >= limit:
                     break
 
-                model_id = prompt_data["id"]
-                output_path = gender_dir / f"{model_id}.png"
+                # Save to disk with frontend-aligned naming (female-1, male-1)
+                model_id_base = f"{gender}-{i+1}" # New model_id for filename and library key
+                filename = f"{model_id_base}.png"
+                output_path = gender_dir / filename # Use output_path for consistency
 
                 # Skip if already exists
                 if output_path.exists():
-                    logger.info(f"[{count+1}] Model {model_id} already exists, skipping")
+                    logger.info(f"[{count+1}] Model {model_id_base} already exists, skipping")
                     # Make sure it's in the library
-                    GENERATED_MODEL_LIBRARY[model_id] = {
+                    GENERATED_MODEL_LIBRARY[model_id_base] = { # Use model_id_base here
                         "gender": gender,
-                        "url": f"/static/models/{gender}/{model_id}.png",
+                        "url": f"/static/models/{gender}/{model_id_base}.png", # Use model_id_base here
                         "local_path": str(output_path)
                     }
+                    self.stats["success"] += 1 # Count as success if skipped but exists
                     count += 1
                     continue
 
                 logger.info(f"[{count+1}] Generating: {prompt_data['description']}")
-                logger.info(f"  ID: {model_id}")
+                logger.info(f"  ID: {model_id_base}")
 
                 # Generate with PiAPI T2I - use portrait dimensions (taller than wide)
                 t2i = await self.piapi.generate_image(
@@ -1510,13 +1727,14 @@ class VidGoPreGenerator:
                         continue
 
                 # Add to library
-                GENERATED_MODEL_LIBRARY[model_id] = {
+                # Add to library
+                GENERATED_MODEL_LIBRARY[model_id_base] = {
                     "gender": gender,
-                    "url": f"/static/models/{gender}/{model_id}.png",
+                    "url": f"/static/models/{gender}/{model_id_base}.png",
                     "local_path": str(output_path)
                 }
 
-                logger.info(f"  Success: Model {model_id} added to library")
+                logger.info(f"  Success: Model {model_id_base} added to library")
                 self.stats["success"] += 1
                 self.stats["by_tool"]["model_library"]["success"] += 1
                 count += 1
@@ -1534,8 +1752,94 @@ class VidGoPreGenerator:
     # DATABASE STORAGE
     # ========================================================================
 
+    async def _apply_watermark_to_local_image(self, image_path: str) -> Optional[str]:
+        """
+        Apply watermark to a local image file.
+        
+        Args:
+            image_path: Path to the local image (e.g., /static/generated/xxx.png)
+            
+        Returns:
+            Path to the watermarked image, or None if failed
+        """
+        from PIL import Image, ImageDraw, ImageFont
+        import io
+        from pathlib import Path
+        
+        try:
+            # Convert static path to absolute path
+            if image_path.startswith("/static/"):
+                abs_path = Path(f"/app{image_path}")
+            else:
+                abs_path = Path(image_path)
+            
+            if not abs_path.exists():
+                logger.warning(f"Image not found for watermarking: {abs_path}")
+                return None
+            
+            # Read image
+            with open(abs_path, "rb") as f:
+                image_data = f.read()
+            
+            # Open and convert to RGBA
+            image = Image.open(io.BytesIO(image_data)).convert("RGBA")
+            width, height = image.size
+            
+            # Create watermark overlay
+            watermark = Image.new("RGBA", image.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(watermark)
+            
+            watermark_text = "Vidgo AI"
+            font_size = max(24, int(height / 20))  # Scale font with image size
+            opacity = 0.7
+            
+            # Try to use a nice font
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+            except OSError:
+                try:
+                    font = ImageFont.truetype("arial.ttf", font_size)
+                except OSError:
+                    font = ImageFont.load_default()
+            
+            # Get text size
+            bbox = draw.textbbox((0, 0), watermark_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            # Position: bottom right with padding
+            padding = 20
+            x = width - text_width - padding
+            y = height - text_height - padding
+            
+            # Draw shadow
+            shadow_offset = 2
+            shadow_color = (0, 0, 0, int(255 * opacity * 0.7))
+            draw.text((x + shadow_offset, y + shadow_offset), watermark_text, font=font, fill=shadow_color)
+            
+            # Draw text
+            text_color = (255, 255, 255, int(255 * opacity))
+            draw.text((x, y), watermark_text, font=font, fill=text_color)
+            
+            # Composite
+            watermarked = Image.alpha_composite(image, watermark)
+            watermarked_rgb = watermarked.convert("RGB")
+            
+            # Save watermarked version with _wm suffix
+            wm_path = abs_path.parent / f"{abs_path.stem}_wm{abs_path.suffix}"
+            watermarked_rgb.save(wm_path, quality=95)
+            
+            # Return the static path
+            wm_static_path = str(wm_path).replace("/app", "")
+            logger.info(f"  Watermarked: {wm_static_path}")
+            return wm_static_path
+            
+        except Exception as e:
+            logger.error(f"Failed to apply watermark: {e}")
+            return None
+
     async def _store_local_to_db(self, tool_name: str):
-        """Store locally collected results to database."""
+        """Store locally collected results to database with watermarks applied."""
         tool_type_map = {
             "ai_avatar": ToolType.AI_AVATAR,
             "background_removal": ToolType.BACKGROUND_REMOVAL,
@@ -1578,6 +1882,20 @@ class VidGoPreGenerator:
                 if entry.get("metadata"):
                     input_params.update(entry["metadata"])
 
+                # Apply watermark to result images (for image-based tools)
+                result_image_url = entry.get("result_image_url")
+                result_video_url = entry.get("result_video_url")
+                result_watermarked_url = None
+                
+                # For images stored locally, apply watermark
+                if result_image_url and result_image_url.startswith("/static/"):
+                    result_watermarked_url = await self._apply_watermark_to_local_image(result_image_url)
+                
+                # For videos, use the video URL as watermarked (video watermarking is more complex)
+                # In preset-only mode, videos are displayed directly without download
+                if not result_watermarked_url:
+                    result_watermarked_url = result_video_url or result_image_url
+
                 material = Material(
                     lookup_hash=lookup_hash,
                     tool_type=tool_type_map[tool_name],
@@ -1591,9 +1909,9 @@ class VidGoPreGenerator:
                     input_params=input_params,
                     generation_steps=entry.get("generation_steps", []),
                     generation_cost_usd=entry.get("generation_cost", 0),
-                    result_image_url=entry.get("result_image_url"),
-                    result_video_url=entry.get("result_video_url"),
-                    result_watermarked_url=entry.get("result_video_url") or entry.get("result_image_url"),
+                    result_image_url=result_image_url,
+                    result_video_url=result_video_url,
+                    result_watermarked_url=result_watermarked_url,
                     tags=entry.get("style_tags", []),
                     quality_score=0.9,
                     is_featured=True,

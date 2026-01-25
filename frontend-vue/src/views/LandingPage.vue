@@ -159,9 +159,12 @@ const featuredTools = computed(() => [
 // VIDEO EXAMPLES
 // ============================================
 const videoExamples = ref<any[]>([])
+const avatarExamples = ref<any[]>([])
 const isLoadingVideos = ref(false)
+const isLoadingAvatars = ref(false)
 const selectedVideo = ref<any>(null)
 const showVideoModal = ref(false)
+const hoveredAvatar = ref<number | null>(null)
 
 async function loadVideoExamples() {
   isLoadingVideos.value = true
@@ -175,6 +178,21 @@ async function loadVideoExamples() {
     console.error('Failed to load video examples:', error)
   } finally {
     isLoadingVideos.value = false
+  }
+}
+
+async function loadAvatarExamples() {
+  isLoadingAvatars.value = true
+  try {
+    const langCode = locale.value.startsWith('zh') ? 'zh-TW' : 'en'
+    const response = await apiClient.get(`/api/v1/demo/presets/ai_avatar?language=${langCode}`)
+    if (response.data.success && response.data.presets?.length > 0) {
+      avatarExamples.value = response.data.presets.slice(0, 6)
+    }
+  } catch (error) {
+    console.error('Failed to load avatar examples:', error)
+  } finally {
+    isLoadingAvatars.value = false
   }
 }
 
@@ -200,10 +218,12 @@ function closeVideoModal() {
 // ============================================
 onMounted(() => {
   loadVideoExamples()
+  loadAvatarExamples()
 })
 
 watch(locale, () => {
   loadVideoExamples()
+  loadAvatarExamples()
 })
 </script>
 
@@ -421,6 +441,88 @@ watch(locale, () => {
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
             <span>{{ isZh ? '載入精選案例...' : 'Loading examples...' }}</span>
+          </div>
+        </section>
+
+        <!-- ============================================
+             AI AVATAR SHOWCASE - AI 數位人展示
+             ============================================ -->
+        <section v-if="avatarExamples.length > 0" class="mb-12">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+              <span>🧑‍💼</span>
+              {{ isZh ? 'AI 數位人 精選案例' : 'AI Avatar Showcase' }}
+            </h2>
+            <RouterLink to="/tools/avatar" class="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1">
+              {{ isZh ? '立即體驗' : 'Try Now' }}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </RouterLink>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div
+              v-for="(avatar, idx) in avatarExamples"
+              :key="avatar.id || idx"
+              class="group relative rounded-xl overflow-hidden bg-dark-700 cursor-pointer"
+              @click="playVideo({ video: avatar.result_video_url, title: isZh ? 'AI 數位人' : 'AI Avatar', prompt: avatar.prompt })"
+            >
+              <!-- Avatar Photo with Video Hover Preview -->
+              <div class="aspect-[9/16] relative">
+                <!-- Static Photo (default) -->
+                <img
+                  :src="avatar.input_image_url || avatar.thumbnail_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400'"
+                  :alt="isZh ? 'AI 數位人' : 'AI Avatar'"
+                  class="w-full h-full object-cover transition-opacity duration-300"
+                  :class="{ 'opacity-0': hoveredAvatar === idx }"
+                />
+                <!-- Video Preview (on hover) -->
+                <video
+                  v-if="avatar.result_video_url"
+                  :src="avatar.result_video_url"
+                  class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                  :class="{ 'opacity-100': hoveredAvatar === idx, 'opacity-0': hoveredAvatar !== idx }"
+                  muted
+                  loop
+                  playsinline
+                  @mouseenter="hoveredAvatar = idx; ($event.target as HTMLVideoElement).play()"
+                  @mouseleave="hoveredAvatar = null; ($event.target as HTMLVideoElement).pause()"
+                />
+              </div>
+
+              <!-- Play Overlay -->
+              <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div class="w-14 h-14 bg-white/90 rounded-full flex items-center justify-center shadow-lg">
+                  <svg class="w-7 h-7 text-primary-600 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Avatar Badge -->
+              <div class="absolute top-2 left-2 px-2 py-1 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xs rounded-full font-medium">
+                {{ isZh ? 'AI 數位人' : 'AI Avatar' }}
+              </div>
+
+              <!-- Script Preview -->
+              <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
+                <p class="text-white text-xs line-clamp-2">
+                  {{ avatar.prompt || (isZh ? '專業數位代言人' : 'Professional Digital Presenter') }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Loading State for Avatars -->
+        <section v-else-if="isLoadingAvatars" class="mb-12">
+          <div class="flex items-center gap-3 text-gray-400">
+            <svg class="animate-spin w-5 h-5" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span>{{ isZh ? '載入 AI 數位人...' : 'Loading AI Avatars...' }}</span>
           </div>
         </section>
 

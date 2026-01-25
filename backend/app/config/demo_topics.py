@@ -1,5 +1,29 @@
 """
+⚠️ DEPRECATED - DO NOT USE THIS MODULE ⚠️
+==========================================
+
+This module is LEGACY and NOT used by the pre-generation pipeline.
+The topics defined here do NOT match what is stored in the Material DB.
+
+INSTEAD, use: app/config/topic_registry.py
+================================================
+- Contains the OFFICIAL TOOL_TOPICS mapping
+- Used by main_pregenerate.py for actual pre-generation
+- Used by /api/v1/demo/topics/{tool_type} API
+- Single source of truth for all topic validation
+
+The TopicDefinition classes below are kept for reference only.
+They should NOT be used in any new code.
+
+Legacy Topics vs Active Topics Example:
+---------------------------------------
+- This file defines: luxury_watch, perfume_bottle, ecommerce_pitch_en
+- Active registry defines: spokesperson, product_intro, electronics, fashion
+
+If you query the API with a topic from this file, it will NOT find any materials.
+
 Demo Topics Configuration with Output Type Routing
+(DEPRECATED - Kept for historical reference only)
 
 This module defines all demo topics with their categories and output types.
 Based on the Prompt Chaining Design workflow:
@@ -14,6 +38,16 @@ Based on the Prompt Chaining Design workflow:
 │  t2i_showcase     │ image       │ Leonardo T2I   │ Image       │
 └─────────────────────────────────────────────────────────────────┘
 """
+import warnings
+
+# Emit deprecation warning when this module is imported
+warnings.warn(
+    "demo_topics.py is DEPRECATED. Use app.config.topic_registry instead. "
+    "Topics from this module do NOT match the Material DB.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 from typing import Dict, List, Optional, Any
 from enum import Enum
 from dataclasses import dataclass, field

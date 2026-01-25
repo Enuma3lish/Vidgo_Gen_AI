@@ -7,6 +7,7 @@ import { useDemoMode } from '@/composables'
 // PRESET-ONLY MODE: UploadZone removed - all users use presets
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 import apiClient from '@/api/client'
 
 const { t, locale } = useI18n()
@@ -22,7 +23,7 @@ const {
   demoTemplates
 } = useDemoMode()
 
-const uploadedImage = ref<string | null>(null)
+const uploadedImage = ref<string | undefined>(undefined)
 const resultVideo = ref<string | null>(null)
 const isProcessing = ref(false)
 const script = ref('')
@@ -495,6 +496,17 @@ watch(selectedAvatarId, () => {
               </div>
             </div>
 
+            <!-- Subscriber Interface: Upload Zone -->
+            <div v-if="!isDemoUser" class="mb-6">
+               <h4 class="text-sm font-medium text-gray-400 mb-2">{{ isZh ? '上傳頭像 (正面人臉)' : 'Upload Portrait (Front-facing)' }}</h4>
+               <ImageUploader 
+                 v-model="uploadedImage" 
+                 :label="isZh ? '點擊上傳或拖放頭像照片' : 'Drop portrait photo here'"
+                 class="mb-4"
+                 @update:model-value="selectedAvatarId = null"
+               />
+            </div>
+            
             <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use preset avatars -->
           </div>
 
@@ -525,7 +537,23 @@ watch(selectedAvatarId, () => {
               </div>
             </div>
 
-            <!-- PRESET-ONLY MODE: Custom script textarea REMOVED - all users use preset scripts -->
+            <!-- Custom Script Textarea -->
+            <div v-if="!isDemoUser" class="mt-4">
+              <label class="block text-sm font-medium text-gray-400 mb-2">
+                {{ isZh ? '自訂腳本' : 'Custom Script' }}
+              </label>
+              <textarea
+                v-model="script"
+                rows="4"
+                class="w-full bg-dark-900 border border-dark-600 rounded-lg p-3 text-white focus:outline-none focus:border-primary-500"
+                :placeholder="isZh ? '輸入您的腳本內容 (建議 100 字以內)...' : 'Enter your script here (max 100 words)...'"
+                maxlength="500"
+                @input="selectedDefaultScriptId = null"
+              ></textarea>
+              <div class="text-right text-xs text-gray-500 mt-1">
+                {{ script.length }} / 500
+              </div>
+            </div>
 
             <!-- Show selected script for all users -->
             <div v-if="script" class="mt-2 p-3 bg-dark-700 rounded-lg">
@@ -612,13 +640,21 @@ watch(selectedAvatarId, () => {
             <!-- Watermark badge -->
             <div class="text-center text-xs text-gray-500">vidgo.ai</div>
 
-            <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
-            <RouterLink
-              to="/pricing"
-              class="btn-primary w-full text-center block"
-            >
-              {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
-            </RouterLink>
+            <!-- Download / Action Buttons -->
+            <div class="flex gap-3">
+               <a
+                 v-if="!isDemoUser"
+                 :href="resultVideo"
+                 download="vidgo_avatar_video.mp4"
+                 class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
+               >
+                 <span class="mr-2">📥</span> {{ t('common.download') }}
+               </a>
+
+               <RouterLink v-else to="/pricing" class="btn-primary w-full text-center block">
+                 {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+               </RouterLink>
+            </div>
           </div>
 
           <div v-else class="aspect-[9/16] max-h-96 flex items-center justify-center bg-dark-700 rounded-xl text-gray-500">

@@ -344,6 +344,133 @@ class PiAPIClient:
             logger.exception(f"[PiAPI] Virtual Try-On exception: {e}")
             return {"success": False, "error": str(e)}
 
+    async def flux_fill(
+        self,
+        image_url: str,
+        prompt: str,
+        mask_url: Optional[str] = None,
+        save_locally: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Image-to-Image using Flux Fill (Inpaint/Outpaint).
+        
+        Use this for Product Scene to change background while keeping product.
+        If no mask is provided, the background is automatically detected and replaced.
+        
+        Reference: https://piapi.ai/docs/flux-api/image-to-image
+        
+        Args:
+            image_url: Source image URL or local path (product with current background)
+            prompt: Description of desired background/scene
+            mask_url: Optional mask image (white = keep, black = replace). If None, auto-detects.
+            save_locally: Save to local file (default True)
+            
+        Returns:
+            {"success": True, "image_url": str} or {"success": False, "error": str}
+        """
+        if not self.api_key:
+            return {"success": False, "error": "PiAPI key not configured"}
+        
+        # Resolve image input (local paths → base64)
+        image_input = self._resolve_image_input(image_url)
+        
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                input_data = {
+                    "prompt": prompt,
+                    "image": image_input,
+                }
+                
+                # Add mask if provided
+                if mask_url:
+                    input_data["mask"] = self._resolve_image_input(mask_url)
+                
+                # Create task - using Flux Fill model for I2I
+                response = await client.post(
+                    f"{self.BASE_URL}/task",
+                    headers=self.headers,
+                    json={
+                        "model": "Qubico/flux1-dev-fill",  # Flux Fill for inpaint/I2I
+                        "task_type": "img2img",
+                        "input": input_data
+                    }
+                )
+                
+                if response.status_code not in [200, 201]:
+                    # Fallback to flux-schnell with image reference
+                    logger.warning(f"[PiAPI] Flux Fill failed, trying flux-schnell...")
+                    response = await client.post(
+                        f"{self.BASE_URL}/task",
+                        headers=self.headers,
+                        json={
+                            "model": "Qubico/flux1-schnell",
+                            "task_type": "img2img",
+                            "input": input_data
+                        }
+                    )
+                
+                if response.status_code not in [200, 201]:
+                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    logger.error(f"[PiAPI] Flux Fill create task failed: {error}")
+                    return {"success": False, "error": error}
+                
+                data = response.json()
+                task_id = data.get("data", {}).get("task_id")
+                
+                if not task_id:
+                    logger.error(f"[PiAPI] Response: {data}")
+                    return {"success": False, "error": "No task_id in response"}
+                
+                logger.info(f"[PiAPI] Flux Fill task created: {task_id}")
+                
+                # Poll for result
+                for attempt in range(90):  # 3 min timeout
+                    await asyncio.sleep(2)
+                    
+                    status_resp = await client.get(
+                        f"{self.BASE_URL}/task/{task_id}",
+                        headers=self.headers
+                    )
+                    
+                    if status_resp.status_code != 200:
+                        continue
+                    
+                    status_data = status_resp.json()
+                    status = status_data.get("data", {}).get("status", "")
+                    
+                    if status == "completed":
+                        output = status_data.get("data", {}).get("output", {})
+                        
+                        image_url_result = output.get("image_url")
+                        if not image_url_result:
+                            images = output.get("images", [])
+                            if images:
+                                img = images[0]
+                                image_url_result = img.get("url") if isinstance(img, dict) else img
+                        
+                        if not image_url_result:
+                            logger.error(f"[PiAPI] Flux Fill output: {output}")
+                            return {"success": False, "error": "No image_url in output"}
+                        
+                        if save_locally:
+                            local_path = await self._download(client, image_url_result)
+                            if local_path:
+                                logger.info(f"[PiAPI] Flux Fill saved: {local_path}")
+                                return {"success": True, "image_url": local_path}
+                        
+                        return {"success": True, "image_url": image_url_result}
+                    
+                    elif status == "failed":
+                        error = status_data.get("data", {}).get("error", "Unknown error")
+                        logger.error(f"[PiAPI] Flux Fill failed: {error}")
+                        return {"success": False, "error": error}
+                
+                return {"success": False, "error": "Timeout (3 min)"}
+        
+        except Exception as e:
+            logger.exception(f"[PiAPI] Flux Fill exception: {e}")
+            return {"success": False, "error": str(e)}
+
     async def _download(self, client: httpx.AsyncClient, url: str) -> Optional[str]:
         """Download image and save locally."""
         try:
@@ -357,3 +484,4 @@ class PiAPIClient:
         except Exception as e:
             logger.warning(f"[PiAPI] Download failed: {e}")
         return None
+

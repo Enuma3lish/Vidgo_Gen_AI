@@ -34,6 +34,7 @@ export interface DemoTemplate {
   sub_topic?: string
   style_tags?: string[]
   is_default?: boolean
+  input_params?: Record<string, any>
 }
 
 export function useDemoMode() {
@@ -53,26 +54,34 @@ export function useDemoMode() {
    * This ensures everyone sees the same UI and uses preset templates only.
    */
   const isDemoUser = computed(() => {
-    // PRESET-ONLY MODE: Always return true - everyone uses preset mode
-    return true
+    // Check real subscription status
+    // If user has active plan (not null) and it's not expired
+    const user = authStore.user
+    if (!user) return true // No user = demo
+    
+    // Check if user has a non-demo plan
+    const hasPlan = user.plan_type && user.plan_type !== 'demo' && user.plan_type !== 'free'
+    
+    // Simple check: if user has a paid plan, they are NOT a demo user
+    return !hasPlan
   })
 
   /**
-   * PRESET-ONLY MODE: Custom inputs are DISABLED for ALL users
-   * No custom uploads, no custom prompts, no custom scripts.
+   * PRESET-ONLY MODE: Custom inputs are DISABLED for demo users
+   * But ENABLED for subscribers.
    */
   const canUseCustomInputs = computed(() => {
-    // PRESET-ONLY MODE: Always return false - no custom inputs allowed
-    return false
+    // Return true if user is NOT a demo user (has subscription)
+    return !isDemoUser.value
   })
 
   /**
-   * PRESET-ONLY MODE: Downloads are BLOCKED for ALL users
-   * All results are watermarked and cannot be downloaded.
+   * PRESET-ONLY MODE: Downloads are BLOCKED for demo users
+   * But ENABLED for subscribers.
    */
   const canDownloadOriginal = computed(() => {
-    // PRESET-ONLY MODE: Always return false - no downloads allowed
-    return false
+    // Return true if user is NOT a demo user
+    return !isDemoUser.value
   })
 
   /**

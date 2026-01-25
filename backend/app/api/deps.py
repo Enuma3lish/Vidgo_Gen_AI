@@ -146,3 +146,30 @@ async def get_current_superuser(
             detail="The user doesn't have enough privileges"
         )
     return current_user
+
+
+def is_subscribed_user(user: Optional[User]) -> bool:
+    """
+    Check if user has an active subscription plan.
+    
+    Returns True if:
+    - User exists AND
+    - User has current_plan_id set AND
+    - User's plan hasn't expired
+    
+    Demo users (no subscription) return False.
+    """
+    if not user:
+        return False
+    
+    if not user.current_plan_id:
+        return False
+    
+    # Check if plan hasn't expired
+    from datetime import datetime, timezone
+    if user.plan_expires_at:
+        if user.plan_expires_at < datetime.now(timezone.utc):
+            return False
+    
+    return True
+

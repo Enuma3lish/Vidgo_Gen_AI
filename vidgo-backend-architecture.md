@@ -1,7 +1,7 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 4.3
-**Last Updated:** January 18, 2026
+**Version:** 4.4
+**Last Updated:** January 25, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
 **Mode:** Preset-Only (Material DB Lookup, No Runtime API Calls)
@@ -363,6 +363,37 @@ class Material(Base):
     # ... additional fields
 ```
 
+### 4.3 Material Pre-generation and Watermark Data Flow
+
+The following diagram shows how materials are pre-generated with watermarks for the preset-only mode:
+
+```mermaid
+flowchart LR
+    subgraph Pre-generation["Pre-generation Script"]
+        A[Prompt] --> B[T2I/API]
+        B --> C[result_image_url]
+        C --> D["Apply Watermark (Vidgo AI)"]
+        D --> E[result_watermarked_url]
+    end
+    
+    subgraph Database["Material DB"]
+        E --> F[(materials table)]
+        C --> G[input_image_url]
+        G --> F
+    end
+    
+    subgraph Frontend["Frontend Display"]
+        F --> H["Before: input_image_url"]
+        F --> I["After: result_watermarked_url"]
+    end
+```
+
+**Key Points:**
+- `input_image_url`: The original/before image (e.g., product, room, person)
+- `result_image_url` or `result_video_url`: The raw generated result
+- `result_watermarked_url`: The watermarked version displayed to demo users
+- All demo users see watermarked results only; download is blocked
+
 ---
 
 ## 5. AI Provider Integration
@@ -627,31 +658,35 @@ python -m scripts.main_pregenerate --tool try_on --limit 20
 
 ---
 
-## 6. Payment Integration
+## 6. Payment & Invoice System
 
 ### 6.1 Supported Payment Providers
 
-| Provider | Region | Features |
+| Provider | Status | Features |
 |----------|--------|----------|
-| ECPay | Taiwan | Credit card, ATM, CVS |
-| Paddle | International | Credit card, PayPal |
+| **Paddle** | ✅ Active | Global payments, Tax compliance, Invoicing |
+| ECPay | ❌ Removed | Legacy Taiwan-only provider |
 
-### 6.2 ECPay Configuration
+### 6.2 Paddle Configuration
 
 ```python
 # app/core/config.py
-ECPAY_MERCHANT_ID: str = ""
-ECPAY_HASH_KEY: str = ""
-ECPAY_HASH_IV: str = ""
-ECPAY_PAYMENT_URL: str = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5"
+PADDLE_API_KEY: str = "your_api_key"
+PADDLE_PUBLIC_KEY: str = "your_public_key"
+PADDLE_WEBHOOK_SECRET: str = "your_webhook_secret"
 ```
 
-### 6.3 Paddle Configuration
+### 6.3 Invoice System flow
 
-```python
-PADDLE_API_KEY: str = ""
-PADDLE_PUBLIC_KEY: str = ""
-```
+1. **Trigger**: `transaction_completed` webhook from Paddle.
+2. **Processing**:
+    - Webhook handler validates signature.
+    - Extracts transaction details.
+    - Calls `PaddleService.get_invoice_pdf_url(transaction_id)`.
+3. **Delivery**:
+    - `EmailService.send_invoice_email()` sends PDF link to user.
+    - User downloads PDF via temporary URL (1h expiry).
+
 
 ---
 
@@ -683,11 +718,11 @@ class Settings(BaseSettings):
     A2E_API_KEY: str = ""         # A2E.ai Avatar
     GEMINI_API_KEY: str = ""      # Google Gemini (Backup)
 
-    # Payments
-    ECPAY_MERCHANT_ID: str = ""
-    ECPAY_HASH_KEY: str = ""
-    ECPAY_HASH_IV: str = ""
+    # Payments (Paddle Only)
     PADDLE_API_KEY: str = ""
+    PADDLE_PUBLIC_KEY: str = ""
+    PADDLE_WEBHOOK_SECRET: str = ""
+    # ECPay (Legacy - Removed)
 
     # Email
     SMTP_HOST: str = ""
@@ -747,10 +782,27 @@ class Settings(BaseSettings):
 
 ## 9. Material Topics Configuration
 
-### 9.1 Tool-Specific Topics (MATERIAL_TOPICS)
+### 9.1 Topic Registry Overview
+
+**IMPORTANT**: There are two topic systems in the codebase:
+
+| System | File | Status | Description |
+|--------|------|--------|-------------|
+| **MAPPING System** | `scripts/main_pregenerate.py` | ✅ **ACTIVE** | Used for actual pre-generation, stored in Material.topic |
+| Topic Definition System | `app/config/demo_topics.py` | ⚠️ **LEGACY** | Old design, NOT used by pre-generation pipeline |
+
+The **MAPPING System** in `main_pregenerate.py` defines the actual topics stored in the Material DB:
+- `SCRIPT_MAPPING` → AI Avatar topics
+- `BACKGROUND_REMOVAL_MAPPING` → Background Removal topics
+- `ROOM_REDESIGN_MAPPING` → Room Redesign styles (stored as topic)
+- `SHORT_VIDEO_MAPPING` → Short Video topics
+- `TRYON_MAPPING` → Try-On clothing categories
+- `PATTERN_GENERATE_MAPPING` → Pattern Generate styles
+
+### 9.2 Tool-Specific Topics (Active Mappings)
 
 ```python
-# app/models/material.py
+# scripts/main_pregenerate.py - ACTUALLY USED
 
 MATERIAL_TOPICS = {
     ToolType.BACKGROUND_REMOVAL: [
@@ -811,7 +863,31 @@ MATERIAL_TOPICS = {
 }
 ```
 
-### 9.2 Landing Page Topics (LANDING_EXAMPLES)
+### 9.3 Topic Registry API Endpoint
+
+```python
+# app/api/v1/demo.py
+
+@router.get("/topics/{tool_type}")
+async def get_tool_topics(tool_type: str):
+    """
+    Get valid topics for a specific tool type.
+    
+    Returns:
+        {
+            "success": true,
+            "tool_type": "ai_avatar",
+            "topics": [
+                {"id": "spokesperson", "name_en": "Spokesperson", "name_zh": "品牌代言人"},
+                ...
+            ]
+        }
+    """
+    topics = MATERIAL_TOPICS.get(tool_type, [])
+    return {"success": True, "tool_type": tool_type, "topics": topics}
+```
+
+### 9.4 Landing Page Topics (LANDING_EXAMPLES)
 
 Landing page materials use **separate topics** from MATERIAL_TOPICS, stored in `material_generator.py`:
 
@@ -855,6 +931,28 @@ LANDING_EXAMPLES = {
 ```
 
 **Important**: Landing materials are stored with `tool_type=SHORT_VIDEO` or `tool_type=AI_AVATAR` but use landing-specific topics (ecommerce, social, brand, app, promo, service) instead of MATERIAL_TOPICS.
+
+### 9.5 Legacy Topic System (demo_topics.py)
+
+⚠️ **WARNING**: The `app/config/demo_topics.py` file contains a legacy topic system that is **NOT** used by the pre-generation pipeline.
+
+```python
+# app/config/demo_topics.py - LEGACY, DO NOT USE
+
+class TopicCategory(str, Enum):
+    PRODUCT_VIDEO = "product_video"      # NOT USED
+    INTERIOR_DESIGN = "interior_design"  # NOT USED
+    STYLE_TRANSFER = "style_transfer"    # NOT USED
+    AVATAR = "avatar"                    # NOT USED
+    T2I_SHOWCASE = "t2i_showcase"        # NOT USED
+
+# These topics are NOT stored in Material DB:
+# - luxury_watch, perfume_bottle, sneaker_product (legacy)
+# - modern_living, anime_landscape (legacy)
+# - ecommerce_pitch_en, product_demo_zh (legacy)
+```
+
+If you see topics like `luxury_watch` or `ecommerce_pitch_en` in the frontend, they will NOT match any materials in the database.
 
 ---
 
@@ -1058,6 +1156,6 @@ curl http://localhost:8001/api/v1/demo/presets/short_video
 
 ---
 
-*Document Version: 4.2*
-*Last Updated: January 18, 2026*
+*Document Version: 4.3*
+*Last Updated: January 24, 2026*
 *Mode: Preset-Only (Material DB Lookup, No Runtime API Calls)*

@@ -284,7 +284,9 @@ class A2EClient:
         language: str = "en",
         anchor_id: Optional[str] = None,
         tts_id: Optional[str] = None,
-        save_locally: bool = True
+        save_locally: bool = True,
+        image_url: Optional[str] = None,
+        gender: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate avatar video with lip-sync (full pipeline).
@@ -299,12 +301,15 @@ class A2EClient:
             anchor_id: Anchor ID (uses default_anchor_id if not specified)
             tts_id: Optional TTS voice ID (uses first available if not specified)
             save_locally: Save to local file (default True)
+            image_url: Ignored - custom photo upload not supported by A2E API
+            gender: Optional gender for voice selection (male/female)
 
         Returns:
             {
                 "success": True/False,
                 "video_url": str (local path or remote URL),
                 "audio_url": str (TTS audio URL),
+                "input_image_url": str (the photo used for avatar),
                 "error": str (if failed)
             }
         """
@@ -313,25 +318,51 @@ class A2EClient:
 
         logger.info(f"[A2E] Generating avatar ({language}): {script[:50]}...")
 
-        try:
-            # Step 0: Get anchor_id
-            if not anchor_id:
-                anchor_id = self.default_anchor_id
+        # Always use anchor_type=0 (public/custom character)
+        # anchor_type=1 (photo mode) requires pre-uploaded photos via A2E web interface
+        anchor_type = 0
+        input_image_url = None
 
-            if not anchor_id:
-                # Try to get from public character list
-                characters = await self.get_characters()
-                if characters:
-                    # Use first available character
-                    anchor_id = characters[0].get("_id")
-                    logger.info(f"[A2E] Using public character: {anchor_id}")
-                else:
-                    return {
-                        "success": False,
-                        "error": "No anchors available. Set A2E_DEFAULT_ANCHOR_ID or check API access."
-                    }
+        try:
+            # Get available characters
+            characters = await self.get_characters()
+            if not characters:
+                return {
+                    "success": False,
+                    "error": "No anchors available. Create anchors via A2E web interface first."
+                }
+
+            # Use specified anchor_id or default, otherwise pick from available characters
+            if anchor_id:
+                # Find the character to get its video_cover
+                for char in characters:
+                    if char.get("_id") == anchor_id:
+                        input_image_url = char.get("video_cover")
+                        break
+                logger.info(f"[A2E] Using specified anchor: {anchor_id}")
+            elif self.default_anchor_id:
+                anchor_id = self.default_anchor_id
+                for char in characters:
+                    if char.get("_id") == anchor_id:
+                        input_image_url = char.get("video_cover")
+                        break
+                logger.info(f"[A2E] Using default anchor: {anchor_id}")
             else:
-                logger.info(f"[A2E] Using anchor: {anchor_id}")
+                # Pick a character based on gender preference if provided
+                selected_char = None
+                if gender:
+                    # Try to find a character with matching gender in name
+                    for char in characters:
+                        char_name = char.get("name", "").lower()
+                        if gender.lower() in char_name:
+                            selected_char = char
+                            break
+                if not selected_char:
+                    selected_char = characters[0]
+
+                anchor_id = selected_char.get("_id")
+                input_image_url = selected_char.get("video_cover")
+                logger.info(f"[A2E] Using character: {anchor_id} ({selected_char.get('name')})")
 
             if not tts_id:
                 voices = await self.get_voices()
@@ -359,12 +390,14 @@ class A2EClient:
             video_result = await self.generate_video(
                 anchor_id=anchor_id,
                 audio_url=audio_url,
+                anchor_type=anchor_type,
                 save_locally=save_locally,
                 language=language
             )
 
             if video_result.get("success"):
                 video_result["audio_url"] = audio_url
+                video_result["input_image_url"] = input_image_url
 
             return video_result
 

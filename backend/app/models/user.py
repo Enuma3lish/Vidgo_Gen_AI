@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
 from app.core.database import Base
+from app.models.user_generation import UserGeneration
 
 
 class User(Base):
@@ -64,6 +65,7 @@ class User(Base):
 
     # Relationships
     current_plan = relationship("app.models.billing.Plan", foreign_keys=[current_plan_id])
+    generations = relationship("UserGeneration", back_populates="user", cascade="all, delete-orphan")
 
     @property
     def total_credits(self) -> int:

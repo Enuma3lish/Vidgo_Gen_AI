@@ -351,6 +351,94 @@ Get started at: {self.frontend_url}
 
         return await self.send_email(to_email, subject, html_content, text_content)
 
+    async def send_invoice_email(
+        self,
+        to_email: str,
+        invoice_number: str,
+        amount: float,
+        currency: str,
+        plan_name: str,
+        pdf_url: str,
+        username: Optional[str] = None
+    ) -> bool:
+        """Send invoice email with PDF download link."""
+        subject = f"Your VidGo Invoice #{invoice_number}"
+
+        greeting = f"Hi {username}," if username else "Hi,"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }}
+                .invoice-box {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; }}
+                .invoice-row {{ display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }}
+                .invoice-total {{ font-size: 24px; font-weight: bold; color: #6366f1; }}
+                .button {{ display: inline-block; background: #6366f1; color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }}
+                .footer {{ text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🧾 Invoice</h1>
+                </div>
+                <div class="content">
+                    <p>{greeting}</p>
+                    <p>Thank you for your subscription to VidGo!</p>
+                    
+                    <div class="invoice-box">
+                        <div class="invoice-row">
+                            <span>Invoice Number</span>
+                            <span><strong>{invoice_number}</strong></span>
+                        </div>
+                        <div class="invoice-row">
+                            <span>Plan</span>
+                            <span>{plan_name}</span>
+                        </div>
+                        <div class="invoice-row">
+                            <span>Amount</span>
+                            <span class="invoice-total">{currency} {amount:.2f}</span>
+                        </div>
+                    </div>
+                    
+                    <p style="text-align: center;">
+                        <a href="{pdf_url}" class="button">📄 Download PDF Invoice</a>
+                    </p>
+                    <p style="color: #6b7280; font-size: 12px; text-align: center;">
+                        Note: This download link expires in 1 hour.
+                    </p>
+                </div>
+                <div class="footer">
+                    <p>© 2024 VidGo. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+{greeting}
+
+Thank you for your subscription to VidGo!
+
+Invoice Number: {invoice_number}
+Plan: {plan_name}
+Amount: {currency} {amount:.2f}
+
+Download your PDF invoice: {pdf_url}
+
+Note: This download link expires in 1 hour.
+
+© 2024 VidGo. All rights reserved.
+        """
+
+        return await self.send_email(to_email, subject, html_content, text_content)
+
 
 # Singleton instance
 email_service = EmailService()

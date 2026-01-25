@@ -8,7 +8,7 @@ ENV PYTHONPATH=/app
 
 # 系統依賴
 RUN apt-get update && apt-get install -y \
-    curl postgresql-client redis-tools ffmpeg \
+    curl postgresql-client redis-tools ffmpeg dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # 1. 先複製 requirements
@@ -38,12 +38,21 @@ COPY . .
 
 # 建立靜態目錄
 RUN mkdir -p /app/static/generated /app/static/materials
-RUN chmod +x /app/scripts/docker_entrypoint.sh
+
+# Convert entrypoint script from Windows CRLF to Unix LF
+# The script was already copied via "COPY . ." above
+# dos2unix is installed in the apt-get step at the top
+RUN dos2unix /app/scripts/docker_entrypoint.sh && \
+    chmod +x /app/scripts/docker_entrypoint.sh && \
+    echo "=== Verifying script (first 5 lines) ===" && \
+    head -5 /app/scripts/docker_entrypoint.sh && \
+    echo "=== Verifying no CRLF (should show \\n only, not \\r) ===" && \
+    od -c /app/scripts/docker_entrypoint.sh | head -3
 
 # 6. 最終檢查 (Final Verification)
 # 如果這裡失敗，代表你 COPY 進來的檔案裡有 "google" 資料夾或 "google.py" 蓋掉了套件
 RUN python -c "from google import genai; print('✅ Final Check: Import works with project files!')"
 
 EXPOSE 8000
-ENTRYPOINT ["/app/scripts/docker_entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "/app/scripts/docker_entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

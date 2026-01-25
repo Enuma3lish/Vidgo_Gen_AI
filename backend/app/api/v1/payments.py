@@ -1,14 +1,14 @@
 """
 Payment API Endpoints
 
-Supports multiple payment providers:
-- ECPay (Taiwan domestic payments)
-- Paddle (International payments, subscriptions)
-
-When Paddle API key is not configured, subscription endpoints work in mock mode.
+Paddle is the ONLY payment provider for this platform.
+Supports:
+- Subscription checkout
+- Webhook handling
+- Invoice PDF retrieval
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, Form, Header
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Header
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import datetime
@@ -17,106 +17,20 @@ import logging
 
 from app.api import deps
 from app.core.config import get_settings
-from app.schemas.payment import PaymentCreateRequest, PaymentResponse
-from app.services.ecpay.client import ECPayClient
-from app.services.paddle_service import get_paddle_service
 from app.models.billing import Order
 from app.models.user import User
+from app.services.paddle_service import get_paddle_service
 
 settings = get_settings()
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Initialize ECPay client
-ecpay_client = ECPayClient(
-    merchant_id=settings.ECPAY_MERCHANT_ID,
-    hash_key=settings.ECPAY_HASH_KEY,
-    hash_iv=settings.ECPAY_HASH_IV,
-    payment_url=settings.ECPAY_PAYMENT_URL
-)
 
 # Initialize Paddle service
 paddle_service = get_paddle_service()
 
 
 # =============================================================================
-# ECPAY ENDPOINTS (Taiwan)
-# =============================================================================
-
-@router.post("/create", response_model=PaymentResponse)
-async def create_payment(
-    request: PaymentCreateRequest,
-    current_user: User = Depends(deps.get_current_active_user),
-    db: AsyncSession = Depends(deps.get_db)
-):
-    """Create ECPay payment (Taiwan domestic)."""
-    # 1. Verify Order Ownership
-    result = await db.execute(
-        select(Order).where(Order.order_number == request.order_id)
-    )
-    order = result.scalars().first()
-
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    if order.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    try:
-        # 2. Generate ECPay Params
-        merchant_trade_no = request.order_id + datetime.now().strftime('%H%M%S')
-        merchant_trade_no = merchant_trade_no[:20]
-        merchant_trade_date = datetime.now().strftime('%Y/%m/%d %H:%M:%S')
-
-        # 3. Create ECPay Data
-        payment_data = ecpay_client.create_payment(
-            merchant_trade_no=merchant_trade_no,
-            merchant_trade_date=merchant_trade_date,
-            total_amount=request.amount,
-            trade_desc=request.description,
-            item_name=request.item_name,
-            return_url=f"{settings.FRONTEND_URL.replace('localhost', '127.0.0.1')}{settings.API_V1_STR}/payments/callback",
-            order_result_url=f"{settings.FRONTEND_URL}/payment/result",
-            client_back_url=f"{settings.FRONTEND_URL}/payment/result",
-            choose_payment=request.payment_method
-        )
-
-        return {
-            "success": True,
-            "payment_url": payment_data['action_url'],
-            "form_data": payment_data['params'],
-            "message": "Payment created"
-        }
-
-    except Exception as e:
-        logger.error(f"ECPay payment creation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/callback")
-async def payment_callback(
-    request: Request,
-    db: AsyncSession = Depends(deps.get_db)
-):
-    """ECPay payment callback handler."""
-    form_data = await request.form()
-    data = dict(form_data)
-
-    if not ecpay_client.verify_callback(data.copy()):
-        return "0|CheckMacValue Error"
-
-    # Process Success
-    if data.get('RtnCode') == '1':
-        # Extract order from MerchantTradeNo
-        merchant_trade_no = data.get('MerchantTradeNo', '')
-        # In production, map back to order ID
-        logger.info(f"ECPay payment success: {merchant_trade_no}")
-        return "1|OK"
-
-    return "0|Error"
-
-
-# =============================================================================
-# PADDLE ENDPOINTS (International)
+# PADDLE ENDPOINTS
 # =============================================================================
 
 @router.post("/paddle/checkout")
@@ -215,10 +129,11 @@ async def paddle_webhook(
 
 
 async def handle_transaction_completed(db: AsyncSession, data: dict):
-    """Handle successful payment transaction."""
+    """Handle successful payment transaction and send invoice email."""
     custom_data = data.get("custom_data", {})
     user_id = custom_data.get("user_id")
     transaction_id = data.get("id")
+    invoice_number = data.get("invoice_number", transaction_id)
 
     if not user_id:
         logger.warning(f"Transaction without user_id: {transaction_id}")
@@ -238,6 +153,41 @@ async def handle_transaction_completed(db: AsyncSession, data: dict):
         await subscription_service.handle_payment_success(
             db, order.order_number, data
         )
+
+    # --- Send Invoice Email ---
+    try:
+        # Get user info
+        from app.models.user import User
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalars().first()
+
+        if user:
+            # Get invoice PDF URL from Paddle
+            invoice_result = await paddle_service.get_invoice_pdf_url(transaction_id)
+            pdf_url = invoice_result.get("pdf_url", "")
+
+            # Extract amount info
+            totals = data.get("details", {}).get("totals", {})
+            amount = float(totals.get("grand_total", 0)) / 100  # Paddle uses cents
+            currency = data.get("currency_code", "USD")
+            plan_name = custom_data.get("plan_name", "VidGo Subscription")
+
+            # Send email
+            from app.services.email_service import email_service
+            await email_service.send_invoice_email(
+                to_email=user.email,
+                invoice_number=invoice_number,
+                amount=amount,
+                currency=currency,
+                plan_name=plan_name,
+                pdf_url=pdf_url,
+                username=user.full_name or user.email.split('@')[0]
+            )
+            logger.info(f"Invoice email sent to {user.email}")
+
+    except Exception as e:
+        logger.error(f"Failed to send invoice email: {e}")
+        # Don't fail the webhook for email errors
 
     logger.info(f"Transaction completed: {transaction_id}")
 

@@ -8,6 +8,7 @@ import { demoApi } from '@/api'
 // PRESET-ONLY MODE: UploadZone removed - all users use presets
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -23,7 +24,7 @@ const {
   demoTemplates
 } = useDemoMode()
 
-const uploadedImage = ref<string | null>(null)
+const uploadedImage = ref<string | undefined>(undefined)
 const resultImages = ref<string[]>([])
 const isProcessing = ref(false)
 const selectedScene = ref('studio')
@@ -317,7 +318,17 @@ function dataURItoBlob(dataURI: string): Blob {
             </p>
           </div>
 
-          <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use presets -->
+          <!-- Subscriber Interface: Upload Zone -->
+          <div v-if="!isDemoUser" class="mb-6">
+             <h4 class="text-sm font-medium text-gray-400 mb-2">{{ isZh ? '上傳您的產品' : 'Upload Your Product' }}</h4>
+             <ImageUploader 
+               v-model="uploadedImage" 
+               :label="isZh ? '點擊上傳或拖放產品圖片' : 'Drop product image here'"
+               class="mb-4"
+             />
+          </div>
+
+          <!-- PRESET-ONLY: Custom upload hidden? No, we just added it above. -->
 
           <!-- Selected Image Preview -->
           <div v-if="uploadedImage" class="space-y-4 mt-4">
@@ -349,7 +360,18 @@ function dataURItoBlob(dataURI: string): Blob {
             </button>
           </div>
 
-          <!-- PRESET-ONLY MODE: Custom prompt REMOVED - all users use preset scenes -->
+           <!-- Custom Prompt Input (Pro Only) -->
+           <div v-if="selectedScene === 'custom'" class="mt-4">
+             <label class="block text-sm font-medium text-gray-400 mb-2">
+               {{ isZh ? '自訂場景描述' : 'Custom Scene Prompt' }}
+             </label>
+             <textarea
+               v-model="prompt"
+               rows="3"
+               class="w-full bg-dark-900 border border-dark-600 rounded-lg p-3 text-white focus:outline-none focus:border-primary-500"
+               :placeholder="isZh ? '描述您想要的場景細節...' : 'Describe the scene details...'"
+             ></textarea>
+           </div>
 
           <!-- Credit Cost & Generate -->
           <div class="mt-6 pt-4 border-t border-dark-700">
@@ -369,24 +391,33 @@ function dataURItoBlob(dataURI: string): Blob {
           <h3 class="text-lg font-semibold text-white mb-4">{{ t('tools.common.generatedScenes') }}</h3>
 
           <div v-if="resultImages.length > 0" class="space-y-4">
-            <img
-              v-for="(img, index) in resultImages"
-              :key="index"
-              :src="img"
-              alt="Result"
-              class="w-full rounded-xl"
-            />
-
-            <!-- Watermark badge -->
-            <div class="text-center text-xs text-gray-500">vidgo.ai</div>
-
-            <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
-            <RouterLink
-              to="/pricing"
-              class="btn-primary w-full text-center block"
-            >
-              {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
-            </RouterLink>
+            <div v-for="(img, index) in resultImages" :key="index" class="space-y-2">
+              <img
+                :src="img"
+                alt="Result"
+                class="w-full rounded-xl"
+              />
+              
+              <!-- Download Button -->
+               <a
+                  v-if="!isDemoUser"
+                  :href="img"
+                  download="vidgo_product_scene.png"
+                  class="btn-primary w-full text-center py-2 block"
+               >
+                 {{ t('common.download') }}
+               </a>
+            </div>
+              
+              <!-- Subscribe CTA for Demo Users -->
+              <RouterLink
+                v-if="isDemoUser"
+                to="/pricing"
+                class="btn-primary w-full text-center block"
+              >
+                {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+              </RouterLink>
+            </div>
           </div>
 
           <div v-else class="h-64 flex items-center justify-center text-gray-500">

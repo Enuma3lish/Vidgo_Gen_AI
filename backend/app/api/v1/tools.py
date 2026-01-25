@@ -14,12 +14,21 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from datetime import datetime, timezone
+import uuid
+from pathlib import Path
+from PIL import Image
+import httpx
+from io import BytesIO
 
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.a2e_service import get_a2e_service, A2E_VOICES
 from app.services.rescue_service import get_rescue_service
 from app.providers.provider_router import get_provider_router, TaskType
-from app.api.deps import get_current_user_optional, get_db
+from app.api.deps import get_current_user_optional, get_db, is_subscribed_user
+from app.models.user_generation import UserGeneration
+from app.models.material import Material, ToolType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -173,16 +182,48 @@ TTS_VOICES = [
 @router.post("/remove-bg", response_model=ToolResponse)
 async def remove_background(
     request: RemoveBackgroundRequest,
+    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
     """
     Remove background from product image.
     Returns transparent PNG or white background.
+    
+    USER TIER LOGIC:
+    - Demo users: Return pre-generated result from Material DB
+    - Subscribers: Real-time background removal + save to UserGeneration
 
     Credits: 3 per image
     """
+    # ========== DEMO USER: Use pre-generated Material DB ==========
+    if not is_subscribed_user(current_user):
+        logger.info("Demo user: Looking up pre-generated background removal result")
+        
+        result = await db.execute(
+            select(Material)
+            .where(Material.tool_type == ToolType.BACKGROUND_REMOVAL)
+            .where(Material.is_active == True)
+            .limit(1)
+        )
+        material = result.scalars().first()
+        
+        if material:
+            result_url = material.result_watermarked_url or material.result_image_url
+            return ToolResponse(
+                success=True,
+                result_url=result_url,
+                credits_used=0,
+                cached=True,
+                message="Demo result (watermarked)"
+            )
+        else:
+            return ToolResponse(
+                success=False,
+                message="No pre-generated examples available. Please subscribe."
+            )
+    
+    # ========== SUBSCRIBER: Real-time Generation ==========
     try:
-        # Use provider router for background removal (GoEnhance)
         provider_router = get_provider_router()
         result = await provider_router.route(
             TaskType.BACKGROUND_REMOVAL,
@@ -191,9 +232,25 @@ async def remove_background(
 
         if result.get("success"):
             output = result.get("output", {})
+            result_url = output.get("image_url")
+            
+            # Save to UserGeneration
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.BACKGROUND_REMOVAL,
+                input_image_url=str(request.image_url),
+                input_params={"output_format": request.output_format},
+                result_image_url=result_url,
+                credits_used=3,
+                status="completed",
+                completed_at=datetime.now(timezone.utc)
+            )
+            db.add(user_gen)
+            await db.commit()
+            
             return ToolResponse(
                 success=True,
-                result_url=output.get("image_url"),
+                result_url=result_url,
                 credits_used=3,
                 message="Background removed successfully"
             )
@@ -268,10 +325,20 @@ async def remove_background_batch(
 @router.post("/product-scene", response_model=ToolResponse)
 async def generate_product_scene(
     request: ProductSceneRequest,
+    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
     """
     Generate product in a professional scene/background.
+    
+    USER TIER LOGIC:
+    - Demo users: Return pre-generated result from Material DB (with watermark)
+    - Subscribers: Real-time I2I generation (no watermark, can download)
+    
+    3-Step I2I Process (for subscribers):
+    1. Remove background from product image (rembg)
+    2. Generate scene background (T2I)
+    3. Composite product onto scene (PIL)
 
     Scene types: studio, nature, luxury, minimal, lifestyle, beach, urban, garden
     Credits: 10 per generation
@@ -282,35 +349,205 @@ async def generate_product_scene(
         scene = SCENE_TEMPLATES[0]  # Default to studio
 
     scene_prompt = request.custom_prompt or scene["prompt"]
-
-    try:
-        # Use rescue service for T2I generation (Wan primary, fal.ai rescue)
-        rescue_service = get_rescue_service()
-        full_prompt = f"Product photography, {scene_prompt}, professional quality"
-        result = await rescue_service.generate_image(
-            prompt=full_prompt,
-            width=1024,
-            height=1024
+    
+    # ========== DEMO USER: Use pre-generated Material DB ==========
+    if not is_subscribed_user(current_user):
+        logger.info(f"Demo user: Looking up pre-generated result for scene={request.scene_type}")
+        
+        # Find matching pre-generated material
+        result = await db.execute(
+            select(Material)
+            .where(Material.tool_type == ToolType.PRODUCT_SCENE)
+            .where(Material.topic == request.scene_type)
+            .where(Material.is_active == True)
+            .limit(1)
         )
-
-        if result.get("success"):
-            image_url = result.get("image_url")
-            images = result.get("images", [])
+        material = result.scalars().first()
+        
+        if material:
+            # Return watermarked result for demo users
+            result_url = material.result_watermarked_url or material.result_image_url
             return ToolResponse(
                 success=True,
-                result_url=image_url or (images[0]["url"] if images else None),
-                results=images,
-                credits_used=10,
-                message="Product scene generated successfully"
+                result_url=result_url,
+                credits_used=0,  # Demo users don't use credits
+                cached=True,
+                message="Demo result (watermarked)"
             )
         else:
             return ToolResponse(
                 success=False,
-                message=result.get("error", "Scene generation failed")
+                message="No pre-generated examples available. Please subscribe for custom generation."
             )
+    
+    # ========== SUBSCRIBER: Real-time I2I Generation ==========
+    logger.info(f"Subscriber: Starting 3-step I2I generation for {request.product_image_url}")
+    
+    try:
+        provider_router = get_provider_router()
+        product_url = str(request.product_image_url)
+
+        # Step 1: Remove background
+        logger.info("Step 1: Removing product background...")
+        rembg_result = await provider_router.route(
+            TaskType.BACKGROUND_REMOVAL,
+            {"image_url": product_url}
+        )
+        if not rembg_result.get("success"):
+            raise Exception(f"Background removal failed: {rembg_result.get('error')}")
+        
+        product_no_bg_url = rembg_result["output"]["image_url"]
+
+        # Step 2: Generate scene background
+        logger.info("Step 2: Generating scene background...")
+        full_prompt = f"{scene_prompt}, empty background for product placement, professional studio lighting, high-end commercial photography, 8K quality"
+        
+        t2i_result = await provider_router.route(
+            TaskType.TEXT_TO_IMAGE,
+            {"prompt": full_prompt}
+        )
+        if not t2i_result.get("success"):
+            raise Exception(f"Scene generation failed: {t2i_result.get('error')}")
+            
+        scene_url = t2i_result["output"]["image_url"]
+        
+        # Step 3: Composite (Local PIL processing)
+        logger.info("Step 3: Compositing...")
+        async with httpx.AsyncClient() as client:
+            p_resp = await client.get(product_no_bg_url)
+            s_resp = await client.get(scene_url)
+            
+            p_img = Image.open(BytesIO(p_resp.content)).convert("RGBA")
+            s_img = Image.open(BytesIO(s_resp.content)).convert("RGBA")
+            
+            # Smart Placement Logic
+            scene_w, scene_h = s_img.size
+            target_w = int(scene_w * 0.6)
+            prod_w, prod_h = p_img.size
+            scale = target_w / prod_w
+            new_w = target_w
+            new_h = int(prod_h * scale)
+            
+            if new_h > scene_h * 0.8:
+                scale = (scene_h * 0.8) / prod_h
+                new_h = int(prod_h * scale)
+                new_w = int(prod_w * scale)
+                
+            p_resized = p_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            x_off = (scene_w - new_w) // 2
+            y_off = (scene_h - new_h) // 2
+            
+            s_img.paste(p_resized, (x_off, y_off), p_resized)
+            final_img = s_img.convert("RGB")
+            
+            # Save final result
+            output_dir = Path("/app/static/user_generated")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
+            final_path = output_dir / filename
+            final_img.save(final_path, "PNG", quality=95)
+            
+            result_url = f"/static/user_generated/{filename}"
+
+        # Save to UserGeneration
+        user_gen = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.PRODUCT_SCENE,
+            input_image_url=str(request.product_image_url),
+            input_params={"scene_type": request.scene_type, "custom_prompt": request.custom_prompt},
+            prompt=full_prompt,
+            result_image_url=result_url,
+            generation_steps=generation_steps,
+            credits_used=10,
+            status="completed",
+            completed_at=datetime.now(timezone.utc)
+        )
+        db.add(user_gen)
+        await db.commit()
+        
+        return ToolResponse(
+            success=True,
+            result_url=result_url,
+            credits_used=10,
+            message="Product scene generated successfully (subscriber)"
+        )
+        
     except Exception as e:
         logger.error(f"Product scene error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> dict:
+    """
+    Composite a transparent product image onto a scene background.
+    
+    Args:
+        product_no_bg_url: URL/path to product image with transparent background
+        scene_url: URL/path to scene background image
+        
+    Returns:
+        {"success": True, "image_url": str} or {"success": False, "error": str}
+    """
+    try:
+        # Load product image (with transparent background)
+        if product_no_bg_url.startswith("/static"):
+            product_path = f"/app{product_no_bg_url}"
+            product_img = Image.open(product_path).convert("RGBA")
+        else:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(product_no_bg_url)
+                product_img = Image.open(BytesIO(response.content)).convert("RGBA")
+        
+        # Load scene background
+        if scene_url.startswith("/static"):
+            scene_path = f"/app{scene_url}"
+            scene_img = Image.open(scene_path).convert("RGBA")
+        else:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(scene_url)
+                scene_img = Image.open(BytesIO(response.content)).convert("RGBA")
+        
+        # Resize product to fit nicely in scene (60% of scene width, centered)
+        scene_w, scene_h = scene_img.size
+        target_w = int(scene_w * 0.6)
+        
+        prod_w, prod_h = product_img.size
+        scale = target_w / prod_w
+        new_w = target_w
+        new_h = int(prod_h * scale)
+        
+        # Ensure product doesn't exceed scene height
+        if new_h > scene_h * 0.8:
+            scale = (scene_h * 0.8) / prod_h
+            new_h = int(prod_h * scale)
+            new_w = int(prod_w * scale)
+        
+        product_resized = product_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        
+        # Center product on scene
+        x_offset = (scene_w - new_w) // 2
+        y_offset = (scene_h - new_h) // 2
+        
+        # Composite: paste product onto scene using alpha channel
+        scene_img.paste(product_resized, (x_offset, y_offset), product_resized)
+        
+        # Convert back to RGB for saving as PNG (no alpha)
+        final_img = scene_img.convert("RGB")
+        
+        # Save result
+        output_dir = Path("/app/static/generated")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
+        output_path = output_dir / filename
+        final_img.save(output_path, "PNG", quality=95)
+        
+        result_url = f"/static/generated/{filename}"
+        logger.info(f"[Composite] Saved: {result_url}")
+        return {"success": True, "image_url": result_url}
+        
+    except Exception as e:
+        logger.error(f"[Composite] Error: {e}")
+        return {"success": False, "error": str(e)}
 
 
 # ============================================================================
@@ -320,56 +557,119 @@ async def generate_product_scene(
 @router.post("/try-on", response_model=ToolResponse)
 async def ai_try_on(
     request: TryOnRequest,
+    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
     """
     Virtual try-on - place garment on model.
-    Uses face/body swap technology.
+    
+    USER TIER LOGIC:
+    - Demo users: Return pre-generated result from Material DB
+    - Subscribers: Real-time try-on generation + save to UserGeneration
 
     Credits: 15 per generation
     """
-    try:
-        # Get model image URL
-        if request.model_image_url:
-            model_url = str(request.model_image_url)
-        elif request.model_id:
-            model = next((m for m in TRYON_MODELS if m["id"] == request.model_id), None)
-            if not model:
-                raise HTTPException(status_code=400, detail=f"Invalid model_id: {request.model_id}")
-            model_url = model["preview_url"]
-        else:
-            # Use default female model
-            model_url = TRYON_MODELS[0]["preview_url"]
-
-        # Use ProviderRouter for try-on effect
-        router = get_provider_router()
-        result = await router.route(
-            TaskType.T2I,
-            {
-                "prompt": f"Virtual try-on of garment on model",
-                "image_url": str(request.garment_image_url),
-                "reference_url": model_url
-            }
+    # ========== DEMO USER: Use pre-generated Material DB ==========
+    if not is_subscribed_user(current_user):
+        logger.info("Demo user: Looking up pre-generated try-on result")
+        
+        result = await db.execute(
+            select(Material)
+            .where(Material.tool_type == ToolType.TRY_ON)
+            .where(Material.is_active == True)
+            .limit(1)
         )
-
-        output_url = result.get("image_url") or result.get("output_url")
-        if output_url:
+        material = result.scalars().first()
+        
+        if material:
+            result_url = material.result_watermarked_url or material.result_image_url
             return ToolResponse(
                 success=True,
-                result_url=output_url,
-                credits_used=15,
-                message="Try-on generated successfully"
+                result_url=result_url,
+                credits_used=0,
+                cached=True,
+                message="Demo result (watermarked)"
             )
         else:
             return ToolResponse(
                 success=False,
-                message=result.get("error", "Try-on generation failed")
+                message="No pre-generated examples available. Please subscribe."
             )
-    except HTTPException:
-        raise
+    
+    # ========== SUBSCRIBER: Real-time Generation ==========
+    logger.info(f"Subscriber: Starting real-time Try-On")
+    
+    try:
+        # Determine model image URL
+        model_url = None
+        if request.model_image_url:
+            model_url = str(request.model_image_url)
+        elif request.model_id:
+             # Look for matching model in config
+             # Frontend passes "female-1", "male-1" etc.
+             # We should map to backend path if not provided
+             # Try /static/models/...
+             gender = "female" if "female" in request.model_id else "male"
+             model_url = f"/static/models/{gender}/{request.model_id}.png"
+             # If using full URL service (PIAPI), and running locally in docker,
+             # we might need to rely on the Client handling local paths.
+             # PiAPIClient._resolve_image_input does this.
+
+        # Route via PIAPI Client directly for specialized Try-On
+        from scripts.services.piapi_client import PiAPIClient
+        piapi = PiAPIClient()
+        
+        result = await piapi.virtual_try_on(
+             model_image_url=model_url,
+             garment_image_url=str(request.garment_image_url)
+        )
+        
+        if not result.get("success"):
+             # Fallback to T2I? No, Try-On is specific.
+             raise Exception(result.get("error", "Try-on failed"))
+             
+        # Extract result URL
+        result_url = result.get("image_url") or result.get("output", {}).get("image_url")
+        if not result_url:
+             # Check list output
+              images = result.get("output", {}).get("images", [])
+              if images:
+                   result_url = images[0].get("url") if isinstance(images[0], dict) else images[0]
+        
+        if not result_url:
+             raise Exception("No result URL returned from Try-On service")
+
+        # Save to UserGeneration
+        user_gen = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.TRY_ON,
+            input_image_url=str(request.garment_image_url),
+            input_params={
+                "model_id": request.model_id,
+                "model_image_url": str(request.model_image_url) if request.model_image_url else None,
+                "angle": request.angle
+            },
+            result_image_url=result_url,
+            credits_used=15,
+            status="completed"
+        )
+        db.add(user_gen)
+        await db.commit()
+        
+        return ToolResponse(
+            success=True,
+            result_url=result_url,
+            credits_used=15,
+            message="Virtual try-on successful"
+        )
+
     except Exception as e:
-        logger.error(f"Try-on error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Try-On error: {e}")
+        return ToolResponse(
+            success=False,
+            message=f"Try-On generation failed: {str(e)}"
+        )
+
 
 
 # ============================================================================
@@ -379,47 +679,103 @@ async def ai_try_on(
 @router.post("/room-redesign", response_model=ToolResponse)
 async def room_redesign(
     request: RoomRedesignRequest,
+    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
     """
     Transform room interior style.
-    Converts empty/bare rooms to furnished designs.
+    
+    USER TIER LOGIC:
+    - Demo users: Return pre-generated result from Material DB
+    - Subscribers: Real-time interior design + save to UserGeneration
 
     Styles: modern, nordic, japanese, industrial, minimalist, luxury, bohemian, coastal
     Credits: 20 per generation
     """
-    # Get interior style
+    # ========== DEMO USER: Use pre-generated Material DB ==========
+    if not is_subscribed_user(current_user):
+        logger.info(f"Demo user: Looking up pre-generated room redesign for style={request.style}")
+        
+        result = await db.execute(
+            select(Material)
+            .where(Material.tool_type == ToolType.ROOM_REDESIGN)
+            .where(Material.topic == request.style)
+            .where(Material.is_active == True)
+            .limit(1)
+        )
+        material = result.scalars().first()
+        
+        if material:
+            result_url = material.result_watermarked_url or material.result_image_url
+            return ToolResponse(
+                success=True,
+                result_url=result_url,
+                credits_used=0,
+                cached=True,
+                message="Demo result (watermarked)"
+            )
+        else:
+            return ToolResponse(
+                success=False,
+                message="No pre-generated examples available. Please subscribe."
+            )
+    
+    # ========== SUBSCRIBER: Real-time Generation ==========
     interior = next((s for s in INTERIOR_STYLES if s["id"] == request.style), None)
     if not interior:
-        interior = INTERIOR_STYLES[0]  # Default to modern
+        interior = INTERIOR_STYLES[0]
 
     style_prompt = request.custom_prompt or interior["prompt"]
 
     try:
-        # Use ProviderRouter for interior design
         router = get_provider_router()
         result = await router.route(
             TaskType.INTERIOR,
             {
                 "image_url": str(request.room_image_url),
                 "prompt": style_prompt,
-                "style": request.style
+                "style": request.style,
+                "preserve_structure": request.preserve_structure
             }
         )
 
-        output_url = result.get("image_url") or result.get("output_url")
+        output_url = result.get("image_url") or result.get("output_url") or (result.get("output", {}).get("image_url") if isinstance(result.get("output"), dict) else None)
+        
         if output_url:
+            # Save to UserGeneration
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.ROOM_REDESIGN,
+                input_image_url=str(request.room_image_url),
+                input_params={
+                    "style": request.style,
+                    "custom_prompt": request.custom_prompt,
+                    "preserve_structure": request.preserve_structure
+                },
+                result_image_url=output_url,
+                credits_used=20,
+                status="completed",
+                completed_at=datetime.now(timezone.utc)
+            )
+            db.add(user_gen)
+            await db.commit()
+            
             return ToolResponse(
                 success=True,
                 result_url=output_url,
                 credits_used=20,
-                message=f"Room redesigned to {interior['name']} style"
+                message="Room redesign successful"
             )
         else:
             return ToolResponse(
                 success=False,
                 message=result.get("error", "Room redesign failed")
             )
+    except Exception as e:
+        logger.error(f"Room Redesign error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+            
+
     except Exception as e:
         logger.error(f"Room redesign error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -432,23 +788,65 @@ async def room_redesign(
 @router.post("/short-video", response_model=ToolResponse)
 async def generate_short_video(
     request: ShortVideoRequest,
+    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
     """
     Generate short video from image.
-    Optionally apply style and add TTS narration.
+    
+    USER TIER LOGIC:
+    - Demo users: Return pre-generated result from Material DB
+    - Subscribers: Real-time video generation + save to UserGeneration
 
     Credits: 25-35 (varies by features used)
     """
+    # ========== DEMO USER: Use pre-generated Material DB ==========
+    if not is_subscribed_user(current_user):
+        logger.info("Demo user: Looking up pre-generated short video result")
+        
+        result = await db.execute(
+            select(Material)
+            .where(Material.tool_type == ToolType.SHORT_VIDEO)
+            .where(Material.is_active == True)
+            .limit(1)
+        )
+        material = result.scalars().first()
+        
+        if material:
+            result_url = material.result_watermarked_url or material.result_video_url
+            return ToolResponse(
+                success=True,
+                result_url=result_url,
+                credits_used=0,
+                cached=True,
+                message="Demo result (watermarked)"
+            )
+        else:
+            return ToolResponse(
+                success=False,
+                message="No pre-generated examples available. Please subscribe."
+            )
+    
+    # ========== SUBSCRIBER: Real-time Generation ==========
     try:
         credits_used = 25
-
-        # Generate motion video with rescue service (Wan primary, fal.ai rescue)
-        rescue_service = get_rescue_service()
-        result = await rescue_service.generate_video(
-            image_url=str(request.image_url),
-            prompt="Natural camera motion, smooth animation",
-            length=5
+        
+        # Use Provider Router for standard I2V
+        provider_router = get_provider_router()
+        task_params = {
+            "image_url": str(request.image_url),
+            "prompt": "Natural camera motion, smooth animation", # Default prompt if none provided
+            "motion_score": request.motion_strength # specific param for some providers
+        }
+        
+        # If script provided, it might be an avatar video or TTS? 
+        # Short Video tool usually just animates the image.
+        # If script is present, maybe use it as prompting guidance?
+        # For now, stick to standard animation.
+        
+        result = await provider_router.route(
+            TaskType.IMAGE_TO_VIDEO,
+            task_params
         )
 
         if not result.get("success"):
@@ -457,37 +855,47 @@ async def generate_short_video(
                 message=result.get("error", "Video generation failed")
             )
 
-        video_url = result.get("video_url")
+        video_url = result.get("video_url") or result.get("output", {}).get("video_url") or result.get("output_url")
 
-        # Optional: Apply style transformation with ProviderRouter V2V
-        if request.style:
+        # Optional: Apply style transformation (Video-to-Video)
+        if request.style and video_url:
             style_prompt = get_style_prompt(request.style)
             if style_prompt:
-                router = get_provider_router()
-                style_result = await router.route(
+                style_result = await provider_router.route(
                     TaskType.V2V,
-                    {
-                        "video_url": video_url,
-                        "prompt": style_prompt
-                    }
+                    {"video_url": video_url, "prompt": style_prompt}
                 )
-                output_url = style_result.get("video_url") or style_result.get("output_url")
+                output_url = style_result.get("video_url") or style_result.get("output_url") or style_result.get("output", {}).get("video_url")
                 if output_url:
                     video_url = output_url
                     credits_used += 5
 
-        # TODO: Add TTS if script is provided
-        # if request.script and request.voice_id:
-        #     tts_result = await tts_service.generate(request.script, request.voice_id)
-        #     # Merge audio with video
-        #     credits_used += 5
+        if video_url:
+            # Save to UserGeneration
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.SHORT_VIDEO,
+                input_image_url=str(request.image_url),
+                input_params={"motion_strength": request.motion_strength, "style": request.style},
+                result_video_url=video_url,
+                credits_used=credits_used,
+                status="completed",
+                completed_at=datetime.now(timezone.utc)
+            )
+            db.add(user_gen)
+            await db.commit()
 
-        return ToolResponse(
-            success=True,
-            result_url=video_url,
-            credits_used=credits_used,
-            message="Short video generated successfully"
-        )
+            return ToolResponse(
+                success=True,
+                result_url=video_url,
+                credits_used=credits_used,
+                message="Short video generated successfully"
+            )
+        else:
+            return ToolResponse(
+                success=False,
+                message="Video generation returned no URL"
+            )
 
     except Exception as e:
         logger.error(f"Short video error: {e}")
@@ -506,16 +914,44 @@ async def generate_avatar_video(
 ):
     """
     Generate AI Avatar video from photo with lip sync.
-    Transforms a headshot into a talking avatar video.
-
-    Uses A2E.ai API for avatar generation with native lip-sync.
-    After generation, the result is saved to material DB for demo examples.
+    
+    USER TIER LOGIC:
+    - Demo users: Return pre-generated result from Material DB
+    - Subscribers: Real-time avatar generation + save to UserGeneration
 
     Supported languages: 'en' (English), 'zh-TW' (Traditional Chinese)
     Credits: 30 per generation
     """
-    from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
+    from app.models.material import MaterialSource, MaterialStatus
 
+    # ========== DEMO USER: Use pre-generated Material DB ==========
+    if not is_subscribed_user(current_user):
+        logger.info("Demo user: Looking up pre-generated avatar result")
+        
+        result = await db.execute(
+            select(Material)
+            .where(Material.tool_type == ToolType.AI_AVATAR)
+            .where(Material.is_active == True)
+            .limit(1)
+        )
+        material = result.scalars().first()
+        
+        if material:
+            result_url = material.result_watermarked_url or material.result_video_url
+            return ToolResponse(
+                success=True,
+                result_url=result_url,
+                credits_used=0,
+                cached=True,
+                message="Demo result (watermarked)"
+            )
+        else:
+            return ToolResponse(
+                success=False,
+                message="No pre-generated examples available. Please subscribe."
+            )
+    
+    # ========== SUBSCRIBER: Real-time Generation ==========
     try:
         # Validate language
         if request.language not in ["en", "zh-TW", "ja", "ko"]:
@@ -533,8 +969,7 @@ async def generate_avatar_video(
 
         avatar_service = get_a2e_service()
 
-        # Call A2E.ai API to generate avatar
-        logger.info(f"Calling A2E.ai Avatar API for user request: {request.script[:50]}...")
+        logger.info(f"Calling A2E.ai Avatar API for subscriber: {request.script[:50]}...")
 
         result = await avatar_service.generate_and_wait(
             image_url=str(request.image_url),
@@ -549,58 +984,30 @@ async def generate_avatar_video(
         if result.get("success"):
             video_url = result.get("video_url")
 
-            # Save to material DB for demo examples
-            try:
-                # Determine topic based on script content (simple heuristic)
-                topic = "social_media"  # Default
-                script_lower = request.script.lower()
-                if any(word in script_lower for word in ["brand", "product", "company", "品牌", "公司"]):
-                    topic = "spokesperson"
-                elif any(word in script_lower for word in ["feature", "design", "功能", "設計", "產品"]):
-                    topic = "product_intro"
-                elif any(word in script_lower for word in ["help", "support", "question", "幫助", "服務", "問題"]):
-                    topic = "customer_service"
-
-                material = Material(
-                    tool_type=ToolType.AI_AVATAR,
-                    topic=topic,
-                    language=request.language,
-                    tags=[topic, "ai_avatar", request.language, "user"],
-                    source=MaterialSource.USER,
-                    status=MaterialStatus.PENDING,  # User content needs review
-                    prompt=request.script,
-                    prompt_enhanced=request.script,
-                    input_image_url=str(request.image_url),
-                    generation_steps=[{
-                        "step": 1,
-                        "api": "a2e-avatar",
-                        "action": "photo_to_avatar",
-                        "language": request.language,
-                        "input": {"script": request.script, "image": str(request.image_url)},
-                        "result_url": video_url,
-                        "cost": 0.10
-                    }],
-                    result_video_url=video_url,
-                    generation_cost_usd=0.10,
-                    quality_score=0.8,
-                    is_active=True
-                )
-
-                # Set language-specific title
-                if request.language == "zh-TW":
-                    material.title_zh = request.script[:100]
-                    material.title_en = f"User Avatar: {topic}"
-                else:
-                    material.title_en = request.script[:100]
-
-                db.add(material)
-                await db.commit()
-
-                logger.info(f"User avatar saved to material DB: {material.id}")
-
-            except Exception as db_error:
-                logger.error(f"Failed to save avatar to DB: {db_error}")
-                # Don't fail the request if DB save fails
+            # Save to UserGeneration (for subscriber's personal gallery)
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.AI_AVATAR,
+                input_image_url=str(request.image_url),
+                input_params={
+                    "language": request.language,
+                    "voice_id": request.voice_id,
+                    "duration": request.duration
+                },
+                prompt=request.script,
+                result_video_url=video_url,
+                generation_steps=[{
+                    "step": 1,
+                    "api": "a2e-avatar",
+                    "action": "photo_to_avatar",
+                    "language": request.language
+                }],
+                credits_used=30,
+                status="completed",
+                completed_at=datetime.now(timezone.utc)
+            )
+            db.add(user_gen)
+            await db.commit()
 
             return ToolResponse(
                 success=True,
@@ -632,6 +1039,67 @@ async def get_avatar_voices(
     if language and language in A2E_VOICES:
         return A2E_VOICES[language]
     return A2E_VOICES
+
+
+@router.get("/avatar/characters")
+async def get_avatar_characters():
+    """
+    Get available A2E avatar characters.
+    
+    Frontend should use these characters instead of fixed Unsplash images.
+    Each character includes:
+    - _id: Anchor ID for generation
+    - name: Character name
+    - video_cover: Preview image URL
+    - lang: Supported language(s)
+    
+    Characters are organized by gender where possible.
+    """
+    from scripts.services import A2EClient
+    import os
+    
+    try:
+        a2e = A2EClient(os.getenv("A2E_API_KEY", ""))
+        characters = await a2e.get_characters()
+        
+        if not characters:
+            return {"success": False, "characters": [], "error": "No characters available"}
+        
+        # Organize by gender (detect from name)
+        female_chars = []
+        male_chars = []
+        other_chars = []
+        
+        for char in characters:
+            name_lower = (char.get("name") or "").lower()
+            char_info = {
+                "id": char.get("_id"),
+                "name": char.get("name"),
+                "preview_url": char.get("video_cover"),
+                "lang": char.get("lang", "en")
+            }
+            
+            if any(kw in name_lower for kw in ["女", "female", "woman", "girl", "小美", "小雅", "小玲"]):
+                char_info["gender"] = "female"
+                female_chars.append(char_info)
+            elif any(kw in name_lower for kw in ["男", "male", "man", "guy", "建明", "志偉", "俊傑"]):
+                char_info["gender"] = "male"
+                male_chars.append(char_info)
+            else:
+                char_info["gender"] = "unknown"
+                other_chars.append(char_info)
+        
+        # Limit to reasonable number for UI
+        return {
+            "success": True,
+            "female": female_chars[:6],
+            "male": male_chars[:6],
+            "other": other_chars[:6],
+            "total": len(characters)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get A2E characters: {e}")
+        return {"success": False, "characters": [], "error": str(e)}
 
 
 # ============================================================================

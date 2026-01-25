@@ -7,6 +7,7 @@ import { useDemoMode } from '@/composables'
 import { demoApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -17,7 +18,7 @@ const isZh = computed(() => locale.value.startsWith('zh'))
 
 // Check if user is subscribed (has paid plan)
 const isSubscribed = computed(() => {
-  return authStore.user?.subscription_tier && authStore.user.subscription_tier !== 'demo'
+  return authStore.user?.plan_type && authStore.user.plan_type !== 'demo'
 })
 
 // PRESET-ONLY MODE: All users use presets, no custom input
@@ -29,7 +30,7 @@ const {
   isLoadingTemplates
 } = useDemoMode()
 
-const uploadedImage = ref<string | null>(null)
+const uploadedImage = ref<string | undefined>(undefined)
 const resultVideo = ref<string | null>(null)
 const isProcessing = ref(false)
 // Settings - only for subscribed users
@@ -129,7 +130,7 @@ onMounted(async () => {
 
 function selectDemoImage(item: { id: string; preview?: string; video_url?: string; motion?: string }) {
   selectedDemoImageId.value = item.id
-  uploadedImage.value = item.preview || item.video_url || null
+  uploadedImage.value = item.preview || item.video_url || undefined
   // Auto-show the result video for demo items
   const template = demoTemplates.value.find(t => t.id === item.id)
   if (template?.result_video_url || template?.result_watermarked_url) {
@@ -245,6 +246,17 @@ function dataURItoBlob(dataURI: string): Blob {
               {{ isZh ? '請試試我們精彩的範例' : 'Please try our amazing examples' }}
             </h3>
 
+            <!-- Subscriber Interface: Upload Zone -->
+            <div v-if="!isDemoUser" class="mb-6">
+               <h4 class="text-sm font-medium text-gray-400 mb-2">{{ isZh ? '上傳圖片 (.jpg, .png)' : 'Upload Image (.jpg, .png)' }}</h4>
+               <ImageUploader 
+                 v-model="uploadedImage" 
+                 :label="isZh ? '點擊上傳或拖放起始圖片' : 'Drop starting image here'"
+                 class="mb-4"
+                 @update:model-value="selectedDemoImageId = null"
+               />
+            </div>
+
             <!-- Demo Images for all users -->
             <div v-if="demoImages.length > 0" class="mb-4">
               <p class="text-sm text-gray-400 mb-3">
@@ -306,7 +318,7 @@ function dataURItoBlob(dataURI: string): Blob {
             <!-- Selected Image Preview -->
             <div v-if="uploadedImage" class="space-y-4 mt-4">
               <img :src="uploadedImage" alt="Source" class="w-full rounded-xl" />
-              <button v-if="canUseCustomInputs" @click="uploadedImage = null; selectedDemoImageId = null" class="btn-ghost text-sm w-full">
+              <button v-if="canUseCustomInputs" @click="uploadedImage = undefined; selectedDemoImageId = null" class="btn-ghost text-sm w-full">
                 {{ isZh ? '移除圖片' : 'Remove Image' }}
               </button>
             </div>
@@ -491,10 +503,21 @@ function dataURItoBlob(dataURI: string): Blob {
             />
             <!-- Watermark badge -->
             <div class="text-center text-xs text-gray-500">vidgo.ai</div>
-            <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
-            <RouterLink to="/pricing" class="btn-primary w-full text-center block">
-              {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
-            </RouterLink>
+            <!-- Download / Action Buttons -->
+            <div class="flex gap-3">
+               <a
+                 v-if="!isDemoUser"
+                 :href="resultVideo"
+                 download="vidgo_short_video.mp4"
+                 class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
+               >
+                 <span class="mr-2">📥</span> {{ t('common.download') }}
+               </a>
+
+               <RouterLink v-else to="/pricing" class="btn-primary w-full text-center block">
+                 {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+               </RouterLink>
+            </div>
           </div>
 
           <div v-else class="aspect-video flex items-center justify-center bg-dark-700 rounded-xl text-gray-500">

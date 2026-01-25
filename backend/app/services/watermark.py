@@ -23,7 +23,7 @@ class WatermarkService:
 
     def __init__(
         self,
-        watermark_text: str = "VidGo Demo",
+        watermark_text: str = "Vidgo AI",
         watermark_image_path: Optional[str] = None,
         font_size: int = 24,
         opacity: float = 0.7,

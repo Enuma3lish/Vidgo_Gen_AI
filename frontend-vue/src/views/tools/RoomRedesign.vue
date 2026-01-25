@@ -9,6 +9,7 @@ import type { DesignStyle, RoomType } from '@/api'
 // PRESET-ONLY MODE: UploadZone removed - all users use presets
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -28,7 +29,7 @@ const roomTypes = ref<RoomType[]>([])
 
 // State
 const activeTab = ref<'redesign' | 'generate' | 'styleTransfer'>('redesign')
-const uploadedImage = ref<string | null>(null)
+const uploadedImage = ref<string | undefined>(undefined)
 const uploadedFile = ref<File | null>(null)
 const resultImage = ref<string | null>(null)
 const resultDescription = ref<string>('')
@@ -435,7 +436,7 @@ function handleSubmit() {
 }
 
 function reset() {
-  uploadedImage.value = null
+  uploadedImage.value = undefined
   uploadedFile.value = null
   resultImage.value = null
   resultDescription.value = ''
@@ -570,7 +571,16 @@ watch(activeTab, (newTab) => {
               </p>
             </div>
 
-            <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use presets -->
+            <!-- Subscriber Interface: Upload Zone -->
+            <div v-if="!isDemoUser" class="mb-6">
+               <h4 class="text-sm font-medium text-gray-400 mb-2">{{ isZh ? '上傳房間照片' : 'Upload Room Photo' }}</h4>
+               <ImageUploader 
+                 v-model="uploadedImage" 
+                 :label="isZh ? '點擊上傳或拖放房間照片' : 'Drop room photo here'"
+                 class="mb-4"
+                 @file-selected="(file) => uploadedFile = file"
+               />
+            </div>
 
             <!-- Selected Image Preview -->
             <div v-if="uploadedImage" class="mt-4 space-y-2">
@@ -623,7 +633,19 @@ watch(activeTab, (newTab) => {
             </div>
           </div>
 
-          <!-- PRESET-ONLY MODE: Custom prompt REMOVED - all users use preset styles -->
+          <!-- Custom Prompt -->
+          <div v-if="!isDemoUser" class="card bg-dark-800/50 backdrop-blur border border-dark-700">
+             <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+               <span>✏️</span>
+               {{ isZh ? '自訂描述 (可選)' : 'Custom Prompt (Optional)' }}
+             </h3>
+             <textarea
+               v-model="prompt"
+               rows="3"
+               class="w-full bg-dark-900 border border-dark-600 rounded-lg p-3 text-white focus:outline-none focus:border-primary-500"
+               :placeholder="isZh ? '描述您想要的房間細節，例如顏色、材質等...' : 'Describe specific details like colors, materials, etc...'"
+             ></textarea>
+          </div>
 
           <!-- Generate Button -->
           <div class="card bg-dark-800/50 backdrop-blur border border-dark-700">
@@ -672,18 +694,29 @@ watch(activeTab, (newTab) => {
               <!-- Watermark badge -->
               <div class="text-center text-xs text-gray-500">vidgo.ai</div>
 
-              <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
+              <!-- Download / Action Buttons -->
               <div class="flex gap-3">
-                <RouterLink
-                  to="/pricing"
-                  class="btn-primary flex-1 text-center"
-                >
-                  {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
-                </RouterLink>
-                <button @click="reset" class="btn-ghost flex-1">
-                  <span class="mr-2">🔄</span>
-                  {{ t('interior.tryAnother') }}
-                </button>
+                 <a
+                   v-if="!isDemoUser"
+                   :href="resultImage"
+                   download="vidgo_room_design.png"
+                   class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
+                 >
+                   <span class="mr-2">📥</span> {{ t('common.download') }}
+                 </a>
+
+                 <RouterLink
+                   v-else
+                   to="/pricing"
+                   class="btn-primary flex-1 text-center"
+                 >
+                   {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+                 </RouterLink>
+
+                 <button @click="reset" class="btn-ghost flex-1">
+                   <span class="mr-2">🔄</span>
+                   {{ t('interior.tryAnother') }}
+                 </button>
               </div>
             </div>
 
@@ -699,18 +732,29 @@ watch(activeTab, (newTab) => {
               <!-- Watermark badge -->
               <div class="text-center text-xs text-gray-500">vidgo.ai</div>
 
-              <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
+              <!-- Download / Action Buttons -->
               <div class="flex gap-3">
-                <RouterLink
-                  to="/pricing"
-                  class="btn-primary flex-1 text-center"
-                >
-                  {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
-                </RouterLink>
-                <button @click="reset" class="btn-ghost flex-1">
-                  <span class="mr-2">🔄</span>
-                  {{ t('interior.tryAnother') }}
-                </button>
+                 <a
+                   v-if="!isDemoUser"
+                   :href="resultImage"
+                   download="vidgo_room_design.png"
+                   class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
+                 >
+                   <span class="mr-2">📥</span> {{ t('common.download') }}
+                 </a>
+
+                 <RouterLink
+                   v-else
+                   to="/pricing"
+                   class="btn-primary flex-1 text-center"
+                 >
+                   {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+                 </RouterLink>
+
+                 <button @click="reset" class="btn-ghost flex-1">
+                   <span class="mr-2">🔄</span>
+                   {{ t('interior.tryAnother') }}
+                 </button>
               </div>
             </div>
 

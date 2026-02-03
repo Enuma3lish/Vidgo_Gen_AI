@@ -148,7 +148,7 @@ class UserContentCollector:
         score *= priority
 
         # Service reliability boost
-        reliable_services = ["leonardo", "pollo_ai", "goenhance"]
+        reliable_services = ["piapi", "wan", "pollo_ai", "a2e"]
         if result.service_name in reliable_services:
             score += 0.05
 

@@ -428,7 +428,7 @@ class MaterialLibraryService(BaseMaterialService):
         ]
 
     # Services known to produce reliable, high-quality outputs
-    RELIABLE_SERVICES = {"leonardo", "pollo_ai", "goenhance"}
+    RELIABLE_SERVICES = {"piapi", "wan", "pollo_ai", "a2e"}
 
     def _calculate_quality_score(
         self,

@@ -926,10 +926,25 @@ class VidGoPreGenerator:
 
                     # Determine avatar gender from A2E character name or default to alternating
                     # Map A2E characters to frontend avatar IDs (female-1, male-1, etc.)
+                    # Common Chinese first names for gender detection (華人常見名字)
+                    FEMALE_NAMES = [
+                        "女", "female", "woman", "girl",
+                        # 常見女性名字
+                        "怡君", "雅婷", "佳穎", "淑芬", "美玲", "雅琪", "怡萱", "欣怡", "雯婷", "筱涵",
+                        "小美", "小雅", "小玲", "小萱", "小婷", "小芬", "小琪", "小涵", "小敏", "小慧",
+                        "詩涵", "宜蓁", "心怡", "佳慧", "婉婷", "靜怡", "雅文", "思穎", "珮瑜", "曉雯",
+                    ]
+                    MALE_NAMES = [
+                        "男", "male", "man", "guy",
+                        # 常見男性名字
+                        "志偉", "冠宇", "宗翰", "家豪", "承恩", "柏翰", "宇軒", "俊宏", "建宏", "明哲",
+                        "建明", "俊傑", "志豪", "冠廷", "柏均", "彥廷", "育成", "嘉偉", "信宏", "政翰",
+                        "小明", "小偉", "小豪", "小杰", "小軒", "小翰", "小宏", "小凱", "小龍", "小剛",
+                    ]
                     char_name_lower = (char.get("name") or "").lower()
-                    if any(kw in char_name_lower for kw in ["女", "female", "woman", "girl", "小美", "小雅", "小玲"]):
+                    if any(kw in char_name_lower for kw in FEMALE_NAMES):
                         avatar_gender = "female"
-                    elif any(kw in char_name_lower for kw in ["男", "male", "man", "guy", "建明", "志偉", "俊傑"]):
+                    elif any(kw in char_name_lower for kw in MALE_NAMES):
                         avatar_gender = "male"
                     else:
                         # Default alternating based on index

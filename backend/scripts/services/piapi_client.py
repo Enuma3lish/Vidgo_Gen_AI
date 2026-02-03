@@ -1,9 +1,12 @@
 """
-PiAPI Client - Text-to-Image using Flux model
+PiAPI Client - AI Image Generation and Processing
 
 API: https://api.piapi.ai
-Model: Qubico/flux1-schnell
-Cost: ~$0.005 per image
+Features:
+- Text-to-Image (Flux model) - ~$0.005/image
+- Virtual Try-On (Kling AI) - $0.05/image  
+- Flux Fill (I2I/Inpaint)
+- Remove Background - $0.001/image
 """
 import asyncio
 import logging
@@ -471,6 +474,110 @@ class PiAPIClient:
             logger.exception(f"[PiAPI] Flux Fill exception: {e}")
             return {"success": False, "error": str(e)}
 
+    async def remove_background(
+        self,
+        image_url: str,
+        save_locally: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Remove background from image using PiAPI Remove Background API.
+        
+        Cost: $0.001 per image
+        Reference: https://piapi.ai/docs/remove-background-api
+        
+        Args:
+            image_url: Source image URL or local path
+            save_locally: Save to local file (default True)
+            
+        Returns:
+            {"success": True, "image_url": str} or {"success": False, "error": str}
+        """
+        if not self.api_key:
+            return {"success": False, "error": "PiAPI key not configured"}
+        
+        # Resolve image input (local paths → base64)
+        image_input = self._resolve_image_input(image_url)
+        
+        logger.info(f"[PiAPI] Remove Background: {image_url[:50]}...")
+        
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                # Create task - using Qubico/image-toolkit model
+                # Reference: https://piapi.ai/docs/remove-background-api
+                response = await client.post(
+                    f"{self.BASE_URL}/task",
+                    headers=self.headers,
+                    json={
+                        "model": "Qubico/image-toolkit",
+                        "task_type": "background-remove",
+                        "input": {
+                            "image": image_input
+                        }
+                    }
+                )
+                
+                if response.status_code not in [200, 201]:
+                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    logger.error(f"[PiAPI] Remove BG create task failed: {error}")
+                    return {"success": False, "error": error}
+                
+                data = response.json()
+                task_id = data.get("data", {}).get("task_id")
+                
+                if not task_id:
+                    logger.error(f"[PiAPI] Response: {data}")
+                    return {"success": False, "error": "No task_id in response"}
+                
+                logger.info(f"[PiAPI] Remove BG task created: {task_id}")
+                
+                # Poll for result (usually very fast)
+                for attempt in range(30):  # 1 min timeout
+                    await asyncio.sleep(2)
+                    
+                    status_resp = await client.get(
+                        f"{self.BASE_URL}/task/{task_id}",
+                        headers=self.headers
+                    )
+                    
+                    if status_resp.status_code != 200:
+                        continue
+                    
+                    status_data = status_resp.json()
+                    status = status_data.get("data", {}).get("status", "")
+                    
+                    if status == "completed":
+                        output = status_data.get("data", {}).get("output", {})
+                        
+                        image_url_result = output.get("image_url")
+                        if not image_url_result:
+                            images = output.get("images", [])
+                            if images:
+                                img = images[0]
+                                image_url_result = img.get("url") if isinstance(img, dict) else img
+                        
+                        if not image_url_result:
+                            logger.error(f"[PiAPI] Remove BG output: {output}")
+                            return {"success": False, "error": "No image_url in output"}
+                        
+                        if save_locally:
+                            local_path = await self._download(client, image_url_result)
+                            if local_path:
+                                logger.info(f"[PiAPI] Remove BG saved: {local_path}")
+                                return {"success": True, "image_url": local_path}
+                        
+                        return {"success": True, "image_url": image_url_result}
+                    
+                    elif status == "failed":
+                        error = status_data.get("data", {}).get("error", "Unknown error")
+                        logger.error(f"[PiAPI] Remove BG failed: {error}")
+                        return {"success": False, "error": error}
+                
+                return {"success": False, "error": "Timeout (1 min)"}
+        
+        except Exception as e:
+            logger.exception(f"[PiAPI] Remove BG exception: {e}")
+            return {"success": False, "error": str(e)}
+
     async def _download(self, client: httpx.AsyncClient, url: str) -> Optional[str]:
         """Download image and save locally."""
         try:
@@ -484,4 +591,5 @@ class PiAPIClient:
         except Exception as e:
             logger.warning(f"[PiAPI] Download failed: {e}")
         return None
+
 

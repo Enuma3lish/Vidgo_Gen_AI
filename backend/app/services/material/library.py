@@ -427,6 +427,59 @@ class MaterialLibraryService(BaseMaterialService):
             for e in examples
         ]
 
+    # Services known to produce reliable, high-quality outputs
+    RELIABLE_SERVICES = {"leonardo", "pollo_ai", "goenhance"}
+
+    def _calculate_quality_score(
+        self,
+        source_image_url: str,
+        result_image_url: Optional[str],
+        result_video_url: Optional[str],
+        prompt: str,
+        service_name: str,
+    ) -> float:
+        """
+        Calculate a quality score (0.0-1.0) for user-generated content.
+
+        Scoring factors:
+        - Base score: 0.4
+        - Output completeness: having both image and video results (+0.2),
+          or at least one (+0.1)
+        - Prompt quality: descriptive prompts score higher (up to +0.2)
+        - Service reliability: known reliable services get a boost (+0.1)
+        - Source relationship: valid source image for before/after (+0.1)
+        """
+        score = 0.4
+
+        # Output completeness
+        has_image = bool(result_image_url)
+        has_video = bool(result_video_url)
+        if has_image and has_video:
+            score += 0.2
+        elif has_image or has_video:
+            score += 0.1
+
+        # Prompt quality — longer, more descriptive prompts tend to yield
+        # better results and make better showcase material
+        prompt_len = len(prompt.strip()) if prompt else 0
+        if prompt_len >= 50:
+            score += 0.2
+        elif prompt_len >= 20:
+            score += 0.1
+        elif prompt_len > 0:
+            score += 0.05
+
+        # Service reliability
+        if service_name in self.RELIABLE_SERVICES:
+            score += 0.1
+
+        # Source relationship — having a proper before/after pair is more
+        # valuable for showcases
+        if source_image_url:
+            score += 0.1
+
+        return min(1.0, score)
+
     async def collect_user_content(
         self,
         source_image_url: str,
@@ -449,9 +502,13 @@ class MaterialLibraryService(BaseMaterialService):
             logger.debug("Skipping collection: no result")
             return None
 
-        # TODO: Implement quality scoring
-        # For now, collect all with threshold check
-        quality_score = 0.8  # Default score
+        quality_score = self._calculate_quality_score(
+            source_image_url=source_image_url,
+            result_image_url=result_image_url,
+            result_video_url=result_video_url,
+            prompt=prompt,
+            service_name=service_name,
+        )
 
         if quality_score < quality_threshold:
             logger.debug(f"Skipping collection: quality {quality_score} < threshold {quality_threshold}")

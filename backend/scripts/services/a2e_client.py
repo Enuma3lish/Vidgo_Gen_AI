@@ -368,16 +368,26 @@ class A2EClient:
                 voices = await self.get_voices()
                 if not voices:
                     return {"success": False, "error": "No voices available"}
-                # Try to find matching language voice
+                # Try to find matching language + gender voice
+                lang_voices = []
                 for voice in voices:
                     voice_lang = voice.get("language", "").lower()
                     if language.lower() in voice_lang or voice_lang in language.lower():
-                        tts_id = voice.get("tts_id")
-                        break
+                        lang_voices.append(voice)
+                # Prefer gender-matched voice within language matches
+                if lang_voices and gender:
+                    for voice in lang_voices:
+                        voice_gender = voice.get("gender", "").lower()
+                        if gender.lower() in voice_gender or voice_gender in gender.lower():
+                            tts_id = voice.get("tts_id")
+                            break
+                # Fall back to any language-matched voice
+                if not tts_id and lang_voices:
+                    tts_id = lang_voices[0].get("tts_id")
+                # Fall back to first available voice
                 if not tts_id:
-                    # Use first available voice
                     tts_id = voices[0].get("tts_id")
-                logger.info(f"[A2E] Using voice: {tts_id}")
+                logger.info(f"[A2E] Using voice: {tts_id} (gender={gender})")
 
             # Step 1: Generate TTS audio
             tts_result = await self.generate_tts(script, tts_id)

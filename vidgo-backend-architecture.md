@@ -1,7 +1,7 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 4.4
-**Last Updated:** January 25, 2026
+**Version:** 4.5
+**Last Updated:** February 4, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
 **Mode:** Preset-Only (Material DB Lookup, No Runtime API Calls)
@@ -49,8 +49,8 @@
 |  |  |  +-------------------+  +-------------------+  +-------------------+  |  | |
 |  |  |  |   PiAPI (Wan)     |  |   Pollo AI API    |  |    A2E.ai API     |  |  | |
 |  |  |  | - T2I             |  | - I2V (Pixverse)  |  | - Avatar Video    |  |  | |
-|  |  |  | - I2V             |  | - T2V (Pollo)     |  | - Lip-sync TTS    |  |  | |
-|  |  |  | - Interior        |  |                   |  |                   |  |  | |
+|  |  |  | - I2I (Style)     |  | - T2V (Pollo)     |  | - Lip-sync TTS    |  |  | |
+|  |  |  | - I2V, Interior   |  |                   |  |                   |  |  | |
 |  |  |  +-------------------+  +-------------------+  +-------------------+  |  | |
 |  |  |                                                                       |  | |
 |  |  |  +-------------------+                                               |  | |
@@ -108,7 +108,8 @@ backend/
 │   │
 │   ├── config/
 │   │   ├── __init__.py
-│   │   └── demo_topics.py           # Demo topic configuration
+│   │   ├── demo_topics.py           # Demo topic configuration (legacy)
+│   │   └── topic_registry.py       # Topic registry (single source of truth)
 │   │
 │   ├── core/
 │   │   ├── __init__.py
@@ -200,7 +201,7 @@ backend/
 │
 ├── scripts/
 │   ├── docker_entrypoint.sh         # Docker startup script
-│   ├── main_pregenerate.py          # Main pre-generation pipeline (7 tools)
+│   ├── main_pregenerate.py          # Main pre-generation pipeline (8 tools)
 │   ├── startup_check.py             # Startup validation
 │   ├── test_api_keys.py             # API key validation
 │   └── services/                    # Service-specific scripts
@@ -318,14 +319,15 @@ from app.models.prompt_template import (
 
 ```python
 class ToolType(str, enum.Enum):
-    """7 Core Tools"""
+    """8 Core Tools"""
     BACKGROUND_REMOVAL = "background_removal"
     PRODUCT_SCENE = "product_scene"
     TRY_ON = "try_on"
     ROOM_REDESIGN = "room_redesign"
     SHORT_VIDEO = "short_video"
     AI_AVATAR = "ai_avatar"
-    PATTERN_GENERATE = "pattern_generate"  # NEW: Seamless pattern generation
+    PATTERN_GENERATE = "pattern_generate"
+    EFFECT = "effect"  # Style transfer / artistic effects
 
 class MaterialSource(str, enum.Enum):
     SEED = "seed"      # Pre-generated
@@ -344,7 +346,7 @@ class Material(Base):
 
     Key Fields:
     - lookup_hash: SHA256 for O(1) preset lookup
-    - tool_type: One of 6 core tools
+    - tool_type: One of 8 core tools
     - prompt/prompt_zh: Multi-language prompts
     - result_image_url/result_video_url: Generated outputs
     - result_watermarked_url: Watermarked version for demo
@@ -402,7 +404,7 @@ flowchart LR
 
 | Provider | API | Purpose | Cost | Env Variable |
 |----------|-----|---------|------|--------------|
-| PiAPI | Wan API | T2I, I2V, Interior Design | Medium | `PIAPI_KEY` |
+| PiAPI | Wan API | T2I, I2I (Style Transfer), I2V, Interior Design | Medium | `PIAPI_KEY` |
 | Pollo AI | Pixverse, Kling, Luma | I2V, T2V | Medium | `POLLO_API_KEY` |
 | A2E.ai | Lip-sync + TTS | Avatar Video | Medium | `A2E_API_KEY`, `A2E_DEFAULT_CREATOR_ID` |
 | Gemini | Generative AI | Moderation, Backup Image | Low | `GEMINI_API_KEY` |
@@ -426,6 +428,7 @@ class ProviderRouter:
 
     ROUTING_CONFIG = {
         "text_to_image": {"primary": "piapi", "backup": "gemini"},
+        "image_to_image": {"primary": "piapi", "backup": None},  # Style transfer
         "image_to_video": {"primary": "pollo", "backup": "piapi"},
         "text_to_video": {"primary": "pollo", "backup": "piapi"},
         "avatar": {"primary": "a2e", "backup": None},
@@ -543,7 +546,9 @@ GET /api/v1/anchor/character_list
 
 **Supported Task Types:**
 - `txt2img` - Text-to-Image (Flux model)
-- `img2img` - Image-to-Image
+- `img2img` - Image-to-Image / Style Transfer (Flux, with `strength` param)
+- `ai_try_on` - Virtual Try-On (Kling AI)
+- `background-remove` - Background Removal
 - `wan26-img2video` - Image-to-Video
 - `wan26-txt2video` - Text-to-Video
 - `kontext` - Context-aware editing
@@ -618,9 +623,10 @@ The Virtual Try-On feature uses AI-generated full-body model photos to ensure co
 |  ┌────────────────────────────────────────────────────────┐       |
 |  │  2. generate_try_on()                                   │       |
 |  │     ├─ Load models from library                         │       |
+|  │     ├─ Apply gender restrictions (male skips female)    │       |
 |  │     ├─ Convert local files to base64 for API           │       |
 |  │     ├─ Call Kling AI Virtual Try-On API                │       |
-|  │     └─ Fallback to T2I if API fails                    │       |
+|  │     └─ Skip on API failure (no T2I fallback)           │       |
 |  └────────────────────────────────────────────────────────┘       |
 |                                                                    |
 +------------------------------------------------------------------+
@@ -633,6 +639,12 @@ The Virtual Try-On feature uses AI-generated full-body model photos to ensure co
 - Neutral pose with arms at sides
 - Plain or minimal background
 - Simple base clothing (t-shirt or tank top)
+
+**Gender Restrictions:**
+- Male models can only wear male/unisex clothing (skip female-only items)
+- Female models can wear all clothing (male, female, unisex)
+- Each clothing item has a `gender_restriction` field: `"male"`, `"female"`, or `None` (unisex)
+- On API failure, the try-on is **skipped** (no T2I fallback to preserve person identity)
 
 **Local File to API Support:**
 
@@ -654,6 +666,58 @@ python -m scripts.main_pregenerate --tool model_library --limit 6
 
 # Generate try-on materials (auto-generates models if needed)
 python -m scripts.main_pregenerate --tool try_on --limit 20
+```
+
+---
+
+### 5.8 Effect / Style Transfer (NEW)
+
+**Architecture:**
+The Effect tool applies artistic styles to product images using a two-step pipeline (T2I → I2I) while preserving product identity.
+
+```
++------------------------------------------------------------------+
+|                  EFFECT / STYLE TRANSFER FLOW                     |
++------------------------------------------------------------------+
+|                                                                    |
+|  Step 1: GENERATE SOURCE IMAGE (PiAPI T2I)                        |
+|  ├─ Input: Product prompt (e.g., "bubble milk tea, studio light") |
+|  ├─ API: PiAPI Flux txt2img                                       |
+|  └─ Output: source_image_url (original product photo)             |
+|                                                                    |
+|  Step 2: APPLY STYLE (PiAPI I2I)                                  |
+|  ├─ Input: source_image_url + style prompt                        |
+|  ├─ Strength: 0.60-0.70 (preserves product identity)             |
+|  ├─ API: PiAPI Flux img2img                                       |
+|  └─ Output: styled_image_url (same product, different art style)  |
+|                                                                    |
+|  IMPORTANT CONSTRAINTS:                                            |
+|  ├─ Style prompt ONLY describes art style, NOT the product        |
+|  ├─ Strength must stay 0.6-0.7 (>0.8 changes the product)       |
+|  └─ Input product = Output product (identity preserved)           |
+|                                                                    |
++------------------------------------------------------------------+
+```
+
+**Source Images (food/drink focused):**
+- Bubble Tea (珍珠奶茶) — topic: drinks
+- Fried Chicken (炸雞排) — topic: snacks
+- Fruit Tea (水果茶) — topic: drinks
+
+**Available Styles:**
+
+| Style ID | Name | Strength | Description |
+|----------|------|----------|-------------|
+| anime | Anime (動漫風格) | 0.65 | Anime illustration style |
+| ghibli | Ghibli (吉卜力風格) | 0.65 | Studio Ghibli / Miyazaki style |
+| cartoon | Cartoon (卡通風格) | 0.60 | Pixar 3D cartoon style |
+| oil_painting | Oil Painting (油畫風格) | 0.70 | Van Gogh oil painting style |
+| watercolor | Watercolor (水彩風格) | 0.65 | Soft watercolor painting style |
+
+**CLI Commands:**
+```bash
+# Generate effect/style transfer materials
+python -m scripts.main_pregenerate --tool effect --limit 15
 ```
 
 ---
@@ -793,11 +857,12 @@ class Settings(BaseSettings):
 
 The **MAPPING System** in `main_pregenerate.py` defines the actual topics stored in the Material DB:
 - `SCRIPT_MAPPING` → AI Avatar topics
-- `BACKGROUND_REMOVAL_MAPPING` → Background Removal topics
+- `BACKGROUND_REMOVAL_MAPPING` → Background Removal topics (food/drink focused)
 - `ROOM_REDESIGN_MAPPING` → Room Redesign styles (stored as topic)
-- `SHORT_VIDEO_MAPPING` → Short Video topics
-- `TRYON_MAPPING` → Try-On clothing categories
+- `SHORT_VIDEO_MAPPING` → Short Video topics (food/drink ads)
+- `TRYON_MAPPING` → Try-On clothing categories (with gender restrictions)
 - `PATTERN_GENERATE_MAPPING` → Pattern Generate styles
+- `EFFECT_MAPPING` → Effect/Style Transfer (source images × art styles)
 
 ### 9.2 Tool-Specific Topics (Active Mappings)
 
@@ -806,14 +871,14 @@ The **MAPPING System** in `main_pregenerate.py` defines the actual topics stored
 
 MATERIAL_TOPICS = {
     ToolType.BACKGROUND_REMOVAL: [
-        {"topic_id": "electronics", "name_en": "Electronics", "name_zh": "電子產品"},
-        {"topic_id": "fashion", "name_en": "Fashion", "name_zh": "時尚服飾"},
-        {"topic_id": "jewelry", "name_en": "Jewelry", "name_zh": "珠寶首飾"},
-        {"topic_id": "food", "name_en": "Food & Beverage", "name_zh": "食品飲料"},
-        {"topic_id": "cosmetics", "name_en": "Cosmetics", "name_zh": "化妝品"},
-        {"topic_id": "furniture", "name_en": "Furniture", "name_zh": "家具"},
-        {"topic_id": "toys", "name_en": "Toys", "name_zh": "玩具"},
-        {"topic_id": "sports", "name_en": "Sports", "name_zh": "運動用品"},
+        {"topic_id": "drinks", "name_en": "Drinks", "name_zh": "飲料"},
+        {"topic_id": "snacks", "name_en": "Snacks", "name_zh": "小吃"},
+        {"topic_id": "desserts", "name_en": "Desserts", "name_zh": "甜點"},
+        {"topic_id": "meals", "name_en": "Meals", "name_zh": "正餐便當"},
+        {"topic_id": "packaging", "name_en": "Packaging", "name_zh": "包裝外帶"},
+        {"topic_id": "equipment", "name_en": "Equipment", "name_zh": "設備器材"},
+        {"topic_id": "signage", "name_en": "Signage", "name_zh": "招牌菜單"},
+        {"topic_id": "ingredients", "name_en": "Ingredients", "name_zh": "食材原料"},
     ],
     ToolType.PRODUCT_SCENE: [
         {"topic_id": "studio", "name_en": "Studio Lighting", "name_zh": "攝影棚"},
@@ -859,6 +924,13 @@ MATERIAL_TOPICS = {
         {"topic_id": "geometric", "name_en": "Geometric Pattern", "name_zh": "幾何圖案"},
         {"topic_id": "abstract", "name_en": "Abstract Pattern", "name_zh": "抽象圖案"},
         {"topic_id": "traditional", "name_en": "Traditional Pattern", "name_zh": "傳統紋樣"},
+    ],
+    ToolType.EFFECT: [
+        {"topic_id": "anime", "name_en": "Anime", "name_zh": "動漫風格"},
+        {"topic_id": "ghibli", "name_en": "Ghibli", "name_zh": "吉卜力風格"},
+        {"topic_id": "cartoon", "name_en": "Cartoon", "name_zh": "卡通風格"},
+        {"topic_id": "oil_painting", "name_en": "Oil Painting", "name_zh": "油畫風格"},
+        {"topic_id": "watercolor", "name_en": "Watercolor", "name_zh": "水彩風格"},
     ],
 }
 ```
@@ -1023,10 +1095,11 @@ async def check_materials_exist(session, category, min_count):
 |----------|-----------|--------|-----------|----------------|
 | landing (video) | SHORT_VIDEO | ecommerce, social, brand, app, promo, service | 6 | 36 (6 topics × 6 examples) |
 | landing (avatar) | AI_AVATAR | ecommerce, social, brand, app, promo, service | 6 | 72 (6 topics × 6 examples × 2 languages) |
-| pattern | BACKGROUND_REMOVAL | electronics, fashion, jewelry, food, cosmetics, furniture, toys, sports | 10 | 80+ |
+| bg_removal | BACKGROUND_REMOVAL | drinks, snacks, desserts, meals, packaging, equipment, signage, ingredients | 10 | 80+ |
 | product | PRODUCT_SCENE | studio, nature, luxury, minimal, lifestyle, urban, seasonal, holiday | 6 | 40 |
 | video | SHORT_VIDEO | product_showcase, brand_story, tutorial, promo | 5 | 10 |
 | avatar | AI_AVATAR | spokesperson, product_intro, customer_service, social_media | 6 | 16 |
+| effect | EFFECT | anime, ghibli, cartoon, oil_painting, watercolor | 5 | 15 (3 sources × 5 styles) |
 
 ### 10.4 Generation Command
 
@@ -1156,6 +1229,6 @@ curl http://localhost:8001/api/v1/demo/presets/short_video
 
 ---
 
-*Document Version: 4.3*
-*Last Updated: January 24, 2026*
+*Document Version: 4.5*
+*Last Updated: February 4, 2026*
 *Mode: Preset-Only (Material DB Lookup, No Runtime API Calls)*

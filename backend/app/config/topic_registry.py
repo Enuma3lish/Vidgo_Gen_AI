@@ -27,6 +27,7 @@ class ToolType(str, Enum):
     SHORT_VIDEO = "short_video"
     AI_AVATAR = "ai_avatar"
     PATTERN_GENERATE = "pattern_generate"
+    EFFECT = "effect"
 
 
 # =============================================================================
@@ -38,14 +39,14 @@ TOOL_TOPICS: Dict[str, List[TopicInfo]] = {
     # Background Removal - Product categories
     # -------------------------------------------------------------------------
     "background_removal": [
-        {"id": "electronics", "name_en": "Electronics", "name_zh": "電子產品"},
-        {"id": "fashion", "name_en": "Fashion", "name_zh": "時尚服飾"},
-        {"id": "jewelry", "name_en": "Jewelry", "name_zh": "珠寶首飾"},
-        {"id": "food", "name_en": "Food & Beverage", "name_zh": "食品飲料"},
-        {"id": "cosmetics", "name_en": "Cosmetics", "name_zh": "化妝品"},
-        {"id": "furniture", "name_en": "Furniture", "name_zh": "家具"},
-        {"id": "toys", "name_en": "Toys", "name_zh": "玩具"},
-        {"id": "sports", "name_en": "Sports", "name_zh": "運動用品"},
+        {"id": "drinks", "name_en": "Drinks", "name_zh": "飲料"},
+        {"id": "snacks", "name_en": "Snacks", "name_zh": "小吃"},
+        {"id": "desserts", "name_en": "Desserts", "name_zh": "甜點"},
+        {"id": "meals", "name_en": "Meals", "name_zh": "正餐便當"},
+        {"id": "packaging", "name_en": "Packaging", "name_zh": "包裝外帶"},
+        {"id": "equipment", "name_en": "Equipment", "name_zh": "設備器材"},
+        {"id": "signage", "name_en": "Signage", "name_zh": "招牌菜單"},
+        {"id": "ingredients", "name_en": "Ingredients", "name_zh": "食材原料"},
     ],
     
     # -------------------------------------------------------------------------
@@ -115,6 +116,17 @@ TOOL_TOPICS: Dict[str, List[TopicInfo]] = {
         {"id": "geometric", "name_en": "Geometric Pattern", "name_zh": "幾何圖案"},
         {"id": "abstract", "name_en": "Abstract Pattern", "name_zh": "抽象圖案"},
         {"id": "traditional", "name_en": "Traditional Pattern", "name_zh": "傳統紋樣"},
+    ],
+
+    # -------------------------------------------------------------------------
+    # Effect (Style Transfer) - Art styles
+    # -------------------------------------------------------------------------
+    "effect": [
+        {"id": "anime", "name_en": "Anime", "name_zh": "動漫風格"},
+        {"id": "ghibli", "name_en": "Ghibli", "name_zh": "吉卜力風格"},
+        {"id": "cartoon", "name_en": "Cartoon", "name_zh": "卡通風格"},
+        {"id": "oil_painting", "name_en": "Oil Painting", "name_zh": "油畫風格"},
+        {"id": "watercolor", "name_en": "Watercolor", "name_zh": "水彩風格"},
     ],
 }
 

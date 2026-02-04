@@ -347,6 +347,124 @@ class PiAPIClient:
             logger.exception(f"[PiAPI] Virtual Try-On exception: {e}")
             return {"success": False, "error": str(e)}
 
+    async def image_to_image(
+        self,
+        image_url: str,
+        prompt: str,
+        strength: float = 0.65,
+        width: int = 1024,
+        height: int = 1024,
+        save_locally: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Image-to-Image style transfer using Flux.
+
+        Used for Effect/Style Transfer: applies an artistic style to an existing image
+        while preserving the subject identity.
+
+        Args:
+            image_url: Source image URL or local path
+            prompt: Style description (e.g., "anime style illustration")
+            strength: How much to change (0.0=no change, 1.0=complete redraw).
+                      Keep 0.6-0.7 for style transfer to preserve product identity.
+            width: Output width (default 1024)
+            height: Output height (default 1024)
+            save_locally: Save to local file (default True)
+
+        Returns:
+            {"success": True, "image_url": str} or {"success": False, "error": str}
+        """
+        if not self.api_key:
+            return {"success": False, "error": "PiAPI key not configured"}
+
+        # Resolve image input (local paths → base64)
+        image_input = self._resolve_image_input(image_url)
+
+        logger.info(f"[PiAPI] I2I Style Transfer: {prompt[:50]}... (strength={strength})")
+
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                input_data = {
+                    "prompt": prompt,
+                    "image": image_input,
+                    "strength": strength,
+                    "width": width,
+                    "height": height,
+                }
+
+                # Create task - using flux1-schnell for img2img
+                response = await client.post(
+                    f"{self.BASE_URL}/task",
+                    headers=self.headers,
+                    json={
+                        "model": "Qubico/flux1-schnell",
+                        "task_type": "img2img",
+                        "input": input_data
+                    }
+                )
+
+                if response.status_code not in [200, 201]:
+                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    logger.error(f"[PiAPI] I2I create task failed: {error}")
+                    return {"success": False, "error": error}
+
+                data = response.json()
+                task_id = data.get("data", {}).get("task_id")
+
+                if not task_id:
+                    logger.error(f"[PiAPI] Response: {data}")
+                    return {"success": False, "error": "No task_id in response"}
+
+                logger.info(f"[PiAPI] I2I task created: {task_id}")
+
+                # Poll for result
+                for attempt in range(90):  # 3 min timeout
+                    await asyncio.sleep(2)
+
+                    status_resp = await client.get(
+                        f"{self.BASE_URL}/task/{task_id}",
+                        headers=self.headers
+                    )
+
+                    if status_resp.status_code != 200:
+                        continue
+
+                    status_data = status_resp.json()
+                    status = status_data.get("data", {}).get("status", "")
+
+                    if status == "completed":
+                        output = status_data.get("data", {}).get("output", {})
+
+                        image_url_result = output.get("image_url")
+                        if not image_url_result:
+                            images = output.get("images", [])
+                            if images:
+                                img = images[0]
+                                image_url_result = img.get("url") if isinstance(img, dict) else img
+
+                        if not image_url_result:
+                            logger.error(f"[PiAPI] I2I output: {output}")
+                            return {"success": False, "error": "No image_url in output"}
+
+                        if save_locally:
+                            local_path = await self._download(client, image_url_result)
+                            if local_path:
+                                logger.info(f"[PiAPI] I2I saved: {local_path}")
+                                return {"success": True, "image_url": local_path}
+
+                        return {"success": True, "image_url": image_url_result}
+
+                    elif status == "failed":
+                        error = status_data.get("data", {}).get("error", "Unknown error")
+                        logger.error(f"[PiAPI] I2I failed: {error}")
+                        return {"success": False, "error": error}
+
+                return {"success": False, "error": "Timeout (3 min)"}
+
+        except Exception as e:
+            logger.exception(f"[PiAPI] I2I exception: {e}")
+            return {"success": False, "error": str(e)}
+
     async def flux_fill(
         self,
         image_url: str,

@@ -3,7 +3,7 @@ Unified Material Model for VidGo Platform
 Based on ARCHITECTURE_FINAL.md specification
 
 Material system for:
-1. Pre-generated seed materials (960 examples across 5 tools)
+1. Pre-generated seed materials (examples across 8 tools)
 2. User-generated content (for approval/featuring)
 3. Admin-curated content
 """
@@ -24,6 +24,7 @@ class ToolType(str, enum.Enum):
     SHORT_VIDEO = "short_video"
     AI_AVATAR = "ai_avatar"  # AI Avatar video generation
     PATTERN_GENERATE = "pattern_generate"  # Pattern design generation
+    EFFECT = "effect"  # Style transfer / artistic effects
 
 
 class MaterialSource(str, enum.Enum):
@@ -262,18 +263,18 @@ class MaterialTopic(Base):
 
 
 # === Topic Configuration (for seed script) ===
-# Based on ARCHITECTURE_FINAL.md: 960 total materials (5 tools × 6-8 topics × 30 each)
+# 8 tools × 4-8 topics each
 
 MATERIAL_TOPICS = {
     ToolType.BACKGROUND_REMOVAL: [
-        {"topic_id": "electronics", "name_en": "Electronics", "name_zh": "電子產品"},
-        {"topic_id": "fashion", "name_en": "Fashion", "name_zh": "時尚服飾"},
-        {"topic_id": "jewelry", "name_en": "Jewelry", "name_zh": "珠寶首飾"},
-        {"topic_id": "food", "name_en": "Food & Beverage", "name_zh": "食品飲料"},
-        {"topic_id": "cosmetics", "name_en": "Cosmetics", "name_zh": "化妝品"},
-        {"topic_id": "furniture", "name_en": "Furniture", "name_zh": "家具"},
-        {"topic_id": "toys", "name_en": "Toys", "name_zh": "玩具"},
-        {"topic_id": "sports", "name_en": "Sports Equipment", "name_zh": "運動器材"},
+        {"topic_id": "drinks", "name_en": "Drinks", "name_zh": "飲料"},
+        {"topic_id": "snacks", "name_en": "Snacks", "name_zh": "小吃"},
+        {"topic_id": "desserts", "name_en": "Desserts", "name_zh": "甜點"},
+        {"topic_id": "meals", "name_en": "Meals", "name_zh": "正餐便當"},
+        {"topic_id": "packaging", "name_en": "Packaging", "name_zh": "包裝外帶"},
+        {"topic_id": "equipment", "name_en": "Equipment", "name_zh": "設備器材"},
+        {"topic_id": "signage", "name_en": "Signage", "name_zh": "招牌菜單"},
+        {"topic_id": "ingredients", "name_en": "Ingredients", "name_zh": "食材原料"},
     ],
     ToolType.PRODUCT_SCENE: [
         {"topic_id": "studio", "name_en": "Studio Lighting", "name_zh": "攝影棚"},
@@ -319,6 +320,13 @@ MATERIAL_TOPICS = {
         {"topic_id": "geometric", "name_en": "Geometric Pattern", "name_zh": "幾何圖案"},
         {"topic_id": "abstract", "name_en": "Abstract Pattern", "name_zh": "抽象圖案"},
         {"topic_id": "traditional", "name_en": "Traditional Pattern", "name_zh": "傳統紋樣"},
+    ],
+    ToolType.EFFECT: [
+        {"topic_id": "anime", "name_en": "Anime", "name_zh": "動漫風格"},
+        {"topic_id": "ghibli", "name_en": "Ghibli", "name_zh": "吉卜力風格"},
+        {"topic_id": "cartoon", "name_en": "Cartoon", "name_zh": "卡通風格"},
+        {"topic_id": "oil_painting", "name_en": "Oil Painting", "name_zh": "油畫風格"},
+        {"topic_id": "watercolor", "name_en": "Watercolor", "name_zh": "水彩風格"},
     ],
 }
 

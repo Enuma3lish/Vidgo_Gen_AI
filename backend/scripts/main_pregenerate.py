@@ -15,7 +15,7 @@ WORKFLOW:
 4. Store results locally first, then batch to DB
 5. Cleanup temp files and print summary
 
-SUPPORTED TOOLS (7 total):
+SUPPORTED TOOLS (8 total):
 ==========================
 - ai_avatar: Avatar × Script × Language → A2E → Video
 - background_removal: Prompt → T2I → Rembg → PNG
@@ -24,10 +24,12 @@ SUPPORTED TOOLS (7 total):
 - product_scene: Product × Scene → T2I → Product in Scene
 - try_on: Model × Clothing (gender restrictions) → T2I → Model wearing Clothing
 - pattern_generate: Style × Prompt → T2I → Seamless Pattern
+- effect: Source Image → T2I → I2I Style Transfer → Styled Image
 
 Usage:
     python -m scripts.main_pregenerate --tool ai_avatar --limit 10
     python -m scripts.main_pregenerate --tool try_on --limit 50
+    python -m scripts.main_pregenerate --tool effect --limit 15
     python -m scripts.main_pregenerate --all --limit 20
     python -m scripts.main_pregenerate --dry-run
 """
@@ -96,27 +98,27 @@ def cleanup_temp_dir():
 # Any avatar can read any script
 AVATAR_MAPPING = {
     "female-1": {
-        "prompt": "Professional portrait of a young Chinese woman, natural makeup, confident smile, studio lighting, headshot",
+        "prompt": "Professional portrait of a young Taiwanese woman, natural makeup, confident smile, studio lighting, headshot",
         "gender": "female",
         "url": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=512"
     },
     "female-2": {
-        "prompt": "Professional portrait of an elegant Asian woman, subtle makeup, warm expression, soft lighting, headshot",
+        "prompt": "Professional portrait of a Chinese woman in her early 30s, elegant makeup, warm expression, soft lighting, headshot",
         "gender": "female",
         "url": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512"
     },
     "female-3": {
-        "prompt": "Professional portrait of a friendly woman, natural look, approachable smile, business style headshot",
+        "prompt": "Professional portrait of a young Chinese woman, professional look, approachable smile, business style headshot",
         "gender": "female",
         "url": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=512"
     },
     "male-1": {
-        "prompt": "Professional portrait of a young Asian man, clean look, confident expression, studio lighting, headshot",
+        "prompt": "Professional portrait of a young Taiwanese man, clean look, confident expression, studio lighting, headshot",
         "gender": "male",
         "url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512"
     },
     "male-2": {
-        "prompt": "Professional portrait of a middle-aged man, business professional, trustworthy expression, corporate headshot",
+        "prompt": "Professional portrait of a Chinese man in his 30s, business professional, trustworthy expression, corporate headshot",
         "gender": "male",
         "url": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=512"
     },
@@ -186,60 +188,60 @@ SCRIPT_MAPPING = {
 # ============================================================================
 
 BACKGROUND_REMOVAL_MAPPING = {
-    "electronics": {
+    "drinks": {
         "prompts": [
-            "Professional product photo of a sleek smartwatch with metallic band on white background, studio lighting, 8K detail",
-            "High-end wireless earbuds in charging case, minimalist white background, commercial photography",
-            "Modern smartphone floating on white background, reflections, product photography"
+            "A cup of bubble milk tea with tapioca pearls on white background, food photography, appetizing, studio lighting",
+            "Fresh fruit tea with lemon and passion fruit in clear cup on white background, drink photography",
+            "Iced coffee latte with cream swirl in transparent cup on white background, beverage product shot"
         ]
     },
-    "fashion": {
+    "snacks": {
         "prompts": [
-            "Designer sneakers on white background, studio lighting, fashion product photography",
-            "Luxury leather handbag on white background, soft shadows, commercial quality",
-            "Elegant high-heel shoes on white background, fashion editorial style"
+            "Crispy fried chicken cutlet on white background, Taiwanese street food, appetizing food photography",
+            "Grilled squid skewer on white background, night market snack, food product shot",
+            "Scallion pancake on white background, golden crispy, traditional Taiwanese snack photography"
         ]
     },
-    "jewelry": {
+    "desserts": {
         "prompts": [
-            "Diamond engagement ring on white background, macro photography, sparkling reflections",
-            "Gold necklace with pendant on white background, luxury jewelry photography",
-            "Pearl earrings on white background, soft lighting, elegant product shot"
+            "Mango shaved ice dessert on white background, colorful toppings, food photography",
+            "Egg tart pastry on white background, golden crust, bakery product photography",
+            "Pineapple cake on white background, traditional Taiwanese pastry, product shot"
         ]
     },
-    "food": {
+    "meals": {
         "prompts": [
-            "Gourmet chocolate truffle on white background, food photography, appetizing",
-            "Premium coffee beans scattered on white background, artisan quality",
-            "Fresh organic fruit on white background, vibrant colors"
+            "Braised pork rice bento box on white background, Taiwanese comfort food, appetizing",
+            "Beef noodle soup bowl on white background, food photography, steaming hot",
+            "Fried rice plate on white background, Chinese restaurant style, food product shot"
         ]
     },
-    "cosmetics": {
+    "packaging": {
         "prompts": [
-            "Luxury lipstick on white background, beauty product photography, glossy finish",
-            "Perfume bottle on white background, elegant lighting, premium product shot",
-            "Skincare cream jar on white background, clean aesthetic"
+            "Takeout paper bag with logo on white background, food delivery packaging, product shot",
+            "Eco-friendly drink cup with straw on white background, beverage packaging photography",
+            "Food container lunch box on white background, takeout packaging, clean product photo"
         ]
     },
-    "furniture": {
+    "equipment": {
         "prompts": [
-            "Modern minimalist chair on white background, furniture catalog style",
-            "Elegant table lamp on white background, interior design photography",
-            "Designer vase on white background, home decor product shot"
+            "Bubble tea sealing machine on white background, drink shop equipment, product photography",
+            "Commercial blender on white background, restaurant kitchen equipment, clean product shot",
+            "Point of sale tablet register on white background, shop equipment photography"
         ]
     },
-    "toys": {
+    "signage": {
         "prompts": [
-            "Colorful children's toy on white background, playful, bright colors",
-            "Educational wooden blocks on white background, kids product photography",
-            "Plush teddy bear on white background, soft toy product shot"
+            "LED menu board display on white background, restaurant signage, product photography",
+            "Wooden A-frame chalkboard sign on white background, cafe menu board, product shot",
+            "Neon open sign on white background, shop signage, glowing product photography"
         ]
     },
-    "sports": {
+    "ingredients": {
         "prompts": [
-            "Professional tennis racket on white background, sports equipment photography",
-            "Running shoes on white background, athletic product shot, dynamic",
-            "Yoga mat rolled on white background, fitness product photography"
+            "Fresh tapioca pearls in bowl on white background, bubble tea ingredient, food photography",
+            "Assorted tea leaves in wooden scoop on white background, premium tea ingredient",
+            "Fresh fruits arranged on white background, mango strawberry kiwi, food ingredient shot"
         ]
     }
 }
@@ -318,29 +320,29 @@ ROOM_REDESIGN_MAPPING = {
 PRODUCT_SCENE_MAPPING = {
     "products": {
         "product-1": {
-            "name": "Watch",
-            "name_zh": "手錶",
-            "url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800"
+            "name": "Bubble Tea",
+            "name_zh": "珍珠奶茶",
+            "url": "https://images.unsplash.com/photo-1558857563-b371033873b8?w=800"
         },
         "product-2": {
-            "name": "Headphones",
-            "name_zh": "耳機",
-            "url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800"
+            "name": "Fried Chicken",
+            "name_zh": "炸雞排",
+            "url": "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=800"
         },
         "product-3": {
-            "name": "Sneaker",
-            "name_zh": "運動鞋",
-            "url": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800"
+            "name": "Cake Slice",
+            "name_zh": "蛋糕",
+            "url": "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800"
         },
         "product-4": {
-            "name": "Camera",
-            "name_zh": "相機",
-            "url": "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800"
+            "name": "Bento Box",
+            "name_zh": "便當",
+            "url": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=800"
         },
         "product-5": {
-            "name": "Perfume",
-            "name_zh": "香水",
-            "url": "https://images.unsplash.com/photo-1541643600914-78b084683601?w=800"
+            "name": "Fruit Tea",
+            "name_zh": "水果茶",
+            "url": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=800"
         }
     },
     "scenes": {
@@ -355,9 +357,9 @@ PRODUCT_SCENE_MAPPING = {
             "prompt": "outdoor nature setting, sunlight, leaves, natural environment"
         },
         "luxury": {
-            "name": "Luxury",
-            "name_zh": "奢華",
-            "prompt": "luxury marble background, elegant lighting, premium feeling"
+            "name": "Premium",
+            "name_zh": "質感",
+            "prompt": "premium elegant background, warm lighting, sophisticated atmosphere"
         },
         "minimal": {
             "name": "Minimal",
@@ -401,16 +403,16 @@ SHORT_VIDEO_MAPPING = {
         "name_zh": "產品展示",
         "prompts": [
             {
-                "en": "Cinematic product showcase, luxury watch rotating slowly, golden hour lighting, 4K quality, smooth natural motion",
-                "zh": "電影級產品展示，奢華手錶緩慢旋轉，黃金時刻光線，4K品質，流暢自然動態"
+                "en": "Cinematic close-up of bubble milk tea being poured, tapioca pearls swirling, appetizing, 4K quality",
+                "zh": "電影級珍珠奶茶沖泡特寫，珍珠旋轉，令人垂涎，4K品質"
             },
             {
-                "en": "Premium cosmetics product video, beauty items arranged artistically, soft lighting, natural movement",
-                "zh": "高級化妝品產品影片，美妝產品藝術陳列，柔和光線，自然動態"
+                "en": "Fresh fried chicken cutlet being sliced open, steam rising, crispy golden crust, food commercial",
+                "zh": "新鮮炸雞排切開特寫，蒸氣上升，金黃酥脆外皮，美食廣告"
             },
             {
-                "en": "Elegant jewelry close-up, diamond ring sparkling, gradual zoom revealing intricate details, luxury commercial",
-                "zh": "優雅珠寶特寫，鑽戒閃耀，逐漸放大展現精緻細節，奢華廣告"
+                "en": "Colorful fruit tea with ice cubes and fresh fruits, condensation drops on cup, refreshing drink ad",
+                "zh": "色彩繽紛水果茶加冰塊和新鮮水果，杯身水珠，清涼飲料廣告"
             }
         ]
     },
@@ -419,16 +421,16 @@ SHORT_VIDEO_MAPPING = {
         "name_zh": "品牌介紹",
         "prompts": [
             {
-                "en": "Fashion model full reveal, starting from elegant shoes, pulling back to show complete outfit, runway style",
-                "zh": "時尚模特全身展示，從優雅鞋履開始，拉遠展示完整穿搭，走秀風格"
+                "en": "Cozy drink shop interior, barista preparing beverage behind counter, warm lighting, brand story",
+                "zh": "溫馨飲料店內景，店員在吧台準備飲品，溫暖光線，品牌故事"
             },
             {
-                "en": "Interior design showcase, room reveal from furniture detail to full space, architectural video",
-                "zh": "室內設計展示，從家具細節到完整空間的房間呈現，建築影片"
+                "en": "Night market food stall, chef cooking with wok fire, authentic street food atmosphere, brand video",
+                "zh": "夜市小吃攤，廚師鍋火翻炒，道地街頭美食氛圍，品牌影片"
             },
             {
-                "en": "Artisan craftsman workshop, handcrafted products being made, authentic brand storytelling",
-                "zh": "工匠工作室，手工製品製作過程，品牌故事傳遞"
+                "en": "Small bakery kitchen, fresh bread coming out of oven, artisan craftsmanship, warm atmosphere",
+                "zh": "小型烘焙廚房，新鮮麵包出爐，手工匠心，溫暖氛圍"
             }
         ]
     },
@@ -437,16 +439,16 @@ SHORT_VIDEO_MAPPING = {
         "name_zh": "教學影片",
         "prompts": [
             {
-                "en": "Step by step product usage demonstration, clear close-up shots, educational content style",
-                "zh": "產品使用步驟教學，清晰特寫鏡頭，教育內容風格"
+                "en": "Step by step bubble tea preparation, adding tapioca and milk, clear instruction video style",
+                "zh": "珍珠奶茶製作步驟，加入珍珠和牛奶，清晰教學影片風格"
             },
             {
-                "en": "Skincare routine display, bottles arranged in sequence, camera panning through products, beauty tutorial video",
-                "zh": "護膚流程展示，瓶瓶罐罐依序排列，鏡頭平移穿過產品，美妝教學影片"
+                "en": "Cooking tutorial, stir frying noodles in wok, step by step food preparation video",
+                "zh": "烹飪教學，鍋中翻炒麵條，步驟式食物準備影片"
             },
             {
-                "en": "Gourmet food preparation, delicious dish being cooked, step by step cooking tutorial",
-                "zh": "美食準備過程，美味料理烹飪中，步驟式烹飪教學"
+                "en": "Cake decorating tutorial, piping cream on dessert, close-up bakery tutorial video",
+                "zh": "蛋糕裝飾教學，在甜點上擠奶油，特寫烘焙教學影片"
             }
         ]
     },
@@ -455,16 +457,16 @@ SHORT_VIDEO_MAPPING = {
         "name_zh": "促銷廣告",
         "prompts": [
             {
-                "en": "Flash sale countdown, exciting discount graphics, festive atmosphere, limited time offer",
-                "zh": "限時特賣倒計時，精彩折扣圖形，節慶氛圍，限時優惠"
+                "en": "Buy one get one free drink promotion, two cups of colorful beverages, festive discount graphics",
+                "zh": "買一送一飲料促銷，兩杯色彩繽紛飲品，節慶折扣圖形"
             },
             {
-                "en": "New product launch, dramatic reveal with spotlight, anticipation building",
-                "zh": "新品發布，聚光燈下的戲劇性揭幕，期待感營造"
+                "en": "New menu item launch, delicious food reveal with spotlight, appetizing anticipation",
+                "zh": "新菜單品項上市，聚光燈下美食揭幕，令人期待的美味"
             },
             {
-                "en": "Seasonal campaign, holiday themed decorations, warm festive mood, special offers",
-                "zh": "季節性活動，節日主題裝飾，溫暖節慶氛圍，特別優惠"
+                "en": "Summer special cold drinks promotion, ice and fruits splashing, refreshing seasonal offer",
+                "zh": "夏季特飲促銷，冰塊和水果飛濺，清涼季節性優惠"
             }
         ]
     }
@@ -593,7 +595,7 @@ TRYON_MAPPING = {
                 "prompt": "elegant silk scarf, fashion accessory",
                 "clothing_type": "general",
                 "image_url": "https://images.unsplash.com/photo-1584030373081-f37b7bb4fa8e?w=400",
-                "gender_restriction": None
+                "gender_restriction": "female"  # Female-only item
             }
         ],
         "sportswear": [
@@ -673,7 +675,7 @@ TRYON_MAPPING = {
                 "prompt": "elegant blouse, casual chic style",
                 "clothing_type": "general",
                 "image_url": "https://images.unsplash.com/photo-1564257631407-4deb1f99d992?w=400",
-                "gender_restriction": None
+                "gender_restriction": "female"  # Female-only item
             }
         ]
     }
@@ -761,6 +763,68 @@ PATTERN_GENERATE_MAPPING = {
 
 
 # ============================================================================
+# EFFECT (STYLE TRANSFER) MAPPING
+# ============================================================================
+
+# Effect examples: T2I source image -> I2I style transfer -> styled result
+# IMPORTANT: Style prompts ONLY describe style, NOT products, to preserve product identity
+EFFECT_MAPPING = {
+    "source_images": [
+        {
+            "name": "Bubble Tea",
+            "name_zh": "珍珠奶茶",
+            "prompt": "A cup of bubble milk tea with tapioca pearls, appetizing food photography, studio lighting, white background",
+            "topic": "drinks"
+        },
+        {
+            "name": "Fried Chicken",
+            "name_zh": "炸雞排",
+            "prompt": "Crispy fried chicken cutlet on a plate, Taiwanese street food photography, studio lighting",
+            "topic": "snacks"
+        },
+        {
+            "name": "Fruit Tea",
+            "name_zh": "水果茶",
+            "prompt": "Colorful fresh fruit tea in clear cup with ice, refreshing drink photography, studio lighting",
+            "topic": "drinks"
+        }
+    ],
+    "styles": {
+        "anime": {
+            "name": "Anime",
+            "name_zh": "動漫風格",
+            "prompt": "anime style illustration",
+            "strength": 0.65
+        },
+        "ghibli": {
+            "name": "Ghibli",
+            "name_zh": "吉卜力風格",
+            "prompt": "studio ghibli anime style, hayao miyazaki",
+            "strength": 0.65
+        },
+        "cartoon": {
+            "name": "Cartoon",
+            "name_zh": "卡通風格",
+            "prompt": "cartoon pixar 3d animation style",
+            "strength": 0.60
+        },
+        "oil_painting": {
+            "name": "Oil Painting",
+            "name_zh": "油畫風格",
+            "prompt": "oil painting artistic van gogh style",
+            "strength": 0.70
+        },
+        "watercolor": {
+            "name": "Watercolor",
+            "name_zh": "水彩風格",
+            "prompt": "watercolor painting soft artistic style",
+            "strength": 0.65
+        }
+    }
+}
+
+
+# ============================================================================
 # MAIN GENERATOR CLASS
 # ============================================================================
 
@@ -768,7 +832,7 @@ class VidGoPreGenerator:
     """
     Unified VidGo Pre-generation Pipeline.
 
-    Supports all 7 tools with mapping-based approach:
+    Supports all 8 tools with mapping-based approach:
     - ai_avatar
     - background_removal
     - room_redesign
@@ -904,39 +968,17 @@ class VidGoPreGenerator:
 
                     script_text = script["text_zh"] if language == "zh-TW" else script["text_en"]
 
-                    logger.info(f"[{count+1}] Character: {char.get('name')} | Topic: {topic} | Script: {script['id']} | Lang: {language}")
-                    logger.info(f"  Script: {script_text[:40]}...")
-
-                    start_time = time.time()
-
-                    # Call A2E API with the character's anchor_id
-                    result = await self.a2e.generate_avatar(
-                        script=script_text,
-                        language=language,
-                        anchor_id=anchor_id,
-                        save_locally=True
-                    )
-
-                    if not result["success"]:
-                        logger.error(f"  Failed: {result.get('error', 'Unknown')}")
-                        self.stats["failed"] += 1
-                        self.stats["by_tool"]["ai_avatar"]["failed"] += 1
-                        count += 1
-                        continue
-
-                    # Determine avatar gender from A2E character name or default to alternating
-                    # Map A2E characters to frontend avatar IDs (female-1, male-1, etc.)
+                    # Determine avatar gender BEFORE API call so we can pass it
+                    # for gender-matched TTS voice selection
                     # Common Chinese first names for gender detection (華人常見名字)
                     FEMALE_NAMES = [
                         "女", "female", "woman", "girl",
-                        # 常見女性名字
                         "怡君", "雅婷", "佳穎", "淑芬", "美玲", "雅琪", "怡萱", "欣怡", "雯婷", "筱涵",
                         "小美", "小雅", "小玲", "小萱", "小婷", "小芬", "小琪", "小涵", "小敏", "小慧",
                         "詩涵", "宜蓁", "心怡", "佳慧", "婉婷", "靜怡", "雅文", "思穎", "珮瑜", "曉雯",
                     ]
                     MALE_NAMES = [
                         "男", "male", "man", "guy",
-                        # 常見男性名字
                         "志偉", "冠宇", "宗翰", "家豪", "承恩", "柏翰", "宇軒", "俊宏", "建宏", "明哲",
                         "建明", "俊傑", "志豪", "冠廷", "柏均", "彥廷", "育成", "嘉偉", "信宏", "政翰",
                         "小明", "小偉", "小豪", "小杰", "小軒", "小翰", "小宏", "小凱", "小龍", "小剛",
@@ -949,6 +991,27 @@ class VidGoPreGenerator:
                     else:
                         # Default alternating based on index
                         avatar_gender = "female" if char_index % 2 == 0 else "male"
+
+                    logger.info(f"[{count+1}] Character: {char.get('name')} (gender={avatar_gender}) | Topic: {topic} | Script: {script['id']} | Lang: {language}")
+                    logger.info(f"  Script: {script_text[:40]}...")
+
+                    start_time = time.time()
+
+                    # Call A2E API with gender for voice matching
+                    result = await self.a2e.generate_avatar(
+                        script=script_text,
+                        language=language,
+                        anchor_id=anchor_id,
+                        gender=avatar_gender,  # Pass gender for TTS voice matching
+                        save_locally=True
+                    )
+
+                    if not result["success"]:
+                        logger.error(f"  Failed: {result.get('error', 'Unknown')}")
+                        self.stats["failed"] += 1
+                        self.stats["by_tool"]["ai_avatar"]["failed"] += 1
+                        count += 1
+                        continue
                     
                     # Generate frontend-compatible avatar_id
                     gender_count = sum(1 for e in self.local_results.get("ai_avatar", []) 
@@ -956,13 +1019,19 @@ class VidGoPreGenerator:
                     frontend_avatar_id = f"{avatar_gender}-{min(gender_count, 3)}"  # female-1, male-1, etc.
                     
                     # Store locally - input_image_url matches the character used
+                    # Ensure input_image_url is not empty (5C: avatar image consistency)
+                    avatar_input_image = result.get("input_image_url") or input_image_url
+                    if not avatar_input_image:
+                        avatar_input_image = char.get("avatar") or char.get("video_cover") or ""
+                        logger.warning("  No input_image_url for avatar, using character thumbnail")
+
                     local_entry = {
                         "avatar_id": anchor_id,
                         "script_id": script["id"],
                         "topic": topic,
                         "language": language,
                         "prompt": script_text,
-                        "input_image_url": result.get("input_image_url") or input_image_url,
+                        "input_image_url": avatar_input_image,
                         "result_video_url": result["video_url"],
                         "input_params": {
                             "anchor_id": anchor_id,
@@ -1491,10 +1560,13 @@ class VidGoPreGenerator:
                     if count >= limit:
                         break
 
-                    # Check gender restriction
+                    # Check gender restriction:
+                    # - Male models skip female-only items
+                    # - Female models can wear ALL items (no restriction)
                     gender_restriction = cloth.get("gender_restriction")
-                    if gender_restriction and model_data["gender"] != gender_restriction:
-                        logger.info(f"  Skipping: {cloth['name']} is {gender_restriction}-only, model is {model_data['gender']}")
+                    model_gender = model_data["gender"]
+                    if model_gender == "male" and gender_restriction == "female":
+                        logger.info(f"  Skipping: {cloth['name']} is female-only, model is male")
                         continue
 
                     logger.info(f"[{count+1}] Model: {model_id} ({model_data['gender']}) -> Clothing: {cloth['name']} (Topic: {topic})")
@@ -1518,17 +1590,11 @@ class VidGoPreGenerator:
 
                     if not tryon_result.get("success"):
                         logger.error(f"  Try-On Failed: {tryon_result.get('error')}")
-                        # Fallback to T2I if Try-On API fails
-                        logger.info("  Falling back to T2I generation...")
-                        prompt = f"Professional fashion photography of a {model_data['gender']} model wearing {cloth['prompt']}, studio lighting, full body shot, high quality, 8K"
-                        tryon_result = await self.piapi.generate_image(prompt=prompt)
-
-                        if not tryon_result.get("success"):
-                            logger.error(f"  Fallback T2I also failed: {tryon_result.get('error')}")
-                            self.stats["failed"] += 1
-                            self.stats["by_tool"]["try_on"]["failed"] += 1
-                            count += 1
-                            continue
+                        logger.warning("  Kling AI unavailable, skipping this combination (no fallback to preserve person identity)")
+                        self.stats["failed"] += 1
+                        self.stats["by_tool"]["try_on"]["failed"] += 1
+                        count += 1
+                        continue
 
                     # Extract result image URL
                     result_url = tryon_result.get("image_url") or tryon_result.get("output", {}).get("image_url")
@@ -1639,6 +1705,120 @@ class VidGoPreGenerator:
                 await asyncio.sleep(1)
 
         await self._store_local_to_db("pattern_generate")
+
+    # ========================================================================
+    # EFFECT (STYLE TRANSFER) GENERATOR
+    # ========================================================================
+
+    async def generate_effect(self, limit: int = 10):
+        """
+        Generate Effect (Style Transfer) examples.
+
+        Flow: T2I (source image) → I2I (style transfer) → Styled result
+        Ensures input product = output product (same item, different style)
+
+        IMPORTANT:
+        - Style prompts ONLY describe the art style, NOT the product
+        - I2I strength is kept at 0.6-0.7 to preserve product identity
+        - If strength is too high (>0.8), the product may change
+        """
+        logger.info("=" * 60)
+        logger.info("EFFECT - T2I + I2I Style Transfer")
+        logger.info("=" * 60)
+
+        self.stats["by_tool"]["effect"] = {"success": 0, "failed": 0}
+        self.local_results["effect"] = []
+        count = 0
+
+        source_images = EFFECT_MAPPING["source_images"]
+        styles = EFFECT_MAPPING["styles"]
+
+        for source in source_images:
+            if count >= limit:
+                break
+
+            # Step 1: Generate source image with T2I
+            logger.info(f"[{count+1}] Source: {source['name']} ({source['name_zh']})")
+            logger.info(f"  Generating source image...")
+
+            t2i = await self.piapi.generate_image(
+                prompt=source["prompt"],
+                width=1024,
+                height=1024
+            )
+
+            if not t2i["success"]:
+                logger.error(f"  T2I Failed: {t2i.get('error')}")
+                self.stats["failed"] += 1
+                self.stats["by_tool"]["effect"]["failed"] += 1
+                count += 1
+                continue
+
+            source_image_url = t2i["image_url"]
+            logger.info(f"  Source image: {source_image_url}")
+
+            # Step 2: Apply each style via I2I
+            for style_id, style_data in styles.items():
+                if count >= limit:
+                    break
+
+                logger.info(f"  Applying style: {style_data['name']} ({style_id})")
+
+                # I2I style transfer - style prompt only describes art style
+                i2i_result = await self.piapi.image_to_image(
+                    image_url=source_image_url,
+                    prompt=style_data["prompt"],
+                    strength=style_data.get("strength", 0.65)
+                )
+
+                if not i2i_result.get("success"):
+                    logger.error(f"  I2I Failed: {i2i_result.get('error')}")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["effect"]["failed"] += 1
+                    count += 1
+                    continue
+
+                result_url = i2i_result.get("image_url") or i2i_result.get("output", {}).get("image_url")
+                if not result_url:
+                    images = i2i_result.get("output", {}).get("images", [])
+                    if images:
+                        result_url = images[0].get("url") if isinstance(images[0], dict) else images[0]
+
+                if not result_url:
+                    logger.error("  No result URL in I2I response")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["effect"]["failed"] += 1
+                    count += 1
+                    continue
+
+                local_entry = {
+                    "topic": style_id,
+                    "prompt": f"{source['name']} - {style_data['name']} style",
+                    "prompt_zh": f"{source['name_zh']} - {style_data['name_zh']}",
+                    "input_image_url": source_image_url,  # Original product photo
+                    "result_image_url": result_url,  # Styled version (same product)
+                    "input_params": {
+                        "source_name": source["name"],
+                        "style_id": style_id,
+                        "style_name": style_data["name"],
+                        "strength": style_data.get("strength", 0.65)
+                    },
+                    "generation_steps": [
+                        {"step": 1, "api": "piapi", "action": "t2i", "result_url": source_image_url},
+                        {"step": 2, "api": "piapi", "action": "i2i_style", "result_url": result_url}
+                    ],
+                    "style_tags": [style_id, "effect", "style_transfer"],
+                    "generation_cost": 0.01  # T2I + I2I cost
+                }
+                self.local_results["effect"].append(local_entry)
+
+                logger.info(f"  Success: {result_url}")
+                self.stats["success"] += 1
+                self.stats["by_tool"]["effect"]["success"] += 1
+                count += 1
+                await asyncio.sleep(2)
+
+        await self._store_local_to_db("effect")
 
     # ========================================================================
     # MODEL LIBRARY GENERATOR (NEW)
@@ -1862,7 +2042,8 @@ class VidGoPreGenerator:
             "short_video": ToolType.SHORT_VIDEO,
             "product_scene": ToolType.PRODUCT_SCENE,
             "try_on": ToolType.TRY_ON,
-            "pattern_generate": ToolType.PATTERN_GENERATE
+            "pattern_generate": ToolType.PATTERN_GENERATE,
+            "effect": ToolType.EFFECT,
         }
 
         if tool_name not in self.local_results:
@@ -1965,7 +2146,7 @@ class VidGoPreGenerator:
             logger.info("Available tools:")
             for t in ["ai_avatar", "background_removal", "room_redesign",
                       "short_video", "product_scene", "try_on", "pattern_generate",
-                      "model_library"]:
+                      "effect", "model_library"]:
                 logger.info(f"  - {t}")
             logger.info("\nModel Library Status:")
             logger.info(f"  Generated models: {len(GENERATED_MODEL_LIBRARY)}")
@@ -1977,7 +2158,7 @@ class VidGoPreGenerator:
 
         # Tool mapping
         tools = {
-            "model_library": self.generate_model_library,  # NEW: Run first to generate models
+            "model_library": self.generate_model_library,  # Run first to generate models
             "ai_avatar": self.generate_ai_avatar,
             "background_removal": self.generate_background_removal,
             "room_redesign": self.generate_room_redesign,
@@ -1985,6 +2166,7 @@ class VidGoPreGenerator:
             "product_scene": self.generate_product_scene,
             "try_on": self.generate_try_on,
             "pattern_generate": self.generate_pattern,
+            "effect": self.generate_effect,
         }
 
         if tool:
@@ -2041,7 +2223,7 @@ Examples:
     python -m scripts.main_pregenerate --dry-run
 
 Available tools:
-    model_library      - Generate full-body model photos for try-on (NEW)
+    model_library      - Generate full-body model photos for try-on
     ai_avatar          - AI Avatar videos (avatar × script × language)
     background_removal - Background removal (T2I → rembg)
     room_redesign      - Room redesign (room × style)
@@ -2049,6 +2231,7 @@ Available tools:
     product_scene      - Product scenes (product × scene)
     try_on             - Virtual try-on (model × clothing) - uses model_library
     pattern_generate   - Pattern designs (style × prompt)
+    effect             - Style transfer (T2I → I2I artistic style)
 
 Workflow for Virtual Try-On:
     1. First run: python -m scripts.main_pregenerate --tool model_library

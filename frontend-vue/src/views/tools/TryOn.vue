@@ -21,7 +21,9 @@ const {
   canUseCustomInputs,
   loadDemoTemplates,
   demoTemplates,
-  isLoadingTemplates
+  isLoadingTemplates,
+  tryPrompts,
+  dbEmpty
 } = useDemoMode()
 
 // State
@@ -32,13 +34,14 @@ const resultImage = ref<string | null>(null)
 const isProcessing = ref(false)
 const selectedModel = ref('female-1')
 
-// Default model options (5 models for demo users)
+// Default model options (6 models matching backend generate_model_library() naming)
 const modelOptions = ref([
   { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: '/static/models/female/female-1.png' },
   { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: '/static/models/female/female-2.png' },
   { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: '/static/models/female/female-3.png' },
   { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: '/static/models/male/male-1.png' },
-  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: '/static/models/male/male-2.png' }
+  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: '/static/models/male/male-2.png' },
+  { id: 'male-3', name: 'Male Model 3', name_zh: '男模特 3', preview: '/static/models/male/male-3.png' }
 ])
 
 // Clothing types that are restricted for male models
@@ -97,10 +100,28 @@ const demoClothingItems = computed(() => {
   return Array.from(clothingMap.values())
 })
 
+// Fallback clothing items from try_prompts (when DB is empty)
+const fallbackClothingItems = computed(() => {
+  if (!dbEmpty.value || tryPrompts.value.length === 0) return []
+  return tryPrompts.value.map((p: any) => ({
+    id: p.id,
+    name: p.prompt,
+    preview: p.image_url || '',
+    clothingType: p.clothing_type || 'general',
+    genderRestriction: null
+  }))
+})
+
+// Display items: use DB items if available, otherwise fallback from try_prompts
+const displayClothingItems = computed(() => {
+  if (demoClothingItems.value.length > 0) return demoClothingItems.value
+  return fallbackClothingItems.value
+})
+
 // Get selected clothing type
 const selectedClothingType = computed(() => {
   if (!selectedClothingId.value) return null
-  const item = demoClothingItems.value.find(c => c.id === selectedClothingId.value)
+  const item = displayClothingItems.value.find(c => c.id === selectedClothingId.value)
   return item?.clothingType || 'general'
 })
 
@@ -169,7 +190,11 @@ async function generateTryOn() {
       }
 
       // No pre-generated result available
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      if (dbEmpty.value) {
+        uiStore.showInfo(isZh.value ? '預覽模式：此服裝尚未生成試穿結果，訂閱以使用完整功能' : 'Preview mode: Try-on results not yet generated. Subscribe for full features.')
+      } else {
+        uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      }
       return
     }
 
@@ -271,8 +296,29 @@ function dataURItoBlob(dataURI: string): Blob {
             {{ isZh ? '選擇服裝' : 'Select Clothing' }}
           </h3>
 
+          <!-- DB Empty Info Banner (prominent preview mode notice) -->
+          <div v-if="dbEmpty" class="mb-4 p-4 bg-amber-500/15 border border-amber-500/40 rounded-lg">
+            <div class="flex items-start gap-3">
+              <span class="text-amber-400 text-lg mt-0.5">&#x1F441;</span>
+              <div>
+                <p class="text-sm font-medium text-amber-300 mb-1">
+                  {{ isZh ? '預覽模式' : 'Preview Mode' }}
+                </p>
+                <p class="text-xs text-amber-400/80 mb-2">
+                  {{ isZh ? '目前僅供瀏覽服裝款式，訂閱後即可使用完整虛擬試穿功能' : 'Currently for browsing only. Subscribe to unlock full virtual try-on.' }}
+                </p>
+                <RouterLink to="/pricing" class="inline-flex items-center gap-1 text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors">
+                  {{ isZh ? '立即訂閱' : 'Subscribe Now' }}
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                </RouterLink>
+              </div>
+            </div>
+          </div>
+
           <!-- Demo Clothing Items -->
-          <div v-if="isDemoUser || demoClothingItems.length > 0" class="mb-4">
+          <div v-if="isDemoUser || displayClothingItems.length > 0" class="mb-4">
             <p class="text-sm text-gray-400 mb-3">
               {{ isZh ? '預設服裝（示範）' : 'Preset Clothing (Demo)' }}
             </p>
@@ -281,7 +327,7 @@ function dataURItoBlob(dataURI: string): Blob {
             </div>
             <div v-else class="grid grid-cols-2 gap-2">
               <button
-                v-for="item in demoClothingItems"
+                v-for="item in displayClothingItems"
                 :key="item.id"
                 @click="selectDemoClothing(item)"
                 class="aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all"
@@ -386,12 +432,15 @@ function dataURItoBlob(dataURI: string): Blob {
 
             <button
               @click="generateTryOn"
-              :disabled="(!clothingImage && !selectedClothingId) || isProcessing || !isValidCombination"
+              :disabled="(!clothingImage && !selectedClothingId) || isProcessing || !isValidCombination || dbEmpty"
               class="btn-primary w-full mt-4"
-              :class="{ 'opacity-50 cursor-not-allowed': !isValidCombination }"
+              :class="{ 'opacity-50 cursor-not-allowed': !isValidCombination || dbEmpty }"
             >
-              {{ t('common.generate') }}
+              {{ dbEmpty ? (isZh ? '預覽模式' : 'Preview Mode') : t('common.generate') }}
             </button>
+            <p v-if="dbEmpty" class="text-xs text-gray-500 text-center mt-2">
+              {{ isZh ? '訂閱後即可生成試穿結果' : 'Subscribe to generate try-on results' }}
+            </p>
           </div>
         </div>
 

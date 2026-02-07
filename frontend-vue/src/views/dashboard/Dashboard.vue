@@ -113,11 +113,16 @@ onMounted(async () => {
 
       <!-- Recent Works -->
       <div>
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
           <h2 class="text-xl font-bold text-white">{{ t('dashboard.recentWorks') }}</h2>
-          <RouterLink to="/dashboard/my-works" class="text-primary-400 hover:text-primary-300 text-sm font-medium">
-            {{ t('dashboard.viewAll') }} →
-          </RouterLink>
+          <div class="flex items-center gap-4">
+            <RouterLink to="/dashboard/my-works" class="text-primary-400 hover:text-primary-300 text-sm font-medium">
+              {{ t('dashboard.viewAll') }} →
+            </RouterLink>
+            <RouterLink to="/dashboard/invoices" class="text-primary-400 hover:text-primary-300 text-sm font-medium">
+              {{ t('dashboard.invoices', 'Invoices') }} →
+            </RouterLink>
+          </div>
         </div>
 
         <div v-if="recentWorks.length > 0" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

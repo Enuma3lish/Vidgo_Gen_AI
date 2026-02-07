@@ -3,10 +3,16 @@ set -e
 
 echo "========================================"
 echo "VidGo Backend Docker Entrypoint"
-echo "PRESET-ONLY Mode Initialization"
 echo "========================================"
 echo "Time: $(date)"
 echo ""
+
+SKIP_MATERIAL_CHECK=${SKIP_MATERIAL_CHECK:-false}
+MATERIAL_CHECK_TIMEOUT=${MATERIAL_CHECK_TIMEOUT:-10800}
+MATERIAL_CHECK_INTERVAL=${MATERIAL_CHECK_INTERVAL:-30}
+# Set CLEAN_MATERIALS to a tool name (e.g., "ai_avatar") to delete and re-seed that tool
+# Set CLEAN_MATERIALS=all to clean ALL tools before re-seeding
+CLEAN_MATERIALS=${CLEAN_MATERIALS:-}
 
 # ============================================
 # STEP 1: Wait for Dependencies
@@ -36,96 +42,91 @@ echo "  Database migrations complete!"
 echo ""
 
 # ============================================
-# STEP 3: Seed Service Pricing (Required)
+# STEP 3: Seed Service Pricing
 # ============================================
 echo "Step 4: Seeding service pricing..."
 python -m scripts.seed_service_pricing 2>/dev/null || echo "  (Pricing already seeded or skipped)"
 echo ""
 
 # ============================================
-# STEP 4: Pre-generation Pipeline
+# STEP 4: Clean Materials (if CLEAN_MATERIALS is set)
 # ============================================
-echo "Step 5: Running pre-generation pipeline..."
-echo "        (This generates demo materials using AI APIs)"
-echo "        Services: PiAPI (T2I), Pollo (Video), A2E (Avatar), rembg (BG removal - FREE)"
-echo ""
-
-# Check if pre-generation should run
-SKIP_PREGENERATION=${SKIP_PREGENERATION:-false}
-PREGENERATION_LIMIT=${PREGENERATION_LIMIT:-10}
-PREGENERATION_TIMEOUT=${PREGENERATION_TIMEOUT:-300}  # 5 minutes default
-
-if [ "$SKIP_PREGENERATION" = "true" ]; then
-    echo "  Skipping pre-generation (SKIP_PREGENERATION=true)"
-else
-    echo "  Timeout: ${PREGENERATION_TIMEOUT}s (set PREGENERATION_TIMEOUT to change)"
-    echo "  Limit: ${PREGENERATION_LIMIT} materials per tool"
-    echo ""
-
-    # Run pre-generation with timeout to prevent blocking forever
-    # Use timeout command with SIGTERM, then SIGKILL after 10s grace period
-    timeout --signal=TERM --kill-after=10 ${PREGENERATION_TIMEOUT} \
-        python -m scripts.main_pregenerate \
-            --limit ${PREGENERATION_LIMIT} \
-            2>&1 || {
-                EXIT_CODE=$?
-                echo ""
-                if [ $EXIT_CODE -eq 124 ]; then
-                    echo "  Pre-generation TIMED OUT after ${PREGENERATION_TIMEOUT}s"
-                    echo "  This is expected for slow API calls - continuing with existing materials"
-                else
-                    echo "  Pre-generation encountered errors (exit code: $EXIT_CODE)"
-                fi
-                echo "  Checking minimum requirements..."
-            }
-fi
-echo ""
-
-# ============================================
-# STEP 6: Startup Validation
-# ============================================
-echo "Step 7: Running startup validation..."
-echo "        (Service will NOT start if demo materials are not ready)"
-echo ""
-
-# Run startup check with wait and generate options
-# --wait: Wait for materials to be ready (up to timeout)
-# --generate: Generate missing materials if found
-# --timeout: Maximum wait time (5 minutes)
-# --min-templates: Minimum cached templates per group
-STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-300}
-MIN_TEMPLATES=${MIN_TEMPLATES:-1}
-
-if python -m scripts.startup_check \
-    --wait \
-    --generate \
-    --timeout ${STARTUP_TIMEOUT} \
-    --min-templates ${MIN_TEMPLATES}; then
-    echo ""
-    echo "  Startup validation passed!"
-    echo ""
-else
-    echo ""
-    echo "  STARTUP VALIDATION FAILED!"
-    echo "  Demo materials are not ready."
-    echo ""
-    echo "  Possible fixes:"
-    echo "  1. Check API keys in .env file:"
-    echo "     - PIAPI_KEY (for T2I)"
-    echo "     - POLLO_API_KEY (for video)"
-    echo "     - A2E_API_KEY (for avatar)"
-    echo "  2. Run pre-generation manually:"
-    echo "     python -m scripts.main_pregenerate --all"
-    echo "  3. Set SKIP_PREGENERATION=true to skip (dev mode only)"
-    echo ""
-
-    # In development, we might want to continue anyway
-    if [ "${ALLOW_EMPTY_MATERIALS:-false}" = "true" ]; then
-        echo "  ALLOW_EMPTY_MATERIALS=true - continuing anyway..."
+if [ -n "$CLEAN_MATERIALS" ]; then
+    echo "Step 4b: Cleaning materials (CLEAN_MATERIALS=$CLEAN_MATERIALS)..."
+    if [ "$CLEAN_MATERIALS" = "all" ]; then
+        echo "  Cleaning ALL materials and re-seeding..."
+        python -m scripts.seed_materials_if_empty --clean 2>&1 || echo "  (Clean+seed failed, will retry)"
     else
-        exit 1
+        # Support comma-separated tool names: CLEAN_MATERIALS=ai_avatar,effect,short_video
+        IFS=',' read -ra TOOLS <<< "$CLEAN_MATERIALS"
+        for tool in "${TOOLS[@]}"; do
+            tool=$(echo "$tool" | xargs)  # trim whitespace
+            echo "  Cleaning tool '$tool' and re-seeding..."
+            python -m scripts.seed_materials_if_empty --clean --tool "$tool" 2>&1 || echo "  (Clean+seed for $tool failed, will retry)"
+        done
     fi
+    echo ""
 fi
+
+# ============================================
+# STEP 5: Material DB Check (wait until ready, run pregen if empty)
+# ============================================
+echo "Step 5: Checking Material DB status..."
+if [ "$SKIP_MATERIAL_CHECK" = "true" ]; then
+    echo "  SKIP_MATERIAL_CHECK=true - skipping material check"
+else
+    START=$(date +%s)
+    GENERATED=false
+    PREGEN_TIMEOUT=7200
+
+    while true; do
+        # Check all 8 tools
+        echo "  --- Material DB Status ---"
+        if python -m scripts.check_material_status 2>/dev/null; then
+            echo "  Material DB ready - all tools have enough examples!"
+            break
+        fi
+
+        ELAPSED=$(($(date +%s) - START))
+        if [ $ELAPSED -ge $MATERIAL_CHECK_TIMEOUT ]; then
+            echo "  Timeout: Material DB not ready after ${MATERIAL_CHECK_TIMEOUT}s"
+            if [ "${ALLOW_EMPTY_MATERIALS:-false}" = "true" ]; then
+                echo "  ALLOW_EMPTY_MATERIALS=true - continuing anyway (demo may be incomplete)"
+                break
+            fi
+            echo "  Set ALLOW_EMPTY_MATERIALS=true to start anyway (dev only)"
+            exit 1
+        fi
+
+        # First attempt: seed missing tools only (not --all to save API credits)
+        if [ "$GENERATED" = "false" ]; then
+            echo ""
+            echo "  Material DB not ready - seeding missing tools..."
+            echo "  This may take 30-90 minutes on first run."
+            echo ""
+            set +e
+            python -m scripts.seed_materials_if_empty --force 2>&1 || true
+            set -e
+            GENERATED=true
+            echo ""
+            echo "  Seeding done. Checking status again..."
+            continue
+        fi
+
+        echo "  Waiting ${MATERIAL_CHECK_INTERVAL}s (timeout in $((MATERIAL_CHECK_TIMEOUT - ELAPSED))s)..."
+        sleep $MATERIAL_CHECK_INTERVAL
+    done
+fi
+echo ""
+
+# ============================================
+# STEP 6: Final Status Report
+# ============================================
+echo "========================================"
+echo "Material DB Final Status:"
+echo "========================================"
+python -m scripts.check_material_status 2>/dev/null || true
+echo ""
 
 # ============================================
 # STEP 7: Start the Service
@@ -140,11 +141,6 @@ echo "    - Docs:   http://localhost:8000/docs"
 echo "    - API:    http://localhost:8000/api/v1/"
 echo ""
 echo "  Mode: PRESET-ONLY"
-echo "    - All users see pre-generated materials"
-echo "    - No runtime API calls for demo users"
-echo "    - All downloads are watermarked"
-echo ""
 echo "========================================"
 
-# Execute the main command (uvicorn)
 exec "$@"

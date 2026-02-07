@@ -21,7 +21,9 @@ const {
   isDemoUser,
   canUseCustomInputs,
   loadDemoTemplates,
-  demoTemplates
+  demoTemplates,
+  tryPrompts,
+  dbEmpty
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -51,38 +53,32 @@ interface DemoProduct {
   nameZh: string
 }
 
-const defaultProducts: DemoProduct[] = [
-  {
-    id: 'product-1',
-    input: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
-    name: 'Watch',
-    nameZh: '手錶'
-  },
-  {
-    id: 'product-2',
-    input: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
-    name: 'Headphones',
-    nameZh: '耳機'
-  },
-  {
-    id: 'product-3',
-    input: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
-    name: 'Sneaker',
-    nameZh: '運動鞋'
-  },
-  {
-    id: 'product-4',
-    input: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800',
-    name: 'Camera',
-    nameZh: '相機'
-  },
-  {
-    id: 'product-5',
-    input: 'https://images.unsplash.com/photo-1541643600914-78b084683601?w=800',
-    name: 'Perfume',
-    nameZh: '香水'
-  }
-]
+// Product definitions matching backend PRODUCT_SCENE_MAPPING (8 products)
+// input URLs are populated from demoTemplates API (T2I-generated images)
+const defaultProducts = computed<DemoProduct[]>(() => {
+  const productDefs = [
+    { id: 'product-1', name: 'Bubble Tea', nameZh: '珍珠奶茶' },
+    { id: 'product-2', name: 'Running Sneakers', nameZh: '跑步運動鞋' },
+    { id: 'product-3', name: 'Smartphone', nameZh: '智慧型手機' },
+    { id: 'product-4', name: 'Skincare Serum', nameZh: '保養精華液' },
+    { id: 'product-5', name: 'Wireless Headphones', nameZh: '無線耳機' },
+    { id: 'product-6', name: 'Espresso Machine', nameZh: '義式咖啡機' },
+    { id: 'product-7', name: 'Luxury Perfume', nameZh: '精品香水' },
+    { id: 'product-8', name: 'Modern Sofa', nameZh: '現代沙發' },
+  ]
+
+  return productDefs.map(p => {
+    // Find input image from pre-generated templates
+    const template = demoTemplates.value.find(t => {
+      const params = (t as any).input_params || {}
+      return params.product_id === p.id
+    })
+    return {
+      ...p,
+      input: template?.input_image_url || ''
+    }
+  })
+})
 
 // Scene types available for demo (excluding custom which is pro-only)
 const demoSceneTypes = [
@@ -115,11 +111,11 @@ const currentPreGeneratedResult = computed(() => {
 
 // Load demo templates on mount
 onMounted(async () => {
-  await loadDemoTemplates('product_scene')
+  await loadDemoTemplates('product_scene', undefined, locale.value)
 
   // For demo users, auto-select first default product
-  if (isDemoUser.value && defaultProducts.length > 0) {
-    const firstProduct = defaultProducts[0]
+  if (isDemoUser.value && defaultProducts.value.length > 0) {
+    const firstProduct = defaultProducts.value[0]
     selectedProductId.value = firstProduct.id
     uploadedImage.value = firstProduct.input
     selectedScene.value = 'studio'  // Default scene
@@ -135,7 +131,7 @@ function loadAllPreGeneratedResults() {
   preGeneratedResults.value = {}
 
   // Look for templates matching each product×scene combination
-  for (const product of defaultProducts) {
+  for (const product of defaultProducts.value) {
     for (const scene of demoSceneTypes) {
       const resultKey = `${product.id}_${scene.id}`
 
@@ -187,7 +183,7 @@ async function generateScenes() {
       }
 
       // Try to find a preset that matches BOTH the selected product AND scene
-      const selectedProduct = defaultProducts.find(p => p.id === selectedProductId.value)
+      const selectedProduct = defaultProducts.value.find(p => p.id === selectedProductId.value)
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
         const matchesProduct = params.product_id === selectedProductId.value ||
@@ -280,6 +276,22 @@ function dataURItoBlob(dataURI: string): Blob {
             {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
           </RouterLink>
         </div>
+
+        <!-- DB Empty: Show try prompts (fixed prompts for try-play) -->
+        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-6 p-4 rounded-xl bg-dark-700/50 border border-dark-600">
+          <p class="text-sm text-gray-300 mb-3">
+            {{ isZh ? '以下為可試玩的固定提示詞，資料庫尚未有預生成結果。訂閱者可上傳自訂圖片並即時生成。' : 'Try-play prompts below. DB has no pre-generated results yet. Subscribers can upload and generate.' }}
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <span
+              v-for="p in tryPrompts.slice(0, 6)"
+              :key="p.id"
+              class="px-3 py-1 rounded-full text-xs bg-dark-800 text-gray-300"
+            >
+              {{ p.prompt }}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -303,10 +315,14 @@ function dataURItoBlob(dataURI: string): Blob {
                   : 'border-dark-600 hover:border-dark-500'"
               >
                 <img
+                  v-if="product.input"
                   :src="product.input"
                   alt="Product"
                   class="w-full h-full object-cover"
                 />
+                <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
+                  <span class="text-2xl">📦</span>
+                </div>
                 <!-- Product name badge -->
                 <div class="absolute bottom-0 left-0 right-0 bg-black/70 px-2 py-1 text-xs text-center">
                   {{ isZh ? product.nameZh : product.name }}
@@ -314,7 +330,7 @@ function dataURItoBlob(dataURI: string): Blob {
               </button>
             </div>
             <p class="text-xs text-gray-500 mt-2">
-              {{ isZh ? '5個產品 × 8個場景 = 40種組合' : '5 products × 8 scenes = 40 combinations' }}
+              {{ isZh ? '8個產品 × 8個場景 = 64種組合' : '8 products × 8 scenes = 64 combinations' }}
             </p>
           </div>
 
@@ -417,7 +433,6 @@ function dataURItoBlob(dataURI: string): Blob {
               >
                 {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
               </RouterLink>
-            </div>
           </div>
 
           <div v-else class="h-64 flex items-center justify-center text-gray-500">

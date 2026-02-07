@@ -100,58 +100,76 @@ LANDING_STATS = LandingStats(
 
 FEATURES = [
     FeatureItem(
-        id="ai_generation",
-        icon="sparkles",
-        gradient="blue",
-        title="AI Smart Generation",
-        title_zh="AI 智能生成",
-        description="Advanced AI technology automatically analyzes your needs and generates professional video ads that match your brand",
-        description_zh="先進的 AI 技術自動分析您的需求，生成符合品牌調性的專業影片廣告"
-    ),
-    FeatureItem(
-        id="fast_create",
-        icon="zap",
+        id="product_scene",
+        icon="🏞️",
         gradient="orange",
-        title="Fast Creation",
-        title_zh="快速製作",
-        description="Complete video ad production in just 3 minutes, dramatically reducing traditional production time",
-        description_zh="只需 3 分鐘即可完成影片廣告製作，大幅縮短傳統製作流程"
+        title="Product Scene Studio",
+        title_zh="產品場景工作室",
+        description="Generate studio and lifestyle scenes for product photography.",
+        description_zh="快速生成棚拍與情境商品圖。"
     ),
     FeatureItem(
-        id="precision_targeting",
-        icon="target",
+        id="background_removal",
+        icon="✂️",
         gradient="green",
-        title="Precision Targeting",
-        title_zh="精準投放",
-        description="Intelligent analysis of target audience to optimize ad content for higher click and conversion rates",
-        description_zh="智能分析目標受眾，優化廣告內容以提升點擊率和轉換率"
+        title="Smart Background Removal",
+        title_zh="智能去背",
+        description="One-click cutouts for catalog-ready assets.",
+        description_zh="一鍵去背，適合上架與型錄。"
     ),
     FeatureItem(
-        id="data_analytics",
-        icon="chart-bar",
+        id="try_on",
+        icon="👗",
         gradient="pink",
-        title="Data Analytics",
-        title_zh="數據分析",
-        description="Real-time tracking of ad performance with deep data analysis and optimization suggestions",
-        description_zh="即時追蹤廣告成效，提供深度數據分析和優化建議"
+        title="Virtual Try-On",
+        title_zh="虛擬試穿",
+        description="Dress AI models with your apparel in minutes.",
+        description_zh="快速展示服飾穿搭效果。"
     ),
     FeatureItem(
-        id="multilingual",
-        icon="globe",
+        id="room_redesign",
+        icon="🏠",
+        gradient="blue",
+        title="Room Redesign",
+        title_zh="空間重設計",
+        description="Transform interiors into multiple design styles.",
+        description_zh="室內空間一鍵風格改造。"
+    ),
+    FeatureItem(
+        id="short_video",
+        icon="📱",
+        gradient="purple",
+        title="Short Video Generator",
+        title_zh="短影片生成",
+        description="Create 8-second product and brand videos fast.",
+        description_zh="快速生成 8 秒品牌與產品短片。"
+    ),
+    FeatureItem(
+        id="ai_avatar",
+        icon="🎭",
         gradient="cyan",
-        title="Multi-language Support",
-        title_zh="多語言支援",
-        description="Support for 30+ languages, easily expand to global markets",
-        description_zh="支援 30+ 種語言，輕鬆拓展全球市場"
+        title="AI Avatar Presenter",
+        title_zh="AI 數位人",
+        description="Digital presenters for campaigns and demos.",
+        description_zh="數位人口播與展示影片。"
     ),
     FeatureItem(
-        id="team_collab",
-        icon="users",
-        gradient="red",
-        title="Team Collaboration",
-        title_zh="團隊協作",
-        description="Support multi-person collaboration to create perfect ad content together",
-        description_zh="支援多人協作，讓團隊共同打造完美廣告內容"
+        id="pattern_generate",
+        icon="🔲",
+        gradient="indigo",
+        title="Pattern Design",
+        title_zh="圖案設計",
+        description="Generate seamless patterns for merchandising.",
+        description_zh="無縫圖案快速生成。"
+    ),
+    FeatureItem(
+        id="image_effects",
+        icon="🎨",
+        gradient="yellow",
+        title="Image Effects",
+        title_zh="圖片風格",
+        description="Apply artistic styles like anime or watercolor.",
+        description_zh="支援動漫、水彩等藝術風格。"
     )
 ]
 
@@ -160,18 +178,18 @@ EXAMPLES = [
         id="ex1",
         category="ecommerce",
         category_label="電商",
-        duration="15 秒",
-        title="E-commerce Product Ad",
-        title_zh="電商產品廣告",
-        description="Product showcase video for e-commerce platforms",
-        description_zh="適合電商平台的產品展示影片",
+        duration="8 秒",
+        title="E-commerce Product Showcase",
+        title_zh="電商產品展示",
+        description="Short video for product hero shots and listings",
+        description_zh="商品主圖與上架用的短影片",
         thumbnail="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=400&fit=crop"
     ),
     ExampleItem(
         id="ex2",
         category="social",
         category_label="社群",
-        duration="10 秒",
+        duration="8 秒",
         title="Social Media Short Video",
         title_zh="社群媒體短影片",
         description="Eye-catching shorts for Instagram and TikTok",
@@ -182,31 +200,31 @@ EXAMPLES = [
         id="ex3",
         category="brand",
         category_label="品牌",
-        duration="30 秒",
-        title="Brand Story Video",
-        title_zh="品牌形象影片",
-        description="Showcase enterprise value and brand story",
-        description_zh="展現企業價值與品牌故事",
+        duration="10 秒",
+        title="Brand Intro Clip",
+        title_zh="品牌介紹短片",
+        description="Brand identity highlight for campaigns",
+        description_zh="品牌形象與理念重點呈現",
         thumbnail="https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&h=400&fit=crop"
     ),
     ExampleItem(
         id="ex4",
         category="app",
         category_label="應用程式",
-        duration="20 秒",
-        title="App Promotion Video",
-        title_zh="App 推廣影片",
-        description="Highlight core app features",
-        description_zh="突顯應用程式核心功能",
+        duration="8 秒",
+        title="App Feature Highlight",
+        title_zh="App 功能亮點",
+        description="Highlight core app features quickly",
+        description_zh="快速呈現 App 核心功能",
         thumbnail="https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=600&h=400&fit=crop"
     ),
     ExampleItem(
         id="ex5",
         category="promo",
         category_label="促銷",
-        duration="12 秒",
-        title="Promotional Video",
-        title_zh="促銷活動影片",
+        duration="8 秒",
+        title="Flash Promo Video",
+        title_zh="促銷快閃影片",
         description="Limited-time offers and promotional campaigns",
         description_zh="限時優惠與促銷活動宣傳",
         thumbnail="https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?w=600&h=400&fit=crop"
@@ -215,9 +233,9 @@ EXAMPLES = [
         id="ex6",
         category="service",
         category_label="服務",
-        duration="25 秒",
-        title="Service Introduction Video",
-        title_zh="服務介紹影片",
+        duration="10 秒",
+        title="Service Introduction",
+        title_zh="服務介紹",
         description="Professional service showcase and explanation",
         description_zh="專業服務展示與說明",
         thumbnail="https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=600&h=400&fit=crop"

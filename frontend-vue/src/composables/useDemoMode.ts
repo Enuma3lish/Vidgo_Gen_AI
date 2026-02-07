@@ -48,6 +48,9 @@ export function useDemoMode() {
   // Demo templates from database
   const demoTemplates = ref<DemoTemplate[]>([])
   const isLoadingTemplates = ref(false)
+  // When DB is empty, API returns try_prompts (fixed prompts to display)
+  const tryPrompts = ref<Array<{ id: string; topic: string; prompt: string }>>([])
+  const dbEmpty = ref(false)
 
   /**
    * PRESET-ONLY MODE: ALL users are treated as "demo" users
@@ -110,21 +113,30 @@ export function useDemoMode() {
   /**
    * Load demo presets for a specific tool type
    * Uses /api/v1/demo/presets/{tool_type} which returns Material IDs
+   * When DB is empty, backend also returns try_prompts for fixed prompt display
    */
-  async function loadDemoTemplates(toolType: string, topic?: string) {
+  async function loadDemoTemplates(toolType: string, topic?: string, locale?: string) {
     isLoadingTemplates.value = true
+    tryPrompts.value = []
+    dbEmpty.value = false
     try {
-      // Use demo presets endpoint - returns Material IDs that work with use-preset
       const params: Record<string, string> = {}
       if (topic) params.topic = topic
+      const lang = locale || (typeof navigator !== 'undefined' ? navigator.language : 'en')
+      params.language = lang.startsWith('zh') ? 'zh-TW' : 'en'
 
       const response = await apiClient.get(`/api/v1/demo/presets/${toolType}`, { params })
 
-      // Backend returns { success, presets: [...] }
       if (response.data.success && Array.isArray(response.data.presets)) {
         demoTemplates.value = response.data.presets
-      } else if (Array.isArray(response.data)) {
-        demoTemplates.value = response.data
+      } else if (Array.isArray(response.data.presets)) {
+        demoTemplates.value = response.data.presets
+      } else {
+        demoTemplates.value = []
+      }
+      if (response.data.db_empty && Array.isArray(response.data.try_prompts)) {
+        tryPrompts.value = response.data.try_prompts
+        dbEmpty.value = true
       }
     } catch (error) {
       console.error('Failed to load demo presets:', error)
@@ -199,6 +211,8 @@ export function useDemoMode() {
     isLoadingSubscription,
     demoTemplates,
     isLoadingTemplates,
+    tryPrompts,
+    dbEmpty,
 
     // Computed
     canUseCustomInputs,

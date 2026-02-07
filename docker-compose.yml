@@ -1,3 +1,17 @@
+# VidGo Full Stack
+# API keys: backend/.env must have PIAPI_KEY, POLLO_API_KEY, A2E_API_KEY
+#
+# Flow: backend entrypoint checks Material DB, runs pregen if empty, then starts.
+#   docker compose up -d
+#   - postgres, redis → backend (checks materials, pregen if empty, starts uvicorn)
+#   - First run: pregen in entrypoint (~30-90 min). Later runs: fast.
+#
+# Material DB Management:
+#   - SKIP_MATERIAL_CHECK=true  → skip material check (dev only)
+#   - CLEAN_MATERIALS=ai_avatar → delete + re-seed ai_avatar on startup
+#   - CLEAN_MATERIALS=all       → delete + re-seed ALL tools on startup
+#   - ALLOW_EMPTY_MATERIALS=true → start even if materials are incomplete
+
 services:
   # PostgreSQL Database
   postgres:
@@ -49,19 +63,15 @@ services:
       - MP_SMTP_AUTH_ACCEPT_ANY=true
       - MP_SMTP_AUTH_ALLOW_INSECURE=true
 
-  # FastAPI Backend with Pre-generation
-  # IMPORTANT: Entrypoint runs pre-generation pipeline before starting server
+  # FastAPI Backend
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vidgo_backend
-    # Command is passed to entrypoint script
-    # Entrypoint runs: migrations -> seeding -> pre-generation -> validation -> uvicorn
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
       - ./backend:/app
-      # Persist generated materials across restarts
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
     ports:
@@ -75,22 +85,9 @@ services:
       - DB_PORT=5432
       - DB_USER=postgres
       - REDIS_HOST=redis
-      # Pre-generation control
-      # Set to 'true' to skip pre-generation (uses existing materials)
-      # Default: false for first startup to generate initial materials
-      - SKIP_PREGENERATION=${SKIP_PREGENERATION:-false}
-      # Number of materials to generate per tool (default: 5 for faster startup)
-      - PREGENERATION_LIMIT=${PREGENERATION_LIMIT:-5}
-      # Skip avatar generation to save A2E API costs (default: skip for dev)
-      - SKIP_AVATAR=${SKIP_AVATAR:-true}
-      # Skip video generation to save Pollo API costs (default: skip for dev)
-      - SKIP_VIDEO=${SKIP_VIDEO:-true}
-      # Allow service to start without materials (default: true for dev)
-      - ALLOW_EMPTY_MATERIALS=${ALLOW_EMPTY_MATERIALS:-true}
-      # Minimum templates required per group (default: 0 for dev)
-      - MIN_TEMPLATES=${MIN_TEMPLATES:-0}
-      # Startup validation timeout in seconds
-      - STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-120}
+      - SKIP_MATERIAL_CHECK=${SKIP_MATERIAL_CHECK:-false}
+      - CLEAN_MATERIALS=${CLEAN_MATERIALS:-}
+      - ALLOW_EMPTY_MATERIALS=${ALLOW_EMPTY_MATERIALS:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,7 +100,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 600s  # Allow time for pre-generation (10 minutes)
+      start_period: 3600s  # 60 min - allow time for pre-generation in entrypoint
 
   # ARQ Worker (Background Tasks)
   worker:
@@ -129,35 +126,28 @@ services:
     networks:
       - vidgo_network
 
-  # Material Pre-generation Job (runs once on first startup)
-  # Use this for initial bulk generation or to regenerate all materials
+  # Material Pre-generation Job (runs once - full generation with TOOL_LIMITS)
+  # Usage: docker compose --profile init up init-materials
   init-materials:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vidgo_init_materials
-    entrypoint: []  # Override entrypoint for init container
+    entrypoint: []
     command: >
       sh -c "echo '========================================' &&
              echo 'VidGo Material Pre-generation Pipeline' &&
              echo '========================================' &&
-             echo '' &&
-             echo 'Step 1: Checking API keys...' &&
              python -m scripts.main_pregenerate --dry-run &&
              echo '' &&
-             echo 'Step 2: Running full pre-generation...' &&
-             echo '(This may take 10-30 minutes depending on API limits)' &&
-             echo 'Tools: ai_avatar, background_removal, room_redesign,' &&
-             echo '       short_video, product_scene, try_on, pattern_generate' &&
-             python -m scripts.main_pregenerate --all --limit ${PREGENERATION_LIMIT:-30} &&
+             echo 'Running full pre-generation (TOOL_LIMITS)...' &&
+             python -m scripts.main_pregenerate --all &&
              echo '' &&
-             echo 'Step 3: Final validation...' &&
-             python -m scripts.startup_check --min-templates 3 &&
+             echo 'Seeding try-play materials (product_scene, effect, background_removal) if any gaps...' &&
+             python -m scripts.seed_materials_if_empty --force &&
              echo '' &&
-             echo '========================================' &&
-             echo 'Pre-generation complete!' &&
-             echo 'All demo materials are ready' &&
-             echo '========================================'"
+             python -m scripts.startup_check --min-templates 1 &&
+             echo 'Pre-generation complete!'"
     volumes:
       - ./backend:/app
       - vidgo_generated:/app/static/generated
@@ -167,7 +157,6 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/vidgo
       - REDIS_URL=redis://redis:6379/0
-      - PREGENERATION_LIMIT=${PREGENERATION_LIMIT:-30}
     depends_on:
       postgres:
         condition: service_healthy
@@ -177,7 +166,36 @@ services:
       - vidgo_network
     restart: "no"
     profiles:
-      - init  # Only run with: docker-compose --profile init up init-materials
+      - init
+
+  # Manual pre-generation (run anytime)
+  # Usage: docker compose --profile tools run --rm pregenerate
+  #        docker compose --profile tools run --rm pregenerate python -m scripts.main_pregenerate --tool room_redesign --limit 40
+  pregenerate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vidgo_pregenerate
+    entrypoint: []
+    command: ["python", "-m", "scripts.main_pregenerate", "--all"]
+    volumes:
+      - ./backend:/app
+      - vidgo_generated:/app/static/generated
+      - vidgo_materials:/app/static/materials
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/vidgo
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vidgo_network
+    profiles:
+      - tools  # Only run with: docker compose --profile tools run pregenerate
 
   # Vue 3 Frontend
   frontend:

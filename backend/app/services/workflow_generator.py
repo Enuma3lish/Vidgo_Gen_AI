@@ -50,8 +50,11 @@ from app.services.interior_design_service import get_interior_design_service
 from app.services.a2e_service import get_a2e_service
 from app.services.pollo_ai import get_pollo_client
 from app.providers.provider_router import get_provider_router, TaskType
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
+SHORT_VIDEO_LENGTH = int(getattr(settings, "SHORT_VIDEO_LENGTH", 8))
 
 # Static directory for generated materials
 STATIC_DIR = Path("/app/static/generated")
@@ -242,7 +245,7 @@ class WorkflowGenerator:
         video_result = await self.rescue_service.generate_video(
             image_url=image_url,
             prompt=effect_prompt,
-            length=5
+            length=SHORT_VIDEO_LENGTH
         )
 
         if not video_result.get("success"):
@@ -379,7 +382,7 @@ class WorkflowGenerator:
         video_result = await self.rescue_service.generate_video(
             image_url=image_url,
             prompt=effect_prompt,
-            length=5
+            length=SHORT_VIDEO_LENGTH
         )
 
         if not video_result.get("success"):

@@ -10,7 +10,7 @@ This is the UNIFIED pre-generation script that merges:
 WORKFLOW:
 =========
 1. CLI parses arguments (--tool, --limit, --dry-run, --all)
-2. Initialize API clients (PiAPI, Pollo, A2E, Rembg)
+2. Initialize API clients (PiAPI, Pollo, A2E)
 3. Run selected generator(s) based on tool mappings
 4. Store results locally first, then batch to DB
 5. Cleanup temp files and print summary
@@ -18,7 +18,7 @@ WORKFLOW:
 SUPPORTED TOOLS (8 total):
 ==========================
 - ai_avatar: Avatar × Script × Language → A2E → Video
-- background_removal: Prompt → T2I → Rembg → PNG
+- background_removal: Prompt → T2I → PiAPI Remove BG → PNG
 - room_redesign: Room × Style → T2I → Styled Room
 - short_video: Prompt → Pollo T2V → Video
 - product_scene: Product × Scene → T2I → Product in Scene
@@ -50,6 +50,7 @@ sys.path.insert(0, "/app")
 from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
+from app.core.config import get_settings
 
 # Import Topic Registry - Single Source of Truth for topics
 from app.config.topic_registry import (
@@ -61,7 +62,7 @@ from app.config.topic_registry import (
 )
 
 # Import service clients
-from scripts.services import PiAPIClient, PolloClient, A2EClient, RembgClient
+from scripts.services import PiAPIClient, PolloClient, A2EClient
 
 # Configure logging
 logging.basicConfig(
@@ -69,6 +70,21 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s'
 )
 logger = logging.getLogger(__name__)
+settings = get_settings()
+SHORT_VIDEO_LENGTH = int(getattr(settings, "SHORT_VIDEO_LENGTH", 8))
+
+# Tool-specific limits when running --all: ensures enough examples for customers
+# Effect: 8 sources × 5 styles = 40 | Try-on: ~6 models × ~10 clothing (male skips female-only)
+TOOL_LIMITS = {
+    "effect": 40,           # 8 sources × 5 styles
+    "try_on": 70,           # 6 models × clothing (male skips dresses/blouse/scarf)
+    "product_scene": 32,    # 8 products × 4 scenes (subset for demo)
+    "short_video": 24,      # 4 topics × 6 prompts
+    "background_removal": 24,  # 8 topics × 3 prompts
+    "room_redesign": 24,    # 4 rooms × 6 styles
+    "pattern_generate": 10, # 5 styles × 2 prompts
+    "ai_avatar": 24,        # 4 topics × 3 scripts × 2 languages
+}
 
 
 # ============================================================================
@@ -98,86 +114,144 @@ def cleanup_temp_dir():
 # Any avatar can read any script
 AVATAR_MAPPING = {
     "female-1": {
-        "prompt": "Professional portrait of a young Taiwanese woman, natural makeup, confident smile, studio lighting, headshot",
+        "prompt": "Professional portrait of a young Taiwanese woman, natural makeup, confident smile, studio lighting, headshot, Chinese face",
         "gender": "female",
-        "url": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=512"
+        "name_zh": "怡君",
+        "name_en": "Yi-Jun",
+        "url": "https://plus.unsplash.com/premium_photo-1723291229685-68f229ac5655?w=512"
     },
     "female-2": {
-        "prompt": "Professional portrait of a Chinese woman in her early 30s, elegant makeup, warm expression, soft lighting, headshot",
+        "prompt": "Professional portrait of a Chinese woman in her early 30s, elegant makeup, warm expression, soft lighting, headshot, Asian face",
         "gender": "female",
-        "url": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512"
+        "name_zh": "雅婷",
+        "name_en": "Ya-Ting",
+        "url": "https://plus.unsplash.com/premium_photo-1661726646319-bde739e96b9a?w=512"
     },
     "female-3": {
-        "prompt": "Professional portrait of a young Chinese woman, professional look, approachable smile, business style headshot",
+        "prompt": "Professional portrait of a young Chinese woman, business blazer, approachable smile, corporate headshot, Asian face",
         "gender": "female",
-        "url": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=512"
+        "name_zh": "佳穎",
+        "name_en": "Jia-Ying",
+        "url": "https://images.unsplash.com/photo-1581065178047-8ee15951ede6?w=512"
+    },
+    "female-4": {
+        "prompt": "Professional portrait of a Taiwanese woman, trendy style, friendly expression, modern headshot, Chinese face",
+        "gender": "female",
+        "name_zh": "淑芬",
+        "name_en": "Shu-Fen",
+        "url": "https://plus.unsplash.com/premium_photo-1705908025930-fc43ae2f0156?w=512"
     },
     "male-1": {
-        "prompt": "Professional portrait of a young Taiwanese man, clean look, confident expression, studio lighting, headshot",
+        "prompt": "Professional portrait of a young Taiwanese man, clean look, confident smile, studio lighting, headshot, Chinese face",
         "gender": "male",
-        "url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512"
+        "name_zh": "志偉",
+        "name_en": "Zhi-Wei",
+        "url": "https://images.unsplash.com/photo-1545830571-6d7665a05cb6?w=512"
     },
     "male-2": {
-        "prompt": "Professional portrait of a Chinese man in his 30s, business professional, trustworthy expression, corporate headshot",
+        "prompt": "Professional portrait of a Chinese man in his 30s, business suit, trustworthy smile, corporate headshot, Asian face",
         "gender": "male",
-        "url": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=512"
+        "name_zh": "冠宇",
+        "name_en": "Guan-Yu",
+        "url": "https://plus.unsplash.com/premium_photo-1682095379852-8ce2bc3c1c59?w=512"
     },
     "male-3": {
-        "prompt": "Professional portrait of a young man, friendly smile, casual professional look, modern headshot",
+        "prompt": "Professional portrait of a young Chinese man, blue polo shirt, friendly smile, casual professional headshot, Asian face",
         "gender": "male",
-        "url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=512"
+        "name_zh": "宗翰",
+        "name_en": "Zong-Han",
+        "url": "https://images.unsplash.com/photo-1549320710-0f17830d27bd?w=512"
+    },
+    "male-4": {
+        "prompt": "Professional portrait of a mature Chinese man, blazer jacket, confident expression, business headshot, Asian face",
+        "gender": "male",
+        "name_zh": "家豪",
+        "name_en": "Jia-Hao",
+        "url": "https://plus.unsplash.com/premium_photo-1733302828477-80e6cccb0911?w=512"
     }
 }
 
 # Script definitions - DECOUPLED from avatars
-# Organized by topic (matching MATERIAL_TOPICS)
+# Organized by topic (matching topic_registry.py)
+# IMPORTANT: Scripts must CLEARLY sell a product or service (target: small businesses, SMB)
+# Most avatars should be Chinese (zh-TW) - VidGo targets Taiwan/SMB market
+# 4 categories × 3 scripts = 12 scripts covering diverse daily life scenarios:
+# food/drinks, bakery, beauty, education, fitness, flowers, candles, etc.
 SCRIPT_MAPPING = {
+    # Each category shows a DIFFERENT promotional technique for small business
+    # spokesperson: Origin story / brand storytelling (builds trust)
     "spokesperson": [
         {
             "id": "spokesperson-1",
-            "text_en": "Welcome to our brand! I'm excited to introduce our latest innovative products that will transform your daily life.",
-            "text_zh": "歡迎來到我們的品牌！我很高興為您介紹我們最新的創新產品，將改變您的日常生活。"
+            "text_en": "I started this bubble tea shop 3 years ago with one recipe from my grandmother. Today we sell over 500 cups a day. Our secret? Real milk, hand-cooked pearls, no shortcuts. Come taste the difference—first cup free for new customers!",
+            "text_zh": "三年前我用阿嬤的一個配方開了這家珍珠奶茶店。現在每天賣超過500杯。我們的秘訣？鮮奶、手煮珍珠、不偷工減料。來嚐嚐看有什麼不同——新客人第一杯免費！"
         },
         {
             "id": "spokesperson-2",
-            "text_en": "Hello! As your brand ambassador, I'm thrilled to present our newest collection designed just for you.",
-            "text_zh": "您好！作為品牌代言人，我很榮幸向您展示我們專為您設計的最新系列。"
+            "text_en": "Every morning at 5 AM, I bake these matcha cream rolls fresh. Only 50 per day because I refuse to use preservatives. When they are gone, they are gone. That is why our customers line up before we open. Come try one before today's batch sells out!",
+            "text_zh": "每天早上五點，我親手烤製這些抹茶生乳捲。因為堅持不加防腐劑，每日限量50條。賣完就沒有了，這就是為什麼客人都在開店前排隊。快來嚐一條，今天的很快就賣完了！"
+        },
+        {
+            "id": "spokesperson-3",
+            "preferred_gender": "female",  # Nail salon / beauty → female avatar
+            "text_en": "My customers always ask: how do you make nails look this good? Let me show you. This is our signature aurora cat-eye gel. Three layers, hand-painted gradient. It takes me 90 minutes per set. Book this week and get a free nail art upgrade worth 300!",
+            "text_zh": "客人常問我：怎麼做出這麼美的指甲？讓我示範一下。這是我們的招牌極光貓眼凝膠，三層手繪漸層，每一組要90分鐘。本週預約送價值300元的美甲升級！"
         }
     ],
+    # product_intro: Social proof / before-after / demo technique (shows results)
     "product_intro": [
         {
             "id": "product-intro-1",
-            "text_en": "Hello everyone! Today I'll show you something truly special. Let's discover what makes our products unique.",
-            "text_zh": "大家好！今天我要給您展示一些真正特別的東西。讓我們一起發現我們產品的獨特之處。"
+            "text_en": "See this phone case? Customers said it survived a drop from a second-floor balcony. We tested it ourselves—dropped it 50 times. Still perfect. Military-grade protection, only 399. No wonder it is our best-seller with over 2000 five-star reviews!",
+            "text_zh": "看這個手機殼？客人說它從二樓陽台掉下來都沒事。我們自己測試過——摔了50次，完好如初。軍規防護，只要399元。難怪它是我們的暢銷品，超過2000則五星評價！"
         },
         {
             "id": "product-intro-2",
-            "text_en": "Let me show you the amazing features of this product. It's designed with you in mind.",
-            "text_zh": "讓我向您展示這款產品的驚人功能。它是專為您設計的。"
+            "preferred_gender": "female",  # Skincare testimonial ("my skin") → female avatar
+            "text_en": "Left side: my skin one month ago. Right side: today. The only thing I changed was this serum. 100% plant-based, no alcohol, safe for sensitive skin. 599 for 30ml—that is less than 20 per day. Your skin deserves this. Free shipping over 1000!",
+            "text_zh": "左邊是一個月前的我的皮膚，右邊是今天。唯一的改變就是這瓶精華液。100%植萃、無酒精、敏感肌也能用。30ml只要599元，每天不到20元。你的肌膚值得擁有。滿千免運！"
+        },
+        {
+            "id": "product-intro-3",
+            "text_en": "I make each candle by hand using soy wax and essential oils. This lavender one takes 48 hours to cure. Smell it once and you will understand why 80% of my customers reorder. Only 280 each. Light one up tonight and feel the difference!",
+            "text_zh": "每一顆蠟燭都是我用大豆蠟和精油手工製作的。這款薰衣草需要48小時熟成。聞一次你就知道為什麼八成的客人都會回購。每顆只要280元。今晚點一顆，感受不一樣的品質！"
         }
     ],
+    # customer_service: Trust-building / guarantee (reduces purchase anxiety)
     "customer_service": [
         {
             "id": "customer-service-1",
-            "text_en": "Thank you for joining us! We've been working hard to bring you the best quality and experience possible.",
-            "text_zh": "感謝您的加入！我們一直努力為您帶來最好的品質和體驗。"
+            "text_en": "Got your order and something is not right? Do not worry at all. Send us a photo on LINE and we will fix it within 24 hours—exchange, refund, or reship. That is our promise. We have handled over 5000 orders and our satisfaction rate is 99.2%!",
+            "text_zh": "收到商品有問題嗎？完全不用擔心！LINE我們傳張照片，24小時內處理完畢——換貨、退款、重寄都可以。這是我們的承諾。超過5000筆訂單，滿意度99.2%！"
         },
         {
             "id": "customer-service-2",
-            "text_en": "Hello! I'm your dedicated customer service representative. Feel free to ask me anything, I'm here to help.",
-            "text_zh": "您好！我是您的專屬客服代表。有任何問題都可以問我，我很樂意為您服務。"
+            "text_en": "Welcome to our pet grooming studio! Before your first visit, let me explain how we work. We spend 15 minutes just letting your pet get comfortable. No rushing, no stress. That is why nervous dogs love coming back. Book a trial grooming for only 399!",
+            "text_zh": "歡迎來到我們的寵物美容工作室！第一次來之前讓我說明一下。我們會花15分鐘讓毛孩先適應環境，不趕時間、零壓力。所以怕生的狗狗都喜歡回來。體驗價只要399元！"
+        },
+        {
+            "id": "customer-service-3",
+            "text_en": "Three things that make our repair shop different: one, we diagnose for free. Two, we only charge if we fix it. Three, every repair comes with a 90-day warranty. Fair and simple. Bring your phone in today—most repairs done in under one hour!",
+            "text_zh": "我們維修店有三個不同：第一，免費檢測。第二，修不好不收費。第三，每次維修都有90天保固。公平、簡單。今天就帶手機來——大部分維修一小時內完成！"
         }
     ],
+    # social_media: Interactive / viral hooks / emotional (drives shares)
     "social_media": [
         {
             "id": "social-media-1",
-            "text_en": "Hey everyone! Don't miss out on our exclusive offer. Subscribe now and save big on your first order!",
-            "text_zh": "嗨大家好！不要錯過我們的獨家優惠。立即訂閱，首單享受超值折扣！"
+            "text_en": "Save this video! Show it at checkout and get buy-one-get-one-free on all drinks today only. We do this every Tuesday—follow us so you never miss it. Last week 200 people used this deal. Do not miss out this time!",
+            "text_zh": "存下這支影片！結帳時出示就能全品項飲料買一送一，限今天。每週二都有這個活動——追蹤我們才不會錯過。上週有200人使用了這個優惠，這次別再錯過了！"
         },
         {
             "id": "social-media-2",
-            "text_en": "Hi there! Let me tell you about our amazing new features. Don't forget to like and subscribe!",
-            "text_zh": "嗨！讓我告訴您關於我們驚人的新功能。記得點讚和訂閱！"
+            "preferred_gender": "female",  # Flower shop / emotional Mother's Day → female avatar
+            "text_en": "A customer sent me this photo—she gave our flower box to her mom and her mom cried happy tears. That is why I do this. Mother's Day carnation boxes, handwrapped with love, only 680. Order by Friday for free delivery. Let us make someone smile together!",
+            "text_zh": "一位客人傳了這張照片給我——她把我們的花禮盒送給媽媽，媽媽感動到流淚。這就是我做這行的原因。母親節康乃馨禮盒，用心手作包裝，只要680元。週五前預訂免運。一起讓人微笑吧！"
+        },
+        {
+            "id": "social-media-3",
+            "text_en": "Parents keep asking what their kids did in class today, so I started filming. Look at this—your child painted this in just one hour! Summer art classes, only 350 per session. Groups of 3 save 20%. Tag a parent who needs to see this!",
+            "text_zh": "家長一直問小朋友今天上課做了什麼，所以我開始拍攝了。看這個——你的孩子一小時就畫出了這幅作品！暑假美術課，每堂只要350元。三人同行八折。標記一位需要看到這個的家長！"
         }
     ]
 }
@@ -240,7 +314,7 @@ BACKGROUND_REMOVAL_MAPPING = {
     "ingredients": {
         "prompts": [
             "Fresh tapioca pearls in bowl on white background, bubble tea ingredient, food photography",
-            "Assorted tea leaves in wooden scoop on white background, premium tea ingredient",
+            "Assorted tea leaves in wooden scoop on white background, tea ingredient product shot",
             "Fresh fruits arranged on white background, mango strawberry kiwi, food ingredient shot"
         ]
     }
@@ -251,6 +325,8 @@ BACKGROUND_REMOVAL_MAPPING = {
 # ROOM REDESIGN MAPPING
 # ============================================================================
 
+# Room redesign: use same room IDs/URLs as frontend defaultRooms and same style IDs as /api/v1/interior/styles (DESIGN_STYLES)
+# so demo matching (room_id + room_type + style_id) works.
 ROOM_REDESIGN_MAPPING = {
     "room_types": {
         "room-1": {
@@ -278,38 +354,8 @@ ROOM_REDESIGN_MAPPING = {
             "room_type": "bathroom"
         }
     },
-    "styles": {
-        "modern": {
-            "name": "Modern",
-            "name_zh": "現代風格",
-            "prompt": "modern interior design, clean lines, neutral colors, contemporary furniture"
-        },
-        "nordic": {
-            "name": "Nordic",
-            "name_zh": "北歐風格",
-            "prompt": "scandinavian nordic interior design, hygge, wood textures, bright, cozy, white walls"
-        },
-        "japanese": {
-            "name": "Japanese",
-            "name_zh": "日式風格",
-            "prompt": "japanese interior design, zen, tatami, bamboo, peaceful, wabi-sabi, natural materials"
-        },
-        "industrial": {
-            "name": "Industrial",
-            "name_zh": "工業風格",
-            "prompt": "industrial interior design, exposed brick, metal accents, loft style, raw materials"
-        },
-        "minimalist": {
-            "name": "Minimalist",
-            "name_zh": "極簡主義",
-            "prompt": "minimalist interior design, ultra clean, sparse furniture, monochromatic, space and light"
-        },
-        "luxury": {
-            "name": "Luxury",
-            "name_zh": "奢華風格",
-            "prompt": "luxury interior design, premium materials, elegant furnishings, gold accents, high-end decor"
-        }
-    }
+    # Style IDs must match DESIGN_STYLES in interior_design_service (frontend /api/v1/interior/styles)
+    "styles": None  # Filled from DESIGN_STYLES in generate_room_redesign
 }
 
 
@@ -322,27 +368,50 @@ PRODUCT_SCENE_MAPPING = {
         "product-1": {
             "name": "Bubble Tea",
             "name_zh": "珍珠奶茶",
-            "url": "https://images.unsplash.com/photo-1558857563-b371033873b8?w=800"
+            "prompt": "Studio product photo of a clear cup of bubble milk tea with tapioca pearls, centered, clean white background, soft shadows, commercial photography, 8K",
+            "prompt_zh": "棚拍產品照：透明杯珍珠奶茶與黑色珍珠，置中構圖，乾淨白底，柔和陰影，商業攝影，8K"
         },
         "product-2": {
-            "name": "Fried Chicken",
-            "name_zh": "炸雞排",
-            "url": "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=800"
+            "name": "Running Sneakers",
+            "name_zh": "跑步運動鞋",
+            "prompt": "Studio product photo of a pair of modern running sneakers, side angle, clean white background, high detail, commercial lighting, 8K",
+            "prompt_zh": "棚拍產品照：一雙現代跑步運動鞋，側面角度，乾淨白底，高細節，商業打光，8K"
         },
         "product-3": {
-            "name": "Cake Slice",
-            "name_zh": "蛋糕",
-            "url": "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800"
+            "name": "Smartphone",
+            "name_zh": "智慧型手機",
+            "prompt": "Studio product photo of a smartphone standing upright, reflective glass, clean white background, tech product advertising, 8K",
+            "prompt_zh": "棚拍產品照：智慧型手機直立擺放，玻璃反光質感，乾淨白底，科技產品廣告風格，8K"
         },
         "product-4": {
-            "name": "Bento Box",
-            "name_zh": "便當",
-            "url": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=800"
+            "name": "Skincare Serum",
+            "name_zh": "保養精華液",
+            "prompt": "Studio product photo of a glass skincare serum bottle with dropper, clean cosmetics product style, white background, soft glow, 8K",
+            "prompt_zh": "棚拍產品照：玻璃滴管保養精華液瓶，清新保養品風格，乾淨白底，柔光氛圍，8K"
         },
         "product-5": {
-            "name": "Fruit Tea",
-            "name_zh": "水果茶",
-            "url": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=800"
+            "name": "Wireless Headphones",
+            "name_zh": "無線耳機",
+            "prompt": "Studio product photo of wireless over-ear headphones, matte black finish, centered, clean white background, audio product shot, 8K",
+            "prompt_zh": "棚拍產品照：無線頭戴式耳機，霧黑質感，置中構圖，乾淨白底，音訊產品照，8K"
+        },
+        "product-6": {
+            "name": "Espresso Machine",
+            "name_zh": "義式咖啡機",
+            "prompt": "Studio product photo of a compact stainless steel espresso machine, front angle, clean white background, professional appliance advertising, 8K",
+            "prompt_zh": "棚拍產品照：小型不鏽鋼義式咖啡機，正面角度，乾淨白底，家電廣告風格，8K"
+        },
+        "product-7": {
+            "name": "Handmade Candle",
+            "name_zh": "手工蠟燭",
+            "prompt": "Studio product photo of a handmade soy wax candle in glass jar, centered, clean white background, cozy product advertising, 8K",
+            "prompt_zh": "棚拍產品照：玻璃罐手工大豆蠟燭，置中構圖，乾淨白底，溫馨產品廣告風格，8K"
+        },
+        "product-8": {
+            "name": "Modern Sofa",
+            "name_zh": "現代沙發",
+            "prompt": "Studio product photo of a modern two-seat sofa, neutral fabric, clean white background, furniture catalog lighting, 8K",
+            "prompt_zh": "棚拍產品照：現代雙人沙發，素色布料，乾淨白底，家具目錄打光，8K"
         }
     },
     "scenes": {
@@ -359,7 +428,7 @@ PRODUCT_SCENE_MAPPING = {
         "luxury": {
             "name": "Premium",
             "name_zh": "質感",
-            "prompt": "premium elegant background, warm lighting, sophisticated atmosphere"
+            "prompt": "warm elegant background, cozy lighting, refined atmosphere"
         },
         "minimal": {
             "name": "Minimal",
@@ -393,9 +462,13 @@ PRODUCT_SCENE_MAPPING = {
 # ============================================================================
 # SHORT VIDEO MAPPING
 # ============================================================================
-
-# Topics MUST match MATERIAL_TOPICS in material.py:
-# product_showcase, brand_story, tutorial, promo
+#
+# TARGET: Small businesses (SMB) selling everyday products/services—NOT luxury.
+# Prompts must clearly show product type and use case (e.g., bubble tea, fried
+# chicken, small shop, local brand). Explain what kind of service we provide.
+#
+# Topics MUST match topic_registry.py:
+# product_showcase, brand_intro, tutorial, promo
 
 SHORT_VIDEO_MAPPING = {
     "product_showcase": {
@@ -413,6 +486,18 @@ SHORT_VIDEO_MAPPING = {
             {
                 "en": "Colorful fruit tea with ice cubes and fresh fruits, condensation drops on cup, refreshing drink ad",
                 "zh": "色彩繽紛水果茶加冰塊和新鮮水果，杯身水珠，清涼飲料廣告"
+            },
+            {
+                "en": "Smartphone rotating on a clean pedestal, studio lighting, tech product showcase",
+                "zh": "智慧型手機在底座上旋轉，攝影棚打光，科技產品展示"
+            },
+            {
+                "en": "Running sneakers on clean studio floor, dynamic spotlight, sporty product commercial",
+                "zh": "跑步運動鞋在乾淨棚拍地面上，動感聚光，運動產品廣告"
+            },
+            {
+                "en": "Glass skincare serum bottle with soft glow, clean beauty product showcase, small business",
+                "zh": "玻璃保養精華瓶柔光呈現，美妝產品展示，小店風格"
             }
         ]
     },
@@ -431,6 +516,18 @@ SHORT_VIDEO_MAPPING = {
             {
                 "en": "Small bakery kitchen, fresh bread coming out of oven, artisan craftsmanship, warm atmosphere",
                 "zh": "小型烘焙廚房，新鮮麵包出爐，手工匠心，溫暖氛圍"
+            },
+            {
+                "en": "Modern tech startup office, team collaborating around prototypes, clean minimal brand intro",
+                "zh": "現代科技新創辦公室，團隊圍繞原型協作，清爽極簡品牌介紹"
+            },
+            {
+                "en": "Cosmetics studio with glass bottles and soft light, small business beauty brand introduction",
+                "zh": "美妝工作室玻璃瓶與柔光氛圍，美妝小店品牌介紹"
+            },
+            {
+                "en": "Furniture showroom with modern sofa and warm lighting, lifestyle brand introduction",
+                "zh": "家具展示間現代沙發與暖光氛圍，生活風格品牌介紹"
             }
         ]
     },
@@ -449,6 +546,14 @@ SHORT_VIDEO_MAPPING = {
             {
                 "en": "Cake decorating tutorial, piping cream on dessert, close-up bakery tutorial video",
                 "zh": "蛋糕裝飾教學，在甜點上擠奶油，特寫烘焙教學影片"
+            },
+            {
+                "en": "Skincare routine tutorial, applying serum and moisturizer, clean bathroom counter, step by step",
+                "zh": "保養步驟教學，塗抹精華與乳霜，乾淨洗手台，逐步示範"
+            },
+            {
+                "en": "New gadget unboxing tutorial, hands opening smart device box, close-up product setup",
+                "zh": "新品開箱教學，雙手拆開智慧裝置包裝，產品設定特寫"
             }
         ]
     },
@@ -467,6 +572,14 @@ SHORT_VIDEO_MAPPING = {
             {
                 "en": "Summer special cold drinks promotion, ice and fruits splashing, refreshing seasonal offer",
                 "zh": "夏季特飲促銷，冰塊和水果飛濺，清涼季節性優惠"
+            },
+            {
+                "en": "Limited-time sneaker sale, dynamic motion graphics, sporty lifestyle promotion",
+                "zh": "限時運動鞋特賣，動感圖形，運動生活風促銷"
+            },
+            {
+                "en": "Home appliance discount event, modern espresso machine in spotlight, limited-time offer",
+                "zh": "家電折扣活動，現代義式咖啡機聚光展示，限時優惠"
             }
         ]
     }
@@ -479,6 +592,11 @@ SHORT_VIDEO_MAPPING = {
 
 # NOTE: input_image_url = CLOTHING preview image (shown in left panel)
 #       result_image_url = model wearing the clothing (shown in right panel)
+#
+# GENDER RESTRICTIONS (must make sense):
+#   - gender_restriction="female" = only female models (e.g. dresses, blouse)
+#   - Male models SKIP female-only items (no men in wedding dress, etc.)
+#   - Female models can wear all items (unisex + female-only)
 #
 # MODEL REQUIREMENTS FOR KLING AI VIRTUAL TRY-ON:
 # - Full body shot (head to at least waist visible)
@@ -652,7 +770,7 @@ TRYON_MAPPING = {
                 "id": "accessories-2",
                 "name": "Watch",
                 "name_zh": "手錶",
-                "prompt": "elegant wristwatch, luxury accessory",
+                "prompt": "classic wristwatch, everyday accessory",
                 "clothing_type": "general",
                 "image_url": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400",
                 "gender_restriction": None
@@ -686,6 +804,7 @@ TRYON_MAPPING = {
 # PATTERN GENERATE MAPPING
 # ============================================================================
 
+# Pattern designs for common business use: packaging, branding, textiles, menus, social media
 PATTERN_GENERATE_MAPPING = {
     "styles": {
         "seamless": {
@@ -693,12 +812,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "無縫圖案",
             "prompts": [
                 {
-                    "en": "Elegant rose floral pattern with gold and navy colors, seamless tile, high quality",
-                    "zh": "優雅的玫瑰花卉圖案，金色與深藍色配色，無縫磁磚"
+                    "en": "Elegant floral pattern for packaging and gift wrap, rose and navy, brand-friendly, seamless tile",
+                    "zh": "禮品包裝與品牌用優雅花卉圖案，玫瑰與深藍色，無縫磁磚"
                 },
                 {
-                    "en": "Japanese wave pattern in navy and white, seamless repeating design, traditional style",
-                    "zh": "日式波浪紋樣，深藍與白色，無縫重複設計"
+                    "en": "Japanese wave pattern for menu border and restaurant branding, navy and white, seamless",
+                    "zh": "菜單邊框與餐飲品牌用日式波浪紋，深藍與白，無縫重複"
                 }
             ]
         },
@@ -707,12 +826,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "花卉圖案",
             "prompts": [
                 {
-                    "en": "Watercolor cherry blossom pattern, soft pink and white, romantic style",
-                    "zh": "水彩櫻花圖案，柔和粉白色，浪漫風格"
+                    "en": "Cherry blossom pattern for cafe and bakery branding, soft pink and white, social media ready",
+                    "zh": "咖啡廳與烘焙品牌用水彩櫻花圖案，粉白色，適合社群貼文"
                 },
                 {
-                    "en": "Tropical palm leaves seamless pattern, green and gold, summer vibes",
-                    "zh": "熱帶棕櫚葉無縫圖案，綠色與金色，夏日氛圍"
+                    "en": "Tropical palm pattern for beverage and summer promo, green and gold, packaging and ads",
+                    "zh": "飲料與夏季促銷用熱帶棕櫚無縫圖案，綠金配色，包裝與廣告"
                 }
             ]
         },
@@ -721,12 +840,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "幾何圖案",
             "prompts": [
                 {
-                    "en": "Modern geometric pattern with triangles, black and gold, art deco style",
-                    "zh": "現代幾何圖案搭配三角形，黑金配色，裝飾藝術風格"
+                    "en": "Modern geometric pattern for tech and retail branding, triangles black and gold, professional look",
+                    "zh": "科技與零售品牌用現代幾何圖案，黑金三角形，高級感"
                 },
                 {
-                    "en": "Art deco golden lines pattern, elegant hexagonal design, luxury feel",
-                    "zh": "裝飾藝術風格金線圖案，優雅六角形設計，奢華感"
+                    "en": "Art deco golden lines for shop product packaging and decor, hexagonal, seamless",
+                    "zh": "商品包裝與店面裝飾用裝飾藝術金線圖案，六角形，無縫"
                 }
             ]
         },
@@ -735,12 +854,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "抽象圖案",
             "prompts": [
                 {
-                    "en": "Abstract marble texture with gold veins, luxury design, organic shapes",
-                    "zh": "抽象大理石紋理配金色紋路，奢華設計，有機形狀"
+                    "en": "Marble texture pattern for cosmetics and skincare packaging, gold veins, professional brand",
+                    "zh": "美妝保養品包裝用大理石紋理圖案，金色紋路，品牌感"
                 },
                 {
-                    "en": "Watercolor abstract splashes, vibrant colors, artistic expression",
-                    "zh": "水彩抽象潑墨，鮮豔色彩，藝術表現"
+                    "en": "Vibrant abstract pattern for social media posts and flyers, watercolor style, small business",
+                    "zh": "社群貼文與傳單用鮮豔抽象圖案，水彩風格，小商家適用"
                 }
             ]
         },
@@ -749,12 +868,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "傳統紋樣",
             "prompts": [
                 {
-                    "en": "Chinese traditional cloud pattern, red and gold, auspicious design",
-                    "zh": "中國傳統雲紋圖案，紅金配色，吉祥設計"
+                    "en": "Chinese cloud pattern for restaurant and festival branding, red and gold, auspicious",
+                    "zh": "餐飲與節慶品牌用中國雲紋，紅金配色，吉祥設計"
                 },
                 {
-                    "en": "Japanese Seigaiha wave pattern, blue gradient, traditional motif",
-                    "zh": "日式青海波紋，藍色漸層，傳統紋樣"
+                    "en": "Japanese wave pattern for tea and beverage packaging, blue gradient, traditional motif",
+                    "zh": "茶飲與飲料包裝用日式青海波紋，藍色漸層，傳統紋樣"
                 }
             ]
         }
@@ -765,9 +884,13 @@ PATTERN_GENERATE_MAPPING = {
 # ============================================================================
 # EFFECT (STYLE TRANSFER) MAPPING
 # ============================================================================
-
-# Effect examples: T2I source image -> I2I style transfer -> styled result
-# IMPORTANT: Style prompts ONLY describe style, NOT products, to preserve product identity
+#
+# RELATIONSHIP (CRITICAL): Do NOT use another prompt to generate a "corresponding"
+# image. Flow: (1) T2I generates source image from prompt, (2) Call Effect API
+# with that EXISTING image + style prompt for I2I transform, (3) Store result.
+# The example IS the transformation of the SAME image—input and output are
+# linked by the same source. Style prompts describe ONLY art style, NOT products.
+#
 EFFECT_MAPPING = {
     "source_images": [
         {
@@ -787,37 +910,67 @@ EFFECT_MAPPING = {
             "name_zh": "水果茶",
             "prompt": "Colorful fresh fruit tea in clear cup with ice, refreshing drink photography, studio lighting",
             "topic": "drinks"
+        },
+        {
+            "name": "Running Sneakers",
+            "name_zh": "跑步運動鞋",
+            "prompt": "Pair of modern running sneakers, clean studio product photo, white background, soft shadow",
+            "topic": "apparel"
+        },
+        {
+            "name": "Smartphone",
+            "name_zh": "智慧型手機",
+            "prompt": "Smartphone standing upright, clean tech product photo, white background, soft shadow",
+            "topic": "tech"
+        },
+        {
+            "name": "Skincare Serum",
+            "name_zh": "保養精華液",
+            "prompt": "Glass skincare serum bottle with dropper, clean cosmetics product photo, white background",
+            "topic": "cosmetics"
+        },
+        {
+            "name": "Wireless Headphones",
+            "name_zh": "無線耳機",
+            "prompt": "Wireless over-ear headphones, matte black finish, centered studio product photo, white background",
+            "topic": "tech"
+        },
+        {
+            "name": "Modern Sofa",
+            "name_zh": "現代沙發",
+            "prompt": "Modern two-seat sofa, neutral fabric, clean studio furniture photo, white background",
+            "topic": "home"
         }
     ],
     "styles": {
         "anime": {
             "name": "Anime",
             "name_zh": "動漫風格",
-            "prompt": "anime style illustration",
+            "prompt": "anime style illustration for social media and ads, eye-catching for small business",
             "strength": 0.65
         },
         "ghibli": {
             "name": "Ghibli",
             "name_zh": "吉卜力風格",
-            "prompt": "studio ghibli anime style, hayao miyazaki",
+            "prompt": "studio ghibli anime style for menu and cafe branding, hayao miyazaki",
             "strength": 0.65
         },
         "cartoon": {
             "name": "Cartoon",
             "name_zh": "卡通風格",
-            "prompt": "cartoon pixar 3d animation style",
+            "prompt": "cartoon pixar 3d style for product ads and flyers, family-friendly business",
             "strength": 0.60
         },
         "oil_painting": {
             "name": "Oil Painting",
             "name_zh": "油畫風格",
-            "prompt": "oil painting artistic van gogh style",
+            "prompt": "oil painting artistic style for brand and restaurant marketing",
             "strength": 0.70
         },
         "watercolor": {
             "name": "Watercolor",
             "name_zh": "水彩風格",
-            "prompt": "watercolor painting soft artistic style",
+            "prompt": "watercolor soft style for menu design and boutique branding",
             "strength": 0.65
         }
     }
@@ -851,19 +1004,26 @@ class VidGoPreGenerator:
         self.piapi = PiAPIClient(os.getenv("PIAPI_KEY", ""))
         self.pollo = PolloClient(os.getenv("POLLO_API_KEY", ""))
         self.a2e = A2EClient(os.getenv("A2E_API_KEY", ""))
-        self.rembg = RembgClient()
-
         # Ensure model library directory exists
         self.MODEL_LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
 
         # Load existing model library
         self._load_model_library()
-
+        self.per_topic_limit: Optional[int] = None
         # Stats tracking
         self.stats = {"success": 0, "failed": 0, "by_tool": {}}
 
         # Local results storage (batch to DB after generation)
         self.local_results: Dict[str, List[Dict]] = {}
+
+    def _topic_can_generate(self, topic_key: str, topic_counts: Dict[str, int], limit: int, total_count: int) -> bool:
+        """Check if we can generate another example for a topic."""
+        if self.per_topic_limit is None:
+            return total_count < limit
+        return topic_counts.get(topic_key, 0) < self.per_topic_limit
+
+    def _topic_mark_generated(self, topic_key: str, topic_counts: Dict[str, int]) -> None:
+        topic_counts[topic_key] = topic_counts.get(topic_key, 0) + 1
 
     def _load_model_library(self):
         """Load existing model photos from disk into GENERATED_MODEL_LIBRARY."""
@@ -904,7 +1064,6 @@ class VidGoPreGenerator:
             "piapi": bool(os.getenv("PIAPI_KEY")),
             "pollo": bool(os.getenv("POLLO_API_KEY")),
             "a2e": bool(os.getenv("A2E_API_KEY")),
-            "rembg": self.rembg.available,
         }
 
     def _generate_lookup_hash(
@@ -936,6 +1095,7 @@ class VidGoPreGenerator:
         self.stats["by_tool"]["ai_avatar"] = {"success": 0, "failed": 0}
         self.local_results["ai_avatar"] = []
         count = 0
+        topic_counts: Dict[str, int] = {}
 
         # Get available characters from A2E
         characters = await self.a2e.get_characters()
@@ -947,50 +1107,70 @@ class VidGoPreGenerator:
         for char in characters[:3]:
             logger.info(f"  - {char.get('_id')}: {char.get('name')}")
 
-        # Iterate through characters, scripts, and languages
-        char_index = 0
+        # Partition characters by gender (name must match face: male name on male face, female on female)
+        # Names must match AVATAR_MAPPING: female avatars = female names, male = male names
+        FEMALE_NAMES = [
+            "女", "female", "woman", "girl",
+            "怡君", "雅婷", "佳穎", "淑芬", "美玲", "雅琪", "怡萱", "欣怡", "雯婷", "筱涵",
+            "小美", "小雅", "小玲", "小萱", "小婷", "小芬", "小琪", "小涵", "小敏", "小慧",
+            "詩涵", "宜蓁", "心怡", "佳慧", "婉婷", "靜怡", "雅文", "思穎", "珮瑜", "曉雯",
+            "yi-jun", "ya-ting", "jia-ying", "shu-fen",
+        ]
+        MALE_NAMES = [
+            "男", "male", "man", "guy",
+            "志偉", "冠宇", "宗翰", "家豪", "承恩", "柏翰", "宇軒", "俊宏", "建宏", "明哲",
+            "建明", "俊傑", "志豪", "冠廷", "柏均", "彥廷", "育成", "嘉偉", "信宏", "政翰",
+            "小明", "小偉", "小豪", "小杰", "小軒", "小翰", "小宏", "小凱", "小龍", "小剛",
+            "zhi-wei", "guan-yu", "zong-han", "jia-hao",
+        ]
+
+        def _char_gender(char):
+            name = (char.get("name") or "").lower()
+            if any(kw in name for kw in FEMALE_NAMES):
+                return "female"
+            if any(kw in name for kw in MALE_NAMES):
+                return "male"
+            return "female" if hash(char.get("_id", "")) % 2 == 0 else "male"
+
+        male_chars = [c for c in characters if _char_gender(c) == "male"]
+        female_chars = [c for c in characters if _char_gender(c) == "female"]
+        if not male_chars:
+            male_chars = characters[: (len(characters) + 1) // 2]
+        if not female_chars:
+            female_chars = characters[len(male_chars):]
+        logger.info(f"  Male characters: {len(male_chars)}, Female: {len(female_chars)}")
+
+        # Most AI Avatars must be Chinese (zh-TW) - VidGo targets SMB/Taiwan market
+        # Language order: zh-TW first, then en
+        lang_order = ["zh-TW", "en"]
+
+        char_index_by_gender = {"male": 0, "female": 0}
+
         for topic, scripts in SCRIPT_MAPPING.items():
-            if count >= limit:
+            if self.per_topic_limit is None and count >= limit:
                 break
 
             for script in scripts:
-                if count >= limit:
+                if self.per_topic_limit is None and count >= limit:
                     break
 
-                for language in ["en", "zh-TW"]:
-                    if count >= limit:
+                for language in lang_order:
+                    topic_key = f"{topic}:{language}"
+                    if not self._topic_can_generate(topic_key, topic_counts, limit, count):
                         break
 
-                    # Cycle through available characters
-                    char = characters[char_index % len(characters)]
+                    # Use script's preferred_gender if set (e.g. nail salon → female),
+                    # otherwise alternate male/female for variety
+                    avatar_gender = script.get("preferred_gender") or ("female" if count % 2 == 0 else "male")
+                    pool = female_chars if avatar_gender == "female" else male_chars
+                    idx = char_index_by_gender[avatar_gender] % max(len(pool), 1)
+                    char = pool[idx] if pool else characters[count % len(characters)]
+                    char_index_by_gender[avatar_gender] += 1
+
                     anchor_id = char.get("_id")
                     input_image_url = char.get("video_cover")
 
                     script_text = script["text_zh"] if language == "zh-TW" else script["text_en"]
-
-                    # Determine avatar gender BEFORE API call so we can pass it
-                    # for gender-matched TTS voice selection
-                    # Common Chinese first names for gender detection (華人常見名字)
-                    FEMALE_NAMES = [
-                        "女", "female", "woman", "girl",
-                        "怡君", "雅婷", "佳穎", "淑芬", "美玲", "雅琪", "怡萱", "欣怡", "雯婷", "筱涵",
-                        "小美", "小雅", "小玲", "小萱", "小婷", "小芬", "小琪", "小涵", "小敏", "小慧",
-                        "詩涵", "宜蓁", "心怡", "佳慧", "婉婷", "靜怡", "雅文", "思穎", "珮瑜", "曉雯",
-                    ]
-                    MALE_NAMES = [
-                        "男", "male", "man", "guy",
-                        "志偉", "冠宇", "宗翰", "家豪", "承恩", "柏翰", "宇軒", "俊宏", "建宏", "明哲",
-                        "建明", "俊傑", "志豪", "冠廷", "柏均", "彥廷", "育成", "嘉偉", "信宏", "政翰",
-                        "小明", "小偉", "小豪", "小杰", "小軒", "小翰", "小宏", "小凱", "小龍", "小剛",
-                    ]
-                    char_name_lower = (char.get("name") or "").lower()
-                    if any(kw in char_name_lower for kw in FEMALE_NAMES):
-                        avatar_gender = "female"
-                    elif any(kw in char_name_lower for kw in MALE_NAMES):
-                        avatar_gender = "male"
-                    else:
-                        # Default alternating based on index
-                        avatar_gender = "female" if char_index % 2 == 0 else "male"
 
                     logger.info(f"[{count+1}] Character: {char.get('name')} (gender={avatar_gender}) | Topic: {topic} | Script: {script['id']} | Lang: {language}")
                     logger.info(f"  Script: {script_text[:40]}...")
@@ -1011,12 +1191,13 @@ class VidGoPreGenerator:
                         self.stats["failed"] += 1
                         self.stats["by_tool"]["ai_avatar"]["failed"] += 1
                         count += 1
+                        self._topic_mark_generated(topic_key, topic_counts)
                         continue
-                    
-                    # Generate frontend-compatible avatar_id
-                    gender_count = sum(1 for e in self.local_results.get("ai_avatar", []) 
-                                      if e.get("input_params", {}).get("voice_gender") == avatar_gender) + 1
-                    frontend_avatar_id = f"{avatar_gender}-{min(gender_count, 3)}"  # female-1, male-1, etc.
+
+                    # Generate frontend-compatible avatar_id — cycle through 1..4
+                    gender_count = sum(1 for e in self.local_results.get("ai_avatar", [])
+                                      if e.get("input_params", {}).get("voice_gender") == avatar_gender)
+                    frontend_avatar_id = f"{avatar_gender}-{(gender_count % 4) + 1}"  # female-1..4, male-1..4 cycling
                     
                     # Store locally - input_image_url matches the character used
                     # Ensure input_image_url is not empty (5C: avatar image consistency)
@@ -1031,6 +1212,8 @@ class VidGoPreGenerator:
                         "topic": topic,
                         "language": language,
                         "prompt": script_text,
+                        "prompt_zh": script_text if language == "zh-TW" else None,
+                        "prompt_en": script_text if language == "en" else None,
                         "input_image_url": avatar_input_image,
                         "result_video_url": result["video_url"],
                         "input_params": {
@@ -1057,7 +1240,7 @@ class VidGoPreGenerator:
                     self.stats["success"] += 1
                     self.stats["by_tool"]["ai_avatar"]["success"] += 1
                     count += 1
-                    char_index += 1  # Move to next character for variety
+                    self._topic_mark_generated(topic_key, topic_counts)
                     await asyncio.sleep(2)
 
         await self._store_local_to_db("ai_avatar")
@@ -1070,7 +1253,7 @@ class VidGoPreGenerator:
         """
         Generate Background Removal examples.
 
-        Flow: Prompt → T2I → Rembg → Transparent PNG
+        Flow: Prompt → T2I → PiAPI Remove BG → Transparent PNG
         """
         logger.info("=" * 60)
         logger.info("BACKGROUND REMOVAL - T2I + Rembg")
@@ -1079,13 +1262,14 @@ class VidGoPreGenerator:
         self.stats["by_tool"]["background_removal"] = {"success": 0, "failed": 0}
         self.local_results["background_removal"] = []
         count = 0
+        topic_counts: Dict[str, int] = {}
 
         for topic, topic_data in BACKGROUND_REMOVAL_MAPPING.items():
-            if count >= limit:
+            if self.per_topic_limit is None and count >= limit:
                 break
 
             for prompt in topic_data["prompts"]:
-                if count >= limit:
+                if not self._topic_can_generate(topic, topic_counts, limit, count):
                     break
 
                 logger.info(f"[{count+1}] Topic: {topic}")
@@ -1100,24 +1284,22 @@ class VidGoPreGenerator:
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["background_removal"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(topic, topic_counts)
                     continue
 
                 source_url = t2i["image_url"]
                 logger.info(f"  Source: {source_url}")
 
-                # Step 2: Remove background
-                logger.info("  Step 2: Rembg...")
-                if source_url.startswith("/static"):
-                    local_path = f"/app{source_url}"
-                    rembg_result = await self.rembg.remove_background_local(local_path)
-                else:
-                    rembg_result = await self.rembg.remove_background(source_url)
+                # Step 2: Remove background via PiAPI
+                logger.info("  Step 2: Remove BG (PiAPI)...")
+                rembg_result = await self.piapi.remove_background(source_url)
 
                 if not rembg_result["success"]:
-                    logger.error(f"  Rembg Failed: {rembg_result.get('error')}")
+                    logger.error(f"  Remove BG Failed: {rembg_result.get('error')}")
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["background_removal"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(topic, topic_counts)
                     continue
 
                 result_url = rembg_result["image_url"]
@@ -1130,7 +1312,7 @@ class VidGoPreGenerator:
                     "result_image_url": result_url,
                     "generation_steps": [
                         {"step": 1, "api": "piapi", "action": "t2i", "result_url": source_url},
-                        {"step": 2, "api": "rembg", "action": "remove_bg", "result_url": result_url}
+                        {"step": 2, "api": "piapi", "action": "remove_bg", "result_url": result_url}
                     ],
                     "generation_cost": 0.005
                 }
@@ -1140,6 +1322,7 @@ class VidGoPreGenerator:
                 self.stats["success"] += 1
                 self.stats["by_tool"]["background_removal"]["success"] += 1
                 count += 1
+                self._topic_mark_generated(topic, topic_counts)
                 await asyncio.sleep(2)
 
         await self._store_local_to_db("background_removal")
@@ -1152,26 +1335,31 @@ class VidGoPreGenerator:
         """
         Generate Room Redesign examples.
 
-        Combinations: Room × Style
-        Total: 4 rooms × 5 styles = 20
+        Combinations: Room × Style (style IDs match DESIGN_STYLES from interior API
+        so frontend room+roomType+style matching works).
+        Total: 4 rooms × N styles (from DESIGN_STYLES)
         """
+        from app.services.interior_design_service import DESIGN_STYLES
+
         logger.info("=" * 60)
-        logger.info("ROOM REDESIGN - Room × Style")
+        logger.info("ROOM REDESIGN - Room × Style (DESIGN_STYLES ids)")
         logger.info("=" * 60)
 
         self.stats["by_tool"]["room_redesign"] = {"success": 0, "failed": 0}
         self.local_results["room_redesign"] = []
         count = 0
+        topic_counts: Dict[str, int] = {}
 
         room_types = ROOM_REDESIGN_MAPPING["room_types"]
-        styles = ROOM_REDESIGN_MAPPING["styles"]
+        # Use DESIGN_STYLES so stored style_id matches frontend /api/v1/interior/styles
+        styles = {sid: {"name": s["name"], "prompt": s["prompt_suffix"]} for sid, s in DESIGN_STYLES.items()}
 
         for room_id, room_data in room_types.items():
-            if count >= limit:
+            if self.per_topic_limit is None and count >= limit:
                 break
 
             for style_id, style_data in styles.items():
-                if count >= limit:
+                if not self._topic_can_generate(style_id, topic_counts, limit, count):
                     break
 
                 logger.info(f"[{count+1}] Room: {room_data['name']} -> Style: {style_data['name']}")
@@ -1185,16 +1373,17 @@ class VidGoPreGenerator:
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["room_redesign"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(style_id, topic_counts)
                     continue
 
                 local_entry = {
-                    "topic": style_id,
+                    "topic": room_data["room_type"],  # so topic matches selectedRoomType in frontend
                     "prompt": prompt,
                     "input_image_url": room_data["url"],
                     "result_image_url": t2i["image_url"],
                     "input_params": {
                         "room_id": room_id,
-                        "style_id": style_id,
+                        "style_id": style_id,  # matches DESIGN_STYLES e.g. modern_minimalist, scandinavian
                         "room_type": room_data["room_type"]
                     },
                     "generation_cost": 0.005
@@ -1205,6 +1394,7 @@ class VidGoPreGenerator:
                 self.stats["success"] += 1
                 self.stats["by_tool"]["room_redesign"]["success"] += 1
                 count += 1
+                self._topic_mark_generated(style_id, topic_counts)
                 await asyncio.sleep(2)
 
         await self._store_local_to_db("room_redesign")
@@ -1232,17 +1422,18 @@ class VidGoPreGenerator:
         self.stats["by_tool"]["short_video"] = {"success": 0, "failed": 0}
         self.local_results["short_video"] = []
         count = 0
+        topic_counts: Dict[str, int] = {}
 
         # Iterate through each motion type
         for motion_id, motion_data in SHORT_VIDEO_MAPPING.items():
-            if count >= limit:
+            if self.per_topic_limit is None and count >= limit:
                 break
 
             motion_name = motion_data["name"]
             motion_name_zh = motion_data["name_zh"]
 
             for prompt_data in motion_data["prompts"]:
-                if count >= limit:
+                if not self._topic_can_generate(motion_id, topic_counts, limit, count):
                     break
 
                 prompt_en = prompt_data["en"]
@@ -1261,17 +1452,20 @@ class VidGoPreGenerator:
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["short_video"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(motion_id, topic_counts)
                     continue
 
-                source_image_url = t2i["image_url"]
+                source_image_url = t2i["image_url"]  # local path for storage
+                remote_image_url = t2i.get("remote_url", source_image_url)  # remote URL for Pollo
                 logger.info(f"  Source image: {source_image_url}")
 
                 # Step 2: Convert T2I image to video using I2V
+                # Pollo API needs remote URL, not local path
                 logger.info("  Step 2: I2V...")
                 result = await self.pollo.generate_video(
                     prompt=prompt_en,
-                    image_url=source_image_url,
-                    length=5
+                    image_url=remote_image_url,
+                    length=SHORT_VIDEO_LENGTH
                 )
 
                 if not result["success"]:
@@ -1279,6 +1473,7 @@ class VidGoPreGenerator:
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["short_video"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(motion_id, topic_counts)
                     continue
 
                 local_entry = {
@@ -1304,6 +1499,7 @@ class VidGoPreGenerator:
                 self.stats["success"] += 1
                 self.stats["by_tool"]["short_video"]["success"] += 1
                 count += 1
+                self._topic_mark_generated(motion_id, topic_counts)
                 await asyncio.sleep(5)
 
         await self._store_local_to_db("short_video")
@@ -1317,7 +1513,7 @@ class VidGoPreGenerator:
         Generate Product Scene examples.
 
         Combinations: Product × Scene
-        Total: 5 products × 8 scenes = 40
+        Total: 8 products × 8 scenes = 64
         """
         logger.info("=" * 60)
         logger.info("PRODUCT SCENE - Product × Scene")
@@ -1329,13 +1525,35 @@ class VidGoPreGenerator:
 
         products = PRODUCT_SCENE_MAPPING["products"]
         scenes = PRODUCT_SCENE_MAPPING["scenes"]
+        product_image_cache = {}
+        topic_counts: Dict[str, int] = {}
 
         for prod_id, prod_data in products.items():
-            if count >= limit:
+            if self.per_topic_limit is None and count >= limit:
                 break
 
+            product_prompt = prod_data.get("prompt")
+            product_prompt_zh = prod_data.get("prompt_zh")
+
+            # Generate product image from prompt once per product
+            if product_prompt and prod_id not in product_image_cache:
+                logger.info(f"  Generating product image from prompt: {prod_data['name']}")
+                t2i_product = await self.piapi.generate_image(
+                    prompt=product_prompt,
+                    width=1024,
+                    height=1024
+                )
+
+                if not t2i_product.get("success"):
+                    logger.warning(f"  Product T2I failed: {t2i_product.get('error')}, skipping product...")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["product_scene"]["failed"] += 1
+                    continue
+
+                product_image_cache[prod_id] = t2i_product.get("image_url")
+
             for scene_id, scene_data in scenes.items():
-                if count >= limit:
+                if not self._topic_can_generate(scene_id, topic_counts, limit, count):
                     break
 
                 logger.info(f"[{count+1}] Product: {prod_data['name']} -> Scene: {scene_data['name']}")
@@ -1345,21 +1563,25 @@ class VidGoPreGenerator:
                 # 2. Generate new scene background with T2I
                 # 3. Composite product onto scene using PIL
 
-                product_url = prod_data["url"]
-
-                # Step 1: Remove product background using Rembg
-                logger.info("  Step 1: Removing product background...")
-                if product_url.startswith("/static"):
-                    local_path = f"/app{product_url}"
-                    rembg_result = await self.rembg.remove_background_local(local_path)
-                else:
-                    rembg_result = await self.rembg.remove_background(product_url)
-
-                if not rembg_result["success"]:
-                    logger.warning(f"  Rembg failed: {rembg_result.get('error')}, skipping...")
+                product_url = product_image_cache.get(prod_id) or prod_data.get("url")
+                if not product_url:
+                    logger.warning("  No product image available (missing prompt and url), skipping...")
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["product_scene"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(scene_id, topic_counts)
+                    continue
+
+                # Step 1: Remove product background using PiAPI
+                logger.info("  Step 1: Removing product background (PiAPI)...")
+                rembg_result = await self.piapi.remove_background(product_url)
+
+                if not rembg_result["success"]:
+                    logger.warning(f"  Remove BG failed: {rembg_result.get('error')}, skipping...")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["product_scene"]["failed"] += 1
+                    count += 1
+                    self._topic_mark_generated(scene_id, topic_counts)
                     continue
 
                 product_no_bg_url = rembg_result["image_url"]
@@ -1367,7 +1589,7 @@ class VidGoPreGenerator:
 
                 # Step 2: Generate scene background image
                 logger.info("  Step 2: Generating scene background...")
-                scene_prompt = f"{scene_data['prompt']}, empty background for product placement, professional studio lighting, high-end commercial photography, 8K quality"
+                scene_prompt = f"{scene_data['prompt']}, empty background for product placement, professional studio lighting, commercial photography, 8K quality"
                 t2i = await self.piapi.generate_image(prompt=scene_prompt, width=1024, height=1024)
 
                 if not t2i["success"]:
@@ -1375,6 +1597,7 @@ class VidGoPreGenerator:
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["product_scene"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(scene_id, topic_counts)
                     continue
 
                 scene_url = t2i["image_url"]
@@ -1393,21 +1616,39 @@ class VidGoPreGenerator:
                     result_url = composite_result["image_url"]
                     logger.info(f"  Composited: {result_url}")
 
+                generation_steps = []
+                step_num = 1
+                if product_prompt:
+                    generation_steps.append({
+                        "step": step_num,
+                        "action": "t2i_product",
+                        "prompt": product_prompt,
+                        "result": product_url
+                    })
+                    step_num += 1
+
+                generation_steps.extend([
+                    {"step": step_num, "action": "remove_bg", "result": product_no_bg_url},
+                    {"step": step_num + 1, "action": "t2i_scene", "result": scene_url},
+                    {"step": step_num + 2, "action": "composite", "result": result_url}
+                ])
+
                 local_entry = {
                     "topic": scene_id,
-                    "prompt": scene_prompt,
+                    "prompt": f"{product_prompt} | Scene: {scene_prompt}" if product_prompt else scene_prompt,
+                    "prompt_zh": f"{product_prompt_zh} | 場景: {scene_data['name_zh']}" if product_prompt_zh else None,
                     "input_image_url": product_url,  # Original product image
                     "result_image_url": result_url,  # Product in new scene
                     "input_params": {
                         "product_id": prod_id,
+                        "product_name": prod_data["name"],
+                        "product_prompt": product_prompt,
                         "scene_type": scene_id,
-                        "method": "rembg_composite"
+                        "scene_name": scene_data["name"],
+                        "scene_prompt": scene_prompt,
+                        "method": "piapi_remove_bg"
                     },
-                    "generation_steps": [
-                        {"step": 1, "action": "rembg", "result": product_no_bg_url},
-                        {"step": 2, "action": "t2i_scene", "result": scene_url},
-                        {"step": 3, "action": "composite", "result": result_url}
-                    ],
+                    "generation_steps": generation_steps,
                     "generation_cost": 0.015  # Rembg + T2I + composite
                 }
                 self.local_results["product_scene"].append(local_entry)
@@ -1416,6 +1657,7 @@ class VidGoPreGenerator:
                 self.stats["success"] += 1
                 self.stats["by_tool"]["product_scene"]["success"] += 1
                 count += 1
+                self._topic_mark_generated(scene_id, topic_counts)
                 await asyncio.sleep(2)
 
         await self._store_local_to_db("product_scene")
@@ -1536,6 +1778,7 @@ class VidGoPreGenerator:
         self.stats["by_tool"]["try_on"] = {"success": 0, "failed": 0}
         self.local_results["try_on"] = []
         count = 0
+        topic_counts: Dict[str, int] = {}
 
         models = TRYON_MAPPING["models"]
         clothing = TRYON_MAPPING["clothing"]
@@ -1549,15 +1792,15 @@ class VidGoPreGenerator:
             logger.info(f"  - {mid}: {mdata.get('url', 'N/A')[:50]}...")
 
         for model_id, model_data in models.items():
-            if count >= limit:
+            if self.per_topic_limit is None and count >= limit:
                 break
 
             for topic, clothes in clothing.items():
-                if count >= limit:
+                if not self._topic_can_generate(topic, topic_counts, limit, count):
                     break
 
                 for cloth in clothes:
-                    if count >= limit:
+                    if not self._topic_can_generate(topic, topic_counts, limit, count):
                         break
 
                     # Check gender restriction:
@@ -1594,6 +1837,7 @@ class VidGoPreGenerator:
                         self.stats["failed"] += 1
                         self.stats["by_tool"]["try_on"]["failed"] += 1
                         count += 1
+                        self._topic_mark_generated(topic, topic_counts)
                         continue
 
                     # Extract result image URL
@@ -1609,6 +1853,7 @@ class VidGoPreGenerator:
                         self.stats["failed"] += 1
                         self.stats["by_tool"]["try_on"]["failed"] += 1
                         count += 1
+                        self._topic_mark_generated(topic, topic_counts)
                         continue
 
                     # IMPORTANT: input_image_url is the CLOTHING preview image
@@ -1634,6 +1879,7 @@ class VidGoPreGenerator:
                     self.stats["success"] += 1
                     self.stats["by_tool"]["try_on"]["success"] += 1
                     count += 1
+                    self._topic_mark_generated(topic, topic_counts)
                     await asyncio.sleep(2)  # Rate limiting for Kling API
 
         await self._store_local_to_db("try_on")
@@ -1656,15 +1902,16 @@ class VidGoPreGenerator:
         self.stats["by_tool"]["pattern_generate"] = {"success": 0, "failed": 0}
         self.local_results["pattern_generate"] = []
         count = 0
+        topic_counts: Dict[str, int] = {}
 
         styles = PATTERN_GENERATE_MAPPING["styles"]
 
         for style_id, style_data in styles.items():
-            if count >= limit:
+            if self.per_topic_limit is None and count >= limit:
                 break
 
             for prompt_data in style_data["prompts"]:
-                if count >= limit:
+                if not self._topic_can_generate(style_id, topic_counts, limit, count):
                     break
 
                 prompt_en = prompt_data["en"]
@@ -1682,6 +1929,7 @@ class VidGoPreGenerator:
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["pattern_generate"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(style_id, topic_counts)
                     continue
 
                 local_entry = {
@@ -1702,6 +1950,7 @@ class VidGoPreGenerator:
                 self.stats["success"] += 1
                 self.stats["by_tool"]["pattern_generate"]["success"] += 1
                 count += 1
+                self._topic_mark_generated(style_id, topic_counts)
                 await asyncio.sleep(1)
 
         await self._store_local_to_db("pattern_generate")
@@ -1715,12 +1964,13 @@ class VidGoPreGenerator:
         Generate Effect (Style Transfer) examples.
 
         Flow: T2I (source image) → I2I (style transfer) → Styled result
-        Ensures input product = output product (same item, different style)
+        IMPORTANT—Example correspondence: We use the EXISTING T2I result as
+        input to Effect API. We do NOT generate another image with a different
+        prompt. The I2I step transforms the SAME product image into the styled
+        version. input_image_url = T2I output; result_image_url = I2I output.
 
-        IMPORTANT:
-        - Style prompts ONLY describe the art style, NOT the product
-        - I2I strength is kept at 0.6-0.7 to preserve product identity
-        - If strength is too high (>0.8), the product may change
+        - Style prompts ONLY describe art style, NOT the product
+        - I2I strength 0.6-0.7 preserves product identity
         """
         logger.info("=" * 60)
         logger.info("EFFECT - T2I + I2I Style Transfer")
@@ -1729,13 +1979,22 @@ class VidGoPreGenerator:
         self.stats["by_tool"]["effect"] = {"success": 0, "failed": 0}
         self.local_results["effect"] = []
         count = 0
+        topic_counts: Dict[str, int] = {}
 
         source_images = EFFECT_MAPPING["source_images"]
         styles = EFFECT_MAPPING["styles"]
 
         for source in source_images:
-            if count >= limit:
+            if self.per_topic_limit is None and count >= limit:
                 break
+            if self.per_topic_limit is not None:
+                all_topics_filled = all(
+                    topic_counts.get(style_id, 0) >= self.per_topic_limit
+                    for style_id in styles.keys()
+                )
+                if all_topics_filled:
+                    logger.info("All style topics reached per-topic limit, stopping effect generation.")
+                    break
 
             # Step 1: Generate source image with T2I
             logger.info(f"[{count+1}] Source: {source['name']} ({source['name_zh']})")
@@ -1751,7 +2010,6 @@ class VidGoPreGenerator:
                 logger.error(f"  T2I Failed: {t2i.get('error')}")
                 self.stats["failed"] += 1
                 self.stats["by_tool"]["effect"]["failed"] += 1
-                count += 1
                 continue
 
             source_image_url = t2i["image_url"]
@@ -1759,7 +2017,7 @@ class VidGoPreGenerator:
 
             # Step 2: Apply each style via I2I
             for style_id, style_data in styles.items():
-                if count >= limit:
+                if not self._topic_can_generate(style_id, topic_counts, limit, count):
                     break
 
                 logger.info(f"  Applying style: {style_data['name']} ({style_id})")
@@ -1776,6 +2034,7 @@ class VidGoPreGenerator:
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["effect"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(style_id, topic_counts)
                     continue
 
                 result_url = i2i_result.get("image_url") or i2i_result.get("output", {}).get("image_url")
@@ -1789,12 +2048,14 @@ class VidGoPreGenerator:
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["effect"]["failed"] += 1
                     count += 1
+                    self._topic_mark_generated(style_id, topic_counts)
                     continue
 
                 local_entry = {
                     "topic": style_id,
-                    "prompt": f"{source['name']} - {style_data['name']} style",
-                    "prompt_zh": f"{source['name_zh']} - {style_data['name_zh']}",
+                    "prompt": f"{source['prompt']} | Style: {style_data['prompt']}",
+                    "prompt_zh": f"{source['name_zh']} | 風格: {style_data['name_zh']}",
+                    "effect_prompt": style_data["prompt"],
                     "input_image_url": source_image_url,  # Original product photo
                     "result_image_url": result_url,  # Styled version (same product)
                     "input_params": {
@@ -1816,7 +2077,17 @@ class VidGoPreGenerator:
                 self.stats["success"] += 1
                 self.stats["by_tool"]["effect"]["success"] += 1
                 count += 1
+                self._topic_mark_generated(style_id, topic_counts)
                 await asyncio.sleep(2)
+
+            if self.per_topic_limit is not None:
+                all_topics_filled = all(
+                    topic_counts.get(style_id, 0) >= self.per_topic_limit
+                    for style_id in styles.keys()
+                )
+                if all_topics_filled:
+                    logger.info("All style topics reached per-topic limit, stopping effect generation.")
+                    break
 
         await self._store_local_to_db("effect")
 
@@ -2062,6 +2333,7 @@ class VidGoPreGenerator:
                 lookup_hash = self._generate_lookup_hash(
                     tool_type=tool_name,
                     prompt=entry["prompt"],
+                    effect_prompt=entry.get("effect_prompt"),
                     input_image_url=entry.get("input_image_url")
                 )
 
@@ -2101,6 +2373,8 @@ class VidGoPreGenerator:
                     status=MaterialStatus.APPROVED,
                     prompt=entry["prompt"],
                     prompt_zh=entry.get("prompt_zh"),
+                    effect_prompt=entry.get("effect_prompt"),
+                    effect_prompt_zh=entry.get("effect_prompt_zh"),
                     input_image_url=entry.get("input_image_url"),
                     input_params=input_params,
                     generation_steps=entry.get("generation_steps", []),
@@ -2130,12 +2404,14 @@ class VidGoPreGenerator:
         self,
         tool: Optional[str] = None,
         limit: int = 10,
-        dry_run: bool = False
+        dry_run: bool = False,
+        per_topic_limit: Optional[int] = None
     ):
         """Run pre-generation pipeline."""
         logger.info("=" * 60)
         logger.info("VidGo Main Pre-generation Pipeline")
         logger.info("=" * 60)
+        self.per_topic_limit = per_topic_limit
 
         # Check APIs
         api_status = await self.check_apis()
@@ -2189,7 +2465,8 @@ class VidGoPreGenerator:
                 if name == "model_library":
                     continue  # Already ran
                 try:
-                    await func(limit=limit)
+                    tool_limit = TOOL_LIMITS.get(name, limit)
+                    await func(limit=tool_limit)
                 except Exception as e:
                     logger.error(f"Error in {name}: {e}")
 
@@ -2225,7 +2502,7 @@ Examples:
 Available tools:
     model_library      - Generate full-body model photos for try-on
     ai_avatar          - AI Avatar videos (avatar × script × language)
-    background_removal - Background removal (T2I → rembg)
+    background_removal - Background removal (T2I → PiAPI remove_bg)
     room_redesign      - Room redesign (room × style)
     short_video        - Short videos (Pollo T2V)
     product_scene      - Product scenes (product × scene)
@@ -2252,7 +2529,13 @@ Workflow for Virtual Try-On:
         "--limit",
         type=int,
         default=10,
-        help="Max materials per tool (default: 10)"
+        help="Max materials per tool (total) when --per-topic-limit is not set (default: 10)"
+    )
+    parser.add_argument(
+        "--per-topic-limit",
+        type=int,
+        default=None,
+        help="Max materials per topic (overrides --limit behavior for topic-based tools)"
     )
     parser.add_argument(
         "--dry-run",
@@ -2271,7 +2554,8 @@ Workflow for Virtual Try-On:
     await generator.run(
         tool=args.tool if not args.all else None,
         limit=args.limit,
-        dry_run=args.dry_run
+        dry_run=args.dry_run,
+        per_topic_limit=args.per_topic_limit
     )
 
 

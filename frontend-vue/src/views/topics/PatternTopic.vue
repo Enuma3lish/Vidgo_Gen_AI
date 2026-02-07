@@ -21,27 +21,27 @@ const {
   demoTemplates
 } = useDemoMode()
 
-// Example prompts for each tool
+// Example prompts for each tool (aligned with backend PATTERN_GENERATE_MAPPING, common business use)
 const toolExamplePrompts = {
   patternGenerate: [
-    { en: 'Elegant rose floral pattern with gold and navy colors', zh: '優雅的玫瑰花卉圖案，金色與深藍色配色' },
-    { en: 'Modern geometric pattern with triangles', zh: '現代幾何圖案搭配三角形' },
-    { en: 'Japanese wave pattern in navy and white', zh: '日式波浪紋樣，深藍與白色' },
-    { en: 'Tropical palm leaves seamless pattern', zh: '熱帶棕櫚葉無縫圖案' },
-    { en: 'Art deco golden lines pattern', zh: '裝飾藝術風格金線圖案' },
-    { en: 'Watercolor cherry blossom pattern', zh: '水彩櫻花圖案' }
+    { en: 'Floral pattern for packaging and gift wrap, rose and navy', zh: '禮品包裝與品牌用花卉圖案，玫瑰與深藍' },
+    { en: 'Japanese wave pattern for menu and restaurant branding', zh: '菜單與餐飲品牌用日式波浪紋' },
+    { en: 'Cherry blossom pattern for cafe and bakery, soft pink', zh: '咖啡廳與烘焙用水彩櫻花圖案' },
+    { en: 'Tropical palm pattern for beverage and summer promo', zh: '飲料與夏季促銷用熱帶棕櫚圖案' },
+    { en: 'Geometric pattern for tech and retail branding', zh: '科技與零售品牌用現代幾何圖案' },
+    { en: 'Marble texture for cosmetics packaging', zh: '美妝包裝用大理石紋理圖案' }
   ],
   patternTransfer: [
-    { en: 'Apply marble texture to this pattern', zh: '將大理石紋理應用到此圖案' },
-    { en: 'Convert to embroidery style', zh: '轉換為刺繡風格' },
-    { en: 'Make it look like watercolor painting', zh: '使其看起來像水彩畫' },
-    { en: 'Add metallic gold finish', zh: '添加金屬金色效果' }
+    { en: 'Apply marble texture for premium packaging look', zh: '將大理石紋理用於高級包裝感' },
+    { en: 'Convert to embroidery style for textile business', zh: '轉換為刺繡風格，織品業用' },
+    { en: 'Watercolor style for menu and flyer design', zh: '水彩風格，菜單與傳單設計' },
+    { en: 'Add metallic gold for luxury brand finish', zh: '添加金屬金效果，奢華品牌用' }
   ],
   patternSeamless: [
-    { en: 'Create seamless tile from this pattern', zh: '從此圖案創建無縫磁磚' },
-    { en: 'Make edges blend perfectly', zh: '使邊緣完美融合' },
-    { en: 'Generate repeatable wallpaper pattern', zh: '生成可重複的壁紙圖案' },
-    { en: 'Create fabric-ready seamless design', zh: '創建織物可用的無縫設計' }
+    { en: 'Seamless tile for packaging and wallpaper', zh: '包裝與壁紙用無縫磁磚' },
+    { en: 'Repeatable pattern for fabric and print', zh: '織物與印刷用可重複圖案' },
+    { en: 'Brand-ready seamless design for social media', zh: '社群用品牌無縫設計' },
+    { en: 'Fabric-ready seamless for retail products', zh: '零售產品用織物無縫設計' }
   ]
 }
 

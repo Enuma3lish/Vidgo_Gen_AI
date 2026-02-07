@@ -34,7 +34,7 @@ VIDGO_STYLES = [
         "name_zh": "動漫風格",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2022/08/09/16/19/anime-7375400_640.jpg",
-        "prompt": "anime style"
+        "prompt": "anime style for social media and product ads"
     },
     {
         "id": "ghibli",
@@ -42,7 +42,7 @@ VIDGO_STYLES = [
         "name_zh": "吉卜力風格",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2020/06/14/03/55/anime-5296573_640.jpg",
-        "prompt": "studio ghibli anime style, hayao miyazaki"
+        "prompt": "studio ghibli anime style for menu and cafe branding, hayao miyazaki"
     },
     {
         "id": "cartoon",
@@ -50,7 +50,7 @@ VIDGO_STYLES = [
         "name_zh": "卡通風格",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2017/07/03/20/17/colorful-2468874_640.jpg",
-        "prompt": "cartoon pixar 3d animation style"
+        "prompt": "cartoon pixar 3d style for product ads and flyers"
     },
     {
         "id": "clay",
@@ -58,7 +58,7 @@ VIDGO_STYLES = [
         "name_zh": "黏土動畫",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2018/03/07/17/36/clay-3206587_640.jpg",
-        "prompt": "claymation stop motion clay animation style"
+        "prompt": "claymation stop motion clay style for product and food ads"
     },
     {
         "id": "cute_anime",
@@ -66,7 +66,7 @@ VIDGO_STYLES = [
         "name_zh": "可愛動漫",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2022/12/01/15/38/ai-generated-7629380_640.jpg",
-        "prompt": "cute kawaii anime style"
+        "prompt": "cute kawaii anime style for social media and shop ads"
     },
     {
         "id": "oil_painting",
@@ -74,7 +74,7 @@ VIDGO_STYLES = [
         "name_zh": "油畫風格",
         "category": "artistic",
         "preview_url": "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=300&fit=crop",
-        "prompt": "oil painting artistic van gogh style"
+        "prompt": "oil painting artistic style for restaurant and food marketing"
     },
     {
         "id": "watercolor",
@@ -82,7 +82,7 @@ VIDGO_STYLES = [
         "name_zh": "水彩風格",
         "category": "artistic",
         "preview_url": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=400&h=300&fit=crop",
-        "prompt": "watercolor painting soft artistic style"
+        "prompt": "watercolor soft style for menu design and product ads"
     },
     # === Modern styles ===
     {
@@ -91,7 +91,7 @@ VIDGO_STYLES = [
         "name_zh": "賽博朋克",
         "category": "modern",
         "preview_url": "https://images.unsplash.com/photo-1515705576963-95cad62945b6?w=400&h=300&fit=crop",
-        "prompt": "cyberpunk neon futuristic sci-fi style"
+        "prompt": "cyberpunk neon futuristic style for tech product ads"
     },
     {
         "id": "realistic",
@@ -99,7 +99,7 @@ VIDGO_STYLES = [
         "name_zh": "寫實風格",
         "category": "modern",
         "preview_url": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=300&fit=crop",
-        "prompt": "realistic photorealistic high quality style"
+        "prompt": "realistic photorealistic style for product and food ads"
     },
     # === Professional styles ===
     {
@@ -108,7 +108,7 @@ VIDGO_STYLES = [
         "name_zh": "電影質感",
         "category": "professional",
         "preview_url": "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=300&fit=crop",
-        "prompt": "cinematic movie film hollywood style"
+        "prompt": "cinematic movie style for brand and product video ads"
     },
     {
         "id": "anime_classic",
@@ -116,7 +116,7 @@ VIDGO_STYLES = [
         "name_zh": "經典動漫",
         "category": "professional",
         "preview_url": "https://images.unsplash.com/photo-1613376023733-0a73315d9b06?w=400&h=300&fit=crop",
-        "prompt": "classic anime high quality style"
+        "prompt": "classic anime style for menu and product marketing"
     },
 ]
 

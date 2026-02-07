@@ -19,7 +19,9 @@ const isZh = computed(() => locale.value.startsWith('zh'))
 const {
   isDemoUser,
   loadDemoTemplates,
-  demoTemplates
+  demoTemplates,
+  tryPrompts,
+  dbEmpty
 } = useDemoMode()
 
 const uploadedImage = ref<string | null>(null)
@@ -28,63 +30,25 @@ const isProcessing = ref(false)
 const selectedBgType = ref<'transparent' | 'white' | 'custom'>('transparent')
 const customBgColor = ref('#ffffff')
 
-// Default images for demo users (5 examples) - with paired input/result URLs
-// These should be pre-generated and stored in the static folder
-const demoExamples = [
-  {
-    id: 'demo-1',
-    input: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
-    prompt: 'Remove the background from this product image',
-    promptZh: '移除這張產品圖片的背景',
-    result: null as string | null
-  },
-  {
-    id: 'demo-2',
-    input: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
-    prompt: 'Remove background and create transparent PNG',
-    promptZh: '移除背景並創建透明PNG圖片',
-    result: null as string | null
-  },
-  {
-    id: 'demo-3',
-    input: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
-    prompt: 'Remove background from shoes image',
-    promptZh: '移除鞋子圖片的背景',
-    result: null as string | null
-  },
-  {
-    id: 'demo-4',
-    input: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800',
-    prompt: 'Create clean product cutout with transparent background',
-    promptZh: '創建乾淨的產品剪影，透明背景',
-    result: null as string | null
-  },
-  {
-    id: 'demo-5',
-    input: 'https://images.unsplash.com/photo-1541643600914-78b084683601?w=800',
-    prompt: 'Extract product from background for e-commerce',
-    promptZh: '為電商提取產品，移除背景',
-    result: null as string | null
-  }
-]
-
-// Demo images from database
+// Demo images from database only (no hardcoded fallbacks)
 const selectedDemoIndex = ref<number>(0)
+const isLoadingTemplates = ref(true)
 
 const demoImages = computed(() => {
-  const templates = demoTemplates.value
+  return demoTemplates.value
     .filter(t => t.input_image_url)
     .map(t => ({
       id: t.id,
       input: t.input_image_url,
       result: t.result_watermarked_url || t.result_image_url
     }))
-  return templates.length > 0 ? templates : demoExamples
 })
 
 // Load demo templates on mount
 onMounted(async () => {
-  await loadDemoTemplates('background_removal')
+  isLoadingTemplates.value = true
+  await loadDemoTemplates('background_removal', undefined, locale.value)
+  isLoadingTemplates.value = false
 
   // For demo users, auto-select first example
   if (isDemoUser.value && demoImages.value.length > 0) {
@@ -230,6 +194,14 @@ function dataURItoBlob(dataURI: string): Blob {
             {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
           </RouterLink>
         </div>
+
+        <!-- DB Empty: Show try prompts -->
+        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-6 p-4 rounded-xl bg-dark-700/50 border border-dark-600">
+          <p class="text-sm text-gray-300 mb-2">{{ isZh ? '可試玩提示詞（資料庫尚無預生成）' : 'Try prompts (no pre-generated results yet)' }}</p>
+          <div class="flex flex-wrap gap-2">
+            <span v-for="p in tryPrompts.slice(0, 5)" :key="p.id" class="px-2 py-1 rounded text-xs bg-dark-800 text-gray-300">{{ p.prompt }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- PRESET-ONLY MODE: All users see the same preset-based layout -->
@@ -239,7 +211,14 @@ function dataURItoBlob(dataURI: string): Blob {
           <h3 class="text-lg font-semibold text-white mb-4">
             {{ isZh ? '選擇範例圖片' : 'Select Example Image' }}
           </h3>
-          <div class="grid grid-cols-5 gap-3">
+          <div v-if="isLoadingTemplates" class="flex justify-center py-8">
+            <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
+          </div>
+          <div v-else-if="demoImages.length === 0" class="text-center py-8 text-gray-500">
+            <span class="text-3xl block mb-2">📷</span>
+            <p class="text-sm">{{ isZh ? '範例圖片準備中，請稍後再試' : 'Example images loading, please try again later' }}</p>
+          </div>
+          <div v-else class="grid grid-cols-5 gap-3">
             <button
               v-for="(example, idx) in demoImages"
               :key="example.id || idx"

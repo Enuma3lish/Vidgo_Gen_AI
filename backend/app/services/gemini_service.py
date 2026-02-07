@@ -454,6 +454,131 @@ Respond in JSON format:
                 "error": str(e)
             }
 
+    async def generate_effect_prompt_for_image(
+        self,
+        image_url: str = None,
+        image_base64: str = None,
+        language: str = "en",
+    ) -> Dict[str, Any]:
+        """
+        Generate a style/effect prompt for image-to-image transformation.
+        Use when Effect API needs an effect prompt and we don't have a predefined one.
+
+        Args:
+            image_url: URL of the source image
+            image_base64: Base64-encoded image data
+            language: Output language (en, zh)
+
+        Returns:
+            Dict with effect_prompt, style_name, strength suggestion.
+        """
+        if not self.api_key:
+            return {
+                "success": False,
+                "effect_prompt": "",
+                "error": "No API key configured",
+            }
+
+        if not image_url and not image_base64:
+            return {
+                "success": False,
+                "effect_prompt": "",
+                "error": "No image provided",
+            }
+
+        prompt = """Analyze this image and suggest ONE art style for transformation.
+
+Output a short effect prompt (15-30 words) suitable for image-to-image style transfer.
+The prompt should describe ONLY the art style (e.g., "anime style illustration", "oil painting van gogh style").
+Do NOT describe the subject. Keep product/object identity intact.
+
+Respond in JSON:
+{"effect_prompt": "your style prompt here", "style_name": "short name"}"""
+
+        if language.startswith("zh"):
+            prompt = """分析這張圖片，建議一種適合的藝術風格轉換。
+
+輸出一個簡短的風格描述（15-30字），用於圖生圖風格轉換。
+只描述藝術風格（例如：「動漫插畫風格」、「梵高油畫風格」）。
+不要描述主體。保持產品/物體外觀可辨識。
+
+以 JSON 回覆：
+{"effect_prompt": "風格描述", "style_name": "簡短名稱"}"""
+
+        image_parts = []
+        if image_base64:
+            mime_type = "image/jpeg"
+            if image_base64.startswith("iVBOR"):
+                mime_type = "image/png"
+            image_parts.append({
+                "inline_data": {"mime_type": mime_type, "data": image_base64}
+            })
+        elif image_url:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                img_response = await client.get(image_url)
+                if img_response.status_code == 200:
+                    import base64
+                    content_type = img_response.headers.get("content-type", "image/jpeg")
+                    image_data = base64.b64encode(img_response.content).decode()
+                    image_parts.append({
+                        "inline_data": {
+                            "mime_type": content_type.split(";")[0],
+                            "data": image_data,
+                        }
+                    })
+                else:
+                    return {
+                        "success": False,
+                        "effect_prompt": "",
+                        "error": f"Failed to fetch image: {img_response.status_code}",
+                    }
+
+        if not image_parts:
+            return {"success": False, "effect_prompt": "", "error": "Could not load image"}
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/models/gemini-2.0-flash:generateContent",
+                    params={"key": self.api_key},
+                    headers=self._get_headers(),
+                    json={
+                        "contents": [{"role": "user", "parts": image_parts + [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.5, "maxOutputTokens": 150},
+                    },
+                )
+                if response.status_code != 200:
+                    return {
+                        "success": False,
+                        "effect_prompt": "",
+                        "error": f"API error: {response.status_code}",
+                    }
+                data = response.json()
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    return {"success": False, "effect_prompt": "", "error": "No response"}
+                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                start, end = text.find("{"), text.rfind("}") + 1
+                if start >= 0 and end > start:
+                    result = json.loads(text[start:end])
+                    return {
+                        "success": True,
+                        "effect_prompt": result.get("effect_prompt", "artistic style illustration"),
+                        "style_name": result.get("style_name", "artistic"),
+                    }
+                return {
+                    "success": True,
+                    "effect_prompt": text[:100] or "artistic style illustration",
+                    "style_name": "custom",
+                }
+        except Exception as e:
+            logger.error(f"Gemini effect prompt error: {e}")
+            return {
+                "success": False,
+                "effect_prompt": "",
+                "error": str(e),
+            }
+
     async def moderate_image(
         self,
         image_url: str = None,

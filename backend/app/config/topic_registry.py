@@ -19,7 +19,7 @@ class TopicInfo(TypedDict):
 
 
 class ToolType(str, Enum):
-    """7 Core Tools - must match material.py ToolType"""
+    """8 Core Tools - must match material.py ToolType"""
     BACKGROUND_REMOVAL = "background_removal"
     PRODUCT_SCENE = "product_scene"
     TRY_ON = "try_on"
@@ -79,12 +79,10 @@ TOOL_TOPICS: Dict[str, List[TopicInfo]] = {
     # Room Redesign - Interior design styles
     # -------------------------------------------------------------------------
     "room_redesign": [
-        {"id": "modern", "name_en": "Modern", "name_zh": "現代風格"},
-        {"id": "nordic", "name_en": "Nordic", "name_zh": "北歐風格"},
-        {"id": "japanese", "name_en": "Japanese", "name_zh": "日式風格"},
-        {"id": "industrial", "name_en": "Industrial", "name_zh": "工業風格"},
-        {"id": "minimalist", "name_en": "Minimalist", "name_zh": "極簡風格"},
-        {"id": "luxury", "name_en": "Luxury", "name_zh": "奢華風格"},
+        {"id": "living_room", "name_en": "Living Room", "name_zh": "客廳"},
+        {"id": "bedroom", "name_en": "Bedroom", "name_zh": "臥室"},
+        {"id": "kitchen", "name_en": "Kitchen", "name_zh": "廚房"},
+        {"id": "bathroom", "name_en": "Bathroom", "name_zh": "浴室"},
     ],
     
     # -------------------------------------------------------------------------

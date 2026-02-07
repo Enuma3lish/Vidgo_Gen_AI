@@ -38,90 +38,157 @@ const languageOptions = [
   { id: 'en', name: 'English', flag: '🇺🇸' }
 ]
 
-// Default avatar images - Chinese faces with gender mapping
+// Default avatar images - Chinese/Taiwanese faces with gender mapping
+// Names are FIXED per person: female avatars have female names, male avatars have male names
+// English names are romanized Chinese (not Western names)
 const defaultAvatars = [
   // Female Chinese avatars
   {
     id: 'female-1',
     gender: 'female',
-    url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=512',
-    name_zh: '小美',
-    name_en: 'Mei'
+    url: 'https://plus.unsplash.com/premium_photo-1723291229685-68f229ac5655?w=512',
+    name_zh: '怡君',
+    name_en: 'Yi-Jun'
   },
   {
     id: 'female-2',
     gender: 'female',
-    url: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512',
-    name_zh: '小雅',
-    name_en: 'Ya'
+    url: 'https://plus.unsplash.com/premium_photo-1661726646319-bde739e96b9a?w=512',
+    name_zh: '雅婷',
+    name_en: 'Ya-Ting'
   },
   {
     id: 'female-3',
     gender: 'female',
-    url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=512',
-    name_zh: '小玲',
-    name_en: 'Ling'
+    url: 'https://images.unsplash.com/photo-1581065178047-8ee15951ede6?w=512',
+    name_zh: '佳穎',
+    name_en: 'Jia-Ying'
+  },
+  {
+    id: 'female-4',
+    gender: 'female',
+    url: 'https://plus.unsplash.com/premium_photo-1705908025930-fc43ae2f0156?w=512',
+    name_zh: '淑芬',
+    name_en: 'Shu-Fen'
   },
   // Male Chinese avatars
   {
     id: 'male-1',
     gender: 'male',
-    url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512',
-    name_zh: '建明',
-    name_en: 'Jason'
+    url: 'https://images.unsplash.com/photo-1545830571-6d7665a05cb6?w=512',
+    name_zh: '志偉',
+    name_en: 'Zhi-Wei'
   },
   {
     id: 'male-2',
     gender: 'male',
-    url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=512',
-    name_zh: '志偉',
-    name_en: 'David'
+    url: 'https://plus.unsplash.com/premium_photo-1682095379852-8ce2bc3c1c59?w=512',
+    name_zh: '冠宇',
+    name_en: 'Guan-Yu'
   },
   {
     id: 'male-3',
     gender: 'male',
-    url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=512',
-    name_zh: '俊傑',
-    name_en: 'James'
+    url: 'https://images.unsplash.com/photo-1549320710-0f17830d27bd?w=512',
+    name_zh: '宗翰',
+    name_en: 'Zong-Han'
+  },
+  {
+    id: 'male-4',
+    gender: 'male',
+    url: 'https://plus.unsplash.com/premium_photo-1733302828477-80e6cccb0911?w=512',
+    name_zh: '家豪',
+    name_en: 'Jia-Hao'
   }
 ]
 
-// 5 Default scripts that ALL users can use (not requiring subscription)
+// Default scripts matching backend SCRIPT_MAPPING (4 topics × 3 scripts = 12 scripts)
+// IDs must match backend script IDs for preset lookup to work
+// Focus: Small personal business promotion techniques (storytelling, social proof, trust-building, viral hooks)
 const defaultScripts = [
   {
-    id: 'script-welcome',
-    text_zh: '歡迎來到我們的品牌！我很高興為您介紹我們最新的創新產品，將改變您的日常生活。',
-    text_en: "Welcome to our brand! I'm excited to introduce our latest innovative products that will transform your daily life.",
-    category: 'welcome',
-    category_zh: '歡迎'
+    id: 'spokesperson-1',
+    text_zh: '三年前我用阿嬤的一個配方開了這家珍珠奶茶店。現在每天賣超過500杯。我們的秘訣？鮮奶、手煮珍珠、不偷工減料。來嚐嚐看有什麼不同——新客人第一杯免費！',
+    text_en: "I started this bubble tea shop 3 years ago with one recipe from my grandmother. Today we sell over 500 cups a day. Our secret? Real milk, hand-cooked pearls, no shortcuts. Come taste the difference—first cup free for new customers!",
+    category: 'spokesperson',
+    category_zh: '品牌故事'
   },
   {
-    id: 'script-product',
-    text_zh: '大家好！今天我要給您展示一些真正特別的東西。讓我們一起發現我們產品的獨特之處。',
-    text_en: "Hello everyone! Today I'll show you something truly special. Let's discover what makes our products unique.",
-    category: 'product',
-    category_zh: '產品'
+    id: 'spokesperson-2',
+    text_zh: '每天早上五點，我親手烤製這些抹茶生乳捲。因為堅持不加防腐劑，每日限量50條。賣完就沒有了，這就是為什麼客人都在開店前排隊。快來嚐一條，今天的很快就賣完了！',
+    text_en: "Every morning at 5 AM, I bake these matcha cream rolls fresh. Only 50 per day because I refuse to use preservatives. When they are gone, they are gone. That is why our customers line up before we open. Come try one before today's batch sells out!",
+    category: 'spokesperson',
+    category_zh: '品牌故事'
   },
   {
-    id: 'script-thanks',
-    text_zh: '感謝您的加入！我們一直努力為您帶來最好的品質和體驗。',
-    text_en: "Thank you for joining us! We've been working hard to bring you the best quality and experience possible.",
-    category: 'thanks',
-    category_zh: '感謝'
+    id: 'spokesperson-3',
+    text_zh: '客人常問我：怎麼做出這麼美的指甲？讓我示範一下。這是我們的招牌極光貓眼凝膠，三層手繪漸層，每一組要90分鐘。本週預約送價值300元的美甲升級！',
+    text_en: "My customers always ask: how do you make nails look this good? Let me show you. This is our signature aurora cat-eye gel. Three layers, hand-painted gradient. It takes me 90 minutes per set. Book this week and get a free nail art upgrade worth 300!",
+    category: 'spokesperson',
+    category_zh: '品牌故事'
   },
   {
-    id: 'script-features',
-    text_zh: '嗨！讓我告訴您關於我們客戶絕對喜愛的驚人新功能。',
-    text_en: 'Hi there! Let me tell you about our amazing new features that our customers absolutely love.',
-    category: 'features',
-    category_zh: '功能'
+    id: 'product-intro-1',
+    text_zh: '看這個手機殼？客人說它從二樓陽台掉下來都沒事。我們自己測試過——摔了50次，完好如初。軍規防護，只要399元。難怪它是我們的暢銷品，超過2000則五星評價！',
+    text_en: "See this phone case? Customers said it survived a drop from a second-floor balcony. We tested it ourselves—dropped it 50 times. Still perfect. Military-grade protection, only 399. No wonder it is our best-seller with over 2000 five-star reviews!",
+    category: 'product_intro',
+    category_zh: '產品開箱'
   },
   {
-    id: 'script-promo',
-    text_zh: '嗨大家好！不要錯過我們的獨家優惠。立即訂閱，首單享受超值折扣！',
-    text_en: "Hey everyone! Don't miss out on our exclusive offer. Subscribe now and save big on your first order!",
-    category: 'promotion',
-    category_zh: '促銷'
+    id: 'product-intro-2',
+    text_zh: '左邊是一個月前的我的皮膚，右邊是今天。唯一的改變就是這瓶精華液。100%植萃、無酒精、敏感肌也能用。30ml只要599元，每天不到20元。你的肌膚值得擁有。滿千免運！',
+    text_en: "Left side: my skin one month ago. Right side: today. The only thing I changed was this serum. 100% plant-based, no alcohol, safe for sensitive skin. 599 for 30ml—that is less than 20 per day. Your skin deserves this. Free shipping over 1000!",
+    category: 'product_intro',
+    category_zh: '產品開箱'
+  },
+  {
+    id: 'product-intro-3',
+    text_zh: '每一顆蠟燭都是我用大豆蠟和精油手工製作的。這款薰衣草需要48小時熟成。聞一次你就知道為什麼八成的客人都會回購。每顆只要280元。今晚點一顆，感受不一樣的品質！',
+    text_en: "I make each candle by hand using soy wax and essential oils. This lavender one takes 48 hours to cure. Smell it once and you will understand why 80% of my customers reorder. Only 280 each. Light one up tonight and feel the difference!",
+    category: 'product_intro',
+    category_zh: '產品開箱'
+  },
+  {
+    id: 'customer-service-1',
+    text_zh: '收到商品有問題嗎？完全不用擔心！LINE我們傳張照片，24小時內處理完畢——換貨、退款、重寄都可以。這是我們的承諾。超過5000筆訂單，滿意度99.2%！',
+    text_en: "Got your order and something is not right? Do not worry at all. Send us a photo on LINE and we will fix it within 24 hours—exchange, refund, or reship. That is our promise. We have handled over 5000 orders and our satisfaction rate is 99.2%!",
+    category: 'customer_service',
+    category_zh: '客戶服務'
+  },
+  {
+    id: 'customer-service-2',
+    text_zh: '歡迎來到我們的寵物美容工作室！第一次來之前讓我說明一下。我們會花15分鐘讓毛孩先適應環境，不趕時間、零壓力。所以怕生的狗狗都喜歡回來。體驗價只要399元！',
+    text_en: "Welcome to our pet grooming studio! Before your first visit, let me explain how we work. We spend 15 minutes just letting your pet get comfortable. No rushing, no stress. That is why nervous dogs love coming back. Book a trial grooming for only 399!",
+    category: 'customer_service',
+    category_zh: '客戶服務'
+  },
+  {
+    id: 'customer-service-3',
+    text_zh: '我們維修店有三個不同：第一，免費檢測。第二，修不好不收費。第三，每次維修都有90天保固。公平、簡單。今天就帶手機來——大部分維修一小時內完成！',
+    text_en: "Three things that make our repair shop different: one, we diagnose for free. Two, we only charge if we fix it. Three, every repair comes with a 90-day warranty. Fair and simple. Bring your phone in today—most repairs done in under one hour!",
+    category: 'customer_service',
+    category_zh: '客戶服務'
+  },
+  {
+    id: 'social-media-1',
+    text_zh: '存下這支影片！結帳時出示就能全品項飲料買一送一，限今天。每週二都有這個活動——追蹤我們才不會錯過。上週有200人使用了這個優惠，這次別再錯過了！',
+    text_en: "Save this video! Show it at checkout and get buy-one-get-one-free on all drinks today only. We do this every Tuesday—follow us so you never miss it. Last week 200 people used this deal. Do not miss out this time!",
+    category: 'social_media',
+    category_zh: '社群行銷'
+  },
+  {
+    id: 'social-media-2',
+    text_zh: '一位客人傳了這張照片給我——她把我們的花禮盒送給媽媽，媽媽感動到流淚。這就是我做這行的原因。母親節康乃馨禮盒，用心手作包裝，只要680元。週五前預訂免運。一起讓人微笑吧！',
+    text_en: "A customer sent me this photo—she gave our flower box to her mom and her mom cried happy tears. That is why I do this. Mother's Day carnation boxes, handwrapped with love, only 680. Order by Friday for free delivery. Let us make someone smile together!",
+    category: 'social_media',
+    category_zh: '社群行銷'
+  },
+  {
+    id: 'social-media-3',
+    text_zh: '家長一直問小朋友今天上課做了什麼，所以我開始拍攝了。看這個——你的孩子一小時就畫出了這幅作品！暑假美術課，每堂只要350元。三人同行八折。標記一位需要看到這個的家長！',
+    text_en: "Parents keep asking what their kids did in class today, so I started filming. Look at this—your child painted this in just one hour! Summer art classes, only 350 per session. Groups of 3 save 20%. Tag a parent who needs to see this!",
+    category: 'social_media',
+    category_zh: '社群行銷'
   }
 ]
 
@@ -172,19 +239,19 @@ async function loadVoices() {
     selectMatchingVoice()
   } catch (error) {
     console.error('Failed to load voices:', error)
-    // Fallback voices
+    // Fallback voices - Chinese names for both languages
     voices.value = selectedLanguage.value === 'zh-TW'
       ? [
-          { id: 'zh-TW-female-1', name: '小雅', gender: 'female' },
-          { id: 'zh-TW-female-2', name: '小玲', gender: 'female' },
-          { id: 'zh-TW-male-1', name: '建明', gender: 'male' },
-          { id: 'zh-TW-male-2', name: '志偉', gender: 'male' }
+          { id: 'zh-TW-female-1', name: '怡君', gender: 'female' },
+          { id: 'zh-TW-female-2', name: '雅婷', gender: 'female' },
+          { id: 'zh-TW-male-1', name: '志偉', gender: 'male' },
+          { id: 'zh-TW-male-2', name: '冠宇', gender: 'male' }
         ]
       : [
-          { id: 'en-US-female-1', name: 'Emily', gender: 'female' },
-          { id: 'en-US-female-2', name: 'Sarah', gender: 'female' },
-          { id: 'en-US-male-1', name: 'James', gender: 'male' },
-          { id: 'en-US-male-2', name: 'David', gender: 'male' }
+          { id: 'en-US-female-1', name: 'Yi-Jun', gender: 'female' },
+          { id: 'en-US-female-2', name: 'Ya-Ting', gender: 'female' },
+          { id: 'en-US-male-1', name: 'Zhi-Wei', gender: 'male' },
+          { id: 'en-US-male-2', name: 'Guan-Yu', gender: 'male' }
         ]
     selectMatchingVoice()
   }
@@ -528,7 +595,7 @@ watch(selectedAvatarId, () => {
                     : 'border-dark-600 hover:border-dark-500'"
                 >
                   <span class="inline-block px-2 py-0.5 text-xs bg-dark-600 text-gray-400 rounded mb-1">
-                    {{ scriptItem.category }}
+                    {{ isZh ? scriptItem.category_zh : scriptItem.category }}
                   </span>
                   <p class="text-gray-300">
                     {{ (isZh ? scriptItem.text_zh : scriptItem.text_en).slice(0, 60) }}...

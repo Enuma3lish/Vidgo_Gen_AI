@@ -149,6 +149,7 @@ async def check_materials() -> Tuple[bool, Dict[str, int]]:
             min_required = {
                 ToolType.BACKGROUND_REMOVAL: 3,   # Need at least 3 background removal examples
                 ToolType.PRODUCT_SCENE: 3,        # Need at least 3 product scene examples
+                ToolType.EFFECT: 3,               # Need at least 3 effect examples (產品增強+廣告特效)
                 ToolType.SHORT_VIDEO: 3,          # Need at least 3 video examples
                 ToolType.AI_AVATAR: 3,            # Need at least 3 avatar examples
             }

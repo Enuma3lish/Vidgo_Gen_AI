@@ -1,10 +1,24 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 4.5
-**Last Updated:** February 4, 2026
+**Version:** 4.7
+**Last Updated:** February 6, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
 **Mode:** Preset-Only (Material DB Lookup, No Runtime API Calls)
+**Target Audience:** Small businesses (SMB) selling everyday products/services—not luxury.
+
+---
+
+## 0. Demo/Trial Flow (Preset-Only)
+
+**User experience:** Visitors and non-subscribers try default AI functions by selecting pre-generated presets. No runtime API calls—all results are pre-computed and stored in Material DB.
+
+**Flow:**
+1. **Pre-generation (startup/CLI):** Prompts → AI APIs (T2I, I2V, I2I, etc.) → results stored in `materials` table
+2. **User trial:** Frontend loads presets from `/api/v1/demo/presets/{tool_type}` → user selects preset → backend returns pre-generated result via O(1) Material DB lookup
+3. **Example correspondence:** Each example must be correctly linked—e.g., Effect tool uses the SAME T2I image as input to I2I, not a different prompt
+
+**Target audience:** Small companies selling everyday products (drinks, snacks, apparel, services)—not luxury brands. Prompts and scripts reflect SMB use cases.
 
 ---
 
@@ -492,6 +506,11 @@ GET /api/v1/anchor/character_list
 # Returns list of available avatars/anchors
 ```
 
+**AI Avatar Pre-generation Rules:**
+- **Gender-name consistency:** Male character name must match male face; female name on female face. Characters are partitioned by detected gender; male voice uses male character, female voice uses female character.
+- **Chinese priority:** Most AI Avatars are zh-TW (VidGo targets Taiwan/SMB market). Language order: zh-TW first, then en.
+- **Product/service focus:** Scripts must clearly sell a product or service (e.g., "買我們的珍珠奶茶！" / "Buy our bubble tea now!"). Not generic brand fluff—explicit promotion.
+
 ### 5.4 Pollo AI Service (Verified Workflow)
 
 **Base URL:** `https://pollo.ai/api/platform`
@@ -675,6 +694,13 @@ python -m scripts.main_pregenerate --tool try_on --limit 20
 **Architecture:**
 The Effect tool applies artistic styles to product images using a two-step pipeline (T2I → I2I) while preserving product identity.
 
+**CRITICAL—Example Correspondence:** We do *not* use a second prompt to generate a "corresponding" image. The example IS the transformation of the SAME image:
+1. T2I generates source image from product prompt
+2. Effect API (I2I) receives that **existing** image and applies style
+3. Result is stored in Material DB with `input_image_url` = T2I output, `result_image_url` = I2I output
+
+The before/after relationship is: same product, different style—linked by the same source.
+
 ```
 +------------------------------------------------------------------+
 |                  EFFECT / STYLE TRANSFER FLOW                     |
@@ -685,8 +711,8 @@ The Effect tool applies artistic styles to product images using a two-step pipel
 |  ├─ API: PiAPI Flux txt2img                                       |
 |  └─ Output: source_image_url (original product photo)             |
 |                                                                    |
-|  Step 2: APPLY STYLE (PiAPI I2I)                                  |
-|  ├─ Input: source_image_url + style prompt                        |
+|  Step 2: APPLY STYLE (PiAPI I2I) ← uses EXISTING image, not new   |
+|  ├─ Input: source_image_url (from Step 1) + style prompt          |
 |  ├─ Strength: 0.60-0.70 (preserves product identity)             |
 |  ├─ API: PiAPI Flux img2img                                       |
 |  └─ Output: styled_image_url (same product, different art style)  |
@@ -699,10 +725,15 @@ The Effect tool applies artistic styles to product images using a two-step pipel
 +------------------------------------------------------------------+
 ```
 
-**Source Images (food/drink focused):**
+**Source Images (multi-category):**
 - Bubble Tea (珍珠奶茶) — topic: drinks
 - Fried Chicken (炸雞排) — topic: snacks
 - Fruit Tea (水果茶) — topic: drinks
+- Running Sneakers (跑步運動鞋) — topic: apparel
+- Smartphone (智慧型手機) — topic: tech
+- Skincare Serum (保養精華液) — topic: cosmetics
+- Wireless Headphones (無線耳機) — topic: tech
+- Modern Sofa (現代沙發) — topic: home
 
 **Available Styles:**
 
@@ -842,6 +873,9 @@ class Settings(BaseSettings):
 | `MIN_TEMPLATES` | `1` | Minimum templates per group |
 | `STARTUP_TIMEOUT` | `300` | Validation timeout (seconds) |
 
+**Prompt-Driven Guarantee:**  
+All pre-generated examples are created from explicit prompts (product + scene/style prompts), not from static placeholder URLs.
+
 ---
 
 ## 9. Material Topics Configuration
@@ -856,10 +890,10 @@ class Settings(BaseSettings):
 | Topic Definition System | `app/config/demo_topics.py` | ⚠️ **LEGACY** | Old design, NOT used by pre-generation pipeline |
 
 The **MAPPING System** in `main_pregenerate.py` defines the actual topics stored in the Material DB:
-- `SCRIPT_MAPPING` → AI Avatar topics
+- `SCRIPT_MAPPING` → AI Avatar topics (scripts must clearly sell product/service)
 - `BACKGROUND_REMOVAL_MAPPING` → Background Removal topics (food/drink focused)
 - `ROOM_REDESIGN_MAPPING` → Room Redesign styles (stored as topic)
-- `SHORT_VIDEO_MAPPING` → Short Video topics (food/drink ads)
+- `SHORT_VIDEO_MAPPING` → Short Video topics; **SMB-focused** (bubble tea, fried chicken, small shop, everyday products—not luxury)
 - `TRYON_MAPPING` → Try-On clothing categories (with gender restrictions)
 - `PATTERN_GENERATE_MAPPING` → Pattern Generate styles
 - `EFFECT_MAPPING` → Effect/Style Transfer (source images × art styles)
@@ -908,7 +942,7 @@ MATERIAL_TOPICS = {
     ],
     ToolType.SHORT_VIDEO: [
         {"topic_id": "product_showcase", "name_en": "Product Showcase", "name_zh": "產品展示"},
-        {"topic_id": "brand_story", "name_en": "Brand Story", "name_zh": "品牌故事"},
+        {"topic_id": "brand_intro", "name_en": "Brand Introduction", "name_zh": "品牌介紹"},
         {"topic_id": "tutorial", "name_en": "Tutorial", "name_zh": "教學"},
         {"topic_id": "promo", "name_en": "Promotion", "name_zh": "促銷"},
     ],
@@ -955,7 +989,7 @@ async def get_tool_topics(tool_type: str):
             ]
         }
     """
-    topics = MATERIAL_TOPICS.get(tool_type, [])
+    topics = get_topics_for_tool(tool_type)
     return {"success": True, "tool_type": tool_type, "topics": topics}
 ```
 
@@ -1002,7 +1036,7 @@ LANDING_EXAMPLES = {
 }
 ```
 
-**Important**: Landing materials are stored with `tool_type=SHORT_VIDEO` or `tool_type=AI_AVATAR` but use landing-specific topics (ecommerce, social, brand, app, promo, service) instead of MATERIAL_TOPICS.
+**Important**: Landing materials are stored with `tool_type=SHORT_VIDEO` or `tool_type=AI_AVATAR` but use landing-specific topics (ecommerce, social, brand, app, promo, service) instead of `TOOL_TOPICS` in `topic_registry.py`.
 
 ### 9.5 Legacy Topic System (demo_topics.py)
 
@@ -1050,6 +1084,7 @@ If you see topics like `luxury_watch` or `ecommerce_pitch_en` in the frontend, t
 |      2. GENERATE VIDEO (Pollo AI I2V)                                       |
 |         ├─ Input: source_image_url + prompt_zh                              |
 |         ├─ API: Pollo Pixverse v4.5                                         |
+|         ├─ Length: `SHORT_VIDEO_LENGTH` (default 8s)                        |
 |         ├─ Output: video_url                                                |
 |         └─ Store as: Material(tool_type=SHORT_VIDEO, topic=<landing_topic>) |
 |                                                                              |
@@ -1075,18 +1110,24 @@ If you see topics like `luxury_watch` or `ecommerce_pitch_en` in the frontend, t
 ```python
 # app/services/material_generator.py
 
-async def check_materials_exist(session, category, min_count):
-    if category == 'landing':
-        # CRITICAL: Must use LANDING_TOPICS, NOT MATERIAL_TOPICS
-        landing_topics = ["ecommerce", "social", "brand", "app", "promo", "service"]
+async def check_all_materials(session):
+    # Landing topics from registry
+    landing_topics = get_landing_topic_ids()
 
-        # Check SHORT_VIDEO with landing topics
-        video_count = count(Material.tool_type == SHORT_VIDEO AND topic IN landing_topics)
+    # Per-topic counts (not just totals)
+    video_counts = count_by_topic(SHORT_VIDEO, landing_topics)
+    avatar_counts = count_by_topic(AI_AVATAR, landing_topics)
 
-        # Check AI_AVATAR with landing topics
-        avatar_count = count(Material.tool_type == AI_AVATAR AND topic IN landing_topics)
+    # Prompt validation
+    prompt_missing = count_missing_prompts(SHORT_VIDEO, landing_topics) + count_missing_prompts(AI_AVATAR, landing_topics)
+    prompt_zh_missing = count_missing_prompt_zh(AI_AVATAR, landing_topics)
 
-        return video_count >= min_count AND avatar_count >= min_count
+    ready = (
+        all(c >= 6 for c in video_counts.values()) and
+        all(c >= 12 for c in avatar_counts.values()) and
+        prompt_missing == 0 and
+        prompt_zh_missing == 0
+    )
 ```
 
 ### 10.3 Expected Material Counts
@@ -1097,7 +1138,7 @@ async def check_materials_exist(session, category, min_count):
 | landing (avatar) | AI_AVATAR | ecommerce, social, brand, app, promo, service | 6 | 72 (6 topics × 6 examples × 2 languages) |
 | bg_removal | BACKGROUND_REMOVAL | drinks, snacks, desserts, meals, packaging, equipment, signage, ingredients | 10 | 80+ |
 | product | PRODUCT_SCENE | studio, nature, luxury, minimal, lifestyle, urban, seasonal, holiday | 6 | 40 |
-| video | SHORT_VIDEO | product_showcase, brand_story, tutorial, promo | 5 | 10 |
+| video | SHORT_VIDEO | product_showcase, brand_intro, tutorial, promo | 5 | 10 |
 | avatar | AI_AVATAR | spokesperson, product_intro, customer_service, social_media | 6 | 16 |
 | effect | EFFECT | anime, ghibli, cartoon, oil_painting, watercolor | 5 | 15 (3 sources × 5 styles) |
 
@@ -1227,8 +1268,43 @@ curl http://localhost:8001/api/v1/landing/materials
 curl http://localhost:8001/api/v1/demo/presets/short_video
 ```
 
+### 12.4 Homepage Tool Hub (Frontend Integration)
+
+The landing page (`frontend-vue/src/views/LandingPage.vue`) is built as a **tool hub** layout (sidebar categories + hero prompt + tool grid + showcases) inspired by Douhui AI, but **only surfaces features backed by existing APIs**:
+
+- **Featured tools**: background_removal, product_scene, try_on, room_redesign, short_video, ai_avatar, pattern_generate, effect
+- **Data source**: `/api/v1/landing/features` → capability highlights (tool-aligned)
+- **Data source**: `/api/v1/demo/landing/works` → works gallery (product_scene, effect, background_removal, short_video, ai_avatar) with `video_url` field for video items
+- **Data source**: `/api/v1/demo/landing/examples` → short-video landing examples (fallback to `/api/v1/landing/examples`)
+- **Data source**: `/api/v1/demo/presets/ai_avatar` → avatar showcase presets (9 items, 3×3 grid)
+
+### 12.5 Landing Works Gallery (`/demo/landing/works`)
+
+The works gallery endpoint returns a mix of image and video materials for the homepage:
+
+**Tool types included:** `product_scene`, `effect`, `background_removal`, `short_video`, `ai_avatar`
+
+**Response fields per item:**
+| Field | Description |
+|-------|-------------|
+| `id` | Material UUID |
+| `tool_type` | One of the 5 tool types above |
+| `tool_name` | Localized tool display name |
+| `route` | Frontend route for the tool page |
+| `thumb` | Thumbnail image URL (result_watermarked_url or input_image_url) |
+| `video_url` | Video URL (only for short_video and ai_avatar items, null otherwise) |
+| `input_image_url` | Original input image (for effect before/after) |
+| `result_image_url` | Result image URL |
+| `prompt` | Truncated prompt text |
+| `topic` | Material topic |
+
+**Frontend rendering:**
+- Image items (product_scene, effect, background_removal): display as `<img>` with hover effects
+- Video items (short_video, ai_avatar): display with play icon overlay, `<video>` hover-to-play
+
 ---
 
-*Document Version: 4.5*
-*Last Updated: February 4, 2026*
+*Document Version: 4.7*
+*Last Updated: February 6, 2026*
 *Mode: Preset-Only (Material DB Lookup, No Runtime API Calls)*
+*Target: SMB (small businesses selling everyday products/services)*

@@ -1,9 +1,10 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 4.4
-**Last Updated:** January 25, 2026
+**Version:** 4.6
+**Last Updated:** February 6, 2026
 **Framework:** Vue 3 + Vite + TypeScript
 **Mode:** Preset-Only (No Custom Input)
+**Target Audience:** Small businesses (SMB) selling everyday products/services
 
 ---
 
@@ -191,14 +192,15 @@ frontend-vue/
 │   │   │   ├── MyWorks.vue
 │   │   │   └── Invoices.vue             # Invoice history & download
 │   │   │
-│   │   ├── tools/                   # 7 Core Tool Pages
+│   │   ├── tools/                   # 8 Core Tool Pages
 │   │   │   ├── BackgroundRemoval.vue
 │   │   │   ├── ProductScene.vue
 │   │   │   ├── TryOn.vue
 │   │   │   ├── RoomRedesign.vue
 │   │   │   ├── ShortVideo.vue
 │   │   │   ├── AIAvatar.vue
-│   │   │   └── PatternDesign.vue
+│   │   │   ├── PatternDesign.vue
+│   │   │   └── ImageEffects.vue
 │   │   │
 │   │   └── topics/                  # Topic category pages
 │   │       ├── PatternTopic.vue
@@ -232,8 +234,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', component: LandingPage },
   { path: '/pricing', name: 'pricing', component: Pricing },
 
-  // ===== 7 Core Tools =====
+  // ===== 8 Core Tools =====
   { path: '/tools/background-removal', name: 'background-removal', component: BackgroundRemoval },
+  { path: '/tools/effects', name: 'effects', component: ImageEffects },
   { path: '/tools/product-scene', name: 'product-scene', component: ProductScene },
   { path: '/tools/try-on', name: 'try-on', component: TryOn },
   { path: '/tools/room-redesign', name: 'room-redesign', component: RoomRedesign },
@@ -470,16 +473,32 @@ export const usePreset = async (toolType: string, presetId: string) => {
 
 | Tool Type | Valid Topics (from API) |
 |-----------|-------------------------|
-| `background_removal` | electronics, fashion, jewelry, food, cosmetics, furniture, toys, sports |
+| `background_removal` | drinks, snacks, desserts, meals, packaging, equipment, signage, ingredients |
+| `effect` | anime, ghibli, cartoon, oil_painting, watercolor |
 | `product_scene` | studio, nature, luxury, minimal, lifestyle, urban, seasonal, holiday |
 | `try_on` | casual, formal, sportswear, outerwear, accessories, dresses |
-| `room_redesign` | modern, nordic, japanese, industrial, minimalist, luxury |
-| `short_video` | product_showcase, brand_story, tutorial, promo |
+| `room_redesign` | living_room, bedroom, kitchen, bathroom |
+| `short_video` | product_showcase, brand_intro, tutorial, promo |
 | `ai_avatar` | spokesperson, product_intro, customer_service, social_media |
 | `pattern_generate` | seamless, floral, geometric, abstract, traditional |
 
 **Landing Page Topics** (separate system):
 - ecommerce, social, brand, app, promo, service
+
+### 5.5 Landing Page Data Sources
+
+The homepage (`LandingPage.vue`) loads data from multiple endpoints:
+
+| Section | Endpoint | Description |
+|---------|----------|-------------|
+| Works Gallery | `GET /api/v1/demo/landing/works` | Mixed gallery of image + video items from 5 tool types (product_scene, effect, background_removal, short_video, ai_avatar). Video items include `video_url` field and render with hover-to-play. |
+| Video Examples | `GET /api/v1/demo/landing/examples` | Short video landing examples |
+| Avatar Showcase | `GET /api/v1/demo/presets/ai_avatar` | AI Avatar presets displayed in 3×3 grid (9 items) with hover video preview |
+| Feature Highlights | `GET /api/v1/landing/features` | Tool capability highlights |
+
+**Works Gallery video rendering:**
+- Items with `video_url` display a play icon overlay and auto-play `<video>` on hover
+- Items without `video_url` display as static `<img>` (with before/after for effect tool)
 
 ---
 
@@ -537,7 +556,7 @@ export const useCreditsStore = defineStore('credits', () => {
 
 ---
 
-## 7. Tool Pages (7 Core Tools)
+## 7. Tool Pages (8 Core Tools)
 
 ### 7.1 Tool Feature Map
 
@@ -549,44 +568,54 @@ export const useCreditsStore = defineStore('credits', () => {
 |  Tool 1: Background Removal (一鍵白底圖)                                     |
 |  ├─ Backend: PiAPI T2I + Rembg / Gemini backup                               |
 |  ├─ Route: /tools/background-removal                                         |
-|  ├─ Topics: electronics, fashion, jewelry, food, cosmetics, furniture...     |
+|  ├─ Topics: drinks, snacks, desserts, meals, packaging, equipment...         |
 |  └─ Mode: Pre-generated examples from Material DB                            |
 |                                                                              |
-|  Tool 2: Product Scene (產品攝影靈感)                                        |
+|  Tool 2: Image Effects (圖片風格 / 風格轉換)                                 |
+|  ├─ Backend: PiAPI I2I (Flux model, strength 0.60-0.70)                      |
+|  ├─ Route: /tools/effects                                                    |
+|  ├─ Topics: anime, ghibli, cartoon, oil_painting, watercolor                 |
+|  └─ Mode: Pre-generated before/after gallery, watermarked output             |
+|                                                                              |
+|  Tool 3: Product Scene (產品攝影靈感)                                        |
 |  ├─ Backend: PiAPI T2I (Flux model)                                          |
 |  ├─ Route: /tools/product-scene                                              |
 |  ├─ Topics: studio, nature, luxury, minimal, lifestyle, urban...             |
 |  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
-|  Tool 3: Virtual Try-On (時尚穿搭展示)                                       |
+|  Tool 4: Virtual Try-On (時尚穿搭展示)                                       |
 |  ├─ Backend: Kling AI Try-On via PiAPI (with T2I fallback)                   |
 |  ├─ Route: /tools/try-on                                                     |
 |  ├─ Topics: casual, formal, dresses, sportswear, outerwear, accessories      |
 |  ├─ Model Library: AI-generated full-body models (3 female, 3 male)          |
+|  ├─ Preview Mode: When DB has 0 try_on materials, shows clothing             |
+|  │   thumbnails from try_prompts; Generate button disabled ("預覽模式")       |
 |  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
-|  Tool 4: Room Redesign (室內設計範例)                                        |
+|  Tool 5: Room Redesign (室內設計範例)                                        |
 |  ├─ Backend: PiAPI T2I (Flux model)                                          |
 |  ├─ Route: /tools/room-redesign                                              |
-|  ├─ Topics: modern, nordic, japanese, industrial, minimalist, luxury         |
+|  ├─ Topics: living_room, bedroom, kitchen, bathroom                          |
 |  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
-|  Tool 5: Short Video (短影片)                                                |
+|  Tool 6: Short Video (短影片)                                                |
 |  ├─ Backend: Pollo AI I2V (Pixverse v4.5 default)                            |
 |  ├─ Route: /tools/short-video                                                |
-|  ├─ Topics: product_showcase, brand_story, tutorial, promo                   |
+|  ├─ Topics: product_showcase, brand_intro, tutorial, promo                   |
+|  ├─ SMB focus: Everyday products (bubble tea, fried chicken, small shop)     |
 |  ├─ Landing Topics: ecommerce, social, brand, app, promo, service            |
 |  └─ Mode: Pre-generated videos from Material DB                              |
 |                                                                              |
-|  Tool 6: AI Avatar (AI數位人)                                                |
+|  Tool 7: AI Avatar (AI數位人)                                                |
 |  ├─ Backend: A2E.ai (TTS + Lip-sync)                                         |
 |  ├─ Route: /tools/avatar                                                     |
 |  ├─ Topics: spokesperson, product_intro, customer_service, social_media      |
 |  ├─ Landing Topics: ecommerce, social, brand, app, promo, service            |
-|  ├─ Languages: en, zh-TW, ja, ko                                             |
+|  ├─ Languages: zh-TW (primary), en; scripts clearly sell product/service     |
+|  ├─ Gender: Male name on male face, female on female (character-voice match) |
 |  └─ Mode: Pre-generated avatar videos from Material DB                       |
 |                                                                              |
-|  Tool 7: Pattern Design (印花設計)                                           |
+|  Tool 8: Pattern Design (印花設計)                                           |
 |  ├─ Backend: PiAPI T2I (Flux model)                                          |
 |  ├─ Route: /tools/pattern-design                                             |
 |  ├─ Topics: seamless, floral, geometric, abstract, traditional               |
@@ -600,6 +629,7 @@ export const useCreditsStore = defineStore('credits', () => {
 | Tool | API Endpoint | Backend Provider | Pre-generation |
 |------|--------------|------------------|----------------|
 | Background Removal | `/api/v1/demo/presets/background_removal` | PiAPI T2I | Yes |
+| Image Effects | `/api/v1/demo/presets/effect` | PiAPI I2I (style transfer) | Yes |
 | Product Scene | `/api/v1/demo/presets/product_scene` | PiAPI T2I | Yes |
 | Try-On | `/api/v1/demo/presets/try_on` | Kling AI + T2I fallback | Yes |
 | Room Redesign | `/api/v1/demo/presets/room_redesign` | PiAPI T2I | Yes |
@@ -719,6 +749,8 @@ export function useGeoLanguage() {
 ---
 
 ## 9. Preset-Only Mode
+
+**Demo/Trial flow:** Users try default AI functions by selecting presets. Backend returns pre-generated results from Material DB—no runtime AI API calls. Examples are correctly linked (e.g., Effect tool: before = T2I image, after = I2I transform of that same image).
 
 ### 9.1 Access Control Matrix
 
@@ -960,6 +992,7 @@ Pattern Design generates seamless textile patterns for fashion and interior desi
 
 ---
 
-*Document Version: 4.4*
-*Last Updated: January 24, 2026*
+*Document Version: 4.6*
+*Last Updated: February 6, 2026*
 *Mode: Preset-Only (No Custom Input)*
+*Target: SMB (small businesses selling everyday products/services)*

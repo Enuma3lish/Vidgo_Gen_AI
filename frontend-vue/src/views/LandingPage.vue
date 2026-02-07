@@ -3,6 +3,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import apiClient from '@/api/client'
+import landingApi from '@/api/landing'
+import type { FeatureItem } from '@/api/landing'
 
 const { locale } = useI18n()
 const router = useRouter()
@@ -10,27 +12,7 @@ const router = useRouter()
 const isZh = computed(() => locale.value.startsWith('zh'))
 
 // ============================================
-// TIME-BASED GREETING
-// ============================================
-const greeting = computed(() => {
-  const hour = new Date().getHours()
-  if (isZh.value) {
-    if (hour < 6) return '凌晨好'
-    if (hour < 12) return '早上好'
-    if (hour < 14) return '中午好'
-    if (hour < 18) return '下午好'
-    return '晚上好'
-  } else {
-    if (hour < 6) return 'Good night'
-    if (hour < 12) return 'Good morning'
-    if (hour < 14) return 'Good afternoon'
-    if (hour < 18) return 'Good afternoon'
-    return 'Good evening'
-  }
-})
-
-// ============================================
-// SIDEBAR CATEGORIES - Like douhuiai.com
+// SIDEBAR CATEGORIES - Inspired by douhuiai.com
 // ============================================
 interface Tool {
   key: string
@@ -45,6 +27,8 @@ interface Category {
   icon: string
   name: string
   nameZh: string
+  desc: string
+  descZh: string
   color: string
   tools: Tool[]
 }
@@ -52,15 +36,17 @@ interface Category {
 const categories = ref<Category[]>([
   {
     key: 'aiImage',
-    icon: '🎨',
+    icon: '🖼️',
     name: 'AI Image',
     nameZh: 'AI 圖像創作',
+    desc: 'Product scenes, styles, and smart edits',
+    descZh: '產品場景、風格效果與智慧修圖',
     color: 'purple',
     tools: [
       { key: 'productScene', icon: '🏞️', route: '/tools/product-scene', name: 'Product Scene', nameZh: '產品場景' },
       { key: 'bgRemoval', icon: '✂️', route: '/tools/background-removal', name: 'Remove Background', nameZh: '智能去背' },
       { key: 'patternGen', icon: '🔲', route: '/tools/pattern-generate', name: 'Pattern Design', nameZh: '圖案設計' },
-      { key: 'imageEnhance', icon: '✨', route: '/tools/product-scene', name: 'Image Enhance', nameZh: '圖片增強' }
+      { key: 'effects', icon: '🎨', route: '/tools/effects', name: 'Image Effects', nameZh: '圖片風格' }
     ]
   },
   {
@@ -68,35 +54,25 @@ const categories = ref<Category[]>([
     icon: '🎬',
     name: 'AI Video',
     nameZh: 'AI 影片創作',
+    desc: 'Short videos and digital humans',
+    descZh: '短影片與 AI 數位人',
     color: 'cyan',
     tools: [
       { key: 'shortVideo', icon: '📱', route: '/tools/short-video', name: 'Short Video', nameZh: '短影片生成' },
-      { key: 'imageToVideo', icon: '🎥', route: '/tools/image-to-video', name: 'Image to Video', nameZh: '圖片轉影片' },
-      { key: 'videoTransform', icon: '🔄', route: '/tools/video-transform', name: 'Style Transfer', nameZh: '風格轉換' },
-      { key: 'productVideo', icon: '🛍️', route: '/tools/product-video', name: 'Product Video', nameZh: '產品影片' }
-    ]
-  },
-  {
-    key: 'aiAvatar',
-    icon: '🎭',
-    name: 'AI Avatar',
-    nameZh: 'AI 數位人',
-    color: 'pink',
-    tools: [
-      { key: 'avatar', icon: '🎤', route: '/tools/avatar', name: 'Digital Human', nameZh: '數位人影片' },
-      { key: 'lipSync', icon: '👄', route: '/tools/avatar', name: 'Lip Sync', nameZh: '口型同步' },
-      { key: 'voiceClone', icon: '🗣️', route: '/tools/avatar', name: 'Voice Clone', nameZh: '聲音克隆' }
+      { key: 'avatar', icon: '🎭', route: '/tools/avatar', name: 'AI Avatar', nameZh: 'AI 數位人' }
     ]
   },
   {
     key: 'ecommerce',
     icon: '🛒',
     name: 'E-commerce',
-    nameZh: '電商工具',
+    nameZh: '電商視覺',
+    desc: 'Catalog ready product assets',
+    descZh: '電商商品圖與素材',
     color: 'orange',
     tools: [
       { key: 'tryOn', icon: '👗', route: '/tools/try-on', name: 'Virtual Try-On', nameZh: '虛擬試穿' },
-      { key: 'productScene', icon: '🏞️', route: '/tools/product-scene', name: 'Product Photo', nameZh: '產品照片' },
+      { key: 'productScene', icon: '🏞️', route: '/tools/product-scene', name: 'Product Photo', nameZh: '產品場景' },
       { key: 'bgRemoval', icon: '✂️', route: '/tools/background-removal', name: 'Background Remove', nameZh: '背景移除' }
     ]
   },
@@ -104,12 +80,25 @@ const categories = ref<Category[]>([
     key: 'interior',
     icon: '🏠',
     name: 'Interior Design',
-    nameZh: '室內設計',
+    nameZh: '空間設計',
+    desc: 'Room redesign and style transfer',
+    descZh: '空間重設計與風格改造',
     color: 'green',
     tools: [
-      { key: 'roomRedesign', icon: '🛋️', route: '/tools/room-redesign', name: 'Room Redesign', nameZh: '空間重設計' },
-      { key: 'floorPlan', icon: '📐', route: '/tools/room-redesign', name: 'Floor Plan', nameZh: '平面圖設計' },
-      { key: 'styleChange', icon: '🎨', route: '/tools/room-redesign', name: 'Style Change', nameZh: '風格轉換' }
+      { key: 'roomRedesign', icon: '🛋️', route: '/tools/room-redesign', name: 'Room Redesign', nameZh: '空間重設計' }
+    ]
+  },
+  {
+    key: 'design',
+    icon: '✨',
+    name: 'Design Tools',
+    nameZh: '設計工具集',
+    desc: 'Patterns and artistic effects',
+    descZh: '圖案生成與藝術風格',
+    color: 'pink',
+    tools: [
+      { key: 'patternGen', icon: '🔲', route: '/tools/pattern-generate', name: 'Pattern Design', nameZh: '圖案設計' },
+      { key: 'effects', icon: '🎨', route: '/tools/effects', name: 'Image Effects', nameZh: '圖片風格' }
     ]
   }
 ])
@@ -142,18 +131,180 @@ function goToTool(route: string) {
 }
 
 // ============================================
-// FEATURED TOOLS - Main content area
+// HERO CONTENT
 // ============================================
-const featuredTools = computed(() => [
-  { key: 'shortVideo', icon: '📱', route: '/tools/short-video', name: isZh.value ? '短影片生成' : 'Short Video', desc: isZh.value ? '一鍵生成爆款短影片' : 'Create viral short videos', color: 'from-purple-500 to-pink-500', hot: true },
-  { key: 'avatar', icon: '🎭', route: '/tools/avatar', name: isZh.value ? 'AI 數位人' : 'AI Avatar', desc: isZh.value ? '數位人口播影片' : 'Digital human videos', color: 'from-cyan-500 to-blue-500', hot: true },
-  { key: 'productScene', icon: '🏞️', route: '/tools/product-scene', name: isZh.value ? '產品場景' : 'Product Scene', desc: isZh.value ? 'AI 生成產品場景' : 'AI product backgrounds', color: 'from-orange-500 to-red-500', new: true },
-  { key: 'bgRemoval', icon: '✂️', route: '/tools/background-removal', name: isZh.value ? '智能去背' : 'Remove BG', desc: isZh.value ? '一鍵移除背景' : 'One-click background removal', color: 'from-green-500 to-teal-500' },
-  { key: 'roomRedesign', icon: '🏠', route: '/tools/room-redesign', name: isZh.value ? '室內設計' : 'Room Design', desc: isZh.value ? 'AI 室內設計渲染' : 'AI interior rendering', color: 'from-blue-500 to-indigo-500' },
-  { key: 'tryOn', icon: '👗', route: '/tools/try-on', name: isZh.value ? '虛擬試穿' : 'Virtual Try-On', desc: isZh.value ? 'AI 模特換裝' : 'AI model fitting', color: 'from-pink-500 to-rose-500' },
-  { key: 'videoTransform', icon: '🔄', route: '/tools/video-transform', name: isZh.value ? '影片風格轉換' : 'Video Style', desc: isZh.value ? '影片風格化處理' : 'Video style transfer', color: 'from-yellow-500 to-orange-500' },
-  { key: 'patternGen', icon: '🔲', route: '/tools/pattern-generate', name: isZh.value ? '圖案設計' : 'Pattern Design', desc: isZh.value ? 'AI 無縫圖案生成' : 'AI seamless patterns', color: 'from-indigo-500 to-purple-500' }
+const heroPrompt = ref('')
+
+const promptSuggestions = computed(() => [
+  {
+    key: 'prompt-1',
+    label: isZh.value ? '電商產品場景' : 'E-commerce product scene',
+    value: isZh.value ? '為高級香水設計極簡棚拍場景' : 'Minimal studio scene for luxury perfume'
+  },
+  {
+    key: 'prompt-2',
+    label: isZh.value ? '短影片腳本' : 'Short video script',
+    value: isZh.value ? '品牌新品 8 秒介紹影片' : '8-second brand intro for new product'
+  },
+  {
+    key: 'prompt-3',
+    label: isZh.value ? '空間改造' : 'Room redesign',
+    value: isZh.value ? '北歐風客廳改造' : 'Nordic living room redesign'
+  }
 ])
+
+const quickActions = computed(() => [
+  { key: 'shortVideo', label: isZh.value ? '短影片' : 'Short Video', route: '/tools/short-video' },
+  { key: 'productScene', label: isZh.value ? '產品場景' : 'Product Scene', route: '/tools/product-scene' },
+  { key: 'bgRemoval', label: isZh.value ? '智能去背' : 'Remove BG', route: '/tools/background-removal' },
+  { key: 'roomRedesign', label: isZh.value ? '空間設計' : 'Room Design', route: '/tools/room-redesign' },
+  { key: 'tryOn', label: isZh.value ? '虛擬試穿' : 'Virtual Try-On', route: '/tools/try-on' },
+  { key: 'effects', label: isZh.value ? '圖片風格' : 'Image Effects', route: '/tools/effects' }
+])
+
+const landingBadges = computed(() => [
+  { key: 'ecommerce', label: isZh.value ? '電商' : 'E-commerce' },
+  { key: 'social', label: isZh.value ? '社群' : 'Social' },
+  { key: 'brand', label: isZh.value ? '品牌' : 'Brand' },
+  { key: 'app', label: isZh.value ? '應用' : 'App' },
+  { key: 'promo', label: isZh.value ? '促銷' : 'Promo' },
+  { key: 'service', label: isZh.value ? '服務' : 'Service' }
+])
+
+function applySuggestion(value: string) {
+  heroPrompt.value = value
+}
+
+function startWithPrompt() {
+  goToTool('/tools/product-scene')
+}
+
+// ============================================
+// TOOL GRID
+// ============================================
+const toolCatalog = computed(() => [
+  {
+    key: 'shortVideo',
+    icon: '📱',
+    route: '/tools/short-video',
+    name: isZh.value ? '短影片生成' : 'Short Video',
+    desc: isZh.value ? '8 秒品牌與產品短片' : '8-second branded videos',
+    color: 'from-purple-500 to-pink-500',
+    hot: true
+  },
+  {
+    key: 'avatar',
+    icon: '🎭',
+    route: '/tools/avatar',
+    name: isZh.value ? 'AI 數位人' : 'AI Avatar',
+    desc: isZh.value ? '數位人口播影片' : 'Digital spokesperson videos',
+    color: 'from-cyan-500 to-blue-500',
+    hot: true
+  },
+  {
+    key: 'productScene',
+    icon: '🏞️',
+    route: '/tools/product-scene',
+    name: isZh.value ? '產品場景' : 'Product Scene',
+    desc: isZh.value ? '商品棚拍與情境圖' : 'Product photography scenes',
+    color: 'from-orange-500 to-red-500',
+    new: true
+  },
+  {
+    key: 'bgRemoval',
+    icon: '✂️',
+    route: '/tools/background-removal',
+    name: isZh.value ? '智能去背' : 'Remove Background',
+    desc: isZh.value ? '一鍵移除背景' : 'One-click cutout',
+    color: 'from-green-500 to-teal-500'
+  },
+  {
+    key: 'roomRedesign',
+    icon: '🏠',
+    route: '/tools/room-redesign',
+    name: isZh.value ? '空間設計' : 'Room Redesign',
+    desc: isZh.value ? '室內空間改造' : 'Interior redesign',
+    color: 'from-blue-500 to-indigo-500'
+  },
+  {
+    key: 'tryOn',
+    icon: '👗',
+    route: '/tools/try-on',
+    name: isZh.value ? '虛擬試穿' : 'Virtual Try-On',
+    desc: isZh.value ? 'AI 模特試穿' : 'AI model fitting',
+    color: 'from-pink-500 to-rose-500'
+  },
+  {
+    key: 'patternGen',
+    icon: '🔲',
+    route: '/tools/pattern-generate',
+    name: isZh.value ? '圖案設計' : 'Pattern Design',
+    desc: isZh.value ? '無縫圖案生成' : 'Seamless patterns',
+    color: 'from-indigo-500 to-purple-500'
+  },
+  {
+    key: 'effects',
+    icon: '🎨',
+    route: '/tools/effects',
+    name: isZh.value ? '圖片風格' : 'Image Effects',
+    desc: isZh.value ? '藝術風格轉換' : 'Artistic style transfer',
+    color: 'from-yellow-500 to-orange-500'
+  }
+])
+
+// ============================================
+// FEATURE HIGHLIGHTS (Landing API)
+// ============================================
+const featureHighlights = ref<FeatureItem[]>([])
+const isLoadingFeatures = ref(false)
+
+async function loadFeatureHighlights() {
+  isLoadingFeatures.value = true
+  try {
+    featureHighlights.value = await landingApi.getFeatures()
+  } catch (error) {
+    console.error('Failed to load features:', error)
+    featureHighlights.value = []
+  } finally {
+    isLoadingFeatures.value = false
+  }
+}
+
+// ============================================
+// WORKS GALLERY (產品增強 + 廣告特效 - like douhuiai)
+// ============================================
+interface WorkItem {
+  id: string
+  tool_type: string
+  tool_name: string
+  route: string
+  title: string
+  prompt: string
+  thumb: string
+  video_url?: string | null
+  input_image_url?: string
+  result_image_url?: string
+  topic?: string
+}
+
+const worksGallery = ref<WorkItem[]>([])
+const isLoadingWorks = ref(false)
+
+async function loadWorksGallery() {
+  isLoadingWorks.value = true
+  try {
+    const langCode = locale.value.startsWith('zh') ? 'zh-TW' : 'en'
+    const response = await apiClient.get(`/api/v1/demo/landing/works?language=${langCode}&limit=24`)
+    if (response.data.success && response.data.items?.length > 0) {
+      worksGallery.value = response.data.items
+    }
+  } catch (error) {
+    console.error('Failed to load works gallery:', error)
+    worksGallery.value = []
+  } finally {
+    isLoadingWorks.value = false
+  }
+}
 
 // ============================================
 // VIDEO EXAMPLES
@@ -174,8 +325,11 @@ async function loadVideoExamples() {
     if (response.data.success && response.data.examples?.length > 0) {
       videoExamples.value = response.data.examples
     }
+    // No fallback to /api/v1/landing/examples - that endpoint returns static data
+    // without video_url fields, which would produce empty video players
   } catch (error) {
     console.error('Failed to load video examples:', error)
+    videoExamples.value = []
   } finally {
     isLoadingVideos.value = false
   }
@@ -187,7 +341,7 @@ async function loadAvatarExamples() {
     const langCode = locale.value.startsWith('zh') ? 'zh-TW' : 'en'
     const response = await apiClient.get(`/api/v1/demo/presets/ai_avatar?language=${langCode}`)
     if (response.data.success && response.data.presets?.length > 0) {
-      avatarExamples.value = response.data.presets.slice(0, 6)
+      avatarExamples.value = response.data.presets.slice(0, 9)
     }
   } catch (error) {
     console.error('Failed to load avatar examples:', error)
@@ -217,11 +371,14 @@ function closeVideoModal() {
 // INITIALIZE
 // ============================================
 onMounted(() => {
+  loadWorksGallery()
+  loadFeatureHighlights()
   loadVideoExamples()
   loadAvatarExamples()
 })
 
 watch(locale, () => {
+  loadWorksGallery()
   loadVideoExamples()
   loadAvatarExamples()
 })
@@ -230,7 +387,7 @@ watch(locale, () => {
 <template>
   <div class="min-h-screen pt-14 flex">
     <!-- ============================================
-         LEFT SIDEBAR - Category Navigation (Like douhuiai.com)
+         LEFT SIDEBAR - Category Navigation
          ============================================ -->
     <aside class="hidden lg:block w-16 hover:w-16 fixed left-0 top-14 bottom-0 bg-dark-800/50 border-r border-dark-700 z-40">
       <div class="py-4">
@@ -264,18 +421,26 @@ watch(locale, () => {
           v-if="hoveredCategory"
           @mouseenter="sidebarExpanded = true"
           @mouseleave="onExpandedPanelLeave"
-          class="absolute left-16 top-0 bottom-0 w-56 bg-dark-800 border-r border-dark-700 shadow-xl overflow-y-auto"
+          class="absolute left-16 top-0 bottom-0 w-60 bg-dark-800 border-r border-dark-700 shadow-xl overflow-y-auto"
         >
           <!-- Category Header -->
           <div class="sticky top-0 bg-dark-800 border-b border-dark-700 p-4">
             <div class="flex items-center gap-2">
               <span class="text-xl">{{ categories.find(c => c.key === hoveredCategory)?.icon }}</span>
-              <span class="font-medium text-white">
-                {{ isZh
-                  ? categories.find(c => c.key === hoveredCategory)?.nameZh
-                  : categories.find(c => c.key === hoveredCategory)?.name
-                }}
-              </span>
+              <div>
+                <span class="font-medium text-white block">
+                  {{ isZh
+                    ? categories.find(c => c.key === hoveredCategory)?.nameZh
+                    : categories.find(c => c.key === hoveredCategory)?.name
+                  }}
+                </span>
+                <span class="text-xs text-gray-400">
+                  {{ isZh
+                    ? categories.find(c => c.key === hoveredCategory)?.descZh
+                    : categories.find(c => c.key === hoveredCategory)?.desc
+                  }}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -302,31 +467,301 @@ watch(locale, () => {
          ============================================ -->
     <main class="flex-1 lg:ml-16">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- ============================================
+             HERO SECTION
+             ============================================ -->
+        <section class="mb-12">
+          <div class="relative overflow-hidden rounded-3xl border border-dark-700 bg-gradient-to-br from-dark-800/80 via-dark-900/90 to-black/80">
+            <div class="absolute -top-24 right-0 w-72 h-72 bg-primary-500/10 blur-3xl"></div>
+            <div class="absolute -bottom-24 left-0 w-72 h-72 bg-cyan-500/10 blur-3xl"></div>
+            <div class="relative grid lg:grid-cols-12 gap-8 p-6 md:p-10">
+              <div class="lg:col-span-7">
+                <p class="text-xs uppercase tracking-widest text-primary-300 mb-3">
+                  {{ isZh ? '全方位 AI 視覺平台' : 'All-in-one AI Visual Studio' }}
+                </p>
+                <h1 class="text-3xl md:text-4xl font-bold text-white mb-4">
+                  {{ isZh
+                    ? '用一句話完成電商、品牌與空間設計素材'
+                    : 'Create commerce, brand, and interior visuals in minutes'
+                  }}
+                </h1>
+                <p class="text-gray-300 leading-relaxed mb-6">
+                  {{ isZh
+                    ? '靈感、素材、短影片與數位人一次完成。所有展示功能都對應 VidGo 已提供的 API。'
+                    : 'From product scenes to short videos and digital humans, every showcase here maps to VidGo APIs you already have.'
+                  }}
+                </p>
 
-        <!-- Greeting Section -->
-        <div class="mb-8">
-          <h1 class="text-2xl md:text-3xl font-bold text-white mb-2">
-            {{ greeting }}{{ isZh ? '，歡迎使用 VidGo' : ', Welcome to VidGo' }}
-          </h1>
-          <p class="text-gray-400">
-            {{ isZh ? '選擇下方功能開始你的 AI 創作之旅' : 'Choose a tool below to start your AI creation journey' }}
-          </p>
-        </div>
+                <div class="flex flex-wrap gap-3">
+                  <button
+                    class="btn-primary"
+                    @click="goToTool('/tools/product-scene')"
+                  >
+                    {{ isZh ? '開始生成產品場景' : 'Start with Product Scene' }}
+                  </button>
+                  <button
+                    class="px-5 py-2.5 rounded-xl border border-dark-600 text-gray-200 hover:text-white hover:border-primary-400 transition-colors"
+                    @click="goToTool('/tools/short-video')"
+                  >
+                    {{ isZh ? '試做短影片' : 'Try Short Video' }}
+                  </button>
+                </div>
+
+                <div class="mt-6">
+                  <div class="flex items-center gap-2 text-xs text-gray-400 mb-2">
+                    <span class="uppercase tracking-widest">Prompt</span>
+                    <span>{{ isZh ? '快速靈感' : 'Quick ideas' }}</span>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-3">
+                    <input
+                      v-model="heroPrompt"
+                      type="text"
+                      class="flex-1 bg-dark-900 border border-dark-600 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary-500"
+                      :placeholder="isZh ? '輸入一句話描述你想要的畫面…' : 'Describe what you want to create…'"
+                    />
+                    <button
+                      class="btn-primary px-6"
+                      @click="startWithPrompt"
+                    >
+                      {{ isZh ? '開始創作' : 'Start' }}
+                    </button>
+                  </div>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <button
+                      v-for="suggestion in promptSuggestions"
+                      :key="suggestion.key"
+                      class="px-3 py-1 rounded-full text-xs border border-dark-600 text-gray-300 hover:text-white hover:border-primary-400 transition-colors"
+                      @click="applySuggestion(suggestion.value)"
+                    >
+                      {{ suggestion.label }}
+                    </button>
+                  </div>
+                  <div class="mt-4 flex flex-wrap gap-2">
+                    <button
+                      v-for="action in quickActions"
+                      :key="action.key"
+                      class="px-3 py-1 rounded-full text-xs bg-dark-800 text-gray-300 hover:text-white hover:bg-dark-700 transition-colors"
+                      @click="goToTool(action.route)"
+                    >
+                      {{ action.label }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="lg:col-span-5">
+                <div class="grid gap-4">
+                  <div class="p-5 rounded-2xl bg-dark-800/70 border border-dark-700">
+                    <div class="flex items-center justify-between">
+                      <h3 class="text-sm font-semibold text-white">
+                        {{ isZh ? '工具庫' : 'Tool Library' }}
+                      </h3>
+                      <span class="text-xs text-primary-300">{{ toolCatalog.length }} {{ isZh ? '項' : 'tools' }}</span>
+                    </div>
+                    <div class="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-300">
+                      <div v-for="tool in toolCatalog.slice(0, 4)" :key="tool.key" class="flex items-center gap-2">
+                        <span>{{ tool.icon }}</span>
+                        <span>{{ tool.name }}</span>
+                      </div>
+                    </div>
+                    <button
+                      class="mt-4 w-full text-xs text-primary-300 hover:text-primary-200"
+                      @click="goToTool('/tools/product-scene')"
+                    >
+                      {{ isZh ? '立即開始生成' : 'Start generating now' }}
+                    </button>
+                  </div>
+
+                  <div class="p-5 rounded-2xl bg-dark-800/70 border border-dark-700">
+                    <h3 class="text-sm font-semibold text-white">
+                      {{ isZh ? '適用場景' : 'Use Cases' }}
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-2">
+                      {{ isZh ? '支援電商、社群、品牌、App、促銷與服務型影片素材' : 'Optimized for ecommerce, social, brand, app, promo, and service creatives.' }}
+                    </p>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                      <span
+                        v-for="badge in landingBadges"
+                        :key="badge.key"
+                        class="px-3 py-1 rounded-full text-xs bg-dark-700 text-gray-300"
+                      >
+                        {{ badge.label }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <!-- ============================================
-             FEATURED TOOLS GRID - Like douhuiai.com
+             WORKS GALLERY - 產品增強與廣告特效 (like douhuiai)
+             ============================================ -->
+        <section v-if="worksGallery.length > 0" class="mb-12">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+              <span>🎨</span>
+              {{ isZh ? '產品增強與廣告特效' : 'Product Enhancement & Ad Effects' }}
+            </h2>
+            <span class="text-sm text-gray-400">
+              {{ isZh ? '精選作品靈感' : 'Featured work inspiration' }}
+            </span>
+          </div>
+
+          <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            <div
+              v-for="work in worksGallery"
+              :key="work.id"
+              class="group relative aspect-square rounded-xl overflow-hidden bg-dark-700 cursor-pointer border border-dark-600 hover:border-primary-500/50 transition-all duration-300"
+              @click="goToTool(work.route)"
+            >
+              <!-- Video item (short_video / ai_avatar) -->
+              <template v-if="work.video_url">
+                <!-- Video poster/thumbnail (default) -->
+                <img
+                  v-if="work.thumb"
+                  :src="work.thumb"
+                  :alt="work.title"
+                  class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-0"
+                />
+                <!-- Video (plays on hover) -->
+                <video
+                  :src="work.video_url"
+                  class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                  :class="work.thumb ? 'opacity-0 group-hover:opacity-100' : ''"
+                  muted
+                  loop
+                  playsinline
+                  @mouseenter="($event.target as HTMLVideoElement).play()"
+                  @mouseleave="($event.target as HTMLVideoElement).pause(); ($event.target as HTMLVideoElement).currentTime = 0"
+                />
+                <!-- Play icon overlay -->
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:opacity-0 transition-opacity duration-300">
+                  <div class="w-10 h-10 bg-white/80 rounded-full flex items-center justify-center shadow-lg">
+                    <svg class="w-5 h-5 text-primary-600 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Image item (product_scene, effect, background_removal) -->
+              <template v-else>
+                <!-- Main thumbnail (result) -->
+                <img
+                  :src="work.thumb"
+                  :alt="work.title"
+                  class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                  :class="{ 'group-hover:opacity-0': work.input_image_url && work.tool_type === 'effect' }"
+                />
+                <!-- Before image (for effects - show on hover) -->
+                <img
+                  v-if="work.input_image_url && work.tool_type === 'effect'"
+                  :src="work.input_image_url"
+                  :alt="work.title"
+                  class="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                />
+              </template>
+
+              <!-- Tool badge -->
+              <div class="absolute top-1.5 left-1.5 px-2 py-0.5 bg-black/70 text-white text-[10px] rounded-full">
+                {{ work.tool_name }}
+              </div>
+
+              <!-- Gradient overlay with prompt on hover -->
+              <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2">
+                <p class="text-white text-[10px] line-clamp-2">
+                  {{ work.prompt }}
+                </p>
+              </div>
+
+              <!-- Arrow hint -->
+              <div class="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-primary-500/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Loading state for Works Gallery -->
+        <section v-else-if="isLoadingWorks" class="mb-12">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+              <span>🎨</span>
+              {{ isZh ? '產品增強與廣告特效' : 'Product Enhancement & Ad Effects' }}
+            </h2>
+          </div>
+          <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            <div v-for="i in 12" :key="i" class="aspect-square rounded-xl bg-dark-700/50 animate-pulse" />
+          </div>
+        </section>
+
+        <!-- ============================================
+             CATEGORY CARDS
+             ============================================ -->
+        <section class="mb-12">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+              <span>📚</span>
+              {{ isZh ? '工具分類' : 'Tool Categories' }}
+            </h2>
+            <span class="text-sm text-gray-400">
+              {{ isZh ? '所有功能皆對應現有 API' : 'All features map to existing APIs' }}
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div
+              v-for="cat in categories"
+              :key="cat.key"
+              class="group relative rounded-2xl border border-dark-600 bg-dark-700/40 p-5 hover:border-primary-500/40 transition-colors"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-2xl">{{ cat.icon }}</span>
+                <span class="text-xs text-gray-400">{{ cat.tools.length }} {{ isZh ? '工具' : 'tools' }}</span>
+              </div>
+              <h3 class="text-base font-semibold text-white mt-3">
+                {{ isZh ? cat.nameZh : cat.name }}
+              </h3>
+              <p class="text-xs text-gray-400 mt-1">
+                {{ isZh ? cat.descZh : cat.desc }}
+              </p>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <span
+                  v-for="tool in cat.tools"
+                  :key="tool.key"
+                  class="px-2.5 py-1 rounded-full text-xs bg-dark-800 text-gray-300"
+                >
+                  {{ isZh ? tool.nameZh : tool.name }}
+                </span>
+              </div>
+              <button
+                class="mt-4 text-xs text-primary-300 hover:text-primary-200"
+                @click="goToTool(cat.tools[0]?.route || '/')"
+              >
+                {{ isZh ? '立即查看' : 'Explore' }}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================
+             FEATURED TOOLS GRID
              ============================================ -->
         <section class="mb-12">
           <div class="flex items-center justify-between mb-6">
             <h2 class="text-lg font-semibold text-white flex items-center gap-2">
               <span>⚡</span>
-              {{ isZh ? '功能推薦' : 'Featured Tools' }}
+              {{ isZh ? '熱門功能' : 'Featured Tools' }}
             </h2>
           </div>
 
           <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <button
-              v-for="tool in featuredTools"
+              v-for="tool in toolCatalog"
               :key="tool.key"
               @click="goToTool(tool.route)"
               class="group relative bg-dark-700/50 hover:bg-dark-700 border border-dark-600 hover:border-primary-500/50 rounded-xl p-4 text-left transition-all duration-300"
@@ -368,15 +803,55 @@ watch(locale, () => {
         </section>
 
         <!-- ============================================
-             VIDEO SHOWCASE - AI影片 精選案例
+             FEATURE HIGHLIGHTS
+             ============================================ -->
+        <section v-if="featureHighlights.length > 0" class="mb-12">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+              <span>✨</span>
+              {{ isZh ? '能力亮點' : 'Capability Highlights' }}
+            </h2>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div
+              v-for="feature in featureHighlights"
+              :key="feature.id"
+              class="p-5 rounded-2xl border border-dark-600 bg-dark-700/40"
+            >
+              <div class="w-12 h-12 rounded-xl bg-dark-800 flex items-center justify-center text-2xl">
+                {{ feature.icon }}
+              </div>
+              <h3 class="text-base font-semibold text-white mt-4">
+                {{ isZh ? feature.title_zh : feature.title }}
+              </h3>
+              <p class="text-xs text-gray-400 mt-2">
+                {{ isZh ? feature.description_zh : feature.description }}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section v-else-if="isLoadingFeatures" class="mb-12">
+          <div class="flex items-center gap-3 text-gray-400">
+            <svg class="animate-spin w-5 h-5" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span>{{ isZh ? '載入功能亮點...' : 'Loading highlights...' }}</span>
+          </div>
+        </section>
+
+        <!-- ============================================
+             VIDEO SHOWCASE
              ============================================ -->
         <section v-if="videoExamples.length > 0" class="mb-12">
           <div class="flex items-center justify-between mb-6">
             <h2 class="text-lg font-semibold text-white flex items-center gap-2">
               <span>🎬</span>
-              {{ isZh ? 'AI影片 精選案例' : 'AI Video Showcase' }}
+              {{ isZh ? '短影片精選案例' : 'Short Video Showcase' }}
             </h2>
-            <RouterLink to="/topics/video" class="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1">
+            <RouterLink to="/tools/short-video" class="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1">
               {{ isZh ? '查看更多' : 'View More' }}
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -445,7 +920,7 @@ watch(locale, () => {
         </section>
 
         <!-- ============================================
-             AI AVATAR SHOWCASE - AI 數位人展示
+             AI AVATAR SHOWCASE
              ============================================ -->
         <section v-if="avatarExamples.length > 0" class="mb-12">
           <div class="flex items-center justify-between mb-6">
@@ -508,7 +983,7 @@ watch(locale, () => {
               <!-- Script Preview -->
               <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
                 <p class="text-white text-xs line-clamp-2">
-                  {{ avatar.prompt || (isZh ? '專業數位代言人' : 'Professional Digital Presenter') }}
+                  {{ (isZh ? avatar.prompt_zh : avatar.prompt) || (isZh ? '專業數位代言人' : 'Professional Digital Presenter') }}
                 </p>
               </div>
             </div>

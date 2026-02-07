@@ -17,11 +17,12 @@ Features:
 import asyncio
 import logging
 import base64
+import time
 import uuid as uid_module
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
@@ -32,8 +33,14 @@ from app.services.rescue_service import get_rescue_service
 from app.services.a2e_service import A2EAvatarService, get_a2e_service
 from app.services.watermark import WatermarkService, get_watermark_service
 from app.providers.provider_router import get_provider_router, TaskType
+from app.core.config import get_settings
+from app.config.topic_registry import get_topic_ids_for_tool, get_landing_topic_ids
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
+SHORT_VIDEO_LENGTH = int(getattr(settings, "SHORT_VIDEO_LENGTH", 8))
+LANDING_GEN_CONCURRENCY = int(getattr(settings, "LANDING_GEN_CONCURRENCY", 2))
+LANDING_GEN_SLEEP_SECONDS = int(getattr(settings, "LANDING_GEN_SLEEP_SECONDS", 5))
 
 
 # =============================================================================
@@ -496,6 +503,59 @@ class MaterialGenerator:
         if not self.watermark_service:
             self.watermark_service = get_watermark_service()
 
+    async def _count_by_topic(
+        self,
+        session: AsyncSession,
+        tool_type: ToolType,
+        topics: List[str]
+    ) -> Dict[str, int]:
+        result = await session.execute(
+            select(Material.topic, func.count(Material.id))
+            .where(Material.tool_type == tool_type)
+            .where(Material.is_active == True)
+            .where(Material.topic.in_(topics))
+            .group_by(Material.topic)
+        )
+        counts = {row[0]: row[1] for row in result.all()}
+        for topic in topics:
+            counts.setdefault(topic, 0)
+        return counts
+
+    async def _count_missing_prompts(
+        self,
+        session: AsyncSession,
+        tool_type: ToolType,
+        topics: Optional[List[str]] = None
+    ) -> int:
+        query = (
+            select(func.count(Material.id))
+            .where(Material.tool_type == tool_type)
+            .where(Material.is_active == True)
+            .where(or_(Material.prompt == None, Material.prompt == ""))
+        )
+        if topics:
+            query = query.where(Material.topic.in_(topics))
+        result = await session.execute(query)
+        return result.scalar() or 0
+
+    async def _count_missing_prompt_zh(
+        self,
+        session: AsyncSession,
+        tool_type: ToolType,
+        topics: Optional[List[str]] = None
+    ) -> int:
+        query = (
+            select(func.count(Material.id))
+            .where(Material.tool_type == tool_type)
+            .where(Material.is_active == True)
+            .where(Material.language.like("zh%"))
+            .where(or_(Material.prompt_zh == None, Material.prompt_zh == ""))
+        )
+        if topics:
+            query = query.where(Material.topic.in_(topics))
+        result = await session.execute(query)
+        return result.scalar() or 0
+
     async def check_materials_exist(
         self,
         session: AsyncSession,
@@ -506,7 +566,7 @@ class MaterialGenerator:
         if category == 'landing':
             # Landing materials are stored in Material table with SHORT_VIDEO and AI_AVATAR types
             # Topics must match LANDING_EXAMPLES keys used in _generate_landing_materials()
-            landing_topics = ["ecommerce", "social", "brand", "app", "promo", "service"]
+            landing_topics = get_landing_topic_ids()
 
             # Check for SHORT_VIDEO materials
             video_result = await session.execute(
@@ -579,19 +639,74 @@ class MaterialGenerator:
             logger.info(f"Category '{category}' has {count} materials (min: {min_count})")
             return count >= min_count
 
-    async def check_all_materials(self, session: AsyncSession) -> Dict[str, bool]:
-        """Check material status for all categories."""
-        categories = {
-            'landing': 6,      # 6 videos + 6 avatars with correct topics
-            'pattern': 10,     # background_removal materials
-            'product': 6,      # product_scene materials
-            'video': 5,        # short_video materials
-            'avatar': 6        # ai_avatar materials
+    async def check_all_materials(self, session: AsyncSession) -> Dict[str, Dict[str, Any]]:
+        """Check material status with per-topic coverage and prompt validation."""
+        status: Dict[str, Dict[str, Any]] = {}
+
+        landing_topics = get_landing_topic_ids()
+        landing_video_counts = await self._count_by_topic(session, ToolType.SHORT_VIDEO, landing_topics)
+        landing_avatar_counts = await self._count_by_topic(session, ToolType.AI_AVATAR, landing_topics)
+
+        LANDING_VIDEO_PER_TOPIC = 6
+        LANDING_AVATAR_PER_TOPIC = 12  # 6 examples × 2 languages
+
+        landing_missing_videos = [t for t, c in landing_video_counts.items() if c < LANDING_VIDEO_PER_TOPIC]
+        landing_missing_avatars = [t for t, c in landing_avatar_counts.items() if c < LANDING_AVATAR_PER_TOPIC]
+
+        landing_prompt_missing = (
+            await self._count_missing_prompts(session, ToolType.SHORT_VIDEO, landing_topics)
+            + await self._count_missing_prompts(session, ToolType.AI_AVATAR, landing_topics)
+        )
+        landing_prompt_zh_missing = await self._count_missing_prompt_zh(session, ToolType.AI_AVATAR, landing_topics)
+
+        status["landing"] = {
+            "ready": len(landing_missing_videos) == 0 and len(landing_missing_avatars) == 0 and landing_prompt_missing == 0 and landing_prompt_zh_missing == 0,
+            "missing_topics": {
+                "videos": landing_missing_videos,
+                "avatars": landing_missing_avatars
+            },
+            "counts": {
+                "videos": landing_video_counts,
+                "avatars": landing_avatar_counts
+            },
+            "prompt_issues": {
+                "missing_prompt": landing_prompt_missing,
+                "missing_prompt_zh": landing_prompt_zh_missing
+            }
         }
 
-        status = {}
-        for category, min_count in categories.items():
-            status[category] = await self.check_materials_exist(session, category, min_count)
+        # Per-topic coverage for core tools
+        MIN_PER_TOPIC_DEFAULT = 1
+        tool_checks = {
+            "pattern": (ToolType.BACKGROUND_REMOVAL, get_topic_ids_for_tool("background_removal")),
+            "product": (ToolType.PRODUCT_SCENE, get_topic_ids_for_tool("product_scene")),
+            "video": (ToolType.SHORT_VIDEO, get_topic_ids_for_tool("short_video")),
+            "avatar": (ToolType.AI_AVATAR, get_topic_ids_for_tool("ai_avatar")),
+            "effect": (ToolType.EFFECT, get_topic_ids_for_tool("effect"))
+        }
+
+        EFFECT_MIN_PER_STYLE = 3
+
+        for category, (tool_type, topics) in tool_checks.items():
+            if not topics:
+                continue
+
+            counts = await self._count_by_topic(session, tool_type, topics)
+            min_per_topic = EFFECT_MIN_PER_STYLE if category == "effect" else MIN_PER_TOPIC_DEFAULT
+            missing_topics = [t for t, c in counts.items() if c < min_per_topic]
+
+            prompt_missing = await self._count_missing_prompts(session, tool_type, topics)
+            prompt_zh_missing = await self._count_missing_prompt_zh(session, tool_type, topics)
+
+            status[category] = {
+                "ready": len(missing_topics) == 0 and prompt_missing == 0 and prompt_zh_missing == 0,
+                "missing_topics": missing_topics,
+                "counts": counts,
+                "prompt_issues": {
+                    "missing_prompt": prompt_missing,
+                    "missing_prompt_zh": prompt_zh_missing
+                }
+            }
 
         return status
 
@@ -618,11 +733,15 @@ class MaterialGenerator:
                 logger.info("Force regeneration enabled - generating all materials")
 
             status = await self.check_all_materials(session)
+            generatable = {"landing", "pattern", "product", "video", "avatar"}
 
-            for category, exists in status.items():
+            for category, info in status.items():
+                if category not in generatable:
+                    continue
                 results['checked'].append(category)
 
-                if exists and not force:
+                ready = info.get("ready", False) if isinstance(info, dict) else bool(info)
+                if ready and not force:
                     logger.info(f"Category '{category}' already has materials, skipping")
                     results['skipped'].append(category)
                     continue
@@ -653,7 +772,7 @@ class MaterialGenerator:
         """Generate landing page video examples with avatars into Material table."""
         logger.info("Generating landing page materials into Material table...")
 
-        landing_topics = ["ecommerce", "social", "brand", "app", "promo", "service"]
+        landing_topics = get_landing_topic_ids()
 
         # Clear old landing materials from Material table
         await session.execute(
@@ -668,33 +787,38 @@ class MaterialGenerator:
         )
         await session.commit()
 
-        sort_order = 0
-        for topic_key, topic_data in LANDING_EXAMPLES.items():
-            for idx, example in enumerate(topic_data['examples']):
+        sem = asyncio.Semaphore(max(LANDING_GEN_CONCURRENCY, 1))
+        topic_items = list(LANDING_EXAMPLES.items())
+
+        async def _process_example(topic_key: str, topic_data: Dict[str, Any], idx: int, example: Dict[str, Any], topic_sort_index: int):
+            async with sem:
                 try:
-                    # Generate product video
                     prompt_zh = example['prompt_zh']
                     prompt_en = example['prompt_en']
+                    sort_order = (topic_sort_index * 100) + idx
 
+                    img_start = time.monotonic()
                     image_result = await self.rescue_service.generate_image(
                         prompt=prompt_zh,
                         width=1024,
                         height=1024
                     )
+                    img_elapsed = time.monotonic() - img_start
+                    logger.info(f"Landing {topic_key} #{idx+1} image gen: {img_elapsed:.1f}s")
 
                     if not image_result.get('success'):
                         logger.error(f"Image generation failed for {topic_key}")
-                        continue
+                        return
 
                     image_url = image_result.get('image_url')
                     if not image_url and image_result.get('images'):
                         image_url = image_result['images'][0]['url']
 
-                    # Convert to video using Pollo AI
+                    vid_start = time.monotonic()
                     success, task_id, _ = await self.pollo.generate_video(
                         image_url=image_url,
                         prompt=prompt_zh,
-                        length=5
+                        length=SHORT_VIDEO_LENGTH
                     )
 
                     video_url = None
@@ -703,92 +827,112 @@ class MaterialGenerator:
                         if video_result.get('status') == 'succeed':
                             video_url = video_result.get('video_url')
 
-                    if video_url:
-                        # Generate lookup hash for preset-only mode
-                        lookup_hash = Material.generate_lookup_hash(
-                            tool_type=ToolType.SHORT_VIDEO.value,
-                            prompt=prompt_zh
-                        )
+                    vid_elapsed = time.monotonic() - vid_start
+                    logger.info(f"Landing {topic_key} #{idx+1} video gen: {vid_elapsed:.1f}s")
 
-                        # Save SHORT_VIDEO material
-                        # In PRESET-ONLY mode, result_watermarked_url = result_video_url
-                        # (all outputs are watermarked by default)
-                        video_material = Material(
-                            tool_type=ToolType.SHORT_VIDEO,
-                            topic=topic_key,
-                            language="zh-TW",
-                            tags=[topic_key, "landing"],
-                            source=MaterialSource.SEED,
-                            status=MaterialStatus.APPROVED,
-                            prompt=prompt_zh,
-                            prompt_enhanced=prompt_en,
-                            input_image_url=image_url,
-                            result_video_url=video_url,
-                            result_watermarked_url=video_url,  # PRESET-ONLY: same as original
-                            lookup_hash=lookup_hash,
-                            title_en=topic_data['name_en'],
-                            title_zh=topic_data['name_zh'],
-                            quality_score=0.9,
-                            sort_order=sort_order,
-                            is_featured=True,
-                            is_active=True
-                        )
-                        session.add(video_material)
-                        await session.commit()
-                        logger.info(f"Generated SHORT_VIDEO: {topic_key} #{idx+1}")
-
-                    # Generate avatars for both languages using topic-appropriate images
-                    avatar_images = AVATAR_IMAGES.get(topic_key, AVATAR_IMAGES["ecommerce"])
-                    avatar_image = avatar_images[idx % len(avatar_images)]  # Alternate between available images
-
-                    for lang, avatar_key in [("en", "avatar_en"), ("zh-TW", "avatar_zh")]:
-                        avatar_script = example[avatar_key]
-                        avatar_result = await self.avatar_service.generate_and_wait(
-                            image_url=avatar_image,
-                            script=avatar_script,
-                            language=lang,
-                            duration=30,
-                            timeout=300
-                        )
-
-                        if avatar_result.get('success'):
-                            avatar_video_url = avatar_result['video_url']
-                            # Generate lookup hash for preset-only mode
-                            avatar_lookup_hash = Material.generate_lookup_hash(
-                                tool_type=ToolType.AI_AVATAR.value,
-                                prompt=avatar_script
+                    async with AsyncSessionLocal() as task_session:
+                        if video_url:
+                            lookup_hash = Material.generate_lookup_hash(
+                                tool_type=ToolType.SHORT_VIDEO.value,
+                                prompt=prompt_zh
                             )
 
-                            avatar_material = Material(
-                                tool_type=ToolType.AI_AVATAR,
+                            video_material = Material(
+                                tool_type=ToolType.SHORT_VIDEO,
                                 topic=topic_key,
-                                language=lang,
-                                tags=[topic_key, "landing", "avatar"],
+                                language="zh-TW",
+                                tags=[topic_key, "landing"],
                                 source=MaterialSource.SEED,
                                 status=MaterialStatus.APPROVED,
-                                prompt=avatar_script,
-                                result_video_url=avatar_video_url,
-                                result_watermarked_url=avatar_video_url,  # PRESET-ONLY: same as original
-                                lookup_hash=avatar_lookup_hash,
-                                title_en=f"{topic_data['name_en']} Avatar",
-                                title_zh=f"{topic_data['name_zh']} 數位人",
+                                prompt=prompt_zh,
+                                prompt_zh=prompt_zh,
+                                prompt_en=prompt_en,
+                                prompt_enhanced=prompt_en,
+                                input_image_url=image_url,
+                                result_video_url=video_url,
+                                result_watermarked_url=video_url,  # PRESET-ONLY: same as original
+                                lookup_hash=lookup_hash,
+                                title_en=topic_data['name_en'],
+                                title_zh=topic_data['name_zh'],
                                 quality_score=0.9,
                                 sort_order=sort_order,
                                 is_featured=True,
                                 is_active=True
                             )
-                            session.add(avatar_material)
-                            await session.commit()
-                            logger.info(f"Generated AI_AVATAR ({lang}): {topic_key} #{idx+1}")
+                            task_session.add(video_material)
+                            await task_session.commit()
+                            logger.info(f"Generated SHORT_VIDEO: {topic_key} #{idx+1}")
 
-                        await asyncio.sleep(5)  # Rate limiting
+                        avatar_image_pairs = AVATAR_IMAGE_TOPIC_MAPPING.get(
+                            topic_key,
+                            AVATAR_IMAGE_TOPIC_MAPPING["ecommerce"]
+                        )
+                        avatar_candidates = []
+                        for gender, style in avatar_image_pairs:
+                            avatar_candidates.extend(
+                                AVATAR_IMAGES_BY_GENDER.get(gender, {}).get(style, [])
+                            )
+                        if not avatar_candidates:
+                            avatar_candidates = AVATAR_IMAGES_BY_GENDER["female"]["professional"]
+                        avatar_image = avatar_candidates[idx % len(avatar_candidates)]
 
-                    sort_order += 1
-                    await asyncio.sleep(5)  # Rate limiting
+                        for lang, avatar_key in [("en", "avatar_en"), ("zh-TW", "avatar_zh")]:
+                            avatar_script = example[avatar_key]
+                            avatar_start = time.monotonic()
+                            avatar_result = await self.avatar_service.generate_and_wait(
+                                image_url=avatar_image,
+                                script=avatar_script,
+                                language=lang,
+                                duration=30,
+                                timeout=300
+                            )
+                            avatar_elapsed = time.monotonic() - avatar_start
+                            logger.info(f"Landing {topic_key} #{idx+1} avatar {lang}: {avatar_elapsed:.1f}s")
+
+                            if avatar_result.get('success'):
+                                avatar_video_url = avatar_result['video_url']
+                                avatar_lookup_hash = Material.generate_lookup_hash(
+                                    tool_type=ToolType.AI_AVATAR.value,
+                                    prompt=avatar_script
+                                )
+
+                                avatar_material = Material(
+                                    tool_type=ToolType.AI_AVATAR,
+                                    topic=topic_key,
+                                    language=lang,
+                                    tags=[topic_key, "landing", "avatar"],
+                                    source=MaterialSource.SEED,
+                                    status=MaterialStatus.APPROVED,
+                                    prompt=avatar_script,
+                                    prompt_zh=avatar_script if lang.startswith("zh") else None,
+                                    prompt_en=avatar_script if lang == "en" else None,
+                                    result_video_url=avatar_video_url,
+                                    result_watermarked_url=avatar_video_url,  # PRESET-ONLY: same as original
+                                    lookup_hash=avatar_lookup_hash,
+                                    title_en=f"{topic_data['name_en']} Avatar",
+                                    title_zh=f"{topic_data['name_zh']} 數位人",
+                                    quality_score=0.9,
+                                    sort_order=sort_order,
+                                    is_featured=True,
+                                    is_active=True
+                                )
+                                task_session.add(avatar_material)
+                                await task_session.commit()
+                                logger.info(f"Generated AI_AVATAR ({lang}): {topic_key} #{idx+1}")
+
+                            await asyncio.sleep(LANDING_GEN_SLEEP_SECONDS)
+
+                        await asyncio.sleep(LANDING_GEN_SLEEP_SECONDS)
 
                 except Exception as e:
                     logger.error(f"Error generating landing {topic_key}: {e}")
-                    continue
+
+        tasks = []
+        for topic_sort_index, (topic_key, topic_data) in enumerate(topic_items):
+            for idx, example in enumerate(topic_data['examples']):
+                tasks.append(_process_example(topic_key, topic_data, idx, example, topic_sort_index))
+
+        await asyncio.gather(*tasks)
 
     async def _generate_pattern_materials(self, session: AsyncSession):
         """Generate pattern design examples using GoEnhance T2I."""
@@ -955,7 +1099,7 @@ class MaterialGenerator:
                 success, task_id, _ = await self.pollo.generate_video(
                     image_url=image_url,
                     prompt=example['source_prompt'],
-                    length=5
+                    length=SHORT_VIDEO_LENGTH
                 )
 
                 if not success:

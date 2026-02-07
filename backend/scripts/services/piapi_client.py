@@ -127,9 +127,9 @@ class PiAPIClient:
                             local_path = await self._download(client, image_url)
                             if local_path:
                                 logger.info(f"[PiAPI] Saved: {local_path}")
-                                return {"success": True, "image_url": local_path}
+                                return {"success": True, "image_url": local_path, "remote_url": image_url}
 
-                        return {"success": True, "image_url": image_url}
+                        return {"success": True, "image_url": image_url, "remote_url": image_url}
 
                     elif status == "failed":
                         error = status_data.get("data", {}).get("error", "Unknown error")

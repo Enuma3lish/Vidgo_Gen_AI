@@ -22,8 +22,9 @@ import logging
 
 from app.api import deps
 from app.models.user import User
-from app.models.billing import Plan, Subscription
+from app.models.billing import Plan, Subscription, Order, Invoice
 from app.services.subscription_service import get_subscription_service, REFUND_ELIGIBILITY_DAYS
+from app.services.paddle_service import get_paddle_service
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 logger = logging.getLogger(__name__)
@@ -337,6 +338,122 @@ async def get_subscription_history(
         "success": True,
         "subscriptions": history
     }
+
+
+# =============================================================================
+# INVOICES (User-facing list & PDF)
+# =============================================================================
+
+class InvoiceItem(BaseModel):
+    """Single invoice/order for list."""
+    order_id: str
+    order_number: str
+    amount: float
+    currency: str
+    status: str
+    paid_at: Optional[str] = None
+    invoice_number: Optional[str] = None
+    has_pdf: bool = False
+
+
+class InvoiceListResponse(BaseModel):
+    success: bool
+    invoices: List[InvoiceItem]
+
+
+class InvoicePdfResponse(BaseModel):
+    success: bool
+    pdf_url: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/invoices", response_model=InvoiceListResponse)
+async def list_invoices(
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(deps.get_current_active_user),
+    db: AsyncSession = Depends(deps.get_db)
+):
+    """
+    List paid orders (invoices) for the current user.
+
+    Returns orders with status=paid, most recent first.
+    Used by Dashboard > Invoices page.
+    """
+    result = await db.execute(
+        select(Order)
+        .where(Order.user_id == current_user.id, Order.status == "paid")
+        .order_by(Order.paid_at.desc().nullslast(), Order.created_at.desc())
+        .limit(limit)
+    )
+    orders = result.scalars().all()
+
+    # Load invoices for these orders (order_id -> invoice)
+    inv_result = await db.execute(
+        select(Invoice).where(Invoice.order_id.in_([o.id for o in orders]))
+    )
+    invoices_by_order = {str(inv.order_id): inv for inv in inv_result.scalars().all()}
+
+    items = []
+    for order in orders:
+        inv = invoices_by_order.get(str(order.id))
+        transaction_id = (order.payment_data or {}).get("paddle_transaction_id") or (order.payment_data or {}).get("transaction_id")
+        items.append(InvoiceItem(
+            order_id=str(order.id),
+            order_number=order.order_number or str(order.id),
+            amount=float(order.amount) if order.amount else 0,
+            currency=(order.payment_data or {}).get("currency_code", "USD"),
+            status=order.status or "paid",
+            paid_at=order.paid_at.isoformat() if order.paid_at else None,
+            invoice_number=inv.invoice_number if inv else None,
+            has_pdf=bool(transaction_id or (inv and inv.pdf_url))
+        ))
+
+    return InvoiceListResponse(success=True, invoices=items)
+
+
+@router.get("/invoices/{order_id}/pdf", response_model=InvoicePdfResponse)
+async def get_invoice_pdf(
+    order_id: str,
+    current_user: User = Depends(deps.get_current_active_user),
+    db: AsyncSession = Depends(deps.get_db)
+):
+    """
+    Get a temporary PDF URL for the invoice of a paid order.
+
+    The URL typically expires after 1 hour (Paddle). Open in new tab or download.
+    """
+    try:
+        order_uuid = UUID(order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+
+    result = await db.execute(
+        select(Order).where(Order.id == order_uuid, Order.user_id == current_user.id)
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status != "paid":
+        raise HTTPException(status_code=400, detail="Invoice only available for paid orders")
+
+    # Prefer stored pdf_url (Invoice table), then Paddle
+    inv_result = await db.execute(select(Invoice).where(Invoice.order_id == order.id))
+    inv = inv_result.scalar_one_or_none()
+    if inv and inv.pdf_url:
+        return InvoicePdfResponse(success=True, pdf_url=inv.pdf_url)
+
+    transaction_id = (order.payment_data or {}).get("paddle_transaction_id") or (order.payment_data or {}).get("transaction_id")
+    if not transaction_id:
+        return InvoicePdfResponse(success=False, error="No invoice PDF available for this order")
+
+    paddle = get_paddle_service()
+    pdf_result = await paddle.get_invoice_pdf_url(str(transaction_id))
+    if not pdf_result.get("success") or not pdf_result.get("pdf_url"):
+        return InvoicePdfResponse(
+            success=False,
+            error=pdf_result.get("error", "Failed to retrieve invoice PDF")
+        )
+    return InvoicePdfResponse(success=True, pdf_url=pdf_result["pdf_url"])
 
 
 @router.get("/refund-eligibility")

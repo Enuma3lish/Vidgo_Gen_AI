@@ -38,6 +38,10 @@ from app.services.block_cache import get_block_cache
 from app.services.gemini_service import get_gemini_service
 from app.services.similarity import get_similarity_service
 from app.services.rescue_service import get_rescue_service
+from app.core.config import get_settings
+
+settings = get_settings()
+SHORT_VIDEO_LENGTH = int(getattr(settings, "SHORT_VIDEO_LENGTH", 8))
 from app.services.material import MaterialLibraryService, UserContentCollector, MATERIAL_REQUIREMENTS
 from app.config.topic_registry import (
     get_topics_for_tool,
@@ -146,7 +150,7 @@ class RandomDemoRequest(BaseModel):
 
 class StyleInfo(BaseModel):
     """Style information"""
-    id: int
+    id: str  # style key e.g. anime, realistic
     name: str
     slug: str
     version: Optional[str] = None
@@ -347,6 +351,9 @@ class PresetResultResponse(BaseModel):
     preset_id: str
     result_watermarked_url: Optional[str] = None
     result_thumbnail_url: Optional[str] = None
+    input_image_url: Optional[str] = None  # For before/after display (Effect, Try-on, etc.)
+    prompt: Optional[str] = None  # Default prompt used
+    prompt_zh: Optional[str] = None
     can_download: bool = False  # ALWAYS false in preset-only mode
     message: str = "Subscribe for full access"
     error: Optional[str] = None
@@ -383,12 +390,15 @@ async def use_preset(
     # Increment use count
     await lookup_service.increment_use_count(str(material.id))
 
-    # Return watermarked result only
+    # Return watermarked result only (with input/prompt for before/after display)
     return PresetResultResponse(
         success=True,
         preset_id=request.preset_id,
         result_watermarked_url=material.result_watermarked_url or material.result_video_url or material.result_image_url,
         result_thumbnail_url=material.result_thumbnail_url,
+        input_image_url=material.input_image_url,
+        prompt=material.prompt,
+        prompt_zh=material.prompt_zh,
         can_download=False,  # ALWAYS false
         message="Subscribe for full access"
     )
@@ -452,6 +462,7 @@ async def get_presets(
     tool_type: str,
     topic: Optional[str] = Query(None, description="Topic filter"),
     limit: int = Query(20, ge=1, le=50, description="Maximum number of presets"),
+    language: str = Query("en", description="Language for try_prompts when db_empty"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -491,7 +502,7 @@ async def get_presets(
     lookup_service = get_material_lookup_service(db)
     presets = await lookup_service.get_presets_for_tool(tool_type, topic, limit)
 
-    return {
+    payload = {
         "success": True,
         "tool_type": tool_type,
         "topic": topic,
@@ -513,6 +524,50 @@ async def get_presets(
             for p in presets
         ],
         "count": len(presets)
+    }
+
+    # When no materials, include fixed try_prompts so frontend can show selectable options
+    if len(presets) == 0:
+        from app.config.try_prompts import get_try_prompts as _get_try_prompts
+        payload["try_prompts"] = _get_try_prompts(tool_type, language)
+        payload["db_empty"] = True
+    else:
+        payload["db_empty"] = False
+
+    return payload
+
+
+@router.get("/try-prompts/{tool_type}")
+async def get_try_prompts(
+    tool_type: str,
+    language: str = Query("en", description="Language code (en, zh-TW, zh)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get fixed prompts for try-play mode.
+
+    When Material DB is empty, frontend uses these prompts to show selectable options.
+    When user selects a prompt, they query Material DB (via presets or use-preset).
+    Run scripts/seed_materials_if_empty.py to populate DB with results for these prompts.
+
+    Supported tools: all registered tool types
+    """
+    from app.config.try_prompts import get_try_prompts as get_prompts
+
+    valid_tools = tuple(get_all_tool_types())
+    if tool_type not in valid_tools:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "invalid_tool_type", "valid_tools": list(valid_tools)}
+        )
+
+    prompts = get_prompts(tool_type, language)
+    return {
+        "success": True,
+        "tool_type": tool_type,
+        "prompts": prompts,
+        "count": len(prompts),
+        "message": "Run seed_materials_if_empty.py to populate Material DB with results."
     }
 
 
@@ -722,7 +777,7 @@ async def generate_product_video(
         video_result = await rescue_service.generate_video(
             image_url=image_url,
             prompt=enhanced_prompt,
-            length=5
+            length=SHORT_VIDEO_LENGTH
         )
 
         video_url = video_result.get("video_url") if video_result.get("success") else None
@@ -971,7 +1026,7 @@ async def generate_paid_tier(
                 video_result = await rescue_service.generate_video(
                     image_url=result_image_url,
                     prompt=enhanced_prompt,
-                    length=5
+                    length=SHORT_VIDEO_LENGTH
                 )
                 result_video_url = video_result.get("video_url") if video_result.get("success") else None
                 if result_video_url:
@@ -1853,11 +1908,12 @@ async def get_avatar_topics(
 
     Returns topics that have at least one avatar material available.
     """
-    from app.models.material import Material, ToolType, MaterialStatus, MATERIAL_TOPICS
+    from app.models.material import Material, ToolType, MaterialStatus
+    from app.config.topic_registry import get_topics_for_tool
     from sqlalchemy import func
 
     # Get topic definitions
-    avatar_topics = MATERIAL_TOPICS.get(ToolType.AI_AVATAR, [])
+    avatar_topics = get_topics_for_tool(ToolType.AI_AVATAR.value)
 
     # Count materials per topic for this language
     query = select(
@@ -1876,13 +1932,13 @@ async def get_avatar_topics(
     # Format topics with counts
     topics = []
     for topic in avatar_topics:
-        topic_id = topic["topic_id"]
+        topic_id = topic["id"]
         count = topic_counts.get(topic_id, 0)
 
         if language == "zh-TW":
-            name = topic.get("name_zh", topic["name_en"])
+            name = topic.get("name_zh") or topic.get("name_en", "")
         else:
-            name = topic["name_en"]
+            name = topic.get("name_en") or topic.get("name_zh", "")
 
         topics.append({
             "topic_id": topic_id,
@@ -2363,14 +2419,12 @@ async def get_inspirations(
 
 # Map material topics to landing page categories
 TOPIC_TO_CATEGORY = {
-    "spokesperson": "brand",
-    "product_intro": "ecommerce",
-    "customer_service": "service",
-    "social_media": "social",
-    "education": "app",
-    "marketing": "promo",
-    "tutorial": "app",
-    "announcement": "promo"
+    "ecommerce": "ecommerce",
+    "social": "social",
+    "brand": "brand",
+    "app": "app",
+    "promo": "promo",
+    "service": "service"
 }
 
 
@@ -2393,9 +2447,9 @@ async def get_landing_examples(
     # Determine avatar language based on user's language
     avatar_lang = "zh-TW" if language.startswith("zh") else "en"
 
-    # Landing page categories we want - must match MATERIAL_TOPICS in architecture
-    # short_video topics: product_showcase, brand_story, tutorial, promo
-    landing_topics = ["product_showcase", "brand_story", "tutorial", "promo"]
+    # Landing page categories must match landing topics registry
+    from app.config.topic_registry import get_landing_topic_ids
+    landing_topics = get_landing_topic_ids()
 
     # Query ALL avatars for the user's language, grouped by topic
     avatars_result = await db.execute(
@@ -2450,10 +2504,12 @@ async def get_landing_examples(
 
         # Topic display names for UI
         topic_names = {
-            "product_showcase": {"en": "Product Showcase", "zh": "產品展示"},
-            "brand_story": {"en": "Brand Story", "zh": "品牌故事"},
-            "tutorial": {"en": "Tutorial", "zh": "教學影片"},
-            "promo": {"en": "Promotion", "zh": "促銷活動"}
+            "ecommerce": {"en": "E-commerce", "zh": "電商廣告"},
+            "social": {"en": "Social Media", "zh": "社群媒體"},
+            "brand": {"en": "Brand Promotion", "zh": "品牌推廣"},
+            "app": {"en": "App Promotion", "zh": "應用推廣"},
+            "promo": {"en": "Promotional", "zh": "活動促銷"},
+            "service": {"en": "Service Introduction", "zh": "服務介紹"}
         }
         topic_display = topic_names.get(topic, {"en": topic.replace("_", " ").title(), "zh": topic})
 
@@ -2464,10 +2520,12 @@ async def get_landing_examples(
         # For thumb: use video URL as poster (browser will extract first frame)
         # Or use a topic-specific Unsplash image
         topic_images = {
-            "product_showcase": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600",
-            "brand_story": "https://images.unsplash.com/photo-1552664730-d307ca884978?w=600",
-            "tutorial": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600",
-            "promo": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?w=600"
+            "ecommerce": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600",
+            "social": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=600",
+            "brand": "https://images.unsplash.com/photo-1552664730-d307ca884978?w=600",
+            "app": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600",
+            "promo": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?w=600",
+            "service": "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=600"
         }
 
         all_examples.append({
@@ -2480,7 +2538,7 @@ async def get_landing_examples(
             "thumb": video.input_image_url or topic_images.get(topic, "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600"),
             "video": video.result_video_url,
             "avatar_video": avatar_video,
-            "duration": "8s",
+            "duration": f"{SHORT_VIDEO_LENGTH}s",
             "topic": topic
         })
 
@@ -2501,6 +2559,91 @@ async def get_landing_examples(
             "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 1,
             "has_more": end < total
         }
+    }
+
+
+@router.get("/landing/works")
+async def get_landing_works(
+    language: str = Query("en", description="Language code"),
+    limit: int = Query(24, ge=8, le=48, description="Number of works to return"),
+    tool_type: Optional[str] = Query(None, description="Filter by tool: product_scene, effect, background_removal, short_video, ai_avatar"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get works gallery for homepage - 產品增強 (product enhancement) & 廣告特效 (ad effects).
+    Returns materials from product_scene, effect, background_removal for dense gallery display.
+    Similar to douhuiai.com homepage works showcase.
+    """
+    from sqlalchemy import func
+    from app.models.material import Material, ToolType
+
+    # Tool types for 產品增強 + 廣告特效 + video content
+    valid_tool_types = ("product_scene", "effect", "background_removal", "short_video", "ai_avatar")
+    works_tool_types = [
+        ToolType.PRODUCT_SCENE,
+        ToolType.EFFECT,
+        ToolType.BACKGROUND_REMOVAL,
+        ToolType.SHORT_VIDEO,
+        ToolType.AI_AVATAR,
+    ]
+    if tool_type and tool_type in valid_tool_types:
+        works_tool_types = [ToolType(tool_type)]
+
+    # Query materials with images or videos
+    result = await db.execute(
+        select(Material)
+        .where(
+            Material.tool_type.in_(works_tool_types),
+            Material.is_active == True,
+            (
+                Material.result_image_url.isnot(None)
+                | Material.result_watermarked_url.isnot(None)
+                | Material.result_video_url.isnot(None)
+            )
+        )
+        .order_by(func.random())
+        .limit(limit)
+    )
+    materials = result.scalars().all()
+
+    # Tool display names and routes
+    tool_info = {
+        "product_scene": {"name_en": "Product Scene", "name_zh": "商品場景", "route": "/tools/product-scene"},
+        "effect": {"name_en": "Image Effects", "name_zh": "圖片風格", "route": "/tools/effects"},
+        "background_removal": {"name_en": "Background Removal", "name_zh": "一鍵白底", "route": "/tools/background-removal"},
+        "short_video": {"name_en": "Short Video", "name_zh": "短影片", "route": "/tools/short-video"},
+        "ai_avatar": {"name_en": "AI Avatar", "name_zh": "AI 數位人", "route": "/tools/avatar"},
+    }
+
+    items = []
+    for m in materials:
+        tt = m.tool_type.value if hasattr(m.tool_type, "value") else str(m.tool_type)
+        info = tool_info.get(tt, {"name_en": tt, "name_zh": tt, "route": "/"})
+        # For video tools, use video thumbnail or input image; for image tools, use result
+        video_url = m.result_video_url if tt in ("short_video", "ai_avatar") else None
+        thumb = m.result_watermarked_url or m.result_image_url or m.result_thumbnail_url or m.input_image_url
+        if not thumb and not video_url:
+            continue
+        title = (m.title_zh if language.startswith("zh") else m.title_en) or info["name_zh" if language.startswith("zh") else "name_en"]
+        prompt = (m.prompt_zh if language.startswith("zh") else m.prompt) or m.prompt or ""
+        items.append({
+            "id": str(m.id),
+            "tool_type": tt,
+            "tool_name": info["name_zh"] if language.startswith("zh") else info["name_en"],
+            "route": info["route"],
+            "title": title,
+            "prompt": prompt[:120] + "..." if len(prompt) > 120 else prompt,
+            "thumb": thumb,
+            "video_url": video_url,
+            "input_image_url": m.input_image_url,  # For effect before/after
+            "result_image_url": m.result_watermarked_url or m.result_image_url,
+            "topic": m.topic,
+        })
+
+    return {
+        "success": True,
+        "items": items,
+        "total": len(items),
     }
 
 
@@ -2566,7 +2709,8 @@ async def get_view_more_examples(
     avatar_lang = "zh-TW" if language.startswith("zh") else "en"
 
     # Landing page categories
-    landing_topics = ["ecommerce", "social", "brand", "app", "promo", "service"]
+    from app.config.topic_registry import get_landing_topic_ids
+    landing_topics = get_landing_topic_ids()
 
     # Filter by category if provided
     if category and category != "all" and category in landing_topics:

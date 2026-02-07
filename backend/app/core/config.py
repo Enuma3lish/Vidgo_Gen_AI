@@ -68,6 +68,7 @@ class Settings(BaseSettings):
 
     # Material Generation
     AUTO_GENERATE_MATERIALS: bool = True  # Auto-generate showcase materials on startup
+    SHORT_VIDEO_LENGTH: int = 8  # Default short video length in seconds
 
     # Email Configuration (for email verification)
     SMTP_HOST: str = ""

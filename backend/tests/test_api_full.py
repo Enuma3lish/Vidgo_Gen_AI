@@ -97,3 +97,11 @@ async def test_download_blocked():
     assert response.status_code == 403
     data = response.json()
     assert data["detail"]["error"] == "download_blocked"
+
+
+async def test_invoices_list_requires_auth():
+    """Invoices list returns 401 without auth"""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/api/v1/subscriptions/invoices")
+    assert response.status_code == 401

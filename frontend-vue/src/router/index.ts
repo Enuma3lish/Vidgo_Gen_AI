@@ -15,6 +15,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tools/BackgroundRemoval.vue'),
     meta: { requiresAuth: false }
   },
+  // Tool: Image Effects (風格轉換)
+  {
+    path: '/tools/effects',
+    name: 'effects',
+    component: () => import('@/views/tools/ImageEffects.vue'),
+    meta: { requiresAuth: false }
+  },
   // Tool 2: Product Scene (商品場景圖)
   {
     path: '/tools/product-scene',
@@ -149,6 +156,12 @@ const routes: RouteRecordRaw[] = [
     path: '/dashboard/my-works',
     name: 'my-works',
     component: () => import('@/views/dashboard/MyWorks.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/dashboard/invoices',
+    name: 'invoices',
+    component: () => import('@/views/dashboard/Invoices.vue'),
     meta: { requiresAuth: true }
   },
   // Pricing

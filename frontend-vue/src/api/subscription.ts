@@ -94,6 +94,28 @@ export interface SubscriptionHistory {
   created_at?: string
 }
 
+export interface InvoiceItem {
+  order_id: string
+  order_number: string
+  amount: number
+  currency: string
+  status: string
+  paid_at: string | null
+  invoice_number: string | null
+  has_pdf: boolean
+}
+
+export interface InvoiceListResponse {
+  success: boolean
+  invoices: InvoiceItem[]
+}
+
+export interface InvoicePdfResponse {
+  success: boolean
+  pdf_url?: string
+  error?: string
+}
+
 // =============================================================================
 // API
 // =============================================================================
@@ -154,6 +176,24 @@ export const subscriptionApi = {
     const response = await apiClient.get('/api/v1/subscriptions/history', {
       params: { limit }
     })
+    return response.data
+  },
+
+  /**
+   * List invoices (paid orders) for current user
+   */
+  async getInvoices(limit: number = 20): Promise<InvoiceListResponse> {
+    const response = await apiClient.get('/api/v1/subscriptions/invoices', {
+      params: { limit }
+    })
+    return response.data
+  },
+
+  /**
+   * Get temporary PDF URL for an invoice
+   */
+  async getInvoicePdf(orderId: string): Promise<InvoicePdfResponse> {
+    const response = await apiClient.get(`/api/v1/subscriptions/invoices/${orderId}/pdf`)
     return response.data
   }
 }

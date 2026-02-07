@@ -45,7 +45,13 @@ async def validate_materials_on_startup() -> dict:
         missing = []
         for tool, info in status.items():
             if isinstance(info, dict) and not info.get('ready', False):
-                missing.append(f"{tool}: {info.get('count', 0)} materials")
+                missing_topics = info.get("missing_topics", [])
+                prompt_issues = info.get("prompt_issues", {})
+                prompt_missing = prompt_issues.get("missing_prompt", 0)
+                prompt_zh_missing = prompt_issues.get("missing_prompt_zh", 0)
+                missing.append(
+                    f"{tool}: missing_topics={missing_topics} prompt_missing={prompt_missing} prompt_zh_missing={prompt_zh_missing}"
+                )
             elif info is False:
                 missing.append(f"{tool}: not ready")
 

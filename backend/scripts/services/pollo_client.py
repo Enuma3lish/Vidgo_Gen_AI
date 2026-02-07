@@ -62,11 +62,14 @@ class PolloClient:
         mode = "I2V" if image_url else "T2V"
         logger.info(f"[Pollo] {mode}: {prompt[:50]}...")
 
-        # Model endpoints
+        # Model endpoints — use pixverse for I2V (supports image input)
         endpoints = {
             "pollo-v2-0": "/generation/pollo/pollo-v2-0",
             "pixverse-v4-5": "/generation/pixverse/pixverse-v4-5",
         }
+        # Auto-select pixverse for I2V since pollo-v2-0 is T2V-only
+        if image_url and model == "pollo-v2-0":
+            model = "pixverse-v4-5"
         endpoint = endpoints.get(model, endpoints["pollo-v2-0"])
 
         # Build payload
@@ -78,7 +81,7 @@ class PolloClient:
             }
         }
         if image_url:
-            payload["input"]["image_url"] = image_url
+            payload["input"]["image"] = image_url
 
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:

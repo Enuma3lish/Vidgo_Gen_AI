@@ -6,7 +6,9 @@ White-labeled GoEnhance services:
 - VidGo HD Enhance (4K upscale)
 - VidGo Video Pro (video enhancement)
 
-Access: Subscribers only (Starter/Pro/Pro+)
+Access:
+- GET /styles: Open to all users (browse available styles)
+- POST endpoints: Subscribers only (Starter/Pro/Pro+)
 """
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -75,11 +77,10 @@ class VideoEnhanceResponse(BaseModel):
 @router.get("/styles", response_model=List[StyleInfo])
 async def get_available_styles(
     category: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get available VidGo style effects.
+    Get available VidGo style effects. Open to all users.
 
     Categories:
     - artistic: Anime, Ghibli, Cartoon, 3D, Clay, Pixel, Oil Painting, Watercolor, Sketch

@@ -57,5 +57,8 @@ export type {
   CancelRequest,
   CancelResponse,
   RefundEligibility,
-  SubscriptionHistory
+  SubscriptionHistory,
+  InvoiceItem,
+  InvoiceListResponse,
+  InvoicePdfResponse
 } from './subscription'

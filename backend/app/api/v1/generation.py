@@ -658,7 +658,7 @@ async def get_video_styles():
             "name_zh": style["name_zh"],
             "category": style["category"],
             "preview_url": style["preview_url"],
-            "model_id": style["goenhance_model_id"]
+            "model_id": style.get("goenhance_model_id", style["id"])
         })
     return styles  # Return array directly for frontend compatibility
 

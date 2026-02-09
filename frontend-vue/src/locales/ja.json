@@ -168,7 +168,7 @@
     "scenes": {
       "studio": { "name": "スタジオ", "desc": "クリーンなスタジオ照明" },
       "nature": { "name": "自然", "desc": "自然なアウトドア設定" },
-      "luxury": { "name": "ラグジュアリー", "desc": "プレミアムエレガントスタイル" },
+      "elegant": { "name": "エレガント", "desc": "上品で洗練されたスタイル" },
       "minimal": { "name": "ミニマル", "desc": "クリーンミニマル背景" },
       "lifestyle": { "name": "ライフスタイル", "desc": "家庭環境" },
       "custom": { "name": "カスタム", "desc": "独自のプロンプト" }
@@ -185,7 +185,7 @@
     "mockup": "商品モックアップ",
     "studio": "スタジオ",
     "nature": "自然",
-    "luxury": "ラグジュアリー",
+    "elegant": "エレガント",
     "minimal": "ミニマル",
     "lifestyle": "ライフスタイル",
     "anime": "アニメスタイル",
@@ -379,6 +379,7 @@
     "registerSubtitle": "VidGo AIに参加",
     "verifyTitle": "メール認証",
     "verifySubtitle": "メールに送信された6桁のコードを入力",
+    "verifyNoEmail": "メールアドレスが見つかりません。再登録するか、メールのリンクから開いてください。",
     "forgotPassword": "パスワードをお忘れですか？",
     "noAccount": "アカウントをお持ちでないですか？",
     "hasAccount": "すでにアカウントをお持ちですか？",

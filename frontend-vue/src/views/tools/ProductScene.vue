@@ -35,7 +35,7 @@ const prompt = ref('')
 const sceneTemplates = computed(() => [
   { id: 'studio', icon: '📷', name: t('tools.scenes.studio.name'), desc: t('tools.scenes.studio.desc') },
   { id: 'nature', icon: '🌿', name: t('tools.scenes.nature.name'), desc: t('tools.scenes.nature.desc') },
-  { id: 'luxury', icon: '✨', name: t('tools.scenes.luxury.name'), desc: t('tools.scenes.luxury.desc') },
+  { id: 'elegant', icon: '✨', name: t('tools.scenes.elegant.name'), desc: t('tools.scenes.elegant.desc') },
   { id: 'minimal', icon: '⬜', name: t('tools.scenes.minimal.name'), desc: t('tools.scenes.minimal.desc') },
   { id: 'lifestyle', icon: '🏠', name: t('tools.scenes.lifestyle.name'), desc: t('tools.scenes.lifestyle.desc') },
   { id: 'urban', icon: '🏙️', name: isZh.value ? '都市' : 'Urban', desc: isZh.value ? '現代都市背景' : 'Modern city backdrop' },
@@ -58,13 +58,13 @@ interface DemoProduct {
 const defaultProducts = computed<DemoProduct[]>(() => {
   const productDefs = [
     { id: 'product-1', name: 'Bubble Tea', nameZh: '珍珠奶茶' },
-    { id: 'product-2', name: 'Running Sneakers', nameZh: '跑步運動鞋' },
-    { id: 'product-3', name: 'Smartphone', nameZh: '智慧型手機' },
+    { id: 'product-2', name: 'Canvas Tote Bag', nameZh: '帆布托特包' },
+    { id: 'product-3', name: 'Handmade Jewelry', nameZh: '手工飾品' },
     { id: 'product-4', name: 'Skincare Serum', nameZh: '保養精華液' },
-    { id: 'product-5', name: 'Wireless Headphones', nameZh: '無線耳機' },
+    { id: 'product-5', name: 'Coffee Beans', nameZh: '咖啡豆' },
     { id: 'product-6', name: 'Espresso Machine', nameZh: '義式咖啡機' },
-    { id: 'product-7', name: 'Luxury Perfume', nameZh: '精品香水' },
-    { id: 'product-8', name: 'Modern Sofa', nameZh: '現代沙發' },
+    { id: 'product-7', name: 'Handmade Candle', nameZh: '手工蠟燭' },
+    { id: 'product-8', name: 'Gift Box Set', nameZh: '禮盒組合' },
   ]
 
   return productDefs.map(p => {
@@ -84,7 +84,7 @@ const defaultProducts = computed<DemoProduct[]>(() => {
 const demoSceneTypes = [
   { id: 'studio', name: 'Studio', nameZh: '攝影棚' },
   { id: 'nature', name: 'Nature', nameZh: '自然場景' },
-  { id: 'luxury', name: 'Luxury', nameZh: '奢華場景' },
+  { id: 'elegant', name: 'Elegant', nameZh: '質感場景' },
   { id: 'minimal', name: 'Minimal', nameZh: '極簡風格' },
   { id: 'lifestyle', name: 'Lifestyle', nameZh: '生活情境' },
   { id: 'urban', name: 'Urban', nameZh: '都市' },

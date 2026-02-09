@@ -110,64 +110,64 @@ def cleanup_temp_dir():
 # AI AVATAR MAPPINGS
 # ============================================================================
 
-# Avatar definitions - DECOUPLED from scripts
-# Any avatar can read any script
+# Avatar definitions - SYNCED with frontend AIAvatar.vue (Asian/Chinese, color, free Unsplash)
+# Any avatar can read any script. URLs must match frontend FEMALE_AVATAR_URLS / MALE_AVATAR_URLS.
 AVATAR_MAPPING = {
     "female-1": {
         "prompt": "Professional portrait of a young Taiwanese woman, natural makeup, confident smile, studio lighting, headshot, Chinese face",
         "gender": "female",
         "name_zh": "怡君",
         "name_en": "Yi-Jun",
-        "url": "https://plus.unsplash.com/premium_photo-1723291229685-68f229ac5655?w=512"
+        "url": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop&crop=faces"
     },
     "female-2": {
         "prompt": "Professional portrait of a Chinese woman in her early 30s, elegant makeup, warm expression, soft lighting, headshot, Asian face",
         "gender": "female",
         "name_zh": "雅婷",
         "name_en": "Ya-Ting",
-        "url": "https://plus.unsplash.com/premium_photo-1661726646319-bde739e96b9a?w=512"
+        "url": "https://images.unsplash.com/photo-1524504388940-b1c1722653e6?w=512&fit=crop&crop=faces"
     },
     "female-3": {
         "prompt": "Professional portrait of a young Chinese woman, business blazer, approachable smile, corporate headshot, Asian face",
         "gender": "female",
         "name_zh": "佳穎",
         "name_en": "Jia-Ying",
-        "url": "https://images.unsplash.com/photo-1581065178047-8ee15951ede6?w=512"
+        "url": "https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=512&fit=crop&crop=faces"
     },
     "female-4": {
         "prompt": "Professional portrait of a Taiwanese woman, trendy style, friendly expression, modern headshot, Chinese face",
         "gender": "female",
         "name_zh": "淑芬",
         "name_en": "Shu-Fen",
-        "url": "https://plus.unsplash.com/premium_photo-1705908025930-fc43ae2f0156?w=512"
+        "url": "https://images.unsplash.com/photo-1544006943-0e92b9a3b95d?w=512&fit=crop&crop=faces"
     },
     "male-1": {
-        "prompt": "Professional portrait of a young Taiwanese man, clean look, confident smile, studio lighting, headshot, Chinese face",
+        "prompt": "Professional portrait of an Asian man, plaid shirt, calm expression, studio portrait, Chinese face",
         "gender": "male",
         "name_zh": "志偉",
         "name_en": "Zhi-Wei",
-        "url": "https://images.unsplash.com/photo-1545830571-6d7665a05cb6?w=512"
+        "url": "https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces"
     },
     "male-2": {
         "prompt": "Professional portrait of a Chinese man in his 30s, business suit, trustworthy smile, corporate headshot, Asian face",
         "gender": "male",
         "name_zh": "冠宇",
         "name_en": "Guan-Yu",
-        "url": "https://plus.unsplash.com/premium_photo-1682095379852-8ce2bc3c1c59?w=512"
+        "url": "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512&fit=crop&crop=faces"
     },
     "male-3": {
-        "prompt": "Professional portrait of a young Chinese man, blue polo shirt, friendly smile, casual professional headshot, Asian face",
+        "prompt": "Professional portrait of a young Chinese man, friendly smile, casual professional headshot, Asian face",
         "gender": "male",
         "name_zh": "宗翰",
         "name_en": "Zong-Han",
-        "url": "https://images.unsplash.com/photo-1549320710-0f17830d27bd?w=512"
+        "url": "https://images.unsplash.com/photo-1600486914327-2f364e2d7731?w=512&fit=crop&crop=faces"
     },
     "male-4": {
-        "prompt": "Professional portrait of a mature Chinese man, blazer jacket, confident expression, business headshot, Asian face",
+        "prompt": "Professional portrait of a mature Chinese man, confident expression, business headshot, Asian face",
         "gender": "male",
         "name_zh": "家豪",
         "name_en": "Jia-Hao",
-        "url": "https://plus.unsplash.com/premium_photo-1733302828477-80e6cccb0911?w=512"
+        "url": "https://images.unsplash.com/photo-1552375816-4b96b919e67a?w=512&fit=crop&crop=faces"
     }
 }
 
@@ -372,16 +372,16 @@ PRODUCT_SCENE_MAPPING = {
             "prompt_zh": "棚拍產品照：透明杯珍珠奶茶與黑色珍珠，置中構圖，乾淨白底，柔和陰影，商業攝影，8K"
         },
         "product-2": {
-            "name": "Running Sneakers",
-            "name_zh": "跑步運動鞋",
-            "prompt": "Studio product photo of a pair of modern running sneakers, side angle, clean white background, high detail, commercial lighting, 8K",
-            "prompt_zh": "棚拍產品照：一雙現代跑步運動鞋，側面角度，乾淨白底，高細節，商業打光，8K"
+            "name": "Canvas Tote Bag",
+            "name_zh": "帆布托特包",
+            "prompt": "Studio product photo of a natural canvas tote bag with minimalist design, standing upright, clean white background, soft shadows, commercial photography, 8K",
+            "prompt_zh": "棚拍產品照：自然色帆布托特包，簡約設計，直立擺放，乾淨白底，柔和陰影，商業攝影，8K"
         },
         "product-3": {
-            "name": "Smartphone",
-            "name_zh": "智慧型手機",
-            "prompt": "Studio product photo of a smartphone standing upright, reflective glass, clean white background, tech product advertising, 8K",
-            "prompt_zh": "棚拍產品照：智慧型手機直立擺放，玻璃反光質感，乾淨白底，科技產品廣告風格，8K"
+            "name": "Handmade Jewelry",
+            "name_zh": "手工飾品",
+            "prompt": "Studio product photo of handmade silver earrings and bracelet set on velvet display, centered, clean white background, jewelry photography, 8K",
+            "prompt_zh": "棚拍產品照：手工銀耳環與手鍊組合，絨布展示台，置中構圖，乾淨白底，飾品攝影，8K"
         },
         "product-4": {
             "name": "Skincare Serum",
@@ -390,10 +390,10 @@ PRODUCT_SCENE_MAPPING = {
             "prompt_zh": "棚拍產品照：玻璃滴管保養精華液瓶，清新保養品風格，乾淨白底，柔光氛圍，8K"
         },
         "product-5": {
-            "name": "Wireless Headphones",
-            "name_zh": "無線耳機",
-            "prompt": "Studio product photo of wireless over-ear headphones, matte black finish, centered, clean white background, audio product shot, 8K",
-            "prompt_zh": "棚拍產品照：無線頭戴式耳機，霧黑質感，置中構圖，乾淨白底，音訊產品照，8K"
+            "name": "Coffee Beans",
+            "name_zh": "咖啡豆",
+            "prompt": "Studio product photo of a kraft paper bag of roasted coffee beans with some beans scattered around, centered, clean white background, food product photography, 8K",
+            "prompt_zh": "棚拍產品照：牛皮紙袋裝烘焙咖啡豆，周圍散落數顆咖啡豆，置中構圖，乾淨白底，食品攝影，8K"
         },
         "product-6": {
             "name": "Espresso Machine",
@@ -408,10 +408,10 @@ PRODUCT_SCENE_MAPPING = {
             "prompt_zh": "棚拍產品照：玻璃罐手工大豆蠟燭，置中構圖，乾淨白底，溫馨產品廣告風格，8K"
         },
         "product-8": {
-            "name": "Modern Sofa",
-            "name_zh": "現代沙發",
-            "prompt": "Studio product photo of a modern two-seat sofa, neutral fabric, clean white background, furniture catalog lighting, 8K",
-            "prompt_zh": "棚拍產品照：現代雙人沙發，素色布料，乾淨白底，家具目錄打光，8K"
+            "name": "Gift Box Set",
+            "name_zh": "禮盒組合",
+            "prompt": "Studio product photo of an elegant gift box set with ribbon bow, assorted small items inside, centered, clean white background, gift product advertising, 8K",
+            "prompt_zh": "棚拍產品照：精美禮盒組合附蝴蝶結緞帶，內含多樣小物，置中構圖，乾淨白底，禮品廣告風格，8K"
         }
     },
     "scenes": {
@@ -425,8 +425,8 @@ PRODUCT_SCENE_MAPPING = {
             "name_zh": "自然",
             "prompt": "outdoor nature setting, sunlight, leaves, natural environment"
         },
-        "luxury": {
-            "name": "Premium",
+        "elegant": {
+            "name": "Elegant",
             "name_zh": "質感",
             "prompt": "warm elegant background, cozy lighting, refined atmosphere"
         },
@@ -912,16 +912,16 @@ EFFECT_MAPPING = {
             "topic": "drinks"
         },
         {
-            "name": "Running Sneakers",
-            "name_zh": "跑步運動鞋",
-            "prompt": "Pair of modern running sneakers, clean studio product photo, white background, soft shadow",
-            "topic": "apparel"
+            "name": "Handmade Candle",
+            "name_zh": "手工蠟燭",
+            "prompt": "Artisan handmade soy candle in glass jar, clean studio product photo, white background, soft shadow",
+            "topic": "handmade"
         },
         {
-            "name": "Smartphone",
-            "name_zh": "智慧型手機",
-            "prompt": "Smartphone standing upright, clean tech product photo, white background, soft shadow",
-            "topic": "tech"
+            "name": "Canvas Tote Bag",
+            "name_zh": "帆布托特包",
+            "prompt": "Canvas tote bag with minimalist design, clean studio product photo, white background, soft shadow",
+            "topic": "accessories"
         },
         {
             "name": "Skincare Serum",
@@ -930,16 +930,16 @@ EFFECT_MAPPING = {
             "topic": "cosmetics"
         },
         {
-            "name": "Wireless Headphones",
-            "name_zh": "無線耳機",
-            "prompt": "Wireless over-ear headphones, matte black finish, centered studio product photo, white background",
-            "topic": "tech"
+            "name": "Coffee Beans",
+            "name_zh": "咖啡豆",
+            "prompt": "Fresh roasted coffee beans in kraft paper bag, artisan coffee product photo, white background",
+            "topic": "food"
         },
         {
-            "name": "Modern Sofa",
-            "name_zh": "現代沙發",
-            "prompt": "Modern two-seat sofa, neutral fabric, clean studio furniture photo, white background",
-            "topic": "home"
+            "name": "Gift Box Set",
+            "name_zh": "禮盒組合",
+            "prompt": "Elegant gift box set with ribbon bow, boutique packaging product photo, white background",
+            "topic": "gifts"
         }
     ],
     "styles": {

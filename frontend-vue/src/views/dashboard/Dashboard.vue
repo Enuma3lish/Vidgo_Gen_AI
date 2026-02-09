@@ -3,16 +3,16 @@ import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useCreditsStore } from '@/stores'
+import { userApi } from '@/api/user'
+import type { UserGeneration, UserStatsResponse } from '@/api/user'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 const creditsStore = useCreditsStore()
 
-const recentWorks = ref([
-  { id: 1, type: 'background_removal', thumbnail: 'https://picsum.photos/seed/work1/200/200', created: '2 hours ago' },
-  { id: 2, type: 'product_scene', thumbnail: 'https://picsum.photos/seed/work2/200/200', created: '5 hours ago' },
-  { id: 3, type: 'room_redesign', thumbnail: 'https://picsum.photos/seed/work3/200/200', created: 'Yesterday' }
-])
+const recentWorks = ref<UserGeneration[]>([])
+const userStats = ref<UserStatsResponse | null>(null)
+const loadingWorks = ref(false)
 
 const quickActions = [
   { key: 'backgroundRemoval', icon: '✂️', route: '/tools/background-removal', color: 'from-red-500 to-orange-500' },
@@ -22,12 +22,44 @@ const quickActions = [
   { key: 'shortVideo', icon: '🎬', route: '/tools/short-video', color: 'from-green-500 to-emerald-500' }
 ]
 
+function getThumbnail(work: UserGeneration): string {
+  return work.result_image_url || work.result_video_url || work.input_image_url || ''
+}
+
+function formatRelativeDate(dateStr: string): string {
+  const now = new Date()
+  const date = new Date(dateStr)
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  if (diffHours < 1) return 'Just now'
+  if (diffHours < 24) return `${diffHours} hours ago`
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return `${diffDays} days ago`
+  return date.toLocaleDateString()
+}
+
 onMounted(async () => {
   try {
     await creditsStore.fetchBalance()
     await creditsStore.fetchPricing()
   } catch {
     // Handle error silently
+  }
+
+  // Fetch real user works and stats
+  loadingWorks.value = true
+  try {
+    const [worksRes, statsRes] = await Promise.all([
+      userApi.getGenerations({ page: 1, per_page: 3 }),
+      userApi.getStats(),
+    ])
+    recentWorks.value = worksRes.data.items
+    userStats.value = statsRes.data
+  } catch {
+    // Handle error silently - will show empty state
+  } finally {
+    loadingWorks.value = false
   }
 })
 </script>
@@ -76,14 +108,14 @@ onMounted(async () => {
         <!-- Plan -->
         <div class="card">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-gray-400 font-medium">Current Plan</h3>
+            <h3 class="text-gray-400 font-medium">{{ t('dashboard.currentPlan', 'Current Plan') }}</h3>
             <span class="text-2xl">⭐</span>
           </div>
           <p class="text-4xl font-bold text-white capitalize">
             {{ authStore.user?.plan_type ?? 'Demo' }}
           </p>
           <RouterLink to="/pricing" class="text-sm text-primary-400 hover:text-primary-300 mt-1 inline-block">
-            Upgrade plan →
+            {{ t('dashboard.manageOrUpgradePlan', 'Manage or upgrade plan') }} →
           </RouterLink>
         </div>
       </div>
@@ -125,7 +157,13 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-if="recentWorks.length > 0" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <!-- Loading -->
+        <div v-if="loadingWorks" class="card text-center py-8">
+          <div class="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+          <p class="text-gray-400 text-sm">Loading recent works...</p>
+        </div>
+
+        <div v-else-if="recentWorks.length > 0" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div
             v-for="work in recentWorks"
             :key="work.id"
@@ -133,17 +171,21 @@ onMounted(async () => {
           >
             <div class="aspect-square relative">
               <img
-                :src="work.thumbnail"
-                :alt="work.type"
+                v-if="getThumbnail(work)"
+                :src="getThumbnail(work)"
+                :alt="work.tool_type"
                 class="w-full h-full object-cover"
               />
+              <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
+                <span class="text-gray-500 text-xs">No preview</span>
+              </div>
               <div class="absolute inset-0 bg-dark-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <button class="btn-primary text-sm">View</button>
+                <RouterLink :to="`/dashboard/my-works`" class="btn-primary text-sm">View</RouterLink>
               </div>
             </div>
             <div class="p-3">
-              <p class="text-sm text-white font-medium capitalize">{{ work.type.replace('_', ' ') }}</p>
-              <p class="text-xs text-gray-500">{{ work.created }}</p>
+              <p class="text-sm text-white font-medium capitalize">{{ work.tool_type.replace(/_/g, ' ') }}</p>
+              <p class="text-xs text-gray-500">{{ formatRelativeDate(work.created_at) }}</p>
             </div>
           </div>
         </div>

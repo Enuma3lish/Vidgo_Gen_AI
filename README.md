@@ -259,7 +259,6 @@ SMTP_PORT=1025
 | `PREGENERATION_LIMIT` | `10` | Materials per tool |
 | `SKIP_AVATAR` | - | Skip A2E avatar generation |
 | `SKIP_VIDEO` | - | Skip Pollo video generation |
-| `ALLOW_EMPTY_MATERIALS` | `false` | Allow startup without materials |
 
 ---
 
@@ -290,9 +289,6 @@ docker-compose --profile init up init-materials
 
 # Skip pre-generation (use cached materials)
 SKIP_PREGENERATION=true docker-compose up -d
-
-# Development mode (allow empty materials)
-ALLOW_EMPTY_MATERIALS=true docker-compose up -d
 
 # Skip expensive operations
 SKIP_VIDEO=true SKIP_AVATAR=true docker-compose up -d

@@ -47,34 +47,34 @@ LANDING_GEN_SLEEP_SECONDS = int(getattr(settings, "LANDING_GEN_SLEEP_SECONDS", 5
 # MATERIAL DEFINITIONS
 # =============================================================================
 
-# Avatar images per topic category
-# Avatar images organized by gender and style (for gender consistency with voice)
+# Avatar images per topic category - SYNCED with frontend AIAvatar.vue (Asian/Chinese, color)
 AVATAR_IMAGES_BY_GENDER = {
     "female": {
         "professional": [
-            "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512",  # Professional business woman
-            "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=512",  # Tech-savvy woman
+            "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop&crop=faces",
+            "https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=512&fit=crop&crop=faces",
         ],
         "young": [
-            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=512",  # Young influencer woman
-            "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=512",  # Young woman portrait
+            "https://images.unsplash.com/photo-1524504388940-b1c1722653e6?w=512&fit=crop&crop=faces",
+            "https://images.unsplash.com/photo-1544006943-0e92b9a3b95d?w=512&fit=crop&crop=faces",
         ],
         "business": [
-            "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512",  # Business woman portrait
-            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=512",  # Professional woman headshot
+            "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop&crop=faces",
+            "https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=512&fit=crop&crop=faces",
         ]
     },
     "male": {
         "professional": [
-            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512",  # Professional man
-            "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512",  # Business man in suit
+            "https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces",
+            "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512&fit=crop&crop=faces",
         ],
         "young": [
-            "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=512",  # Young influencer man
-            "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=512",  # Young man portrait
+            "https://images.unsplash.com/photo-1600486914327-2f364e2d7731?w=512&fit=crop&crop=faces",
+            "https://images.unsplash.com/photo-1552375816-4b96b919e67a?w=512&fit=crop&crop=faces",
         ],
         "business": [
-            "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512",  # Business man portrait
+            "https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces",
+            "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512&fit=crop&crop=faces",
         ]
     }
 }
@@ -362,12 +362,12 @@ PATTERN_EXAMPLES = [
 
 # Product Photos Examples - generate then apply effect
 PRODUCT_EXAMPLES = [
-    {"title": "Watch Background Removal", "title_zh": "手錶去背", "source_prompt": "Luxury wristwatch on cluttered desk", "effect": "background_removal", "tool_id": "remove_background", "style_tags": ["background_removal"]},
-    {"title": "Sneaker Background Removal", "title_zh": "運動鞋去背", "source_prompt": "White sneaker on grass outdoor", "effect": "background_removal", "tool_id": "remove_background", "style_tags": ["background_removal"]},
-    {"title": "Perfume Studio Scene", "title_zh": "香水攝影棚場景", "source_prompt": "Elegant perfume bottle, plain background", "effect": "scene_generation", "tool_id": "product_scene", "style_tags": ["studio"], "scene": "studio"},
+    {"title": "Candle Background Removal", "title_zh": "蠟燭去背", "source_prompt": "Handmade soy candle on wooden table", "effect": "background_removal", "tool_id": "remove_background", "style_tags": ["background_removal"]},
+    {"title": "Tote Bag Background Removal", "title_zh": "托特包去背", "source_prompt": "Canvas tote bag on grass outdoor", "effect": "background_removal", "tool_id": "remove_background", "style_tags": ["background_removal"]},
+    {"title": "Skincare Studio Scene", "title_zh": "護膚品攝影棚場景", "source_prompt": "Skincare serum bottle, plain background", "effect": "scene_generation", "tool_id": "product_scene", "style_tags": ["studio"], "scene": "studio"},
     {"title": "Skincare Nature Scene", "title_zh": "護膚品自然場景", "source_prompt": "Skincare cream jar, minimal background", "effect": "scene_generation", "tool_id": "product_scene", "style_tags": ["nature"], "scene": "nature"},
-    {"title": "Jewelry Luxury Scene", "title_zh": "珠寶奢華場景", "source_prompt": "Diamond ring on white background", "effect": "scene_generation", "tool_id": "product_scene", "style_tags": ["luxury"], "scene": "luxury"},
-    {"title": "Headphones Minimal Scene", "title_zh": "耳機極簡場景", "source_prompt": "Wireless headphones, simple background", "effect": "scene_generation", "tool_id": "product_scene", "style_tags": ["minimal"], "scene": "minimal"}
+    {"title": "Jewelry Elegant Scene", "title_zh": "飾品質感場景", "source_prompt": "Handmade jewelry on white background", "effect": "scene_generation", "tool_id": "product_scene", "style_tags": ["elegant"], "scene": "elegant"},
+    {"title": "Coffee Beans Minimal Scene", "title_zh": "咖啡豆極簡場景", "source_prompt": "Coffee beans in kraft bag, simple background", "effect": "scene_generation", "tool_id": "product_scene", "style_tags": ["minimal"], "scene": "minimal"}
 ]
 
 # Video Style Examples - create video then apply style effect
@@ -379,21 +379,21 @@ VIDEO_EXAMPLES = [
     {"title": "Cinematic Look", "title_zh": "電影質感", "source_prompt": "Ocean waves on rocky shore, dramatic clouds", "style_id": "cinematic", "model_id": 2010, "style_tags": ["cinematic"]}
 ]
 
-# AI Avatar Examples - product/service ad scripts
+# AI Avatar Examples - SYNCED with frontend avatars (Asian/Chinese, color)
 AVATAR_EXAMPLES = [
-    {"title": "E-commerce Launch", "title_zh": "電商產品發布", "language": "en", "avatar_url": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=512", "script": "Introducing our revolutionary smart watch collection! With advanced health tracking and stunning design.", "style_tags": ["ecommerce", "english"]},
-    {"title": "Tech Startup Pitch", "title_zh": "科技創業簡報", "language": "en", "avatar_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512", "script": "Welcome to the future of productivity! Our AI-powered app automates repetitive tasks.", "style_tags": ["tech", "english"]},
-    {"title": "Skincare Brand", "title_zh": "護膚品牌大使", "language": "en", "avatar_url": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512", "script": "Discover the secret to radiant skin with our organic skincare line.", "style_tags": ["beauty", "english"]},
-    {"title": "手機產品介紹", "title_zh": "手機產品介紹", "language": "zh-TW", "avatar_url": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512", "script": "歡迎了解我們最新推出的旗艦手機！搭載先進的AI攝影系統。", "style_tags": ["tech", "chinese"]},
-    {"title": "餐廳美食推薦", "title_zh": "餐廳美食推薦", "language": "zh-TW", "avatar_url": "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512", "script": "歡迎來到我們的米其林餐廳！精選最新鮮的食材，由頂級主廚精心烹調。", "style_tags": ["food", "chinese"]},
-    {"title": "線上課程推廣", "title_zh": "線上課程推廣", "language": "zh-TW", "avatar_url": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=512", "script": "想要在家也能學習新技能嗎？我們的線上課程平台提供上千門專業課程。", "style_tags": ["education", "chinese"]}
+    {"title": "E-commerce Launch", "title_zh": "電商產品發布", "language": "en", "avatar_url": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop&crop=faces", "script": "Introducing our revolutionary smart watch collection! With advanced health tracking and stunning design.", "style_tags": ["ecommerce", "english"]},
+    {"title": "Tech Startup Pitch", "title_zh": "科技創業簡報", "language": "en", "avatar_url": "https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces", "script": "Welcome to the future of productivity! Our AI-powered app automates repetitive tasks.", "style_tags": ["tech", "english"]},
+    {"title": "Skincare Brand", "title_zh": "護膚品牌大使", "language": "en", "avatar_url": "https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=512&fit=crop&crop=faces", "script": "Discover the secret to radiant skin with our organic skincare line.", "style_tags": ["beauty", "english"]},
+    {"title": "手機產品介紹", "title_zh": "手機產品介紹", "language": "zh-TW", "avatar_url": "https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces", "script": "歡迎了解我們最新推出的旗艦手機！搭載先進的AI攝影系統。", "style_tags": ["tech", "chinese"]},
+    {"title": "餐廳美食推薦", "title_zh": "餐廳美食推薦", "language": "zh-TW", "avatar_url": "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512&fit=crop&crop=faces", "script": "歡迎來到我們的米其林餐廳！精選最新鮮的食材，由頂級主廚精心烹調。", "style_tags": ["food", "chinese"]},
+    {"title": "線上課程推廣", "title_zh": "線上課程推廣", "language": "zh-TW", "avatar_url": "https://images.unsplash.com/photo-1524504388940-b1c1722653e6?w=512&fit=crop&crop=faces", "script": "想要在家也能學習新技能嗎？我們的線上課程平台提供上千門專業課程。", "style_tags": ["education", "chinese"]}
 ]
 
 # Scene prompts for product scene generation
 SCENE_PROMPTS = {
     "studio": "professional photography studio, dramatic lighting, black backdrop",
     "nature": "natural wooden surface, fresh green leaves and flowers, soft daylight",
-    "luxury": "white marble surface with gold accents, elegant lighting",
+    "elegant": "white marble surface with gold accents, elegant lighting",
     "minimal": "pure white background, floating product with subtle shadow",
     "lifestyle": "cozy home desk with morning sunlight, warm atmosphere"
 }

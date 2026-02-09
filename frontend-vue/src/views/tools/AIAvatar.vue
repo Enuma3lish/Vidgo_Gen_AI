@@ -38,69 +38,43 @@ const languageOptions = [
   { id: 'en', name: 'English', flag: '🇺🇸' }
 ]
 
-// Default avatar images - Chinese/Taiwanese faces with gender mapping
-// Names are FIXED per person: female avatars have female names, male avatars have male names
-// English names are romanized Chinese (not Western names)
-const defaultAvatars = [
-  // Female Chinese avatars
-  {
-    id: 'female-1',
-    gender: 'female',
-    url: 'https://plus.unsplash.com/premium_photo-1723291229685-68f229ac5655?w=512',
-    name_zh: '怡君',
-    name_en: 'Yi-Jun'
-  },
-  {
-    id: 'female-2',
-    gender: 'female',
-    url: 'https://plus.unsplash.com/premium_photo-1661726646319-bde739e96b9a?w=512',
-    name_zh: '雅婷',
-    name_en: 'Ya-Ting'
-  },
-  {
-    id: 'female-3',
-    gender: 'female',
-    url: 'https://images.unsplash.com/photo-1581065178047-8ee15951ede6?w=512',
-    name_zh: '佳穎',
-    name_en: 'Jia-Ying'
-  },
-  {
-    id: 'female-4',
-    gender: 'female',
-    url: 'https://plus.unsplash.com/premium_photo-1705908025930-fc43ae2f0156?w=512',
-    name_zh: '淑芬',
-    name_en: 'Shu-Fen'
-  },
-  // Male Chinese avatars
-  {
-    id: 'male-1',
-    gender: 'male',
-    url: 'https://images.unsplash.com/photo-1545830571-6d7665a05cb6?w=512',
-    name_zh: '志偉',
-    name_en: 'Zhi-Wei'
-  },
-  {
-    id: 'male-2',
-    gender: 'male',
-    url: 'https://plus.unsplash.com/premium_photo-1682095379852-8ce2bc3c1c59?w=512',
-    name_zh: '冠宇',
-    name_en: 'Guan-Yu'
-  },
-  {
-    id: 'male-3',
-    gender: 'male',
-    url: 'https://images.unsplash.com/photo-1549320710-0f17830d27bd?w=512',
-    name_zh: '宗翰',
-    name_en: 'Zong-Han'
-  },
-  {
-    id: 'male-4',
-    gender: 'male',
-    url: 'https://plus.unsplash.com/premium_photo-1733302828477-80e6cccb0911?w=512',
-    name_zh: '家豪',
-    name_en: 'Jia-Hao'
-  }
+// Female AI Avatars - Asian/Chinese women, color portraits (Unsplash free); v=3
+const FEMALE_AVATAR_URLS = [
+  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1524504388940-b1c1722653e6?w=512&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=512&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1544006943-0e92b9a3b95d?w=512&fit=crop&crop=faces'
 ]
+const femaleAvatars = [
+  { id: 'female-1', gender: 'female' as const, name_zh: '怡君', name_en: 'Yi-Jun', url: FEMALE_AVATAR_URLS[0] },
+  { id: 'female-2', gender: 'female' as const, name_zh: '雅婷', name_en: 'Ya-Ting', url: FEMALE_AVATAR_URLS[1] },
+  { id: 'female-3', gender: 'female' as const, name_zh: '佳穎', name_en: 'Jia-Ying', url: FEMALE_AVATAR_URLS[2] },
+  { id: 'female-4', gender: 'female' as const, name_zh: '淑芬', name_en: 'Shu-Fen', url: FEMALE_AVATAR_URLS[3] }
+]
+
+// Male AI Avatars - Asian/Chinese men, color (Unsplash free); v=3. male-1 was wrong (female photo) → fixed.
+const MALE_AVATAR_URLS = [
+  'https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces', // Asian man, plaid shirt
+  'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1600486914327-2f364e2d7731?w=512&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1552375816-4b96b919e67a?w=512&fit=crop&crop=faces'
+]
+const maleAvatars = [
+  { id: 'male-1', gender: 'male' as const, name_zh: '志偉', name_en: 'Zhi-Wei', url: MALE_AVATAR_URLS[0] },
+  { id: 'male-2', gender: 'male' as const, name_zh: '冠宇', name_en: 'Guan-Yu', url: MALE_AVATAR_URLS[1] },
+  { id: 'male-3', gender: 'male' as const, name_zh: '宗翰', name_en: 'Zong-Han', url: MALE_AVATAR_URLS[2] },
+  { id: 'male-4', gender: 'male' as const, name_zh: '家豪', name_en: 'Jia-Hao', url: MALE_AVATAR_URLS[3] }
+]
+
+// Combined list (order: females first, then males) for voice index
+const defaultAvatars = [...femaleAvatars, ...maleAvatars]
+
+// Voice index per avatar (same gender): each avatar gets a different voice (0, 1, 2, 3...)
+function getVoiceIndexForAvatar(avatar: { id: string; gender: string }): number {
+  const sameGender = defaultAvatars.filter(a => a.gender === avatar.gender)
+  const idx = sameGender.findIndex(a => a.id === avatar.id)
+  return idx >= 0 ? idx : 0
+}
 
 // Default scripts matching backend SCRIPT_MAPPING (4 topics × 3 scripts = 12 scripts)
 // IDs must match backend script IDs for preset lookup to work
@@ -212,24 +186,13 @@ const selectedAvatar = computed(() => {
   return defaultAvatars.find(a => a.id === selectedAvatarId.value) || null
 })
 
-// Voice options filtered by selected avatar gender
-// IMPORTANT: Male avatars ONLY get male voices, female avatars ONLY get female voices
+// Voice options filtered by selected avatar gender (used to set fixed voice per avatar)
 const filteredVoices = computed(() => {
   if (!selectedAvatar.value) return voices.value
   const avatarGender = selectedAvatar.value.gender
   return voices.value.filter(v => v.gender === avatarGender)
 })
 
-// Get avatar preview thumbnail from pre-generated results
-// Returns the video URL for the first result matching this avatar (to use as video poster)
-const getAvatarPreviewUrl = (avatarId: string): string | null => {
-  // Find any template with this avatar that has a result video
-  const template = demoTemplates.value.find(t => {
-    const params = (t as any).input_params || {}
-    return params.avatar_id === avatarId && (t.result_watermarked_url || t.result_video_url)
-  })
-  return template?.result_watermarked_url || template?.result_video_url || null
-}
 
 async function loadVoices() {
   try {
@@ -239,32 +202,36 @@ async function loadVoices() {
     selectMatchingVoice()
   } catch (error) {
     console.error('Failed to load voices:', error)
-    // Fallback voices - Chinese names for both languages
+    // Fallback voices - one per avatar (4 female, 4 male)
     voices.value = selectedLanguage.value === 'zh-TW'
       ? [
-          { id: 'zh-TW-female-1', name: '怡君', gender: 'female' },
-          { id: 'zh-TW-female-2', name: '雅婷', gender: 'female' },
-          { id: 'zh-TW-male-1', name: '志偉', gender: 'male' },
-          { id: 'zh-TW-male-2', name: '冠宇', gender: 'male' }
+          { id: 'zh-TW-female-1', name: '小曉', gender: 'female' },
+          { id: 'zh-TW-female-2', name: '小晨', gender: 'female' },
+          { id: 'zh-TW-female-3', name: '曉夢', gender: 'female' },
+          { id: 'zh-TW-female-4', name: '小萱', gender: 'female' },
+          { id: 'zh-TW-male-1', name: '雲熙', gender: 'male' },
+          { id: 'zh-TW-male-2', name: '雲揚', gender: 'male' },
+          { id: 'zh-TW-male-3', name: '雲傑', gender: 'male' },
+          { id: 'zh-TW-male-4', name: '雲皓', gender: 'male' }
         ]
       : [
-          { id: 'en-US-female-1', name: 'Yi-Jun', gender: 'female' },
-          { id: 'en-US-female-2', name: 'Ya-Ting', gender: 'female' },
-          { id: 'en-US-male-1', name: 'Zhi-Wei', gender: 'male' },
-          { id: 'en-US-male-2', name: 'Guan-Yu', gender: 'male' }
+          { id: 'en-US-fable', name: 'Fable', gender: 'female' },
+          { id: 'en-US-nova', name: 'Nova', gender: 'female' },
+          { id: 'en-US-shimmer', name: 'Shimmer', gender: 'female' },
+          { id: 'en-US-echo', name: 'Echo', gender: 'male' },
+          { id: 'en-US-onyx', name: 'Onyx', gender: 'male' }
         ]
     selectMatchingVoice()
   }
 }
 
 function selectMatchingVoice() {
-  // ALWAYS select voice matching avatar gender
-  // Male avatar → male voice only, Female avatar → female voice only
+  // Each avatar gets a different voice by index (female-1→voice0, female-2→voice1, ...)
   if (selectedAvatar.value && filteredVoices.value.length > 0) {
-    // Always use first voice of matching gender
-    selectedVoice.value = filteredVoices.value[0].id
+    const idx = getVoiceIndexForAvatar(selectedAvatar.value)
+    const voice = filteredVoices.value[idx % filteredVoices.value.length]
+    selectedVoice.value = voice.id
   } else if (voices.value.length > 0) {
-    // Fallback if no avatar selected
     selectedVoice.value = voices.value[0].id
   }
 }
@@ -275,7 +242,7 @@ function selectAvatar(avatar: typeof defaultAvatars[0]) {
   selectedAvatarId.value = avatar.id
   uploadedImage.value = avatar.url
   resultVideo.value = null
-  // Auto-select matching voice
+  // Assign this avatar's distinct voice (by index)
   selectMatchingVoice()
 }
 
@@ -483,18 +450,69 @@ watch(selectedAvatarId, () => {
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Left Panel - Input -->
+        <!-- Left Panel - Input (example mode: language + script first, then avatar, then voice) -->
         <div class="space-y-6">
-          <!-- Avatar Selection -->
+          <!-- 1. Language & Script (present first so user chooses language and script) -->
+          <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ isZh ? '選擇語言與腳本' : 'Choose Language & Script' }}</h3>
+            <!-- Language -->
+            <div class="mb-6">
+              <label class="label">{{ t('tools.avatar.language') }}</label>
+              <div class="flex gap-3">
+                <button
+                  v-for="lang in languageOptions"
+                  :key="lang.id"
+                  @click="selectedLanguage = lang.id"
+                  class="flex-1 py-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2"
+                  :class="selectedLanguage === lang.id
+                    ? 'border-primary-500 bg-primary-500/10'
+                    : 'border-dark-600 hover:border-dark-500'"
+                >
+                  <span>{{ lang.flag }}</span>
+                  <span>{{ lang.name }}</span>
+                </button>
+              </div>
+            </div>
+            <!-- Script Selection -->
+            <div>
+              <label class="label">{{ t('tools.avatar.script') }}</label>
+              <p class="text-sm text-gray-400 mb-2">{{ isZh ? '選擇預設腳本' : 'Select Script' }}</p>
+              <div class="space-y-2 max-h-48 overflow-y-auto">
+                <button
+                  v-for="scriptItem in defaultScripts"
+                  :key="scriptItem.id"
+                  @click="selectDefaultScript(scriptItem)"
+                  class="w-full text-left p-3 rounded-lg border-2 transition-all text-sm"
+                  :class="selectedDefaultScriptId === scriptItem.id
+                    ? 'border-primary-500 bg-primary-500/10'
+                    : 'border-dark-600 hover:border-dark-500'"
+                >
+                  <span class="inline-block px-2 py-0.5 text-xs bg-dark-600 text-gray-400 rounded mb-1">
+                    {{ isZh ? scriptItem.category_zh : scriptItem.category }}
+                  </span>
+                  <p class="text-gray-300">
+                    {{ (isZh ? scriptItem.text_zh : scriptItem.text_en).slice(0, 60) }}...
+                  </p>
+                </button>
+              </div>
+            </div>
+            <!-- Show selected script -->
+            <div v-if="script" class="mt-4 p-3 bg-dark-700 rounded-lg">
+              <p class="text-sm text-gray-300">{{ script }}</p>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">{{ t('tools.avatar.maxSpeech') }}</p>
+          </div>
+
+          <!-- 2. Avatar Selection -->
           <div class="card">
             <h3 class="text-lg font-semibold text-white mb-4">{{ t('tools.avatar.avatarPhoto') }}</h3>
 
-            <!-- Female Avatars -->
+            <!-- Female Avatars (Asian/Chinese) -->
             <div class="mb-4">
               <p class="text-sm text-gray-400 mb-2">{{ isZh ? '女性頭像' : 'Female Avatars' }}</p>
-              <div class="grid grid-cols-3 gap-3">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
-                  v-for="avatar in defaultAvatars.filter(a => a.gender === 'female')"
+                  v-for="avatar in femaleAvatars"
                   :key="avatar.id"
                   @click="selectAvatar(avatar)"
                   class="relative aspect-square rounded-xl overflow-hidden border-2 transition-all"
@@ -502,22 +520,12 @@ watch(selectedAvatarId, () => {
                     ? 'border-primary-500 ring-2 ring-primary-500/50'
                     : 'border-dark-600 hover:border-dark-500'"
                 >
-                  <!-- Show video preview if available, otherwise static image -->
-                  <video
-                    v-if="getAvatarPreviewUrl(avatar.id)"
-                    :src="getAvatarPreviewUrl(avatar.id) || undefined"
-                    class="w-full h-full object-cover"
-                    muted
-                    loop
-                    playsinline
-                    @mouseenter="($event.target as HTMLVideoElement)?.play()"
-                    @mouseleave="($event.target as HTMLVideoElement)?.pause()"
-                  />
+                  <!-- Always show static Asian/Chinese avatar photo (no video overlay) -->
                   <img
-                    v-else
                     :src="avatar.url"
                     :alt="isZh ? avatar.name_zh : avatar.name_en"
                     class="w-full h-full object-cover"
+                    loading="lazy"
                   />
                   <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
                     <p class="text-xs text-white text-center">{{ isZh ? avatar.name_zh : avatar.name_en }}</p>
@@ -529,9 +537,9 @@ watch(selectedAvatarId, () => {
             <!-- Male Avatars -->
             <div class="mb-4">
               <p class="text-sm text-gray-400 mb-2">{{ isZh ? '男性頭像' : 'Male Avatars' }}</p>
-              <div class="grid grid-cols-3 gap-3">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
-                  v-for="avatar in defaultAvatars.filter(a => a.gender === 'male')"
+                  v-for="avatar in maleAvatars"
                   :key="avatar.id"
                   @click="selectAvatar(avatar)"
                   class="relative aspect-square rounded-xl overflow-hidden border-2 transition-all"
@@ -539,22 +547,12 @@ watch(selectedAvatarId, () => {
                     ? 'border-primary-500 ring-2 ring-primary-500/50'
                     : 'border-dark-600 hover:border-dark-500'"
                 >
-                  <!-- Show video preview if available, otherwise static image -->
-                  <video
-                    v-if="getAvatarPreviewUrl(avatar.id)"
-                    :src="getAvatarPreviewUrl(avatar.id) || undefined"
-                    class="w-full h-full object-cover"
-                    muted
-                    loop
-                    playsinline
-                    @mouseenter="($event.target as HTMLVideoElement)?.play()"
-                    @mouseleave="($event.target as HTMLVideoElement)?.pause()"
-                  />
+                  <!-- Always show static Asian/Chinese avatar photo (no video overlay) -->
                   <img
-                    v-else
                     :src="avatar.url"
                     :alt="isZh ? avatar.name_zh : avatar.name_en"
                     class="w-full h-full object-cover"
+                    loading="lazy"
                   />
                   <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
                     <p class="text-xs text-white text-center">{{ isZh ? avatar.name_zh : avatar.name_en }}</p>
@@ -577,108 +575,32 @@ watch(selectedAvatarId, () => {
             <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use preset avatars -->
           </div>
 
-          <!-- Script Selection -->
-          <div class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">{{ t('tools.avatar.script') }}</h3>
-
-            <!-- Default Scripts (Available to ALL users) -->
-            <div class="mb-4">
-              <p class="text-sm text-gray-400 mb-2">{{ isZh ? '選擇預設腳本' : 'Select Script' }}</p>
-              <div class="space-y-2">
-                <button
-                  v-for="scriptItem in defaultScripts"
-                  :key="scriptItem.id"
-                  @click="selectDefaultScript(scriptItem)"
-                  class="w-full text-left p-3 rounded-lg border-2 transition-all text-sm"
-                  :class="selectedDefaultScriptId === scriptItem.id
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-dark-600 hover:border-dark-500'"
-                >
-                  <span class="inline-block px-2 py-0.5 text-xs bg-dark-600 text-gray-400 rounded mb-1">
-                    {{ isZh ? scriptItem.category_zh : scriptItem.category }}
-                  </span>
-                  <p class="text-gray-300">
-                    {{ (isZh ? scriptItem.text_zh : scriptItem.text_en).slice(0, 60) }}...
-                  </p>
-                </button>
-              </div>
+          <!-- Custom Script Textarea (subscribers only) -->
+          <div v-if="!isDemoUser" class="card">
+            <label class="block text-sm font-medium text-gray-400 mb-2">
+              {{ isZh ? '自訂腳本' : 'Custom Script' }}
+            </label>
+            <textarea
+              v-model="script"
+              rows="4"
+              class="w-full bg-dark-900 border border-dark-600 rounded-lg p-3 text-white focus:outline-none focus:border-primary-500"
+              :placeholder="isZh ? '輸入您的腳本內容 (建議 100 字以內)...' : 'Enter your script here (max 100 words)...'"
+              maxlength="500"
+              @input="selectedDefaultScriptId = null"
+            ></textarea>
+            <div class="text-right text-xs text-gray-500 mt-1">
+              {{ script.length }} / 500
             </div>
-
-            <!-- Custom Script Textarea -->
-            <div v-if="!isDemoUser" class="mt-4">
-              <label class="block text-sm font-medium text-gray-400 mb-2">
-                {{ isZh ? '自訂腳本' : 'Custom Script' }}
-              </label>
-              <textarea
-                v-model="script"
-                rows="4"
-                class="w-full bg-dark-900 border border-dark-600 rounded-lg p-3 text-white focus:outline-none focus:border-primary-500"
-                :placeholder="isZh ? '輸入您的腳本內容 (建議 100 字以內)...' : 'Enter your script here (max 100 words)...'"
-                maxlength="500"
-                @input="selectedDefaultScriptId = null"
-              ></textarea>
-              <div class="text-right text-xs text-gray-500 mt-1">
-                {{ script.length }} / 500
-              </div>
-            </div>
-
-            <!-- Show selected script for all users -->
-            <div v-if="script" class="mt-2 p-3 bg-dark-700 rounded-lg">
-              <p class="text-sm text-gray-300">{{ script }}</p>
-            </div>
-
-            <p class="text-xs text-gray-500 mt-2">{{ t('tools.avatar.maxSpeech') }}</p>
           </div>
 
-          <!-- Settings -->
+          <!-- 3. Generate (voice is fixed per avatar – no user choice) -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">{{ t('tools.avatar.voiceSettings') }}</h3>
-
-            <!-- Language -->
-            <div class="mb-6">
-              <label class="label">{{ t('tools.avatar.language') }}</label>
-              <div class="flex gap-3">
-                <button
-                  v-for="lang in languageOptions"
-                  :key="lang.id"
-                  @click="selectedLanguage = lang.id"
-                  class="flex-1 py-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2"
-                  :class="selectedLanguage === lang.id
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-dark-600 hover:border-dark-500'"
-                >
-                  <span>{{ lang.flag }}</span>
-                  <span>{{ lang.name }}</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Voice Selection (filtered by avatar gender) -->
-            <div>
-              <label class="label">
-                {{ t('tools.avatar.voice') }}
-                <span v-if="selectedAvatar" class="text-xs text-primary-400 ml-2">
-                  ({{ selectedAvatar.gender === 'female' ? (isZh ? '女聲' : 'Female') : (isZh ? '男聲' : 'Male') }})
-                </span>
-              </label>
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  v-for="voice in filteredVoices"
-                  :key="voice.id"
-                  @click="selectedVoice = voice.id"
-                  class="p-3 rounded-xl border-2 transition-all text-center"
-                  :class="selectedVoice === voice.id
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-dark-600 hover:border-dark-500'"
-                >
-                  <p class="text-sm font-medium">{{ voice.name }}</p>
-                  <p class="text-xs text-gray-500">{{ voice.gender === 'female' ? t('tools.avatar.female') : t('tools.avatar.male') }}</p>
-                </button>
-              </div>
-            </div>
-
+            <h3 class="text-lg font-semibold text-white mb-4">{{ isZh ? '產生影片' : 'Generate' }}</h3>
+            <p class="text-xs text-gray-500 mb-4">
+              {{ isZh ? '每位頭像已固定對應專屬聲音，只需選擇頭像與腳本即可。' : 'Each avatar has a fixed voice. Just pick an avatar and a script.' }}
+            </p>
             <!-- Credit Cost & Generate -->
-            <div class="mt-6 pt-4 border-t border-dark-700">
+            <div class="pt-2">
               <CreditCost service="ai_avatar" />
               <button
                 @click="generateAvatar"

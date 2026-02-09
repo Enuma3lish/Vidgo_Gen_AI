@@ -55,7 +55,7 @@ TOOL_TOPICS: Dict[str, List[TopicInfo]] = {
     "product_scene": [
         {"id": "studio", "name_en": "Studio Lighting", "name_zh": "攝影棚"},
         {"id": "nature", "name_en": "Nature Setting", "name_zh": "自然場景"},
-        {"id": "luxury", "name_en": "Luxury Setting", "name_zh": "奢華場景"},
+        {"id": "elegant", "name_en": "Elegant Setting", "name_zh": "質感場景"},
         {"id": "minimal", "name_en": "Minimal", "name_zh": "極簡風格"},
         {"id": "lifestyle", "name_en": "Lifestyle", "name_zh": "生活風格"},
         {"id": "urban", "name_en": "Urban", "name_zh": "都市風格"},

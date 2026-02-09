@@ -170,6 +170,24 @@ const routes: RouteRecordRaw[] = [
     name: 'pricing',
     component: () => import('@/views/Pricing.vue')
   },
+  // Subscription payment result (Paddle redirects here)
+  {
+    path: '/subscription/success',
+    name: 'subscription-success',
+    component: () => import('@/views/subscription/SubscriptionSuccess.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/subscription/cancelled',
+    name: 'subscription-cancelled',
+    component: () => import('@/views/subscription/SubscriptionCancelled.vue')
+  },
+  {
+    path: '/subscription/mock-checkout',
+    name: 'subscription-mock-checkout',
+    component: () => import('@/views/subscription/SubscriptionMockCheckout.vue'),
+    meta: { requiresAuth: true }
+  },
   // Admin Dashboard
   {
     path: '/admin',

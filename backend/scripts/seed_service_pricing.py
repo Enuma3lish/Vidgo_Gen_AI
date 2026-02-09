@@ -154,6 +154,8 @@ PLAN_DATA = [
         "plan_type": "free",
         "price_twd": Decimal("0"),
         "price_usd": Decimal("0"),
+        "price_monthly": 0.0,
+        "price_yearly": 0.0,
         "monthly_credits": 0,
         "weekly_credits": 0,  # Demo users get 2 one-time credits on signup
         "topup_discount_rate": Decimal("0"),
@@ -172,6 +174,8 @@ PLAN_DATA = [
         "plan_type": "basic",
         "price_twd": Decimal("299"),
         "price_usd": Decimal("10"),
+        "price_monthly": 299.0,
+        "price_yearly": 2990.0,
         "monthly_credits": 100,
         "weekly_credits": 25,  # 25 credits per week
         "topup_discount_rate": Decimal("0"),
@@ -190,6 +194,8 @@ PLAN_DATA = [
         "plan_type": "pro",
         "price_twd": Decimal("599"),
         "price_usd": Decimal("20"),
+        "price_monthly": 599.0,
+        "price_yearly": 5990.0,
         "monthly_credits": 250,
         "weekly_credits": 60,  # 60 credits per week
         "topup_discount_rate": Decimal("0.10"),
@@ -208,6 +214,8 @@ PLAN_DATA = [
         "plan_type": "enterprise",
         "price_twd": Decimal("999"),
         "price_usd": Decimal("33"),
+        "price_monthly": 999.0,
+        "price_yearly": 9990.0,
         "monthly_credits": 500,
         "weekly_credits": 125,  # 125 credits per week
         "topup_discount_rate": Decimal("0.20"),

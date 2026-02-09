@@ -1,7 +1,7 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 4.6
-**Last Updated:** February 6, 2026
+**Version:** 4.8
+**Last Updated:** February 9, 2026
 **Framework:** Vue 3 + Vite + TypeScript
 **Mode:** Preset-Only (No Custom Input)
 **Target Audience:** Small businesses (SMB) selling everyday products/services
@@ -192,6 +192,11 @@ frontend-vue/
 │   │   │   ├── MyWorks.vue
 │   │   │   └── Invoices.vue             # Invoice history & download
 │   │   │
+│   │   ├── subscription/            # Paddle redirect result pages
+│   │   │   ├── SubscriptionSuccess.vue   # Payment success (order= query)
+│   │   │   ├── SubscriptionCancelled.vue # User cancelled payment
+│   │   │   └── SubscriptionMockCheckout.vue # Mock payment complete → redirect dashboard
+│   │   │
 │   │   ├── tools/                   # 8 Core Tool Pages
 │   │   │   ├── BackgroundRemoval.vue
 │   │   │   ├── ProductScene.vue
@@ -233,6 +238,11 @@ const routes: RouteRecordRaw[] = [
   // ===== Public Routes =====
   { path: '/', name: 'home', component: LandingPage },
   { path: '/pricing', name: 'pricing', component: Pricing },
+
+  // ===== Subscription payment result (Paddle redirects here) =====
+  { path: '/subscription/success', name: 'subscription-success', component: SubscriptionSuccess, meta: { requiresAuth: true } },
+  { path: '/subscription/cancelled', name: 'subscription-cancelled', component: SubscriptionCancelled },
+  { path: '/subscription/mock-checkout', name: 'subscription-mock-checkout', component: SubscriptionMockCheckout, meta: { requiresAuth: true } },
 
   // ===== 8 Core Tools =====
   { path: '/tools/background-removal', name: 'background-removal', component: BackgroundRemoval },
@@ -499,6 +509,25 @@ The homepage (`LandingPage.vue`) loads data from multiple endpoints:
 **Works Gallery video rendering:**
 - Items with `video_url` display a play icon overlay and auto-play `<video>` on hover
 - Items without `video_url` display as static `<img>` (with before/after for effect tool)
+
+### 5.6 Auth & Email Verification
+
+- **Register** (`auth/Register.vue`): Calls `authApi.register()`; store sets `pendingEmail` and redirects to `/auth/verify`.
+- **Verify** (`auth/VerifyEmail.vue`): User enters 6-digit code; `authApi.verifyCode({ email: pendingEmail, code })` is called. Backend returns **AuthResponse** (user, access_token, refresh_token); auth store accepts both `tokens.access`/`tokens.refresh` and flat `access_token`/`refresh_token`, then sets tokens and user so the user is logged in without a separate login.
+- **Resend:** `authApi.resendCode(email)` for resending the verification code.
+
+### 5.7 Pricing & Paddle
+
+- **Plans:** `subscriptionApi.getPlans()` → `GET /api/v1/subscriptions/plans`. Backend seeds default plans with `price_monthly`, `price_yearly`, and credits when DB is empty. `Pricing.vue` displays `NT${{ getPrice(plan) }}` and plan features.
+- **Subscribe:** `subscriptionApi.subscribe({ plan_id, billing_cycle, payment_method: 'paddle' })` → `POST /subscriptions/subscribe`. When not mock, response includes `checkout_url`; frontend redirects with `window.location.href = result.checkout_url`. When mock, subscription is activated and status is refreshed.
+- **Subscription result routes:** After Paddle payment (or mock), user is sent to:
+  - `/subscription/success?order=...` — success message and links to Dashboard / Pricing.
+  - `/subscription/cancelled` — user cancelled payment; link back to Pricing.
+  - `/subscription/mock-checkout?txn=...` — mock flow; auto-redirect to Dashboard.
+- **Cancel & Refund:** On Pricing, when user has an active subscription, two actions are shown (with `ConfirmModal` before submitting):
+  - **Cancel with Refund** (only when `refund_eligible`, i.e. within 7 days): `subscriptionApi.cancel({ request_refund: true })` — full refund, subscription and credits revoked immediately.
+  - **Cancel subscription** (no refund): `subscriptionApi.cancel({ request_refund: false })` — subscription stays active until period end, then no renewal.
+  Status and refund eligibility come from `subscriptionApi.getStatus()` (`refund_eligible`, `refund_days_remaining`). Dashboard plan card links to `/pricing` with label "Manage or upgrade plan" so users can cancel or refund from there.
 
 ---
 

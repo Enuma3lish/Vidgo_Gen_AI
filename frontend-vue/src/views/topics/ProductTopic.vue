@@ -53,7 +53,7 @@ const tools = [
 const sceneTypes = [
   { key: 'studio', icon: '📷' },
   { key: 'nature', icon: '🌿' },
-  { key: 'luxury', icon: '💎' },
+  { key: 'elegant', icon: '✨' },
   { key: 'minimal', icon: '⬜' },
   { key: 'lifestyle', icon: '🏠' },
   { key: 'urban', icon: '🏙️', nameZh: '都市', nameEn: 'Urban', descZh: '現代都市背景', descEn: 'Modern city backdrop' },
@@ -116,11 +116,11 @@ const fallbackExamples = [
   },
   {
     id: 2,
-    title: '奢華場景',
-    title_en: 'Luxury Scene',
+    title: '質感場景',
+    title_en: 'Elegant Scene',
     before: 'https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&h=400&fit=crop',
     after: 'https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&h=400&fit=crop',
-    scene: 'luxury'
+    scene: 'elegant'
   },
   {
     id: 3,

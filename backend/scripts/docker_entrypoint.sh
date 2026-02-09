@@ -7,7 +7,6 @@ echo "========================================"
 echo "Time: $(date)"
 echo ""
 
-SKIP_MATERIAL_CHECK=${SKIP_MATERIAL_CHECK:-false}
 MATERIAL_CHECK_TIMEOUT=${MATERIAL_CHECK_TIMEOUT:-10800}
 MATERIAL_CHECK_INTERVAL=${MATERIAL_CHECK_INTERVAL:-30}
 # Set CLEAN_MATERIALS to a tool name (e.g., "ai_avatar") to delete and re-seed that tool
@@ -72,51 +71,42 @@ fi
 # STEP 5: Material DB Check (wait until ready, run pregen if empty)
 # ============================================
 echo "Step 5: Checking Material DB status..."
-if [ "$SKIP_MATERIAL_CHECK" = "true" ]; then
-    echo "  SKIP_MATERIAL_CHECK=true - skipping material check"
-else
-    START=$(date +%s)
-    GENERATED=false
-    PREGEN_TIMEOUT=7200
+START=$(date +%s)
+GENERATED=false
+PREGEN_TIMEOUT=7200
 
-    while true; do
-        # Check all 8 tools
-        echo "  --- Material DB Status ---"
-        if python -m scripts.check_material_status 2>/dev/null; then
-            echo "  Material DB ready - all tools have enough examples!"
-            break
-        fi
+while true; do
+    # Check all 8 tools
+    echo "  --- Material DB Status ---"
+    if python -m scripts.check_material_status 2>/dev/null; then
+        echo "  Material DB ready - all tools have enough examples!"
+        break
+    fi
 
-        ELAPSED=$(($(date +%s) - START))
-        if [ $ELAPSED -ge $MATERIAL_CHECK_TIMEOUT ]; then
-            echo "  Timeout: Material DB not ready after ${MATERIAL_CHECK_TIMEOUT}s"
-            if [ "${ALLOW_EMPTY_MATERIALS:-false}" = "true" ]; then
-                echo "  ALLOW_EMPTY_MATERIALS=true - continuing anyway (demo may be incomplete)"
-                break
-            fi
-            echo "  Set ALLOW_EMPTY_MATERIALS=true to start anyway (dev only)"
-            exit 1
-        fi
+    ELAPSED=$(($(date +%s) - START))
+    if [ $ELAPSED -ge $MATERIAL_CHECK_TIMEOUT ]; then
+        echo "  Timeout: Material DB not ready after ${MATERIAL_CHECK_TIMEOUT}s"
+        exit 1
+    fi
 
-        # First attempt: seed missing tools only (not --all to save API credits)
-        if [ "$GENERATED" = "false" ]; then
-            echo ""
-            echo "  Material DB not ready - seeding missing tools..."
-            echo "  This may take 30-90 minutes on first run."
-            echo ""
-            set +e
-            python -m scripts.seed_materials_if_empty --force 2>&1 || true
-            set -e
-            GENERATED=true
-            echo ""
-            echo "  Seeding done. Checking status again..."
-            continue
-        fi
+    # First attempt: seed missing tools only (not --all to save API credits)
+    if [ "$GENERATED" = "false" ]; then
+        echo ""
+        echo "  Material DB not ready - seeding missing tools..."
+        echo "  This may take 30-90 minutes on first run."
+        echo ""
+        set +e
+        python -m scripts.seed_materials_if_empty --force 2>&1 || true
+        set -e
+        GENERATED=true
+        echo ""
+        echo "  Seeding done. Checking status again..."
+        continue
+    fi
 
-        echo "  Waiting ${MATERIAL_CHECK_INTERVAL}s (timeout in $((MATERIAL_CHECK_TIMEOUT - ELAPSED))s)..."
-        sleep $MATERIAL_CHECK_INTERVAL
-    done
-fi
+    echo "  Waiting ${MATERIAL_CHECK_INTERVAL}s (timeout in $((MATERIAL_CHECK_TIMEOUT - ELAPSED))s)..."
+    sleep $MATERIAL_CHECK_INTERVAL
+done
 echo ""
 
 # ============================================

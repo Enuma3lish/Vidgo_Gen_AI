@@ -15,9 +15,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_db, get_current_user, get_current_user_optional, is_subscribed_user
 from app.models.user import User
+from app.models.material import Material, ToolType
+from app.models.user_generation import UserGeneration
 from app.services.effects_service import VidGoEffectsService, VIDGO_STYLES
+from sqlalchemy import select, func
 
 router = APIRouter(prefix="/effects", tags=["effects"])
 
@@ -108,15 +111,43 @@ async def get_available_styles(
 @router.post("/apply-style", response_model=ApplyStyleResponse)
 async def apply_style_effect(
     request: ApplyStyleRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Apply style effect to an image.
 
-    **Requires:** Starter, Pro, or Pro+ subscription
-    **Credits:** 8 points per use
+    - **Subscribers:** Calls real API, saves to UserGeneration, no watermark.
+    - **Demo users:** Returns a pre-generated Material DB result (watermarked).
+
+    **Credits:** 8 points per use (subscribers only)
     """
+    # Demo path: return pre-generated material
+    if not is_subscribed_user(current_user):
+        result = await db.execute(
+            select(Material)
+            .where(
+                Material.tool_type == ToolType.EFFECT,
+                Material.topic == request.style_id,
+                Material.is_active == True,
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+        material = result.scalar_one_or_none()
+        if material:
+            return ApplyStyleResponse(
+                success=True,
+                output_url=material.result_watermarked_url or material.result_image_url,
+                style=request.style_id,
+                credits_used=0,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active subscription required. No demo examples available for this style.",
+        )
+
+    # Subscriber path: call real API
     effects_service = VidGoEffectsService(db)
 
     success, result = await effects_service.apply_style(
@@ -132,6 +163,18 @@ async def apply_style_effect(
             detail=result.get("error", "Failed to apply style")
         )
 
+    # Save to UserGeneration
+    generation = UserGeneration(
+        user_id=current_user.id,
+        tool_type=ToolType.EFFECT,
+        input_image_url=request.image_url,
+        input_params={"style_id": request.style_id, "intensity": request.intensity},
+        result_image_url=result.get("output_url"),
+        credits_used=result.get("credits_used", 8),
+    )
+    db.add(generation)
+    await db.commit()
+
     return ApplyStyleResponse(
         success=True,
         output_url=result.get("output_url"),
@@ -143,15 +186,23 @@ async def apply_style_effect(
 @router.post("/hd-enhance", response_model=HDEnhanceResponse)
 async def hd_enhance(
     request: HDEnhanceRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Upscale image to 4K resolution.
 
-    **Requires:** Starter, Pro, or Pro+ subscription
-    **Credits:** 10 points per use
+    - **Subscribers:** Calls real API, saves to UserGeneration.
+    - **Demo users:** Returns 403 (no pre-generated HD enhance examples).
+
+    **Credits:** 10 points per use (subscribers only)
     """
+    if not is_subscribed_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active subscription required for HD enhance.",
+        )
+
     effects_service = VidGoEffectsService(db)
 
     success, result = await effects_service.hd_enhance(
@@ -166,6 +217,18 @@ async def hd_enhance(
             detail=result.get("error", "Failed to enhance image")
         )
 
+    # Save to UserGeneration
+    generation = UserGeneration(
+        user_id=current_user.id,
+        tool_type=ToolType.EFFECT,
+        input_image_url=request.image_url,
+        input_params={"target_resolution": request.target_resolution, "action": "hd_enhance"},
+        result_image_url=result.get("output_url"),
+        credits_used=result.get("credits_used", 10),
+    )
+    db.add(generation)
+    await db.commit()
+
     return HDEnhanceResponse(
         success=True,
         output_url=result.get("output_url"),
@@ -177,20 +240,28 @@ async def hd_enhance(
 @router.post("/video-enhance", response_model=VideoEnhanceResponse)
 async def video_enhance(
     request: VideoEnhanceRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Enhance video quality.
 
-    **Requires:** Pro or Pro+ subscription
-    **Credits:** 12 points per use
+    - **Subscribers:** Calls real API, saves to UserGeneration.
+    - **Demo users:** Returns 403 (no pre-generated video enhance examples).
+
+    **Credits:** 12 points per use (subscribers only)
 
     Enhancement types:
     - quality: General quality improvement
     - stabilize: Video stabilization
     - denoise: Noise reduction
     """
+    if not is_subscribed_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active subscription required for video enhance.",
+        )
+
     effects_service = VidGoEffectsService(db)
 
     success, result = await effects_service.video_enhance(
@@ -204,6 +275,18 @@ async def video_enhance(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=result.get("error", "Failed to enhance video")
         )
+
+    # Save to UserGeneration
+    generation = UserGeneration(
+        user_id=current_user.id,
+        tool_type=ToolType.EFFECT,
+        input_video_url=request.video_url,
+        input_params={"enhancement_type": request.enhancement_type, "action": "video_enhance"},
+        result_video_url=result.get("output_url"),
+        credits_used=result.get("credits_used", 12),
+    )
+    db.add(generation)
+    await db.commit()
 
     return VideoEnhanceResponse(
         success=True,

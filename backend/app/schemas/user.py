@@ -70,6 +70,14 @@ class LoginResponse(BaseModel):
     tokens: TokenPair
 
 
+class AuthResponse(BaseModel):
+    """Auth response with flat token fields for frontend (login/verify-code)."""
+    user: User
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
 class RefreshTokenRequest(BaseModel):
     refresh: str
 

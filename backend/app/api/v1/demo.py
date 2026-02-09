@@ -1954,6 +1954,110 @@ async def get_avatar_topics(
 
 
 # =============================================================================
+# INSPIRATION GALLERY - 24 Categories (must be before /{demo_id})
+# =============================================================================
+
+GALLERY_CATEGORY_MAP = {
+    "video": ["short_video", "video"],
+    "recommended": ["product", "ecommerce", "brand"],
+    "portrait": ["portrait", "people", "human"],
+    "photography": ["photography", "realistic"],
+    "animation": ["animation", "cartoon", "animated"],
+    "poster": ["poster", "illustration", "design"],
+    "anime": ["anime", "manga", "2d"],
+    "ecommerceDesign": ["ecommerce", "product", "shopping"],
+    "chinese": ["chinese", "oriental", "asian"],
+    "female": ["female", "woman", "girl"],
+    "male": ["male", "man", "boy"],
+    "interior": ["interior", "room", "home"],
+    "architectureLandscape": ["architecture", "landscape", "building"],
+    "toys": ["toys", "figures", "collectibles"],
+    "art": ["art", "painting", "artistic"],
+    "productDesign": ["product", "industrial", "design"],
+    "gameCG": ["game", "cg", "gaming"],
+    "nature": ["nature", "natural", "landscape"],
+    "threeD": ["3d", "render", "dimensional"],
+    "logoUI": ["logo", "ui", "branding"],
+    "character": ["character", "ip", "mascot"],
+    "animals": ["animals", "pets", "wildlife"],
+    "fantasy": ["fantasy", "magical", "mythical"],
+    "scifi": ["scifi", "futuristic", "tech"]
+}
+
+
+@router.get("/inspirations")
+async def get_inspirations(
+    category: str = Query("recommended", description="Gallery category"),
+    language: str = Query("en", description="Language code for prompts"),
+    limit: int = Query(8, ge=4, le=20, description="Number of items to return"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get inspiration gallery items for the homepage.
+
+    Returns images with prompts organized by category.
+    Clicking an item shows the generation prompt in the user's language.
+
+    Categories:
+    - video, recommended, portrait, photography, animation, poster
+    - anime, ecommerceDesign, chinese, female, male, interior
+    - architectureLandscape, toys, art, productDesign, gameCG, nature
+    - threeD, logoUI, character, animals, fantasy, scifi
+    """
+    from sqlalchemy import func, or_
+    from app.models.material import Material, MaterialStatus
+
+    topic_keywords = GALLERY_CATEGORY_MAP.get(category, [category])
+    conditions = []
+    for keyword in topic_keywords:
+        conditions.append(Material.topic.ilike(f"%{keyword}%"))
+        conditions.append(Material.tags.contains([keyword]))
+    result = await db.execute(
+        select(Material)
+        .where(
+            or_(*conditions) if conditions else True,
+            Material.is_active == True,
+            or_(
+                Material.result_image_url.isnot(None),
+                Material.input_image_url.isnot(None)
+            )
+        )
+        .order_by(func.random())
+        .limit(limit)
+    )
+    materials = result.scalars().all()
+    items = []
+    for m in materials:
+        if language.startswith("zh"):
+            title = m.title_zh or m.title_en or f"{category} #{len(items) + 1}"
+        elif language.startswith("ja"):
+            title = m.title_en or f"{category} #{len(items) + 1}"
+        elif language.startswith("ko"):
+            title = m.title_en or f"{category} #{len(items) + 1}"
+        elif language.startswith("es"):
+            title = m.title_en or f"{category} #{len(items) + 1}"
+        else:
+            title = m.title_en or f"{category} #{len(items) + 1}"
+        prompt = m.prompt or m.prompt_enhanced or ""
+        thumb = m.result_image_url or m.input_image_url or m.result_thumbnail_url
+        if thumb:
+            items.append({
+                "id": str(m.id),
+                "title": title,
+                "thumb": thumb,
+                "prompt": prompt,
+                "category": category
+            })
+    return {
+        "success": True,
+        "items": items,
+        "category": category,
+        "language": language,
+        "total": len(items)
+    }
+
+
+# =============================================================================
 # DEMO BY ID - Catch-all route (must be last)
 # =============================================================================
 
@@ -2292,125 +2396,6 @@ async def promote_material_to_showcase(
         return {"success": True, "message": "Material promoted to showcase"}
     else:
         return {"success": False, "message": "Failed to promote material"}
-
-
-# =============================================================================
-# INSPIRATION GALLERY - 24 Categories
-# =============================================================================
-
-# Map gallery categories to material topics
-GALLERY_CATEGORY_MAP = {
-    "video": ["short_video", "video"],
-    "recommended": ["product", "ecommerce", "brand"],
-    "portrait": ["portrait", "people", "human"],
-    "photography": ["photography", "realistic"],
-    "animation": ["animation", "cartoon", "animated"],
-    "poster": ["poster", "illustration", "design"],
-    "anime": ["anime", "manga", "2d"],
-    "ecommerceDesign": ["ecommerce", "product", "shopping"],
-    "chinese": ["chinese", "oriental", "asian"],
-    "female": ["female", "woman", "girl"],
-    "male": ["male", "man", "boy"],
-    "interior": ["interior", "room", "home"],
-    "architectureLandscape": ["architecture", "landscape", "building"],
-    "toys": ["toys", "figures", "collectibles"],
-    "art": ["art", "painting", "artistic"],
-    "productDesign": ["product", "industrial", "design"],
-    "gameCG": ["game", "cg", "gaming"],
-    "nature": ["nature", "natural", "landscape"],
-    "threeD": ["3d", "render", "dimensional"],
-    "logoUI": ["logo", "ui", "branding"],
-    "character": ["character", "ip", "mascot"],
-    "animals": ["animals", "pets", "wildlife"],
-    "fantasy": ["fantasy", "magical", "mythical"],
-    "scifi": ["scifi", "futuristic", "tech"]
-}
-
-
-@router.get("/inspirations")
-async def get_inspirations(
-    category: str = Query("recommended", description="Gallery category"),
-    language: str = Query("en", description="Language code for prompts"),
-    limit: int = Query(8, ge=4, le=20, description="Number of items to return"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get inspiration gallery items for the homepage.
-
-    Returns images with prompts organized by category.
-    Clicking an item shows the generation prompt in the user's language.
-
-    Categories:
-    - video, recommended, portrait, photography, animation, poster
-    - anime, ecommerceDesign, chinese, female, male, interior
-    - architectureLandscape, toys, art, productDesign, gameCG, nature
-    - threeD, logoUI, character, animals, fantasy, scifi
-    """
-    from sqlalchemy import func, or_
-    from app.models.material import Material, MaterialStatus
-
-    # Get topic keywords for this category
-    topic_keywords = GALLERY_CATEGORY_MAP.get(category, [category])
-
-    # Build query to find materials matching any of the topic keywords
-    conditions = []
-    for keyword in topic_keywords:
-        conditions.append(Material.topic.ilike(f"%{keyword}%"))
-        conditions.append(Material.tags.contains([keyword]))
-
-    # Query materials with images
-    result = await db.execute(
-        select(Material)
-        .where(
-            or_(*conditions) if conditions else True,
-            Material.is_active == True,
-            or_(
-                Material.result_image_url.isnot(None),
-                Material.input_image_url.isnot(None)
-            )
-        )
-        .order_by(func.random())
-        .limit(limit)
-    )
-    materials = result.scalars().all()
-
-    # Format response based on language
-    items = []
-    for m in materials:
-        # Determine title based on language
-        if language.startswith("zh"):
-            title = m.title_zh or m.title_en or f"{category} #{len(items) + 1}"
-        elif language.startswith("ja"):
-            title = m.title_en or f"{category} #{len(items) + 1}"  # TODO: Add ja titles
-        elif language.startswith("ko"):
-            title = m.title_en or f"{category} #{len(items) + 1}"  # TODO: Add ko titles
-        elif language.startswith("es"):
-            title = m.title_en or f"{category} #{len(items) + 1}"  # TODO: Add es titles
-        else:
-            title = m.title_en or f"{category} #{len(items) + 1}"
-
-        # Get the prompt (prefer localized if available)
-        prompt = m.prompt or m.prompt_enhanced or ""
-
-        # Get best available image
-        thumb = m.result_image_url or m.input_image_url or m.result_thumbnail_url
-
-        if thumb:  # Only include items with images
-            items.append({
-                "id": str(m.id),
-                "title": title,
-                "thumb": thumb,
-                "prompt": prompt,
-                "category": category
-            })
-
-    return {
-        "success": True,
-        "items": items,
-        "category": category,
-        "language": language,
-        "total": len(items)
-    }
 
 
 # =============================================================================

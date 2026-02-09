@@ -168,7 +168,7 @@
     "scenes": {
       "studio": { "name": "스튜디오", "desc": "깔끔한 스튜디오 조명" },
       "nature": { "name": "자연", "desc": "자연스러운 야외 환경" },
-      "luxury": { "name": "럭셔리", "desc": "프리미엄 우아한 스타일" },
+      "elegant": { "name": "엘레강트", "desc": "세련되고 우아한 스타일" },
       "minimal": { "name": "미니멀", "desc": "깔끔한 미니멀 배경" },
       "lifestyle": { "name": "라이프스타일", "desc": "가정 환경" },
       "custom": { "name": "커스텀", "desc": "나만의 프롬프트" }
@@ -185,7 +185,7 @@
     "mockup": "제품 목업",
     "studio": "스튜디오",
     "nature": "자연",
-    "luxury": "럭셔리",
+    "elegant": "엘레강트",
     "minimal": "미니멀",
     "lifestyle": "라이프스타일",
     "anime": "애니메이션 스타일",
@@ -379,6 +379,7 @@
     "registerSubtitle": "VidGo AI에 가입하세요",
     "verifyTitle": "이메일 인증",
     "verifySubtitle": "이메일로 전송된 6자리 코드를 입력하세요",
+    "verifyNoEmail": "이메일을 찾을 수 없습니다. 다시 등록하거나 이메일의 링크를 열어주세요.",
     "forgotPassword": "비밀번호를 잊으셨나요?",
     "noAccount": "계정이 없으신가요?",
     "hasAccount": "이미 계정이 있으신가요?",

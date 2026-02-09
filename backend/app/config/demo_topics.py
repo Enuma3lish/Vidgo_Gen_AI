@@ -427,14 +427,14 @@ clouds churning, lighthouse light spinning
 # AVATAR TOPICS - Pollo Avatar API
 # =============================================================================
 
-# Asian/Taiwanese professional avatar images
+# Asian/Taiwanese professional avatar images - SYNCED with frontend AIAvatar.vue (color)
 ASIAN_AVATAR_IMAGES = {
-    "female_professional": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=512",
-    "male_professional": "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=512",
-    "female_business": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512",
-    "male_business": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512",
-    "female_young": "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=512",
-    "male_young": "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=512",
+    "female_professional": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop&crop=faces",
+    "male_professional": "https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces",
+    "female_business": "https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=512&fit=crop&crop=faces",
+    "male_business": "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512&fit=crop&crop=faces",
+    "female_young": "https://images.unsplash.com/photo-1524504388940-b1c1722653e6?w=512&fit=crop&crop=faces",
+    "male_young": "https://images.unsplash.com/photo-1600486914327-2f364e2d7731?w=512&fit=crop&crop=faces",
 }
 
 AVATAR_TOPICS: List[TopicDefinition] = [

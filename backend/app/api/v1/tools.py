@@ -15,7 +15,6 @@ from pydantic import BaseModel, HttpUrl
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from datetime import datetime, timezone
 import uuid
 from pathlib import Path
 from PIL import Image
@@ -55,7 +54,7 @@ class RemoveBackgroundBatchRequest(BaseModel):
 class ProductSceneRequest(BaseModel):
     """Generate product in new scene"""
     product_image_url: HttpUrl
-    scene_type: str = "studio"  # studio, nature, luxury, minimal, lifestyle
+    scene_type: str = "studio"  # studio, nature, elegant, minimal, lifestyle
     custom_prompt: Optional[str] = None
 
 
@@ -115,8 +114,8 @@ SCENE_TEMPLATES = [
      "prompt": "professional studio lighting, white background, soft shadows, commercial photography"},
     {"id": "nature", "name": "Nature", "name_zh": "自然風景", "preview_url": "/static/scenes/nature.jpg",
      "prompt": "natural outdoor setting, soft sunlight, greenery, organic environment"},
-    {"id": "luxury", "name": "Luxury", "name_zh": "奢華風格", "preview_url": "/static/scenes/luxury.jpg",
-     "prompt": "luxury marble surface, gold accents, premium elegant setting, high-end"},
+    {"id": "elegant", "name": "Elegant", "name_zh": "質感場景", "preview_url": "/static/scenes/elegant.jpg",
+     "prompt": "warm elegant background, cozy lighting, refined atmosphere"},
     {"id": "minimal", "name": "Minimal", "name_zh": "極簡風格", "preview_url": "/static/scenes/minimal.jpg",
      "prompt": "clean minimal white backdrop, simple composition, modern aesthetic"},
     {"id": "lifestyle", "name": "Lifestyle", "name_zh": "生活情境", "preview_url": "/static/scenes/lifestyle.jpg",
@@ -242,8 +241,6 @@ async def remove_background(
                 input_params={"output_format": request.output_format},
                 result_image_url=result_url,
                 credits_used=3,
-                status="completed",
-                completed_at=datetime.now(timezone.utc)
             )
             db.add(user_gen)
             await db.commit()
@@ -340,7 +337,7 @@ async def generate_product_scene(
     2. Generate scene background (T2I)
     3. Composite product onto scene (PIL)
 
-    Scene types: studio, nature, luxury, minimal, lifestyle, beach, urban, garden
+    Scene types: studio, nature, elegant, minimal, lifestyle, beach, urban, garden
     Credits: 10 per generation
     """
     # Get scene prompt from templates
@@ -455,12 +452,9 @@ async def generate_product_scene(
             tool_type=ToolType.PRODUCT_SCENE,
             input_image_url=str(request.product_image_url),
             input_params={"scene_type": request.scene_type, "custom_prompt": request.custom_prompt},
-            prompt=full_prompt,
+            input_text=full_prompt,
             result_image_url=result_url,
-            generation_steps=generation_steps,
             credits_used=10,
-            status="completed",
-            completed_at=datetime.now(timezone.utc)
         )
         db.add(user_gen)
         await db.commit()
@@ -651,7 +645,6 @@ async def ai_try_on(
             },
             result_image_url=result_url,
             credits_used=15,
-            status="completed"
         )
         db.add(user_gen)
         await db.commit()
@@ -754,8 +747,6 @@ async def room_redesign(
                 },
                 result_image_url=output_url,
                 credits_used=20,
-                status="completed",
-                completed_at=datetime.now(timezone.utc)
             )
             db.add(user_gen)
             await db.commit()
@@ -773,11 +764,6 @@ async def room_redesign(
             )
     except Exception as e:
         logger.error(f"Room Redesign error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-            
-
-    except Exception as e:
-        logger.error(f"Room redesign error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -879,8 +865,6 @@ async def generate_short_video(
                 input_params={"motion_strength": request.motion_strength, "style": request.style},
                 result_video_url=video_url,
                 credits_used=credits_used,
-                status="completed",
-                completed_at=datetime.now(timezone.utc)
             )
             db.add(user_gen)
             await db.commit()
@@ -994,17 +978,14 @@ async def generate_avatar_video(
                     "voice_id": request.voice_id,
                     "duration": request.duration
                 },
-                prompt=request.script,
+                input_text=request.script,
                 result_video_url=video_url,
-                generation_steps=[{
-                    "step": 1,
+                result_metadata={
                     "api": "a2e-avatar",
                     "action": "photo_to_avatar",
                     "language": request.language
-                }],
+                },
                 credits_used=30,
-                status="completed",
-                completed_at=datetime.now(timezone.utc)
             )
             db.add(user_gen)
             await db.commit()

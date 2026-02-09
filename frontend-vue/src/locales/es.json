@@ -168,7 +168,7 @@
     "scenes": {
       "studio": { "name": "Estudio", "desc": "Iluminación limpia de estudio" },
       "nature": { "name": "Naturaleza", "desc": "Entorno natural al aire libre" },
-      "luxury": { "name": "Lujo", "desc": "Estilo premium elegante" },
+      "elegant": { "name": "Elegante", "desc": "Estilo refinado y sofisticado" },
       "minimal": { "name": "Minimalista", "desc": "Fondo minimalista limpio" },
       "lifestyle": { "name": "Lifestyle", "desc": "Ambiente hogareño" },
       "custom": { "name": "Personalizado", "desc": "Tu propio prompt" }
@@ -185,7 +185,7 @@
     "mockup": "Mockup de Producto",
     "studio": "Estudio",
     "nature": "Naturaleza",
-    "luxury": "Lujo",
+    "elegant": "Elegante",
     "minimal": "Minimalista",
     "lifestyle": "Lifestyle",
     "anime": "Estilo Anime",
@@ -379,6 +379,7 @@
     "registerSubtitle": "Únete a VidGo AI hoy",
     "verifyTitle": "Verificar correo",
     "verifySubtitle": "Ingresa el código de 6 dígitos enviado a tu correo",
+    "verifyNoEmail": "No se encontró el correo. Regístrate de nuevo o abre el enlace del correo.",
     "forgotPassword": "¿Olvidaste tu contraseña?",
     "noAccount": "¿No tienes cuenta?",
     "hasAccount": "¿Ya tienes cuenta?",

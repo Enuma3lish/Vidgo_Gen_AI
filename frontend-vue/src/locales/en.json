@@ -189,7 +189,7 @@
     "scenes": {
       "studio": { "name": "Studio", "desc": "Clean studio lighting" },
       "nature": { "name": "Nature", "desc": "Natural outdoor setting" },
-      "luxury": { "name": "Luxury", "desc": "Premium elegant style" },
+      "elegant": { "name": "Elegant", "desc": "Refined warm atmosphere" },
       "minimal": { "name": "Minimal", "desc": "Clean minimal backdrop" },
       "lifestyle": { "name": "Lifestyle", "desc": "Home environment" },
       "custom": { "name": "Custom", "desc": "Your own prompt" }
@@ -206,7 +206,7 @@
     "mockup": "Product Mockup",
     "studio": "Studio",
     "nature": "Nature",
-    "luxury": "Luxury",
+    "elegant": "Elegant",
     "minimal": "Minimal",
     "lifestyle": "Lifestyle",
     "anime": "Anime Style",
@@ -400,6 +400,7 @@
     "registerSubtitle": "Join VidGo AI today",
     "verifyTitle": "Verify Email",
     "verifySubtitle": "Enter the 6-digit code sent to your email",
+    "verifyNoEmail": "No email found. Please register again or open the link from your email.",
     "forgotPassword": "Forgot password?",
     "noAccount": "Don't have an account?",
     "hasAccount": "Already have an account?",
@@ -412,7 +413,9 @@
     "usedThisWeek": "Used This Week",
     "recentWorks": "Recent Works",
     "quickActions": "Quick Actions",
-    "viewAll": "View All"
+    "viewAll": "View All",
+    "currentPlan": "Current Plan",
+    "manageOrUpgradePlan": "Manage or upgrade plan"
   },
   "pricing": {
     "title": "Choose Your Plan",
@@ -441,6 +444,12 @@
     "refundProcessed": "Refund processed successfully. Your subscription has been cancelled.",
     "subscriptionCancelled": "Subscription cancelled. You can continue using credits until the end of your billing period.",
     "cancelFailed": "Failed to cancel subscription. Please try again.",
+    "confirmRefundTitle": "Cancel and request refund?",
+    "confirmRefundMessage": "You will receive a full refund. Your subscription will end immediately and subscription credits will be revoked. This cannot be undone.",
+    "confirmRefund": "Yes, cancel and refund",
+    "confirmCancelTitle": "Cancel subscription?",
+    "confirmCancelMessage": "Your subscription will stay active until the end of the current billing period. You will not be charged again. You can resubscribe anytime.",
+    "confirmCancel": "Yes, cancel subscription",
     "faq": {
       "title": "Frequently Asked Questions",
       "credits": {
@@ -460,6 +469,18 @@
         "a": "You can request a full refund within 7 days of subscribing. After 7 days, you can still cancel but will retain access until the end of your billing period."
       }
     }
+  },
+  "subscription": {
+    "paymentSuccess": "Payment successful",
+    "paymentSuccessDesc": "Your subscription is now active. You can start using all features.",
+    "goToDashboard": "Go to Dashboard",
+    "viewPlans": "View plans",
+    "paymentCancelled": "Payment cancelled",
+    "paymentCancelledDesc": "You cancelled the payment. No charges were made.",
+    "backToPricing": "Back to Pricing",
+    "mockComplete": "Demo payment complete",
+    "redirecting": "Redirecting to dashboard...",
+    "goNow": "Go now"
   },
   "footer": {
     "about": "About",

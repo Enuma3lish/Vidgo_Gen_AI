@@ -14,17 +14,19 @@ AI Service Provider Routing:
 
 Uses Provider Router for smart failover
 """
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, status
 from pydantic import BaseModel, HttpUrl, Field
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 
 from app.providers.provider_router import get_provider_router, TaskType
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.similarity import get_similarity_service
-from app.api.deps import get_current_user_optional, get_db
+from app.api.deps import get_current_user_optional, get_db, is_subscribed_user
 from app.models.demo import ToolShowcase, PromptCache
+from app.models.material import Material, ToolType
+from app.models.user_generation import UserGeneration
 import logging
 
 logger = logging.getLogger(__name__)
@@ -271,7 +273,7 @@ class PatternTransferRequest(BaseModel):
 class ProductSceneRequest(BaseModel):
     """Generate product in new scene"""
     product_image_url: HttpUrl
-    scene_type: str = "studio"  # studio, nature, luxury, minimal, lifestyle
+    scene_type: str = "studio"  # studio, nature, elegant, minimal, lifestyle
     custom_prompt: Optional[str] = None
 
 
@@ -311,18 +313,43 @@ class GenerationResponse(BaseModel):
 @router.post("/pattern/generate", response_model=GenerationResponse)
 async def generate_pattern(
     request: PatternGenerateRequest,
-    current_user=Depends(get_current_user_optional)
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Generate pattern/texture from text description
 
-    Styles:
-    - seamless: Tileable repeating pattern
-    - floral: Flower and botanical designs
-    - geometric: Abstract geometric shapes
-    - abstract: Artistic abstract textures
-    - traditional: Cultural/traditional motifs
+    - **Subscribers:** Calls real API, saves to UserGeneration.
+    - **Demo users:** Returns a pre-generated Material DB result (watermarked).
+
+    Styles: seamless, floral, geometric, abstract, traditional
     """
+    # Demo path: return pre-generated material
+    if not is_subscribed_user(current_user):
+        result = await db.execute(
+            select(Material)
+            .where(
+                Material.tool_type == ToolType.PATTERN_GENERATE,
+                Material.topic == request.style,
+                Material.is_active == True,
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+        material = result.scalar_one_or_none()
+        if material:
+            return GenerationResponse(
+                success=True,
+                result_url=material.result_watermarked_url or material.result_image_url,
+                credits_used=0,
+                message="Demo pattern (watermarked). Subscribe to generate custom patterns.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active subscription required. No demo examples available.",
+        )
+
+    # Subscriber path: call real API
     try:
         style_prompts = {
             "seamless": "seamless tileable repeating pattern",
@@ -348,9 +375,23 @@ async def generate_pattern(
             if not images and image_url:
                 images = [{"url": image_url}]
 
+            result_url = images[0]["url"] if images else image_url
+
+            # Save to UserGeneration
+            generation = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.PATTERN_GENERATE,
+                input_text=request.prompt,
+                input_params={"style": request.style, "width": request.width, "height": request.height},
+                result_image_url=result_url,
+                credits_used=5,
+            )
+            db.add(generation)
+            await db.commit()
+
             return GenerationResponse(
                 success=True,
-                result_url=images[0]["url"] if images else image_url,
+                result_url=result_url,
                 results=images,
                 credits_used=5,
                 message="Pattern generated successfully"
@@ -414,14 +455,41 @@ async def transfer_pattern(
 @router.post("/product/remove-background", response_model=GenerationResponse)
 async def remove_background(
     request: BackgroundRemoveRequest,
-    current_user=Depends(get_current_user_optional)
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    Remove background from product image
-    Returns transparent PNG
+    Remove background from product image. Returns transparent PNG.
+
+    - **Subscribers:** Calls real API, saves to UserGeneration.
+    - **Demo users:** Returns a pre-generated Material DB result (watermarked).
     """
+    # Demo path: return pre-generated material
+    if not is_subscribed_user(current_user):
+        result = await db.execute(
+            select(Material)
+            .where(
+                Material.tool_type == ToolType.BACKGROUND_REMOVAL,
+                Material.is_active == True,
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+        material = result.scalar_one_or_none()
+        if material:
+            return GenerationResponse(
+                success=True,
+                result_url=material.result_watermarked_url or material.result_image_url,
+                credits_used=0,
+                message="Demo background removal (watermarked). Subscribe to process your own images.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active subscription required. No demo examples available.",
+        )
+
+    # Subscriber path: call real API
     try:
-        # Use provider router for background removal (GoEnhance)
         result = await provider_router.route(
             TaskType.BACKGROUND_REMOVAL,
             {"image_url": str(request.image_url)}
@@ -429,9 +497,22 @@ async def remove_background(
 
         if result.get("success"):
             output = result.get("output", {})
+            result_url = output.get("image_url")
+
+            # Save to UserGeneration
+            generation = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.BACKGROUND_REMOVAL,
+                input_image_url=str(request.image_url),
+                result_image_url=result_url,
+                credits_used=3,
+            )
+            db.add(generation)
+            await db.commit()
+
             return GenerationResponse(
                 success=True,
-                result_url=output.get("image_url"),
+                result_url=result_url,
                 credits_used=3,
                 message="Background removed successfully"
             )
@@ -448,22 +529,47 @@ async def remove_background(
 @router.post("/product/generate-scene", response_model=GenerationResponse)
 async def generate_product_scene(
     request: ProductSceneRequest,
-    current_user=Depends(get_current_user_optional)
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    Generate product in a professional scene/background
+    Generate product in a professional scene/background.
 
-    Scene types:
-    - studio: Clean studio lighting
-    - nature: Natural outdoor setting
-    - luxury: Premium elegant environment
-    - minimal: Clean minimal backdrop
-    - lifestyle: Home/lifestyle context
+    - **Subscribers:** Calls real API, saves to UserGeneration.
+    - **Demo users:** Returns a pre-generated Material DB result (watermarked).
+
+    Scene types: studio, nature, elegant, minimal, lifestyle
     """
+    # Demo path: return pre-generated material
+    if not is_subscribed_user(current_user):
+        result = await db.execute(
+            select(Material)
+            .where(
+                Material.tool_type == ToolType.PRODUCT_SCENE,
+                Material.topic == request.scene_type,
+                Material.is_active == True,
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+        material = result.scalar_one_or_none()
+        if material:
+            return GenerationResponse(
+                success=True,
+                result_url=material.result_watermarked_url or material.result_image_url,
+                credits_used=0,
+                message="Demo product scene (watermarked). Subscribe to generate custom scenes.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active subscription required. No demo examples available.",
+        )
+
+    # Subscriber path: call real API
     scene_prompts = {
         "studio": "professional studio lighting, white background, soft shadows, commercial photography",
         "nature": "natural outdoor setting, soft sunlight, greenery, organic environment",
-        "luxury": "luxury marble surface, gold accents, premium elegant setting, high-end",
+        "elegant": "warm elegant background, cozy lighting, refined atmosphere",
         "minimal": "clean minimal white backdrop, simple composition, modern aesthetic",
         "lifestyle": "cozy home environment, lifestyle context, warm lighting, lived-in feel"
     }
@@ -490,9 +596,23 @@ async def generate_product_scene(
             if not images and image_url:
                 images = [{"url": image_url}]
 
+            result_url = images[0]["url"] if images else image_url
+
+            # Save to UserGeneration
+            generation = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.PRODUCT_SCENE,
+                input_image_url=str(request.product_image_url),
+                input_params={"scene_type": request.scene_type, "custom_prompt": request.custom_prompt},
+                result_image_url=result_url,
+                credits_used=10,
+            )
+            db.add(generation)
+            await db.commit()
+
             return GenerationResponse(
                 success=True,
-                result_url=images[0]["url"] if images else image_url,
+                result_url=result_url,
                 results=images,
                 credits_used=10,
                 message="Product scene generated successfully"
@@ -545,14 +665,43 @@ async def enhance_product_image(
 @router.post("/video/image-to-video", response_model=GenerationResponse)
 async def image_to_video(
     request: ImageToVideoRequest,
-    current_user=Depends(get_current_user_optional)
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    Convert static image to animated video
+    Convert static image to animated video.
+
+    - **Subscribers:** Calls real API, saves to UserGeneration.
+    - **Demo users:** Returns a pre-generated Material DB result (watermarked).
 
     Uses PiAPI (Wan I2V) as primary with Pollo as backup.
-    Optional style transformation via GoEnhance.
     """
+    # Demo path: return pre-generated material
+    if not is_subscribed_user(current_user):
+        result = await db.execute(
+            select(Material)
+            .where(
+                Material.tool_type == ToolType.SHORT_VIDEO,
+                Material.is_active == True,
+                Material.result_video_url.isnot(None),
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+        material = result.scalar_one_or_none()
+        if material:
+            return GenerationResponse(
+                success=True,
+                result_url=material.result_watermarked_url or material.result_video_url,
+                credits_used=0,
+                message="Demo video (watermarked). Subscribe to generate custom videos.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active subscription required. No demo examples available.",
+        )
+
+    # Subscriber path: call real API
     try:
         result = await provider_router.route(
             TaskType.I2V,
@@ -578,6 +727,18 @@ async def image_to_video(
                     )
                     if style_result.get("success"):
                         video_url = style_result.get("video_url")
+
+            # Save to UserGeneration
+            generation = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.SHORT_VIDEO,
+                input_image_url=str(request.image_url),
+                input_params={"motion_strength": request.motion_strength, "style": request.style},
+                result_video_url=video_url,
+                credits_used=25,
+            )
+            db.add(generation)
+            await db.commit()
 
             return GenerationResponse(
                 success=True,
@@ -776,7 +937,7 @@ async def get_topic_examples(
                 "title": "場景生成",
                 "before": f"https://images.unsplash.com/photo-1542291026-7eec264c27ff?{IMG_SIZE}",
                 "after": f"https://images.unsplash.com/photo-1542291026-7eec264c27ff?{IMG_SIZE}",
-                "scene": "luxury",
+                "scene": "elegant",
                 "description": "Scene generation demo",
                 "tool": "generate_scene"
             }

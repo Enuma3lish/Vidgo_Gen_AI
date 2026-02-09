@@ -98,11 +98,13 @@ class AdminDashboardService:
 
     async def _get_users_by_plan(self) -> Dict[str, int]:
         """Get user count grouped by plan"""
+        from app.models.billing import Plan
         result = await self.db.execute(
-            select(User.plan, func.count(User.id))
-            .group_by(User.plan)
+            select(Plan.name, func.count(User.id))
+            .outerjoin(Plan, User.current_plan_id == Plan.id)
+            .group_by(Plan.name)
         )
-        return {row[0] or "demo": row[1] for row in result.all()}
+        return {(row[0] or "demo"): row[1] for row in result.all()}
 
     async def _get_revenue_for_period(
         self,
@@ -217,14 +219,16 @@ class AdminDashboardService:
         if search:
             search_filter = or_(
                 User.email.ilike(f"%{search}%"),
-                User.name.ilike(f"%{search}%")
+                User.full_name.ilike(f"%{search}%")
             )
             query = query.where(search_filter)
             count_query = count_query.where(search_filter)
 
         if plan:
-            query = query.where(User.plan == plan)
-            count_query = count_query.where(User.plan == plan)
+            from app.models.billing import Plan
+            plan_subq = select(Plan.id).where(Plan.name == plan).scalar_subquery()
+            query = query.where(User.current_plan_id == plan_subq)
+            count_query = count_query.where(User.current_plan_id == plan_subq)
 
         # Get total count
         total = await self.db.scalar(count_query)
@@ -294,12 +298,10 @@ class AdminDashboardService:
         if not user:
             return False, "User not found"
 
-        if user.is_admin:
+        if user.is_superuser:
             return False, "Cannot ban admin users"
 
         user.is_active = False
-        user.ban_reason = reason
-        user.banned_at = datetime.utcnow()
         await self.db.commit()
 
         return True, "User banned successfully"
@@ -315,8 +317,6 @@ class AdminDashboardService:
             return False, "User not found"
 
         user.is_active = True
-        user.ban_reason = None
-        user.banned_at = None
         await self.db.commit()
 
         return True, "User unbanned successfully"

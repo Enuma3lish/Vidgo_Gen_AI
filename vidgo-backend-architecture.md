@@ -1,7 +1,7 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 4.7
-**Last Updated:** February 6, 2026
+**Version:** 4.8
+**Last Updated:** February 9, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
 **Mode:** Preset-Only (Material DB Lookup, No Runtime API Calls)
@@ -270,11 +270,11 @@ api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 
 | Prefix | Tag | Description |
 |--------|-----|-------------|
-| `/auth` | auth | User authentication (login, register, verify) |
+| `/auth` | auth | User authentication (login, register, 6-digit verify; verify-code returns tokens) |
 | `/payments` | payments | Payment webhooks (ECPay, Paddle) |
-| `/subscriptions` | subscriptions | Subscription management |
+| `/subscriptions` | subscriptions | Subscription management (plans seed defaults; subscribe returns checkout_url) |
 | `/demo` | demo | Demo/preset endpoints |
-| `/plans` | plans | Subscription plan details |
+| `/plans` | plans | Subscription plan details (ensure_default_plans) |
 | `/promotions` | promotions | Promotional codes |
 | `/credits` | credits | Credit balance and transactions |
 | `/effects` | effects | Video effects |
@@ -771,7 +771,16 @@ PADDLE_PUBLIC_KEY: str = "your_public_key"
 PADDLE_WEBHOOK_SECRET: str = "your_webhook_secret"
 ```
 
-### 6.3 Invoice System flow
+### 6.3 Paddle Checkout, Cancel & Refund
+
+- **Subscribe:** `POST /subscriptions/subscribe` (plan_id, billing_cycle, payment_method=paddle). When Paddle is configured, returns `checkout_url`; frontend redirects user to Paddle to pay. When Paddle is not configured (mock), subscription is activated immediately.
+- **Webhook:** `POST /payments/paddle/webhook` handles `transaction_completed`; activates subscription and allocates credits.
+- **Cancel subscription:** `POST /subscriptions/cancel` with body `{ "request_refund": true | false }`.
+  - **With refund** (`request_refund: true`): Allowed only within 7 days of subscription start. Backend calls `PaddleService.create_refund()`, marks order as refunded, revokes subscription credits, and sets subscription to cancelled immediately.
+  - **Without refund** (`request_refund: false`): Subscription is set to cancelled; access continues until end of billing period, then no renewal. If the order has a Paddle subscription ID, backend notifies Paddle to cancel at next billing period.
+- **Refund eligibility:** `GET /subscriptions/status` returns `refund_eligible` (boolean) and `refund_days_remaining` (int). `GET /subscriptions/refund-eligibility` returns `eligible`, `days_remaining`, and optional `reason` for use by the frontend (e.g. to show "Cancel with Refund" only when eligible).
+
+### 6.4 Invoice System flow
 
 1. **Trigger**: `transaction_completed` webhook from Paddle.
 2. **Processing**:
@@ -781,6 +790,15 @@ PADDLE_WEBHOOK_SECRET: str = "your_webhook_secret"
 3. **Delivery**:
     - `EmailService.send_invoice_email()` sends PDF link to user.
     - User downloads PDF via temporary URL (1h expiry).
+
+### 6.5 Plans & pricing display
+
+- `GET /subscriptions/plans` lists active plans with `price_monthly`, `price_yearly`, and features. It ensures default plans exist (e.g. via `ensure_vidgo_plans(db)` or `ensure_default_plans(db)` depending on codebase) so that if the DB has no plans, default plans with prices and credits are seeded before returning.
+
+### 6.6 Email verification (auth)
+
+- **Register:** `POST /auth/register` creates user (is_active=false), sends 6-digit code via email.
+- **Verify:** `POST /auth/verify-code` (email, code) validates the code, activates the user, then returns **AuthResponse** (user, access_token, refresh_token, token_type) so the frontend can set the session without a separate login call.
 
 
 ---

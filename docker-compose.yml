@@ -7,10 +7,8 @@
 #   - First run: pregen in entrypoint (~30-90 min). Later runs: fast.
 #
 # Material DB Management:
-#   - SKIP_MATERIAL_CHECK=true  → skip material check (dev only)
 #   - CLEAN_MATERIALS=ai_avatar → delete + re-seed ai_avatar on startup
 #   - CLEAN_MATERIALS=all       → delete + re-seed ALL tools on startup
-#   - ALLOW_EMPTY_MATERIALS=true → start even if materials are incomplete
 
 services:
   # PostgreSQL Database
@@ -69,6 +67,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vidgo_backend
+    entrypoint: []
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
       - ./backend:/app
@@ -85,9 +84,8 @@ services:
       - DB_PORT=5432
       - DB_USER=postgres
       - REDIS_HOST=redis
-      - SKIP_MATERIAL_CHECK=${SKIP_MATERIAL_CHECK:-false}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8501}
       - CLEAN_MATERIALS=${CLEAN_MATERIALS:-}
-      - ALLOW_EMPTY_MATERIALS=${ALLOW_EMPTY_MATERIALS:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -214,8 +212,7 @@ services:
       # Flag to indicate Docker environment for proxy config
       - DOCKER_ENV=true
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - vidgo_network
 

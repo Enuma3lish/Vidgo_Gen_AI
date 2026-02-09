@@ -189,7 +189,7 @@
     "scenes": {
       "studio": { "name": "攝影棚", "desc": "乾淨的棚拍燈光" },
       "nature": { "name": "自然", "desc": "自然戶外場景" },
-      "luxury": { "name": "奢華", "desc": "高端優雅風格" },
+      "elegant": { "name": "質感", "desc": "溫暖優雅氛圍" },
       "minimal": { "name": "極簡", "desc": "乾淨極簡背景" },
       "lifestyle": { "name": "生活", "desc": "居家環境" },
       "custom": { "name": "自訂", "desc": "您自己的提示詞" }
@@ -206,7 +206,7 @@
     "mockup": "產品展示",
     "studio": "攝影棚",
     "nature": "自然風光",
-    "luxury": "奢華質感",
+    "elegant": "質感",
     "minimal": "極簡風格",
     "lifestyle": "生活場景",
     "anime": "動漫風格",
@@ -400,6 +400,7 @@
     "registerSubtitle": "立即加入 VidGo AI",
     "verifyTitle": "驗證郵箱",
     "verifySubtitle": "輸入發送到您郵箱的 6 位數驗證碼",
+    "verifyNoEmail": "未找到郵箱，請重新註冊或從郵件中的連結進入。",
     "forgotPassword": "忘記密碼？",
     "noAccount": "還沒有帳戶？",
     "hasAccount": "已經有帳戶？",
@@ -441,6 +442,12 @@
     "refundProcessed": "退款已處理。您的訂閱已取消。",
     "subscriptionCancelled": "訂閱已取消。您可以繼續使用點數直到計費週期結束。",
     "cancelFailed": "取消訂閱失敗，請重試。",
+    "confirmRefundTitle": "確定要取消並申請退款？",
+    "confirmRefundMessage": "您將獲得全額退款，訂閱會立即結束，方案點數將被收回，此操作無法復原。",
+    "confirmRefund": "確定取消並退款",
+    "confirmCancelTitle": "確定要取消訂閱？",
+    "confirmCancelMessage": "訂閱將在目前計費週期結束前保持有效，之後不會再扣款，您可隨時重新訂閱。",
+    "confirmCancel": "確定取消訂閱",
     "faq": {
       "title": "常見問題",
       "credits": {

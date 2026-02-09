@@ -18,6 +18,7 @@ from app.schemas.user import (
     User as UserSchema,
     UserWithDetails,
     LoginResponse,
+    AuthResponse,
     TokenPair,
     RefreshTokenRequest,
     EmailVerificationRequest,
@@ -498,7 +499,7 @@ class ResendCodeRequest(BaseModel):
     email: EmailStr
 
 
-@router.post("/verify-code", response_model=MessageResponse)
+@router.post("/verify-code", response_model=AuthResponse)
 async def verify_email_code(
     db: AsyncSession = Depends(deps.get_db),
     request: VerifyCodeRequest = Body(...)
@@ -506,7 +507,7 @@ async def verify_email_code(
     """
     Verify email using 6-digit code.
 
-    This is the new verification system using 6-digit codes instead of links.
+    On success, returns user and tokens so the client can log in without a separate login call.
     - Code expires in 15 minutes
     - Maximum 3 attempts per code
     """
@@ -524,7 +525,21 @@ async def verify_email_code(
             detail=message
         )
 
-    return MessageResponse(message=message)
+    # Load user and return tokens so frontend can set session
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="User not found after verification"
+        )
+    access_token, refresh_token = security.create_token_pair(str(user.id))
+    return AuthResponse(
+        user=UserSchema.model_validate(user),
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer"
+    )
 
 
 @router.post("/resend-code", response_model=MessageResponse)

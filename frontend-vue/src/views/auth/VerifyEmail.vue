@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { ref, onMounted, computed } from 'vue'
+import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useUIStore } from '@/stores'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const uiStore = useUIStore()
 
@@ -14,6 +15,14 @@ const isLoading = ref(false)
 const resendCooldown = ref(0)
 
 const inputRefs = ref<HTMLInputElement[]>([])
+
+// Email for verification: from query, store, or sessionStorage so it persists on refresh
+const emailForVerify = computed(() => {
+  const q = route.query.email
+  if (typeof q === 'string' && q) return q
+  if (authStore.pendingEmail) return authStore.pendingEmail
+  return sessionStorage.getItem('pendingVerifyEmail') || ''
+})
 
 function handleInput(index: number, event: Event) {
   const target = event.target as HTMLInputElement
@@ -68,10 +77,11 @@ async function handleSubmit() {
   isLoading.value = true
   try {
     await authStore.verifyCode({
-      email: authStore.pendingEmail || '',
+      email: emailForVerify.value || authStore.pendingEmail || '',
       code: fullCode
     })
 
+    sessionStorage.removeItem('pendingVerifyEmail')
     uiStore.showSuccess('Email verified successfully!')
     router.push('/dashboard')
   } catch (error) {
@@ -87,7 +97,7 @@ async function handleResend() {
   if (resendCooldown.value > 0) return
 
   try {
-    await authStore.resendCode(authStore.pendingEmail || '')
+    await authStore.resendCode(emailForVerify.value || authStore.pendingEmail || '')
     uiStore.showSuccess('Verification code sent!')
     resendCooldown.value = 60
     startCooldown()
@@ -106,6 +116,9 @@ function startCooldown() {
 }
 
 onMounted(() => {
+  if (emailForVerify.value && !authStore.pendingEmail) {
+    authStore.pendingEmail = emailForVerify.value
+  }
   inputRefs.value[0]?.focus()
 })
 </script>
@@ -124,8 +137,11 @@ onMounted(() => {
           </div>
           <h1 class="text-2xl font-bold text-white mb-2">{{ t('auth.verifyTitle') }}</h1>
           <p class="text-gray-400">{{ t('auth.verifySubtitle') }}</p>
-          <p v-if="authStore.pendingEmail" class="text-primary-400 font-medium mt-2">
-            {{ authStore.pendingEmail }}
+          <p v-if="emailForVerify" class="text-primary-400 font-medium mt-2">
+            {{ emailForVerify }}
+          </p>
+          <p v-else class="text-amber-400 text-sm mt-2">
+            {{ t('auth.verifyNoEmail') }}
           </p>
         </div>
 

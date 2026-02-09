@@ -23,7 +23,11 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     try {
       const response = await authApi.login(data)
-      setTokens(response.access_token, response.refresh_token)
+      const access = (response as { tokens?: { access: string }; access_token?: string }).tokens?.access
+        ?? (response as { access_token?: string }).access_token
+      const refresh = (response as { tokens?: { refresh: string }; refresh_token?: string }).tokens?.refresh
+        ?? (response as { refresh_token?: string }).refresh_token
+      if (access && refresh) setTokens(access, refresh)
       user.value = response.user
       return response
     } catch (err: unknown) {
@@ -56,7 +60,11 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     try {
       const response = await authApi.verifyCode(data)
-      setTokens(response.access_token, response.refresh_token)
+      const access = (response as { tokens?: { access: string }; access_token?: string }).tokens?.access
+        ?? (response as { access_token?: string }).access_token
+      const refresh = (response as { tokens?: { refresh: string }; refresh_token?: string }).tokens?.refresh
+        ?? (response as { refresh_token?: string }).refresh_token
+      if (access && refresh) setTokens(access, refresh)
       user.value = response.user
       pendingEmail.value = null
       return response

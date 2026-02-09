@@ -69,10 +69,6 @@ async def check(tool_filter: str = None) -> dict:
 
 
 def main() -> int:
-    if __import__("os").environ.get("SKIP_MATERIAL_CHECK") == "true":
-        print("SKIP_MATERIAL_CHECK=true - skip check, exit 0")
-        return 0
-
     parser = argparse.ArgumentParser(description="Check Material DB status. Exit 0 when enough.")
     parser.add_argument("--min", type=int, default=0, help="Override min examples per tool (0 = use defaults)")
     parser.add_argument("--tool", type=str, default=None, help="Check only a specific tool")

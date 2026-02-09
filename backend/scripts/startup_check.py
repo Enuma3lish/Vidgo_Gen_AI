@@ -145,7 +145,7 @@ async def check_materials() -> Tuple[bool, Dict[str, int]]:
 
             # Minimum required materials per tool
             # These are the minimum examples needed for a good demo experience
-            # If any required tool falls below minimum, startup will warn (or block if ALLOW_EMPTY_MATERIALS=false)
+            # If any required tool falls below minimum, startup will block
             min_required = {
                 ToolType.BACKGROUND_REMOVAL: 3,   # Need at least 3 background removal examples
                 ToolType.PRODUCT_SCENE: 3,        # Need at least 3 product scene examples

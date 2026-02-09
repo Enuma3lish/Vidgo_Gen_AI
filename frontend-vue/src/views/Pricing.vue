@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { subscriptionApi } from '@/api'
+import ConfirmModal from '@/components/molecules/ConfirmModal.vue'
 import type { PlanInfo, SubscriptionStatus } from '@/api'
 
 const { t } = useI18n()
@@ -18,6 +19,8 @@ const subscribing = ref<string | null>(null)
 const cancelling = ref(false)
 const error = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
+const showCancelModal = ref(false)
+const cancelWithRefund = ref(false)
 
 // Computed
 const isLoggedIn = computed(() => authStore.isAuthenticated)
@@ -76,7 +79,8 @@ async function handleSubscribe(plan: PlanInfo) {
     error.value = null
     successMessage.value = null
 
-    const result = await subscriptionApi.subscribeDirect({
+    // Use subscribe() for real Paddle checkout; backend returns checkout_url when not mock
+    const result = await subscriptionApi.subscribe({
       plan_id: plan.id,
       billing_cycle: billingPeriod.value,
       payment_method: 'paddle'
@@ -88,10 +92,10 @@ async function handleSubscribe(plan: PlanInfo) {
         : t('pricing.redirectingToPayment')
 
       if (result.checkout_url && !result.is_mock) {
-        // Redirect to payment page
+        // Redirect to Paddle payment page
         window.location.href = result.checkout_url
       } else {
-        // Mock mode - refresh status
+        // Mock mode or no checkout URL - refresh status
         await fetchSubscriptionStatus()
       }
     } else {
@@ -105,8 +109,15 @@ async function handleSubscribe(plan: PlanInfo) {
   }
 }
 
-// Cancel subscription
+// Open cancel confirmation (refund or cancel at period end)
+function askCancel(requestRefund: boolean) {
+  cancelWithRefund.value = requestRefund
+  showCancelModal.value = true
+}
+
+// Cancel subscription (after user confirms)
 async function handleCancel(requestRefund: boolean = false) {
+  showCancelModal.value = false
   try {
     cancelling.value = true
     error.value = null
@@ -128,6 +139,10 @@ async function handleCancel(requestRefund: boolean = false) {
   } finally {
     cancelling.value = false
   }
+}
+
+function onConfirmCancel() {
+  handleCancel(cancelWithRefund.value)
 }
 
 // Get display name for plan
@@ -208,7 +223,7 @@ onMounted(async () => {
             <div class="flex gap-2">
               <button
                 v-if="isRefundEligible"
-                @click="handleCancel(true)"
+                @click="askCancel(true)"
                 :disabled="cancelling"
                 class="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50"
               >
@@ -217,7 +232,7 @@ onMounted(async () => {
               </button>
               <button
                 v-if="subscriptionStatus.status === 'active'"
-                @click="handleCancel(false)"
+                @click="askCancel(false)"
                 :disabled="cancelling"
                 class="px-4 py-2 bg-dark-700 text-gray-300 rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-50"
               >
@@ -227,6 +242,19 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+
+      <!-- Cancel confirmation modal -->
+      <ConfirmModal
+        :show="showCancelModal"
+        :title="cancelWithRefund ? t('pricing.confirmRefundTitle') : t('pricing.confirmCancelTitle')"
+        :message="cancelWithRefund ? t('pricing.confirmRefundMessage') : t('pricing.confirmCancelMessage')"
+        :confirm-text="cancelWithRefund ? t('pricing.confirmRefund') : t('pricing.confirmCancel')"
+        :cancel-text="t('common.cancel', 'Cancel')"
+        variant="danger"
+        :loading="cancelling"
+        @confirm="onConfirmCancel"
+        @close="showCancelModal = false"
+      />
 
       <!-- Success/Error Messages -->
       <div v-if="successMessage" class="mb-6 p-4 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-center">

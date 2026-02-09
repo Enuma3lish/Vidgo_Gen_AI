@@ -57,7 +57,7 @@ class StatsResponse(BaseModel):
 
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require user to be an admin"""
-    if not current_user.is_admin:
+    if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
@@ -196,11 +196,11 @@ async def get_user_detail(
         "user": {
             "id": str(user.id),
             "email": user.email,
-            "name": user.name,
-            "plan": user.plan,
+            "name": user.full_name,
+            "plan": str(user.current_plan_id) if user.current_plan_id else None,
             "is_active": user.is_active,
-            "is_verified": user.is_verified,
-            "is_admin": user.is_admin,
+            "is_verified": user.email_verified,
+            "is_admin": user.is_superuser,
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
             "subscription_credits": user.subscription_credits,

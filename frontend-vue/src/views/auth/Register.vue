@@ -41,7 +41,8 @@ async function handleSubmit() {
     })
 
     uiStore.showSuccess('Registration successful! Please verify your email.')
-    router.push('/auth/verify')
+    sessionStorage.setItem('pendingVerifyEmail', email.value)
+    router.push({ path: '/auth/verify', query: { email: email.value } })
   } catch (error) {
     // Error is already set in store
   } finally {

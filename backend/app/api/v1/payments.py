@@ -133,13 +133,18 @@ async def handle_transaction_completed(db: AsyncSession, data: dict):
     custom_data = data.get("custom_data", {})
     user_id = custom_data.get("user_id")
     transaction_id = data.get("id")
+    if transaction_id is not None:
+        transaction_id = str(transaction_id).strip('"')
     invoice_number = data.get("invoice_number", transaction_id)
 
     if not user_id:
         logger.warning(f"Transaction without user_id: {transaction_id}")
         return
+    if not transaction_id:
+        logger.warning("Transaction completed webhook missing id")
+        return
 
-    # Find order by transaction ID
+    # Find order by transaction ID (normalize to string for JSONB comparison)
     result = await db.execute(
         select(Order).where(
             Order.payment_data["paddle_transaction_id"].astext == transaction_id

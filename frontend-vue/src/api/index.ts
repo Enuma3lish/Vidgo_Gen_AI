@@ -9,6 +9,7 @@ export { default as quotaApi } from './quota'
 export { adminApi, createAdminWebSocket } from './admin'
 export { interiorApi } from './interior'
 export { subscriptionApi } from './subscription'
+export { userApi } from './user'
 
 export type { LoginRequest, RegisterRequest, VerifyCodeRequest, User, AuthResponse } from './auth'
 export type { GenerateRequest, GenerateResponse, ToolShowcase, Inspiration } from './demo'
@@ -49,6 +50,13 @@ export type {
   IterativeEditRequest,
   StyleTransferRequest
 } from './interior'
+export type {
+  UserGeneration,
+  UserGenerationDetail,
+  GenerationListResponse,
+  UserStatsResponse,
+  GenerationListParams,
+} from './user'
 export type {
   PlanInfo,
   SubscribeRequest,

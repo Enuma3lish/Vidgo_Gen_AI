@@ -103,6 +103,26 @@ class PlanInfo(BaseModel):
 # ENDPOINTS
 # =============================================================================
 
+# Default plans to ensure pricing page always has data (TWD for NT$ display)
+DEFAULT_VIDGO_PLANS = [
+    {"name": "demo", "display_name": "Demo", "slug": "demo", "plan_type": "free", "price_monthly": 0.0, "price_yearly": 0.0, "price_twd": 0, "monthly_credits": 0, "weekly_credits": 0, "max_resolution": "720p", "has_watermark": True, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False},
+    {"name": "starter", "display_name": "Starter", "slug": "starter", "plan_type": "basic", "price_monthly": 299.0, "price_yearly": 2990.0, "price_twd": 299, "monthly_credits": 100, "weekly_credits": 25, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": False, "feature_custom_styles": False},
+    {"name": "pro", "display_name": "Pro", "slug": "pro", "plan_type": "pro", "price_monthly": 599.0, "price_yearly": 5990.0, "price_twd": 599, "monthly_credits": 250, "weekly_credits": 60, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True},
+    {"name": "pro_plus", "display_name": "Pro+", "slug": "pro_plus", "plan_type": "enterprise", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "monthly_credits": 500, "weekly_credits": 125, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True},
+]
+
+
+async def ensure_vidgo_plans(db: AsyncSession) -> None:
+    """Ensure default VidGo plans exist so pricing page always shows plans with prices."""
+    r = await db.execute(select(Plan).limit(1))
+    if r.scalar_one_or_none() is not None:
+        return
+    for data in DEFAULT_VIDGO_PLANS:
+        plan = Plan(**data)
+        db.add(plan)
+    await db.commit()
+
+
 @router.get("/plans", response_model=List[PlanInfo])
 async def list_available_plans(
     db: AsyncSession = Depends(deps.get_db)
@@ -110,12 +130,28 @@ async def list_available_plans(
     """
     List all available subscription plans.
 
-    Returns plans with pricing and features.
+    Returns plans with pricing and features. Ensures default plans exist if DB is empty.
+    Prices are in TWD for NT$ display on frontend.
     """
+    await ensure_vidgo_plans(db)
     result = await db.execute(
         select(Plan).where(Plan.is_active == True).order_by(Plan.price_monthly)
     )
     plans = result.scalars().all()
+
+    def _monthly(p: Plan) -> float:
+        v = p.price_monthly
+        if v is not None and float(v) > 0:
+            return float(v)
+        twd = getattr(p, "price_twd", None)
+        return float(twd) if twd is not None else 0.0
+
+    def _yearly(p: Plan) -> float:
+        v = p.price_yearly
+        if v is not None and float(v) > 0:
+            return float(v)
+        m = _monthly(p)
+        return m * 10.0 if m > 0 else 0.0
 
     return [
         PlanInfo(
@@ -123,8 +159,8 @@ async def list_available_plans(
             name=p.name,
             display_name=p.display_name,
             description=p.description,
-            price_monthly=float(p.price_monthly or 0),
-            price_yearly=float(p.price_yearly or 0),
+            price_monthly=_monthly(p),
+            price_yearly=_yearly(p),
             monthly_credits=p.monthly_credits or p.weekly_credits or 0,
             features={
                 "max_video_length": p.max_video_length,

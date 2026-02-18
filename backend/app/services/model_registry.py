@@ -5,8 +5,11 @@ Manages catalog of available AI models per provider and tracks new model announc
 import json
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Optional
 from pydantic import BaseModel
+
+ANNOUNCEMENTS_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "model_announcements.json"
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,28 @@ class ModelRegistry:
     """Manages available AI models and new model announcements."""
 
     def __init__(self):
-        self._announcements: List[Dict] = []
+        self._announcements: List[Dict] = self._load_announcements()
+
+    @staticmethod
+    def _load_announcements() -> List[Dict]:
+        """Load announcements from persistent JSON file."""
+        try:
+            if ANNOUNCEMENTS_FILE.exists():
+                return json.loads(ANNOUNCEMENTS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Failed to load model announcements: %s", e)
+        return []
+
+    def _save_announcements(self) -> None:
+        """Persist announcements to JSON file."""
+        try:
+            ANNOUNCEMENTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            ANNOUNCEMENTS_FILE.write_text(
+                json.dumps(self._announcements, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as e:
+            logger.warning("Failed to save model announcements: %s", e)
 
     def get_all_models(self) -> List[ModelInfo]:
         """Get all known models."""
@@ -78,6 +102,7 @@ class ModelRegistry:
             "tier": model.tier,
             "announced_at": datetime.utcnow().isoformat(),
         })
+        self._save_announcements()
         return True
 
     def get_new_models(self, since_days: int = 7) -> List[Dict]:

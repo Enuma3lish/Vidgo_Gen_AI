@@ -164,6 +164,24 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/dashboard/Invoices.vue'),
     meta: { requiresAuth: true }
   },
+  {
+    path: '/dashboard/gift-codes',
+    name: 'gift-codes',
+    component: () => import('@/views/dashboard/GiftCodes.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/dashboard/profile',
+    name: 'profile',
+    component: () => import('@/views/dashboard/Profile.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/dashboard/contact',
+    name: 'contact-us',
+    component: () => import('@/views/dashboard/ContactUs.vue'),
+    meta: { requiresAuth: true }
+  },
   // Pricing
   {
     path: '/pricing',

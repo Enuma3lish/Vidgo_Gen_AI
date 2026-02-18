@@ -39,6 +39,13 @@ class AdjustCreditsRequest(BaseModel):
     reason: str
 
 
+class BatchCreditDispatchRequest(BaseModel):
+    """Batch dispatch credits to multiple users."""
+    user_ids: List[str]
+    amount: int
+    reason: str = "Admin credit dispatch"
+
+
 class ReviewMaterialRequest(BaseModel):
     action: str  # approve, reject, feature
     rejection_reason: Optional[str] = None
@@ -275,6 +282,45 @@ async def adjust_user_credits(
         raise HTTPException(status_code=400, detail=message)
 
     return {"success": True, "message": message}
+
+
+@router.post("/credits/dispatch")
+async def batch_dispatch_credits(
+    request: BatchCreditDispatchRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    Batch dispatch credits to multiple users.
+
+    Adds bonus_credits to each specified user and logs the transaction.
+    Used for promotional events, customer support, or testing.
+    """
+    service = AdminDashboardService(db)
+    dispatched = 0
+    errors = []
+
+    for user_id in request.user_ids:
+        try:
+            success, message = await service.adjust_credits(
+                user_id,
+                request.amount,
+                f"[Batch] {request.reason} (by admin {admin.email})"
+            )
+            if success:
+                dispatched += 1
+            else:
+                errors.append({"user_id": user_id, "error": message})
+        except Exception as e:
+            errors.append({"user_id": user_id, "error": str(e)})
+
+    return {
+        "success": True,
+        "dispatched": dispatched,
+        "total_requested": len(request.user_ids),
+        "amount_per_user": request.amount,
+        "errors": errors if errors else None,
+    }
 
 
 # ============================================================================

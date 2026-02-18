@@ -270,6 +270,81 @@ async def apply_promotion(
     )
 
 
+# ============ Gift Code Redemption ============
+
+from pydantic import BaseModel as _BaseModel, Field as _Field
+
+
+class RedeemCodeRequest(_BaseModel):
+    code: str = _Field(..., description="Gift/promotion code to redeem")
+
+
+class RedeemCodeResponse(_BaseModel):
+    success: bool
+    credits_added: int = 0
+    message: str = ""
+
+
+@router.post("/redeem", response_model=RedeemCodeResponse)
+async def redeem_gift_code(
+    request: RedeemCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Redeem a gift/promotion code to add credits directly.
+
+    Unlike /apply which calculates a discount, /redeem directly adds
+    bonus credits to the user's account for gift codes.
+    """
+    result = await db.execute(
+        select(Promotion).where(Promotion.code == request.code.upper())
+    )
+    promotion = result.scalar_one_or_none()
+
+    if not promotion or not is_promotion_valid(promotion):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="無效或已過期的兌換碼"
+        )
+
+    # Check user usage limit
+    user_usage = await get_user_promotion_usage_count(db, current_user.id, promotion.id)
+    if user_usage >= promotion.max_uses_per_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"此兌換碼已使用過 {promotion.max_uses_per_user} 次"
+        )
+
+    # For gift codes, the discount_value represents the credits to add
+    credits_to_add = int(promotion.discount_value)
+
+    # Add bonus credits to user
+    current_user.bonus_credits = (current_user.bonus_credits or 0) + credits_to_add
+    if not current_user.bonus_credits_expiry or current_user.bonus_credits_expiry < datetime.now(timezone.utc):
+        from datetime import timedelta
+        current_user.bonus_credits_expiry = datetime.now(timezone.utc) + timedelta(days=30)
+
+    # Record usage
+    usage = PromotionUsage(
+        user_id=current_user.id,
+        promotion_id=promotion.id,
+        discount_amount=credits_to_add,
+    )
+    db.add(usage)
+
+    # Increment promotion usage count
+    promotion.current_uses = (promotion.current_uses or 0) + 1
+
+    await db.commit()
+
+    return RedeemCodeResponse(
+        success=True,
+        credits_added=credits_to_add,
+        message=f"成功兌換 {credits_to_add} 點！"
+    )
+
+
 # ============ Admin Endpoints ============
 
 @router.get("/admin/list", response_model=List[PromotionResponse])

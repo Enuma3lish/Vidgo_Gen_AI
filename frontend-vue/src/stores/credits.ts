@@ -12,11 +12,6 @@ export const useCreditsStore = defineStore('credits', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // Insufficient Credits Modal State
-  const showInsufficientCreditsModal = ref(false)
-  const requiredCredits = ref(0)
-  const currentCredits = ref(0)
-
   // Getters
   const remainingCredits = computed(() => balance.value?.remaining_credits ?? 0)
   const weeklyRemaining = computed(() => {
@@ -97,19 +92,6 @@ export const useCreditsStore = defineStore('credits', () => {
     error.value = null
   }
 
-  // Insufficient Credits Modal Methods
-  function openInsufficientCreditsModal(required: number) {
-    requiredCredits.value = required
-    currentCredits.value = remainingCredits.value
-    showInsufficientCreditsModal.value = true
-  }
-
-  function closeInsufficientCreditsModal() {
-    showInsufficientCreditsModal.value = false
-    requiredCredits.value = 0
-    currentCredits.value = 0
-  }
-
   return {
     // State
     balance,
@@ -118,10 +100,6 @@ export const useCreditsStore = defineStore('credits', () => {
     transactions,
     loading,
     error,
-    // Insufficient Credits Modal State
-    showInsufficientCreditsModal,
-    requiredCredits,
-    currentCredits,
     // Getters
     remainingCredits,
     weeklyRemaining,
@@ -134,9 +112,6 @@ export const useCreditsStore = defineStore('credits', () => {
     getServiceCost,
     canAfford,
     deductCredits,
-    clearError,
-    // Insufficient Credits Modal Methods
-    openInsufficientCreditsModal,
-    closeInsufficientCreditsModal
+    clearError
   }
 })

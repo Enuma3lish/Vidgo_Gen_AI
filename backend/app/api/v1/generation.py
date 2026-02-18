@@ -23,13 +23,10 @@ from sqlalchemy import select, and_, func
 from app.providers.provider_router import get_provider_router, TaskType
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.similarity import get_similarity_service
-from app.services.tier_config import get_credit_cost, get_user_tier
-from app.api.deps import get_current_user_optional, get_db, is_subscribed_user, get_redis
+from app.api.deps import get_current_user_optional, get_db, is_subscribed_user
 from app.models.demo import ToolShowcase, PromptCache
 from app.models.material import Material, ToolType
-from app.models.user import User
 from app.models.user_generation import UserGeneration
-import redis.asyncio as aioredis
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,31 +35,6 @@ router = APIRouter()
 
 # Initialize provider router singleton
 provider_router = get_provider_router()
-
-
-# ============================================================================
-# Credit Check Helper
-# ============================================================================
-
-def check_credits(user: Optional[User], tool_type: str):
-    """
-    Check if user has enough credits for the generation.
-    Raises HTTP 402 if insufficient.
-    """
-    if not user:
-        return  # Anonymous users handled differently (demo mode)
-
-    cost = get_credit_cost(tool_type, user)
-    if user.total_credits < cost:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={
-                "error": "insufficient_credits",
-                "message": "點數不足，請儲值",
-                "required": cost,
-                "current": user.total_credits,
-            }
-        )
 
 
 # ============================================================================
@@ -138,26 +110,19 @@ class ServiceStatusResponse(BaseModel):
 # ============================================================================
 
 @router.post("/t2i", response_model=T2IResponse)
-async def text_to_image_with_rescue(
-    request: T2IRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-):
+async def text_to_image_with_rescue(request: T2IRequest):
     """
     Generate image from text prompt.
 
     Uses PiAPI (Wan) as primary with Pollo as backup.
-    Credit cost: Free tier 20 pts, Paid tier 80 pts.
     """
-    check_credits(current_user, "t2i")
-
     try:
         result = await provider_router.route(
             TaskType.T2I,
             {
                 "prompt": request.prompt,
                 "size": f"{request.width}*{request.height}"
-            },
-            user=current_user,
+            }
         )
 
         output = result.get("output", {})
@@ -179,18 +144,12 @@ async def text_to_image_with_rescue(
 
 
 @router.post("/i2v", response_model=I2VResponse)
-async def image_to_video_with_rescue(
-    request: I2VRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-):
+async def image_to_video_with_rescue(request: I2VRequest):
     """
     Generate video from image.
 
     Uses PiAPI (Wan I2V) as primary with Pollo as backup.
-    Credit cost: Free tier 25 pts, Paid tier 100 pts.
     """
-    check_credits(current_user, "i2v")
-
     try:
         result = await provider_router.route(
             TaskType.I2V,
@@ -198,8 +157,7 @@ async def image_to_video_with_rescue(
                 "image_url": request.image_url,
                 "prompt": request.prompt,
                 "duration": request.length
-            },
-            user=current_user,
+            }
         )
 
         output = result.get("output", {})
@@ -1014,7 +972,7 @@ async def get_topic_examples(
 @router.get("/api-status")
 async def get_api_status():
     """
-    Check status of all AI providers (PiAPI, Pollo, GoEnhance, A2E, Gemini, Trellis)
+    Check status of all AI providers (PiAPI, Pollo, GoEnhance, A2E, Gemini)
     """
     try:
         status = await provider_router.get_all_status()
@@ -1026,97 +984,5 @@ async def get_api_status():
             "pollo": {"status": "unknown"},
             "goenhance": {"status": "unknown"},
             "a2e": {"status": "unknown"},
-            "gemini": {"status": "unknown"},
-            "trellis": {"status": "unknown"},
+            "gemini": {"status": "unknown"}
         }
-
-
-# ============================================================================
-# Generation Queue & Status Tracking
-# ============================================================================
-
-class GenerationStatusResponse(BaseModel):
-    """Response for generation task status."""
-    task_id: str
-    status: str  # queued, processing, completed, failed
-    progress: int = 0  # 0-100
-    estimated_seconds: Optional[int] = None
-    result_url: Optional[str] = None
-    error: Optional[str] = None
-
-
-@router.get("/status/{task_id}", response_model=GenerationStatusResponse)
-async def get_generation_status(
-    task_id: str,
-    redis: aioredis.Redis = Depends(get_redis),
-):
-    """
-    Get the status of a generation task.
-
-    Frontend should poll this endpoint every 3 seconds to show progress.
-    Status flow: queued → processing → completed (or failed)
-    """
-    # Check Redis for status
-    status_key = f"gen:status:{task_id}"
-    progress_key = f"gen:progress:{task_id}"
-    result_key = f"gen:result:{task_id}"
-
-    task_status = await redis.get(status_key)
-    progress = await redis.get(progress_key)
-    result_url = await redis.get(result_key)
-
-    if not task_status:
-        # If no status in Redis, try polling the PiAPI task directly
-        try:
-            import httpx
-            import os
-            api_key = os.getenv("PIAPI_KEY", "")
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    f"https://api.piapi.ai/api/v1/task/{task_id}",
-                    headers={"X-API-Key": api_key}
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    task_data = data.get("data", data)
-                    piapi_status = task_data.get("status", "").lower()
-
-                    if piapi_status in ["completed", "success", "done"]:
-                        output = task_data.get("output", {})
-                        url = output.get("video_url") or output.get("image_url") or output.get("model_url")
-                        return GenerationStatusResponse(
-                            task_id=task_id,
-                            status="completed",
-                            progress=100,
-                            result_url=url,
-                        )
-                    elif piapi_status in ["failed", "error"]:
-                        return GenerationStatusResponse(
-                            task_id=task_id,
-                            status="failed",
-                            error=task_data.get("error", "Generation failed"),
-                        )
-                    else:
-                        return GenerationStatusResponse(
-                            task_id=task_id,
-                            status="processing",
-                            progress=50,
-                            estimated_seconds=180,
-                        )
-        except Exception:
-            pass
-
-        return GenerationStatusResponse(
-            task_id=task_id,
-            status="queued",
-            progress=0,
-            estimated_seconds=300,
-        )
-
-    return GenerationStatusResponse(
-        task_id=task_id,
-        status=task_status,
-        progress=int(progress) if progress else 0,
-        result_url=result_url,
-        estimated_seconds=180 if task_status == "processing" else None,
-    )

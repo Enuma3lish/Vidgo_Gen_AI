@@ -1,59 +1,24 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 5.0
-**Last Updated:** February 18, 2026
+**Version:** 4.8
+**Last Updated:** February 9, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
-**Mode:** Hybrid (Free Trial Presets + Tier-based Live Generation)
+**Mode:** Preset-Only (Material DB Lookup, No Runtime API Calls)
 **Target Audience:** Small businesses (SMB) selling everyday products/services—not luxury.
 
 ---
 
-## 0. Free Trial & Paid Generation Flow
+## 0. Demo/Trial Flow (Preset-Only)
 
-### Two-Tier System
+**User experience:** Visitors and non-subscribers try default AI functions by selecting pre-generated presets. No runtime API calls—all results are pre-computed and stored in Material DB.
 
-| Feature | Free Trial (未付費) | Paid (已付費) |
-|---------|-------------------|---------------|
-| Registration bonus | 40 points (30-day expiry) | — |
-| Credit cost | 20-35 pts/generation | 80-120 pts/generation |
-| Max resolution | 720P | 1080P |
-| Max video duration | 5 seconds | 15 seconds |
-| Audio (Avatar) | Disabled | Enabled |
-| Image size | 512×512 | 1024×1024 |
-| Download | Watermarked | Original |
-| Preset browsing | Yes | Yes |
-| Live generation | Yes (limited quality) | Yes (full quality) |
+**Flow:**
+1. **Pre-generation (startup/CLI):** Prompts → AI APIs (T2I, I2V, I2I, etc.) → results stored in `materials` table
+2. **User trial:** Frontend loads presets from `/api/v1/demo/presets/{tool_type}` → user selects preset → backend returns pre-generated result via O(1) Material DB lookup
+3. **Example correspondence:** Each example must be correctly linked—e.g., Effect tool uses the SAME T2I image as input to I2I, not a different prompt
 
-**User tier detection:**
-```python
-# app/services/tier_config.py
-def get_user_tier(user) -> str:
-    if user.purchased_credits > 0 or user.current_plan_id:
-        return "paid"
-    return "free"
-```
-
-**Credit cost table:**
-
-| Tool | Free Tier | Paid Tier |
-|------|-----------|-----------|
-| T2I | 20 pts | 80 pts |
-| I2V | 25 pts | 100 pts |
-| T2V | 30 pts | 120 pts |
-| Avatar | 35 pts | 100 pts |
-| Interior | 25 pts | 90 pts |
-| Interior 3D | 30 pts | 100 pts |
-| Background Removal | 20 pts | 80 pts |
-| Effect/Style | 20 pts | 80 pts |
-
-**Lockout flow:** When credits reach 0:
-1. Backend returns HTTP 402 with `{"error": "insufficient_credits", "message": "點數不足，請儲值"}`
-2. Frontend shows InsufficientCreditsModal
-3. User directed to `/pricing` to purchase credits
-
-**Credit packages:**
-- Starter Pack: 100 credits for NT$99 (~US$3.29)
+**Target audience:** Small companies selling everyday products (drinks, snacks, apparel, services)—not luxury brands. Prompts and scripts reflect SMB use cases.
 
 ---
 
@@ -182,8 +147,7 @@ backend/
 │   │   ├── gemini_provider.py       # Google Gemini provider
 │   │   ├── piapi_provider.py        # PiAPI (Wan) provider - Primary
 │   │   ├── pollo_provider.py        # Pollo AI provider
-│   │   ├── provider_router.py       # Smart routing between providers
-│   │   └── trellis_provider.py          # PiAPI Trellis 3D provider
+│   │   └── provider_router.py       # Smart routing between providers
 │   │
 │   ├── schemas/
 │   │   ├── __init__.py
@@ -216,10 +180,8 @@ backend/
 │   │   ├── paddle_service.py        # Paddle payment service
 │   │   ├── pollo_ai.py              # Pollo AI client
 │   │   ├── prompt_generator.py      # Prompt generation & caching
-│   │   ├── rate_limiter.py             # Redis-based anti-abuse rate limiting
 │   │   ├── rescue_service.py        # Error recovery service
 │   │   ├── subscription_service.py  # Subscription management
-│   │   ├── tier_config.py               # Free/Paid tier generation config
 │   │   ├── workflow_generator.py    # Workflow generation
 │   │   ├── workflow_service.py      # Workflow execution
 │   │   │
@@ -460,52 +422,32 @@ flowchart LR
 | Pollo AI | Pixverse, Kling, Luma | I2V, T2V | Medium | `POLLO_API_KEY` |
 | A2E.ai | Lip-sync + TTS | Avatar Video | Medium | `A2E_API_KEY`, `A2E_DEFAULT_CREATOR_ID` |
 | Gemini | Generative AI | Moderation, Backup Image | Low | `GEMINI_API_KEY` |
-| Trellis | PiAPI (Trellis 3D) | Image-to-3D GLB Model | $0.04/gen | `PIAPI_KEY` (shared) |
 
 ### 5.2 Provider Router
 
 ```python
-class TaskType(str, Enum):
-    T2I = "text_to_image"
-    I2V = "image_to_video"
-    T2V = "text_to_video"
-    V2V = "video_style_transfer"
-    INTERIOR = "interior_design"
-    INTERIOR_3D = "interior_3d"
-    AVATAR = "avatar"
-    UPSCALE = "upscale"
-    KEYFRAMES = "keyframes"
-    EFFECTS = "effects"
-    MULTI_MODEL = "multi_model"
-    MODERATION = "moderation"
-    BACKGROUND_REMOVAL = "background_removal"
+# app/providers/provider_router.py
 
 class ProviderRouter:
     """
-    Smart routing between AI providers with automatic failover.
-    Now with tier-based parameter overrides (free vs paid quality).
+    Smart routing between AI providers with fallback.
 
     Routing Strategy:
-    - T2I: PiAPI (primary) -> Pollo (backup)
-    - I2V: PiAPI Wan (primary) -> Pollo (backup)
-    - T2V: PiAPI Wan (primary) -> Pollo (backup)
-    - V2V: PiAPI Wan VACE (primary) -> Pollo (backup)
-    - Interior: PiAPI Wan Doodle (primary) -> Gemini (backup)
-    - Interior 3D: Trellis (no backup)
+    - T2I: PiAPI Wan (primary) -> Gemini (backup)
+    - I2V: Pollo AI -> PiAPI Wan
+    - T2V: Pollo AI -> PiAPI Wan
     - Avatar: A2E.ai (no backup)
-    - Background Removal: PiAPI (no backup)
-    - Keyframes/Effects/MultiModel: Pollo only
-    - Moderation: Gemini only
+    - Interior: PiAPI Wan -> Gemini
     """
 
-    async def route(self, task_type, params, user_tier="free", user=None):
-        # Auto-detect tier from user object
-        if user is not None:
-            user_tier = get_user_tier(user)
-        # Apply tier-based parameter overrides
-        params = self._apply_tier_overrides(task_type, params, user_tier)
-        # Route to provider with failover
-        ...
+    ROUTING_CONFIG = {
+        "text_to_image": {"primary": "piapi", "backup": "gemini"},
+        "image_to_image": {"primary": "piapi", "backup": None},  # Style transfer
+        "image_to_video": {"primary": "pollo", "backup": "piapi"},
+        "text_to_video": {"primary": "pollo", "backup": "piapi"},
+        "avatar": {"primary": "a2e", "backup": None},
+        "interior": {"primary": "piapi", "backup": "gemini"},
+    }
 ```
 
 ### 5.3 A2E.ai Avatar Service (Verified Workflow)
@@ -568,16 +510,6 @@ GET /api/v1/anchor/character_list
 - **Gender-name consistency:** Male character name must match male face; female name on female face. Characters are partitioned by detected gender; male voice uses male character, female voice uses female character.
 - **Chinese priority:** Most AI Avatars are zh-TW (VidGo targets Taiwan/SMB market). Language order: zh-TW first, then en.
 - **Product/service focus:** Scripts must clearly sell a product or service (e.g., "買我們的珍珠奶茶！" / "Buy our bubble tea now!"). Not generic brand fluff—explicit promotion.
-
-**Asian-Only Constraint (NEW):**
-- ALL avatars must be Asian/Chinese/Taiwanese. Western/European/African avatars are filtered out.
-- `filter_asian_avatars(characters)` filters the character list from A2E API.
-- Keywords: 亞洲, 華人, 台灣, Chinese, Asian, Taiwanese, plus common Asian names.
-
-**Gender-Voice Matching (NEW):**
-- Male avatars can ONLY use male voices; female avatars can ONLY use female voices.
-- `validate_avatar_voice_gender(avatar_gender, voice_id)` raises ValueError for mismatches.
-- Voice gender map maintained in `a2e_service.py`.
 
 ### 5.4 Pollo AI Service (Verified Workflow)
 
@@ -664,43 +596,19 @@ GET /api/v1/anchor/character_list
 
 ### 5.6 Interior Design Service
 
-**Two modes:**
-1. **Free/Paid users with credits:** Live generation via PiAPI Wan Doodle (primary) / Gemini (backup)
-2. **Preset browsing:** Pre-generated examples from Material DB
+**Current Implementation (Free Users - Example Gallery Mode)**:
+-   Free users browse pre-generated interior design examples
+-   Examples created via Text-to-Image (T2I) generation
+-   No actual processing of user-uploaded images
+-   Watermarked results, no downloads
 
-**Room-Type Logical Constraints:**
-A room can ONLY change style, NOT transform into a different room type:
-```python
-ROOM_TYPE_CONSTRAINTS = {
-    "bathroom": ["bathroom"],
-    "kitchen": ["kitchen"],
-    "bedroom": ["bedroom"],
-    "living_room": ["living_room"],
-    "dining_room": ["dining_room"],
-    "home_office": ["home_office"],
-    "balcony": ["balcony"],
-}
-# bathroom → modern bathroom: OK
-# bathroom → kitchen: BLOCKED (HTTP 400)
-```
-
-**3D Model Generation (Trellis via PiAPI):**
-- Endpoint: `POST /interior/3d-model`
-- Provider: PiAPI Trellis (`Qubico/trellis`)
-- Input: 2D interior design image URL
-- Output: GLB 3D mesh file for Three.js rendering
-- Cost: ~$0.04 per generation
-- Parameters: mesh_simplify (0.95), texture_size (1024), generate_model, generate_color
-
-**Workflow:**
-```
-User uploads room photo
-    → Validate room_type constraints
-    → Check credits (HTTP 402 if insufficient)
-    → PiAPI Wan Doodle generates redesigned room
-    → (Optional) Trellis generates 3D GLB model
-    → Frontend renders in Three.js viewer
-```
+**Future Implementation (Paid Users - True I2I Mode)**:
+-   **Objective**: Convert user-uploaded floor plans into photorealistic 3D visualizations
+-   **Workflow**:
+    1. Parse CAD/Floor Plan files into high-contrast sketches
+    2. Use **PiAPI I2I/ControlNet** to generate 3D renders from sketches
+    3. Apply style refinements via natural language prompts
+-   **Benefits**: True transformation vs example browsing
 
 ### 5.7 Virtual Try-On with Model Library (NEW)
 
@@ -845,38 +753,6 @@ python -m scripts.main_pregenerate --tool effect --limit 15
 
 ---
 
-### 5.9 Trellis 3D Provider (NEW)
-
-**Provider:** PiAPI Trellis (`Qubico/trellis`)
-**Base URL:** `https://api.piapi.ai/api/v1`
-**Authentication:** X-API-Key header (shared with PiAPI)
-
-**Supported task types:**
-- `image-to-3d`: Convert 2D image to 3D GLB model
-- `text-to-3d`: Generate 3D model from text description
-
-**Workflow:**
-```
-POST /api/v1/task
-{
-    "model": "Qubico/trellis",
-    "task_type": "image-to-3d",
-    "input": {
-        "image": "https://...image.jpg",
-        "mesh_simplify": 0.95,
-        "texture_size": 1024,
-        "generate_model": true,
-        "generate_color": true
-    }
-}
-→ Poll GET /api/v1/task/{task_id}
-→ Output: { "model_url": "https://...file.glb" }
-```
-
-**Output format:** GLB (GL Binary) mesh file, viewable in Three.js with GLTFLoader.
-
----
-
 ## 6. Payment & Invoice System
 
 ### 6.1 Supported Payment Providers
@@ -919,24 +795,7 @@ PADDLE_WEBHOOK_SECRET: str = "your_webhook_secret"
 
 - `GET /subscriptions/plans` lists active plans with `price_monthly`, `price_yearly`, and features. It ensures default plans exist (e.g. via `ensure_vidgo_plans(db)` or `ensure_default_plans(db)` depending on codebase) so that if the DB has no plans, default plans with prices and credits are seeded before returning.
 
-### 6.6 Credit Packages (NEW)
-
-| Package | Credits | Price (TWD) | Price (USD) | Popular |
-|---------|---------|-------------|-------------|---------|
-| Starter Pack | 100 | NT$99 | $3.29 | Yes |
-| Standard Pack | 300 | NT$249 | $8.29 | No |
-| Premium Pack | 1000 | NT$699 | $23.29 | No |
-
-**Subscription Plans:**
-
-| Plan | Price/month | Credits/month | Resolution | Features |
-|------|------------|---------------|------------|----------|
-| Free | NT$0 | 0 | 720P | Watermarked, basic tools |
-| Starter | NT$299 | 200 | 1080P | Full quality |
-| Pro | NT$649 | 500 | 1080P | Priority queue |
-| Pro Plus | NT$1,299 | 2000 | 4K | Batch processing |
-
-### 6.8 Email verification (auth)
+### 6.6 Email verification (auth)
 
 - **Register:** `POST /auth/register` creates user (is_active=false), sends 6-digit code via email.
 - **Verify:** `POST /auth/verify-code` (email, code) validates the code, activates the user, then returns **AuthResponse** (user, access_token, refresh_token, token_type) so the frontend can set the session without a separate login call.
@@ -983,9 +842,6 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-
-    # Anti-abuse: reCAPTCHA
-    RECAPTCHA_SECRET_KEY: str = ""  # Google reCAPTCHA v2 secret key
 
     # Watermark
     WATERMARK_TEXT: str = "VidGo Demo"
@@ -1221,19 +1077,6 @@ class TopicCategory(str, Enum):
 ```
 
 If you see topics like `luxury_watch` or `ecommerce_pitch_en` in the frontend, they will NOT match any materials in the database.
-
-### 9.6 Anti-abuse System (NEW)
-
-**Rate Limiting (Redis-based):**
-- Registration: Max 3 per IP per hour, 5 per email per day
-- Generation: Max 10 per minute per user
-- Login: Max 10 per IP per 15 minutes
-
-**Implementation:** `app/services/rate_limiter.py` uses Redis INCR with TTL windows.
-
-**CAPTCHA:** Google reCAPTCHA v2 on registration form.
-- Backend: `RECAPTCHA_SECRET_KEY` in config.py
-- Frontend: reCAPTCHA widget in Register.vue
 
 ---
 
@@ -1479,7 +1322,7 @@ The works gallery endpoint returns a mix of image and video materials for the ho
 
 ---
 
-*Document Version: 5.0*
-*Last Updated: February 18, 2026*
-*Mode: Hybrid (Free Trial + Paid Generation)*
+*Document Version: 4.7*
+*Last Updated: February 6, 2026*
+*Mode: Preset-Only (Material DB Lookup, No Runtime API Calls)*
 *Target: SMB (small businesses selling everyday products/services)*

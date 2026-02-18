@@ -34,21 +34,6 @@ export interface ChartDataPoint {
   revenue?: number
 }
 
-export interface ToolBreakdownItem {
-  tool_type: string
-  count: number
-}
-
-export interface PlanDistributionItem {
-  plan: string
-  count: number
-}
-
-export interface CreditUsageItem {
-  date: string
-  credits: number
-}
-
 export interface AdminUser {
   id: string
   email: string
@@ -251,26 +236,6 @@ export const adminApi = {
   // AI Service Status
   async getAIServicesStatus(): Promise<AIServicesResponse> {
     const response = await apiClient.get('/api/v1/admin/ai-services')
-    return response.data
-  },
-
-  // New Chart Endpoints
-  async getToolBreakdown(days: number = 30): Promise<ToolBreakdownItem[]> {
-    const response = await apiClient.get('/api/v1/admin/charts/tool-breakdown', {
-      params: { days }
-    })
-    return response.data
-  },
-
-  async getPlanDistribution(): Promise<PlanDistributionItem[]> {
-    const response = await apiClient.get('/api/v1/admin/charts/plan-distribution')
-    return response.data
-  },
-
-  async getCreditUsage(days: number = 30): Promise<CreditUsageItem[]> {
-    const response = await apiClient.get('/api/v1/admin/charts/credit-usage', {
-      params: { days }
-    })
     return response.data
   }
 }

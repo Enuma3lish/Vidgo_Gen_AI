@@ -13,49 +13,9 @@ const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const isLoading = ref(false)
-const recaptchaToken = ref<string | null>(null)
-const recaptchaWidgetId = ref<number | null>(null)
-const recaptchaContainer = ref<HTMLElement | null>(null)
-
-const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || ''
-const recaptchaEnabled = computed(() => !!siteKey)
 
 const passwordMatch = computed(() => password.value === confirmPassword.value)
 const passwordStrong = computed(() => password.value.length >= 8)
-
-function onRecaptchaLoad() {
-  if (!recaptchaContainer.value || !siteKey) return
-  try {
-    recaptchaWidgetId.value = (window as any).grecaptcha.render(recaptchaContainer.value, {
-      sitekey: siteKey,
-      callback: (token: string) => { recaptchaToken.value = token },
-      'expired-callback': () => { recaptchaToken.value = null },
-      theme: 'dark'
-    })
-  } catch {
-    // Widget may already be rendered
-  }
-}
-
-// Load reCAPTCHA script dynamically
-if (siteKey && typeof document !== 'undefined') {
-  const existingScript = document.querySelector('script[src*="recaptcha"]')
-  if (!existingScript) {
-    const script = document.createElement('script')
-    script.src = `https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoaded&render=explicit`
-    script.async = true
-    script.defer = true
-    ;(window as any).onRecaptchaLoaded = onRecaptchaLoad
-    document.head.appendChild(script)
-  } else {
-    // Script already loaded, render manually
-    setTimeout(() => {
-      if ((window as any).grecaptcha?.render) {
-        onRecaptchaLoad()
-      }
-    }, 500)
-  }
-}
 
 async function handleSubmit() {
   if (!email.value || !password.value || !confirmPassword.value) {
@@ -73,17 +33,11 @@ async function handleSubmit() {
     return
   }
 
-  if (recaptchaEnabled.value && !recaptchaToken.value) {
-    uiStore.showError('Please complete the reCAPTCHA verification')
-    return
-  }
-
   isLoading.value = true
   try {
     await authStore.register({
       email: email.value,
-      password: password.value,
-      recaptcha_token: recaptchaToken.value || undefined
+      password: password.value
     })
 
     uiStore.showSuccess('Registration successful! Please verify your email.')
@@ -91,11 +45,6 @@ async function handleSubmit() {
     router.push({ path: '/auth/verify', query: { email: email.value } })
   } catch (error) {
     // Error is already set in store
-    // Reset reCAPTCHA on error
-    if (recaptchaWidgetId.value !== null && (window as any).grecaptcha) {
-      (window as any).grecaptcha.reset(recaptchaWidgetId.value)
-      recaptchaToken.value = null
-    }
   } finally {
     isLoading.value = false
   }
@@ -172,14 +121,9 @@ async function handleSubmit() {
             </p>
           </div>
 
-          <!-- reCAPTCHA -->
-          <div v-if="recaptchaEnabled" class="flex justify-center">
-            <div ref="recaptchaContainer"></div>
-          </div>
-
           <button
             type="submit"
-            :disabled="isLoading || !passwordMatch || !passwordStrong || (recaptchaEnabled && !recaptchaToken)"
+            :disabled="isLoading || !passwordMatch || !passwordStrong"
             class="btn-primary w-full"
           >
             <span v-if="isLoading" class="flex items-center justify-center gap-2">

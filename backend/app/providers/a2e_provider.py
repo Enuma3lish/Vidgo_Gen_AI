@@ -5,6 +5,8 @@ Supports:
 - Text-to-speech with lip sync
 - Multiple voices and languages
 - High quality avatar videos
+- Asian-only avatar filtering
+- Gender-voice matching enforcement
 """
 import httpx
 import asyncio
@@ -13,6 +15,12 @@ import logging
 import os
 
 from app.providers.base import BaseProvider
+from app.services.a2e_service import (
+    ASIAN_AVATAR_KEYWORDS,
+    VOICE_GENDER_MAP,
+    filter_asian_avatars,
+    validate_avatar_voice_gender,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +29,20 @@ class A2EProvider(BaseProvider):
     """
     A2E.ai Provider - Best value for avatar/digital human videos.
     No backup provider - A2E is the primary for avatars.
+
+    Enforces:
+    - Asian-only avatars (Chinese/Taiwanese/Asian characters only)
+    - Gender-voice matching (male avatars use male voices, female use female)
     """
 
     name = "a2e"
     BASE_URL = "https://api.a2e.ai"
 
     SUPPORTED_LANGUAGES = ["en", "zh-TW", "zh-CN", "ja", "ko", "es", "fr", "de"]
+
+    # Re-export constants so consumers of the provider can access them directly
+    ASIAN_AVATAR_FILTER = ASIAN_AVATAR_KEYWORDS
+    VOICE_GENDER_MAP = VOICE_GENDER_MAP
 
     def __init__(self):
         self.api_key = os.getenv("A2E_API_KEY", "")
@@ -66,9 +82,35 @@ class A2EProvider(BaseProvider):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def get_characters(self, asian_only: bool = True) -> List[Dict[str, Any]]:
+        """
+        Get available avatar characters, optionally filtered to Asian only.
+
+        Args:
+            asian_only: If True (default), return only Asian avatars.
+
+        Returns:
+            List of character dicts.
+        """
+        try:
+            response = await self.client.get(f"{self.BASE_URL}/characters")
+            response.raise_for_status()
+            characters = response.json().get("characters", [])
+
+            if asian_only:
+                characters = filter_asian_avatars(characters)
+                logger.info(f"Filtered to {len(characters)} Asian characters")
+
+            return characters
+        except Exception as e:
+            logger.error(f"Failed to get characters: {e}")
+            return []
+
     async def generate_avatar(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate avatar video with lip sync.
+
+        Enforces Asian-only avatars and gender-voice matching.
 
         Args:
             params: {
@@ -76,11 +118,15 @@ class A2EProvider(BaseProvider):
                 "text": str (script to speak),
                 "voice": str (voice ID or preset),
                 "language": str (default "en"),
-                "emotion": str (optional, "neutral", "happy", "serious")
+                "emotion": str (optional, "neutral", "happy", "serious"),
+                "avatar_gender": str (optional, "male"/"female"/"neutral")
             }
 
         Returns:
             {"success": True, "output": {"video_url": str, "audio_url": str}}
+
+        Raises:
+            ValueError: If gender-voice combination is invalid.
         """
         self._log_request("generate_avatar", params)
 
@@ -89,10 +135,21 @@ class A2EProvider(BaseProvider):
             logger.warning(f"Unsupported language: {language}, defaulting to en")
             language = "en"
 
+        # --- Gender-voice validation ---
+        avatar_gender = params.get("avatar_gender")
+        voice = params.get("voice", "default")
+
+        if avatar_gender and voice and voice != "default":
+            # This will raise ValueError on mismatch
+            validate_avatar_voice_gender(avatar_gender, voice)
+            logger.info(
+                f"Gender-voice validation passed: {avatar_gender} avatar + voice {voice}"
+            )
+
         payload = {
             "image_url": params["image_url"],
             "text": params["text"],
-            "voice": params.get("voice", "default"),
+            "voice": voice,
             "language": language,
             "emotion": params.get("emotion", "neutral"),
             "quality": params.get("quality", "high"),
@@ -113,6 +170,34 @@ class A2EProvider(BaseProvider):
         except Exception as e:
             logger.error(f"Failed to get voices: {e}")
             return []
+
+    async def get_voices_for_gender(
+        self, language: str = "en", gender: str = "neutral"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get voices filtered by gender compatibility.
+
+        Args:
+            language: Language code.
+            gender: Avatar gender to match ("male", "female", "neutral").
+
+        Returns:
+            List of compatible voice dicts.
+        """
+        all_voices = await self.get_voices(language)
+        gender = gender.strip().lower()
+
+        if gender == "neutral":
+            return all_voices
+
+        compatible = []
+        for voice in all_voices:
+            voice_id = voice.get("id", "")
+            voice_gender = VOICE_GENDER_MAP.get(voice_id, voice.get("gender", "neutral"))
+            if voice_gender == gender or voice_gender == "neutral":
+                compatible.append(voice)
+
+        return compatible if compatible else all_voices
 
     async def _submit_and_poll(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Submit avatar generation task and poll for result."""

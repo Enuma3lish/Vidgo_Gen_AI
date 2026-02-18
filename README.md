@@ -2,7 +2,7 @@
 
 **AI-Powered Visual Content Generation for E-commerce**
 
-VidGo is a comprehensive AI platform that enables e-commerce businesses to create professional visual content using cutting-edge generative AI technology. The platform operates in **PRESET-ONLY mode**, providing instant access to pre-generated high-quality examples while driving conversions to paid subscriptions.
+VidGo is a comprehensive AI platform that enables e-commerce businesses to create professional visual content using cutting-edge generative AI technology. The platform operates with a **two-tier model**: free users browse pre-generated examples (PRESET mode), while paid subscribers access real-time AI generation with full-quality output.
 
 ---
 
@@ -16,6 +16,7 @@ VidGo is a comprehensive AI platform that enables e-commerce businesses to creat
 - [Configuration](#configuration)
 - [Docker Services](#docker-services)
 - [Development](#development)
+- [Security & Anti-Abuse](#security--anti-abuse)
 - [Documentation](#documentation)
 
 ---
@@ -48,16 +49,22 @@ VidGo is a comprehensive AI platform that enables e-commerce businesses to creat
                                                |
                     +--------------------------+
                     |          |               |
-         +----------+--+  +----+-----+  +------+-------+
-         |  PiAPI/Wan  |  | Pollo AI |  |    A2E.ai    |
-         | - T2I       |  | - I2V    |  | - Avatar     |
-         | - I2V       |  | - T2V    |  | - Lip-sync   |
          +-------------+  +----------+  +--------------+
+         |    PiAPI     |  | Pollo AI |  |    A2E.ai    |
+         | - T2I / I2I  |  | - I2V    |  | - Avatar     |
+         | - I2V / T2V  |  | - T2V    |  | - Lip-sync   |
+         | - Try-On     |  | - V2V    |  +--------------+
+         | - 3D(Trellis)|  +----------+
+         +-------------+         +---------------+
+                                 | Google Gemini  |
+                                 | - Moderation   |
+                                 | - Interior(bkp)|
+                                 +---------------+
 ```
 
-### PRESET-ONLY Mode
+### Demo / Free Tier (PRESET Mode)
 
-VidGo operates in **PRESET-ONLY mode** for demo users:
+Free users experience **PRESET mode**:
 
 1. **No Runtime API Calls**: All demo content is pre-generated before service starts
 2. **Instant Experience**: Users see results immediately without waiting for AI processing
@@ -65,34 +72,46 @@ VidGo operates in **PRESET-ONLY mode** for demo users:
 4. **Watermarked Results**: All demo outputs have watermarks; full downloads require subscription
 5. **Conversion-Focused**: Demo experience drives users toward paid subscriptions
 
+### Paid Tier (Real-Time Generation)
+
+Subscribers receive real-time AI generation with:
+
+1. **Full Resolution**: 1080P output (vs 720P for free tier)
+2. **No Watermarks**: Clean output with full download access
+3. **Credit System**: Free tier 20-35 pts vs Paid tier 80-120 pts per generation
+4. **Registration Bonus**: 40 credits (30-day expiry) for new users to trial paid features
+5. **Custom Uploads**: Upload and process custom images across all tools
+
 ---
 
-**Note on Free vs Paid Features**
+**Free vs Paid Features**
 
-*Current Implementation (Free Users)*:
-- Free users can browse pre-generated AI example galleries
-- Examples are created using Text-to-Image generation
-- Results are watermarked and downloads are restricted
-
-*Roadmap (Paid Users)*:
-- Upload custom images for processing
-- True Image-to-Image transformations using PiAPI I2I/ControlNet
-- Room Redesign: Process actual floor plans into 3D renders
-- Product Scene: Composite real products into custom scenes
-- Virtual Try-On: Apply clothing to user-selected models
+| Capability | Free (Demo) | Paid (Subscriber) |
+|---|---|---|
+| Browse AI galleries | Pre-generated, watermarked | Full-quality, downloadable |
+| Upload custom images | -- | All tools |
+| I2I Transformations | Demo result | Real-time via PiAPI Flux |
+| Room Redesign + 3D | Gallery only | Real-time redesign + GLB export |
+| Product Scene Compositing | Gallery only | 3-step pipeline (rembg + T2I + composite) |
+| Virtual Try-On | Gallery only | Real-time via Kling AI (PiAPI) |
+| Style Effects | Browse styles | Real-time via GoEnhance |
+| Credits on signup | 40 pts (30-day expiry) | Purchase packages (Starter / Standard / Premium) |
 
 ## Core Features
 
-### 6 Core AI Tools
+### 9 Core AI Tools
 
 | Tool | Description | API Provider |
 |------|-------------|--------------|
-| **Background Removal** | Remove backgrounds from product images | PiAPI Wan / Gemini |
-| **Product Scene** | Product Photography Inspiration Gallery | PiAPI Wan T2I |
-| **Virtual Try-On** | Fashion Model Showcase | PiAPI Wan T2I |
-| **Room Redesign** | Interior Design Example Gallery | PiAPI Wan T2I |
-| **Short Video** | Image-to-video, Text-to-video | Pollo AI |
+| **Background Removal** | Remove backgrounds from product images | PiAPI (Flux) |
+| **Product Scene** | Composite products into professional scenes (3-step I2I) | PiAPI T2I + PIL |
+| **Virtual Try-On** | Place garments on AI models | Kling AI via PiAPI |
+| **Room Redesign** | AI interior design with 10 styles + iterative editing | Gemini 2.5 Flash |
+| **3D Model Generation** | Convert 2D designs to interactive GLB models | PiAPI Trellis (Qubico) |
+| **Short Video** | Image-to-video, Text-to-video | PiAPI Wan / Pollo AI |
 | **AI Avatar** | Talking avatar with lip-sync TTS | A2E.ai |
+| **Image Effects** | Style transfer (anime, ghibli, 3D, etc.) + HD upscale | GoEnhance |
+| **I2I Transform** | Image-to-image transformation with prompt control | PiAPI Flux (img2img) |
 
 ---
 
@@ -127,18 +146,22 @@ VidGo operates in **PRESET-ONLY mode** for demo users:
 | Docker Compose | 2.0+ | Orchestration |
 
 ### AI Providers
-| Provider | API | Purpose |
-|----------|-----|---------|
-| PiAPI | Wan API | Text-to-Image, Image-to-Video, Interior Design |
-| Pollo AI | Pixverse, Pollo | Image-to-Video, Text-to-Video |
-| A2E.ai | Lip-sync API | Avatar Video with TTS |
-| Google Gemini | Generative AI | Moderation, Backup Image |
+| Provider | Services | Details |
+|----------|----------|---------|
+| PiAPI | T2I, I2I, I2V, T2V, Interior, BG Removal, 3D | Flux1-schnell (free) / Flux (paid); Wan for video; Trellis for 3D |
+| PiAPI (Kling) | Virtual Try-On | Kling AI accessed through PiAPI |
+| Pollo AI | I2V, T2V, V2V | Backup for video; keyframes, effects, multi-model |
+| A2E.ai | Avatar + Lip-sync TTS | Photo-to-avatar; Asian-focused; gender-voice matching |
+| Google Gemini | Moderation, Interior (backup) | Content moderation; emergency fallback for interior design |
+| GoEnhance | Style Effects, HD Enhance | White-labeled as VidGo Effects |
 
-### Payment Providers
-| Provider | Region | Features |
-|----------|--------|----------|
-| ECPay | Taiwan | Credit card, ATM, CVS |
-| Paddle | International | Credit card, PayPal |
+### Payment & Billing
+| Provider | Region | Status |
+|----------|--------|--------|
+| Paddle | International | **Primary** - credit card, PayPal |
+| ECPay | Taiwan | Legacy (optional, still in codebase) |
+
+**Credit Packages**: Starter / Standard / Premium tiers. Gift codes and promotional discounts supported.
 
 ---
 
@@ -148,7 +171,7 @@ VidGo operates in **PRESET-ONLY mode** for demo users:
 Vidgo_Gen_AI/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/             # API endpoints (17 routers)
+│   │   ├── api/v1/             # API endpoints (20 routers)
 │   │   ├── core/               # Config, database, security
 │   │   ├── models/             # SQLAlchemy models
 │   │   ├── providers/          # AI provider integrations
@@ -232,19 +255,23 @@ Vidgo_Gen_AI/
 PIAPI_KEY=your_piapi_key
 POLLO_API_KEY=your_pollo_key
 A2E_API_KEY=your_a2e_key
+A2E_API_ID=your_a2e_api_id
+A2E_DEFAULT_CREATOR_ID=your_creator_id
 GEMINI_API_KEY=your_gemini_key
 
-# Payment - Taiwan
-ECPAY_MERCHANT_ID=
-ECPAY_HASH_KEY=
-ECPAY_HASH_IV=
-
-# Payment - International
+# Payment - Primary (International)
 PADDLE_API_KEY=
 PADDLE_PUBLIC_KEY=
 
+# Payment - Legacy (Taiwan, optional)
+# ECPAY_MERCHANT_ID=
+# ECPAY_HASH_KEY=
+# ECPAY_HASH_IV=
+
 # Security
 SECRET_KEY=your-secret-key-here
+RECAPTCHA_SECRET_KEY=your_recaptcha_v2_secret
+RECAPTCHA_SITE_KEY=your_recaptcha_v2_site_key
 
 # Email (dev uses Mailpit)
 SMTP_HOST=mailpit
@@ -318,14 +345,39 @@ npm run dev
 
 | Prefix | Description |
 |--------|-------------|
-| `/api/v1/auth` | Authentication |
+| `/api/v1/auth` | Authentication & registration |
 | `/api/v1/demo` | Demo/preset endpoints |
 | `/api/v1/generate` | Content generation |
-| `/api/v1/tools` | Tool operations |
-| `/api/v1/credits` | Credit management |
+| `/api/v1/tools` | Tool operations (BG removal, try-on, I2I, etc.) |
+| `/api/v1/credits` | Credit balance & transactions |
 | `/api/v1/admin` | Admin dashboard |
-| `/api/v1/interior` | Interior design |
+| `/api/v1/interior` | Interior design & 3D models |
 | `/api/v1/workflow` | Workflow management |
+| `/api/v1/subscriptions` | Subscription management |
+| `/api/v1/effects` | Style effects & HD enhance |
+| `/api/v1/promotions` | Promotions & gift codes |
+| `/api/v1/plans` | Subscription plans & pricing |
+| `/api/v1/payments` | Payment processing (Paddle) |
+| `/api/v1/landing` | Landing page data |
+| `/api/v1/quota` | Usage quotas |
+| `/api/v1/session` | Session tracking |
+| `/api/v1/prompts` | Prompt templates |
+| `/api/v1/user` | User works & generations |
+| `/api/v1/social` | Social sharing |
+| `/api/v1/models` | AI model registry |
+
+---
+
+## Security & Anti-Abuse
+
+| Mechanism | Implementation |
+|-----------|---------------|
+| Rate Limiting | Redis-based; per-IP and per-email limits on registration and generation |
+| CAPTCHA | Google reCAPTCHA v2 on registration |
+| Watermarking | All demo outputs watermarked; subscribers get clean output |
+| Credit Gating | All generation endpoints check credit balance before processing (HTTP 402) |
+
+See [backend architecture doc](./vidgo-backend-architecture.md) for full security details.
 
 ---
 
@@ -349,5 +401,5 @@ npm run dev
 
 ---
 
-*Last Updated: January 12, 2026*
+*Last Updated: February 18, 2026*
 

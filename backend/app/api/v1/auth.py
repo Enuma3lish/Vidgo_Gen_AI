@@ -3,7 +3,7 @@ Authentication API endpoints with email verification support.
 """
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -29,7 +29,6 @@ from app.schemas.user import (
 )
 from app.services.email_service import email_service
 from app.services.email_verify import EmailVerificationService
-from app.services.rate_limiter import get_rate_limiter
 import redis.asyncio as redis
 
 settings = get_settings()
@@ -56,27 +55,13 @@ class LoginRequest(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
-    request: Request,
     db: AsyncSession = Depends(deps.get_db),
     login_data: LoginRequest = Body(...)
 ) -> Any:
     """
     Login with email and password.
     Returns user info and token pair (access + refresh).
-    Rate-limited: 10 attempts per IP per 15 minutes.
     """
-    # Rate limiting
-    redis_client = await get_redis_client()
-    if redis_client:
-        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
-            request.client.host if request.client else "unknown"
-        )
-        rate_limiter = get_rate_limiter(redis_client)
-        try:
-            await rate_limiter.check_login_rate(client_ip)
-        finally:
-            await redis_client.close()
-
     # Find user by email
     result = await db.execute(select(User).where(User.email == login_data.email))
     user = result.scalars().first()
@@ -187,29 +172,13 @@ async def refresh_token(
 
 @router.post("/register", response_model=MessageResponse)
 async def register(
-    request: Request,
     db: AsyncSession = Depends(deps.get_db),
     user_in: UserCreate = Body(...)
 ) -> Any:
     """
     Register a new user.
     Sends 6-digit verification code - user must verify before logging in.
-    Rate-limited: 3 registrations per IP per hour, 5 per email per day.
     """
-    # Rate limiting: check IP and email
-    redis_client = await get_redis_client()
-    if redis_client:
-        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
-            request.client.host if request.client else "unknown"
-        )
-        rate_limiter = get_rate_limiter(redis_client)
-        try:
-            await rate_limiter.check_registration_rate(client_ip, user_in.email)
-        finally:
-            await redis_client.close()
-        # Re-open redis for later use
-        redis_client = None
-
     # Check password confirmation if provided
     if user_in.password_confirm and user_in.password != user_in.password_confirm:
         raise HTTPException(
@@ -242,7 +211,7 @@ async def register(
                 message="A verification code has been sent to your email. Please check your inbox."
             )
 
-    # Create new user with 40 bonus credits for free trial
+    # Create new user
     user = User(
         email=user_in.email,
         username=user_in.username,
@@ -250,9 +219,7 @@ async def register(
         hashed_password=security.get_password_hash(user_in.password),
         is_active=False,  # Will be activated after email verification
         email_verified=False,
-        email_verification_sent_at=datetime.now(timezone.utc),
-        bonus_credits=40,  # Free trial: 40 bonus points on registration
-        bonus_credits_expiry=datetime.now(timezone.utc) + timedelta(days=30),
+        email_verification_sent_at=datetime.now(timezone.utc)
     )
 
     db.add(user)
@@ -603,6 +570,8 @@ async def resend_verification_code(
 
 
 # ============== IP-based Language Detection ==============
+
+from fastapi import Request
 
 # Country code to language mapping
 COUNTRY_LANGUAGE_MAP = {

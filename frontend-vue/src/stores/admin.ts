@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { adminApi, createAdminWebSocket } from '@/api/admin'
-import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse, ToolBreakdownItem, PlanDistributionItem, CreditUsageItem } from '@/api/admin'
+import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse } from '@/api/admin'
 
 export const useAdminStore = defineStore('admin', () => {
   // State
@@ -18,9 +18,6 @@ export const useAdminStore = defineStore('admin', () => {
   const generationChart = ref<ChartDataPoint[]>([])
   const revenueChart = ref<ChartDataPoint[]>([])
   const userGrowthChart = ref<ChartDataPoint[]>([])
-  const toolBreakdownChart = ref<ToolBreakdownItem[]>([])
-  const planDistribution = ref<PlanDistributionItem[]>([])
-  const creditUsageChart = ref<CreditUsageItem[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const wsConnection = ref<WebSocket | null>(null)
@@ -172,49 +169,18 @@ export const useAdminStore = defineStore('admin', () => {
     isLoading.value = true
     error.value = null
     try {
-      const [genData, revData, growthData, toolData, planData] = await Promise.all([
+      const [genData, revData, growthData] = await Promise.all([
         adminApi.getGenerationChart(days),
         adminApi.getRevenueChart(months),
-        adminApi.getUserGrowthChart(days),
-        adminApi.getToolBreakdown(),
-        adminApi.getPlanDistribution()
+        adminApi.getUserGrowthChart(days)
       ])
       generationChart.value = genData
       revenueChart.value = revData
       userGrowthChart.value = growthData
-      toolBreakdownChart.value = toolData
-      planDistribution.value = planData
     } catch (e: any) {
       error.value = e.message || 'Failed to fetch charts'
     } finally {
       isLoading.value = false
-    }
-  }
-
-  async function fetchToolBreakdown(days: number = 30) {
-    error.value = null
-    try {
-      toolBreakdownChart.value = await adminApi.getToolBreakdown(days)
-    } catch (e: any) {
-      error.value = e.message || 'Failed to fetch tool breakdown'
-    }
-  }
-
-  async function fetchPlanDistribution() {
-    error.value = null
-    try {
-      planDistribution.value = await adminApi.getPlanDistribution()
-    } catch (e: any) {
-      error.value = e.message || 'Failed to fetch plan distribution'
-    }
-  }
-
-  async function fetchCreditUsage(days: number = 30) {
-    error.value = null
-    try {
-      creditUsageChart.value = await adminApi.getCreditUsage(days)
-    } catch (e: any) {
-      error.value = e.message || 'Failed to fetch credit usage'
     }
   }
 
@@ -255,9 +221,6 @@ export const useAdminStore = defineStore('admin', () => {
     generationChart,
     revenueChart,
     userGrowthChart,
-    toolBreakdownChart,
-    planDistribution,
-    creditUsageChart,
     isLoading,
     error,
 
@@ -279,9 +242,6 @@ export const useAdminStore = defineStore('admin', () => {
     fetchSystemHealth,
     fetchAIServicesStatus,
     fetchCharts,
-    fetchToolBreakdown,
-    fetchPlanDistribution,
-    fetchCreditUsage,
     connectWebSocket,
     disconnectWebSocket
   }

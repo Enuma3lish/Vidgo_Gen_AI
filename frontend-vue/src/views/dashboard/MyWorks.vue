@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { userApi } from '@/api/user'
 import type { UserGeneration } from '@/api/user'
+import { SocialShareModal } from '@/components/molecules'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -168,12 +169,16 @@ async function deleteWork() {
   }
 }
 
-// Share placeholder (social share modal will be implemented later)
+// Social share modal
+const showShareModal = ref(false)
+const shareUrl = ref('')
+
 function shareWork() {
   if (!selectedWork.value) return
   const url = selectedWork.value.result_video_url || selectedWork.value.result_image_url
-  if (url && navigator.clipboard) {
-    navigator.clipboard.writeText(url)
+  if (url) {
+    shareUrl.value = url
+    showShareModal.value = true
   }
 }
 
@@ -439,5 +444,13 @@ const skeletonCount = 8
         </div>
       </div>
     </Teleport>
+
+    <!-- Social Share Modal -->
+    <SocialShareModal
+      :visible="showShareModal"
+      :content-url="shareUrl"
+      :content-type="selectedWork && isVideo(selectedWork) ? 'video' : 'image'"
+      @close="showShareModal = false"
+    />
   </div>
 </template>

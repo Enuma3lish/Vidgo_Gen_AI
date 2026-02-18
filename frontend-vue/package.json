@@ -18,8 +18,7 @@
     "@vueuse/core": "^10.9.0",
     "@headlessui/vue": "^1.7.19",
     "@heroicons/vue": "^2.1.1",
-    "three": "^0.170.0",
-    "vue-recaptcha": "^3.0.0-alpha.6"
+    "three": "^0.170.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",

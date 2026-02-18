@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import apiClient from '@/api/client'
 import landingApi from '@/api/landing'
 import type { FeatureItem } from '@/api/landing'
+import NewModelBanner from '@/components/molecules/NewModelBanner.vue'
 
 const { locale } = useI18n()
 const router = useRouter()
@@ -385,7 +386,9 @@ watch(locale, () => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-14 flex">
+  <div class="min-h-screen pt-14 flex flex-col">
+    <NewModelBanner />
+    <div class="flex flex-1">
     <!-- ============================================
          LEFT SIDEBAR - Category Navigation
          ============================================ -->
@@ -1040,6 +1043,7 @@ watch(locale, () => {
       </div>
     </main>
 
+    </div>
     <!-- ============================================
          MOBILE BOTTOM NAV - Category quick access
          ============================================ -->

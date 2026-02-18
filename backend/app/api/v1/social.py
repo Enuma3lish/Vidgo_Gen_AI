@@ -1,78 +1,58 @@
 """Social media sharing endpoints."""
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.api.deps import get_current_user, get_db
 from app.models.user import User
-from app.services.social_share import SocialShareService, SocialPlatform
+from app.services.social_share import build_share_url, get_all_share_urls, SUPPORTED_PLATFORMS
 
 router = APIRouter()
 
 
-class ShareLinkRequest(BaseModel):
-    generation_id: str
-    platform: str
+class ShareRequest(BaseModel):
+    content_url: str
+    platform: Optional[str] = None
     caption: Optional[str] = None
 
 
-class ShareLinkResponse(BaseModel):
+class ShareResponse(BaseModel):
     platform: str
-    share_url: str
+    share_url: Optional[str]
     content_url: str
-    caption: str
-    requires_manual: bool
+    action: str
+    message: Optional[str] = None
 
 
-@router.post("/share-link", response_model=ShareLinkResponse)
+@router.post("/share", response_model=ShareResponse)
 async def create_share_link(
-    request: ShareLinkRequest,
-    db: AsyncSession = Depends(get_db),
+    request: ShareRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Generate a social media share link for a generation result."""
-    # Look up the generation result
-    from app.models.user_generation import UserGeneration
-    result = await db.execute(
-        select(UserGeneration).where(
-            UserGeneration.id == request.generation_id,
-            UserGeneration.user_id == current_user.id
-        )
-    )
-    generation = result.scalar_one_or_none()
-    if not generation:
-        raise HTTPException(status_code=404, detail="Generation not found")
+    """Generate a share link for a specific platform."""
+    if not request.platform:
+        raise HTTPException(400, "Platform is required")
 
-    # Get the content URL (prefer video, fallback to image)
-    content_url = generation.result_video_url or generation.result_image_url
-    if not content_url:
-        raise HTTPException(status_code=400, detail="No content URL available for sharing")
+    result = build_share_url(request.platform, request.content_url, request.caption)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
 
-    # Validate platform
-    try:
-        platform = SocialPlatform(request.platform)
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid platform. Choose from: {', '.join(p.value for p in SocialPlatform)}"
-        )
 
-    service = SocialShareService()
-    share_result = service.generate_share_url(platform, content_url, request.caption)
-    return share_result
+@router.post("/share/all")
+async def get_all_share_links(
+    request: ShareRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate share links for all supported platforms."""
+    return {
+        "platforms": get_all_share_urls(request.content_url, request.caption),
+        "supported_platforms": SUPPORTED_PLATFORMS
+    }
 
 
 @router.get("/platforms")
 async def list_platforms():
-    """List all available social media platforms for sharing."""
-    return {
-        "platforms": [
-            {"id": "facebook", "name": "Facebook", "icon": "facebook", "supports_direct_share": True},
-            {"id": "twitter", "name": "Twitter / X", "icon": "twitter", "supports_direct_share": True},
-            {"id": "line", "name": "LINE", "icon": "line", "supports_direct_share": True},
-            {"id": "tiktok", "name": "TikTok", "icon": "tiktok", "supports_direct_share": False},
-            {"id": "instagram", "name": "Instagram", "icon": "instagram", "supports_direct_share": False},
-        ]
-    }
+    """List all supported social media platforms."""
+    return {"platforms": SUPPORTED_PLATFORMS}

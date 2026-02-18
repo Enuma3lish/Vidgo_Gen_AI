@@ -8,6 +8,7 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string
   password: string
+  recaptcha_token?: string
 }
 
 export interface VerifyCodeRequest {

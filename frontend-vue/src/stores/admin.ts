@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { adminApi, createAdminWebSocket } from '@/api/admin'
-import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse } from '@/api/admin'
+import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse, ToolBreakdownItem, PlanDistributionItem, CreditUsageItem } from '@/api/admin'
 
 export const useAdminStore = defineStore('admin', () => {
   // State
@@ -18,6 +18,9 @@ export const useAdminStore = defineStore('admin', () => {
   const generationChart = ref<ChartDataPoint[]>([])
   const revenueChart = ref<ChartDataPoint[]>([])
   const userGrowthChart = ref<ChartDataPoint[]>([])
+  const toolBreakdownChart = ref<ToolBreakdownItem[]>([])
+  const planDistribution = ref<PlanDistributionItem[]>([])
+  const creditUsageChart = ref<CreditUsageItem[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const wsConnection = ref<WebSocket | null>(null)
@@ -184,6 +187,33 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function fetchToolBreakdown() {
+    error.value = null
+    try {
+      toolBreakdownChart.value = await adminApi.getToolBreakdown()
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch tool breakdown'
+    }
+  }
+
+  async function fetchPlanDistribution() {
+    error.value = null
+    try {
+      planDistribution.value = await adminApi.getPlanDistribution()
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch plan distribution'
+    }
+  }
+
+  async function fetchCreditUsage(days: number = 30) {
+    error.value = null
+    try {
+      creditUsageChart.value = await adminApi.getCreditUsage(days)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch credit usage'
+    }
+  }
+
   function connectWebSocket() {
     if (wsConnection.value) {
       wsConnection.value.close()
@@ -221,6 +251,9 @@ export const useAdminStore = defineStore('admin', () => {
     generationChart,
     revenueChart,
     userGrowthChart,
+    toolBreakdownChart,
+    planDistribution,
+    creditUsageChart,
     isLoading,
     error,
 
@@ -242,6 +275,9 @@ export const useAdminStore = defineStore('admin', () => {
     fetchSystemHealth,
     fetchAIServicesStatus,
     fetchCharts,
+    fetchToolBreakdown,
+    fetchPlanDistribution,
+    fetchCreditUsage,
     connectWebSocket,
     disconnectWebSocket
   }

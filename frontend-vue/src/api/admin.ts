@@ -255,8 +255,10 @@ export const adminApi = {
   },
 
   // New Chart Endpoints
-  async getToolBreakdown(): Promise<ToolBreakdownItem[]> {
-    const response = await apiClient.get('/api/v1/admin/charts/tool-breakdown')
+  async getToolBreakdown(days: number = 30): Promise<ToolBreakdownItem[]> {
+    const response = await apiClient.get('/api/v1/admin/charts/tool-breakdown', {
+      params: { days }
+    })
     return response.data
   },
 

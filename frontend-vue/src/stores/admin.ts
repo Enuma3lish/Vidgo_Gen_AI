@@ -172,14 +172,18 @@ export const useAdminStore = defineStore('admin', () => {
     isLoading.value = true
     error.value = null
     try {
-      const [genData, revData, growthData] = await Promise.all([
+      const [genData, revData, growthData, toolData, planData] = await Promise.all([
         adminApi.getGenerationChart(days),
         adminApi.getRevenueChart(months),
-        adminApi.getUserGrowthChart(days)
+        adminApi.getUserGrowthChart(days),
+        adminApi.getToolBreakdown(),
+        adminApi.getPlanDistribution()
       ])
       generationChart.value = genData
       revenueChart.value = revData
       userGrowthChart.value = growthData
+      toolBreakdownChart.value = toolData
+      planDistribution.value = planData
     } catch (e: any) {
       error.value = e.message || 'Failed to fetch charts'
     } finally {
@@ -187,10 +191,10 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function fetchToolBreakdown() {
+  async function fetchToolBreakdown(days: number = 30) {
     error.value = null
     try {
-      toolBreakdownChart.value = await adminApi.getToolBreakdown()
+      toolBreakdownChart.value = await adminApi.getToolBreakdown(days)
     } catch (e: any) {
       error.value = e.message || 'Failed to fetch tool breakdown'
     }

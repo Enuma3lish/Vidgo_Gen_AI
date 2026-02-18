@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { userApi } from '@/api/user'
 import type { UserGeneration } from '@/api/user'
+import { SocialShareModal } from '@/components/molecules'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const selectedFilter = ref('all')
 const works = ref<UserGeneration[]>([])
@@ -12,6 +15,51 @@ const loading = ref(false)
 const totalWorks = ref(0)
 const currentPage = ref(1)
 const perPage = 20
+
+// Sort
+const sortOrder = ref<'newest' | 'oldest'>('newest')
+
+// Bulk select
+const selectedIds = ref<Set<string>>(new Set())
+const bulkDeleting = ref(false)
+
+const allSelected = computed(() => {
+  return works.value.length > 0 && works.value.every(w => selectedIds.value.has(w.id))
+})
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedIds.value.clear()
+  } else {
+    works.value.forEach(w => selectedIds.value.add(w.id))
+  }
+  // Trigger reactivity
+  selectedIds.value = new Set(selectedIds.value)
+}
+
+function toggleSelect(id: string) {
+  if (selectedIds.value.has(id)) {
+    selectedIds.value.delete(id)
+  } else {
+    selectedIds.value.add(id)
+  }
+  selectedIds.value = new Set(selectedIds.value)
+}
+
+async function deleteSelected() {
+  if (selectedIds.value.size === 0) return
+  bulkDeleting.value = true
+  try {
+    const ids = Array.from(selectedIds.value)
+    await Promise.all(ids.map(id => userApi.deleteGeneration(id)))
+    selectedIds.value = new Set()
+    await fetchWorks()
+  } catch {
+    // Handle error silently
+  } finally {
+    bulkDeleting.value = false
+  }
+}
 
 const filters = [
   { id: 'all', label: 'All' },
@@ -24,6 +72,16 @@ const filters = [
   { id: 'pattern_generate', label: 'Pattern Design' },
   { id: 'effect', label: 'Style Effects' }
 ]
+
+const sortedWorks = computed(() => {
+  const list = [...works.value]
+  if (sortOrder.value === 'oldest') {
+    list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  } else {
+    list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  }
+  return list
+})
 
 async function fetchWorks() {
   loading.value = true
@@ -50,6 +108,7 @@ onMounted(fetchWorks)
 
 watch(selectedFilter, () => {
   currentPage.value = 1
+  selectedIds.value = new Set()
   fetchWorks()
 })
 
@@ -58,6 +117,7 @@ const totalPages = computed(() => Math.ceil(totalWorks.value / perPage))
 function changePage(page: number) {
   if (page < 1 || page > totalPages.value) return
   currentPage.value = page
+  selectedIds.value = new Set()
   fetchWorks()
 }
 
@@ -108,6 +168,22 @@ async function deleteWork() {
     deleting.value = false
   }
 }
+
+// Social share modal
+const showShareModal = ref(false)
+const shareUrl = ref('')
+
+function shareWork() {
+  if (!selectedWork.value) return
+  const url = selectedWork.value.result_video_url || selectedWork.value.result_image_url
+  if (url) {
+    shareUrl.value = url
+    showShareModal.value = true
+  }
+}
+
+// Skeleton placeholder count
+const skeletonCount = 8
 </script>
 
 <template>
@@ -119,60 +195,122 @@ async function deleteWork() {
         <p class="text-gray-400">Browse and manage your generated content</p>
       </div>
 
-      <!-- Filters -->
-      <div class="flex flex-wrap gap-2 mb-8">
-        <button
-          v-for="filter in filters"
-          :key="filter.id"
-          @click="selectedFilter = filter.id"
-          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          :class="selectedFilter === filter.id
-            ? 'bg-primary-500 text-white'
-            : 'bg-dark-800 text-gray-400 hover:text-white'"
-        >
-          {{ filter.label }}
-        </button>
+      <!-- Filters + Sort + Bulk Actions -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="filter in filters"
+            :key="filter.id"
+            @click="selectedFilter = filter.id"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            :class="selectedFilter === filter.id
+              ? 'bg-primary-500 text-white'
+              : 'bg-dark-800 text-gray-400 hover:text-white'"
+          >
+            {{ filter.label }}
+          </button>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- Sort Dropdown -->
+          <select
+            v-model="sortOrder"
+            class="bg-dark-800 border border-dark-600 text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-primary-500"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+
+          <!-- Bulk Delete Button -->
+          <button
+            v-if="selectedIds.size > 0"
+            @click="deleteSelected"
+            :disabled="bulkDeleting"
+            class="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 hover:text-red-300 transition-colors disabled:opacity-50"
+          >
+            {{ bulkDeleting ? 'Deleting...' : `Delete (${selectedIds.size})` }}
+          </button>
+        </div>
       </div>
 
-      <!-- Loading State -->
-      <div v-if="loading" class="card text-center py-12">
-        <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-        <p class="text-gray-400">Loading your works...</p>
+      <!-- Select All Checkbox (shown when works exist and not loading) -->
+      <div v-if="!loading && works.length > 0" class="flex items-center gap-3 mb-4">
+        <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-400 hover:text-white transition-colors">
+          <input
+            type="checkbox"
+            :checked="allSelected"
+            @change="toggleSelectAll"
+            class="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500 focus:ring-offset-0 cursor-pointer"
+          />
+          Select all
+        </label>
+        <span v-if="selectedIds.size > 0" class="text-xs text-gray-500">
+          {{ selectedIds.size }} selected
+        </span>
+      </div>
+
+      <!-- Loading Skeleton -->
+      <div v-if="loading" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div
+          v-for="i in skeletonCount"
+          :key="'skeleton-' + i"
+          class="rounded-xl overflow-hidden border border-dark-700 bg-dark-800"
+        >
+          <div class="aspect-square bg-dark-700 animate-pulse" />
+          <div class="p-4 space-y-3">
+            <div class="h-4 bg-dark-700 rounded animate-pulse w-3/4" />
+            <div class="flex justify-between">
+              <div class="h-3 bg-dark-700 rounded animate-pulse w-1/3" />
+              <div class="h-3 bg-dark-700 rounded animate-pulse w-1/4" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Works Grid -->
       <div v-else-if="works.length > 0">
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           <div
-            v-for="work in works"
+            v-for="work in sortedWorks"
             :key="work.id"
-            @click="openWork(work)"
-            class="card p-0 overflow-hidden group cursor-pointer hover:border-primary-500/50 transition-all"
+            class="card p-0 overflow-hidden group cursor-pointer hover:border-primary-500/50 transition-all relative"
           >
-            <div class="aspect-square relative">
-              <img
-                v-if="getThumbnail(work)"
-                :src="getThumbnail(work)"
-                :alt="work.tool_type"
-                class="w-full h-full object-cover"
+            <!-- Bulk Select Checkbox -->
+            <div class="absolute top-2 left-2 z-10" @click.stop>
+              <input
+                type="checkbox"
+                :checked="selectedIds.has(work.id)"
+                @change="toggleSelect(work.id)"
+                class="w-4 h-4 rounded border-dark-500 bg-dark-800/80 text-primary-500 focus:ring-primary-500 focus:ring-offset-0 cursor-pointer"
               />
-              <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
-                <span class="text-gray-500 text-sm">No preview</span>
-              </div>
-              <div v-if="isVideo(work)" class="absolute top-2 right-2 bg-dark-900/80 text-white text-xs px-2 py-1 rounded">
-                Video
-              </div>
-              <div class="absolute inset-0 bg-dark-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                <button class="btn-primary text-sm px-4 py-2">View</button>
-              </div>
             </div>
-            <div class="p-4">
-              <p class="text-sm text-white font-medium capitalize mb-1">
-                {{ work.tool_type.replace(/_/g, ' ') }}
-              </p>
-              <div class="flex items-center justify-between text-xs text-gray-500">
-                <span>{{ formatDate(work.created_at) }}</span>
-                <span>{{ work.credits_used }} credits</span>
+
+            <div @click="openWork(work)">
+              <div class="aspect-square relative">
+                <img
+                  v-if="getThumbnail(work)"
+                  :src="getThumbnail(work)"
+                  :alt="work.tool_type"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
+                  <span class="text-gray-500 text-sm">No preview</span>
+                </div>
+                <div v-if="isVideo(work)" class="absolute top-2 right-2 bg-dark-900/80 text-white text-xs px-2 py-1 rounded">
+                  Video
+                </div>
+                <div class="absolute inset-0 bg-dark-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <button class="btn-primary text-sm px-4 py-2">View</button>
+                </div>
+              </div>
+              <div class="p-4">
+                <p class="text-sm text-white font-medium capitalize mb-1">
+                  {{ work.tool_type.replace(/_/g, ' ') }}
+                </p>
+                <div class="flex items-center justify-between text-xs text-gray-500">
+                  <span>{{ formatDate(work.created_at) }}</span>
+                  <span>{{ work.credits_used }} credits</span>
+                </div>
               </div>
             </div>
           </div>
@@ -201,10 +339,36 @@ async function deleteWork() {
       </div>
 
       <!-- Empty State -->
-      <div v-else class="card text-center py-12">
-        <span class="text-5xl block mb-4">🔍</span>
-        <h3 class="text-lg font-medium text-white mb-2">No works found</h3>
-        <p class="text-gray-400">Try a different filter or create new content</p>
+      <div v-else class="card text-center py-16 px-6">
+        <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-dark-700 flex items-center justify-center">
+          <svg class="w-10 h-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h3 class="text-xl font-semibold text-white mb-2">No works yet</h3>
+        <p class="text-gray-400 mb-8 max-w-md mx-auto">
+          You haven't created any content yet. Get started with one of our AI tools to generate images, videos, and more.
+        </p>
+        <div class="flex flex-wrap justify-center gap-3">
+          <button
+            @click="router.push('/tools/product-scene')"
+            class="btn-primary px-6 py-2.5"
+          >
+            Create Product Scene
+          </button>
+          <button
+            @click="router.push('/tools/short-video')"
+            class="px-6 py-2.5 rounded-xl border border-dark-600 text-gray-300 hover:text-white hover:border-primary-400 transition-colors"
+          >
+            Make a Short Video
+          </button>
+          <button
+            @click="router.push('/')"
+            class="px-6 py-2.5 rounded-xl border border-dark-600 text-gray-300 hover:text-white hover:border-primary-400 transition-colors"
+          >
+            Browse All Tools
+          </button>
+        </div>
       </div>
     </div>
 
@@ -260,6 +424,15 @@ async function deleteWork() {
                 {{ t('common.download') }}
               </button>
               <button
+                @click="shareWork"
+                class="btn-ghost text-primary-400 hover:text-primary-300 hover:bg-primary-500/10"
+              >
+                <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Share
+              </button>
+              <button
                 @click="deleteWork"
                 :disabled="deleting"
                 class="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10"
@@ -271,5 +444,13 @@ async function deleteWork() {
         </div>
       </div>
     </Teleport>
+
+    <!-- Social Share Modal -->
+    <SocialShareModal
+      :visible="showShareModal"
+      :content-url="shareUrl"
+      :content-type="selectedWork && isVideo(selectedWork) ? 'video' : 'image'"
+      @close="showShareModal = false"
+    />
   </div>
 </template>

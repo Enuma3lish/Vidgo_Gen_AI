@@ -1,9 +1,9 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 4.8
-**Last Updated:** February 9, 2026
+**Version:** 5.0
+**Last Updated:** February 18, 2026
 **Framework:** Vue 3 + Vite + TypeScript
-**Mode:** Preset-Only (No Custom Input)
+**Mode:** Hybrid (Free Trial Presets + Tier-based Generation)
 **Target Audience:** Small businesses (SMB) selling everyday products/services
 
 ---
@@ -127,6 +127,8 @@ frontend-vue/
 │   │   ├── molecules/               # Composite components
 │   │   │   ├── ConfirmModal.vue
 │   │   │   ├── CreditBadge.vue
+│   │   │   ├── GenerationProgress.vue  # Generation queue/progress display
+│   │   │   ├── InsufficientCreditsModal.vue # "點數不足" credit lockout modal
 │   │   │   ├── MaterialCard.vue
 │   │   │   ├── ToastNotification.vue
 │   │   │   ├── UpgradePrompt.vue
@@ -135,6 +137,7 @@ frontend-vue/
 │   │   ├── tools/                   # Tool-specific components
 │   │   │   ├── BeforeAfterSlider.vue
 │   │   │   ├── CreditCost.vue
+│   │   │   ├── ThreeViewer.vue         # Three.js GLB 3D model viewer
 │   │   │   └── UploadZone.vue
 │   │   │
 │   │   └── index.ts                 # Component exports
@@ -188,9 +191,12 @@ frontend-vue/
 │   │   │   └── ForgotPassword.vue
 │   │   │
 │   │   ├── dashboard/               # User dashboard
+│   │   │   ├── ContactUs.vue           # Contact form
 │   │   │   ├── Dashboard.vue
+│   │   │   ├── GiftCodes.vue           # Gift code redemption
+│   │   │   ├── Invoices.vue             # Invoice history & download
 │   │   │   ├── MyWorks.vue
-│   │   │   └── Invoices.vue             # Invoice history & download
+│   │   │   └── Profile.vue             # User profile editing
 │   │   │
 │   │   ├── subscription/            # Paddle redirect result pages
 │   │   │   ├── SubscriptionSuccess.vue   # Payment success (order= query)
@@ -274,6 +280,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/dashboard', name: 'dashboard', component: Dashboard, meta: { requiresAuth: true } },
   { path: '/dashboard/my-works', name: 'my-works', component: MyWorks, meta: { requiresAuth: true } },
   { path: '/dashboard/invoices', name: 'invoices', component: Invoices, meta: { requiresAuth: true } },
+  { path: '/dashboard/gift-codes', name: 'gift-codes', component: GiftCodes, meta: { requiresAuth: true } },
+  { path: '/dashboard/profile', name: 'profile', component: Profile, meta: { requiresAuth: true } },
+  { path: '/dashboard/contact', name: 'contact-us', component: ContactUs, meta: { requiresAuth: true } },
 
   // ===== Admin Routes (Admin Only) =====
   { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresAuth: true, requiresAdmin: true } },
@@ -335,9 +344,13 @@ export { useWebSocket } from './useWebSocket'      // WebSocket connection
 export { useResponsive } from './useResponsive'    // Responsive breakpoints
 export { useGeoLanguage } from './useGeoLanguage'  // Geo-based language
 export { useDemoMode } from './useDemoMode'        // Demo mode logic
+export { useTrialMode } from './useTrialMode'        // Free trial + generation mode (replaces useDemoMode for generation)
+export { useGenerationProgress } from './useGenerationProgress'  // Generation queue/progress tracking
 ```
 
-### 4.2 useDemoMode Composable (Preset-Only Mode)
+### 4.2 useDemoMode Composable (Preset Browsing Only)
+
+> **Note:** `useDemoMode` still exists for preset browsing (Material DB lookups). For live generation with credit checking, use the new `useTrialMode` composable instead.
 
 ```typescript
 // src/composables/useDemoMode.ts
@@ -450,6 +463,7 @@ export * from './interior'
 export * from './subscription'
 export * from './quota'
 export * from './effects'
+export * from './tools'              // Tool operations (with credit check)
 ```
 
 ### 5.3 Demo API (Topic Registry)
@@ -529,6 +543,41 @@ The homepage (`LandingPage.vue`) loads data from multiple endpoints:
   - **Cancel subscription** (no refund): `subscriptionApi.cancel({ request_refund: false })` — subscription stays active until period end, then no renewal.
   Status and refund eligibility come from `subscriptionApi.getStatus()` (`refund_eligible`, `refund_days_remaining`). Dashboard plan card links to `/pricing` with label "Manage or upgrade plan" so users can cancel or refund from there.
 
+### 5.8 Generation Status API (NEW)
+
+```typescript
+// Generation status polling
+export const getGenerationStatus = async (taskId: string) => {
+  return client.get(`/generate/status/${taskId}`)
+  // Returns: { task_id, status: "queued"|"processing"|"completed"|"failed", progress, output }
+}
+```
+
+### 5.9 Interior 3D API (NEW)
+
+```typescript
+// Trellis 3D model generation
+export const generate3DModel = async (imageUrl: string) => {
+  return client.post('/interior/3d-model', { image_url: imageUrl })
+  // Returns: { task_id, model_url: "https://...file.glb" }
+}
+
+// Room-type constraints
+export const getRoomConstraints = async () => {
+  return client.get('/interior/room-constraints')
+  // Returns: { constraints: { bathroom: ["bathroom"], kitchen: ["kitchen"], ... } }
+}
+```
+
+### 5.10 Gift Code & Promotions API (NEW)
+
+```typescript
+export const redeemGiftCode = async (code: string) => {
+  return client.post('/promotions/redeem', { code })
+  // Returns: { success, credits_added, message }
+}
+```
+
 ---
 
 ## 6. State Management (Pinia)
@@ -569,17 +618,37 @@ export const useAuthStore = defineStore('auth', () => {
 ### 6.3 Credits Store
 
 ```typescript
-// src/stores/credits.ts
+// src/stores/credits.ts (updated)
 
 export const useCreditsStore = defineStore('credits', () => {
   const balance = ref(0)
-  const weeklyCredits = ref(0)
-  const paidCredits = ref(0)
+  const bonusCredits = ref(0)
+  const purchasedCredits = ref(0)
+  const showInsufficientCreditsModal = ref(false)
 
   const fetchBalance = async () => { ... }
   const deductCredits = async (amount: number, type: string) => { ... }
+  const openInsufficientModal = () => { showInsufficientCreditsModal.value = true }
+  const closeInsufficientModal = () => { showInsufficientCreditsModal.value = false }
 
-  return { balance, weeklyCredits, paidCredits, fetchBalance, deductCredits }
+  return { balance, bonusCredits, purchasedCredits, showInsufficientCreditsModal, fetchBalance, deductCredits, openInsufficientModal, closeInsufficientModal }
+})
+```
+
+### 6.4 Generation Store
+
+```typescript
+// src/stores/generation.ts (updated)
+
+export const useGenerationStore = defineStore('generation', () => {
+  const currentTask = ref<GenerationTask | null>(null)
+  const isProcessing = computed(() => ['uploading', 'processing', 'polling'].includes(currentTask.value?.status))
+
+  function startTask(toolType: string, creditCost: number): string { ... }
+  function updateStatus(status: GenerationStatus) { ... }
+  function startPolling(taskId: string) { ... }  // Polls /generate/status/{taskId} every 3s
+
+  return { currentTask, isProcessing, startTask, updateStatus, startPolling }
 })
 ```
 
@@ -736,6 +805,19 @@ const generate = async () => {
 </script>
 ```
 
+### 7.3 Tier-based Generation Quality (NEW)
+
+| Tool | Free Tier (720P) | Paid Tier (1080P) |
+|------|------------------|-------------------|
+| Background Removal | 512×512, watermarked | 1024×1024, original |
+| Product Scene | 512×512, watermarked | 1024×1024, original |
+| Room Redesign | 720P, style change only | 1080P, style change only |
+| Short Video | 720P, 5s max | 1080P, 15s max |
+| AI Avatar | 720P, 30s, no audio | 1080P, 120s, with audio |
+| Effects | 512×512 | 1024×1024 |
+| Try-On | 512×512 | 1024×1024 |
+| Pattern Design | 512×512 | 1024×1024 |
+
 ---
 
 ## 8. Internationalization (i18n)
@@ -777,45 +859,45 @@ export function useGeoLanguage() {
 
 ---
 
-## 9. Preset-Only Mode
+## 9. Free Trial & Preset Mode (Updated)
 
-**Demo/Trial flow:** Users try default AI functions by selecting presets. Backend returns pre-generated results from Material DB—no runtime AI API calls. Examples are correctly linked (e.g., Effect tool: before = T2I image, after = I2I transform of that same image).
+**Hybrid flow:** Users can both browse presets AND generate new content (with credit deduction).
 
-### 9.1 Access Control Matrix
+### 9.1 Access Control Matrix (Updated)
 
-| Feature | All Users |
-|---------|-----------|
-| View preset options | Yes |
-| Select preset | Yes |
-| Enter custom text | No |
-| View watermarked result | Yes |
-| View original result | No |
-| Download | No |
-| API calls | No (Material DB only) |
+| Feature | Guest (No Login) | Free Trial (Logged In, No Payment) | Paid (Credits/Subscription) |
+|---------|-------------------|-------------------------------------|---------------------------|
+| View presets | Yes | Yes | Yes |
+| Select preset | Yes | Yes | Yes |
+| View watermarked result | Yes | Yes | Yes |
+| Live generation | No | Yes (720P, limited) | Yes (1080P, full) |
+| Download | No | No (watermarked) | Yes (original) |
+| API calls | No | Yes (free tier params) | Yes (paid tier params) |
+| Starting credits | — | 40 bonus points | Purchase 100 pts for NT$99 |
 
-### 9.2 User Flow
+### 9.2 User Flow (Updated)
 
 ```
 +---------------------------------------------------------------------+
-|                     PRESET-ONLY USER FLOW                            |
+|                     HYBRID USER FLOW                                 |
 +---------------------------------------------------------------------+
 |                                                                      |
-|  1. User visits tool page (e.g., /tools/background-removal)          |
+|  GUEST (Not logged in):                                              |
+|  1. Browse presets from Material DB                                   |
+|  2. View watermarked results only                                    |
+|  3. Prompt to register for free 40 points                            |
 |                                                                      |
-|  2. Frontend loads presets from /api/v1/demo/presets/{tool_type}     |
-|     └── Returns list of pre-generated materials                      |
+|  FREE TRIAL (Logged in, 40 bonus points):                           |
+|  1. Browse presets + generate new content                            |
+|  2. Generation: 720P, 5s video, no audio, watermarked               |
+|  3. Credit deducted per generation (20-35 pts)                       |
+|  4. When 0 credits → InsufficientCreditsModal → /pricing             |
 |                                                                      |
-|  3. User selects a preset (clicks on thumbnail)                      |
-|                                                                      |
-|  4. User clicks "View Result" button                                 |
-|                                                                      |
-|  5. Frontend calls /api/v1/demo/use-preset                           |
-|     └── O(1) lookup by material ID                                   |
-|     └── NO external API calls                                        |
-|                                                                      |
-|  6. Result displayed with watermark                                  |
-|     └── Download button disabled                                     |
-|     └── "Subscribe for full access" CTA shown                        |
+|  PAID (Purchased credits or subscription):                           |
+|  1. Full access: presets + premium generation                        |
+|  2. Generation: 1080P, 15s video, with audio, original quality       |
+|  3. Download enabled                                                  |
+|  4. Priority queue                                                    |
 |                                                                      |
 +---------------------------------------------------------------------+
 ```
@@ -1021,7 +1103,48 @@ Pattern Design generates seamless textile patterns for fashion and interior desi
 
 ---
 
-*Document Version: 4.6*
-*Last Updated: February 6, 2026*
-*Mode: Preset-Only (No Custom Input)*
+## 15. New Components (Free Trial System)
+
+### 15.1 InsufficientCreditsModal
+
+Modal shown when user has insufficient credits for generation.
+- Trigger: API returns HTTP 402 with `error: "insufficient_credits"`
+- Message: "點數不足，請儲值" (Insufficient credits, please top up)
+- Action: "前往儲值" button → navigates to `/pricing`
+- Shows: required credits vs current balance
+
+### 15.2 GenerationProgress
+
+Real-time generation progress display component.
+- States: 排隊中... → 生成中... 50% → 完成
+- Polls `/generate/status/{task_id}` every 3 seconds
+- Estimated time: 3-8 minutes
+- Shows credit cost that will be deducted
+
+### 15.3 ThreeViewer (3D Model Viewer)
+
+Three.js-based GLB model viewer for interior design 3D outputs.
+- Uses GLTFLoader to load .glb files from Trellis API
+- OrbitControls for rotation, zoom, pan
+- Auto-rotation on load
+- Responsive container sizing
+- Dependencies: `three`, `@types/three`
+
+### 15.4 Dashboard Sidebar Navigation
+
+Full sidebar navigation for authenticated users:
+1. 儀表板 (Dashboard) → `/dashboard`
+2. 我的創作 (My Works) → `/dashboard/my-works`
+3. 會員帳單 (Invoices) → `/dashboard/invoices`
+4. 禮品碼 (Gift Codes) → `/dashboard/gift-codes`
+5. 個人資料 (Profile) → `/dashboard/profile`
+6. 聯絡我們 (Contact Us) → `/dashboard/contact`
+
+Dashboard shows: "剩餘 X 點" (remaining credits display)
+
+---
+
+*Document Version: 5.0*
+*Last Updated: February 18, 2026*
+*Mode: Hybrid (Free Trial Presets + Tier-based Generation)*
 *Target: SMB (small businesses selling everyday products/services)*

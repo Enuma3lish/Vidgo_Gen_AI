@@ -116,6 +116,7 @@ class Invoice(Base):
     invoice_number = Column(String, unique=True)
     amount = Column(DECIMAL(10, 2))
     pdf_url = Column(String, nullable=True)
+    donation_code = Column(String, nullable=True)  # Taiwan e-invoice donation code (愛心碼)
     
     issued_at = Column(DateTime(timezone=True), server_default=func.now())
     

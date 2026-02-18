@@ -8,6 +8,8 @@ Features:
 - Multi-language support (English, Chinese, Japanese, Korean, etc.)
 - Link-to-video generation
 - 99.99% SLA guaranteed
+- Asian-only avatar filtering (Chinese/Taiwanese/Asian avatars only)
+- Gender-voice matching enforcement
 
 API Documentation: https://a2e.ai/ai-avatar-api/
 """
@@ -27,6 +29,60 @@ STATIC_DIR = Path("/app/static/materials")
 
 # A2E.ai API base URL (video.a2e.ai is the actual API, api.a2e.ai is just docs)
 A2E_BASE_URL = "https://video.a2e.ai"
+
+# ---------------------------------------------------------------------------
+# Asian Avatar Filter Keywords
+# Used to identify Asian/Chinese/Taiwanese avatars from character lists.
+# Avatars whose name, tag, or description match any of these keywords
+# (case-insensitive) are considered valid. All others are rejected.
+# ---------------------------------------------------------------------------
+ASIAN_AVATAR_KEYWORDS: List[str] = [
+    # Ethnicity / region tags
+    "asian", "chinese", "taiwanese", "china", "taiwan",
+    "japanese", "korean", "vietnamese", "thai", "filipino",
+    "東方", "亞洲", "中文", "華人", "台灣", "中國",
+    # Common Chinese / Taiwanese given-name fragments
+    "xiao", "wei", "mei", "ling", "yu", "jia", "min", "hui",
+    "chen", "wang", "zhang", "liu", "li", "yang", "huang", "zhou",
+    "lin", "wu", "xu", "sun", "zhu", "gao", "he", "guo",
+    # Common Chinese character name components
+    "小", "大", "曉", "雲", "美", "麗", "華", "明", "志", "文",
+    "婷", "萱", "欣", "宜", "芳", "玲", "珍", "淑", "惠", "雅",
+    # Japanese name fragments
+    "yuki", "hana", "sato", "taka", "nana", "keita", "miku",
+    # Korean name fragments
+    "kim", "park", "choi", "jung", "yoon", "seo", "hyun",
+]
+
+# ---------------------------------------------------------------------------
+# Voice-to-Gender Mapping
+# Maps every known A2E voice ID to its gender so we can enforce that
+# male avatars only use male voices and female avatars only use female voices.
+# ---------------------------------------------------------------------------
+VOICE_GENDER_MAP: Dict[str, str] = {
+    # English voices
+    "en-US-alloy": "neutral",
+    "en-US-echo": "male",
+    "en-US-fable": "female",
+    "en-US-onyx": "male",
+    "en-US-nova": "female",
+    "en-US-shimmer": "female",
+    # Traditional Chinese (Taiwan) voices
+    "zh-TW-xiaoxiao": "female",
+    "zh-TW-xiaochen": "female",
+    "zh-TW-xiaomeng": "female",
+    "zh-TW-xiaoxuan": "female",
+    "zh-TW-yunxi": "male",
+    "zh-TW-yunyang": "male",
+    "zh-TW-yunjie": "male",
+    "zh-TW-yunhao": "male",
+    # Japanese voices
+    "ja-JP-nanami": "female",
+    "ja-JP-keita": "male",
+    # Korean voices
+    "ko-KR-sunhi": "female",
+    "ko-KR-injoon": "male",
+}
 
 # Available voices for each language (A2E.ai provides 50+ voices)
 A2E_VOICES = {
@@ -75,6 +131,110 @@ DEFAULT_AVATARS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+def filter_asian_avatars(characters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Filter a list of avatar characters to include only Asian avatars.
+
+    An avatar is considered Asian if any of its searchable text fields
+    (name, tag, description, ethnicity, region) contain at least one of
+    the keywords defined in ASIAN_AVATAR_KEYWORDS (case-insensitive match).
+
+    Args:
+        characters: Raw list of character dicts from the A2E API.
+
+    Returns:
+        Filtered list containing only Asian/Chinese/Taiwanese avatars.
+        If the filter yields zero results, the original list is returned
+        with a warning logged (to avoid breaking production).
+    """
+    if not characters:
+        return characters
+
+    keywords_lower = [kw.lower() for kw in ASIAN_AVATAR_KEYWORDS]
+
+    filtered: List[Dict[str, Any]] = []
+    for char in characters:
+        # Build a single searchable string from all relevant fields
+        searchable_parts = [
+            str(char.get("name", "")),
+            str(char.get("tag", "")),
+            str(char.get("tags", "")),
+            str(char.get("description", "")),
+            str(char.get("ethnicity", "")),
+            str(char.get("region", "")),
+            str(char.get("category", "")),
+            str(char.get("label", "")),
+        ]
+        searchable = " ".join(searchable_parts).lower()
+
+        if any(kw in searchable for kw in keywords_lower):
+            filtered.append(char)
+
+    if not filtered:
+        logger.warning(
+            "Asian avatar filter matched 0 out of %d characters. "
+            "Returning original list to avoid empty results. "
+            "Consider updating ASIAN_AVATAR_KEYWORDS.",
+            len(characters),
+        )
+        return characters
+
+    logger.info(
+        "Asian avatar filter: %d/%d characters passed",
+        len(filtered),
+        len(characters),
+    )
+    return filtered
+
+
+def validate_avatar_voice_gender(avatar_gender: str, voice_id: str) -> None:
+    """
+    Validate that the avatar gender matches the voice gender.
+
+    Rules:
+    - Male avatars can ONLY use male or neutral voices.
+    - Female avatars can ONLY use female or neutral voices.
+    - Neutral avatars can use any voice.
+    - Unknown voice IDs are rejected to prevent accidental mismatches.
+
+    Args:
+        avatar_gender: Gender of the avatar ("male", "female", or "neutral").
+        voice_id: The voice identifier string (e.g. "en-US-echo").
+
+    Raises:
+        ValueError: If the combination is invalid.
+    """
+    avatar_gender = avatar_gender.strip().lower()
+    voice_id = voice_id.strip()
+
+    # Neutral avatars accept any voice
+    if avatar_gender == "neutral":
+        return
+
+    voice_gender = VOICE_GENDER_MAP.get(voice_id)
+
+    if voice_gender is None:
+        raise ValueError(
+            f"Unknown voice ID '{voice_id}'. Cannot verify gender match. "
+            f"Known voices: {sorted(VOICE_GENDER_MAP.keys())}"
+        )
+
+    # Neutral voices are acceptable for any avatar gender
+    if voice_gender == "neutral":
+        return
+
+    if avatar_gender != voice_gender:
+        raise ValueError(
+            f"Gender mismatch: {avatar_gender} avatar cannot use "
+            f"{voice_gender} voice '{voice_id}'. "
+            f"Please select a {avatar_gender} or neutral voice."
+        )
+
+
 class A2EAvatarService:
     """
     A2E.ai Avatar Service for generating talking avatar videos with native lip-sync.
@@ -90,6 +250,8 @@ class A2EAvatarService:
     - High-quality video output
     - Fast generation (~1:5 ratio for processing)
     - 99.99% SLA guaranteed
+    - Asian-only avatar enforcement
+    - Gender-voice matching validation
 
     API Documentation: https://api.a2e.ai/
     """
@@ -120,13 +282,41 @@ class A2EAvatarService:
         """Get available voices for a language."""
         return A2E_VOICES.get(language, A2E_VOICES["en"])
 
+    def get_voices_for_gender(self, language: str = "en", gender: str = "neutral") -> List[Dict[str, str]]:
+        """
+        Get available voices filtered by avatar gender compatibility.
+
+        Args:
+            language: Language code.
+            gender: Avatar gender ("male", "female", "neutral").
+
+        Returns:
+            List of voice dicts that are compatible with the given avatar gender.
+        """
+        all_voices = self.get_voices(language)
+        gender = gender.strip().lower()
+
+        if gender == "neutral":
+            return all_voices
+
+        compatible = []
+        for voice in all_voices:
+            voice_gender = voice.get("gender", "neutral").lower()
+            if voice_gender == gender or voice_gender == "neutral":
+                compatible.append(voice)
+
+        return compatible if compatible else all_voices
+
     def get_default_avatars(self, language: str = "en") -> List[str]:
         """Get default avatar images for a language."""
         return DEFAULT_AVATARS.get(language, DEFAULT_AVATARS["en"])
 
-    async def get_character_list(self) -> Dict[str, Any]:
+    async def get_character_list(self, asian_only: bool = True) -> Dict[str, Any]:
         """
         Get list of available avatar characters/anchors.
+
+        Args:
+            asian_only: If True (default), filter to Asian avatars only.
 
         Returns:
             Dict with success status and list of anchors
@@ -140,8 +330,15 @@ class A2EAvatarService:
 
                 if response.status_code == 200:
                     data = response.json()
-                    logger.info(f"A2E character list: {len(data.get('data', []))} anchors found")
-                    return {"success": True, "anchors": data.get("data", [])}
+                    anchors = data.get("data", [])
+                    logger.info(f"A2E character list: {len(anchors)} anchors found (raw)")
+
+                    # Apply Asian-only filter
+                    if asian_only:
+                        anchors = filter_asian_avatars(anchors)
+                        logger.info(f"A2E character list: {len(anchors)} anchors after Asian filter")
+
+                    return {"success": True, "anchors": anchors}
                 else:
                     logger.error(f"A2E character list failed: {response.status_code}")
                     return {"success": False, "error": f"HTTP {response.status_code}"}
@@ -210,14 +407,19 @@ class A2EAvatarService:
         voice_id: Optional[str] = None,
         aspect_ratio: str = "9:16",
         resolution: str = "720p",
-        anchor_id: Optional[str] = None
+        anchor_id: Optional[str] = None,
+        avatar_gender: Optional[str] = None
     ) -> Tuple[bool, str, Optional[str]]:
         """
         Generate a talking avatar video with lip-sync.
 
+        Enforces:
+        - Gender-voice matching when avatar_gender is provided.
+
         Workflow:
-        1. Generate TTS audio from text
-        2. Submit video generation with audio and anchor
+        1. Validate gender-voice combination (if avatar_gender supplied)
+        2. Generate TTS audio from text
+        3. Submit video generation with audio and anchor
 
         Args:
             image_url: Not used (kept for compatibility)
@@ -227,6 +429,8 @@ class A2EAvatarService:
             aspect_ratio: Not used by this endpoint
             resolution: Not used by this endpoint
             anchor_id: Specific anchor/avatar ID (uses default if not provided)
+            avatar_gender: Gender of the selected avatar ("male"/"female"/"neutral").
+                           When provided, the voice_id is validated against it.
 
         Returns:
             Tuple of (success, task_id or error, None)
@@ -238,6 +442,17 @@ class A2EAvatarService:
         use_anchor_id = anchor_id or self.default_anchor_id
         if not use_anchor_id:
             return False, "No anchor_id configured. Get one from /api/v1/anchor/character_list", None
+
+        # --- Gender-voice validation ---
+        if avatar_gender and voice_id:
+            try:
+                validate_avatar_voice_gender(avatar_gender, voice_id)
+                logger.info(
+                    f"Gender-voice validation passed: {avatar_gender} avatar + voice {voice_id}"
+                )
+            except ValueError as e:
+                logger.warning(f"Gender-voice validation failed: {e}")
+                return False, str(e), None
 
         # Step 1: Generate TTS audio
         logger.info(f"Step 1: Generating TTS audio for: {text[:50]}...")
@@ -412,7 +627,8 @@ class A2EAvatarService:
         voice_id: Optional[str] = None,
         duration: int = 30,
         timeout: int = 300,
-        save_locally: bool = True
+        save_locally: bool = True,
+        avatar_gender: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate avatar video and wait for completion.
@@ -425,6 +641,7 @@ class A2EAvatarService:
             duration: Ignored (determined by script length)
             timeout: Max wait time in seconds
             save_locally: Save video to local storage
+            avatar_gender: Avatar gender for voice validation ("male"/"female"/"neutral")
 
         Returns:
             Dict with video_url on success
@@ -437,7 +654,8 @@ class A2EAvatarService:
             image_url=image_url,
             text=script,
             language=language,
-            voice_id=voice_id
+            voice_id=voice_id,
+            avatar_gender=avatar_gender
         )
 
         if not success:
@@ -504,12 +722,12 @@ class A2EAvatarService:
             }
 
         try:
-            # Test by fetching the character list - validates connection and bearer auth
-            result = await self.get_character_list()
+            # Test by fetching the character list (with Asian filter)
+            result = await self.get_character_list(asian_only=True)
 
             if result.get("success"):
                 anchors = result.get("anchors", [])
-                anchor_info = f"{len(anchors)} anchors available"
+                anchor_info = f"{len(anchors)} Asian anchors available"
 
                 if not self.default_anchor_id:
                     return {

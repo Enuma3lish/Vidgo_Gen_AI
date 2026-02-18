@@ -7,6 +7,11 @@ AI-powered interior design using Gemini 2.5 Flash Image:
 - Style Fusion (Multi-image → Image)
 - Iterative Editing (Multi-turn refinement)
 - Style Transfer (Apply design style)
+- 3D Model Generation (Image → GLB via Trellis)
+
+Room-Type Constraints:
+- A room can ONLY change STYLE, not change to a different room type
+- e.g., bathroom → modern bathroom OK, bathroom → kitchen BLOCKED
 
 Access: All users (demo) or Subscribers (full features)
 """
@@ -23,6 +28,42 @@ from app.services.interior_design_service import (
     DESIGN_STYLES,
     ROOM_TYPES
 )
+from app.providers.provider_router import get_provider_router, TaskType
+from app.services.tier_config import get_credit_cost, get_user_tier
+
+
+# ---------------------------------------------------------------------------
+# Room-Type Logical Constraints
+# ---------------------------------------------------------------------------
+# A room can ONLY change its design STYLE, NOT become a different room type.
+# Example: bathroom can become "modern bathroom" but NOT "kitchen".
+ROOM_TYPE_CONSTRAINTS = {
+    "living_room": ["living_room"],
+    "bedroom": ["bedroom"],
+    "kitchen": ["kitchen"],
+    "bathroom": ["bathroom"],
+    "dining_room": ["dining_room"],
+    "home_office": ["home_office"],
+    "balcony": ["balcony"],
+}
+
+
+def validate_room_redesign(source_room_type: Optional[str], target_room_type: Optional[str]):
+    """
+    Validate that the target room type is compatible with the source room type.
+    A bathroom cannot become a kitchen, etc.
+    """
+    if not source_room_type or not target_room_type:
+        return  # If either is not specified, skip validation
+
+    allowed = ROOM_TYPE_CONSTRAINTS.get(source_room_type, [source_room_type])
+    if target_room_type not in allowed:
+        source_name = ROOM_TYPES.get(source_room_type, {}).get("name_zh", source_room_type)
+        target_name = ROOM_TYPES.get(target_room_type, {}).get("name_zh", target_room_type)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"無法將{source_name}轉換為{target_name}。房間只能變更設計風格，不能變更房間類型。"
+        )
 
 router = APIRouter(prefix="/interior", tags=["interior"])
 
@@ -76,6 +117,8 @@ class StyleTransferRequest(BaseModel):
     room_image_url: Optional[str] = Field(None, description="URL of room image")
     room_image_base64: Optional[str] = Field(None, description="Base64-encoded room image")
     style_id: str = Field(..., description="Design style ID to apply")
+    source_room_type: Optional[str] = Field(None, description="Source room type for validation")
+    target_room_type: Optional[str] = Field(None, description="Target room type (must match source)")
 
 
 class DesignResponse(BaseModel):
@@ -165,6 +208,20 @@ async def redesign_room(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Room image is required (URL or base64)"
         )
+
+    # Credit check for authenticated users
+    if current_user:
+        cost = get_credit_cost("interior", current_user)
+        if current_user.total_credits < cost:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "error": "insufficient_credits",
+                    "message": "點數不足，請儲值",
+                    "required": cost,
+                    "current": current_user.total_credits,
+                }
+            )
 
     service = get_interior_design_service()
 
@@ -388,6 +445,23 @@ async def style_transfer(
             detail=f"Unknown style: {request.style_id}. Available: {list(DESIGN_STYLES.keys())}"
         )
 
+    # Room-type constraint: cannot change room type, only style
+    validate_room_redesign(request.source_room_type, request.target_room_type)
+
+    # Credit check
+    if current_user:
+        cost = get_credit_cost("interior", current_user)
+        if current_user.total_credits < cost:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "error": "insufficient_credits",
+                    "message": "點數不足，請儲值",
+                    "required": cost,
+                    "current": current_user.total_credits,
+                }
+            )
+
     service = get_interior_design_service()
 
     result = await service.transfer_style(
@@ -482,3 +556,113 @@ async def demo_generate(
         image_url=result.get("image_url"),
         description=result.get("description")
     )
+
+
+# ============ 3D Model Generation (Trellis) ============
+
+class Generate3DRequest(BaseModel):
+    """Generate 3D model from a 2D interior design image."""
+    image_url: str = Field(..., description="URL of 2D interior design image")
+    texture_size: int = Field(1024, description="Texture resolution (512 or 1024)")
+    mesh_simplify: float = Field(0.95, ge=0.0, le=1.0, description="Mesh simplification ratio")
+
+
+class Generate3DResponse(BaseModel):
+    """Response with 3D model URL (GLB format)."""
+    success: bool
+    model_url: Optional[str] = None
+    task_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post("/3d-model", response_model=Generate3DResponse)
+async def generate_3d_model(
+    request: Generate3DRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate a 3D model (GLB) from a 2D interior design image using PiAPI Trellis.
+
+    The output is a GLB file that can be rendered in a Three.js viewer on the frontend.
+    Cost: ~$0.04 per generation.
+
+    Requires authentication and sufficient credits.
+    """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required for 3D model generation"
+        )
+
+    # Credit check
+    cost = get_credit_cost("interior_3d", current_user)
+    if current_user.total_credits < cost:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "insufficient_credits",
+                "message": "點數不足，請儲值",
+                "required": cost,
+                "current": current_user.total_credits,
+            }
+        )
+
+    # Determine tier for texture quality
+    tier = get_user_tier(current_user)
+    texture_size = 512 if tier == "free" else request.texture_size
+
+    try:
+        provider_router = get_provider_router()
+        result = await provider_router.route(
+            TaskType.INTERIOR_3D,
+            {
+                "image_url": request.image_url,
+                "texture_size": texture_size,
+                "mesh_simplify": request.mesh_simplify,
+            },
+            user_tier=tier,
+        )
+
+        output = result.get("output", {})
+        model_url = output.get("model_url") or output.get("glb_url") or output.get("url")
+
+        return Generate3DResponse(
+            success=True,
+            model_url=model_url,
+            task_id=result.get("task_id"),
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"3D model generation failed: {str(e)}"
+        )
+
+
+# ============ Room-Type Constraint Info ============
+
+@router.get("/room-constraints")
+async def get_room_constraints():
+    """
+    Get room-type constraint information.
+
+    A room can only change its design STYLE, not its room TYPE.
+    For example, a bathroom can be redesigned in Japanese Zen style,
+    but cannot be converted to a kitchen.
+    """
+    return {
+        "constraints": ROOM_TYPE_CONSTRAINTS,
+        "message": "Each room type can only be redesigned within the same room type. "
+                   "Change the STYLE, not the room TYPE.",
+        "examples": {
+            "allowed": [
+                {"from": "bathroom", "to": "bathroom", "style": "japanese", "note": "OK - same room, different style"},
+                {"from": "kitchen", "to": "kitchen", "style": "modern_minimalist", "note": "OK - same room, different style"},
+            ],
+            "blocked": [
+                {"from": "bathroom", "to": "kitchen", "note": "BLOCKED - cannot change room type"},
+                {"from": "bedroom", "to": "living_room", "note": "BLOCKED - cannot change room type"},
+            ]
+        }
+    }

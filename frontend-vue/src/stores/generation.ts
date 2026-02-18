@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import apiClient from '@/api/client'
 
 export type GenerationStatus = 'idle' | 'uploading' | 'processing' | 'polling' | 'completed' | 'failed'
 
@@ -15,6 +16,19 @@ export interface GenerationTask {
   startedAt: Date
   completedAt?: Date
   creditCost: number
+  estimatedSeconds?: number
+}
+
+// Estimated generation time per tool type (seconds)
+const TOOL_ETA: Record<string, number> = {
+  background_removal: 15,
+  product_scene: 30,
+  try_on: 45,
+  room_redesign: 60,
+  short_video: 120,
+  ai_avatar: 180,
+  pattern_generate: 25,
+  effect: 20,
 }
 
 export const useGenerationStore = defineStore('generation', () => {
@@ -22,6 +36,8 @@ export const useGenerationStore = defineStore('generation', () => {
   const currentTask = ref<GenerationTask | null>(null)
   const taskHistory = ref<GenerationTask[]>([])
   const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
+  const pollingRetryCount = ref(0)
+  const MAX_POLL_RETRIES = 3
 
   // Computed
   const isProcessing = computed(() =>
@@ -35,6 +51,20 @@ export const useGenerationStore = defineStore('generation', () => {
 
   const currentProgress = computed(() => currentTask.value?.progress || 0)
 
+  const activeGenerations = computed(() =>
+    taskHistory.value.filter(t =>
+      t.status === 'uploading' || t.status === 'processing' || t.status === 'polling'
+    )
+  )
+
+  const estimatedTimeRemaining = computed(() => {
+    if (!currentTask.value || !isProcessing.value) return null
+    const eta = currentTask.value.estimatedSeconds || 60
+    const elapsed = (Date.now() - currentTask.value.startedAt.getTime()) / 1000
+    const remaining = Math.max(0, eta - elapsed)
+    return Math.ceil(remaining)
+  })
+
   // Actions
   function startTask(toolType: string, creditCost: number): string {
     const taskId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -45,9 +75,11 @@ export const useGenerationStore = defineStore('generation', () => {
       status: 'uploading',
       progress: 0,
       startedAt: new Date(),
-      creditCost
+      creditCost,
+      estimatedSeconds: TOOL_ETA[toolType] || 60,
     }
 
+    pollingRetryCount.value = 0
     return taskId
   }
 
@@ -114,10 +146,12 @@ export const useGenerationStore = defineStore('generation', () => {
     intervalMs: number = 2000
   ) {
     stopPolling()
+    pollingRetryCount.value = 0
 
     pollingInterval.value = setInterval(async () => {
       try {
         const response = await pollFn()
+        pollingRetryCount.value = 0 // Reset on success
 
         if (response.progress !== undefined) {
           updateStatus('polling', response.progress)
@@ -129,7 +163,28 @@ export const useGenerationStore = defineStore('generation', () => {
           setError(response.result?.error || 'Generation failed')
         }
       } catch (error: any) {
-        setError(error.message || 'Polling failed')
+        pollingRetryCount.value++
+        if (pollingRetryCount.value >= MAX_POLL_RETRIES) {
+          setError(error.message || 'Polling failed after retries')
+        }
+        // Otherwise silently retry on next interval
+      }
+    }, intervalMs)
+  }
+
+  /**
+   * Poll the backend generation status endpoint directly.
+   * Usage: pollGenerationStatus('task-uuid-123')
+   */
+  function pollGenerationStatus(taskId: string, intervalMs: number = 2000) {
+    updateStatus('polling', 30)
+
+    startPolling(async () => {
+      const { data } = await apiClient.get(`/api/v1/generate/status/${taskId}`)
+      return {
+        status: data.status,
+        progress: data.progress,
+        result: data.result,
       }
     }, intervalMs)
   }
@@ -160,6 +215,8 @@ export const useGenerationStore = defineStore('generation', () => {
     isCompleted,
     isFailed,
     currentProgress,
+    activeGenerations,
+    estimatedTimeRemaining,
 
     // Actions
     startTask,
@@ -168,6 +225,7 @@ export const useGenerationStore = defineStore('generation', () => {
     setResult,
     setError,
     startPolling,
+    pollGenerationStatus,
     stopPolling,
     reset,
     clearHistory

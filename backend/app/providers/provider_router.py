@@ -6,11 +6,6 @@ Priority:
 2. Pollo.ai - Backup + Advanced features (Keyframes, Effects, Multi-model)
 3. A2E.ai - Avatar (no backup)
 4. Gemini - Moderation + Emergency backup for Interior
-5. Trellis (via PiAPI) - 3D model generation from images
-
-Tier-based routing:
-- Free tier: Lower resolution, shorter duration, no audio
-- Paid tier: Full resolution, longer duration, with audio
 """
 from typing import Dict, Any, Optional
 from enum import Enum
@@ -22,8 +17,6 @@ from app.providers.piapi_provider import PiAPIProvider
 from app.providers.pollo_provider import PolloProvider
 from app.providers.a2e_provider import A2EProvider
 from app.providers.gemini_provider import GeminiProvider
-from app.providers.trellis_provider import TrellisProvider
-from app.services.tier_config import get_user_tier, get_tier_config, get_model_params
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +28,6 @@ class TaskType(str, Enum):
     T2V = "text_to_video"
     V2V = "video_style_transfer"
     INTERIOR = "interior_design"
-    INTERIOR_3D = "interior_3d"  # Trellis Image-to-3D
     AVATAR = "avatar"
     UPSCALE = "upscale"
     KEYFRAMES = "keyframes"
@@ -122,10 +114,6 @@ class ProviderRouter:
             "primary": "piapi",
             "backup": None,
         },
-        TaskType.INTERIOR_3D: {
-            "primary": "trellis",
-            "backup": None,
-        },
     }
 
     def __init__(self):
@@ -134,7 +122,6 @@ class ProviderRouter:
         self.pollo = PolloProvider()
         self.a2e = A2EProvider()
         self.gemini = GeminiProvider()
-        self.trellis = TrellisProvider()
 
         # Provider status cache
         self._status_cache: Dict[str, Dict] = {}
@@ -149,18 +136,15 @@ class ProviderRouter:
         self,
         task_type: TaskType,
         params: Dict[str, Any],
-        user_tier: str = "free",
-        user=None,
+        user_tier: str = "starter"
     ) -> Dict[str, Any]:
         """
         Route request to appropriate provider with automatic failover.
-        Applies tier-based parameter overrides (free vs paid quality).
 
         Args:
             task_type: Type of task to perform
             params: Task parameters
-            user_tier: User tier ('free' or 'paid')
-            user: Optional User model for tier detection
+            user_tier: User subscription tier (starter, pro, pro_plus)
 
         Returns:
             Provider response with output
@@ -168,11 +152,6 @@ class ProviderRouter:
         config = self.ROUTING_CONFIG.get(task_type)
         if not config:
             raise ValueError(f"Unknown task type: {task_type}")
-
-        # Apply tier-based parameter overrides
-        if user is not None:
-            user_tier = get_user_tier(user)
-        params = self._apply_tier_overrides(task_type, params, user_tier)
 
         # Check primary provider health
         primary_provider = config["primary"]
@@ -215,68 +194,6 @@ class ProviderRouter:
     # PROVIDER EXECUTION
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _apply_tier_overrides(
-        self,
-        task_type: TaskType,
-        params: Dict[str, Any],
-        user_tier: str,
-    ) -> Dict[str, Any]:
-        """
-        Apply tier-based parameter overrides to generation params.
-
-        Free tier: 720P, max 5s video, no audio, smaller images
-        Paid tier: 1080P, max 15s video, with audio, full images
-        """
-        from app.services.tier_config import FREE_TIER, PAID_TIER
-
-        tier_cfg = FREE_TIER if user_tier == "free" else PAID_TIER
-
-        # Map TaskType to tier_config model key
-        type_key_map = {
-            TaskType.T2I: "t2i",
-            TaskType.I2V: "i2v",
-            TaskType.T2V: "t2v",
-            TaskType.V2V: "t2v",  # same limits as t2v
-            TaskType.INTERIOR: "interior",
-            TaskType.INTERIOR_3D: "interior_3d",
-            TaskType.AVATAR: "avatar",
-            TaskType.BACKGROUND_REMOVAL: "bg_removal",
-            TaskType.EFFECTS: "effect",
-        }
-
-        key = type_key_map.get(task_type)
-        if not key:
-            return params
-
-        model_cfg = tier_cfg["models"].get(key, {})
-
-        # Apply resolution override
-        if "resolution" in model_cfg:
-            params["resolution"] = model_cfg["resolution"]
-        elif "resolution" in params:
-            params["resolution"] = tier_cfg["max_resolution"]
-
-        # Apply duration limits
-        if "duration" in params:
-            params["duration"] = min(
-                params["duration"], tier_cfg["max_duration"]
-            )
-        elif "duration" in model_cfg:
-            params["duration"] = model_cfg["duration"]
-
-        # Apply image size override
-        if "size" in model_cfg and "size" not in params:
-            params["size"] = model_cfg["size"]
-
-        # Apply audio setting for avatars
-        if task_type == TaskType.AVATAR:
-            params["audio_enabled"] = tier_cfg["audio_enabled"]
-
-        # Mark tier on params for downstream use
-        params["_user_tier"] = user_tier
-
-        return params
-
     async def _execute_on_provider(
         self,
         provider: str,
@@ -293,8 +210,6 @@ class ProviderRouter:
             return await self.a2e.generate_avatar(params)
         elif provider == "gemini":
             return await self._execute_gemini(task_type, params)
-        elif provider == "trellis":
-            return await self._execute_trellis(task_type, params)
         else:
             raise ValueError(f"Unknown provider: {provider}")
 
@@ -348,21 +263,6 @@ class ProviderRouter:
         else:
             raise ValueError(f"Gemini doesn't support: {task_type}")
 
-    async def _execute_trellis(
-        self, task_type: TaskType, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Execute task on Trellis (PiAPI 3D generation)."""
-
-        if task_type == TaskType.INTERIOR_3D:
-            if "image_url" in params:
-                return await self.trellis.image_to_3d(params)
-            elif "prompt" in params:
-                return await self.trellis.text_to_3d(params)
-            else:
-                raise ValueError("Trellis requires either image_url or prompt")
-        else:
-            raise ValueError(f"Trellis doesn't support: {task_type}")
-
     # ─────────────────────────────────────────────────────────────────────────
     # HEALTH CHECKING
     # ─────────────────────────────────────────────────────────────────────────
@@ -403,8 +303,7 @@ class ProviderRouter:
             "piapi": self.piapi,
             "pollo": self.pollo,
             "a2e": self.a2e,
-            "gemini": self.gemini,
-            "trellis": self.trellis,
+            "gemini": self.gemini
         }
         return providers.get(provider)
 
@@ -440,7 +339,7 @@ class ProviderRouter:
 
     async def get_all_status(self) -> Dict[str, Any]:
         """Get status of all providers."""
-        providers = ["piapi", "pollo", "a2e", "gemini", "trellis"]
+        providers = ["piapi", "pollo", "a2e", "gemini"]
         status = {}
 
         for provider in providers:
@@ -463,8 +362,7 @@ class ProviderRouter:
             ("piapi", self.piapi),
             ("pollo", self.pollo),
             ("a2e", self.a2e),
-            ("gemini", self.gemini),
-            ("trellis", self.trellis),
+            ("gemini", self.gemini)
         ]:
             try:
                 is_healthy = await provider.health_check()
@@ -486,8 +384,7 @@ class ProviderRouter:
             self.piapi.close(),
             self.pollo.close(),
             self.a2e.close(),
-            self.gemini.close(),
-            self.trellis.close(),
+            self.gemini.close()
         )
 
 

@@ -83,10 +83,6 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
     FRONTEND_URL: str = "http://localhost:8501"
 
-    # Anti-abuse: reCAPTCHA
-    RECAPTCHA_SECRET_KEY: str = ""  # Google reCAPTCHA v2 secret key
-    RECAPTCHA_SITE_KEY: str = ""  # Google reCAPTCHA v2 site key (public, also set in frontend VITE_RECAPTCHA_SITE_KEY)
-
     class Config:
         env_file = ".env"
         case_sensitive = True

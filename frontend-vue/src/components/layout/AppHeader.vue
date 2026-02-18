@@ -116,8 +116,63 @@ onUnmounted(() => {
           {{ t('nav.home') }}
         </RouterLink>
 
-        <!-- Auth links for mobile -->
-        <div v-if="!authStore.isAuthenticated" class="pt-2 border-t border-dark-700 space-y-2">
+        <!-- Authenticated user: dashboard links -->
+        <template v-if="authStore.isAuthenticated">
+          <div class="pt-2 border-t border-dark-700 space-y-2">
+            <RouterLink
+              to="/dashboard"
+              class="block px-4 py-2 rounded-lg hover:bg-dark-700 text-gray-300"
+              @click="mobileMenuOpen = false"
+            >
+              {{ t('nav.dashboard') }}
+            </RouterLink>
+            <RouterLink
+              to="/dashboard/my-works"
+              class="block px-4 py-2 rounded-lg hover:bg-dark-700 text-gray-300"
+              @click="mobileMenuOpen = false"
+            >
+              {{ t('nav.myWorks') }}
+            </RouterLink>
+            <RouterLink
+              to="/dashboard/invoices"
+              class="block px-4 py-2 rounded-lg hover:bg-dark-700 text-gray-300"
+              @click="mobileMenuOpen = false"
+            >
+              Invoices
+            </RouterLink>
+            <RouterLink
+              to="/dashboard/profile"
+              class="block px-4 py-2 rounded-lg hover:bg-dark-700 text-gray-300"
+              @click="mobileMenuOpen = false"
+            >
+              Profile
+            </RouterLink>
+          </div>
+
+          <!-- Admin link -->
+          <div v-if="authStore.isAdmin" class="pt-2 border-t border-dark-700 space-y-2">
+            <RouterLink
+              to="/admin"
+              class="block px-4 py-2 rounded-lg hover:bg-dark-700 text-orange-400"
+              @click="mobileMenuOpen = false"
+            >
+              Admin Panel
+            </RouterLink>
+          </div>
+
+          <!-- Logout -->
+          <div class="pt-2 border-t border-dark-700">
+            <button
+              @click="handleLogout(); mobileMenuOpen = false"
+              class="block w-full text-left px-4 py-2 rounded-lg hover:bg-dark-700 text-red-400"
+            >
+              {{ t('nav.logout') }}
+            </button>
+          </div>
+        </template>
+
+        <!-- Not authenticated: login/register -->
+        <div v-else class="pt-2 border-t border-dark-700 space-y-2">
           <RouterLink
             to="/auth/login"
             class="block px-4 py-2 rounded-lg hover:bg-dark-700 text-gray-300"

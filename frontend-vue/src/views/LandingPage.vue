@@ -609,7 +609,7 @@ watch(locale, () => {
             </span>
           </div>
 
-          <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <div
               v-for="work in worksGallery"
               :key="work.id"
@@ -694,7 +694,7 @@ watch(locale, () => {
               {{ isZh ? '產品增強與廣告特效' : 'Product Enhancement & Ad Effects' }}
             </h2>
           </div>
-          <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <div v-for="i in 12" :key="i" class="aspect-square rounded-xl bg-dark-700/50 animate-pulse" />
           </div>
         </section>
@@ -759,7 +759,7 @@ watch(locale, () => {
             </h2>
           </div>
 
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <button
               v-for="tool in toolCatalog"
               :key="tool.key"
@@ -1002,20 +1002,20 @@ watch(locale, () => {
         </section>
 
         <!-- ============================================
-             QUICK ACCESS CATEGORIES - Mobile visible
+             QUICK ACCESS CATEGORIES - Mobile visible (horizontal scroll)
              ============================================ -->
         <section class="lg:hidden mb-12">
           <h2 class="text-lg font-semibold text-white mb-4">
             {{ isZh ? '功能分類' : 'Categories' }}
           </h2>
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
             <button
               v-for="cat in categories"
               :key="cat.key"
               @click="goToTool(cat.tools[0]?.route || '/')"
-              class="flex items-center gap-3 p-4 bg-dark-700/50 hover:bg-dark-700 border border-dark-600 rounded-xl transition-colors"
+              class="flex items-center gap-2 px-4 py-3 bg-dark-700/50 hover:bg-dark-700 border border-dark-600 rounded-xl transition-colors whitespace-nowrap flex-shrink-0"
             >
-              <span class="text-2xl">{{ cat.icon }}</span>
+              <span class="text-xl">{{ cat.icon }}</span>
               <span class="text-sm text-white">{{ isZh ? cat.nameZh : cat.name }}</span>
             </button>
           </div>
@@ -1127,5 +1127,14 @@ watch(locale, () => {
   main {
     padding-bottom: 80px;
   }
+}
+
+/* Hide scrollbar for horizontal scroll containers */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 </style>

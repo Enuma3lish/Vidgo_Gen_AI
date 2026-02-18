@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, payments, demo, plans, promotions, credits, effects, generation, landing, quota, tools, admin, session, interior, workflow, subscriptions, prompts, user_works
+from app.api.v1 import auth, payments, demo, plans, promotions, credits, effects, generation, landing, quota, tools, admin, session, interior, workflow, subscriptions, prompts, user_works, social
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -20,3 +20,4 @@ api_router.include_router(interior.router, tags=["interior"])
 api_router.include_router(workflow.router, tags=["workflow"])
 api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(user_works.router, prefix="/user", tags=["user"])
+api_router.include_router(social.router, prefix="/social", tags=["social"])

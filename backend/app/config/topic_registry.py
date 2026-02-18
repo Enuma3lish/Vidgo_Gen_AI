@@ -223,3 +223,170 @@ def get_landing_topic_ids() -> List[str]:
 def is_landing_topic(topic_id: str) -> bool:
     """Check if a topic ID is a landing page topic."""
     return topic_id in get_landing_topic_ids()
+
+
+# =============================================================================
+# PROMPT-TOPIC VALIDATION
+# =============================================================================
+
+# Keywords associated with each topic for content matching
+TOPIC_KEYWORDS: Dict[str, List[str]] = {
+    # Background Removal topics
+    "drinks": ["tea", "coffee", "juice", "beverage", "drink", "cup", "straw", "latte", "smoothie", "水", "茶", "咖啡", "飲", "杯"],
+    "snacks": ["snack", "fried", "crispy", "chip", "popcorn", "chicken", "fry", "炸", "雞", "薯", "小吃", "零食"],
+    "desserts": ["cake", "dessert", "sweet", "pastry", "chocolate", "ice cream", "cookie", "蛋糕", "甜", "巧克力", "冰淇淋"],
+    "meals": ["meal", "lunch", "dinner", "rice", "noodle", "soup", "bento", "飯", "麵", "湯", "便當", "正餐"],
+    "packaging": ["package", "bag", "box", "container", "takeout", "包裝", "袋", "盒", "外帶"],
+    "equipment": ["equipment", "machine", "oven", "blender", "mixer", "tool", "設備", "機器", "烤箱"],
+    "signage": ["sign", "menu", "board", "banner", "poster", "招牌", "菜單", "看板"],
+    "ingredients": ["ingredient", "raw", "fresh", "vegetable", "fruit", "meat", "食材", "蔬菜", "水果", "肉"],
+
+    # Product Scene topics
+    "studio": ["studio", "lighting", "professional", "flash", "backdrop", "攝影棚", "燈光"],
+    "nature": ["nature", "outdoor", "garden", "forest", "grass", "natural", "自然", "戶外", "花園"],
+    "elegant": ["elegant", "luxury", "premium", "gold", "marble", "silk", "質感", "優雅", "高級"],
+    "minimal": ["minimal", "simple", "clean", "white", "plain", "極簡", "簡約", "乾淨"],
+    "lifestyle": ["lifestyle", "home", "cozy", "living", "casual", "daily", "生活", "居家"],
+    "urban": ["urban", "city", "street", "modern", "concrete", "都市", "城市", "街頭"],
+    "seasonal": ["seasonal", "spring", "summer", "autumn", "winter", "season", "季節", "春", "夏", "秋", "冬"],
+    "holiday": ["holiday", "christmas", "new year", "valentine", "festival", "節日", "聖誕", "新年"],
+
+    # Try-On topics
+    "casual": ["casual", "t-shirt", "jeans", "hoodie", "everyday", "休閒", "T恤", "牛仔"],
+    "formal": ["formal", "suit", "dress shirt", "tie", "blazer", "business", "正式", "西裝"],
+    "sportswear": ["sport", "athletic", "gym", "running", "yoga", "fitness", "運動", "健身"],
+    "outerwear": ["jacket", "coat", "parka", "windbreaker", "outer", "外套", "夾克", "大衣"],
+    "accessories": ["accessory", "hat", "scarf", "watch", "bag", "belt", "glasses", "配件", "帽", "圍巾"],
+    "dresses": ["dress", "gown", "skirt", "frock", "洋裝", "裙"],
+
+    # Room Redesign topics
+    "living_room": ["living room", "sofa", "couch", "tv", "lounge", "客廳", "沙發", "電視"],
+    "bedroom": ["bedroom", "bed", "sleep", "pillow", "mattress", "nightstand", "臥室", "床", "枕"],
+    "kitchen": ["kitchen", "cook", "stove", "oven", "counter", "cabinet", "廚房", "烹飪", "爐"],
+    "bathroom": ["bathroom", "bath", "shower", "sink", "tile", "toilet", "mirror", "浴室", "淋浴", "洗手台"],
+
+    # Short Video topics
+    "product_showcase": ["showcase", "product", "display", "present", "close-up", "展示", "產品", "特寫"],
+    "brand_intro": ["brand", "introduction", "story", "company", "about", "品牌", "介紹", "故事"],
+    "tutorial": ["tutorial", "how to", "step", "guide", "learn", "教學", "步驟", "指南"],
+    "promo": ["promo", "sale", "discount", "offer", "deal", "limited", "促銷", "優惠", "折扣", "限時"],
+
+    # AI Avatar topics
+    "spokesperson": ["spokesperson", "brand", "ambassador", "represent", "代言", "品牌", "形象"],
+    "product_intro": ["product", "introduce", "feature", "benefit", "launch", "產品", "介紹", "功能"],
+    "customer_service": ["customer", "service", "help", "support", "assist", "FAQ", "客服", "服務", "幫助"],
+    "social_media": ["social", "media", "instagram", "tiktok", "post", "share", "社群", "媒體", "分享"],
+
+    # Pattern Generate topics
+    "seamless": ["seamless", "repeat", "tile", "continuous", "無縫", "重複", "連續"],
+    "floral": ["floral", "flower", "petal", "botanical", "rose", "leaf", "花", "花卉", "玫瑰", "葉"],
+    "geometric": ["geometric", "triangle", "circle", "square", "hexagon", "line", "幾何", "三角", "圓"],
+    "abstract": ["abstract", "modern", "artistic", "creative", "shape", "抽象", "藝術", "現代"],
+    "traditional": ["traditional", "cultural", "chinese", "japanese", "classic", "heritage", "傳統", "文化", "古典"],
+
+    # Effect/Style Transfer topics
+    "anime": ["anime", "manga", "animation", "japanese", "動漫", "漫畫", "動畫"],
+    "ghibli": ["ghibli", "miyazaki", "totoro", "spirited", "吉卜力", "宮崎駿"],
+    "cartoon": ["cartoon", "pixar", "3d", "toon", "disney", "卡通", "動畫"],
+    "oil_painting": ["oil", "painting", "canvas", "brush", "van gogh", "impressionist", "油畫", "畫布"],
+    "watercolor": ["watercolor", "wash", "soft", "pastel", "aquarelle", "水彩", "柔和"],
+}
+
+
+def validate_prompt_topic(
+    tool_type: str,
+    topic_id: str,
+    prompt: str,
+    min_matches: int = 1,
+) -> Dict:
+    """
+    Validate if a prompt's content matches its assigned topic using keyword matching.
+
+    Args:
+        tool_type: Tool type string (e.g., 'background_removal')
+        topic_id: Topic ID to validate against (e.g., 'drinks')
+        prompt: The prompt text to check
+        min_matches: Minimum keyword matches required (default: 1)
+
+    Returns:
+        Dict with: is_valid, matched_keywords, total_keywords, confidence, message
+    """
+    if not is_valid_topic(tool_type, topic_id):
+        return {
+            "is_valid": False,
+            "matched_keywords": [],
+            "total_keywords": 0,
+            "confidence": 0.0,
+            "message": f"Invalid topic '{topic_id}' for tool '{tool_type}'",
+        }
+
+    keywords = TOPIC_KEYWORDS.get(topic_id, [])
+    if not keywords:
+        # No keywords defined for this topic — skip validation
+        return {
+            "is_valid": True,
+            "matched_keywords": [],
+            "total_keywords": 0,
+            "confidence": 1.0,
+            "message": f"No keywords defined for topic '{topic_id}', skipping validation",
+        }
+
+    prompt_lower = prompt.lower()
+    matched = [kw for kw in keywords if kw.lower() in prompt_lower]
+
+    is_valid = len(matched) >= min_matches
+    confidence = len(matched) / len(keywords) if keywords else 0.0
+
+    return {
+        "is_valid": is_valid,
+        "matched_keywords": matched,
+        "total_keywords": len(keywords),
+        "confidence": round(confidence, 3),
+        "message": (
+            f"OK: {len(matched)}/{len(keywords)} keywords matched"
+            if is_valid
+            else f"MISMATCH: prompt has {len(matched)}/{len(keywords)} matches for topic '{topic_id}' (need {min_matches})"
+        ),
+    }
+
+
+def validate_all_prompts(
+    tool_type: str,
+    topic_prompts: Dict[str, List[str]],
+) -> Dict:
+    """
+    Validate all prompts for a tool type against their assigned topics.
+
+    Args:
+        tool_type: Tool type string
+        topic_prompts: Dict mapping topic_id -> list of prompt strings
+
+    Returns:
+        Dict with: total, valid, invalid, mismatches (list of problem prompts)
+    """
+    total = 0
+    valid = 0
+    mismatches = []
+
+    for topic_id, prompts in topic_prompts.items():
+        for prompt in prompts:
+            total += 1
+            result = validate_prompt_topic(tool_type, topic_id, prompt)
+            if result["is_valid"]:
+                valid += 1
+            else:
+                mismatches.append({
+                    "topic": topic_id,
+                    "prompt": prompt[:80] + "..." if len(prompt) > 80 else prompt,
+                    "matched_keywords": result["matched_keywords"],
+                    "confidence": result["confidence"],
+                })
+
+    return {
+        "tool_type": tool_type,
+        "total": total,
+        "valid": valid,
+        "invalid": len(mismatches),
+        "pass_rate": round(valid / total, 3) if total > 0 else 1.0,
+        "mismatches": mismatches,
+    }

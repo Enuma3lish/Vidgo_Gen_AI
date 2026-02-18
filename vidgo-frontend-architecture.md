@@ -260,6 +260,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/tools/avatar', name: 'avatar', component: AIAvatar },
   { path: '/tools/pattern-design', name: 'pattern-design', component: PatternDesign },
 
+  // ===== Effects Tool Alias =====
+  { path: '/tools/image-transform', redirect: '/tools/effects' },
+
   // ===== Video Tool Aliases =====
   { path: '/tools/image-to-video', redirect: '/tools/short-video' },
   { path: '/tools/video-transform', redirect: '/tools/short-video' },
@@ -567,6 +570,42 @@ export const getRoomConstraints = async () => {
   return client.get('/interior/room-constraints')
   // Returns: { constraints: { bathroom: ["bathroom"], kitchen: ["kitchen"], ... } }
 }
+
+// Full 3D model generation with parameters (used by RoomRedesign "3D Model" tab)
+// interiorApi.generate3DModel(request) — 5-minute timeout
+export const generate3DModelFull = async (request: Generate3DRequest) => {
+  return client.post('/interior/3d-model', request, { timeout: 300000 })
+  // Sends: { image_url, texture_size, mesh_simplify }
+  // Returns: Generate3DResponse { model_url }
+}
+
+interface Generate3DRequest {
+  image_url: string
+  texture_size?: number
+  mesh_simplify?: number
+}
+
+interface Generate3DResponse {
+  model_url: string
+}
+```
+
+### 5.9.1 Effects API — Image Transform (NEW)
+
+```typescript
+// effectsApi.imageTransform(data) — Free-form I2I transformation
+// Used by ImageEffects "AI Transform" tab
+export const imageTransform = async (data: ImageTransformRequest) => {
+  return client.post('/tools/image-transform', data)
+  // Returns: ApplyStyleResponse
+}
+
+interface ImageTransformRequest {
+  image_url: string
+  prompt: string
+  strength: number
+  negative_prompt?: string
+}
 ```
 
 ### 5.10 Gift Code & Promotions API (NEW)
@@ -673,6 +712,10 @@ export const useGenerationStore = defineStore('generation', () => {
 |  ├─ Backend: PiAPI I2I (Flux model, strength 0.60-0.70)                      |
 |  ├─ Route: /tools/effects                                                    |
 |  ├─ Topics: anime, ghibli, cartoon, oil_painting, watercolor                 |
+|  ├─ Tabs:                                                                    |
+|  │   ├─ "Style Presets" — Existing preset-based style transfer (default)     |
+|  │   └─ "AI Transform" — Free-form I2I transformation with custom prompt     |
+|  │       + strength slider. Requires subscription; demo users blocked.       |
 |  └─ Mode: Pre-generated before/after gallery, watermarked output             |
 |                                                                              |
 |  Tool 3: Product Scene (產品攝影靈感)                                        |
@@ -691,9 +734,16 @@ export const useGenerationStore = defineStore('generation', () => {
 |  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
 |  Tool 5: Room Redesign (室內設計範例)                                        |
-|  ├─ Backend: PiAPI T2I (Flux model)                                          |
+|  ├─ Backend: PiAPI T2I (Flux model) + PiAPI Trellis (3D)                     |
 |  ├─ Route: /tools/room-redesign                                              |
 |  ├─ Topics: living_room, bedroom, kitchen, bathroom                          |
+|  ├─ Tabs:                                                                    |
+|  │   ├─ "Redesign" — Existing room redesign (default)                        |
+|  │   ├─ "Generate" — Room image generation                                   |
+|  │   ├─ "Style Transfer" — Room style transfer                               |
+|  │   └─ "3D Model" — Converts 2D room image/design into interactive 3D GLB  |
+|  │       model via PiAPI Trellis. Renders with ThreeViewer.vue.              |
+|  │       Requires subscription; demo users blocked.                          |
 |  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
 |  Tool 6: Short Video (短影片)                                                |
@@ -1124,6 +1174,8 @@ Real-time generation progress display component.
 ### 15.3 ThreeViewer (3D Model Viewer)
 
 Three.js-based GLB model viewer for interior design 3D outputs.
+- **Location:** `src/components/tools/ThreeViewer.vue`
+- **Used by:** `RoomRedesign.vue` (3D Model tab) — actively renders GLB models generated via PiAPI Trellis
 - Uses GLTFLoader to load .glb files from Trellis API
 - OrbitControls for rotation, zoom, pan
 - Auto-rotation on load

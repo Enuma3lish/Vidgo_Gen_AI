@@ -6,8 +6,8 @@ import { useUIStore } from '@/stores'
 import { useDemoMode } from '@/composables'
 import { interiorApi } from '@/api'
 import type { DesignStyle, RoomType } from '@/api'
-// PRESET-ONLY MODE: UploadZone removed - all users use presets
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
+import ThreeViewer from '@/components/tools/ThreeViewer.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 
@@ -28,7 +28,7 @@ const styles = ref<DesignStyle[]>([])
 const roomTypes = ref<RoomType[]>([])
 
 // State
-const activeTab = ref<'redesign' | 'generate' | 'styleTransfer'>('redesign')
+const activeTab = ref<'redesign' | 'generate' | 'styleTransfer' | '3dModel'>('redesign')
 const uploadedImage = ref<string | undefined>(undefined)
 const uploadedFile = ref<File | null>(null)
 const resultImage = ref<string | null>(null)
@@ -41,6 +41,12 @@ const prompt = ref<string>('')
 // Conversation for iterative editing
 const conversationId = ref<string | null>(null)
 const editHistory = ref<Array<{ prompt: string; image: string }>>([])
+
+// 3D Model state
+const modelUrl = ref<string | null>(null)
+const is3DProcessing = ref(false)
+const textureSize = ref(1024)
+const meshSimplify = ref(0.95)
 
 // Style icons mapping
 const styleIcons: Record<string, string> = {
@@ -421,6 +427,48 @@ async function handleStyleTransfer() {
   }
 }
 
+async function handle3DGenerate() {
+  if (isDemoUser.value) {
+    uiStore.showInfo(isZh.value ? '請訂閱以使用 3D 模型生成' : 'Subscribe to use 3D model generation')
+    return
+  }
+
+  // Use the generated 2D result or the uploaded image as source
+  const sourceUrl = resultImage.value || uploadedImage.value
+  if (!sourceUrl) {
+    uiStore.showError(isZh.value ? '請先上傳房間圖片或生成 2D 設計' : 'Please upload a room image or generate a 2D design first')
+    return
+  }
+
+  is3DProcessing.value = true
+  isProcessing.value = true
+  try {
+    const result = await interiorApi.generate3DModel({
+      image_url: sourceUrl,
+      texture_size: textureSize.value,
+      mesh_simplify: meshSimplify.value
+    })
+
+    if (result.success && result.model_url) {
+      modelUrl.value = result.model_url
+      uiStore.showSuccess(isZh.value ? '3D 模型生成成功' : '3D model generated successfully')
+    } else {
+      uiStore.showError(result.error || (isZh.value ? '3D 模型生成失敗' : '3D model generation failed'))
+    }
+  } catch (error: any) {
+    console.error('3D generation failed:', error)
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'object' && detail?.error === 'insufficient_credits') {
+      uiStore.showError(isZh.value ? '點數不足，請儲值' : 'Insufficient credits')
+    } else {
+      uiStore.showError(typeof detail === 'string' ? detail : (isZh.value ? '生成過程中發生錯誤' : 'An error occurred'))
+    }
+  } finally {
+    is3DProcessing.value = false
+    isProcessing.value = false
+  }
+}
+
 function handleSubmit() {
   switch (activeTab.value) {
     case 'redesign':
@@ -431,6 +479,9 @@ function handleSubmit() {
       break
     case 'styleTransfer':
       handleStyleTransfer()
+      break
+    case '3dModel':
+      handle3DGenerate()
       break
   }
 }
@@ -443,6 +494,7 @@ function reset() {
   prompt.value = ''
   conversationId.value = null
   editHistory.value = []
+  modelUrl.value = null
 
   // For demo users, re-select first default room
   if (isDemoUser.value && defaultRooms.length > 0) {
@@ -458,8 +510,11 @@ function reset() {
 
 // Watch tab changes for demo users
 watch(activeTab, (newTab) => {
-  if (isDemoUser.value && newTab === 'generate') {
-    uiStore.showInfo(isZh.value ? '請訂閱以使用文字生成功能' : 'Please subscribe to use text generation')
+  if (isDemoUser.value && (newTab === 'generate' || newTab === '3dModel')) {
+    const msg = newTab === '3dModel'
+      ? (isZh.value ? '請訂閱以使用 3D 模型生成' : 'Subscribe to use 3D model generation')
+      : (isZh.value ? '請訂閱以使用文字生成功能' : 'Please subscribe to use text generation')
+    uiStore.showInfo(msg)
     activeTab.value = 'redesign'
   }
 })
@@ -509,7 +564,8 @@ watch(activeTab, (newTab) => {
             v-for="tab in [
               { id: 'redesign', icon: '🔄', label: t('interior.tabs.redesign') },
               { id: 'generate', icon: '✨', label: t('interior.tabs.generate'), disabled: isDemoUser },
-              { id: 'styleTransfer', icon: '🎨', label: t('interior.tabs.styleTransfer') }
+              { id: 'styleTransfer', icon: '🎨', label: t('interior.tabs.styleTransfer') },
+              { id: '3dModel', icon: '🧊', label: isZh ? '3D 模型' : '3D Model', disabled: isDemoUser }
             ]"
             :key="tab.id"
             @click="!tab.disabled && (activeTab = tab.id as any)"
@@ -531,7 +587,7 @@ watch(activeTab, (newTab) => {
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Left Panel - Input -->
         <div class="space-y-6">
-          <!-- Upload Zone (for redesign and style transfer) -->
+          <!-- Upload Zone (for redesign, style transfer, and 3D) -->
           <div v-if="activeTab !== 'generate'" class="card bg-dark-800/50 backdrop-blur border border-dark-700">
             <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <span>📷</span>
@@ -633,8 +689,8 @@ watch(activeTab, (newTab) => {
             </div>
           </div>
 
-          <!-- Custom Prompt -->
-          <div v-if="!isDemoUser" class="card bg-dark-800/50 backdrop-blur border border-dark-700">
+          <!-- Custom Prompt (not shown for 3D tab) -->
+          <div v-if="!isDemoUser && activeTab !== '3dModel'" class="card bg-dark-800/50 backdrop-blur border border-dark-700">
              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                <span>✏️</span>
                {{ isZh ? '自訂描述 (可選)' : 'Custom Prompt (Optional)' }}
@@ -645,6 +701,61 @@ watch(activeTab, (newTab) => {
                class="w-full bg-dark-900 border border-dark-600 rounded-lg p-3 text-white focus:outline-none focus:border-primary-500"
                :placeholder="isZh ? '描述您想要的房間細節，例如顏色、材質等...' : 'Describe specific details like colors, materials, etc...'"
              ></textarea>
+          </div>
+
+          <!-- 3D Model Settings -->
+          <div v-if="activeTab === '3dModel' && !isDemoUser" class="card bg-dark-800/50 backdrop-blur border border-dark-700">
+            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <span>🧊</span>
+              {{ isZh ? '3D 模型設定' : '3D Model Settings' }}
+            </h3>
+            <div class="space-y-4">
+              <div>
+                <p class="text-sm text-gray-300 mb-2">
+                  {{ isZh ? '將 2D 圖片轉換為可互動的 3D 模型（GLB 格式）。' : 'Convert a 2D image into an interactive 3D model (GLB format).' }}
+                </p>
+                <p v-if="resultImage" class="text-xs text-primary-400">
+                  {{ isZh ? '將使用上方的 2D 設計結果作為來源' : 'Will use the 2D design result above as source' }}
+                </p>
+                <p v-else class="text-xs text-gray-500">
+                  {{ isZh ? '將使用已選擇的房間圖片作為來源' : 'Will use the selected room image as source' }}
+                </p>
+              </div>
+
+              <div>
+                <label class="text-sm font-medium text-gray-300 mb-1 block">
+                  {{ isZh ? '貼圖品質' : 'Texture Quality' }}
+                </label>
+                <select
+                  v-model.number="textureSize"
+                  class="w-full bg-dark-900 border border-dark-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
+                >
+                  <option :value="512">512px ({{ isZh ? '較快' : 'Faster' }})</option>
+                  <option :value="1024">1024px ({{ isZh ? '高品質' : 'High Quality' }})</option>
+                </select>
+              </div>
+
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <label class="text-sm font-medium text-gray-300">
+                    {{ isZh ? '網格精細度' : 'Mesh Detail' }}
+                  </label>
+                  <span class="text-xs text-gray-400">{{ Math.round(meshSimplify * 100) }}%</span>
+                </div>
+                <input
+                  v-model.number="meshSimplify"
+                  type="range"
+                  min="0.5"
+                  max="1"
+                  step="0.05"
+                  class="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                />
+              </div>
+
+              <p class="text-xs text-gray-500">
+                {{ isZh ? '3D 模型生成可能需要 2-5 分鐘' : '3D model generation may take 2-5 minutes' }}
+              </p>
+            </div>
           </div>
 
           <!-- Generate Button -->
@@ -665,6 +776,7 @@ watch(activeTab, (newTab) => {
                 <span>✨</span>
                 {{ activeTab === 'redesign' ? t('interior.actions.redesign') :
                    activeTab === 'generate' ? t('interior.actions.generate') :
+                   activeTab === '3dModel' ? (isZh ? '生成 3D 模型' : 'Generate 3D Model') :
                    t('interior.actions.applyStyle') }}
               </span>
             </button>
@@ -755,6 +867,32 @@ watch(activeTab, (newTab) => {
                    <span class="mr-2">🔄</span>
                    {{ t('interior.tryAnother') }}
                  </button>
+              </div>
+            </div>
+
+            <!-- 3D Model Result -->
+            <div v-else-if="modelUrl && activeTab === '3dModel'" class="space-y-4">
+              <ThreeViewer
+                :model-url="modelUrl"
+                :width="560"
+                :height="400"
+              />
+              <p class="text-sm text-gray-400 text-center">
+                {{ isZh ? '拖曳旋轉 / 滾輪縮放' : 'Drag to rotate / Scroll to zoom' }}
+              </p>
+
+              <div class="flex gap-3">
+                <a
+                  :href="modelUrl"
+                  download="vidgo_3d_model.glb"
+                  class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
+                >
+                  <span class="mr-2">📥</span> {{ isZh ? '下載 GLB 模型' : 'Download GLB Model' }}
+                </a>
+                <button @click="reset" class="btn-ghost flex-1">
+                  <span class="mr-2">🔄</span>
+                  {{ t('interior.tryAnother') }}
+                </button>
               </div>
             </div>
 

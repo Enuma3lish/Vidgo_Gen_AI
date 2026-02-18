@@ -43,6 +43,7 @@ class TaskType(str, Enum):
     MULTI_MODEL = "multi_model"
     MODERATION = "moderation"
     BACKGROUND_REMOVAL = "background_removal"
+    I2I = "image_to_image"
 
 
 class ProviderStatus(str, Enum):
@@ -125,6 +126,11 @@ class ProviderRouter:
         TaskType.INTERIOR_3D: {
             "primary": "trellis",
             "backup": None,
+        },
+        TaskType.I2I: {
+            "primary": "piapi",
+            "backup": None,
+            "model": "flux1-schnell"
         },
     }
 
@@ -242,6 +248,7 @@ class ProviderRouter:
             TaskType.AVATAR: "avatar",
             TaskType.BACKGROUND_REMOVAL: "bg_removal",
             TaskType.EFFECTS: "effect",
+            TaskType.I2I: "i2i",
         }
 
         key = type_key_map.get(task_type)
@@ -317,6 +324,8 @@ class ProviderRouter:
             return await self.piapi.upscale(params)
         elif task_type == TaskType.BACKGROUND_REMOVAL:
             return await self.piapi.background_removal(params)
+        elif task_type == TaskType.I2I:
+            return await self.piapi.image_to_image(params)
         else:
             raise ValueError(f"PiAPI doesn't support: {task_type}")
 

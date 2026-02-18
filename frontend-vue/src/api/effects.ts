@@ -31,6 +31,13 @@ export interface EnhanceResponse {
   credits_used: number
 }
 
+export interface ImageTransformRequest {
+  image_url: string
+  prompt: string
+  strength?: number
+  negative_prompt?: string
+}
+
 export const effectsApi = {
   async getStyles(category?: string): Promise<Style[]> {
     const params = category ? { category } : {}
@@ -45,6 +52,11 @@ export const effectsApi = {
 
   async hdEnhance(data: EnhanceRequest): Promise<EnhanceResponse> {
     const response = await apiClient.post('/api/v1/effects/hd-enhance', data)
+    return response.data
+  },
+
+  async imageTransform(data: ImageTransformRequest): Promise<ApplyStyleResponse> {
+    const response = await apiClient.post('/api/v1/tools/image-transform', data)
     return response.data
   }
 }

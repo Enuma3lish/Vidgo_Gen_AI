@@ -1084,6 +1084,135 @@ async def get_avatar_characters():
 
 
 # ============================================================================
+# Image-to-Image Transform
+# ============================================================================
+
+class ImageTransformRequest(BaseModel):
+    """Image-to-Image transformation using PiAPI Flux"""
+    image_url: HttpUrl
+    prompt: str
+    strength: float = 0.75  # 0.0 (subtle) to 1.0 (dramatic)
+    negative_prompt: Optional[str] = None
+
+
+@router.post("/image-transform", response_model=ToolResponse)
+async def image_transform(
+    request: ImageTransformRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional)
+):
+    """
+    True Image-to-Image transformation via PiAPI Flux.
+
+    Upload a source image and describe how to transform it.
+    Supports style changes, scene modifications, artistic effects, etc.
+
+    USER TIER LOGIC:
+    - Demo users: Return pre-generated result from Material DB (EFFECT type)
+    - Subscribers: Real-time I2I via PiAPI Flux img2img
+
+    Credits: 20 (free) / 80 (paid) per generation
+    """
+    # ========== DEMO USER: Use pre-generated Material DB ==========
+    if not is_subscribed_user(current_user):
+        logger.info("Demo user: Looking up pre-generated effect result for I2I")
+
+        result = await db.execute(
+            select(Material)
+            .where(Material.tool_type == ToolType.EFFECT)
+            .where(Material.is_active == True)
+            .limit(1)
+        )
+        material = result.scalars().first()
+
+        if material:
+            result_url = material.result_watermarked_url or material.result_image_url
+            return ToolResponse(
+                success=True,
+                result_url=result_url,
+                credits_used=0,
+                cached=True,
+                message="Demo result (watermarked). Subscribe for custom I2I transformations."
+            )
+        else:
+            return ToolResponse(
+                success=False,
+                message="No pre-generated examples available. Please subscribe."
+            )
+
+    # ========== SUBSCRIBER: Real-time I2I Generation ==========
+    from app.services.tier_config import get_credit_cost, get_user_tier
+
+    tier = get_user_tier(current_user)
+    cost = get_credit_cost("i2i", current_user)
+
+    if current_user.total_credits < cost:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "insufficient_credits",
+                "message": "Insufficient credits",
+                "required": cost,
+                "current": current_user.total_credits,
+            }
+        )
+
+    try:
+        provider_router = get_provider_router()
+        result = await provider_router.route(
+            TaskType.I2I,
+            {
+                "image_url": str(request.image_url),
+                "prompt": request.prompt,
+                "strength": request.strength,
+                "negative_prompt": request.negative_prompt or "",
+            },
+            user_tier=tier,
+        )
+
+        if result.get("success"):
+            output = result.get("output", {})
+            result_url = output.get("image_url")
+
+            # Save to UserGeneration
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.EFFECT,
+                input_image_url=str(request.image_url),
+                input_text=request.prompt,
+                input_params={
+                    "strength": request.strength,
+                    "negative_prompt": request.negative_prompt,
+                    "mode": "i2i_transform",
+                },
+                result_image_url=result_url,
+                credits_used=cost,
+            )
+            db.add(user_gen)
+
+            # Deduct credits
+            current_user.total_credits -= cost
+            await db.commit()
+
+            return ToolResponse(
+                success=True,
+                result_url=result_url,
+                credits_used=cost,
+                message="Image transformed successfully"
+            )
+        else:
+            return ToolResponse(
+                success=False,
+                message=result.get("error", "Image transformation failed")
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Image transform error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # Template & Resource Endpoints
 # ============================================================================
 

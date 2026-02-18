@@ -6,17 +6,10 @@ const adminStore = useAdminStore()
 
 const stats = computed(() => adminStore.dashboardStats)
 
-const toolBreakdownMax = computed(() => {
-  const items = adminStore.toolBreakdownChart
-  if (!items.length) return 1
-  return Math.max(...items.map(i => i.count), 1)
-})
-
 onMounted(async () => {
   await Promise.all([
     adminStore.fetchDashboardStats(),
-    adminStore.fetchCharts(),
-    adminStore.fetchToolBreakdown()
+    adminStore.fetchCharts()
   ])
   adminStore.connectWebSocket()
 })
@@ -140,27 +133,6 @@ function formatCurrency(amount: number): string {
             ></div>
           </div>
           <span class="tier-count">{{ count }}</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Generation by Tool -->
-    <section class="section" v-if="adminStore.toolBreakdownChart.length">
-      <h2>Generations by Tool</h2>
-      <div class="tool-bars">
-        <div
-          v-for="item in adminStore.toolBreakdownChart"
-          :key="item.tool_type"
-          class="tool-bar"
-        >
-          <span class="tool-label">{{ item.tool_type }}</span>
-          <div class="tool-progress">
-            <div
-              class="tool-fill"
-              :style="{ width: `${(item.count / toolBreakdownMax) * 100}%` }"
-            ></div>
-          </div>
-          <span class="tool-count">{{ item.count }}</span>
         </div>
       </div>
     </section>
@@ -404,51 +376,6 @@ function formatCurrency(amount: number): string {
   text-align: right;
   font-weight: 600;
   color: #1a1a2e;
-}
-
-.tool-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.tool-bar {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.tool-label {
-  width: 140px;
-  font-size: 0.875rem;
-  color: #666;
-  text-transform: capitalize;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tool-progress {
-  flex: 1;
-  height: 10px;
-  background: #f0f0f0;
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.tool-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #388e3c, #66bb6a);
-  border-radius: 5px;
-  transition: width 0.3s ease;
-}
-
-.tool-count {
-  width: 60px;
-  text-align: right;
-  font-weight: 600;
-  color: #1a1a2e;
-  font-size: 0.875rem;
 }
 
 .quick-links {

@@ -193,49 +193,6 @@ class AdminDashboardService:
             for row in result.all()
         ]
 
-    async def get_tool_breakdown(self, days: int = 30) -> List[Dict[str, Any]]:
-        """Get generation count breakdown by tool type for the past N days"""
-        from app.models.user_generation import UserGeneration
-
-        cutoff = datetime.utcnow() - timedelta(days=days)
-        result = await self.db.execute(
-            select(
-                UserGeneration.tool_type,
-                func.count(UserGeneration.id).label('count')
-            ).where(
-                UserGeneration.created_at >= cutoff
-            ).group_by(
-                UserGeneration.tool_type
-            )
-        )
-        rows = result.all()
-        return [
-            {
-                "tool_type": row.tool_type.value if hasattr(row.tool_type, "value") else str(row.tool_type),
-                "count": row.count
-            }
-            for row in rows
-        ]
-
-    async def get_plan_distribution(self) -> List[Dict[str, Any]]:
-        """Get user count by plan type"""
-        result = await self.db.execute(
-            select(
-                Plan.name.label('plan_name'),
-                func.count(User.id).label('count')
-            )
-            .outerjoin(Plan, User.current_plan_id == Plan.id)
-            .group_by(Plan.name)
-        )
-        rows = result.all()
-        return [
-            {
-                "plan": row.plan_name or "No Plan",
-                "count": row.count
-            }
-            for row in rows
-        ]
-
     # =========================================================================
     # User Management
     # =========================================================================

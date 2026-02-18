@@ -13,13 +13,10 @@ from fastapi import APIRouter, HTTPException, Depends, Query, WebSocket, WebSock
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func as sa_func, select, cast, Date, text
 import asyncio
 
 from app.api.deps import get_current_user, get_db
 from app.models.user import User
-from app.models.user_generation import UserGeneration
-from app.models.billing import CreditTransaction, Plan
 from app.services.admin_dashboard import AdminDashboardService
 from app.services.session_tracker import session_tracker
 import logging
@@ -40,13 +37,6 @@ class BanUserRequest(BaseModel):
 class AdjustCreditsRequest(BaseModel):
     amount: int
     reason: str
-
-
-class BatchCreditDispatchRequest(BaseModel):
-    """Batch dispatch credits to multiple users."""
-    user_ids: List[str]
-    amount: int
-    reason: str = "Admin credit dispatch"
 
 
 class ReviewMaterialRequest(BaseModel):
@@ -137,59 +127,6 @@ async def get_user_growth_chart(
     """Get daily user registration counts for chart"""
     service = AdminDashboardService(db)
     return await service.get_user_growth_trend(days)
-
-
-@router.get("/charts/tool-breakdown")
-async def get_tool_breakdown(
-    days: int = Query(default=30, ge=1, le=365),
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin)
-):
-    """Get generation count breakdown by tool type"""
-    service = AdminDashboardService(db)
-    return await service.get_tool_breakdown(days)
-
-
-@router.get("/charts/plan-distribution")
-async def get_plan_distribution(
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin)
-):
-    """Get user count by plan type"""
-    service = AdminDashboardService(db)
-    return await service.get_plan_distribution()
-
-
-@router.get("/charts/credit-usage")
-async def get_credit_usage_chart(
-    days: int = Query(default=30, ge=1, le=365),
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin)
-):
-    """Get daily credit usage (sum of debits per day)"""
-    from datetime import datetime, timedelta
-
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    result = await db.execute(
-        select(
-            sa_func.date(CreditTransaction.created_at).label("date"),
-            sa_func.sum(sa_func.abs(CreditTransaction.amount)).label("credits")
-        )
-        .where(
-            CreditTransaction.created_at >= cutoff,
-            CreditTransaction.amount < 0  # Only debit transactions (usage)
-        )
-        .group_by(sa_func.date(CreditTransaction.created_at))
-        .order_by(sa_func.date(CreditTransaction.created_at))
-    )
-    rows = result.all()
-    return [
-        {
-            "date": str(row.date),
-            "credits": int(row.credits) if row.credits else 0,
-        }
-        for row in rows
-    ]
 
 
 # ============================================================================
@@ -338,45 +275,6 @@ async def adjust_user_credits(
         raise HTTPException(status_code=400, detail=message)
 
     return {"success": True, "message": message}
-
-
-@router.post("/credits/dispatch")
-async def batch_dispatch_credits(
-    request: BatchCreditDispatchRequest,
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin)
-):
-    """
-    Batch dispatch credits to multiple users.
-
-    Adds bonus_credits to each specified user and logs the transaction.
-    Used for promotional events, customer support, or testing.
-    """
-    service = AdminDashboardService(db)
-    dispatched = 0
-    errors = []
-
-    for user_id in request.user_ids:
-        try:
-            success, message = await service.adjust_credits(
-                user_id,
-                request.amount,
-                f"[Batch] {request.reason} (by admin {admin.email})"
-            )
-            if success:
-                dispatched += 1
-            else:
-                errors.append({"user_id": user_id, "error": message})
-        except Exception as e:
-            errors.append({"user_id": user_id, "error": str(e)})
-
-    return {
-        "success": True,
-        "dispatched": dispatched,
-        "total_requested": len(request.user_ids),
-        "amount_per_user": request.amount,
-        "errors": errors if errors else None,
-    }
 
 
 # ============================================================================

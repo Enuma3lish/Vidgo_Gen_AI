@@ -1,40 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAdminStore } from '@/stores/admin'
 
 const adminStore = useAdminStore()
 
 const selectedPeriod = ref<'7d' | '30d' | '90d' | '1y'>('30d')
 
-const planTotal = computed(() => {
-  return adminStore.planDistribution.reduce((sum, d) => sum + d.count, 0) || 1
-})
-
-const planColors = ['#667eea', '#764ba2', '#f57c00', '#388e3c', '#d32f2f', '#0097a7', '#7b1fa2']
-
-function getPlanColor(index: number): string {
-  return planColors[index % planColors.length]
-}
-
-function getConicGradient(): string {
-  const items = adminStore.planDistribution
-  if (!items.length) return 'conic-gradient(#e0e0e0 0deg 360deg)'
-  let angle = 0
-  const stops: string[] = []
-  items.forEach((item, i) => {
-    const sliceDeg = (item.count / planTotal.value) * 360
-    const color = getPlanColor(i)
-    stops.push(`${color} ${angle}deg ${angle + sliceDeg}deg`)
-    angle += sliceDeg
-  })
-  return `conic-gradient(${stops.join(', ')})`
-}
-
 onMounted(async () => {
   await Promise.all([
     adminStore.fetchDashboardStats(),
-    adminStore.fetchCharts(30, 12),
-    adminStore.fetchPlanDistribution()
+    adminStore.fetchCharts(30, 12)
   ])
 })
 
@@ -180,36 +155,6 @@ function getBarHeight(revenue: number): string {
             {{ adminStore.userGrowthChart.reduce((sum, d) => sum + (d.count || 0), 0) }}
           </span>
           <span class="growth-label">New This Period</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Plan Distribution -->
-    <section class="chart-section" v-if="adminStore.planDistribution.length">
-      <h2>Plan Distribution</h2>
-      <div class="plan-distribution">
-        <div class="donut-chart-container">
-          <div
-            class="donut-chart"
-            :style="{ background: getConicGradient() }"
-          >
-            <div class="donut-hole">
-              <span class="donut-total">{{ planTotal }}</span>
-              <span class="donut-label">Users</span>
-            </div>
-          </div>
-        </div>
-        <div class="plan-legend">
-          <div
-            v-for="(item, index) in adminStore.planDistribution"
-            :key="item.plan"
-            class="legend-item"
-          >
-            <span class="legend-color" :style="{ background: getPlanColor(index) }"></span>
-            <span class="legend-plan">{{ item.plan }}</span>
-            <span class="legend-count">{{ item.count }}</span>
-            <span class="legend-pct">{{ ((item.count / planTotal) * 100).toFixed(1) }}%</span>
-          </div>
         </div>
       </div>
     </section>
@@ -426,92 +371,6 @@ function getBarHeight(revenue: number): string {
   font-size: 0.875rem;
   color: #666;
   margin-top: 0.25rem;
-}
-
-.plan-distribution {
-  display: flex;
-  gap: 3rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.donut-chart-container {
-  flex-shrink: 0;
-}
-
-.donut-chart {
-  width: 200px;
-  height: 200px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.donut-hole {
-  width: 120px;
-  height: 120px;
-  background: white;
-  border-radius: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.donut-total {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #1a1a2e;
-}
-
-.donut-label {
-  font-size: 0.75rem;
-  color: #666;
-}
-
-.plan-legend {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  flex: 1;
-  min-width: 200px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.legend-color {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.legend-plan {
-  flex: 1;
-  font-size: 0.875rem;
-  color: #1a1a2e;
-  text-transform: capitalize;
-}
-
-.legend-count {
-  font-weight: 600;
-  color: #1a1a2e;
-  font-size: 0.875rem;
-  min-width: 40px;
-  text-align: right;
-}
-
-.legend-pct {
-  font-size: 0.75rem;
-  color: #666;
-  min-width: 50px;
-  text-align: right;
 }
 
 .loading-overlay {

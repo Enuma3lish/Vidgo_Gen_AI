@@ -211,6 +211,15 @@ async def register(
                 message="A verification code has been sent to your email. Please check your inbox."
             )
 
+    # Validate referral code if provided
+    referrer_id = None
+    if user_in.referral_code:
+        from app.services.referral_service import ReferralService
+        referral_svc = ReferralService(db)
+        referrer = await referral_svc.find_referrer(user_in.referral_code)
+        if referrer:
+            referrer_id = referrer.id
+
     # Create new user
     user = User(
         email=user_in.email,
@@ -219,7 +228,8 @@ async def register(
         hashed_password=security.get_password_hash(user_in.password),
         is_active=False,  # Will be activated after email verification
         email_verified=False,
-        email_verification_sent_at=datetime.now(timezone.utc)
+        email_verification_sent_at=datetime.now(timezone.utc),
+        referred_by_id=referrer_id,
     )
 
     db.add(user)
@@ -533,6 +543,16 @@ async def verify_email_code(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="User not found after verification"
         )
+
+    # Award referral credits if user was referred
+    if user.referred_by_id:
+        try:
+            from app.services.referral_service import ReferralService
+            referral_svc = ReferralService(db)
+            await referral_svc.award_referral_bonus(user, redis_client=redis_client)
+        except Exception:
+            pass  # Don't block verification if referral bonus fails
+
     access_token, refresh_token = security.create_token_pair(str(user.id))
     return AuthResponse(
         user=UserSchema.model_validate(user),

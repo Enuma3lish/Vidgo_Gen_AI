@@ -640,5 +640,62 @@
       "contactSales": "Contact Sales",
       "socialProof": "Over 500+ businesses choose VIDGO"
     }
+  },
+  "referrals": {
+    "title": "Referral Program",
+    "subtitle": "Invite friends and earn free credits",
+    "stats": {
+      "invited": "People Invited",
+      "creditsEarned": "Credits Earned",
+      "referredBy": "Referred By",
+      "none": "—"
+    },
+    "yourLink": "Your Referral Link",
+    "linkDescription": "Share this link to invite friends. You earn 50 credits for each person who registers.",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "shareText": "Join VidGo AI and get 20 free credits when you sign up!",
+    "share": {
+      "copyLink": "Copy Link"
+    },
+    "howItWorks": {
+      "title": "How It Works",
+      "step1": "Share your unique referral link with friends or on social media.",
+      "step2": "Your friend signs up using your link and verifies their email.",
+      "step3": "You receive 50 bonus credits, and your friend gets 20 welcome credits!"
+    },
+    "applyCode": {
+      "title": "Have a Referral Code?",
+      "description": "Enter a code to get 20 bonus credits added to your account.",
+      "placeholder": "Enter referral code (e.g. ABC12345)",
+      "submit": "Apply",
+      "error": "Failed to apply code. Please try again."
+    },
+    "leaderboard": {
+      "title": "Top Referrers",
+      "referrals": "referrals",
+      "empty": "No referrals yet. Be the first!"
+    }
+  },
+  "upload": {
+    "gate": {
+      "title": "Subscriber Feature",
+      "description": "Upload your own images and get AI-generated results without watermarks. Subscribe to unlock.",
+      "cta": "View Plans"
+    },
+    "selectModel": "Select AI Model",
+    "credits": "credits",
+    "dropzone": {
+      "title": "Drop your image here, or click to browse",
+      "hint": "JPEG, PNG, WebP — max 20 MB"
+    },
+    "promptLabel": "Describe what you want (optional)",
+    "promptPlaceholder": "e.g. anime style, vibrant colors...",
+    "uploading": "Uploading...",
+    "generating": "Generating...",
+    "generate": "Generate",
+    "resultReady": "Result Ready",
+    "download": "Download",
+    "startOver": "Start Over"
   }
 }

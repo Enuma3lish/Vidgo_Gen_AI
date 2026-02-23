@@ -64,6 +64,7 @@ class I2VRequest(BaseModel):
     image_url: str = Field(..., description="URL of source image")
     prompt: str = Field(..., description="Animation/motion description")
     length: int = Field(5, ge=3, le=10, description="Video length in seconds")
+    model: Optional[str] = Field(None, description="Model to use (paid users only)")
 
 
 class I2VResponse(BaseModel):
@@ -967,6 +968,304 @@ async def get_topic_examples(
 
     logger.info(f"Returning fallback examples for topic: {topic}")
     return {"topic": topic, "examples": fallback_examples[topic], "source": "fallback"}
+
+
+# ============================================================================
+# Model Selection (Paid Users)
+# ============================================================================
+
+AVAILABLE_MODELS = [
+    {
+        "id": "pixverse_v4_5",
+        "name": "Pixverse v4.5",
+        "description": "Fast, affordable video generation",
+        "type": "video",
+        "credit_cost": 8,
+        "min_plan": "starter",
+        "max_length": 8,
+        "resolution": "720p",
+        "quality": "good",
+    },
+    {
+        "id": "pixverse_v5",
+        "name": "Pixverse v5",
+        "description": "Creative animations with better quality",
+        "type": "video",
+        "credit_cost": 12,
+        "min_plan": "starter",
+        "max_length": 8,
+        "resolution": "720p",
+        "quality": "better",
+    },
+    {
+        "id": "kling_v1_5",
+        "name": "Kling v1.5",
+        "description": "Good quality, fast generation",
+        "type": "video",
+        "credit_cost": 15,
+        "min_plan": "starter",
+        "max_length": 10,
+        "resolution": "1080p",
+        "quality": "high",
+    },
+    {
+        "id": "kling_v2",
+        "name": "Kling v2.0",
+        "description": "High quality video generation",
+        "type": "video",
+        "credit_cost": 20,
+        "min_plan": "pro",
+        "max_length": 10,
+        "resolution": "1080p",
+        "quality": "premium",
+    },
+    {
+        "id": "luma_ray2",
+        "name": "Luma Ray 2.0",
+        "description": "Cinematic quality, best results",
+        "type": "video",
+        "credit_cost": 25,
+        "min_plan": "pro",
+        "max_length": 10,
+        "resolution": "1080p",
+        "quality": "cinematic",
+    },
+    {
+        "id": "wan_t2i",
+        "name": "Wan T2I (Default)",
+        "description": "Standard text-to-image generation",
+        "type": "image",
+        "credit_cost": 3,
+        "min_plan": "starter",
+        "max_length": None,
+        "resolution": "1024x1024",
+        "quality": "standard",
+    },
+    {
+        "id": "wan_i2v",
+        "name": "Wan I2V (Default)",
+        "description": "Standard image-to-video generation",
+        "type": "video",
+        "credit_cost": 10,
+        "min_plan": "starter",
+        "max_length": 5,
+        "resolution": "720p",
+        "quality": "standard",
+    },
+]
+
+
+@router.get("/models")
+async def get_available_models(
+    model_type: Optional[str] = None,
+    current_user=Depends(get_current_user_optional),
+):
+    """
+    Get available AI models for generation.
+
+    Paid users can select different models with varying quality and credit costs.
+    Better models cost more credits.
+
+    Args:
+        model_type: Filter by type ("image" or "video")
+    """
+    models = AVAILABLE_MODELS
+    if model_type:
+        models = [m for m in models if m["type"] == model_type]
+
+    user_plan = None
+    if current_user and current_user.current_plan_id:
+        from sqlalchemy import select as sa_select
+        from app.models.billing import Plan
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            plan_result = await db.execute(
+                sa_select(Plan).where(Plan.id == current_user.current_plan_id)
+            )
+            plan = plan_result.scalar_one_or_none()
+            if plan:
+                user_plan = plan.name
+
+    plan_order = {"demo": 0, "starter": 1, "pro": 2, "pro_plus": 3}
+    user_level = plan_order.get(user_plan, 0)
+
+    for model in models:
+        required_level = plan_order.get(model.get("min_plan", "starter"), 1)
+        model["available"] = is_subscribed_user(current_user) and user_level >= required_level
+
+    return {"models": models}
+
+
+# ============================================================================
+# File Upload for Subscribers
+# ============================================================================
+
+@router.post("/upload", response_model=GenerationResponse)
+async def upload_and_generate(
+    tool_type: str = Form(...),
+    prompt: str = Form(""),
+    style: Optional[str] = Form(None),
+    model: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload a file and generate with real API (subscribers only).
+
+    Subscribers can upload their own materials (images) and call real AI APIs
+    for processing. Results are returned without watermark and can be downloaded.
+
+    Supported tool_types:
+    - background_removal: Remove background from uploaded image
+    - product_scene: Generate product in professional scene
+    - effect: Apply artistic style to uploaded image
+    - short_video: Generate video from uploaded image
+    - try_on: Virtual try-on with uploaded clothing image
+    """
+    if not is_subscribed_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active subscription required to upload and process custom materials. Subscribe to unlock this feature.",
+        )
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only image files are supported (JPEG, PNG, WebP)",
+        )
+
+    import base64
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size exceeds 10MB limit",
+        )
+
+    mime = file.content_type or "image/png"
+    b64 = base64.b64encode(contents).decode("utf-8")
+    data_url = f"data:{mime};base64,{b64}"
+
+    # Determine credit cost based on model
+    model_costs = {m["id"]: m["credit_cost"] for m in AVAILABLE_MODELS}
+    credit_cost = model_costs.get(model, 5)  # default 5
+
+    tool_cost_defaults = {
+        "background_removal": 3,
+        "product_scene": 5,
+        "effect": 5,
+        "short_video": 10,
+        "try_on": 8,
+        "pattern_generate": 5,
+    }
+    if not model:
+        credit_cost = tool_cost_defaults.get(tool_type, 5)
+
+    # Check credits
+    from app.services.credit_service import CreditService
+    credit_svc = CreditService(db)
+    has_credits = await credit_svc.check_sufficient(str(current_user.id), credit_cost)
+    if not has_credits:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Insufficient credits. This operation requires {credit_cost} credits.",
+        )
+
+    try:
+        result = None
+        tool_type_enum = None
+
+        if tool_type == "background_removal":
+            tool_type_enum = ToolType.BACKGROUND_REMOVAL
+            result = await provider_router.route(
+                TaskType.BACKGROUND_REMOVAL,
+                {"image_url": data_url},
+            )
+        elif tool_type == "product_scene":
+            tool_type_enum = ToolType.PRODUCT_SCENE
+            scene_prompt = prompt or "professional studio lighting, white background"
+            result = await provider_router.route(
+                TaskType.T2I,
+                {"prompt": f"Product photography, {scene_prompt}, professional quality", "size": "1024*1024"},
+            )
+        elif tool_type == "effect":
+            tool_type_enum = ToolType.EFFECT
+            style_prompt = prompt or "anime style artistic transformation"
+            result = await provider_router.route(
+                TaskType.T2I,
+                {"prompt": style_prompt, "image_url": data_url, "size": "1024*1024"},
+            )
+        elif tool_type == "short_video":
+            tool_type_enum = ToolType.SHORT_VIDEO
+            video_prompt = prompt or "Natural camera motion, smooth animation"
+            params = {
+                "image_url": data_url,
+                "prompt": video_prompt,
+                "duration": 5,
+            }
+            if model:
+                params["model"] = model
+            result = await provider_router.route(TaskType.I2V, params)
+        elif tool_type == "pattern_generate":
+            tool_type_enum = ToolType.PATTERN_GENERATE
+            result = await provider_router.route(
+                TaskType.T2I,
+                {"prompt": f"{prompt}, seamless tileable repeating pattern, high quality", "size": "1024*1024"},
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported tool_type: {tool_type}",
+            )
+
+        if not result or not result.get("success"):
+            return GenerationResponse(
+                success=False,
+                message=result.get("error", "Generation failed") if result else "Generation failed",
+            )
+
+        output = result.get("output", {})
+        result_url = output.get("image_url") or output.get("video_url")
+        images = output.get("images", [])
+        if images and not result_url:
+            result_url = images[0].get("url")
+
+        # Deduct credits
+        await credit_svc.deduct_credits(
+            user_id=str(current_user.id),
+            amount=credit_cost,
+            service_type=f"upload_{tool_type}" + (f"_{model}" if model else ""),
+            description=f"Upload & generate: {tool_type}" + (f" (model: {model})" if model else ""),
+        )
+
+        # Save to UserGeneration (no watermark for subscribers)
+        generation = UserGeneration(
+            user_id=current_user.id,
+            tool_type=tool_type_enum,
+            input_image_url=file.filename,
+            input_text=prompt,
+            input_params={"style": style, "model": model, "tool_type": tool_type},
+            result_image_url=result_url if tool_type != "short_video" else None,
+            result_video_url=result_url if tool_type == "short_video" else None,
+            credits_used=credit_cost,
+        )
+        db.add(generation)
+        await db.commit()
+        await db.refresh(generation)
+
+        return GenerationResponse(
+            success=True,
+            result_url=result_url,
+            credits_used=credit_cost,
+            message=f"Generated successfully using {model or 'default model'}. No watermark - ready to download.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upload generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/api-status")

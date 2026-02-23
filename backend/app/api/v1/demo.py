@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_current_user_optional, is_subscribed_user
 from app.models.demo import ImageDemo, DemoCategory, DemoVideo, DemoExample, PromptCache, ToolShowcase
 from app.services.demo_service import get_demo_service, DEMO_TOPICS, DEMO_STYLES
 from app.services.prompt_matching import get_prompt_matching_service
@@ -346,15 +346,18 @@ class UsePresetRequest(BaseModel):
 
 
 class PresetResultResponse(BaseModel):
-    """Response from using a preset - always watermarked"""
+    """Response from using a preset.
+    Subscribers receive the full-quality URL; free users receive the watermarked URL."""
     success: bool
     preset_id: str
-    result_watermarked_url: Optional[str] = None
+    result_url: Optional[str] = None              # Full-quality result (subscribers only)
+    result_watermarked_url: Optional[str] = None   # Watermarked result (free users / fallback)
     result_thumbnail_url: Optional[str] = None
-    input_image_url: Optional[str] = None  # For before/after display (Effect, Try-on, etc.)
-    prompt: Optional[str] = None  # Default prompt used
+    input_image_url: Optional[str] = None          # For before/after display (Effect, Try-on, etc.)
+    prompt: Optional[str] = None
     prompt_zh: Optional[str] = None
-    can_download: bool = False  # ALWAYS false in preset-only mode
+    can_download: bool = False                      # True for subscribers
+    is_subscribed: bool = False
     message: str = "Subscribe for full access"
     error: Optional[str] = None
 
@@ -362,20 +365,20 @@ class PresetResultResponse(BaseModel):
 @router.post("/use-preset", response_model=PresetResultResponse)
 async def use_preset(
     request: UsePresetRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
 ):
     """
     Use a preset template - Material DB lookup only.
 
-    PRESET-ONLY MODE:
-    - ALL users use this endpoint (no distinction)
-    - Returns watermarked results from Material DB
-    - NO external API calls
-    - NO custom prompts allowed
+    - Free/anonymous users receive watermarked results; downloads blocked.
+    - Subscribers receive full-quality results and may download.
+    - NO external API calls in either case.
     """
     from app.services.material_lookup import get_material_lookup_service
 
     lookup_service = get_material_lookup_service(db)
+    subscribed = is_subscribed_user(current_user)
 
     # Look up material by ID
     material = await lookup_service.lookup_by_id(request.preset_id)
@@ -390,18 +393,70 @@ async def use_preset(
     # Increment use count
     await lookup_service.increment_use_count(str(material.id))
 
-    # Return watermarked result only (with input/prompt for before/after display)
+    # Determine which URL to surface
+    full_result_url = material.result_video_url or material.result_image_url
+    watermarked_url = material.result_watermarked_url or full_result_url
+
+    if subscribed:
+        return PresetResultResponse(
+            success=True,
+            preset_id=request.preset_id,
+            result_url=full_result_url,
+            result_watermarked_url=watermarked_url,
+            result_thumbnail_url=getattr(material, "result_thumbnail_url", None),
+            input_image_url=material.input_image_url,
+            prompt=material.prompt,
+            prompt_zh=material.prompt_zh,
+            can_download=True,
+            is_subscribed=True,
+            message="Full access",
+        )
+
     return PresetResultResponse(
         success=True,
         preset_id=request.preset_id,
-        result_watermarked_url=material.result_watermarked_url or material.result_video_url or material.result_image_url,
-        result_thumbnail_url=material.result_thumbnail_url,
+        result_url=None,
+        result_watermarked_url=watermarked_url,
+        result_thumbnail_url=getattr(material, "result_thumbnail_url", None),
         input_image_url=material.input_image_url,
         prompt=material.prompt,
         prompt_zh=material.prompt_zh,
-        can_download=False,  # ALWAYS false
-        message="Subscribe for full access"
+        can_download=False,
+        is_subscribed=False,
+        message="Subscribe for full access",
     )
+
+
+@router.get("/download/{material_id}")
+async def download_preset_result(
+    material_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """
+    Download the full-quality result for a preset (subscribers only).
+    Returns a redirect to the result URL.
+    """
+    from fastapi.responses import RedirectResponse
+    from app.services.material_lookup import get_material_lookup_service
+
+    if not is_subscribed_user(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="A subscription is required to download results."
+        )
+
+    lookup_service = get_material_lookup_service(db)
+    material = await lookup_service.lookup_by_id(material_id)
+
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    download_url = material.result_video_url or material.result_image_url
+    if not download_url:
+        raise HTTPException(status_code=404, detail="No result available for download")
+
+    return RedirectResponse(url=download_url)
 
 
 # =============================================================================

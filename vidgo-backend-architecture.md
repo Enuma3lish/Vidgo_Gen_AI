@@ -1,24 +1,56 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 4.8
-**Last Updated:** February 9, 2026
+**Version:** 5.0
+**Last Updated:** February 21, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
-**Mode:** Preset-Only (Material DB Lookup, No Runtime API Calls)
+**Mode:** Dual-Mode — Preset-Only (free) + Real-API (subscribers)
 **Target Audience:** Small businesses (SMB) selling everyday products/services—not luxury.
 
 ---
 
-## 0. Demo/Trial Flow (Preset-Only)
+## 0. User Tiers & Access Control
 
+### 0.1 Free/Demo Users (Preset-Only)
 **User experience:** Visitors and non-subscribers try default AI functions by selecting pre-generated presets. No runtime API calls—all results are pre-computed and stored in Material DB.
 
 **Flow:**
 1. **Pre-generation (startup/CLI):** Prompts → AI APIs (T2I, I2V, I2I, etc.) → results stored in `materials` table
-2. **User trial:** Frontend loads presets from `/api/v1/demo/presets/{tool_type}` → user selects preset → backend returns pre-generated result via O(1) Material DB lookup
-3. **Example correspondence:** Each example must be correctly linked—e.g., Effect tool uses the SAME T2I image as input to I2I, not a different prompt
+2. **User trial:** Frontend loads presets from `/api/v1/demo/presets/{tool_type}` → user selects preset → backend returns watermarked result via O(1) Material DB lookup
+3. **Download blocked.** All demo results carry a watermark; download requires subscription.
 
-**Target audience:** Small companies selling everyday products (drinks, snacks, apparel, services)—not luxury brands. Prompts and scripts reflect SMB use cases.
+### 0.2 Subscribers (Real-API Mode)
+**User experience:** Subscribers upload their own images and trigger live AI API calls. Results are returned without watermarks and can be downloaded.
+
+**Flow:**
+1. **Upload:** `POST /api/v1/uploads/material` (multipart form: file + tool_type + model_id + prompt)
+2. **Credit deduction:** Credits deducted based on `tool_type` base cost × model multiplier
+3. **Generation:** Backend calls AI provider (PiAPI / Pollo / A2E) in real time
+4. **Result:** `result_url` / `result_video_url` stored without watermark; `GET /api/v1/uploads/{id}/download`
+
+### 0.3 Preset Download (Subscribers)
+Subscribers can also download full-quality (no watermark) versions of preset gallery results:
+- `POST /api/v1/demo/use-preset` returns `result_url` (full quality) when authenticated as subscriber
+- `GET /api/v1/demo/download/{material_id}` redirects to full-quality result URL
+
+### 0.4 Model Selection
+Paid users can select AI models for upload-based generation. Better models cost more credits:
+
+| Model | Multiplier | Tools |
+|-------|------------|-------|
+| default | 1× | All tools |
+| pixverse_v5 | 1.5× | short_video |
+| kling_v2 | 2× | try_on, short_video |
+| wan_pro | 2× | product_scene, room_redesign, pattern_generate, effect |
+| luma_ray2 | 3× | short_video |
+
+### 0.5 Referral System
+Users earn bonus credits by inviting others:
+- Referrer: **+50 credits** per successful registration via their code
+- New user: **+20 credits** when registering with a referral code
+- Endpoints: `GET /referrals/code`, `GET /referrals/stats`, `POST /referrals/apply`, `GET /referrals/leaderboard`
+
+**Target audience:** Small companies selling everyday products (drinks, snacks, apparel, services)—not luxury brands.
 
 ---
 
@@ -271,14 +303,16 @@ api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 | Prefix | Tag | Description |
 |--------|-----|-------------|
 | `/auth` | auth | User authentication (login, register, 6-digit verify; verify-code returns tokens) |
-| `/payments` | payments | Payment webhooks (ECPay, Paddle) |
+| `/payments` | payments | Payment webhooks (Paddle) |
 | `/subscriptions` | subscriptions | Subscription management (plans seed defaults; subscribe returns checkout_url) |
-| `/demo` | demo | Demo/preset endpoints |
+| `/demo` | demo | Demo/preset endpoints; `use-preset` returns full URL for subscribers, watermarked for free users |
 | `/plans` | plans | Subscription plan details (ensure_default_plans) |
 | `/promotions` | promotions | Promotional codes |
 | `/credits` | credits | Credit balance and transactions |
 | `/effects` | effects | Video effects |
-| `/generate` | generation | Content generation |
+| `/generate` | generation | Content generation (subscribers) |
+| `/uploads` | uploads | **NEW** Subscriber material upload + real-API generation + download (no watermark) |
+| `/referrals` | referrals | **NEW** Referral code, stats, apply, leaderboard |
 | `/landing` | landing | Landing page data |
 | `/quota` | quota | Usage quota management |
 | `/tools` | tools | Tool-specific operations |
@@ -287,10 +321,35 @@ api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 | `/interior` | interior | Interior design |
 | `/workflow` | workflow | Workflow management |
 | `/prompts` | prompts | Prompt templates |
+| `/user` | user | User works history |
 
 ---
 
 ## 4. Database Models
+
+### 4.0 New Models (v5.0)
+
+```python
+# app/models/user_upload.py  — subscriber material uploads
+class UserUpload(Base):
+    """
+    File uploaded by a subscriber for use with a real AI generation call.
+    Tracks upload, generation status, result URL (no watermark), and credits used.
+    """
+    tool_type: str               # e.g. "background_removal"
+    file_url: str                # stored path
+    selected_model: str          # model chosen by user
+    status: UploadStatus         # pending → processing → completed / failed
+    result_url: str              # result image (no watermark)
+    result_video_url: str        # result video (no watermark)
+    credits_used: int            # credits deducted for this generation
+
+# app/models/user.py — referral fields added
+class User(Base):
+    referral_code: str           # unique 8-char code (auto-generated)
+    referred_by_id: UUID         # FK → users.id of referrer
+    referral_count: int          # number of successful referrals
+```
 
 ### 4.1 Core Models
 
@@ -858,6 +917,13 @@ class Settings(BaseSettings):
 |                        STARTUP SEQUENCE                              |
 +---------------------------------------------------------------------+
 |                                                                      |
+|  ⚠️  NOTE: docker-compose.yml backend service sets entrypoint: []   |
+|  to bypass docker_entrypoint.sh for fast dev iteration.             |
+|  Use `docker compose --profile init up init-materials` for          |
+|  first-time material pre-generation, or set                         |
+|  ALLOW_EMPTY_MATERIALS=true SKIP_PREGENERATION=true for dev.        |
+|                                                                      |
+|  PRODUCTION (Dockerfile ENTRYPOINT — docker_entrypoint.sh):         |
 |  1. Wait for Dependencies                                            |
 |     - PostgreSQL ready (pg_isready)                                  |
 |     - Redis ready (redis-cli ping)                                   |
@@ -865,14 +931,13 @@ class Settings(BaseSettings):
 |  2. Database Migrations                                              |
 |     - alembic upgrade head                                           |
 |                                                                      |
-|  3. Pre-generation Pipeline (if not skipped)                         |
-|     - Validate API keys                                              |
-|     - Generate materials for each tool type                          |
-|     - Store with lookup_hash for O(1) access                         |
+|  3. Seed Service Pricing                                             |
+|     - python -m scripts.seed_service_pricing                         |
 |                                                                      |
-|  4. Startup Validation                                               |
-|     - Check minimum materials per tool                               |
-|     - FAIL if requirements not met (unless dev mode)                 |
+|  4. Material DB Check + Pre-generation (if empty)                    |
+|     - python -m scripts.check_material_status                        |
+|     - python -m scripts.seed_materials_if_empty --force (if needed) |
+|     - Waits up to MATERIAL_CHECK_TIMEOUT (default 10800s / 3h)      |
 |                                                                      |
 |  5. Start uvicorn                                                    |
 |                                                                      |
@@ -1322,7 +1387,57 @@ The works gallery endpoint returns a mix of image and video materials for the ho
 
 ---
 
-*Document Version: 4.7*
-*Last Updated: February 6, 2026*
-*Mode: Preset-Only (Material DB Lookup, No Runtime API Calls)*
+---
+
+## 13. New Features (v5.0)
+
+### 13.1 Subscriber Upload & Real-API Generation
+
+```
+POST /api/v1/uploads/material
+  ├─ Auth: Bearer (subscriber required)
+  ├─ Body: multipart/form-data
+  │   ├─ tool_type: str
+  │   ├─ model_id: str (default = "default")
+  │   ├─ prompt: str (optional)
+  │   └─ file: binary (JPEG/PNG/WebP, max 20 MB)
+  ├─ Credits deducted: TOOL_BASE_CREDITS[tool_type] × model_multiplier
+  └─ Response: { upload_id, status, credits_used }
+
+GET /api/v1/uploads/{upload_id}
+  └─ Returns status + result_url / result_video_url (no watermark)
+
+GET /api/v1/uploads/{upload_id}/download
+  └─ Streaming download of result file (no watermark, subscribers only)
+
+GET /api/v1/uploads/models/{tool_type}
+  └─ List available models with credit costs for a tool
+```
+
+### 13.2 Referral System
+
+```
+GET  /api/v1/referrals/code        → { referral_code, referral_url }
+GET  /api/v1/referrals/stats       → { referral_count, credits_earned, referred_by }
+POST /api/v1/referrals/apply       → Apply a code; earn welcome credits
+GET  /api/v1/referrals/leaderboard → Top 10 referrers (public)
+```
+
+**Credit awards:**
+- Referrer: `REFERRAL_BONUS_CREDITS` (default 50) per successful referral
+- New user: `REFERRAL_WELCOME_CREDITS` (default 20) when registering via referral
+
+### 13.3 Subscriber Download from Preset Gallery
+
+`POST /api/v1/demo/use-preset` now accepts optional Bearer token:
+- **Subscriber:** returns `result_url` (full quality) + `can_download=true`
+- **Free user / anonymous:** returns `result_watermarked_url` + `can_download=false`
+
+`GET /api/v1/demo/download/{material_id}` redirects to full-quality URL (subscribers only).
+
+---
+
+*Document Version: 5.0*
+*Last Updated: February 21, 2026*
+*Mode: Dual-Mode — Preset-Only (free) + Real-API (subscribers)*
 *Target: SMB (small businesses selling everyday products/services)*

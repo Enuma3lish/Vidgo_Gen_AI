@@ -40,7 +40,7 @@ export const demoApi = {
   },
 
   async generate(data: GenerateRequest): Promise<GenerateResponse> {
-    const response = await apiClient.post('/api/v1/demo/generate', data)
+    const response = await apiClient.post('/api/v1/demo/generate-unified', data)
     return response.data
   },
 

@@ -17,6 +17,8 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 (STATIC_DIR / "generated").mkdir(parents=True, exist_ok=True)
 (STATIC_DIR / "generated" / "interior").mkdir(parents=True, exist_ok=True)
 (STATIC_DIR / "materials").mkdir(parents=True, exist_ok=True)
+(STATIC_DIR / "uploads").mkdir(parents=True, exist_ok=True)   # subscriber uploads
+(STATIC_DIR / "tryon_garments").mkdir(parents=True, exist_ok=True)  # cached Virtual Try-On garments
 
 
 async def validate_materials_on_startup() -> dict:

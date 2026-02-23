@@ -133,6 +133,7 @@ const routes: RouteRecordRaw[] = [
     name: 'register',
     component: () => import('@/views/auth/Register.vue'),
     meta: { guestOnly: true }
+    // Accepts ?ref=CODE query param to pre-fill referral code during registration
   },
   {
     path: '/auth/verify',
@@ -162,6 +163,12 @@ const routes: RouteRecordRaw[] = [
     path: '/dashboard/invoices',
     name: 'invoices',
     component: () => import('@/views/dashboard/Invoices.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/dashboard/referrals',
+    name: 'referrals',
+    component: () => import('@/views/dashboard/Referrals.vue'),
     meta: { requiresAuth: true }
   },
   // Pricing

@@ -36,8 +36,8 @@ RUN python -c "from google import genai; print('✅ Check 1: Packages installed 
 # =========================================================
 COPY . .
 
-# 建立靜態目錄
-RUN mkdir -p /app/static/generated /app/static/materials
+# 建立靜態目錄 (tryon_garments for cached Virtual Try-On garment images)
+RUN mkdir -p /app/static/generated /app/static/materials /app/static/tryon_garments
 
 # Convert entrypoint script from Windows CRLF to Unix LF
 # The script was already copied via "COPY . ." above

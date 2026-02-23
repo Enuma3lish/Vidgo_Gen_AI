@@ -8,6 +8,7 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string
   password: string
+  referral_code?: string
 }
 
 export interface VerifyCodeRequest {
@@ -16,12 +17,14 @@ export interface VerifyCodeRequest {
 }
 
 export interface User {
-  id: number
+  id: string
   email: string
   is_active: boolean
-  is_verified: boolean
-  is_admin: boolean
-  plan_type: string
+  email_verified: boolean
+  is_superuser?: boolean
+  plan_type?: string
+  referral_code?: string
+  referral_count?: number
   created_at: string
 }
 
@@ -60,7 +63,7 @@ export const authApi = {
 
   async refresh(refreshToken: string): Promise<AuthResponse> {
     const response = await apiClient.post('/api/v1/auth/refresh', {
-      refresh_token: refreshToken
+      refresh: refreshToken
     })
     return response.data
   },

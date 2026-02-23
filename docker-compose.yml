@@ -73,6 +73,7 @@ services:
       - ./backend:/app
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
+      - vidgo_tryon_garments:/app/static/tryon_garments
     ports:
       - "8001:8000"
     env_file:
@@ -112,6 +113,7 @@ services:
       - ./backend:/app
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
+      - vidgo_tryon_garments:/app/static/tryon_garments
     env_file:
       - ./backend/.env
     environment:
@@ -150,6 +152,7 @@ services:
       - ./backend:/app
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
+      - vidgo_tryon_garments:/app/static/tryon_garments
     env_file:
       - ./backend/.env
     environment:
@@ -180,6 +183,7 @@ services:
       - ./backend:/app
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
+      - vidgo_tryon_garments:/app/static/tryon_garments
     env_file:
       - ./backend/.env
     environment:
@@ -225,3 +229,4 @@ volumes:
   redis_data:
   vidgo_generated:    # Persist generated images/videos
   vidgo_materials:    # Persist avatar and other materials
+  vidgo_tryon_garments:  # Persist cached Virtual Try-On garment images

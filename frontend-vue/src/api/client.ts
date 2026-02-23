@@ -40,18 +40,18 @@ apiClient.interceptors.response.use(
       if (refreshToken) {
         try {
           const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
-            refresh_token: refreshToken
+            refresh: refreshToken
           })
 
-          const { access_token, refresh_token: newRefreshToken } = response.data
-          localStorage.setItem('access_token', access_token)
+          const { access, refresh: newRefreshToken } = response.data
+          localStorage.setItem('access_token', access)
           if (newRefreshToken) {
             localStorage.setItem('refresh_token', newRefreshToken)
           }
 
           // Retry original request with new token
           if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${access_token}`
+            originalRequest.headers.Authorization = `Bearer ${access}`
           }
           return apiClient(originalRequest)
         } catch (refreshError) {

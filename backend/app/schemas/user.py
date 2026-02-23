@@ -13,6 +13,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8)
     password_confirm: Optional[str] = None
+    referral_code: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -43,11 +44,12 @@ class UserInDBBase(UserBase):
 
 class User(UserInDBBase):
     """User response schema (public info)"""
-    pass
+    referral_code: Optional[str] = None
+    referral_count: int = 0
 
 
-class UserWithDetails(UserInDBBase):
-    """User with more details (for profile page)"""
+class UserWithDetails(User):
+    """User with more details (for profile page); includes referral fields from User."""
     is_superuser: bool = False
     updated_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None

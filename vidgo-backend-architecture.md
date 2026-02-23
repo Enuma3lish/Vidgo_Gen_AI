@@ -1,7 +1,7 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 5.0
-**Last Updated:** February 21, 2026
+**Version:** 5.1
+**Last Updated:** February 23, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
 **Mode:** Dual-Mode — Preset-Only (free) + Real-API (subscribers)
@@ -32,6 +32,25 @@
 Subscribers can also download full-quality (no watermark) versions of preset gallery results:
 - `POST /api/v1/demo/use-preset` returns `result_url` (full quality) when authenticated as subscriber
 - `GET /api/v1/demo/download/{material_id}` redirects to full-quality result URL
+
+**Tier config keys** (`app/services/tier_config.py`):
+Each tool maps to a tier_config key that defines per-tier credit cost and quality parameters. The `i2i` key is configured as:
+- **Free:** 20 pts, strength 0.65
+- **Paid:** 80 pts, strength 0.70
+
+**Credit cost table:**
+
+| Tool | Free Tier | Paid Tier |
+|------|-----------|-----------|
+| T2I | 20 pts | 80 pts |
+| I2V | 25 pts | 100 pts |
+| T2V | 30 pts | 120 pts |
+| Avatar | 35 pts | 100 pts |
+| Interior | 25 pts | 90 pts |
+| Interior 3D | 30 pts | 100 pts |
+| Background Removal | 20 pts | 80 pts |
+| Effect/Style | 20 pts | 80 pts |
+| I2I (Image-to-Image) | 20 pts | 80 pts |
 
 ### 0.4 Model Selection
 Paid users can select AI models for upload-based generation. Better models cost more credits:
@@ -323,6 +342,64 @@ api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 | `/prompts` | prompts | Prompt templates |
 | `/user` | user | User works history |
 
+### 3.3 Detailed Endpoint Documentation
+
+#### `POST /api/v1/tools/image-transform` — Image-to-Image Transformation (NEW)
+
+True Image-to-Image transformation via PiAPI Flux (model: `flux1-schnell`).
+
+**Request body:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `image_url` | HttpUrl | Yes | — | Source image URL to transform |
+| `prompt` | str | Yes | — | Transformation prompt describing desired output |
+| `strength` | float | No | 0.75 | Transformation strength (0.0-1.0). Lower preserves more of the original. |
+| `negative_prompt` | str | No | None | Negative prompt to exclude unwanted elements |
+
+**Response:** Standard `ToolResponse`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | bool | Whether the operation succeeded |
+| `result_url` | str | URL of the transformed image |
+| `credits_used` | int | Credits consumed |
+| `message` | str | Status message |
+| `cached` | bool | Whether the result was served from cache |
+
+**Behavior by user type:**
+
+- **Demo users (no credits):** Returns a pre-generated result from the Material DB (matched via `ToolType.EFFECT`). No AI generation is performed.
+- **Subscribers (with credits):** Real-time I2I generation via PiAPI Flux `img2img`. Result is saved to `UserGeneration` table.
+
+**Credits:** 20 (free tier) / 80 (paid tier)
+
+---
+
+#### `POST /api/v1/interior/3d-model` — 3D Model from Interior Design Image (NEW)
+
+Generate a 3D model (GLB format) from a 2D interior design image via PiAPI Trellis (`Qubico/trellis`).
+
+**Request body:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `image_url` | str | Yes | — | URL of the 2D interior design image |
+| `texture_size` | int | No | 1024 | Texture resolution: `512` (free) or `1024` (paid) |
+| `mesh_simplify` | float | No | 0.95 | Mesh simplification ratio (0.0-1.0) |
+
+**Response:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | bool | Whether the operation succeeded |
+| `model_url` | str | URL of the generated GLB 3D model file |
+| `task_id` | str | PiAPI task ID for reference |
+
+**Auth:** Requires authentication and credit check (HTTP 402 if insufficient).
+
+**Credits:** 30 (free tier, 512px texture) / 100 (paid tier, 1024px texture)
+
 ---
 
 ## 4. Database Models
@@ -485,7 +562,25 @@ flowchart LR
 ### 5.2 Provider Router
 
 ```python
+<<<<<<< HEAD
 # app/providers/provider_router.py
+=======
+class TaskType(str, Enum):
+    T2I = "text_to_image"
+    I2V = "image_to_video"
+    T2V = "text_to_video"
+    V2V = "video_style_transfer"
+    INTERIOR = "interior_design"
+    INTERIOR_3D = "interior_3d"
+    AVATAR = "avatar"
+    UPSCALE = "upscale"
+    KEYFRAMES = "keyframes"
+    EFFECTS = "effects"
+    MULTI_MODEL = "multi_model"
+    MODERATION = "moderation"
+    BACKGROUND_REMOVAL = "background_removal"
+    I2I = "image_to_image"
+>>>>>>> origin/claude/add-free-trial-mode-B21Bl
 
 class ProviderRouter:
     """
@@ -496,6 +591,7 @@ class ProviderRouter:
     - I2V: Pollo AI -> PiAPI Wan
     - T2V: Pollo AI -> PiAPI Wan
     - Avatar: A2E.ai (no backup)
+<<<<<<< HEAD
     - Interior: PiAPI Wan -> Gemini
     """
 
@@ -507,6 +603,28 @@ class ProviderRouter:
         "avatar": {"primary": "a2e", "backup": None},
         "interior": {"primary": "piapi", "backup": "gemini"},
     }
+=======
+    - Background Removal: PiAPI (no backup)
+    - I2I: PiAPI (primary, model: flux1-schnell), no backup
+    - Keyframes/Effects/MultiModel: Pollo only
+    - Moderation: Gemini only
+    """
+
+    async def route(self, task_type, params, user_tier="free", user=None):
+        # Auto-detect tier from user object
+        if user is not None:
+            user_tier = get_user_tier(user)
+        # Apply tier-based parameter overrides
+        params = self._apply_tier_overrides(task_type, params, user_tier)
+        # Route to provider with failover
+        ...
+
+    # Tier key mapping (TaskType -> tier_config key):
+    #   T2I -> "t2i", I2V -> "i2v", T2V -> "t2v", AVATAR -> "avatar",
+    #   INTERIOR -> "interior", INTERIOR_3D -> "interior_3d",
+    #   BACKGROUND_REMOVAL -> "background_removal", EFFECTS -> "effect",
+    #   I2I -> "i2i"
+>>>>>>> origin/claude/add-free-trial-mode-B21Bl
 ```
 
 ### 5.3 A2E.ai Avatar Service (Verified Workflow)
@@ -1387,6 +1505,7 @@ The works gallery endpoint returns a mix of image and video materials for the ho
 
 ---
 
+<<<<<<< HEAD
 ---
 
 ## 13. New Features (v5.0)
@@ -1440,4 +1559,27 @@ GET  /api/v1/referrals/leaderboard → Top 10 referrers (public)
 *Document Version: 5.0*
 *Last Updated: February 21, 2026*
 *Mode: Dual-Mode — Preset-Only (free) + Real-API (subscribers)*
+=======
+## 13. Paid User Feature Readiness
+
+| Feature | Status | Endpoint | Provider | Notes |
+|---------|--------|----------|----------|-------|
+| Text-to-Image (T2I) | Implemented | `POST /api/v1/tools/generate-image` | PiAPI Flux | — |
+| Image-to-Video (I2V) | Implemented | `POST /api/v1/tools/generate-video` | PiAPI Wan / Pollo | — |
+| Text-to-Video (T2V) | Implemented | `POST /api/v1/generate/text-to-video` | PiAPI Wan / Pollo | — |
+| AI Avatar | Implemented | `POST /api/v1/tools/avatar` | A2E.ai | — |
+| Interior Redesign | Implemented | `POST /api/v1/interior/redesign` | PiAPI Wan Doodle | — |
+| Background Removal | Implemented | `POST /api/v1/tools/remove-background` | PiAPI | — |
+| Effect/Style Transfer | Implemented | `POST /api/v1/tools/effect` | PiAPI Flux I2I | — |
+| **I2I Transformations** | **Implemented** | `POST /api/v1/tools/image-transform` | PiAPI Flux (flux1-schnell) | New: true image-to-image |
+| **Room Redesign 3D** | **Implemented** | `POST /api/v1/interior/3d-model` | PiAPI Trellis | New: GLB 3D model from 2D image |
+| Virtual Try-On | Implemented | `POST /api/v1/tools/try-on` | PiAPI (Kling AI) | — |
+| Pattern Generate | Implemented | `POST /api/v1/tools/pattern` | PiAPI Flux | — |
+
+---
+
+*Document Version: 5.1*
+*Last Updated: February 18, 2026*
+*Mode: Hybrid (Free Trial + Paid Generation)*
+>>>>>>> origin/claude/add-free-trial-mode-B21Bl
 *Target: SMB (small businesses selling everyday products/services)*

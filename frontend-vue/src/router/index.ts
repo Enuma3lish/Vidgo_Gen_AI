@@ -22,6 +22,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tools/ImageEffects.vue'),
     meta: { requiresAuth: false }
   },
+  // Tool: Image Transform (AI 自由變換) - alias to ImageEffects with transform tab
+  {
+    path: '/tools/image-transform',
+    name: 'image-transform',
+    component: () => import('@/views/tools/ImageEffects.vue'),
+    meta: { requiresAuth: false }
+  },
   // Tool 2: Product Scene (商品場景圖)
   {
     path: '/tools/product-scene',

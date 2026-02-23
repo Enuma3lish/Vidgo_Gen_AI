@@ -35,6 +35,7 @@ class TaskType(str, Enum):
     MULTI_MODEL = "multi_model"
     MODERATION = "moderation"
     BACKGROUND_REMOVAL = "background_removal"
+    I2I = "image_to_image"
 
 
 class ProviderStatus(str, Enum):
@@ -113,6 +114,15 @@ class ProviderRouter:
         TaskType.BACKGROUND_REMOVAL: {
             "primary": "piapi",
             "backup": None,
+        },
+        TaskType.INTERIOR_3D: {
+            "primary": "trellis",
+            "backup": None,
+        },
+        TaskType.I2I: {
+            "primary": "piapi",
+            "backup": None,
+            "model": "flux1-schnell"
         },
     }
 
@@ -194,6 +204,69 @@ class ProviderRouter:
     # PROVIDER EXECUTION
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _apply_tier_overrides(
+        self,
+        task_type: TaskType,
+        params: Dict[str, Any],
+        user_tier: str,
+    ) -> Dict[str, Any]:
+        """
+        Apply tier-based parameter overrides to generation params.
+
+        Free tier: 720P, max 5s video, no audio, smaller images
+        Paid tier: 1080P, max 15s video, with audio, full images
+        """
+        from app.services.tier_config import FREE_TIER, PAID_TIER
+
+        tier_cfg = FREE_TIER if user_tier == "free" else PAID_TIER
+
+        # Map TaskType to tier_config model key
+        type_key_map = {
+            TaskType.T2I: "t2i",
+            TaskType.I2V: "i2v",
+            TaskType.T2V: "t2v",
+            TaskType.V2V: "t2v",  # same limits as t2v
+            TaskType.INTERIOR: "interior",
+            TaskType.INTERIOR_3D: "interior_3d",
+            TaskType.AVATAR: "avatar",
+            TaskType.BACKGROUND_REMOVAL: "bg_removal",
+            TaskType.EFFECTS: "effect",
+            TaskType.I2I: "i2i",
+        }
+
+        key = type_key_map.get(task_type)
+        if not key:
+            return params
+
+        model_cfg = tier_cfg["models"].get(key, {})
+
+        # Apply resolution override
+        if "resolution" in model_cfg:
+            params["resolution"] = model_cfg["resolution"]
+        elif "resolution" in params:
+            params["resolution"] = tier_cfg["max_resolution"]
+
+        # Apply duration limits
+        if "duration" in params:
+            params["duration"] = min(
+                params["duration"], tier_cfg["max_duration"]
+            )
+        elif "duration" in model_cfg:
+            params["duration"] = model_cfg["duration"]
+
+        # Apply image size override
+        if "size" in model_cfg and "size" not in params:
+            params["size"] = model_cfg["size"]
+
+        # Apply audio setting for avatars
+        if task_type == TaskType.AVATAR:
+            params["audio_enabled"] = tier_cfg["audio_enabled"]
+
+        # Mark tier on params for downstream use
+        params["_user_tier"] = user_tier
+
+        return params
+
     async def _execute_on_provider(
         self,
         provider: str,
@@ -232,6 +305,8 @@ class ProviderRouter:
             return await self.piapi.upscale(params)
         elif task_type == TaskType.BACKGROUND_REMOVAL:
             return await self.piapi.background_removal(params)
+        elif task_type == TaskType.I2I:
+            return await self.piapi.image_to_image(params)
         else:
             raise ValueError(f"PiAPI doesn't support: {task_type}")
 

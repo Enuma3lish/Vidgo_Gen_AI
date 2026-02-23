@@ -62,6 +62,7 @@ from app.config.topic_registry import (
 )
 
 # Import service clients
+import httpx
 from scripts.services import PiAPIClient, PolloClient, A2EClient
 
 # Configure logging
@@ -998,14 +999,17 @@ class VidGoPreGenerator:
 
     # Directory for generated model photos
     MODEL_LIBRARY_DIR = Path("/app/static/models")
+    # Directory for cached try-on garment images (local copy so we can serve as URL or base64)
+    TRYON_GARMENTS_DIR = Path("/app/static/tryon_garments")
 
     def __init__(self):
         # Initialize API clients
         self.piapi = PiAPIClient(os.getenv("PIAPI_KEY", ""))
         self.pollo = PolloClient(os.getenv("POLLO_API_KEY", ""))
         self.a2e = A2EClient(os.getenv("A2E_API_KEY", ""))
-        # Ensure model library directory exists
+        # Ensure model library and try-on garments directories exist
         self.MODEL_LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+        self.TRYON_GARMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
         # Load existing model library
         self._load_model_library()
@@ -1024,6 +1028,34 @@ class VidGoPreGenerator:
 
     def _topic_mark_generated(self, topic_key: str, topic_counts: Dict[str, int]) -> None:
         topic_counts[topic_key] = topic_counts.get(topic_key, 0) + 1
+
+    async def _ensure_garment_local(self, cloth: Dict[str, Any]) -> str:
+        """
+        Download try-on garment image to local storage so we can send it as our URL
+        (with PUBLIC_APP_URL) or as base64. Returns local path if cached, else original URL.
+        """
+        cloth_id = cloth.get("id", "")
+        remote_url = cloth.get("image_url", "")
+        if not remote_url or not cloth_id:
+            return remote_url or ""
+        # Safe filename from cloth id (e.g. casual-1 -> casual-1.jpg)
+        ext = ".jpg"
+        if ".png" in remote_url.lower():
+            ext = ".png"
+        local_path = self.TRYON_GARMENTS_DIR / f"{cloth_id}{ext}"
+        if local_path.exists():
+            return str(local_path)
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.get(remote_url)
+                r.raise_for_status()
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                local_path.write_bytes(r.content)
+            logger.debug(f"Cached garment {cloth_id} to {local_path}")
+        except Exception as e:
+            logger.warning(f"Could not cache garment {cloth_id}: {e}, using remote URL")
+            return remote_url
+        return str(local_path)
 
     def _load_model_library(self):
         """Load existing model photos from disk into GENERATED_MODEL_LIBRARY."""
@@ -1423,6 +1455,7 @@ class VidGoPreGenerator:
         self.local_results["short_video"] = []
         count = 0
         topic_counts: Dict[str, int] = {}
+        pollo_disabled = False  # Set True after repeated "Not enough credits" from Pollo
 
         # Iterate through each motion type
         for motion_id, motion_data in SHORT_VIDEO_MAPPING.items():
@@ -1460,16 +1493,34 @@ class VidGoPreGenerator:
                 logger.info(f"  Source image: {source_image_url}")
 
                 # Step 2: Convert T2I image to video using I2V
-                # Pollo API needs remote URL, not local path
-                logger.info("  Step 2: I2V...")
-                result = await self.pollo.generate_video(
-                    prompt=prompt_en,
-                    image_url=remote_image_url,
-                    length=SHORT_VIDEO_LENGTH
-                )
+                # Pollo first; fallback to PiAPI Wan I2V when Pollo is out of credits
+                logger.info(f"  Step 2: I2V ({'PiAPI Wan' if pollo_disabled else 'Pollo → PiAPI fallback'})...")
+                result = None
+                i2v_api = "pollo"
+                if not pollo_disabled:
+                    result = await self.pollo.generate_video(
+                        prompt=prompt_en,
+                        image_url=remote_image_url,
+                        length=SHORT_VIDEO_LENGTH
+                    )
+                    if not result["success"]:
+                        err = result.get("error", "")
+                        if "Not enough credits" in err or "403" in err:
+                            logger.warning("  Pollo credits exhausted - switching to PiAPI Wan I2V for remaining videos")
+                            pollo_disabled = True
+                        else:
+                            logger.error(f"  Pollo I2V failed: {err}")
 
-                if not result["success"]:
-                    logger.error(f"  I2V Failed: {result.get('error')}")
+                if pollo_disabled or (result and not result["success"]):
+                    logger.info("  Trying PiAPI Wan I2V as fallback...")
+                    result = await self.piapi.image_to_video(
+                        image_url=remote_image_url,
+                        prompt=prompt_en
+                    )
+                    i2v_api = "piapi_wan"
+
+                if not result or not result["success"]:
+                    logger.error(f"  I2V Failed (both providers): {result.get('error') if result else 'No result'}")
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["short_video"]["failed"] += 1
                     count += 1
@@ -1477,14 +1528,14 @@ class VidGoPreGenerator:
                     continue
 
                 local_entry = {
-                    "topic": motion_id,  # Use motion_id as topic
+                    "topic": motion_id,
                     "prompt": prompt_en,
-                    "prompt_zh": prompt_zh,  # Store Chinese prompt for frontend
-                    "input_image_url": source_image_url,  # Before image for frontend
+                    "prompt_zh": prompt_zh,
+                    "input_image_url": source_image_url,
                     "result_video_url": result["video_url"],
                     "generation_steps": [
                         {"step": 1, "api": "piapi", "action": "t2i", "result_url": source_image_url},
-                        {"step": 2, "api": "pollo", "action": "i2v", "result_url": result["video_url"]}
+                        {"step": 2, "api": i2v_api, "action": "i2v", "result_url": result["video_url"]}
                     ],
                     "generation_cost": 0.12,  # T2I + I2V cost
                     "metadata": {
@@ -1814,21 +1865,22 @@ class VidGoPreGenerator:
 
                     logger.info(f"[{count+1}] Model: {model_id} ({model_data['gender']}) -> Clothing: {cloth['name']} (Topic: {topic})")
 
-                    # Get model image URL
-                    # PiAPIClient._resolve_image_input() handles local files automatically
+                    # Get model image URL (local path for base64 or PUBLIC_APP_URL)
                     model_url = model_data["url"]
                     if model_url.startswith("/static/"):
-                        # Use local path for base64 conversion
                         model_url = model_data.get("local_path") or f"/app{model_url}"
 
+                    # Prefer local garment image so PiAPI can get our URL (PUBLIC_APP_URL) or base64
+                    garment_url = await self._ensure_garment_local(cloth)
+
                     logger.info(f"  Model: {model_url[:60]}...")
-                    logger.info(f"  Garment: {cloth['image_url'][:60]}...")
+                    logger.info(f"  Garment: {garment_url[:60]}...")
 
                     # Use REAL Virtual Try-On API (Kling AI via PiAPI)
-                    # PiAPIClient automatically converts local files to base64 data URLs
+                    # Model/garment sent as local path -> base64 or PUBLIC_APP_URL URL
                     tryon_result = await self.piapi.virtual_try_on(
                         model_image_url=model_url,
-                        garment_image_url=cloth["image_url"]
+                        garment_image_url=garment_url
                     )
 
                     if not tryon_result.get("success"):

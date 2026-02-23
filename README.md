@@ -2,7 +2,7 @@
 
 **AI-Powered Visual Content Generation for E-commerce**
 
-VidGo is a comprehensive AI platform that enables e-commerce businesses to create professional visual content using cutting-edge generative AI technology. The platform operates in **PRESET-ONLY mode**, providing instant access to pre-generated high-quality examples while driving conversions to paid subscriptions.
+VidGo is a comprehensive AI platform that enables e-commerce businesses to create professional visual content using cutting-edge generative AI technology. The platform provides instant access to pre-generated high-quality examples for trial users, and full real-API generation with model selection for subscribers.
 
 ---
 
@@ -10,6 +10,7 @@ VidGo is a comprehensive AI platform that enables e-commerce businesses to creat
 
 - [Architecture Overview](#architecture-overview)
 - [Core Features](#core-features)
+- [Subscriber Features](#subscriber-features)
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
@@ -55,44 +56,71 @@ VidGo is a comprehensive AI platform that enables e-commerce businesses to creat
          +-------------+  +----------+  +--------------+
 ```
 
-### PRESET-ONLY Mode
+### Dual-Mode Architecture
 
-VidGo operates in **PRESET-ONLY mode** for demo users:
+VidGo supports two modes depending on user tier:
 
+| Mode | Who | Experience |
+|------|-----|------------|
+| **PRESET-ONLY** | Free / trial users | Browse pre-generated watermarked gallery; instant results, no API costs |
+| **REAL-API** | Subscribers | Upload own materials, call live AI APIs, choose AI model, download without watermark |
+
+### PRESET-ONLY Mode (Free Users)
 1. **No Runtime API Calls**: All demo content is pre-generated before service starts
-2. **Instant Experience**: Users see results immediately without waiting for AI processing
-3. **Cost Control**: Zero API costs for demo usage - only pre-generation costs
-4. **Watermarked Results**: All demo outputs have watermarks; full downloads require subscription
-5. **Conversion-Focused**: Demo experience drives users toward paid subscriptions
+2. **Instant Experience**: Users see results immediately without waiting
+3. **Watermarked Results**: All demo outputs have watermarks; downloads require subscription
+
+### REAL-API Mode (Subscribers)
+1. **Custom Upload**: Upload own images for processing
+2. **Model Selection**: Choose from multiple AI models (better models cost more credits)
+3. **No Watermarks**: Full-quality results available for download
+4. **Credit System**: Credits deducted per generation; better models cost more
 
 ---
 
-**Note on Free vs Paid Features**
-
-*Current Implementation (Free Users)*:
-- Free users can browse pre-generated AI example galleries
-- Examples are created using Text-to-Image generation
-- Results are watermarked and downloads are restricted
-
-*Roadmap (Paid Users)*:
-- Upload custom images for processing
-- True Image-to-Image transformations using PiAPI I2I/ControlNet
-- Room Redesign: Process actual floor plans into 3D renders
-- Product Scene: Composite real products into custom scenes
-- Virtual Try-On: Apply clothing to user-selected models
-
 ## Core Features
 
-### 6 Core AI Tools
+### 8 Core AI Tools
 
 | Tool | Description | API Provider |
 |------|-------------|--------------|
 | **Background Removal** | Remove backgrounds from product images | PiAPI Wan / Gemini |
 | **Product Scene** | Product Photography Inspiration Gallery | PiAPI Wan T2I |
-| **Virtual Try-On** | Fashion Model Showcase | PiAPI Wan T2I |
+| **Virtual Try-On** | Fashion Model Showcase | Kling AI via PiAPI |
 | **Room Redesign** | Interior Design Example Gallery | PiAPI Wan T2I |
 | **Short Video** | Image-to-video, Text-to-video | Pollo AI |
 | **AI Avatar** | Talking avatar with lip-sync TTS | A2E.ai |
+| **Image Effects** | Artistic style transfer | PiAPI I2I (Flux) |
+| **Pattern Design** | Seamless pattern generation | PiAPI Wan T2I |
+
+---
+
+## Subscriber Features
+
+### Custom Material Upload
+Subscribers can upload their own product images and trigger real AI API calls:
+- Supported tools: All 8 tools
+- Supported formats: JPEG, PNG, WebP (max 20 MB)
+- Results returned without watermarks
+- Results downloadable via `/api/v1/uploads/{id}/download`
+
+### AI Model Selection
+Paid users can choose from multiple AI models per tool:
+
+| Model | Credit Multiplier | Best For |
+|-------|-------------------|----------|
+| Standard (default) | 1× | Quick, everyday use |
+| Pixverse v5 | 1.5× | Creative video animations |
+| Kling v2 | 2× | High-quality video / try-on |
+| Wan Pro | 2× | High-quality image generation |
+| Luma Ray2 | 3× | Cinematic video quality |
+
+### Referral Program
+Invite friends and earn credits:
+- Referrer earns **50 credits** per successful registration
+- New user earns **20 welcome credits** for using a referral code
+- Referral leaderboard at `/dashboard/referrals`
+- Share via LINE, X/Twitter, Facebook, or direct link
 
 ---
 
@@ -137,8 +165,7 @@ VidGo operates in **PRESET-ONLY mode** for demo users:
 ### Payment Providers
 | Provider | Region | Features |
 |----------|--------|----------|
-| ECPay | Taiwan | Credit card, ATM, CVS |
-| Paddle | International | Credit card, PayPal |
+| Paddle | International | Credit card, PayPal, Tax compliance |
 
 ---
 
@@ -168,7 +195,8 @@ Vidgo_Gen_AI/
 │   │   ├── locales/            # i18n (en, zh-TW, ja, ko, es)
 │   │   ├── stores/             # Pinia stores
 │   │   ├── views/              # Page components
-│   │   │   ├── tools/          # 6 tool pages
+│   │   │   ├── tools/          # 8 tool pages
+│   │   │   ├── dashboard/      # Dashboard + MyWorks + Invoices + Referrals
 │   │   │   ├── admin/          # Admin dashboard
 │   │   │   └── auth/           # Auth pages
 │   │   └── router/             # Vue Router
@@ -260,6 +288,15 @@ SMTP_PORT=1025
 | `SKIP_AVATAR` | - | Skip A2E avatar generation |
 | `SKIP_VIDEO` | - | Skip Pollo video generation |
 
+### Referral & Upload Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REFERRAL_BONUS_CREDITS` | `50` | Credits for referrer per successful signup |
+| `REFERRAL_WELCOME_CREDITS` | `20` | Welcome credits for new user via referral |
+| `MAX_UPLOAD_SIZE_MB` | `20` | Max subscriber upload size in MB |
+| `UPLOAD_ALLOWED_TYPES` | `image/jpeg,...` | Allowed upload MIME types |
+
 ---
 
 ## Docker Services
@@ -318,11 +355,14 @@ npm run dev
 
 | Prefix | Description |
 |--------|-------------|
-| `/api/v1/auth` | Authentication |
-| `/api/v1/demo` | Demo/preset endpoints |
-| `/api/v1/generate` | Content generation |
+| `/api/v1/auth` | Authentication + Email verification |
+| `/api/v1/demo` | Demo/preset endpoints (preset-only mode) |
+| `/api/v1/generate` | Content generation (subscribers) |
+| `/api/v1/uploads` | Subscriber material upload + real-API generation |
+| `/api/v1/referrals` | Referral code management + stats |
 | `/api/v1/tools` | Tool operations |
 | `/api/v1/credits` | Credit management |
+| `/api/v1/subscriptions` | Subscription plans + Paddle checkout |
 | `/api/v1/admin` | Admin dashboard |
 | `/api/v1/interior` | Interior design |
 | `/api/v1/workflow` | Workflow management |
@@ -333,7 +373,25 @@ npm run dev
 
 - **Backend Architecture**: [vidgo-backend-architecture.md](./vidgo-backend-architecture.md)
 - **Frontend Architecture**: [vidgo-frontend-architecture.md](./vidgo-frontend-architecture.md)
+- **Infrastructure**: [vidgo-infra-architecture.md](./vidgo-infra-architecture.md)
 - **API Documentation**: http://localhost:8001/docs (when running)
+
+---
+
+## ⚠️ Docker Startup Notes
+
+### Material Pre-generation
+The `docker-compose.yml` **backend** service bypasses `docker_entrypoint.sh` (it sets `entrypoint: []`) for fast development iteration. To pre-generate materials, run:
+
+```bash
+# First-time setup: generate all materials
+docker compose --profile init up init-materials
+
+# Or skip pre-generation for dev (uses empty Material DB)
+SKIP_PREGENERATION=true ALLOW_EMPTY_MATERIALS=true docker compose up -d
+```
+
+The Dockerfile's `ENTRYPOINT` (the full startup sequence with migration + material check) is used in production builds.
 
 ---
 
@@ -349,5 +407,5 @@ npm run dev
 
 ---
 
-*Last Updated: January 12, 2026*
+*Last Updated: February 21, 2026*
 

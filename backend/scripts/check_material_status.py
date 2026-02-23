@@ -17,17 +17,17 @@ import sys
 
 sys.path.insert(0, "/app")
 
-# Required tools - must have minimum examples for service to start
+# Required tools - must have minimum examples before full stack starts (product-scene, short-video, avatar pages need these)
 REQUIRED_TOOLS_MIN = {
     "product_scene": 3,
     "effect": 3,
     "background_removal": 3,
+    "short_video": 3,
     "ai_avatar": 3,
 }
 
 # Optional tools - nice to have, won't block startup
 OPTIONAL_TOOLS_MIN = {
-    "short_video": 3,  # Requires Pollo credits - optional until funded
     "room_redesign": 2,
     "pattern_generate": 2,
     "try_on": 2,

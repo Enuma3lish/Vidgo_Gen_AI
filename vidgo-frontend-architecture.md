@@ -1,9 +1,9 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 4.8
-**Last Updated:** February 9, 2026
+**Version:** 5.0
+**Last Updated:** February 21, 2026
 **Framework:** Vue 3 + Vite + TypeScript
-**Mode:** Preset-Only (No Custom Input)
+**Mode:** Dual-Mode — Preset-Only (free) + Real-API with model selection (subscribers)
 **Target Audience:** Small businesses (SMB) selling everyday products/services
 
 ---
@@ -104,7 +104,9 @@ frontend-vue/
 │   │   ├── interior.ts              # Interior design API
 │   │   ├── landing.ts               # Landing page API
 │   │   ├── quota.ts                 # Quota API
-│   │   └── subscription.ts          # Subscription API
+│   │   ├── subscription.ts          # Subscription API
+│   │   ├── uploads.ts               # NEW: Subscriber upload + real-API generation
+│   │   └── referrals.ts             # NEW: Referral code/stats/apply
 │   │
 │   ├── components/
 │   │   ├── atoms/                   # Basic UI components
@@ -135,7 +137,8 @@ frontend-vue/
 │   │   ├── tools/                   # Tool-specific components
 │   │   │   ├── BeforeAfterSlider.vue
 │   │   │   ├── CreditCost.vue
-│   │   │   └── UploadZone.vue
+│   │   │   ├── UploadZone.vue
+│   │   │   └── SubscriberUploadPanel.vue  # NEW: Subscriber upload + model selection
 │   │   │
 │   │   └── index.ts                 # Component exports
 │   │
@@ -190,7 +193,8 @@ frontend-vue/
 │   │   ├── dashboard/               # User dashboard
 │   │   │   ├── Dashboard.vue
 │   │   │   ├── MyWorks.vue
-│   │   │   └── Invoices.vue             # Invoice history & download
+│   │   │   ├── Invoices.vue             # Invoice history & download
+│   │   │   └── Referrals.vue            # NEW: Referral program, stats, leaderboard
 │   │   │
 │   │   ├── subscription/            # Paddle redirect result pages
 │   │   │   ├── SubscriptionSuccess.vue   # Payment success (order= query)
@@ -274,6 +278,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/dashboard', name: 'dashboard', component: Dashboard, meta: { requiresAuth: true } },
   { path: '/dashboard/my-works', name: 'my-works', component: MyWorks, meta: { requiresAuth: true } },
   { path: '/dashboard/invoices', name: 'invoices', component: Invoices, meta: { requiresAuth: true } },
+  { path: '/dashboard/referrals', name: 'referrals', component: Referrals, meta: { requiresAuth: true } },  // NEW
 
   // ===== Admin Routes (Admin Only) =====
   { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresAuth: true, requiresAdmin: true } },
@@ -783,15 +788,17 @@ export function useGeoLanguage() {
 
 ### 9.1 Access Control Matrix
 
-| Feature | All Users |
-|---------|-----------|
-| View preset options | Yes |
-| Select preset | Yes |
-| Enter custom text | No |
-| View watermarked result | Yes |
-| View original result | No |
-| Download | No |
-| API calls | No (Material DB only) |
+| Feature | Free / Anonymous | Subscriber |
+|---------|-----------------|------------|
+| View preset options | Yes | Yes |
+| Select preset | Yes | Yes |
+| Enter custom text | No | No (preset mode) |
+| View watermarked result | Yes | Yes (+ full-quality) |
+| Download preset result | No | Yes (no watermark) |
+| Upload own material | No | Yes |
+| Select AI model | No | Yes |
+| Real-API generation | No | Yes (credits deducted) |
+| Referral program | Earn credits | Earn credits |
 
 ### 9.2 User Flow
 
@@ -1021,7 +1028,62 @@ Pattern Design generates seamless textile patterns for fashion and interior desi
 
 ---
 
-*Document Version: 4.6*
-*Last Updated: February 6, 2026*
-*Mode: Preset-Only (No Custom Input)*
+---
+
+## 15. New Features (v5.0)
+
+### 15.1 SubscriberUploadPanel Component
+
+Reusable drop-in component added to all tool pages. Shows a "Subscribe to unlock" gate for free users.
+
+```vue
+<!-- Usage in any tool page -->
+<SubscriberUploadPanel
+  :tool-type="'background_removal'"
+  :is-subscribed="isSubscribed"
+  :show-prompt="true"
+  @result="handleResult"
+/>
+```
+
+**Features:**
+- Model selector (shows available models with credit costs)
+- Drag-and-drop file upload zone
+- Upload progress bar
+- Status polling (every 3s) until generation completes
+- Download button (no watermark) on completion
+- Subscriber gate overlay for free users
+
+### 15.2 Referrals Dashboard Page
+
+New route: `/dashboard/referrals` — `views/dashboard/Referrals.vue`
+
+**Sections:**
+1. Stats cards (invited count, credits earned, referred-by)
+2. Referral link with copy + social share buttons (LINE, X, Facebook)
+3. How it works (3-step guide)
+4. Apply referral code form (if not already referred)
+5. Top 10 leaderboard
+
+### 15.3 API Clients
+
+```typescript
+// src/api/uploads.ts
+uploadsApi.getToolModels(toolType)           // models with credit costs
+uploadsApi.uploadAndGenerate(...)            // upload + trigger generation
+uploadsApi.getUploadStatus(uploadId)         // poll for result
+uploadsApi.getDownloadUrl(uploadId)          // direct download URL
+
+// src/api/referrals.ts
+referralsApi.getCode()                       // get/create referral code
+referralsApi.getStats()                      // count, credits, referred_by
+referralsApi.applyCode(code)                 // apply a referral code
+referralsApi.getLeaderboard()                // top 10 referrers
+```
+
+---
+
+*Document Version: 5.0*
+*Last Updated: February 21, 2026*
+*Mode: Dual-Mode — Preset-Only (free) + Real-API with model selection (subscribers)*
 *Target: SMB (small businesses selling everyday products/services)*

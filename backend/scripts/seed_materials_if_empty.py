@@ -24,6 +24,7 @@ Usage:
 import asyncio
 import argparse
 import logging
+import os
 import sys
 
 sys.path.insert(0, "/app")
@@ -38,7 +39,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# All 8 tools we seed for try-play (try_on last because it needs model_library)
+# All 8 tools we seed for try-play (try_on last because it needs model_library).
+# Set env SKIP_TRY_ON=1 to exclude try_on when PiAPI/Kling Virtual Try-On returns 500.
 SEED_TOOLS = [
     "product_scene",
     "effect",
@@ -49,6 +51,13 @@ SEED_TOOLS = [
     "pattern_generate",
     "try_on",
 ]
+
+
+def _get_seed_tools():
+    """Return SEED_TOOLS, excluding try_on if SKIP_TRY_ON is set."""
+    if os.environ.get("SKIP_TRY_ON"):
+        return [t for t in SEED_TOOLS if t != "try_on"]
+    return list(SEED_TOOLS)
 
 # Per-tool limits for seed - enough for landing gallery and tool try-play
 SEED_LIMITS = {
@@ -108,8 +117,10 @@ async def main():
     )
     args = parser.parse_args()
 
-    # Determine which tools to process
-    target_tools = [args.tool] if args.tool else SEED_TOOLS
+    # Determine which tools to process (when no --tool, respect SKIP_TRY_ON)
+    target_tools = [args.tool] if args.tool else _get_seed_tools()
+    if not args.tool and os.environ.get("SKIP_TRY_ON"):
+        logger.info("SKIP_TRY_ON is set: excluding try_on from this run (PiAPI/Kling may be unavailable).")
 
     # Clean mode: delete old materials first
     if args.clean:

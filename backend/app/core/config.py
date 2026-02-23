@@ -83,6 +83,19 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
     FRONTEND_URL: str = "http://localhost:8501"
 
+    # Referral System
+    REFERRAL_BONUS_CREDITS: int = 50       # Credits awarded to referrer per successful referral
+    REFERRAL_WELCOME_CREDITS: int = 20     # Credits awarded to new user who used a referral code
+
+    # Upload settings (subscriber material upload)
+    MAX_UPLOAD_SIZE_MB: int = 20           # Max file size for subscriber uploads
+    UPLOAD_ALLOWED_TYPES: str = "image/jpeg,image/png,image/webp,image/gif"
+
+    # Model credit multipliers (model_id → credit cost per generation)
+    # Base cost is defined in ServicePricing; these are multipliers
+    # Format: JSON string parsed at runtime
+    MODEL_CREDIT_MULTIPLIERS: str = '{"default":1,"kling_v2":2,"luma_ray2":3,"pixverse_v5":1.5,"wan_pro":2}'
+
     class Config:
         env_file = ".env"
         case_sensitive = True

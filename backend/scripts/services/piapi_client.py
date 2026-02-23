@@ -7,9 +7,14 @@ Features:
 - Virtual Try-On (Kling AI) - $0.05/image  
 - Flux Fill (I2I/Inpaint)
 - Remove Background - $0.001/image
+
+Virtual Try-On note: Kling may require image URLs (not base64). If you get HTTP 500
+with base64 model images, set PUBLIC_APP_URL to your backend's public URL (e.g.
+https://api.example.com) so model images are sent as PUBLIC_APP_URL/static/models/...
 """
 import asyncio
 import logging
+import os
 import uuid
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -248,11 +253,32 @@ class PiAPIClient:
         if not self.api_key:
             return {"success": False, "error": "PiAPI key not configured"}
 
-        # Resolve image inputs (convert local files to base64 if needed)
-        model_input = self._resolve_image_input(model_image_url)
-        garment_input = self._resolve_image_input(garment_image_url) if garment_image_url else None
+        # Resolve model image: use public URL if available (Kling may reject base64)
+        public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+        static_path = None
+        if model_image_url.startswith("/static/"):
+            static_path = model_image_url
+        elif model_image_url.startswith("/app/static/"):
+            static_path = "/static/" + model_image_url[len("/app/static/"):]
+        if public_base and static_path:
+            model_input = f"{public_base}{static_path}"
+            logger.info(f"[PiAPI] Virtual Try-On: model as public URL: {model_input[:60]}...")
+        else:
+            model_input = self._resolve_image_input(model_image_url)
+            logger.info(f"[PiAPI] Virtual Try-On: model={'base64...' if model_input.startswith('data:') else model_input[:50]}...")
 
-        logger.info(f"[PiAPI] Virtual Try-On: model={'base64...' if model_input.startswith('data:') else model_input[:50]}...")
+        # Resolve garment: use public URL if local tryon_garments path and PUBLIC_APP_URL set
+        garment_static = None
+        if garment_image_url:
+            if garment_image_url.startswith("/static/tryon_garments/"):
+                garment_static = garment_image_url
+            elif garment_image_url.startswith("/app/static/tryon_garments/"):
+                garment_static = "/static/tryon_garments/" + garment_image_url[len("/app/static/tryon_garments/"):]
+        if public_base and garment_static:
+            garment_input = f"{public_base}{garment_static}"
+            logger.info(f"[PiAPI] Virtual Try-On: garment as public URL: {garment_input[:60]}...")
+        else:
+            garment_input = self._resolve_image_input(garment_image_url) if garment_image_url else None
 
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
@@ -283,8 +309,18 @@ class PiAPIClient:
                 )
 
                 if response.status_code not in [200, 201]:
-                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    raw = response.text
+                    error = f"HTTP {response.status_code}: {raw[:500]}"
                     logger.error(f"[PiAPI] Virtual Try-On create task failed: {error}")
+                    # Parse JSON for a clearer message (PiAPI may return message/code in body)
+                    try:
+                        body = response.json()
+                        msg = body.get("message") or body.get("msg") or (body.get("data") or {}).get("message")
+                        if msg:
+                            logger.error(f"[PiAPI] Virtual Try-On server message: {msg}")
+                            return {"success": False, "error": f"HTTP {response.status_code}: {msg}"}
+                    except Exception:
+                        pass
                     return {"success": False, "error": error}
 
                 data = response.json()
@@ -345,6 +381,98 @@ class PiAPIClient:
 
         except Exception as e:
             logger.exception(f"[PiAPI] Virtual Try-On exception: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def image_to_video(
+        self,
+        image_url: str,
+        prompt: str = "smooth natural motion",
+        duration: int = 5,
+        resolution: str = "720P",
+        save_locally: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate video from image using Wan 2.6 I2V via PiAPI.
+        Used as fallback when Pollo is unavailable or out of credits.
+
+        Args:
+            image_url: Remote image URL (https://...) or local path (converted to base64)
+            prompt: Motion description
+            duration: 5 or 10 seconds
+            resolution: "720P" or "1080P"
+            save_locally: Save output video to disk
+
+        Returns:
+            {"success": True, "video_url": str} or {"success": False, "error": str}
+        """
+        if not self.api_key:
+            return {"success": False, "error": "PiAPI key not configured"}
+
+        image_input = self._resolve_image_input(image_url)
+        logger.info(f"[PiAPI] I2V (Wan): {prompt[:50]}...")
+
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/task",
+                    headers=self.headers,
+                    json={
+                        "model": "Wan",
+                        "task_type": "wan26-img2video",
+                        "input": {
+                            "image": image_input,
+                            "prompt": prompt,
+                            "duration": duration,
+                            "resolution": resolution,
+                            "watermark": False
+                        }
+                    }
+                )
+                if response.status_code not in [200, 201]:
+                    error = f"HTTP {response.status_code}: {response.text[:300]}"
+                    logger.error(f"[PiAPI] I2V create task failed: {error}")
+                    return {"success": False, "error": error}
+
+                data = response.json()
+                task_id = data.get("data", {}).get("task_id")
+                if not task_id:
+                    return {"success": False, "error": "No task_id in I2V response"}
+
+                logger.info(f"[PiAPI] I2V task created: {task_id}")
+
+                for attempt in range(120):  # up to 4 min
+                    await asyncio.sleep(2)
+                    status_resp = await client.get(f"{self.BASE_URL}/task/{task_id}", headers=self.headers)
+                    if status_resp.status_code != 200:
+                        continue
+                    status_data = status_resp.json()
+                    status = status_data.get("data", {}).get("status", "")
+
+                    if status == "completed":
+                        output = status_data.get("data", {}).get("output", {})
+                        video_url = output.get("video_url") or output.get("url")
+                        if not video_url:
+                            videos = output.get("videos", [])
+                            if videos:
+                                video_url = videos[0].get("url") if isinstance(videos[0], dict) else videos[0]
+                        if not video_url:
+                            return {"success": False, "error": f"No video_url in I2V output: {output}"}
+                        if save_locally:
+                            local_path = await self._download_as(client, video_url, ext=".mp4")
+                            if local_path:
+                                logger.info(f"[PiAPI] I2V saved: {local_path}")
+                                return {"success": True, "video_url": local_path, "remote_url": video_url}
+                        return {"success": True, "video_url": video_url}
+
+                    elif status == "failed":
+                        error = status_data.get("data", {}).get("error", "Unknown error")
+                        logger.error(f"[PiAPI] I2V task failed: {error}")
+                        return {"success": False, "error": error}
+
+                return {"success": False, "error": "I2V timeout (4 min)"}
+
+        except Exception as e:
+            logger.exception(f"[PiAPI] I2V exception: {e}")
             return {"success": False, "error": str(e)}
 
     async def image_to_image(
@@ -698,11 +826,15 @@ class PiAPIClient:
 
     async def _download(self, client: httpx.AsyncClient, url: str) -> Optional[str]:
         """Download image and save locally."""
+        return await self._download_as(client, url, ext=".png")
+
+    async def _download_as(self, client: httpx.AsyncClient, url: str, ext: str = ".png") -> Optional[str]:
+        """Download a file and save locally with the specified extension."""
         try:
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             response = await client.get(url, follow_redirects=True)
             if response.status_code == 200:
-                filename = f"piapi_{uuid.uuid4().hex[:8]}.png"
+                filename = f"piapi_{uuid.uuid4().hex[:8]}{ext}"
                 filepath = OUTPUT_DIR / filename
                 filepath.write_bytes(response.content)
                 return f"/static/generated/{filename}"

@@ -154,6 +154,9 @@ onMounted(async () => {
             <RouterLink to="/dashboard/invoices" class="text-primary-400 hover:text-primary-300 text-sm font-medium">
               {{ t('dashboard.invoices', 'Invoices') }} →
             </RouterLink>
+            <RouterLink to="/dashboard/referrals" class="text-indigo-400 hover:text-indigo-300 text-sm font-medium">
+              🎁 {{ t('referrals.title', 'Referrals') }} →
+            </RouterLink>
           </div>
         </div>
 

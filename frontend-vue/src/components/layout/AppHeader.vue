@@ -63,6 +63,9 @@ onUnmounted(() => {
             <RouterLink to="/dashboard" class="px-3 py-1.5 text-sm text-gray-300 hover:text-white transition-colors">
               {{ t('nav.dashboard') }}
             </RouterLink>
+            <RouterLink to="/dashboard/referrals" class="px-3 py-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
+              🎁 {{ t('referrals.title', 'Referrals') }}
+            </RouterLink>
             <button @click="handleLogout" class="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors">
               {{ t('nav.logout') }}
             </button>

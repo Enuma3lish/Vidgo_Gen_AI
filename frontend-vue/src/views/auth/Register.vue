@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useUIStore } from '@/stores'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const uiStore = useUIStore()
 
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const referralCode = ref('')
 const isLoading = ref(false)
 
 const passwordMatch = computed(() => password.value === confirmPassword.value)
@@ -37,7 +39,8 @@ async function handleSubmit() {
   try {
     await authStore.register({
       email: email.value,
-      password: password.value
+      password: password.value,
+      referral_code: referralCode.value || undefined
     })
 
     uiStore.showSuccess('Registration successful! Please verify your email.')
@@ -48,6 +51,10 @@ async function handleSubmit() {
   } finally {
     isLoading.value = false
   }
+}
+
+if (typeof route.query.ref === 'string' && route.query.ref) {
+  referralCode.value = route.query.ref.toUpperCase()
 }
 </script>
 
@@ -119,6 +126,17 @@ async function handleSubmit() {
             >
               Passwords do not match
             </p>
+          </div>
+
+          <div>
+            <label class="label">{{ t('auth.referralCode', 'Referral Code (Optional)') }}</label>
+            <input
+              v-model="referralCode"
+              type="text"
+              class="input-field"
+              placeholder="ABC123XYZ"
+              autocomplete="off"
+            />
           </div>
 
           <button

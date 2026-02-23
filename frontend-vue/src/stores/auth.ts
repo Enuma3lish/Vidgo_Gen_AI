@@ -14,8 +14,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Getters
   const isAuthenticated = computed(() => !!accessToken.value && !!user.value)
-  const isVerified = computed(() => user.value?.is_verified ?? false)
-  const isAdmin = computed(() => user.value?.is_admin ?? false)
+  const isVerified = computed(() => user.value?.email_verified ?? false)
+  const isAdmin = computed(() => user.value?.is_superuser ?? false)
 
   // Actions
   async function login(data: LoginRequest) {

@@ -28,6 +28,25 @@ test_api() {
   fi
 }
 
+# Optional: assert response has required key (content check). Use after test_api for critical APIs.
+test_api_content() {
+  local path="$1"
+  local jq_key="$2"
+  local desc="$3"
+  if command -v jq >/dev/null 2>&1; then
+    if curl -s -o /tmp/api_resp.json "$BASE$path" 2>/dev/null && jq -e "$jq_key" /tmp/api_resp.json >/dev/null 2>&1; then
+      echo "  ✓ $desc (content OK)"
+      PASSED=$((PASSED + 1))
+      return 0
+    else
+      echo "  ✗ $desc (content: missing $jq_key)"
+      FAILED=$((FAILED + 1))
+      return 1
+    fi
+  fi
+  return 0
+}
+
 echo "=========================================="
 echo "VidGo API Tests (Docker)"
 echo "=========================================="
@@ -123,6 +142,14 @@ echo ""
 # Quota
 echo "12. Quota"
 test_api GET "/api/v1/quota/daily" "Daily quota"
+echo ""
+
+# Content checks (response body) for critical APIs
+echo "13. Content checks (key fields in response)"
+test_api_content "/health" ".status" "Health .status"
+test_api_content "/api/v1/credits/pricing" ".pricing" "Credits pricing .pricing"
+test_api_content "/api/v1/demo/inspiration?count=1" ".examples" "Demo inspiration .examples"
+test_api_content "/api/v1/plans" "." "Plans response (any JSON)"
 echo ""
 
 echo "=========================================="

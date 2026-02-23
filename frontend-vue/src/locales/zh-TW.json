@@ -626,5 +626,62 @@
       "contactSales": "聯繫銷售團隊",
       "socialProof": "超過 500+ 企業選擇 VIDGO"
     }
+  },
+  "referrals": {
+    "title": "推廣獎勵計畫",
+    "subtitle": "邀請好友，賺取免費點數",
+    "stats": {
+      "invited": "已邀請人數",
+      "creditsEarned": "已獲得點數",
+      "referredBy": "推薦人",
+      "none": "—"
+    },
+    "yourLink": "您的推薦連結",
+    "linkDescription": "分享此連結邀請好友，每邀請一人成功註冊即可獲得 50 點數。",
+    "copy": "複製",
+    "copied": "已複製！",
+    "shareText": "加入 VidGo AI，透過推薦連結註冊即可獲得 20 點免費點數！",
+    "share": {
+      "copyLink": "複製連結"
+    },
+    "howItWorks": {
+      "title": "如何運作",
+      "step1": "複製您的專屬推薦連結，分享給朋友或發布在社群媒體上。",
+      "step2": "好友使用您的連結完成註冊並驗證電子郵件。",
+      "step3": "您立即獲得 50 點數，好友也能獲得 20 點歡迎點數！"
+    },
+    "applyCode": {
+      "title": "有推薦碼嗎？",
+      "description": "輸入推薦碼即可獲得 20 點額外點數。",
+      "placeholder": "輸入推薦碼（例如 ABC12345）",
+      "submit": "套用",
+      "error": "套用失敗，請再試一次。"
+    },
+    "leaderboard": {
+      "title": "推廣排行榜",
+      "referrals": "次推薦",
+      "empty": "目前尚無推薦紀錄，快成為第一名！"
+    }
+  },
+  "upload": {
+    "gate": {
+      "title": "訂閱者專屬功能",
+      "description": "上傳您的素材圖片，取得無浮水印的 AI 生成結果。訂閱後即可解鎖。",
+      "cta": "查看方案"
+    },
+    "selectModel": "選擇 AI 模型",
+    "credits": "點數",
+    "dropzone": {
+      "title": "將圖片拖曳至此，或點擊選擇檔案",
+      "hint": "JPEG、PNG、WebP — 最大 20 MB"
+    },
+    "promptLabel": "描述您的需求（選填）",
+    "promptPlaceholder": "例如：動漫風格、鮮豔色彩...",
+    "uploading": "上傳中...",
+    "generating": "生成中...",
+    "generate": "開始生成",
+    "resultReady": "生成完成",
+    "download": "下載",
+    "startOver": "重新開始"
   }
 }

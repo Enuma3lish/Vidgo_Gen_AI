@@ -6,6 +6,13 @@ from app.core.database import Base
 from app.models.user_generation import UserGeneration
 
 
+def generate_referral_code() -> str:
+    """Generate a short unique referral code."""
+    import secrets, string
+    alphabet = string.ascii_uppercase + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(8))
+
+
 class User(Base):
     """
     User model with email verification and credit system support.
@@ -58,6 +65,11 @@ class User(Base):
     demo_usage_reset_at = Column(DateTime(timezone=True), nullable=True)  # Last reset timestamp
     demo_usage_limit = Column(Integer, default=2)  # Max demo uses (default 2)
 
+    # Referral System
+    referral_code = Column(String(16), unique=True, index=True, nullable=True)
+    referred_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    referral_count = Column(Integer, default=0)  # Number of successful referrals
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -66,6 +78,8 @@ class User(Base):
     # Relationships
     current_plan = relationship("app.models.billing.Plan", foreign_keys=[current_plan_id])
     generations = relationship("UserGeneration", back_populates="user", cascade="all, delete-orphan")
+    referred_by = relationship("User", remote_side="User.id", foreign_keys=[referred_by_id])
+    referrals = relationship("User", foreign_keys="User.referred_by_id", back_populates="referred_by")
 
     @property
     def total_credits(self) -> int:

@@ -6,6 +6,7 @@ from app.models.billing import (
 from app.models.demo import DemoCategory, DemoVideo, DemoView, ImageDemo, PromptCache, DemoExample, ToolShowcase
 from app.models.material import Material, MaterialView, MaterialTopic, ToolType, MaterialSource, MaterialStatus
 from app.models.user_generation import UserGeneration
+from app.models.user_upload import UserUpload, UploadStatus
 from app.models.verification import EmailVerification
 from app.models.prompt_template import (
     PromptTemplate, PromptTemplateUsage, PromptGroup, PromptSubTopic,

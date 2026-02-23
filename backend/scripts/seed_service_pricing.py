@@ -143,6 +143,132 @@ SERVICE_PRICING_DATA = [
         "min_plan": None,
         "description": "Fallback video generation via Runway (internal)"
     },
+    # Model-specific pricing (for model selection feature)
+    {
+        "service_type": "model_pixverse_v4_5",
+        "display_name": "Pixverse v4.5 (Fast)",
+        "credit_cost": 8,
+        "api_cost_usd": Decimal("0.10"),
+        "resolution": "720p",
+        "max_duration": 8,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "Fast video generation with Pixverse v4.5"
+    },
+    {
+        "service_type": "model_pixverse_v5",
+        "display_name": "Pixverse v5 (Creative)",
+        "credit_cost": 12,
+        "api_cost_usd": Decimal("0.15"),
+        "resolution": "720p",
+        "max_duration": 8,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "Creative animations with Pixverse v5"
+    },
+    {
+        "service_type": "model_kling_v1_5",
+        "display_name": "Kling v1.5 (Good Quality)",
+        "credit_cost": 15,
+        "api_cost_usd": Decimal("0.25"),
+        "resolution": "1080p",
+        "max_duration": 10,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "Good quality video with Kling v1.5"
+    },
+    {
+        "service_type": "model_kling_v2",
+        "display_name": "Kling v2.0 (High Quality)",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.40"),
+        "resolution": "1080p",
+        "max_duration": 10,
+        "subscribers_only": False,
+        "min_plan": "pro",
+        "description": "High quality video with Kling v2.0"
+    },
+    {
+        "service_type": "model_luma_ray2",
+        "display_name": "Luma Ray 2.0 (Cinematic)",
+        "credit_cost": 25,
+        "api_cost_usd": Decimal("0.50"),
+        "resolution": "1080p",
+        "max_duration": 10,
+        "subscribers_only": False,
+        "min_plan": "pro",
+        "description": "Cinematic quality video with Luma Ray 2.0"
+    },
+    {
+        "service_type": "model_wan_t2i",
+        "display_name": "Wan T2I (Standard Image)",
+        "credit_cost": 3,
+        "api_cost_usd": Decimal("0.02"),
+        "resolution": "1024x1024",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "Standard text-to-image generation"
+    },
+    {
+        "service_type": "model_wan_i2v",
+        "display_name": "Wan I2V (Standard Video)",
+        "credit_cost": 10,
+        "api_cost_usd": Decimal("0.15"),
+        "resolution": "720p",
+        "max_duration": 5,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "Standard image-to-video generation with Wan"
+    },
+    # Background removal for subscribers
+    {
+        "service_type": "bg_removal",
+        "display_name": "Background Removal",
+        "credit_cost": 3,
+        "api_cost_usd": Decimal("0.02"),
+        "resolution": None,
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "AI background removal from uploaded images"
+    },
+    # Product scene for subscribers
+    {
+        "service_type": "product_scene_gen",
+        "display_name": "Product Scene Generation",
+        "credit_cost": 5,
+        "api_cost_usd": Decimal("0.05"),
+        "resolution": "1024x1024",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "Generate product in professional scenes"
+    },
+    # Pattern generation for subscribers
+    {
+        "service_type": "pattern_gen",
+        "display_name": "Pattern Generation",
+        "credit_cost": 5,
+        "api_cost_usd": Decimal("0.03"),
+        "resolution": "1024x1024",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "Generate seamless patterns"
+    },
+    # Effect / style transfer for subscribers
+    {
+        "service_type": "style_transfer",
+        "display_name": "Style Transfer",
+        "credit_cost": 5,
+        "api_cost_usd": Decimal("0.05"),
+        "resolution": "1024x1024",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "starter",
+        "description": "Apply artistic styles to images"
+    },
 ]
 
 # Plan data (Weekly Credit System)

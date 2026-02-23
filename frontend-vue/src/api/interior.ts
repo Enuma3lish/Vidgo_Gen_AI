@@ -59,6 +59,19 @@ export interface StyleTransferRequest {
   style_id: string
 }
 
+export interface Generate3DRequest {
+  image_url: string
+  texture_size?: number
+  mesh_simplify?: number
+}
+
+export interface Generate3DResponse {
+  success: boolean
+  model_url?: string
+  task_id?: string
+  error?: string
+}
+
 // API Functions
 export const interiorApi = {
   /**
@@ -159,6 +172,13 @@ export const interiorApi = {
   async styleTransfer(request: StyleTransferRequest): Promise<DesignResponse> {
     const response = await apiClient.post('/api/v1/interior/style-transfer', request, {
       timeout: 120000
+    })
+    return response.data
+  },
+
+  async generate3DModel(request: Generate3DRequest): Promise<Generate3DResponse> {
+    const response = await apiClient.post('/api/v1/interior/3d-model', request, {
+      timeout: 300000 // 5 minutes for 3D generation
     })
     return response.data
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
@@ -22,12 +22,19 @@ const {
   dbEmpty
 } = useDemoMode()
 
+// Tab state
+const activeTab = ref<'styles' | 'transform'>('styles')
+
 const uploadedImage = ref<string | undefined>(undefined)
 const resultImage = ref<string | null>(null)
 const isProcessing = ref(false)
 
 const styles = ref<Style[]>([])
 const selectedStyle = ref<string>('anime')
+
+// AI Transform state
+const transformPrompt = ref('')
+const transformStrength = ref(0.75)
 
 const defaultStyles: Style[] = [
   { id: 'anime', name: 'Anime', name_zh: '動漫風格', preview_url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&h=300&fit=crop', category: 'artistic' },
@@ -150,6 +157,73 @@ async function applyStyle() {
   }
 }
 
+async function applyTransform() {
+  if (!uploadedImage.value || !transformPrompt.value.trim()) return
+
+  if (isDemoUser.value) {
+    uiStore.showInfo(isZh.value ? '請訂閱以使用 AI 自由變換功能' : 'Subscribe to use AI Transform')
+    return
+  }
+
+  if (!canUseCustomInputs.value) {
+    uiStore.showError(isZh.value ? '請訂閱以上傳自訂圖片' : 'Please subscribe to upload custom images')
+    return
+  }
+
+  isProcessing.value = true
+  try {
+    const uploadResult = await demoApi.uploadImage(
+      dataURItoBlob(uploadedImage.value) as File
+    )
+
+    const response = await effectsApi.imageTransform({
+      image_url: uploadResult.url,
+      prompt: transformPrompt.value,
+      strength: transformStrength.value
+    })
+
+    if (response.success && response.result_url) {
+      resultImage.value = response.result_url
+      creditsStore.deductCredits(response.credits_used)
+      uiStore.showSuccess(isZh.value ? '變換成功' : 'Transform applied successfully')
+    } else {
+      uiStore.showError(isZh.value ? '變換失敗' : 'Transform failed')
+    }
+  } catch (error: any) {
+    console.error('Image transform failed:', error)
+    const detail = error.response?.data?.detail
+    if (detail?.error === 'insufficient_credits') {
+      uiStore.showError(isZh.value ? '點數不足，請儲值' : 'Insufficient credits')
+    } else {
+      uiStore.showError(isZh.value ? '處理過程中發生錯誤' : 'An error occurred while processing')
+    }
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+function handleSubmit() {
+  if (activeTab.value === 'transform') {
+    applyTransform()
+  } else {
+    applyStyle()
+  }
+}
+
+// Block demo users from AI Transform tab
+watch(activeTab, (newTab) => {
+  if (isDemoUser.value && newTab === 'transform') {
+    uiStore.showInfo(isZh.value ? '請訂閱以使用 AI 自由變換' : 'Subscribe to use AI Transform')
+    activeTab.value = 'styles'
+  }
+})
+
+const strengthLabel = computed(() => {
+  if (transformStrength.value < 0.3) return isZh.value ? '微調' : 'Subtle'
+  if (transformStrength.value < 0.7) return isZh.value ? '中等' : 'Moderate'
+  return isZh.value ? '強烈' : 'Dramatic'
+})
+
 onMounted(async () => {
   isLoadingDemoImages.value = true
   await loadDemoTemplates('effect', undefined, locale.value)
@@ -170,7 +244,7 @@ onMounted(async () => {
           {{ isZh ? '圖片風格轉換' : 'Image Style Effects' }}
         </h1>
         <p class="text-gray-400">
-          {{ isZh ? '將照片快速轉換成不同的藝術風格，支援動漫、吉卜力、水彩等效果。' : 'Transform photos into artistic styles like anime, Ghibli, and watercolor.' }}
+          {{ isZh ? '將照片快速轉換成不同的藝術風格，或使用 AI 自由描述變換效果。' : 'Transform photos into artistic styles or use AI to freely describe transformations.' }}
         </p>
         <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-4 p-4 rounded-xl bg-dark-700/50 border border-dark-600">
           <p class="text-sm text-gray-300 mb-2">{{ isZh ? '可試玩提示詞（資料庫尚無預生成）' : 'Try prompts (no pre-generated results yet)' }}</p>
@@ -178,6 +252,27 @@ onMounted(async () => {
             <span v-for="p in tryPrompts.slice(0, 5)" :key="p.id" class="px-2 py-1 rounded text-xs bg-dark-800 text-gray-300">{{ p.prompt }}</span>
           </div>
         </div>
+      </div>
+
+      <!-- Tab Switcher -->
+      <div class="flex gap-2 mb-6">
+        <button
+          v-for="tab in [
+            { id: 'styles', label: isZh ? '風格預設' : 'Style Presets' },
+            { id: 'transform', label: isZh ? 'AI 自由變換' : 'AI Transform' }
+          ]"
+          :key="tab.id"
+          @click="activeTab = tab.id as any"
+          class="px-6 py-3 rounded-lg font-medium transition-all"
+          :class="activeTab === tab.id
+            ? 'bg-primary-500 text-white'
+            : 'bg-dark-800 text-gray-400 hover:text-white'"
+        >
+          {{ tab.label }}
+        </button>
+        <span v-if="isDemoUser" class="self-center ml-2 text-xs text-yellow-400">
+          {{ isZh ? 'AI 變換需訂閱' : 'AI Transform requires subscription' }}
+        </span>
       </div>
 
       <div class="grid lg:grid-cols-3 gap-6">
@@ -224,39 +319,113 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Style Selection -->
+        <!-- Style Selection / Transform Controls -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-white mb-4">
-            {{ isZh ? '選擇風格' : 'Choose Style' }}
-          </h3>
+          <!-- Style Presets Mode -->
+          <template v-if="activeTab === 'styles'">
+            <h3 class="text-lg font-semibold text-white mb-4">
+              {{ isZh ? '選擇風格' : 'Choose Style' }}
+            </h3>
 
-          <div class="grid grid-cols-2 gap-3">
-            <button
-              v-for="style in styles"
-              :key="style.id"
-              @click="selectedStyle = style.id"
-              class="rounded-xl border-2 overflow-hidden text-left transition-all"
-              :class="selectedStyle === style.id ? 'border-primary-500 bg-primary-500/10' : 'border-dark-600 hover:border-dark-500'"
-            >
-              <img :src="style.preview_url" :alt="style.name" class="w-full h-20 object-cover" />
-              <div class="p-2">
-                <p class="text-xs text-white font-medium">
-                  {{ isZh ? style.name_zh : style.name }}
-                </p>
+            <div class="grid grid-cols-2 gap-3">
+              <button
+                v-for="style in styles"
+                :key="style.id"
+                @click="selectedStyle = style.id"
+                class="rounded-xl border-2 overflow-hidden text-left transition-all"
+                :class="selectedStyle === style.id ? 'border-primary-500 bg-primary-500/10' : 'border-dark-600 hover:border-dark-500'"
+              >
+                <img :src="style.preview_url" :alt="style.name" class="w-full h-20 object-cover" />
+                <div class="p-2">
+                  <p class="text-xs text-white font-medium">
+                    {{ isZh ? style.name_zh : style.name }}
+                  </p>
+                </div>
+              </button>
+            </div>
+          </template>
+
+          <!-- AI Transform Mode -->
+          <template v-else>
+            <h3 class="text-lg font-semibold text-white mb-4">
+              {{ isZh ? 'AI 變換設定' : 'Transform Settings' }}
+            </h3>
+
+            <div class="space-y-5">
+              <!-- Prompt -->
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">
+                  {{ isZh ? '描述你想要的變換效果' : 'Describe the transformation' }}
+                </label>
+                <textarea
+                  v-model="transformPrompt"
+                  rows="4"
+                  class="w-full bg-dark-900 border border-dark-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 resize-none"
+                  :placeholder="isZh ? '例如：轉換成水彩畫風格、添加日落氛圍、改為冬天雪景...' : 'e.g. watercolor painting style, add sunset mood, change to winter snow scene...'"
+                ></textarea>
               </div>
-            </button>
-          </div>
+
+              <!-- Strength Slider -->
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <label class="text-sm font-medium text-gray-300">
+                    {{ isZh ? '變換強度' : 'Transform Strength' }}
+                  </label>
+                  <span class="text-xs text-primary-400 font-medium">
+                    {{ Math.round(transformStrength * 100) }}% — {{ strengthLabel }}
+                  </span>
+                </div>
+                <input
+                  v-model.number="transformStrength"
+                  type="range"
+                  min="0.05"
+                  max="1"
+                  step="0.05"
+                  class="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                />
+                <div class="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>{{ isZh ? '微調' : 'Subtle' }}</span>
+                  <span>{{ isZh ? '強烈' : 'Dramatic' }}</span>
+                </div>
+              </div>
+
+              <!-- Quick prompts -->
+              <div>
+                <p class="text-xs text-gray-400 mb-2">{{ isZh ? '快速選擇：' : 'Quick picks:' }}</p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="qp in [
+                      { en: 'Watercolor painting', zh: '水彩畫風格' },
+                      { en: 'Oil painting', zh: '油畫效果' },
+                      { en: 'Cyberpunk neon style', zh: '賽博朋克霓虹' },
+                      { en: 'Vintage film photo', zh: '復古底片風格' },
+                      { en: 'Pencil sketch', zh: '鉛筆素描' },
+                    ]"
+                    :key="qp.en"
+                    @click="transformPrompt = isZh ? qp.zh : qp.en"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-dark-700 text-gray-300 hover:bg-dark-600 hover:text-white transition-colors"
+                  >
+                    {{ isZh ? qp.zh : qp.en }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
 
           <div class="mt-6 pt-4 border-t border-dark-700">
             <button
               class="btn-primary w-full"
-              :disabled="!uploadedImage || isProcessing"
-              @click="applyStyle"
+              :disabled="!uploadedImage || isProcessing || (activeTab === 'transform' && !transformPrompt.trim())"
+              @click="handleSubmit"
             >
-              {{ isZh ? '開始轉換' : 'Apply Style' }}
+              {{ activeTab === 'transform'
+                ? (isZh ? 'AI 變換' : 'Transform')
+                : (isZh ? '開始轉換' : 'Apply Style') }}
             </button>
             <p class="mt-2 text-xs text-gray-500">
-              {{ isZh ? '示範模式會使用預先生成結果' : 'Demo mode uses pre-generated results' }}
+              {{ activeTab === 'transform'
+                ? (isZh ? '使用 PiAPI Flux I2I 即時變換' : 'Real-time I2I via PiAPI Flux')
+                : (isZh ? '示範模式會使用預先生成結果' : 'Demo mode uses pre-generated results') }}
             </p>
           </div>
         </div>

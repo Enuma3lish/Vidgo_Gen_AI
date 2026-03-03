@@ -521,14 +521,14 @@ watch(activeTab, (newTab) => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20 bg-gradient-to-b from-dark-900 to-dark-950">
+  <div class="min-h-screen pt-24 bg-white pb-20 bg-gradient-to-b from-dark-900 to-dark-950">
     <LoadingOverlay :show="isProcessing" :message="t('interior.processing')" />
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
       <button
         @click="router.back()"
-        class="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+        class="mb-6 flex items-center gap-2 text-dark-500 hover:text-dark-900 transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -542,10 +542,10 @@ watch(activeTab, (newTab) => {
           <span class="text-2xl">🏠</span>
           <span class="text-primary-400 font-medium">{{ t('interior.badge') }}</span>
         </div>
-        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
+        <h1 class="text-4xl md:text-5xl font-bold text-dark-900 mb-4">
           {{ t('interior.title') }}
         </h1>
-        <p class="text-xl text-gray-400 max-w-2xl mx-auto">
+        <p class="text-xl text-dark-500 max-w-2xl mx-auto">
           {{ t('interior.subtitle') }}
         </p>
 
@@ -572,8 +572,8 @@ watch(activeTab, (newTab) => {
             class="px-6 py-3 rounded-lg font-medium transition-all"
             :class="[
               activeTab === tab.id
-                ? 'bg-primary-500 text-white'
-                : 'text-gray-400 hover:text-white',
+                ? 'bg-primary-500 text-dark-900'
+                : 'text-dark-500 hover:text-dark-900',
               tab.disabled ? 'opacity-50 cursor-not-allowed' : ''
             ]"
           >
@@ -588,15 +588,15 @@ watch(activeTab, (newTab) => {
         <!-- Left Panel - Input -->
         <div class="space-y-6">
           <!-- Upload Zone (for redesign, style transfer, and 3D) -->
-          <div v-if="activeTab !== 'generate'" class="card bg-dark-800/50 backdrop-blur border border-dark-700">
-            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <div v-if="activeTab !== 'generate'" class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>📷</span>
               {{ t('interior.uploadTitle') }}
             </h3>
 
             <!-- PRESET-ONLY MODE: All users select from preset rooms -->
             <div class="mb-4">
-              <p class="text-sm text-gray-400 mb-3">
+              <p class="text-sm text-dark-500 mb-3">
                 {{ isZh ? '選擇房間圖片' : 'Select Room Image' }}
               </p>
               <div class="grid grid-cols-2 gap-2">
@@ -607,7 +607,7 @@ watch(activeTab, (newTab) => {
                   class="relative aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all"
                   :class="selectedDemoRoomId === room.id
                     ? 'border-primary-500 ring-2 ring-primary-500/50'
-                    : 'border-dark-600 hover:border-dark-500'"
+                    : 'border-gray-200 hover:border-dark-500'"
                 >
                   <img
                     :src="room.input"
@@ -616,20 +616,20 @@ watch(activeTab, (newTab) => {
                   />
                   <!-- Room name badge -->
                   <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                    <span class="text-xs text-white">
+                    <span class="text-xs text-dark-900">
                       {{ isZh ? room.nameZh : room.name }}
                     </span>
                   </div>
                 </button>
               </div>
-              <p class="text-xs text-gray-500 mt-2">
+              <p class="text-xs text-dark-400 mt-2">
                 {{ isZh ? '4個房間 × 多種類型 × 多種風格 = 多種組合' : '4 rooms × multiple types × multiple styles = many combinations' }}
               </p>
             </div>
 
             <!-- Subscriber Interface: Upload Zone -->
             <div v-if="!isDemoUser" class="mb-6">
-               <h4 class="text-sm font-medium text-gray-400 mb-2">{{ isZh ? '上傳房間照片' : 'Upload Room Photo' }}</h4>
+               <h4 class="text-sm font-medium text-dark-500 mb-2">{{ isZh ? '上傳房間照片' : 'Upload Room Photo' }}</h4>
                <ImageUploader 
                  v-model="uploadedImage" 
                  :label="isZh ? '點擊上傳或拖放房間照片' : 'Drop room photo here'"
@@ -645,8 +645,8 @@ watch(activeTab, (newTab) => {
           </div>
 
           <!-- Room Type Selection -->
-          <div class="card bg-dark-800/50 backdrop-blur border border-dark-700">
-            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <div class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🏠</span>
               {{ t('interior.roomType') }}
             </h3>
@@ -658,17 +658,17 @@ watch(activeTab, (newTab) => {
                 class="p-3 rounded-xl border-2 transition-all text-center"
                 :class="selectedRoomType === room.id
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-dark-600 hover:border-dark-500'"
+                  : 'border-gray-200 hover:border-dark-500'"
               >
                 <span class="text-2xl block">{{ roomTypeIcons[room.id] || '🏠' }}</span>
-                <p class="text-xs text-gray-400 mt-1 truncate">{{ roomTypeName(room) }}</p>
+                <p class="text-xs text-dark-500 mt-1 truncate">{{ roomTypeName(room) }}</p>
               </button>
             </div>
           </div>
 
           <!-- Style Selection -->
-          <div class="card bg-dark-800/50 backdrop-blur border border-dark-700">
-            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <div class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🎨</span>
               {{ t('interior.designStyle') }}
             </h3>
@@ -680,55 +680,55 @@ watch(activeTab, (newTab) => {
                 class="p-4 rounded-xl border-2 transition-all text-left"
                 :class="selectedStyle === style.id
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-dark-600 hover:border-dark-500'"
+                  : 'border-gray-200 hover:border-dark-500'"
               >
                 <span class="text-2xl">{{ styleIcons[style.id] || '🏠' }}</span>
-                <p class="font-medium text-white mt-2">{{ styleName(style) }}</p>
-                <p class="text-xs text-gray-500 line-clamp-2">{{ style.description }}</p>
+                <p class="font-medium text-dark-900 mt-2">{{ styleName(style) }}</p>
+                <p class="text-xs text-dark-400 line-clamp-2">{{ style.description }}</p>
               </button>
             </div>
           </div>
 
           <!-- Custom Prompt (not shown for 3D tab) -->
-          <div v-if="!isDemoUser && activeTab !== '3dModel'" class="card bg-dark-800/50 backdrop-blur border border-dark-700">
-             <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <div v-if="!isDemoUser && activeTab !== '3dModel'" class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+             <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
                <span>✏️</span>
                {{ isZh ? '自訂描述 (可選)' : 'Custom Prompt (Optional)' }}
              </h3>
              <textarea
                v-model="prompt"
                rows="3"
-               class="w-full bg-dark-900 border border-dark-600 rounded-lg p-3 text-white focus:outline-none focus:border-primary-500"
+               class="w-full bg-dark-900 border border-gray-200 rounded-lg p-3 text-dark-900 focus:outline-none focus:border-primary-500"
                :placeholder="isZh ? '描述您想要的房間細節，例如顏色、材質等...' : 'Describe specific details like colors, materials, etc...'"
              ></textarea>
           </div>
 
           <!-- 3D Model Settings -->
-          <div v-if="activeTab === '3dModel' && !isDemoUser" class="card bg-dark-800/50 backdrop-blur border border-dark-700">
-            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <div v-if="activeTab === '3dModel' && !isDemoUser" class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🧊</span>
               {{ isZh ? '3D 模型設定' : '3D Model Settings' }}
             </h3>
             <div class="space-y-4">
               <div>
-                <p class="text-sm text-gray-300 mb-2">
+                <p class="text-sm text-dark-600 mb-2">
                   {{ isZh ? '將 2D 圖片轉換為可互動的 3D 模型（GLB 格式）。' : 'Convert a 2D image into an interactive 3D model (GLB format).' }}
                 </p>
                 <p v-if="resultImage" class="text-xs text-primary-400">
                   {{ isZh ? '將使用上方的 2D 設計結果作為來源' : 'Will use the 2D design result above as source' }}
                 </p>
-                <p v-else class="text-xs text-gray-500">
+                <p v-else class="text-xs text-dark-400">
                   {{ isZh ? '將使用已選擇的房間圖片作為來源' : 'Will use the selected room image as source' }}
                 </p>
               </div>
 
               <div>
-                <label class="text-sm font-medium text-gray-300 mb-1 block">
+                <label class="text-sm font-medium text-dark-600 mb-1 block">
                   {{ isZh ? '貼圖品質' : 'Texture Quality' }}
                 </label>
                 <select
                   v-model.number="textureSize"
-                  class="w-full bg-dark-900 border border-dark-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
+                  class="w-full bg-dark-900 border border-gray-200 rounded-lg px-3 py-2 text-dark-900 focus:outline-none focus:border-primary-500"
                 >
                   <option :value="512">512px ({{ isZh ? '較快' : 'Faster' }})</option>
                   <option :value="1024">1024px ({{ isZh ? '高品質' : 'High Quality' }})</option>
@@ -737,10 +737,10 @@ watch(activeTab, (newTab) => {
 
               <div>
                 <div class="flex justify-between items-center mb-1">
-                  <label class="text-sm font-medium text-gray-300">
+                  <label class="text-sm font-medium text-dark-600">
                     {{ isZh ? '網格精細度' : 'Mesh Detail' }}
                   </label>
-                  <span class="text-xs text-gray-400">{{ Math.round(meshSimplify * 100) }}%</span>
+                  <span class="text-xs text-dark-500">{{ Math.round(meshSimplify * 100) }}%</span>
                 </div>
                 <input
                   v-model.number="meshSimplify"
@@ -748,18 +748,18 @@ watch(activeTab, (newTab) => {
                   min="0.5"
                   max="1"
                   step="0.05"
-                  class="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                  class="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-500"
                 />
               </div>
 
-              <p class="text-xs text-gray-500">
+              <p class="text-xs text-dark-400">
                 {{ isZh ? '3D 模型生成可能需要 2-5 分鐘' : '3D model generation may take 2-5 minutes' }}
               </p>
             </div>
           </div>
 
           <!-- Generate Button -->
-          <div class="card bg-dark-800/50 backdrop-blur border border-dark-700">
+          <div class="card bg-dark-800/50 backdrop-blur border border-gray-200">
             <button
               @click="handleSubmit"
               :disabled="isProcessing || (activeTab !== 'generate' && !uploadedImage)"
@@ -785,8 +785,8 @@ watch(activeTab, (newTab) => {
 
         <!-- Right Panel - Results -->
         <div class="space-y-6">
-          <div class="card bg-dark-800/50 backdrop-blur border border-dark-700 h-fit sticky top-24">
-            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <div class="card bg-dark-800/50 backdrop-blur border border-gray-200 h-fit sticky top-24">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🖼️</span>
               {{ t('interior.result') }}
             </h3>
@@ -799,12 +799,12 @@ watch(activeTab, (newTab) => {
                 :after-label="t('interior.after')"
               />
 
-              <p v-if="resultDescription" class="text-sm text-gray-400 italic">
+              <p v-if="resultDescription" class="text-sm text-dark-500 italic">
                 {{ resultDescription }}
               </p>
 
               <!-- Watermark badge -->
-              <div class="text-center text-xs text-gray-500">vidgo.ai</div>
+              <div class="text-center text-xs text-dark-400">vidgo.ai</div>
 
               <!-- Download / Action Buttons -->
               <div class="flex gap-3">
@@ -837,12 +837,12 @@ watch(activeTab, (newTab) => {
                 <img :src="resultImage" alt="Generated Design" class="w-full" />
               </div>
 
-              <p v-if="resultDescription" class="text-sm text-gray-400 italic">
+              <p v-if="resultDescription" class="text-sm text-dark-500 italic">
                 {{ resultDescription }}
               </p>
 
               <!-- Watermark badge -->
-              <div class="text-center text-xs text-gray-500">vidgo.ai</div>
+              <div class="text-center text-xs text-dark-400">vidgo.ai</div>
 
               <!-- Download / Action Buttons -->
               <div class="flex gap-3">
@@ -877,7 +877,7 @@ watch(activeTab, (newTab) => {
                 :width="560"
                 :height="400"
               />
-              <p class="text-sm text-gray-400 text-center">
+              <p class="text-sm text-dark-500 text-center">
                 {{ isZh ? '拖曳旋轉 / 滾輪縮放' : 'Drag to rotate / Scroll to zoom' }}
               </p>
 
@@ -899,19 +899,19 @@ watch(activeTab, (newTab) => {
             <div v-else class="h-80 flex items-center justify-center">
               <div class="text-center">
                 <span class="text-6xl block mb-4">🏠</span>
-                <p class="text-gray-500">{{ t('interior.resultPlaceholder') }}</p>
-                <p class="text-gray-600 text-sm mt-2">{{ t('interior.resultHint') }}</p>
+                <p class="text-dark-400">{{ t('interior.resultPlaceholder') }}</p>
+                <p class="text-dark-400 text-sm mt-2">{{ t('interior.resultHint') }}</p>
               </div>
             </div>
           </div>
 
           <!-- Features Info -->
           <div class="card bg-gradient-to-br from-primary-500/10 to-purple-500/10 border border-primary-500/20">
-            <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
+            <h4 class="font-semibold text-dark-900 mb-3 flex items-center gap-2">
               <span>💡</span>
               {{ t('interior.features.title') }}
             </h4>
-            <ul class="space-y-2 text-sm text-gray-400">
+            <ul class="space-y-2 text-sm text-dark-500">
               <li class="flex items-start gap-2">
                 <span class="text-primary-400">✓</span>
                 {{ t('interior.features.imageText') }}
@@ -942,13 +942,13 @@ watch(activeTab, (newTab) => {
 }
 
 .btn-primary {
-  @apply px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white font-medium rounded-xl
+  @apply px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-dark-900 font-medium rounded-xl
          hover:from-primary-600 hover:to-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .btn-ghost {
-  @apply px-6 py-3 bg-dark-700 text-gray-300 font-medium rounded-xl
-         hover:bg-dark-600 hover:text-white transition-all;
+  @apply px-6 py-3 bg-gray-100 text-dark-600 font-medium rounded-xl
+         hover:bg-dark-600 hover:text-dark-900 transition-all;
 }
 
 .line-clamp-2 {

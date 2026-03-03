@@ -16,7 +16,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4 py-24 bg-dark-900">
+  <div class="min-h-screen flex items-center justify-center px-4 py-24 bg-white">
     <div class="max-w-md w-full text-center card p-8">
       <div class="w-16 h-16 bg-primary-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
         <svg class="w-8 h-8 text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -24,15 +24,15 @@ onMounted(() => {
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
       </div>
-      <h1 class="text-2xl font-bold text-white mb-2">
+      <h1 class="text-2xl font-bold text-dark-900 mb-2">
         {{ t('subscription.mockComplete', 'Demo payment complete') }}
       </h1>
-      <p class="text-gray-400 mb-6">
+      <p class="text-dark-500 mb-6">
         {{ t('subscription.redirecting', 'Redirecting to dashboard...') }}
       </p>
       <button
         type="button"
-        class="text-primary-400 hover:text-primary-300 text-sm"
+        class="text-dark-600 hover:text-dark-900 text-sm"
         @click="router.replace('/dashboard')"
       >
         {{ t('subscription.goNow', 'Go now') }}

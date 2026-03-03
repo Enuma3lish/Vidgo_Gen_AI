@@ -205,14 +205,14 @@ function dataURItoBlob(dataURI: string): Blob {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20">
+  <div class="min-h-screen pt-24 pb-20 bg-white">
     <LoadingOverlay :show="isProcessing" :message="isZh ? '正在生成影片... 這可能需要幾分鐘' : 'Generating video... This may take a few minutes'" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
       <button
         @click="router.back()"
-        class="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+        class="mb-6 flex items-center gap-2 text-dark-500 hover:text-dark-900 transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -222,10 +222,10 @@ function dataURItoBlob(dataURI: string): Blob {
 
       <!-- Header -->
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-white mb-4">
+        <h1 class="text-4xl font-bold text-dark-900 mb-4">
           {{ t('tools.shortVideo.name') }}
         </h1>
-        <p class="text-xl text-gray-400">
+        <p class="text-xl text-dark-500">
           {{ t('tools.shortVideo.longDesc') }}
         </p>
 
@@ -242,13 +242,13 @@ function dataURItoBlob(dataURI: string): Blob {
         <div class="space-y-6">
           <!-- Example Selection -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4">
               {{ isZh ? '請試試我們精彩的範例' : 'Please try our amazing examples' }}
             </h3>
 
             <!-- Subscriber Interface: Upload Zone -->
             <div v-if="!isDemoUser" class="mb-6">
-               <h4 class="text-sm font-medium text-gray-400 mb-2">{{ isZh ? '上傳圖片 (.jpg, .png)' : 'Upload Image (.jpg, .png)' }}</h4>
+               <h4 class="text-sm font-medium text-dark-500 mb-2">{{ isZh ? '上傳圖片 (.jpg, .png)' : 'Upload Image (.jpg, .png)' }}</h4>
                <ImageUploader 
                  v-model="uploadedImage" 
                  :label="isZh ? '點擊上傳或拖放起始圖片' : 'Drop starting image here'"
@@ -259,7 +259,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
             <!-- Demo Images for all users -->
             <div v-if="demoImages.length > 0" class="mb-4">
-              <p class="text-sm text-gray-400 mb-3">
+              <p class="text-sm text-dark-500 mb-3">
                 {{ isZh ? '點擊查看不同動態效果' : 'Click to see different motion effects' }}
               </p>
               <div v-if="isLoadingTemplates" class="flex justify-center py-8">
@@ -273,7 +273,7 @@ function dataURItoBlob(dataURI: string): Blob {
                   class="aspect-video rounded-lg overflow-hidden border-2 transition-all relative group"
                   :class="selectedDemoImageId === item.id
                     ? 'border-primary-500'
-                    : 'border-dark-600 hover:border-dark-500'"
+                    : 'border-gray-200 hover:border-gray-300'"
                 >
                   <!-- Video preview with poster -->
                   <video
@@ -291,11 +291,11 @@ function dataURItoBlob(dataURI: string): Blob {
                     :alt="item.name"
                     class="w-full h-full object-cover"
                   />
-                  <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
+                  <div v-else class="w-full h-full bg-gray-100 flex items-center justify-center">
                     <span class="text-3xl">🎬</span>
                   </div>
                   <!-- Motion type badge -->
-                  <div class="absolute top-1 left-1 px-2 py-0.5 bg-primary-500/80 rounded text-xs text-white">
+                  <div class="absolute top-1 left-1 px-2 py-0.5 bg-primary-500/80 rounded text-xs text-dark-900">
                     {{ isZh
                       ? motionOptions.find(m => m.id === item.motion)?.nameZh || item.topic
                       : motionOptions.find(m => m.id === item.motion)?.nameEn || item.topic
@@ -303,7 +303,7 @@ function dataURItoBlob(dataURI: string): Blob {
                   </div>
                   <!-- Prompt description overlay -->
                   <div class="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                    <p class="text-white text-xs line-clamp-2">
+                    <p class="text-dark-900 text-xs line-clamp-2">
                       {{ item.name }}
                     </p>
                   </div>
@@ -326,18 +326,18 @@ function dataURItoBlob(dataURI: string): Blob {
 
           <!-- Selected Video Info - shows when a preset is selected -->
           <div v-if="selectedDemoImageId" class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4">
               {{ isZh ? '已選擇的範例' : 'Selected Example' }}
             </h3>
             <div class="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-              <p class="text-sm text-white mb-2">
+              <p class="text-sm text-dark-900 mb-2">
                 <span class="text-primary-400 font-medium">{{ isZh ? '動態效果：' : 'Motion Effect: ' }}</span>
                 {{ isZh
                   ? motionOptions.find(m => m.id === demoImages.find(d => d.id === selectedDemoImageId)?.motion)?.nameZh || '自動'
                   : motionOptions.find(m => m.id === demoImages.find(d => d.id === selectedDemoImageId)?.motion)?.nameEn || 'Auto'
                 }}
               </p>
-              <p class="text-sm text-gray-300">
+              <p class="text-sm text-dark-600">
                 <span class="text-primary-400 font-medium">{{ isZh ? '描述：' : 'Prompt: ' }}</span>
                 {{ demoImages.find(d => d.id === selectedDemoImageId)?.name }}
               </p>
@@ -346,11 +346,11 @@ function dataURItoBlob(dataURI: string): Blob {
 
           <!-- Prompt to select - shows when nothing selected -->
           <div v-else class="card">
-            <h3 class="text-lg font-semibold text-white mb-4">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4">
               {{ isZh ? '選擇一個範例' : 'Select an Example' }}
             </h3>
-            <div class="p-3 bg-dark-700/50 border border-dark-600 rounded-lg">
-              <p class="text-sm text-gray-400">
+            <div class="p-3 bg-gray-100/50 border border-gray-200 rounded-lg">
+              <p class="text-sm text-dark-500">
                 {{ isZh ? '👆 從上方範例影片中選擇一個來查看效果' : '👆 Select an example video above to see the result' }}
               </p>
             </div>
@@ -359,7 +359,7 @@ function dataURItoBlob(dataURI: string): Blob {
           <!-- Video Settings - Subscriber Only -->
           <div class="card">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-white">
+              <h3 class="text-lg font-semibold text-dark-900">
                 {{ isZh ? '影片設定' : 'Video Settings' }}
               </h3>
               <span v-if="!isSubscribed" class="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded">
@@ -378,12 +378,12 @@ function dataURItoBlob(dataURI: string): Blob {
                   class="flex-1 py-3 rounded-xl border-2 transition-all"
                   :class="selectedDuration === dur
                     ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-dark-600 hover:border-dark-500'"
+                    : 'border-gray-200 hover:border-gray-300'"
                 >
                   {{ dur }}s
                 </button>
               </div>
-              <p v-if="!isSubscribed" class="text-xs text-gray-500 mt-2">
+              <p v-if="!isSubscribed" class="text-xs text-dark-400 mt-2">
                 {{ isZh ? '訂閱後可自訂影片長度' : 'Subscribe to customize video duration' }}
               </p>
             </div>
@@ -399,13 +399,13 @@ function dataURItoBlob(dataURI: string): Blob {
                   class="p-3 rounded-xl border-2 transition-all text-center"
                   :class="selectedMotion === motion.id
                     ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-dark-600 hover:border-dark-500'"
+                    : 'border-gray-200 hover:border-gray-300'"
                 >
                   <p class="text-sm font-medium">{{ isZh ? motion.nameZh : motion.nameEn }}</p>
-                  <p class="text-xs text-gray-500 mt-1">{{ isZh ? motion.descZh : motion.descEn }}</p>
+                  <p class="text-xs text-dark-400 mt-1">{{ isZh ? motion.descZh : motion.descEn }}</p>
                 </button>
               </div>
-              <p v-if="!isSubscribed" class="text-xs text-gray-500 mt-2">
+              <p v-if="!isSubscribed" class="text-xs text-dark-400 mt-2">
                 {{ isZh ? '訂閱後可選擇動態效果' : 'Subscribe to choose motion effects' }}
               </p>
             </div>
@@ -421,7 +421,7 @@ function dataURItoBlob(dataURI: string): Blob {
             </div>
 
             <!-- Credit Cost & Generate -->
-            <div class="mt-6 pt-4 border-t border-dark-700">
+            <div class="mt-6 pt-4 border-t border-gray-200">
               <CreditCost service="short_video" />
               <button
                 @click="generateVideo"
@@ -436,7 +436,7 @@ function dataURItoBlob(dataURI: string): Blob {
           <!-- AI Model Selection - Subscriber Only -->
           <div class="card">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-white">
+              <h3 class="text-lg font-semibold text-dark-900">
                 {{ isZh ? 'AI 模型選擇' : 'AI Model Selection' }}
               </h3>
               <span v-if="!isSubscribed" class="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded">
@@ -445,7 +445,7 @@ function dataURItoBlob(dataURI: string): Blob {
             </div>
 
             <div :class="{ 'opacity-50 pointer-events-none': !isSubscribed }">
-              <p class="text-sm text-gray-400 mb-3">
+              <p class="text-sm text-dark-500 mb-3">
                 {{ isZh ? '選擇不同的 AI 模型以獲得不同的生成效果' : 'Choose different AI models for different generation effects' }}
               </p>
               <div class="space-y-2">
@@ -456,17 +456,17 @@ function dataURItoBlob(dataURI: string): Blob {
                   class="w-full p-3 rounded-xl border-2 transition-all text-left flex items-center justify-between"
                   :class="selectedModel === model.id
                     ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-dark-600 hover:border-dark-500'"
+                    : 'border-gray-200 hover:border-gray-300'"
                 >
                   <div>
-                    <p class="text-sm font-medium text-white">{{ isZh ? model.nameZh : model.nameEn }}</p>
-                    <p class="text-xs text-gray-500">{{ isZh ? model.descZh : model.descEn }}</p>
-                    <p class="text-xs text-gray-600 mt-1">
+                    <p class="text-sm font-medium text-dark-900">{{ isZh ? model.nameZh : model.nameEn }}</p>
+                    <p class="text-xs text-dark-400">{{ isZh ? model.descZh : model.descEn }}</p>
+                    <p class="text-xs text-dark-400 mt-1">
                       {{ isZh ? `支援長度: ${model.lengths.join('s, ')}s` : `Lengths: ${model.lengths.join('s, ')}s` }}
                     </p>
                   </div>
                   <div v-if="model.badge" class="ml-2">
-                    <span v-if="model.badge === 'default'" class="text-xs px-2 py-0.5 bg-gray-500/20 text-gray-400 rounded">Default</span>
+                    <span v-if="model.badge === 'default'" class="text-xs px-2 py-0.5 bg-gray-500/20 text-dark-500 rounded">Default</span>
                     <span v-else-if="model.badge === 'new'" class="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded">New</span>
                     <span v-else-if="model.badge === 'pro'" class="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">Pro</span>
                     <span v-else-if="model.badge === 'premium'" class="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">Premium</span>
@@ -489,7 +489,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
         <!-- Right Panel - Result -->
         <div class="card h-fit sticky top-24">
-          <h3 class="text-lg font-semibold text-white mb-4">
+          <h3 class="text-lg font-semibold text-dark-900 mb-4">
             {{ isZh ? '生成的影片' : 'Generated Video' }}
           </h3>
 
@@ -502,7 +502,7 @@ function dataURItoBlob(dataURI: string): Blob {
               loop
             />
             <!-- Watermark badge -->
-            <div class="text-center text-xs text-gray-500">vidgo.ai</div>
+            <div class="text-center text-xs text-dark-400">vidgo.ai</div>
             <!-- Download / Action Buttons -->
             <div class="flex gap-3">
                <a
@@ -520,7 +520,7 @@ function dataURItoBlob(dataURI: string): Blob {
             </div>
           </div>
 
-          <div v-else class="aspect-video flex items-center justify-center bg-dark-700 rounded-xl text-gray-500">
+          <div v-else class="aspect-video flex items-center justify-center bg-gray-100 rounded-xl text-dark-400">
             <div class="text-center">
               <span class="text-5xl block mb-4">🎬</span>
               <p>{{ isZh ? '生成的影片將顯示在這裡' : 'Generated video will appear here' }}</p>

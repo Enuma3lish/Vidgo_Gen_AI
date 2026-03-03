@@ -111,12 +111,12 @@ async function deleteWork() {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20">
+  <div class="min-h-screen pt-24 pb-20 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="mb-8">
-        <h1 class="text-3xl font-bold text-white mb-2">{{ t('nav.myWorks') }}</h1>
-        <p class="text-gray-400">Browse and manage your generated content</p>
+        <h1 class="text-3xl font-bold text-dark-900 mb-2">{{ t('nav.myWorks') }}</h1>
+        <p class="text-dark-500">Browse and manage your generated content</p>
       </div>
 
       <!-- Filters -->
@@ -127,8 +127,8 @@ async function deleteWork() {
           @click="selectedFilter = filter.id"
           class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           :class="selectedFilter === filter.id
-            ? 'bg-primary-500 text-white'
-            : 'bg-dark-800 text-gray-400 hover:text-white'"
+            ? 'bg-primary-500 text-dark-900'
+            : 'bg-gray-50 text-dark-500 hover:text-dark-900'"
         >
           {{ filter.label }}
         </button>
@@ -137,7 +137,7 @@ async function deleteWork() {
       <!-- Loading State -->
       <div v-if="loading" class="card text-center py-12">
         <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-        <p class="text-gray-400">Loading your works...</p>
+        <p class="text-dark-500">Loading your works...</p>
       </div>
 
       <!-- Works Grid -->
@@ -156,21 +156,21 @@ async function deleteWork() {
                 :alt="work.tool_type"
                 class="w-full h-full object-cover"
               />
-              <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
-                <span class="text-gray-500 text-sm">No preview</span>
+              <div v-else class="w-full h-full bg-gray-100 flex items-center justify-center">
+                <span class="text-dark-400 text-sm">No preview</span>
               </div>
-              <div v-if="isVideo(work)" class="absolute top-2 right-2 bg-dark-900/80 text-white text-xs px-2 py-1 rounded">
+              <div v-if="isVideo(work)" class="absolute top-2 right-2 bg-white/80 text-dark-900 text-xs px-2 py-1 rounded">
                 Video
               </div>
-              <div class="absolute inset-0 bg-dark-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <div class="absolute inset-0 bg-white/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                 <button class="btn-primary text-sm px-4 py-2">View</button>
               </div>
             </div>
             <div class="p-4">
-              <p class="text-sm text-white font-medium capitalize mb-1">
+              <p class="text-sm text-dark-900 font-medium capitalize mb-1">
                 {{ work.tool_type.replace(/_/g, ' ') }}
               </p>
-              <div class="flex items-center justify-between text-xs text-gray-500">
+              <div class="flex items-center justify-between text-xs text-dark-400">
                 <span>{{ formatDate(work.created_at) }}</span>
                 <span>{{ work.credits_used }} credits</span>
               </div>
@@ -183,17 +183,17 @@ async function deleteWork() {
           <button
             @click="changePage(currentPage - 1)"
             :disabled="currentPage <= 1"
-            class="px-3 py-1 rounded bg-dark-800 text-gray-400 hover:text-white disabled:opacity-50"
+            class="px-3 py-1 rounded bg-gray-50 text-dark-500 hover:text-dark-900 disabled:opacity-50"
           >
             Prev
           </button>
-          <span class="text-gray-400 text-sm">
+          <span class="text-dark-500 text-sm">
             {{ currentPage }} / {{ totalPages }}
           </span>
           <button
             @click="changePage(currentPage + 1)"
             :disabled="currentPage >= totalPages"
-            class="px-3 py-1 rounded bg-dark-800 text-gray-400 hover:text-white disabled:opacity-50"
+            class="px-3 py-1 rounded bg-gray-50 text-dark-500 hover:text-dark-900 disabled:opacity-50"
           >
             Next
           </button>
@@ -203,8 +203,8 @@ async function deleteWork() {
       <!-- Empty State -->
       <div v-else class="card text-center py-12">
         <span class="text-5xl block mb-4">🔍</span>
-        <h3 class="text-lg font-medium text-white mb-2">No works found</h3>
-        <p class="text-gray-400">Try a different filter or create new content</p>
+        <h3 class="text-lg font-medium text-dark-900 mb-2">No works found</h3>
+        <p class="text-dark-500">Try a different filter or create new content</p>
       </div>
     </div>
 
@@ -215,13 +215,13 @@ async function deleteWork() {
         class="fixed inset-0 z-50 flex items-center justify-center p-4"
         @click.self="closeModal"
       >
-        <div class="absolute inset-0 bg-dark-900/80 backdrop-blur-sm" @click="closeModal" />
+        <div class="absolute inset-0 bg-white/80 backdrop-blur-sm" @click="closeModal" />
 
-        <div class="relative bg-dark-800 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
+        <div class="relative bg-gray-50 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
           <!-- Close Button -->
           <button
             @click="closeModal"
-            class="absolute top-4 right-4 z-10 w-10 h-10 bg-dark-900/80 rounded-full flex items-center justify-center text-gray-400 hover:text-white"
+            class="absolute top-4 right-4 z-10 w-10 h-10 bg-white/80 rounded-full flex items-center justify-center text-dark-500 hover:text-dark-900"
           >
             ✕
           </button>
@@ -232,26 +232,26 @@ async function deleteWork() {
               v-if="isVideo(selectedWork)"
               :src="selectedWork.result_video_url!"
               controls
-              class="w-full h-full object-contain bg-dark-900"
+              class="w-full h-full object-contain bg-white"
             />
             <img
               v-else
               :src="getThumbnail(selectedWork)"
               :alt="selectedWork.tool_type"
-              class="w-full h-full object-contain bg-dark-900"
+              class="w-full h-full object-contain bg-white"
             />
           </div>
 
           <!-- Info -->
           <div class="p-6">
-            <h3 class="text-xl font-semibold text-white capitalize mb-2">
+            <h3 class="text-xl font-semibold text-dark-900 capitalize mb-2">
               {{ selectedWork.tool_type.replace(/_/g, ' ') }}
             </h3>
-            <div class="flex items-center gap-4 text-sm text-gray-400 mb-4">
+            <div class="flex items-center gap-4 text-sm text-dark-500 mb-4">
               <span>Created: {{ formatDate(selectedWork.created_at) }}</span>
               <span>Credits used: {{ selectedWork.credits_used }}</span>
             </div>
-            <p v-if="selectedWork.input_text" class="text-sm text-gray-300 mb-6 line-clamp-2">
+            <p v-if="selectedWork.input_text" class="text-sm text-dark-600 mb-6 line-clamp-2">
               {{ selectedWork.input_text }}
             </p>
 

@@ -246,14 +246,14 @@ function dataURItoBlob(dataURI: string): Blob {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20">
+  <div class="min-h-screen pt-24 bg-white pb-20">
     <LoadingOverlay :show="isProcessing" :message="t('common.processing')" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
       <button
         @click="router.back()"
-        class="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+        class="mb-6 flex items-center gap-2 text-dark-500 hover:text-dark-900 transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -263,10 +263,10 @@ function dataURItoBlob(dataURI: string): Blob {
 
       <!-- Header -->
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-white mb-4">
+        <h1 class="text-4xl font-bold text-dark-900 mb-4">
           {{ t('tools.productScene.name') }}
         </h1>
-        <p class="text-xl text-gray-400">
+        <p class="text-xl text-dark-500">
           {{ t('tools.productScene.longDesc') }}
         </p>
 
@@ -278,15 +278,15 @@ function dataURItoBlob(dataURI: string): Blob {
         </div>
 
         <!-- DB Empty: Show try prompts (fixed prompts for try-play) -->
-        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-6 p-4 rounded-xl bg-dark-700/50 border border-dark-600">
-          <p class="text-sm text-gray-300 mb-3">
+        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-6 p-4 rounded-xl bg-gray-100/50 border border-gray-200">
+          <p class="text-sm text-dark-600 mb-3">
             {{ isZh ? '以下為可試玩的固定提示詞，資料庫尚未有預生成結果。訂閱者可上傳自訂圖片並即時生成。' : 'Try-play prompts below. DB has no pre-generated results yet. Subscribers can upload and generate.' }}
           </p>
           <div class="flex flex-wrap gap-2">
             <span
               v-for="p in tryPrompts.slice(0, 6)"
               :key="p.id"
-              class="px-3 py-1 rounded-full text-xs bg-dark-800 text-gray-300"
+              class="px-3 py-1 rounded-full text-xs bg-dark-800 text-dark-600"
             >
               {{ p.prompt }}
             </span>
@@ -297,11 +297,11 @@ function dataURItoBlob(dataURI: string): Blob {
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <!-- Left Panel - Product Selection -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-white mb-4">{{ t('tools.common.productImage') }}</h3>
+          <h3 class="text-lg font-semibold text-dark-900 mb-4">{{ t('tools.common.productImage') }}</h3>
 
           <!-- PRESET-ONLY MODE: All users select from preset products -->
           <div class="mb-4">
-            <p class="text-sm text-gray-400 mb-3">
+            <p class="text-sm text-dark-500 mb-3">
               {{ isZh ? '選擇產品圖片' : 'Select Product Image' }}
             </p>
             <div class="grid grid-cols-2 gap-2">
@@ -312,7 +312,7 @@ function dataURItoBlob(dataURI: string): Blob {
                 class="relative aspect-square rounded-lg overflow-hidden border-2 transition-all"
                 :class="selectedProductId === product.id
                   ? 'border-primary-500 ring-2 ring-primary-500/50'
-                  : 'border-dark-600 hover:border-dark-500'"
+                  : 'border-gray-200 hover:border-dark-500'"
               >
                 <img
                   v-if="product.input"
@@ -320,7 +320,7 @@ function dataURItoBlob(dataURI: string): Blob {
                   alt="Product"
                   class="w-full h-full object-cover"
                 />
-                <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
+                <div v-else class="w-full h-full bg-gray-100 flex items-center justify-center">
                   <span class="text-2xl">📦</span>
                 </div>
                 <!-- Product name badge -->
@@ -329,14 +329,14 @@ function dataURItoBlob(dataURI: string): Blob {
                 </div>
               </button>
             </div>
-            <p class="text-xs text-gray-500 mt-2">
+            <p class="text-xs text-dark-400 mt-2">
               {{ isZh ? '8個產品 × 8個場景 = 64種組合' : '8 products × 8 scenes = 64 combinations' }}
             </p>
           </div>
 
           <!-- Subscriber Interface: Upload Zone -->
           <div v-if="!isDemoUser" class="mb-6">
-             <h4 class="text-sm font-medium text-gray-400 mb-2">{{ isZh ? '上傳您的產品' : 'Upload Your Product' }}</h4>
+             <h4 class="text-sm font-medium text-dark-500 mb-2">{{ isZh ? '上傳您的產品' : 'Upload Your Product' }}</h4>
              <ImageUploader 
                v-model="uploadedImage" 
                :label="isZh ? '點擊上傳或拖放產品圖片' : 'Drop product image here'"
@@ -354,7 +354,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
         <!-- Middle Panel - Scene Selection -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-white mb-4">{{ t('tools.common.selectScene') }}</h3>
+          <h3 class="text-lg font-semibold text-dark-900 mb-4">{{ t('tools.common.selectScene') }}</h3>
 
           <div class="grid grid-cols-2 gap-3">
             <button
@@ -365,32 +365,32 @@ function dataURItoBlob(dataURI: string): Blob {
               :class="[
                 selectedScene === scene.id
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-dark-600 hover:border-dark-500',
+                  : 'border-gray-200 hover:border-dark-500',
                 scene.proOnly && isDemoUser ? 'opacity-60' : ''
               ]"
             >
-              <span v-if="scene.proOnly && isDemoUser" class="absolute top-1 right-1 text-xs bg-primary-500 text-white px-1 rounded">Pro</span>
+              <span v-if="scene.proOnly && isDemoUser" class="absolute top-1 right-1 text-xs bg-primary-500 text-dark-900 px-1 rounded">Pro</span>
               <span class="text-2xl">{{ scene.icon }}</span>
-              <p class="font-medium text-white mt-2">{{ scene.name }}</p>
-              <p class="text-xs text-gray-500">{{ scene.desc }}</p>
+              <p class="font-medium text-dark-900 mt-2">{{ scene.name }}</p>
+              <p class="text-xs text-dark-400">{{ scene.desc }}</p>
             </button>
           </div>
 
            <!-- Custom Prompt Input (Pro Only) -->
            <div v-if="selectedScene === 'custom'" class="mt-4">
-             <label class="block text-sm font-medium text-gray-400 mb-2">
+             <label class="block text-sm font-medium text-dark-500 mb-2">
                {{ isZh ? '自訂場景描述' : 'Custom Scene Prompt' }}
              </label>
              <textarea
                v-model="prompt"
                rows="3"
-               class="w-full bg-dark-900 border border-dark-600 rounded-lg p-3 text-white focus:outline-none focus:border-primary-500"
+               class="w-full bg-dark-900 border border-gray-200 rounded-lg p-3 text-dark-900 focus:outline-none focus:border-primary-500"
                :placeholder="isZh ? '描述您想要的場景細節...' : 'Describe the scene details...'"
              ></textarea>
            </div>
 
           <!-- Credit Cost & Generate -->
-          <div class="mt-6 pt-4 border-t border-dark-700">
+          <div class="mt-6 pt-4 border-t border-gray-200">
             <CreditCost service="product_scene" />
             <button
               @click="generateScenes"
@@ -404,7 +404,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
         <!-- Right Panel - Results -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-white mb-4">{{ t('tools.common.generatedScenes') }}</h3>
+          <h3 class="text-lg font-semibold text-dark-900 mb-4">{{ t('tools.common.generatedScenes') }}</h3>
 
           <div v-if="resultImages.length > 0" class="space-y-4">
             <div v-for="(img, index) in resultImages" :key="index" class="space-y-2">
@@ -435,7 +435,7 @@ function dataURItoBlob(dataURI: string): Blob {
               </RouterLink>
           </div>
 
-          <div v-else class="h-64 flex items-center justify-center text-gray-500">
+          <div v-else class="h-64 flex items-center justify-center text-dark-400">
             <div class="text-center">
               <span class="text-5xl block mb-4">🛍️</span>
               <p>{{ t('tools.common.generatedScenes') }}</p>

@@ -66,14 +66,14 @@ async function downloadPdf(inv: InvoiceItem) {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20">
+  <div class="min-h-screen pt-24 pb-20 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="mb-8">
-        <h1 class="text-3xl font-bold text-white mb-2">
+        <h1 class="text-3xl font-bold text-dark-900 mb-2">
           {{ t('dashboard.invoices', 'Invoices') }}
         </h1>
-        <p class="text-gray-400">
+        <p class="text-dark-500">
           {{ t('dashboard.invoicesDesc', 'View and download your payment invoices') }}
         </p>
       </div>
@@ -90,34 +90,34 @@ async function downloadPdf(inv: InvoiceItem) {
 
       <!-- Loading -->
       <div v-if="loading" class="card text-center py-12">
-        <p class="text-gray-400">Loading invoices...</p>
+        <p class="text-dark-500">Loading invoices...</p>
       </div>
 
       <!-- Invoices list -->
       <div v-else-if="invoices.length > 0" class="card overflow-hidden p-0">
         <div class="overflow-x-auto">
           <table class="w-full">
-            <thead class="bg-dark-800/80 border-b border-dark-600">
+            <thead class="bg-gray-50/80 border-b border-gray-200">
               <tr>
-                <th class="text-left py-4 px-4 text-sm font-medium text-gray-400">Date</th>
-                <th class="text-left py-4 px-4 text-sm font-medium text-gray-400">Invoice / Order</th>
-                <th class="text-left py-4 px-4 text-sm font-medium text-gray-400">Amount</th>
-                <th class="text-right py-4 px-4 text-sm font-medium text-gray-400">Action</th>
+                <th class="text-left py-4 px-4 text-sm font-medium text-dark-500">Date</th>
+                <th class="text-left py-4 px-4 text-sm font-medium text-dark-500">Invoice / Order</th>
+                <th class="text-left py-4 px-4 text-sm font-medium text-dark-500">Amount</th>
+                <th class="text-right py-4 px-4 text-sm font-medium text-dark-500">Action</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-dark-600">
               <tr
                 v-for="inv in invoices"
                 :key="inv.order_id"
-                class="hover:bg-dark-700/50 transition-colors"
+                class="hover:bg-gray-100/50 transition-colors"
               >
-                <td class="py-4 px-4 text-white">
+                <td class="py-4 px-4 text-dark-900">
                   {{ formatDate(inv.paid_at) }}
                 </td>
                 <td class="py-4 px-4">
-                  <span class="text-white font-mono text-sm">{{ inv.invoice_number || inv.order_number }}</span>
+                  <span class="text-dark-900 font-mono text-sm">{{ inv.invoice_number || inv.order_number }}</span>
                 </td>
-                <td class="py-4 px-4 text-white">
+                <td class="py-4 px-4 text-dark-900">
                   {{ formatAmount(inv.amount, inv.currency) }}
                 </td>
                 <td class="py-4 px-4 text-right">
@@ -129,7 +129,7 @@ async function downloadPdf(inv: InvoiceItem) {
                   >
                     {{ loadingPdf === inv.order_id ? '...' : (t('common.download') || 'Download') }} PDF
                   </button>
-                  <span v-else class="text-gray-500 text-sm">—</span>
+                  <span v-else class="text-dark-400 text-sm">—</span>
                 </td>
               </tr>
             </tbody>
@@ -140,10 +140,10 @@ async function downloadPdf(inv: InvoiceItem) {
       <!-- Empty state -->
       <div v-else class="card text-center py-12">
         <span class="text-5xl block mb-4">🧾</span>
-        <h3 class="text-lg font-medium text-white mb-2">
+        <h3 class="text-lg font-medium text-dark-900 mb-2">
           {{ t('dashboard.noInvoices', 'No invoices yet') }}
         </h3>
-        <p class="text-gray-400 mb-4">
+        <p class="text-dark-500 mb-4">
           {{ t('dashboard.noInvoicesDesc', 'Your payment invoices will appear here after you subscribe.') }}
         </p>
         <RouterLink to="/pricing" class="btn-primary">

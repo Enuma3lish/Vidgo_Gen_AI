@@ -4,7 +4,7 @@
 
       <!-- Header -->
       <div>
-        <h1 class="text-3xl font-bold text-white">{{ $t('referrals.title') }}</h1>
+        <h1 class="text-3xl font-bold text-dark-900">{{ $t('referrals.title') }}</h1>
         <p class="mt-1 text-slate-400">{{ $t('referrals.subtitle') }}</p>
       </div>
 
@@ -28,7 +28,7 @@
 
       <!-- Referral link card -->
       <div class="bg-gradient-to-br from-indigo-900/60 to-purple-900/60 rounded-2xl p-6 border border-indigo-700/40">
-        <h2 class="text-xl font-semibold text-white mb-1">{{ $t('referrals.yourLink') }}</h2>
+        <h2 class="text-xl font-semibold text-dark-900 mb-1">{{ $t('referrals.yourLink') }}</h2>
         <p class="text-slate-400 text-sm mb-4">{{ $t('referrals.linkDescription') }}</p>
 
         <!-- Referral URL display -->
@@ -40,7 +40,7 @@
           />
           <button
             @click="copyLink"
-            class="shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors"
+            class="shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-dark-900 rounded-lg text-sm font-medium transition-colors"
           >
             {{ copied ? $t('referrals.copied') : $t('referrals.copy') }}
           </button>
@@ -63,10 +63,10 @@
 
       <!-- How it works -->
       <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
-        <h2 class="text-xl font-semibold text-white mb-4">{{ $t('referrals.howItWorks.title') }}</h2>
+        <h2 class="text-xl font-semibold text-dark-900 mb-4">{{ $t('referrals.howItWorks.title') }}</h2>
         <ol class="space-y-3">
           <li v-for="(step, i) in howItWorksSteps" :key="i" class="flex gap-3">
-            <span class="w-7 h-7 shrink-0 rounded-full bg-indigo-600 text-white text-sm flex items-center justify-center font-bold">
+            <span class="w-7 h-7 shrink-0 rounded-full bg-indigo-600 text-dark-900 text-sm flex items-center justify-center font-bold">
               {{ i + 1 }}
             </span>
             <p class="text-slate-300 text-sm leading-relaxed pt-0.5">{{ step }}</p>
@@ -76,18 +76,18 @@
 
       <!-- Apply referral code (only if user hasn't been referred yet) -->
       <div v-if="!stats?.referred_by" class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
-        <h2 class="text-xl font-semibold text-white mb-1">{{ $t('referrals.applyCode.title') }}</h2>
+        <h2 class="text-xl font-semibold text-dark-900 mb-1">{{ $t('referrals.applyCode.title') }}</h2>
         <p class="text-slate-400 text-sm mb-4">{{ $t('referrals.applyCode.description') }}</p>
         <div class="flex gap-2">
           <input
             v-model="applyCodeInput"
             :placeholder="$t('referrals.applyCode.placeholder')"
-            class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-dark-900 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
           <button
             @click="applyCode"
             :disabled="!applyCodeInput || applyLoading"
-            class="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+            class="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-dark-900 rounded-lg text-sm font-medium transition-colors"
           >
             {{ applyLoading ? '...' : $t('referrals.applyCode.submit') }}
           </button>
@@ -99,7 +99,7 @@
 
       <!-- Leaderboard -->
       <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
-        <h2 class="text-xl font-semibold text-white mb-4">{{ $t('referrals.leaderboard.title') }}</h2>
+        <h2 class="text-xl font-semibold text-dark-900 mb-4">{{ $t('referrals.leaderboard.title') }}</h2>
         <div v-if="leaderboard.length" class="space-y-2">
           <div
             v-for="entry in leaderboard"
@@ -155,7 +155,7 @@ const shareChannels = computed(() => {
       id: 'copy',
       icon: '🔗',
       label: t('referrals.share.copyLink'),
-      cls: 'border-slate-600 text-slate-300 hover:border-indigo-500 hover:text-white',
+      cls: 'border-slate-600 text-slate-300 hover:border-indigo-500 hover:text-dark-900',
       action: () => navigator.clipboard.writeText(url),
     },
     {
@@ -169,7 +169,7 @@ const shareChannels = computed(() => {
       id: 'twitter',
       icon: '𝕏',
       label: 'X / Twitter',
-      cls: 'border-slate-600 text-slate-300 hover:border-white hover:text-white',
+      cls: 'border-slate-600 text-slate-300 hover:border-white hover:text-dark-900',
       action: () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`),
     },
     {

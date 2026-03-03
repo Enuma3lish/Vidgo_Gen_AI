@@ -65,14 +65,14 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20">
+  <div class="min-h-screen pt-24 pb-20 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="mb-8">
-        <h1 class="text-3xl font-bold text-white mb-2">
+        <h1 class="text-3xl font-bold text-dark-900 mb-2">
           {{ t('dashboard.welcome') }}, {{ authStore.user?.email?.split('@')[0] }}!
         </h1>
-        <p class="text-gray-400">Here's an overview of your account</p>
+        <p class="text-dark-500">Here's an overview of your account</p>
       </div>
 
       <!-- Stats Grid -->
@@ -80,13 +80,13 @@ onMounted(async () => {
         <!-- Total Credits -->
         <div class="card">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-gray-400 font-medium">{{ t('dashboard.totalCredits') }}</h3>
+            <h3 class="text-dark-500 font-medium">{{ t('dashboard.totalCredits') }}</h3>
             <span class="text-2xl">💰</span>
           </div>
-          <p class="text-4xl font-bold text-white">
+          <p class="text-4xl font-bold text-dark-900">
             {{ creditsStore.balance?.remaining_credits ?? 0 }}
           </p>
-          <p class="text-sm text-gray-500 mt-1">
+          <p class="text-sm text-dark-400 mt-1">
             of {{ creditsStore.balance?.total_credits ?? 0 }} total
           </p>
         </div>
@@ -94,13 +94,13 @@ onMounted(async () => {
         <!-- Used This Week -->
         <div class="card">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-gray-400 font-medium">{{ t('dashboard.usedThisWeek') }}</h3>
+            <h3 class="text-dark-500 font-medium">{{ t('dashboard.usedThisWeek') }}</h3>
             <span class="text-2xl">📊</span>
           </div>
-          <p class="text-4xl font-bold text-white">
+          <p class="text-4xl font-bold text-dark-900">
             {{ creditsStore.balance?.weekly_used ?? 0 }}
           </p>
-          <p class="text-sm text-gray-500 mt-1">
+          <p class="text-sm text-dark-400 mt-1">
             limit: {{ creditsStore.balance?.weekly_limit ?? 0 }} / week
           </p>
         </div>
@@ -108,10 +108,10 @@ onMounted(async () => {
         <!-- Plan -->
         <div class="card">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-gray-400 font-medium">{{ t('dashboard.currentPlan', 'Current Plan') }}</h3>
+            <h3 class="text-dark-500 font-medium">{{ t('dashboard.currentPlan', 'Current Plan') }}</h3>
             <span class="text-2xl">⭐</span>
           </div>
-          <p class="text-4xl font-bold text-white capitalize">
+          <p class="text-4xl font-bold text-dark-900 capitalize">
             {{ authStore.user?.plan_type ?? 'Demo' }}
           </p>
           <RouterLink to="/pricing" class="text-sm text-primary-400 hover:text-primary-300 mt-1 inline-block">
@@ -122,7 +122,7 @@ onMounted(async () => {
 
       <!-- Quick Actions -->
       <div class="mb-12">
-        <h2 class="text-xl font-bold text-white mb-6">{{ t('dashboard.quickActions') }}</h2>
+        <h2 class="text-xl font-bold text-dark-900 mb-6">{{ t('dashboard.quickActions') }}</h2>
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
           <RouterLink
             v-for="action in quickActions"
@@ -136,7 +136,7 @@ onMounted(async () => {
             >
               <span class="text-2xl">{{ action.icon }}</span>
             </div>
-            <h3 class="font-medium text-white group-hover:text-primary-400 transition-colors">
+            <h3 class="font-medium text-dark-900 group-hover:text-primary-400 transition-colors">
               {{ t(`tools.${action.key}.name`) }}
             </h3>
           </RouterLink>
@@ -146,7 +146,7 @@ onMounted(async () => {
       <!-- Recent Works -->
       <div>
         <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
-          <h2 class="text-xl font-bold text-white">{{ t('dashboard.recentWorks') }}</h2>
+          <h2 class="text-xl font-bold text-dark-900">{{ t('dashboard.recentWorks') }}</h2>
           <div class="flex items-center gap-4">
             <RouterLink to="/dashboard/my-works" class="text-primary-400 hover:text-primary-300 text-sm font-medium">
               {{ t('dashboard.viewAll') }} →
@@ -163,7 +163,7 @@ onMounted(async () => {
         <!-- Loading -->
         <div v-if="loadingWorks" class="card text-center py-8">
           <div class="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-          <p class="text-gray-400 text-sm">Loading recent works...</p>
+          <p class="text-dark-500 text-sm">Loading recent works...</p>
         </div>
 
         <div v-else-if="recentWorks.length > 0" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -179,24 +179,24 @@ onMounted(async () => {
                 :alt="work.tool_type"
                 class="w-full h-full object-cover"
               />
-              <div v-else class="w-full h-full bg-dark-700 flex items-center justify-center">
-                <span class="text-gray-500 text-xs">No preview</span>
+              <div v-else class="w-full h-full bg-gray-100 flex items-center justify-center">
+                <span class="text-dark-400 text-xs">No preview</span>
               </div>
-              <div class="absolute inset-0 bg-dark-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <div class="absolute inset-0 bg-white/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <RouterLink :to="`/dashboard/my-works`" class="btn-primary text-sm">View</RouterLink>
               </div>
             </div>
             <div class="p-3">
-              <p class="text-sm text-white font-medium capitalize">{{ work.tool_type.replace(/_/g, ' ') }}</p>
-              <p class="text-xs text-gray-500">{{ formatRelativeDate(work.created_at) }}</p>
+              <p class="text-sm text-dark-900 font-medium capitalize">{{ work.tool_type.replace(/_/g, ' ') }}</p>
+              <p class="text-xs text-dark-400">{{ formatRelativeDate(work.created_at) }}</p>
             </div>
           </div>
         </div>
 
         <div v-else class="card text-center py-12">
           <span class="text-5xl block mb-4">🎨</span>
-          <h3 class="text-lg font-medium text-white mb-2">No works yet</h3>
-          <p class="text-gray-400 mb-4">Start creating to see your works here</p>
+          <h3 class="text-lg font-medium text-dark-900 mb-2">No works yet</h3>
+          <p class="text-dark-500 mb-4">Start creating to see your works here</p>
           <RouterLink to="/tools/background-removal" class="btn-primary">
             Start Creating
           </RouterLink>

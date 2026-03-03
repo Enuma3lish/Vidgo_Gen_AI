@@ -79,7 +79,7 @@ onUnmounted(() => {
               <RouterLink to="/tools/room-redesign" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
                 <span class="text-lg">🏠</span> 室內設計
               </RouterLink>
-              <RouterLink to="/tools/ai-avatar" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
+              <RouterLink to="/tools/avatar" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
                 <span class="text-lg">🤖</span> AI 頭像
               </RouterLink>
             </div>

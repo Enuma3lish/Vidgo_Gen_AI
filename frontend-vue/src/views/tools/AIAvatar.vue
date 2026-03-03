@@ -38,12 +38,12 @@ const languageOptions = [
   { id: 'en', name: 'English', flag: '🇺🇸' }
 ]
 
-// Female AI Avatars - Asian/Chinese women, color portraits (Unsplash free); v=3
+// Female AI Avatars - Confirmed Asian/Taiwanese women (Unsplash free); v=4
 const FEMALE_AVATAR_URLS = [
-  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e6?w=512&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=512&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1544006943-0e92b9a3b95d?w=512&fit=crop&crop=faces'
+  'https://images.unsplash.com/photo-1615262239828-a4d49e6503ea?w=512&fit=crop&crop=faces',  // 怡君 - Asian woman, white top
+  'https://images.unsplash.com/photo-1615262239126-1931bdb03182?w=512&fit=crop&crop=faces',  // 雅婷 - Asian woman, red background
+  'https://images.unsplash.com/photo-1566589430181-a51c280be4b1?w=512&fit=crop&crop=faces',  // 佳穎 - Asian woman, blue jacket
+  'https://images.unsplash.com/photo-1614387256720-5b994a2bb8e5?w=512&fit=crop&crop=faces'   // 淑芬 - Asian woman, orange top
 ]
 const femaleAvatars = [
   { id: 'female-1', gender: 'female' as const, name_zh: '怡君', name_en: 'Yi-Jun', url: FEMALE_AVATAR_URLS[0] },
@@ -52,12 +52,12 @@ const femaleAvatars = [
   { id: 'female-4', gender: 'female' as const, name_zh: '淑芬', name_en: 'Shu-Fen', url: FEMALE_AVATAR_URLS[3] }
 ]
 
-// Male AI Avatars - Asian/Chinese men, color (Unsplash free); v=3. male-1 was wrong (female photo) → fixed.
+// Male AI Avatars - Confirmed Asian/Taiwanese men (Unsplash free); v=4
 const MALE_AVATAR_URLS = [
-  'https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces', // Asian man, plaid shirt
-  'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1600486914327-2f364e2d7731?w=512&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1552375816-4b96b919e67a?w=512&fit=crop&crop=faces'
+  'https://images.unsplash.com/photo-1643990081716-345352952d33?w=512&fit=crop&crop=faces',  // 志偉 - Asian man, young
+  'https://images.unsplash.com/photo-1634843824979-c89d2910b80f?w=512&fit=crop&crop=faces',  // 冠宇 - Asian man, glasses, red top
+  'https://images.unsplash.com/photo-1633177188754-980c2a6b6266?w=512&fit=crop&crop=faces',  // 宗翰 - Asian man, green top
+  'https://images.unsplash.com/photo-1727605507453-dfe1e74abfbc?w=512&fit=crop&crop=faces'   // 家豪 - Asian man, glasses, black suit
 ]
 const maleAvatars = [
   { id: 'male-1', gender: 'male' as const, name_zh: '志偉', name_en: 'Zhi-Wei', url: MALE_AVATAR_URLS[0] },

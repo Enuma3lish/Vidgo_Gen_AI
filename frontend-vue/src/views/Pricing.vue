@@ -33,7 +33,11 @@ const planDisplayNames: Record<string, string> = {
   free: 'demo',
   starter: 'starter',
   pro: 'pro',
-  enterprise: 'proPlus'
+  enterprise: 'proPlus',
+  '免費體驗': 'demo',
+  'Starter': 'starter',
+  'Pro': 'pro',
+  'Enterprise': 'proPlus'
 }
 
 // Fetch plans from API
@@ -44,7 +48,48 @@ async function fetchPlans() {
   } catch (err) {
     console.error('Failed to fetch plans:', err)
     // Fallback to default plans if API fails
-    plans.value = []
+    plans.value = [
+      {
+        id: 'free',
+        name: 'free',
+        display_name: '免費體驗',
+        description: '新用戶專屬，立即體驗 AI 生成',
+        price_monthly: 0,
+        price_yearly: 0,
+        monthly_credits: 40,
+        features: { max_video_length: 5, max_resolution: '720p', has_watermark: true, priority_queue: false, api_access: false, can_use_effects: false, batch_processing: false, custom_styles: false }
+      },
+      {
+        id: 'starter',
+        name: 'starter',
+        display_name: 'Starter',
+        description: '適合個人創作者與小型電商',
+        price_monthly: 99,
+        price_yearly: 79,
+        monthly_credits: 100,
+        features: { max_video_length: 30, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: false, custom_styles: false }
+      },
+      {
+        id: 'pro',
+        name: 'pro',
+        display_name: 'Pro',
+        description: '專業團隊首選，最高畫質輸出',
+        price_monthly: 649,
+        price_yearly: 519,
+        monthly_credits: -1,
+        features: { max_video_length: null, max_resolution: '4K', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
+      },
+      {
+        id: 'enterprise',
+        name: 'enterprise',
+        display_name: 'Enterprise',
+        description: '大型企業專屬，客製化服務',
+        price_monthly: 0,
+        price_yearly: 0,
+        monthly_credits: -1,
+        features: { max_video_length: null, max_resolution: '4K', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
+      }
+    ]
   } finally {
     loading.value = false
   }
@@ -152,7 +197,7 @@ function getPlanDisplayKey(name: string): string {
 
 // Check if plan is popular
 function isPlanPopular(name: string): boolean {
-  return name === 'pro'
+  return name === 'pro' || name === 'Pro'
 }
 
 // Get price based on billing period
@@ -297,23 +342,23 @@ onMounted(async () => {
           </span>
 
           <!-- Plan Name -->
-          <h3 class="text-xl font-semibold text-dark-900 mb-4">
+          <h3 class="text-xl font-semibold mb-4" :class="isPlanPopular(plan.name) ? 'text-white' : 'text-dark-900'">
             {{ plan.display_name || t(`pricing.${getPlanDisplayKey(plan.name)}`) }}
           </h3>
 
           <!-- Price -->
           <div class="mb-6">
-            <span class="text-4xl font-bold text-dark-900">
+            <span class="text-4xl font-bold" :class="isPlanPopular(plan.name) ? 'text-white' : 'text-dark-900'">
               NT${{ getPrice(plan) }}
             </span>
-            <span class="text-dark-500">
+            <span :class="isPlanPopular(plan.name) ? 'text-gray-400' : 'text-dark-500'">
               /{{ billingPeriod === 'monthly' ? 'mo' : 'yr' }}
             </span>
           </div>
 
           <!-- Credits -->
-          <p class="text-dark-500 mb-6">
-            {{ plan.monthly_credits }} credits/month
+          <p class="mb-6" :class="isPlanPopular(plan.name) ? 'text-gray-400' : 'text-dark-500'">
+            {{ plan.monthly_credits === -1 ? "無限制" : plan.monthly_credits }} 點數/月
           </p>
 
           <!-- CTA Button -->

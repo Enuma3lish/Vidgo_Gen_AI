@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useCreditsStore } from '@/stores'
 import LanguageSelector from './LanguageSelector.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const isZh = () => locale.value === 'zh-TW'
 const router = useRouter()
 const authStore = useAuthStore()
 const creditsStore = useCreditsStore()
@@ -60,7 +61,7 @@ onUnmounted(() => {
           </RouterLink>
           <div class="relative group">
             <button class="nav-link rounded-lg hover:bg-black/5 font-medium text-dark-700 flex items-center gap-1">
-              工具
+              {{ t('nav.tools') }}
               <svg class="w-3.5 h-3.5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </button>
             <div class="absolute top-full left-0 mt-1 w-52 bg-white rounded-2xl shadow-xl border border-black/8 overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">

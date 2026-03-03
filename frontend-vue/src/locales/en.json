@@ -11,7 +11,8 @@
     "register": "Register",
     "logout": "Logout",
     "dashboard": "Dashboard",
-    "myWorks": "My Works"
+    "myWorks": "My Works",
+    "tools": "Tools"
   },
   "hero": {
     "title": "Create Stunning Visuals with AI",
@@ -187,12 +188,30 @@
       "examplePrompt": "e.g., Elegant rose floral pattern, gold and navy color scheme..."
     },
     "scenes": {
-      "studio": { "name": "Studio", "desc": "Clean studio lighting" },
-      "nature": { "name": "Nature", "desc": "Natural outdoor setting" },
-      "elegant": { "name": "Elegant", "desc": "Refined warm atmosphere" },
-      "minimal": { "name": "Minimal", "desc": "Clean minimal backdrop" },
-      "lifestyle": { "name": "Lifestyle", "desc": "Home environment" },
-      "custom": { "name": "Custom", "desc": "Your own prompt" }
+      "studio": {
+        "name": "Studio",
+        "desc": "Clean studio lighting"
+      },
+      "nature": {
+        "name": "Nature",
+        "desc": "Natural outdoor setting"
+      },
+      "elegant": {
+        "name": "Elegant",
+        "desc": "Refined warm atmosphere"
+      },
+      "minimal": {
+        "name": "Minimal",
+        "desc": "Clean minimal backdrop"
+      },
+      "lifestyle": {
+        "name": "Lifestyle",
+        "desc": "Home environment"
+      },
+      "custom": {
+        "name": "Custom",
+        "desc": "Your own prompt"
+      }
     }
   },
   "styles": {
@@ -553,22 +572,52 @@
       "title": "Powerful Features,",
       "titleHighlight": "All in One",
       "subtitle": "Integrating AI technology with professional marketing tools for comprehensive ad production solutions",
-      "ai": { "title": "AI Smart Generation", "desc": "Advanced AI technology automatically analyzes your needs and generates professional video ads that match your brand identity" },
-      "fast": { "title": "Fast Production", "desc": "Complete video ad production in just 3 minutes, significantly reducing traditional production time" },
-      "target": { "title": "Precise Targeting", "desc": "Intelligent audience analysis to optimize ad content for better click-through and conversion rates" },
-      "data": { "title": "Data Analytics", "desc": "Real-time ad performance tracking with in-depth data analysis and optimization suggestions" },
-      "lang": { "title": "Multi-language Support", "desc": "Support for 30+ languages to easily expand into global markets" },
-      "team": { "title": "Team Collaboration", "desc": "Multi-user collaboration support for teams to create perfect ad content together" }
+      "ai": {
+        "title": "AI Smart Generation",
+        "desc": "Advanced AI technology automatically analyzes your needs and generates professional video ads that match your brand identity"
+      },
+      "fast": {
+        "title": "Fast Production",
+        "desc": "Complete video ad production in just 3 minutes, significantly reducing traditional production time"
+      },
+      "target": {
+        "title": "Precise Targeting",
+        "desc": "Intelligent audience analysis to optimize ad content for better click-through and conversion rates"
+      },
+      "data": {
+        "title": "Data Analytics",
+        "desc": "Real-time ad performance tracking with in-depth data analysis and optimization suggestions"
+      },
+      "lang": {
+        "title": "Multi-language Support",
+        "desc": "Support for 30+ languages to easily expand into global markets"
+      },
+      "team": {
+        "title": "Team Collaboration",
+        "desc": "Multi-user collaboration support for teams to create perfect ad content together"
+      }
     },
     "howItWorks": {
       "badge": "How It Works",
       "title": "Four Steps",
       "titleHighlight": "Easy Completion",
       "subtitle": "Simple and intuitive workflow to get you started quickly and create immediately",
-      "step1": { "title": "Upload Assets", "desc": "Upload your product images, videos, or text content, supporting multiple formats" },
-      "step2": { "title": "AI Generation", "desc": "AI automatically analyzes content and generates professional ad scripts and visual effects" },
-      "step3": { "title": "Customize", "desc": "Adjust style, copy, music and other details according to your needs" },
-      "step4": { "title": "Export & Deploy", "desc": "Download the finished product or integrate directly with major ad platforms" }
+      "step1": {
+        "title": "Upload Assets",
+        "desc": "Upload your product images, videos, or text content, supporting multiple formats"
+      },
+      "step2": {
+        "title": "AI Generation",
+        "desc": "AI automatically analyzes content and generates professional ad scripts and visual effects"
+      },
+      "step3": {
+        "title": "Customize",
+        "desc": "Adjust style, copy, music and other details according to your needs"
+      },
+      "step4": {
+        "title": "Export & Deploy",
+        "desc": "Download the finished product or integrate directly with major ad platforms"
+      }
     },
     "examples": {
       "badge": "Showcase",
@@ -593,8 +642,22 @@
       "traditional": "Traditional Method",
       "aiWay": "VIDGO AI",
       "recommend": "Recommended",
-      "traditionalItems": ["Requires professional team", "2-4 weeks production", "High cost $5000+", "Difficult revisions", "Professional equipment needed", "High labor costs"],
-      "aiItems": ["No professional skills needed", "Complete in 3 minutes", "Starting at $49/month", "Adjust anytime", "Online operation", "AI automation"],
+      "traditionalItems": [
+        "Requires professional team",
+        "2-4 weeks production",
+        "High cost $5000+",
+        "Difficult revisions",
+        "Professional equipment needed",
+        "High labor costs"
+      ],
+      "aiItems": [
+        "No professional skills needed",
+        "Complete in 3 minutes",
+        "Starting at $49/month",
+        "Adjust anytime",
+        "Online operation",
+        "AI automation"
+      ],
       "statTimeSaved": "Time Saved",
       "statCostReduced": "Cost Reduced",
       "statEfficiency": "Output Efficiency"

@@ -11,7 +11,8 @@
     "register": "Registrarse",
     "logout": "Cerrar sesión",
     "dashboard": "Panel",
-    "myWorks": "Mis trabajos"
+    "myWorks": "Mis trabajos",
+    "tools": "Herramientas"
   },
   "hero": {
     "title": "Crea visuales impresionantes con IA",
@@ -166,12 +167,30 @@
       "examplePrompt": "Ej: Elegante patrón de rosas florales, esquema de colores dorado y azul marino..."
     },
     "scenes": {
-      "studio": { "name": "Estudio", "desc": "Iluminación limpia de estudio" },
-      "nature": { "name": "Naturaleza", "desc": "Entorno natural al aire libre" },
-      "elegant": { "name": "Elegante", "desc": "Estilo refinado y sofisticado" },
-      "minimal": { "name": "Minimalista", "desc": "Fondo minimalista limpio" },
-      "lifestyle": { "name": "Lifestyle", "desc": "Ambiente hogareño" },
-      "custom": { "name": "Personalizado", "desc": "Tu propio prompt" }
+      "studio": {
+        "name": "Estudio",
+        "desc": "Iluminación limpia de estudio"
+      },
+      "nature": {
+        "name": "Naturaleza",
+        "desc": "Entorno natural al aire libre"
+      },
+      "elegant": {
+        "name": "Elegante",
+        "desc": "Estilo refinado y sofisticado"
+      },
+      "minimal": {
+        "name": "Minimalista",
+        "desc": "Fondo minimalista limpio"
+      },
+      "lifestyle": {
+        "name": "Lifestyle",
+        "desc": "Ambiente hogareño"
+      },
+      "custom": {
+        "name": "Personalizado",
+        "desc": "Tu propio prompt"
+      }
     }
   },
   "styles": {
@@ -512,22 +531,52 @@
       "title": "Funciones Potentes,",
       "titleHighlight": "Todo en Uno",
       "subtitle": "Integrando tecnología de IA con herramientas de marketing profesional para soluciones completas de producción de anuncios",
-      "ai": { "title": "Generación Inteligente IA", "desc": "Tecnología de IA avanzada analiza automáticamente tus necesidades y genera anuncios de video profesionales que coinciden con tu identidad de marca" },
-      "fast": { "title": "Producción Rápida", "desc": "Completa la producción de anuncios de video en solo 3 minutos, reduciendo significativamente el tiempo de producción tradicional" },
-      "target": { "title": "Segmentación Precisa", "desc": "Análisis inteligente de audiencia para optimizar contenido de anuncios para mejores tasas de clics y conversión" },
-      "data": { "title": "Análisis de Datos", "desc": "Seguimiento de rendimiento de anuncios en tiempo real con análisis de datos profundo y sugerencias de optimización" },
-      "lang": { "title": "Soporte Multiidioma", "desc": "Soporte para 30+ idiomas para expandirse fácilmente a mercados globales" },
-      "team": { "title": "Colaboración en Equipo", "desc": "Soporte de colaboración multiusuario para que los equipos creen contenido de anuncios perfecto juntos" }
+      "ai": {
+        "title": "Generación Inteligente IA",
+        "desc": "Tecnología de IA avanzada analiza automáticamente tus necesidades y genera anuncios de video profesionales que coinciden con tu identidad de marca"
+      },
+      "fast": {
+        "title": "Producción Rápida",
+        "desc": "Completa la producción de anuncios de video en solo 3 minutos, reduciendo significativamente el tiempo de producción tradicional"
+      },
+      "target": {
+        "title": "Segmentación Precisa",
+        "desc": "Análisis inteligente de audiencia para optimizar contenido de anuncios para mejores tasas de clics y conversión"
+      },
+      "data": {
+        "title": "Análisis de Datos",
+        "desc": "Seguimiento de rendimiento de anuncios en tiempo real con análisis de datos profundo y sugerencias de optimización"
+      },
+      "lang": {
+        "title": "Soporte Multiidioma",
+        "desc": "Soporte para 30+ idiomas para expandirse fácilmente a mercados globales"
+      },
+      "team": {
+        "title": "Colaboración en Equipo",
+        "desc": "Soporte de colaboración multiusuario para que los equipos creen contenido de anuncios perfecto juntos"
+      }
     },
     "howItWorks": {
       "badge": "Cómo Funciona",
       "title": "Cuatro Pasos",
       "titleHighlight": "Fácil Completar",
       "subtitle": "Flujo de trabajo simple e intuitivo para comenzar rápidamente y crear inmediatamente",
-      "step1": { "title": "Subir Activos", "desc": "Sube tus imágenes de productos, videos o contenido de texto, soportando múltiples formatos" },
-      "step2": { "title": "Generación IA", "desc": "La IA analiza automáticamente el contenido y genera guiones de anuncios profesionales y efectos visuales" },
-      "step3": { "title": "Personalizar", "desc": "Ajusta estilo, texto, música y otros detalles según tus necesidades" },
-      "step4": { "title": "Exportar y Desplegar", "desc": "Descarga el producto terminado o integra directamente con las principales plataformas de anuncios" }
+      "step1": {
+        "title": "Subir Activos",
+        "desc": "Sube tus imágenes de productos, videos o contenido de texto, soportando múltiples formatos"
+      },
+      "step2": {
+        "title": "Generación IA",
+        "desc": "La IA analiza automáticamente el contenido y genera guiones de anuncios profesionales y efectos visuales"
+      },
+      "step3": {
+        "title": "Personalizar",
+        "desc": "Ajusta estilo, texto, música y otros detalles según tus necesidades"
+      },
+      "step4": {
+        "title": "Exportar y Desplegar",
+        "desc": "Descarga el producto terminado o integra directamente con las principales plataformas de anuncios"
+      }
     },
     "examples": {
       "badge": "Exhibición",
@@ -552,8 +601,22 @@
       "traditional": "Método Tradicional",
       "aiWay": "VIDGO AI",
       "recommend": "Recomendado",
-      "traditionalItems": ["Requiere equipo profesional", "Producción de 2-4 semanas", "Alto costo $5000+", "Revisiones difíciles", "Necesita equipo profesional", "Altos costos laborales"],
-      "aiItems": ["No requiere habilidades profesionales", "Completo en 3 minutos", "Desde $49/mes", "Ajusta en cualquier momento", "Operación en línea", "Automatización IA"],
+      "traditionalItems": [
+        "Requiere equipo profesional",
+        "Producción de 2-4 semanas",
+        "Alto costo $5000+",
+        "Revisiones difíciles",
+        "Necesita equipo profesional",
+        "Altos costos laborales"
+      ],
+      "aiItems": [
+        "No requiere habilidades profesionales",
+        "Completo en 3 minutos",
+        "Desde $49/mes",
+        "Ajusta en cualquier momento",
+        "Operación en línea",
+        "Automatización IA"
+      ],
       "statTimeSaved": "Tiempo Ahorrado",
       "statCostReduced": "Costo Reducido",
       "statEfficiency": "Eficiencia de Producción"

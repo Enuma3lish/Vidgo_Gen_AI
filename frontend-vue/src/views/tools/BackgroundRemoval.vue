@@ -44,6 +44,51 @@ const demoImages = computed(() => {
     }))
 })
 
+
+// Static fallback examples (shown when backend DB is empty)
+const STATIC_BG_EXAMPLES = [
+  {
+    id: 'static-bg-1',
+    input: 'https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&fit=crop',
+    result: 'https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&fit=crop&bg=transparent',
+    label: 'Skincare Bottle'
+  },
+  {
+    id: 'static-bg-2',
+    input: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&fit=crop',
+    result: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&fit=crop',
+    label: 'Watch'
+  },
+  {
+    id: 'static-bg-3',
+    input: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&fit=crop',
+    result: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&fit=crop',
+    label: 'Sneakers'
+  },
+  {
+    id: 'static-bg-4',
+    input: 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&fit=crop',
+    result: 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&fit=crop',
+    label: 'Running Shoes'
+  },
+  {
+    id: 'static-bg-5',
+    input: 'https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&fit=crop',
+    result: 'https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&fit=crop',
+    label: 'Sneaker Pair'
+  },
+  {
+    id: 'static-bg-6',
+    input: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&fit=crop',
+    result: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&fit=crop',
+    label: 'Camera'
+  }
+]
+
+const effectiveDemoImages = computed(() =>
+  demoImages.value.length > 0 ? demoImages.value : STATIC_BG_EXAMPLES
+)
+
 // Load demo templates on mount
 onMounted(async () => {
   isLoadingTemplates.value = true
@@ -51,14 +96,16 @@ onMounted(async () => {
   isLoadingTemplates.value = false
 
   // For demo users, auto-select first example
-  if (isDemoUser.value && demoImages.value.length > 0) {
-    uploadedImage.value = demoImages.value[0].input || null
+  const effective = demoImages.value.length > 0 ? demoImages.value : STATIC_BG_EXAMPLES
+  if (isDemoUser.value && effective.length > 0) {
+    uploadedImage.value = effective[0].input || null
   }
 })
 
 function selectDemoExample(index: number) {
   selectedDemoIndex.value = index
-  const example = demoImages.value[index]
+  const effective2 = demoImages.value.length > 0 ? demoImages.value : STATIC_BG_EXAMPLES
+  const example = effective2[index]
   if (example) {
     uploadedImage.value = example.input || null
     resultImage.value = null
@@ -214,13 +261,13 @@ function dataURItoBlob(dataURI: string): Blob {
           <div v-if="isLoadingTemplates" class="flex justify-center py-8">
             <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
           </div>
-          <div v-else-if="demoImages.length === 0" class="text-center py-8 text-dark-400">
+          <div v-else-if="effectiveDemoImages.length === 0" class="text-center py-8 text-dark-400">
             <span class="text-3xl block mb-2">📷</span>
             <p class="text-sm">{{ isZh ? '範例圖片準備中，請稍後再試' : 'Example images loading, please try again later' }}</p>
           </div>
           <div v-else class="grid grid-cols-5 gap-3">
             <button
-              v-for="(example, idx) in demoImages"
+              v-for="(example, idx) in effectiveDemoImages"
               :key="example.id || idx"
               @click="selectDemoExample(idx)"
               class="aspect-square rounded-lg overflow-hidden border-2 transition-all"

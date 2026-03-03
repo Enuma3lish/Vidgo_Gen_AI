@@ -5,8 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useCreditsStore } from '@/stores'
 import LanguageSelector from './LanguageSelector.vue'
 
-const { t, locale } = useI18n()
-const isZh = () => locale.value === 'zh-TW'
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const creditsStore = useCreditsStore()

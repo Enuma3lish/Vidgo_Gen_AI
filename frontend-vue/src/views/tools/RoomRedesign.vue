@@ -152,6 +152,8 @@ const roomTypeName = computed(() => {
 })
 
 // Load styles and room types
+
+
 onMounted(async () => {
   try {
     const [stylesData, roomTypesData] = await Promise.all([
@@ -521,7 +523,7 @@ watch(activeTab, (newTab) => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 bg-white pb-20 bg-gradient-to-b from-dark-900 to-dark-950">
+  <div class="min-h-screen pt-24 bg-white pb-20">
     <LoadingOverlay :show="isProcessing" :message="t('interior.processing')" />
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -559,7 +561,7 @@ watch(activeTab, (newTab) => {
 
       <!-- Tab Selection -->
       <div class="flex justify-center mb-8">
-        <div class="inline-flex bg-dark-800 rounded-xl p-1">
+        <div class="inline-flex bg-gray-100 rounded-xl p-1 border border-gray-200">
           <button
             v-for="tab in [
               { id: 'redesign', icon: '🔄', label: t('interior.tabs.redesign') },
@@ -588,7 +590,7 @@ watch(activeTab, (newTab) => {
         <!-- Left Panel - Input -->
         <div class="space-y-6">
           <!-- Upload Zone (for redesign, style transfer, and 3D) -->
-          <div v-if="activeTab !== 'generate'" class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+          <div v-if="activeTab !== 'generate'" class="card bg-white border border-gray-200">
             <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>📷</span>
               {{ t('interior.uploadTitle') }}
@@ -645,7 +647,7 @@ watch(activeTab, (newTab) => {
           </div>
 
           <!-- Room Type Selection -->
-          <div class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+          <div class="card bg-white border border-gray-200">
             <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🏠</span>
               {{ t('interior.roomType') }}
@@ -667,7 +669,7 @@ watch(activeTab, (newTab) => {
           </div>
 
           <!-- Style Selection -->
-          <div class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+          <div class="card bg-white border border-gray-200">
             <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🎨</span>
               {{ t('interior.designStyle') }}
@@ -690,7 +692,7 @@ watch(activeTab, (newTab) => {
           </div>
 
           <!-- Custom Prompt (not shown for 3D tab) -->
-          <div v-if="!isDemoUser && activeTab !== '3dModel'" class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+          <div v-if="!isDemoUser && activeTab !== '3dModel'" class="card bg-white border border-gray-200">
              <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
                <span>✏️</span>
                {{ isZh ? '自訂描述 (可選)' : 'Custom Prompt (Optional)' }}
@@ -698,13 +700,13 @@ watch(activeTab, (newTab) => {
              <textarea
                v-model="prompt"
                rows="3"
-               class="w-full bg-dark-900 border border-gray-200 rounded-lg p-3 text-dark-900 focus:outline-none focus:border-primary-500"
+               class="w-full bg-gray-900 border border-gray-200 rounded-lg p-3 text-dark-900 focus:outline-none focus:border-primary-500"
                :placeholder="isZh ? '描述您想要的房間細節，例如顏色、材質等...' : 'Describe specific details like colors, materials, etc...'"
              ></textarea>
           </div>
 
           <!-- 3D Model Settings -->
-          <div v-if="activeTab === '3dModel' && !isDemoUser" class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+          <div v-if="activeTab === '3dModel' && !isDemoUser" class="card bg-white border border-gray-200">
             <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🧊</span>
               {{ isZh ? '3D 模型設定' : '3D Model Settings' }}
@@ -728,7 +730,7 @@ watch(activeTab, (newTab) => {
                 </label>
                 <select
                   v-model.number="textureSize"
-                  class="w-full bg-dark-900 border border-gray-200 rounded-lg px-3 py-2 text-dark-900 focus:outline-none focus:border-primary-500"
+                  class="w-full bg-gray-900 border border-gray-200 rounded-lg px-3 py-2 text-dark-900 focus:outline-none focus:border-primary-500"
                 >
                   <option :value="512">512px ({{ isZh ? '較快' : 'Faster' }})</option>
                   <option :value="1024">1024px ({{ isZh ? '高品質' : 'High Quality' }})</option>
@@ -759,7 +761,7 @@ watch(activeTab, (newTab) => {
           </div>
 
           <!-- Generate Button -->
-          <div class="card bg-dark-800/50 backdrop-blur border border-gray-200">
+          <div class="card bg-white border border-gray-200">
             <button
               @click="handleSubmit"
               :disabled="isProcessing || (activeTab !== 'generate' && !uploadedImage)"
@@ -785,7 +787,7 @@ watch(activeTab, (newTab) => {
 
         <!-- Right Panel - Results -->
         <div class="space-y-6">
-          <div class="card bg-dark-800/50 backdrop-blur border border-gray-200 h-fit sticky top-24">
+          <div class="card bg-gray-50 backdrop-blur border border-gray-200 h-fit sticky top-24">
             <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🖼️</span>
               {{ t('interior.result') }}

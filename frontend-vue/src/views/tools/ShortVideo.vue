@@ -123,6 +123,68 @@ const demoImages = computed(() => {
     }))
 })
 
+
+// Static fallback examples for ShortVideo (shown when backend DB is empty)
+const STATIC_VIDEO_EXAMPLES = [
+  {
+    id: 'static-sv-1',
+    name: 'Cherry blossom petals falling in slow motion, cinematic',
+    preview: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=600&fit=crop',
+    video_url: undefined,
+    watermarked_result: undefined,
+    topic: 'nature',
+    motion: 'zoom_in'
+  },
+  {
+    id: 'static-sv-2',
+    name: 'Skincare product rotating on marble surface, studio lighting',
+    preview: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&fit=crop',
+    video_url: undefined,
+    watermarked_result: undefined,
+    topic: 'product',
+    motion: 'rotate'
+  },
+  {
+    id: 'static-sv-3',
+    name: 'Coffee being poured into a glass cup, overhead view',
+    preview: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&fit=crop',
+    video_url: undefined,
+    watermarked_result: undefined,
+    topic: 'food',
+    motion: 'pan_right'
+  },
+  {
+    id: 'static-sv-4',
+    name: 'Fashion model walking on city street, golden hour',
+    preview: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&fit=crop',
+    video_url: undefined,
+    watermarked_result: undefined,
+    topic: 'fashion',
+    motion: 'pan_left'
+  },
+  {
+    id: 'static-sv-5',
+    name: 'Mountain landscape with clouds moving, time lapse',
+    preview: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&fit=crop',
+    video_url: undefined,
+    watermarked_result: undefined,
+    topic: 'landscape',
+    motion: 'zoom_out'
+  },
+  {
+    id: 'static-sv-6',
+    name: 'Bubble tea shop interior, warm lighting, cozy atmosphere',
+    preview: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&fit=crop',
+    video_url: undefined,
+    watermarked_result: undefined,
+    topic: 'food',
+    motion: 'auto'
+  }
+]
+const effectiveDemoImages = computed(() =>
+  demoImages.value.length > 0 ? demoImages.value : STATIC_VIDEO_EXAMPLES
+)
+
 // Load demo presets on mount
 onMounted(async () => {
   await loadDemoTemplates('short_video')
@@ -258,7 +320,7 @@ function dataURItoBlob(dataURI: string): Blob {
             </div>
 
             <!-- Demo Images for all users -->
-            <div v-if="demoImages.length > 0" class="mb-4">
+            <div v-if="effectiveDemoImages.length > 0" class="mb-4">
               <p class="text-sm text-dark-500 mb-3">
                 {{ isZh ? '點擊查看不同動態效果' : 'Click to see different motion effects' }}
               </p>
@@ -267,7 +329,7 @@ function dataURItoBlob(dataURI: string): Blob {
               </div>
               <div v-else class="grid grid-cols-2 gap-2">
                 <button
-                  v-for="item in demoImages"
+                  v-for="item in effectiveDemoImages"
                   :key="item.id"
                   @click="selectDemoImage(item)"
                   class="aspect-video rounded-lg overflow-hidden border-2 transition-all relative group"

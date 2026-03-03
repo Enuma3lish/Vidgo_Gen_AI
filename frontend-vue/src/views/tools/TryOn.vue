@@ -36,12 +36,12 @@ const selectedModel = ref('female-1')
 
 // Default model options (6 models matching backend generate_model_library() naming)
 const modelOptions = ref([
-  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: '/static/models/female/female-1.png' },
-  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: '/static/models/female/female-2.png' },
-  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: '/static/models/female/female-3.png' },
-  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: '/static/models/male/male-1.png' },
-  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: '/static/models/male/male-2.png' },
-  { id: 'male-3', name: 'Male Model 3', name_zh: '男模特 3', preview: '/static/models/male/male-3.png' }
+  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: 'https://images.unsplash.com/photo-1615262239828-5a7d7b6e5e0a?w=200&h=300&fit=crop&crop=faces' },
+  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: 'https://images.unsplash.com/photo-1566589430181-7a3e3d6d4e8b?w=200&h=300&fit=crop&crop=faces' },
+  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: 'https://images.unsplash.com/photo-1614387256720-e00e2a5a7e0a?w=200&h=300&fit=crop&crop=faces' },
+  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: 'https://images.unsplash.com/photo-1643990081716-e0c8a7c3c4b1?w=200&h=300&fit=crop&crop=faces' },
+  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: 'https://images.unsplash.com/photo-1634843824979-e0b7c4e3e0a1?w=200&h=300&fit=crop&crop=faces' },
+  { id: 'male-3', name: 'Male Model 3', name_zh: '男模特 3', preview: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=300&fit=crop&crop=faces' }
 ])
 
 // Clothing types that are restricted for male models
@@ -112,10 +112,18 @@ const fallbackClothingItems = computed(() => {
   }))
 })
 
-// Display items: use DB items if available, otherwise fallback from try_prompts
+// Display items: use DB items if available, otherwise fallback from try_prompts, then STATIC_CLOTHING
 const displayClothingItems = computed(() => {
   if (demoClothingItems.value.length > 0) return demoClothingItems.value
-  return fallbackClothingItems.value
+  if (fallbackClothingItems.value.length > 0) return fallbackClothingItems.value
+  // Last resort: static clothing images
+  return STATIC_CLOTHING.map(c => ({
+    id: c.id,
+    name: c.label,
+    preview: c.url,
+    clothingType: 'general',
+    genderRestriction: null
+  }))
 })
 
 // Get selected clothing type
@@ -133,6 +141,17 @@ const isValidCombination = computed(() => {
   }
   return true
 })
+
+
+// Static clothing fallback images (shown when backend DB is empty)
+const STATIC_CLOTHING = [
+  { id: 'c1', url: 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400&fit=crop', label: 'White Blouse' },
+  { id: 'c2', url: 'https://images.unsplash.com/photo-1594938298603-c8148c4b4357?w=400&fit=crop', label: 'Blue Dress' },
+  { id: 'c3', url: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400&fit=crop', label: 'Denim Jacket' },
+  { id: 'c4', url: 'https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=400&fit=crop', label: 'Floral Dress' },
+  { id: 'c5', url: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&fit=crop', label: 'Jeans' },
+  { id: 'c6', url: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&fit=crop', label: 'White T-Shirt' }
+]
 
 // Load demo presets on mount
 onMounted(async () => {

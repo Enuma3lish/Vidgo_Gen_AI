@@ -14,6 +14,19 @@ const { t, locale } = useI18n()
 const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
+
+// Static product image URLs for fallback display (keyed by product-id)
+const STATIC_PRODUCT_IMAGES: Record<string, string> = {
+  'product-1': 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&fit=crop',
+  'product-2': 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=400&fit=crop',
+  'product-3': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400&fit=crop',
+  'product-4': 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&fit=crop',
+  'product-5': 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=400&fit=crop',
+  'product-6': 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&fit=crop',
+  'product-7': 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&fit=crop',
+  'product-8': 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=400&fit=crop'
+}
+
 const isZh = computed(() => locale.value.startsWith('zh'))
 
 // Demo mode
@@ -75,7 +88,7 @@ const defaultProducts = computed<DemoProduct[]>(() => {
     })
     return {
       ...p,
-      input: template?.input_image_url || ''
+      input: template?.input_image_url || STATIC_PRODUCT_IMAGES[p.id] || ''
     }
   })
 })

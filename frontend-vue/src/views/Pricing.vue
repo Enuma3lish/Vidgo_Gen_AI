@@ -237,26 +237,26 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20 bg-white">
+  <div class="min-h-screen pt-24 pb-20" style="background: #0a1628;">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-dark-900 mb-4">{{ t('pricing.title') }}</h1>
-        <p class="text-xl text-dark-500">{{ t('pricing.subtitle') }}</p>
+        <h1 class="text-4xl font-bold mb-4" style="color: #e8f4ff;">{{ t('pricing.title') }}</h1>
+        <p class="text-xl" style="color: #a8c8e8;">{{ t('pricing.subtitle') }}</p>
 
         <!-- Billing Toggle -->
-        <div class="mt-8 inline-flex items-center bg-gray-100 rounded-xl p-1">
+        <div class="mt-8 inline-flex items-center rounded-xl p-1" style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.2);">
           <button
             @click="billingPeriod = 'monthly'"
-            class="px-6 py-2 rounded-lg text-sm font-medium transition-colors"
-            :class="billingPeriod === 'monthly' ? 'bg-primary-500 text-dark-900' : 'text-dark-500 hover:text-dark-900'"
+            class="px-6 py-2 rounded-lg text-sm font-medium transition-all"
+            :style="billingPeriod === 'monthly' ? 'background: linear-gradient(135deg, #00b8e6, #0077a8); color: white;' : 'color: #6b9ab8;'"
           >
             {{ t('pricing.monthly') }}
           </button>
           <button
             @click="billingPeriod = 'yearly'"
-            class="px-6 py-2 rounded-lg text-sm font-medium transition-colors"
-            :class="billingPeriod === 'yearly' ? 'bg-primary-500 text-dark-900' : 'text-dark-500 hover:text-dark-900'"
+            class="px-6 py-2 rounded-lg text-sm font-medium transition-all"
+            :style="billingPeriod === 'yearly' ? 'background: linear-gradient(135deg, #00b8e6, #0077a8); color: white;' : 'color: #6b9ab8;'"
           >
             {{ t('pricing.yearly') }}
             <span class="ml-1 text-green-400">-20%</span>
@@ -266,13 +266,13 @@ onMounted(async () => {
 
       <!-- Current Subscription Status -->
       <div v-if="isLoggedIn && subscriptionStatus?.has_subscription" class="mb-8">
-        <div class="card p-4 border border-primary-500/30">
+        <div class="p-4 rounded-2xl" style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.3);">
           <div class="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h3 class="text-lg font-semibold text-dark-900">
+              <h3 class="text-lg font-semibold" style="color: #e8f4ff;">
                 {{ t('pricing.currentPlan') }}: {{ subscriptionStatus.plan?.display_name || subscriptionStatus.plan?.name }}
               </h3>
-              <p class="text-sm text-dark-500">
+              <p class="text-sm" style="color: #6b9ab8;">
                 {{ t('pricing.status') }}:
                 <span :class="subscriptionStatus.status === 'active' ? 'text-green-400' : 'text-yellow-400'">
                   {{ subscriptionStatus.status }}
@@ -297,7 +297,8 @@ onMounted(async () => {
                 v-if="subscriptionStatus.status === 'active'"
                 @click="askCancel(false)"
                 :disabled="cancelling"
-                class="px-4 py-2 bg-gray-100 text-dark-600 rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-50"
+                class="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              style="background: rgba(0,184,230,0.1); color: #a8c8e8; border: 1px solid rgba(0,184,230,0.2);"
               >
                 {{ cancelling ? t('pricing.processing') : t('pricing.cancelSubscription') }}
               </button>
@@ -337,16 +338,18 @@ onMounted(async () => {
         <div
           v-for="plan in plans"
           :key="plan.id"
-          class="relative rounded-2xl p-6 transition-transform hover:scale-[1.02]"
-          :class="[
-            isPlanPopular(plan.name) ? 'bg-dark-900 border-2 border-dark-900 text-white' : 'bg-white border border-gray-200 shadow-sm',
-            isCurrentPlan(plan.id) ? 'ring-2 ring-green-500' : ''
-          ]"
+          class="relative rounded-2xl p-6 transition-all duration-300 hover:scale-[1.02]"
+          :style="isPlanPopular(plan.name)
+            ? 'background: #0f1f3d; border: 2px solid #00b8e6; box-shadow: 0 8px 40px rgba(0,184,230,0.25);'
+            : isCurrentPlan(plan.id)
+              ? 'background: #0f1f3d; border: 2px solid #10b981; box-shadow: 0 0 20px rgba(16,185,129,0.2);'
+              : 'background: #0f1f3d; border: 1px solid rgba(0,184,230,0.15);'"
         >
           <!-- Popular Badge -->
           <span
             v-if="isPlanPopular(plan.name)"
-            class="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary-300 text-dark-900 text-xs font-semibold px-4 py-1 rounded-full"
+            class="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-semibold px-4 py-1 rounded-full"
+            style="background: linear-gradient(135deg, #00b8e6, #0077a8); color: white;"
           >
             {{ t('badges.hot') }}
           </span>
@@ -360,22 +363,22 @@ onMounted(async () => {
           </span>
 
           <!-- Plan Name -->
-          <h3 class="text-xl font-semibold mb-4" :class="isPlanPopular(plan.name) ? 'text-white' : 'text-dark-900'">
+          <h3 class="text-xl font-semibold mb-4" style="color: #e8f4ff;">
             {{ plan.display_name || t(`pricing.${getPlanDisplayKey(plan.name)}`) }}
           </h3>
 
           <!-- Price -->
           <div class="mb-6">
-            <span class="text-4xl font-bold" :class="isPlanPopular(plan.name) ? 'text-white' : 'text-dark-900'">
+            <span class="text-4xl font-bold" style="color: #e8f4ff;">
               NT${{ getPrice(plan) }}
             </span>
-            <span :class="isPlanPopular(plan.name) ? 'text-gray-400' : 'text-dark-500'">
+            <span style="color: #6b9ab8;">
               /{{ billingPeriod === 'monthly' ? 'mo' : 'yr' }}
             </span>
           </div>
 
           <!-- Credits -->
-          <p class="mb-6" :class="isPlanPopular(plan.name) ? 'text-gray-400' : 'text-dark-500'">
+          <p class="mb-6" style="color: #6b9ab8;">
             {{ plan.monthly_credits === -1 ? "無限制" : plan.monthly_credits }} 點數/月
           </p>
 
@@ -386,8 +389,8 @@ onMounted(async () => {
               v-if="plan.price_monthly > 0 && isLoggedIn"
               @click="handleSubscribe(plan, 'ecpay')"
               :disabled="subscribing === plan.id"
-              class="block w-full text-center py-3 rounded-xl font-medium transition-colors mb-2 disabled:opacity-50"
-              :class="isPlanPopular(plan.name) ? 'bg-primary-500 hover:bg-primary-600 text-dark-900' : 'bg-dark-900 hover:bg-dark-800 text-white'"
+              class="block w-full text-center py-3 rounded-xl font-medium transition-all duration-200 mb-2 disabled:opacity-50"
+              style="background: linear-gradient(135deg, #00b8e6, #0077a8); color: white; box-shadow: 0 4px 15px rgba(0,184,230,0.3);"
             >
               <span v-if="subscribing === plan.id" class="flex items-center justify-center gap-2">
                 <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -408,8 +411,8 @@ onMounted(async () => {
               v-else
               @click="handleSubscribe(plan, 'ecpay')"
               :disabled="subscribing === plan.id"
-              class="block w-full text-center py-3 rounded-xl font-medium transition-colors mb-2 disabled:opacity-50"
-              :class="isPlanPopular(plan.name) ? 'bg-primary-500 hover:bg-primary-600 text-dark-900' : 'bg-gray-100 hover:bg-gray-200 text-dark-900'"
+              class="block w-full text-center py-3 rounded-xl font-medium transition-all duration-200 mb-2 disabled:opacity-50"
+              style="background: rgba(0,184,230,0.1); color: #00b8e6; border: 1px solid rgba(0,184,230,0.3);"
             >
               {{ plan.price_monthly === 0 ? t('hero.cta') : t('pricing.getStarted') }}
             </button>
@@ -420,43 +423,43 @@ onMounted(async () => {
 
           <!-- Features -->
           <ul class="space-y-3">
-            <li class="flex items-start gap-2 text-sm text-dark-600">
+            <li class="flex items-start gap-2 text-sm" style="color: #a8c8e8;">
               <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               {{ plan.monthly_credits }} credits/month
             </li>
-            <li v-if="plan.features.max_resolution" class="flex items-start gap-2 text-sm text-dark-600">
+            <li v-if="plan.features.max_resolution" class="flex items-start gap-2 text-sm" style="color: #a8c8e8;">
               <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               {{ plan.features.max_resolution }} quality
             </li>
-            <li v-if="plan.features.priority_queue" class="flex items-start gap-2 text-sm text-dark-600">
+            <li v-if="plan.features.priority_queue" class="flex items-start gap-2 text-sm" style="color: #a8c8e8;">
               <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               Priority queue
             </li>
-            <li v-if="plan.features.api_access" class="flex items-start gap-2 text-sm text-dark-600">
+            <li v-if="plan.features.api_access" class="flex items-start gap-2 text-sm" style="color: #a8c8e8;">
               <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               API access
             </li>
-            <li v-if="plan.features.batch_processing" class="flex items-start gap-2 text-sm text-dark-600">
+            <li v-if="plan.features.batch_processing" class="flex items-start gap-2 text-sm" style="color: #a8c8e8;">
               <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               Batch processing
             </li>
-            <li v-if="!plan.features.has_watermark" class="flex items-start gap-2 text-sm text-dark-600">
+            <li v-if="!plan.features.has_watermark" class="flex items-start gap-2 text-sm" style="color: #a8c8e8;">
               <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               No watermark
             </li>
-            <li v-if="plan.features.has_watermark" class="flex items-start gap-2 text-sm text-dark-600">
+            <li v-if="plan.features.has_watermark" class="flex items-start gap-2 text-sm" style="color: #6b9ab8;">
               <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
@@ -468,23 +471,23 @@ onMounted(async () => {
 
       <!-- FAQ Section -->
       <div class="mt-20 max-w-3xl mx-auto">
-        <h2 class="text-2xl font-bold text-dark-900 text-center mb-8">{{ t('pricing.faq.title') }}</h2>
+        <h2 class="text-2xl font-bold text-center mb-8" style="color: #e8f4ff;">{{ t('pricing.faq.title') }}</h2>
         <div class="space-y-4">
-          <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-2">{{ t('pricing.faq.credits.q') }}</h3>
-            <p class="text-dark-500">{{ t('pricing.faq.credits.a') }}</p>
+          <div class="rounded-2xl p-6" style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.15);">
+            <h3 class="text-lg font-semibold mb-2" style="color: #e8f4ff;">{{ t('pricing.faq.credits.q') }}</h3>
+            <p style="color: #6b9ab8;">{{ t('pricing.faq.credits.a') }}</p>
           </div>
-          <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-2">{{ t('pricing.faq.rollover.q') }}</h3>
-            <p class="text-dark-500">{{ t('pricing.faq.rollover.a') }}</p>
+          <div class="rounded-2xl p-6" style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.15);">
+            <h3 class="text-lg font-semibold mb-2" style="color: #e8f4ff;">{{ t('pricing.faq.rollover.q') }}</h3>
+            <p style="color: #6b9ab8;">{{ t('pricing.faq.rollover.a') }}</p>
           </div>
-          <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-2">{{ t('pricing.faq.change.q') }}</h3>
-            <p class="text-dark-500">{{ t('pricing.faq.change.a') }}</p>
+          <div class="rounded-2xl p-6" style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.15);">
+            <h3 class="text-lg font-semibold mb-2" style="color: #e8f4ff;">{{ t('pricing.faq.change.q') }}</h3>
+            <p style="color: #6b9ab8;">{{ t('pricing.faq.change.a') }}</p>
           </div>
-          <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-2">{{ t('pricing.faq.refund.q') }}</h3>
-            <p class="text-dark-500">{{ t('pricing.faq.refund.a') }}</p>
+          <div class="rounded-2xl p-6" style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.15);">
+            <h3 class="text-lg font-semibold mb-2" style="color: #e8f4ff;">{{ t('pricing.faq.refund.q') }}</h3>
+            <p style="color: #6b9ab8;">{{ t('pricing.faq.refund.a') }}</p>
           </div>
         </div>
       </div>

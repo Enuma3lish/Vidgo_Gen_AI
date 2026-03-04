@@ -178,6 +178,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/dashboard/Referrals.vue'),
     meta: { requiresAuth: true }
   },
+  {
+    path: '/dashboard/social-accounts',
+    name: 'social-accounts',
+    component: () => import('@/views/dashboard/SocialAccounts.vue'),
+    meta: { requiresAuth: true }
+  },
   // Pricing
   {
     path: '/pricing',

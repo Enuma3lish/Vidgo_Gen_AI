@@ -80,6 +80,7 @@ class User(Base):
     generations = relationship("UserGeneration", back_populates="user", cascade="all, delete-orphan")
     referred_by = relationship("User", remote_side="User.id", foreign_keys=[referred_by_id])
     referrals = relationship("User", foreign_keys="User.referred_by_id", back_populates="referred_by")
+    social_accounts = relationship("SocialAccount", back_populates="user", cascade="all, delete-orphan", lazy="dynamic")
 
     @property
     def total_credits(self) -> int:

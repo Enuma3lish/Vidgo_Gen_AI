@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/user'
 import type { UserGeneration } from '@/api/user'
+import ShareToSocialModal from '@/components/social/ShareToSocialModal.vue'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const selectedFilter = ref('all')
 const works = ref<UserGeneration[]>([])
@@ -14,16 +17,25 @@ const currentPage = ref(1)
 const perPage = 20
 
 const filters = [
-  { id: 'all', label: 'All' },
-  { id: 'background_removal', label: 'Background Removal' },
-  { id: 'product_scene', label: 'Product Scene' },
-  { id: 'try_on', label: 'Virtual Try-On' },
-  { id: 'room_redesign', label: 'Room Redesign' },
-  { id: 'short_video', label: 'Short Video' },
-  { id: 'ai_avatar', label: 'AI Avatar' },
-  { id: 'pattern_generate', label: 'Pattern Design' },
-  { id: 'effect', label: 'Style Effects' }
+  { id: 'all', label: '全部' },
+  { id: 'background_removal', label: '去背' },
+  { id: 'product_scene', label: '商品場景' },
+  { id: 'try_on', label: '虛擬試穿' },
+  { id: 'room_redesign', label: '室內設計' },
+  { id: 'short_video', label: '短影音' },
+  { id: 'ai_avatar', label: 'AI 頭像' },
+  { id: 'pattern_generate', label: '圖案設計' },
+  { id: 'effect', label: '風格特效' }
 ]
+
+// Social media sharing
+const showShareModal = ref(false)
+const shareTarget = ref<UserGeneration | null>(null)
+
+const isSubscribed = computed(() => {
+  const plan = authStore.user?.plan_type
+  return plan && plan !== 'free' && plan !== 'demo'
+})
 
 async function fetchWorks() {
   loading.value = true
@@ -81,7 +93,7 @@ function isVideo(work: UserGeneration): boolean {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString()
+  return new Date(dateStr).toLocaleDateString('zh-TW')
 }
 
 async function downloadWork() {
@@ -108,15 +120,36 @@ async function deleteWork() {
     deleting.value = false
   }
 }
+
+function openShareModal(work: UserGeneration) {
+  shareTarget.value = work
+  showShareModal.value = true
+  // Close detail modal if open
+  selectedWork.value = null
+}
+
+function closeShareModal() {
+  showShareModal.value = false
+  shareTarget.value = null
+}
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20 bg-white">
+  <div class="min-h-screen pt-24 pb-20" style="background: #0a1628;">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Header -->
-      <div class="mb-8">
-        <h1 class="text-3xl font-bold text-dark-900 mb-2">{{ t('nav.myWorks') }}</h1>
-        <p class="text-dark-500">Browse and manage your generated content</p>
+      <div class="mb-8 flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 class="text-3xl font-bold mb-2" style="color: #e8f4ff;">{{ t('nav.myWorks') }}</h1>
+          <p style="color: #6b9ab8;">瀏覽並管理您的 AI 創作內容</p>
+        </div>
+        <router-link
+          to="/dashboard/social-accounts"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all"
+          style="background: rgba(0,184,230,0.05); border-color: rgba(0,184,230,0.2); color: #00b8e6;"
+        >
+          📡 社交媒體帳號
+        </router-link>
       </div>
 
       <!-- Filters -->
@@ -125,10 +158,10 @@ async function deleteWork() {
           v-for="filter in filters"
           :key="filter.id"
           @click="selectedFilter = filter.id"
-          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          :class="selectedFilter === filter.id
-            ? 'bg-primary-500 text-dark-900'
-            : 'bg-gray-50 text-dark-500 hover:text-dark-900'"
+          class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+          :style="selectedFilter === filter.id
+            ? 'background: linear-gradient(135deg, #00b8e6, #0066cc); color: white;'
+            : 'background: rgba(255,255,255,0.05); color: #a8c8e8; border: 1px solid rgba(255,255,255,0.08);'"
         >
           {{ filter.label }}
         </button>
@@ -136,8 +169,9 @@ async function deleteWork() {
 
       <!-- Loading State -->
       <div v-if="loading" class="card text-center py-12">
-        <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-        <p class="text-dark-500">Loading your works...</p>
+        <div class="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto mb-4"
+             style="border-color: #00b8e6; border-top-color: transparent;"></div>
+        <p style="color: #6b9ab8;">載入作品中...</p>
       </div>
 
       <!-- Works Grid -->
@@ -146,33 +180,65 @@ async function deleteWork() {
           <div
             v-for="work in works"
             :key="work.id"
-            @click="openWork(work)"
-            class="card p-0 overflow-hidden group cursor-pointer hover:border-primary-500/50 transition-all"
+            class="rounded-2xl overflow-hidden group cursor-pointer transition-all"
+            style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.1);"
+            @mouseover="($event.currentTarget as HTMLElement).style.borderColor = 'rgba(0,184,230,0.3)'"
+            @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = 'rgba(0,184,230,0.1)'"
           >
-            <div class="aspect-square relative">
+            <!-- Thumbnail -->
+            <div class="aspect-square relative" @click="openWork(work)">
               <img
                 v-if="getThumbnail(work)"
                 :src="getThumbnail(work)"
                 :alt="work.tool_type"
                 class="w-full h-full object-cover"
               />
-              <div v-else class="w-full h-full bg-gray-100 flex items-center justify-center">
-                <span class="text-dark-400 text-sm">No preview</span>
+              <div v-else class="w-full h-full flex items-center justify-center text-4xl"
+                   style="background: rgba(0,184,230,0.05);">
+                🎨
               </div>
-              <div v-if="isVideo(work)" class="absolute top-2 right-2 bg-white/80 text-dark-900 text-xs px-2 py-1 rounded">
-                Video
+              <div v-if="isVideo(work)"
+                   class="absolute top-2 right-2 text-xs px-2 py-1 rounded-full font-medium"
+                   style="background: rgba(0,0,0,0.7); color: #00b8e6;">
+                ▶ 影片
               </div>
-              <div class="absolute inset-0 bg-white/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                <button class="btn-primary text-sm px-4 py-2">View</button>
+              <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                   style="background: rgba(10,22,40,0.7);">
+                <button class="px-4 py-2 rounded-lg text-sm font-medium"
+                        style="background: linear-gradient(135deg, #00b8e6, #0066cc); color: white;">
+                  查看
+                </button>
               </div>
             </div>
+
+            <!-- Info + Actions -->
             <div class="p-4">
-              <p class="text-sm text-dark-900 font-medium capitalize mb-1">
+              <p class="text-sm font-medium capitalize mb-1" style="color: #e8f4ff;">
                 {{ work.tool_type.replace(/_/g, ' ') }}
               </p>
-              <div class="flex items-center justify-between text-xs text-dark-400">
+              <div class="flex items-center justify-between text-xs mb-3" style="color: #4a7bb5;">
                 <span>{{ formatDate(work.created_at) }}</span>
-                <span>{{ work.credits_used }} credits</span>
+                <span>{{ work.credits_used }} 點</span>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex gap-2">
+                <button
+                  @click="openWork(work)"
+                  class="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all border"
+                  style="background: transparent; border-color: rgba(0,184,230,0.2); color: #00b8e6;"
+                >
+                  查看
+                </button>
+                <button
+                  v-if="isSubscribed"
+                  @click="openShareModal(work)"
+                  class="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style="background: rgba(0,184,230,0.1); color: #00b8e6; border: 1px solid rgba(0,184,230,0.2);"
+                  title="發布至社交媒體"
+                >
+                  📡 發布
+                </button>
               </div>
             </div>
           </div>
@@ -183,19 +249,21 @@ async function deleteWork() {
           <button
             @click="changePage(currentPage - 1)"
             :disabled="currentPage <= 1"
-            class="px-3 py-1 rounded bg-gray-50 text-dark-500 hover:text-dark-900 disabled:opacity-50"
+            class="px-4 py-2 rounded-lg text-sm transition-all disabled:opacity-50"
+            style="background: rgba(255,255,255,0.05); color: #a8c8e8; border: 1px solid rgba(255,255,255,0.08);"
           >
-            Prev
+            上一頁
           </button>
-          <span class="text-dark-500 text-sm">
+          <span class="text-sm px-3" style="color: #6b9ab8;">
             {{ currentPage }} / {{ totalPages }}
           </span>
           <button
             @click="changePage(currentPage + 1)"
             :disabled="currentPage >= totalPages"
-            class="px-3 py-1 rounded bg-gray-50 text-dark-500 hover:text-dark-900 disabled:opacity-50"
+            class="px-4 py-2 rounded-lg text-sm transition-all disabled:opacity-50"
+            style="background: rgba(255,255,255,0.05); color: #a8c8e8; border: 1px solid rgba(255,255,255,0.08);"
           >
-            Next
+            下一頁
           </button>
         </div>
       </div>
@@ -203,8 +271,8 @@ async function deleteWork() {
       <!-- Empty State -->
       <div v-else class="card text-center py-12">
         <span class="text-5xl block mb-4">🔍</span>
-        <h3 class="text-lg font-medium text-dark-900 mb-2">No works found</h3>
-        <p class="text-dark-500">Try a different filter or create new content</p>
+        <h3 class="text-lg font-medium mb-2" style="color: #e8f4ff;">尚無作品</h3>
+        <p style="color: #6b9ab8;">嘗試其他篩選條件或建立新內容</p>
       </div>
     </div>
 
@@ -213,15 +281,16 @@ async function deleteWork() {
       <div
         v-if="selectedWork"
         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style="background: rgba(0,0,0,0.85);"
         @click.self="closeModal"
       >
-        <div class="absolute inset-0 bg-white/80 backdrop-blur-sm" @click="closeModal" />
-
-        <div class="relative bg-gray-50 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
+        <div class="relative rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+             style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.2);">
           <!-- Close Button -->
           <button
             @click="closeModal"
-            class="absolute top-4 right-4 z-10 w-10 h-10 bg-white/80 rounded-full flex items-center justify-center text-dark-500 hover:text-dark-900"
+            class="absolute top-4 right-4 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+            style="background: rgba(255,255,255,0.1); color: #a8c8e8;"
           >
             ✕
           </button>
@@ -232,44 +301,79 @@ async function deleteWork() {
               v-if="isVideo(selectedWork)"
               :src="selectedWork.result_video_url!"
               controls
-              class="w-full h-full object-contain bg-white"
+              class="w-full h-full object-contain"
+              style="background: #0a1628;"
             />
             <img
               v-else
               :src="getThumbnail(selectedWork)"
               :alt="selectedWork.tool_type"
-              class="w-full h-full object-contain bg-white"
+              class="w-full h-full object-contain"
+              style="background: #0a1628;"
             />
           </div>
 
           <!-- Info -->
           <div class="p-6">
-            <h3 class="text-xl font-semibold text-dark-900 capitalize mb-2">
+            <h3 class="text-xl font-semibold capitalize mb-2" style="color: #e8f4ff;">
               {{ selectedWork.tool_type.replace(/_/g, ' ') }}
             </h3>
-            <div class="flex items-center gap-4 text-sm text-dark-500 mb-4">
-              <span>Created: {{ formatDate(selectedWork.created_at) }}</span>
-              <span>Credits used: {{ selectedWork.credits_used }}</span>
+            <div class="flex items-center gap-4 text-sm mb-4" style="color: #6b9ab8;">
+              <span>建立於：{{ formatDate(selectedWork.created_at) }}</span>
+              <span>使用點數：{{ selectedWork.credits_used }}</span>
             </div>
-            <p v-if="selectedWork.input_text" class="text-sm text-dark-600 mb-6 line-clamp-2">
+            <p v-if="selectedWork.input_text" class="text-sm mb-6 line-clamp-2" style="color: #a8c8e8;">
               {{ selectedWork.input_text }}
             </p>
 
-            <div class="flex gap-3">
-              <button @click="downloadWork" class="btn-primary flex-1">
-                {{ t('common.download') }}
+            <div class="flex gap-3 flex-wrap">
+              <button @click="downloadWork"
+                      class="flex-1 py-2.5 rounded-xl font-medium text-sm transition-all"
+                      style="background: linear-gradient(135deg, #00b8e6, #0066cc); color: white;">
+                ⬇ {{ t('common.download') }}
               </button>
+
+              <!-- Share to Social Button (Subscribers Only) -->
+              <button
+                v-if="isSubscribed"
+                @click="openShareModal(selectedWork)"
+                class="flex-1 py-2.5 rounded-xl font-medium text-sm transition-all border"
+                style="background: rgba(0,184,230,0.1); border-color: rgba(0,184,230,0.3); color: #00b8e6;"
+              >
+                📡 發布至社交媒體
+              </button>
+              <router-link
+                v-else
+                to="/pricing"
+                @click="closeModal"
+                class="flex-1 py-2.5 rounded-xl font-medium text-sm transition-all border text-center"
+                style="background: rgba(255,165,0,0.1); border-color: rgba(255,165,0,0.3); color: #ffa500;"
+              >
+                🔒 升級以發布
+              </router-link>
+
               <button
                 @click="deleteWork"
                 :disabled="deleting"
-                class="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                class="py-2.5 px-4 rounded-xl font-medium text-sm transition-all border disabled:opacity-50"
+                style="background: transparent; border-color: rgba(255,80,80,0.3); color: #ff5050;"
               >
-                {{ deleting ? 'Deleting...' : t('common.delete') }}
+                {{ deleting ? '刪除中...' : t('common.delete') }}
               </button>
             </div>
           </div>
         </div>
       </div>
     </Teleport>
+
+    <!-- Share to Social Modal -->
+    <ShareToSocialModal
+      v-if="showShareModal && shareTarget"
+      :generation-id="shareTarget.id"
+      :tool-type="shareTarget.tool_type"
+      :is-video="isVideo(shareTarget)"
+      :media-url="shareTarget.result_video_url || shareTarget.result_image_url || undefined"
+      @close="closeShareModal"
+    />
   </div>
 </template>

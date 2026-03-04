@@ -11,6 +11,25 @@ from app.api.api import api_router
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
+
+# ── Media Cleanup Background Task ─────────────────────────────────────────────
+async def _media_cleanup_loop():
+    """後台任務：每小時執行一次媒體清理，清除超過14天的媒體 URL。"""
+    from app.core.database import AsyncSessionLocal
+    from app.services.media_cleanup_service import run_media_cleanup
+    while True:
+        try:
+            await asyncio.sleep(3600)  # 每小時執行一次
+            async with AsyncSessionLocal() as db:
+                result = await run_media_cleanup(db)
+                if result['expired_count'] > 0:
+                    logger.info(f"[MediaCleanup] Expired {result['expired_count']} generation(s)")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[MediaCleanup] Error during cleanup: {e}")
+
+
 # Ensure static directory exists
 STATIC_DIR = Path("/app/static")
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -109,9 +128,28 @@ async def lifespan(app: FastAPI):
         logger.warning("Run 'python scripts/pregenerate_all.py' to generate materials")
         logger.warning("=" * 60)
 
+    # Run initial media cleanup on startup (clear any already-expired media)
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.services.media_cleanup_service import run_media_cleanup
+        async with AsyncSessionLocal() as db:
+            result = await run_media_cleanup(db)
+            logger.info(f"[MediaCleanup] Startup cleanup: {result['expired_count']} generation(s) expired")
+    except Exception as e:
+        logger.warning(f"[MediaCleanup] Startup cleanup failed (non-fatal): {e}")
+
+    # Start hourly background cleanup task
+    cleanup_task = asyncio.create_task(_media_cleanup_loop())
+    logger.info("[MediaCleanup] Hourly cleanup task started (14-day media retention policy)")
+
     yield
 
-    # Shutdown
+    # Shutdown: cancel cleanup task
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     logger.info("VidGo AI Backend shutting down...")
 
 

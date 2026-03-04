@@ -9,6 +9,11 @@ export interface UserGeneration {
   result_video_url?: string
   credits_used: number
   created_at: string
+  // Media expiry fields (14-day retention policy)
+  expires_at?: string
+  media_expired: boolean
+  days_until_expiry?: number
+  hours_until_expiry?: number
 }
 
 export interface UserGenerationDetail extends UserGeneration {
@@ -22,18 +27,23 @@ export interface GenerationListResponse {
   total: number
   page: number
   per_page: number
+  active_count: number
+  expired_count: number
 }
 
 export interface UserStatsResponse {
   total_works: number
   total_credits_used: number
   by_tool_type: Record<string, number>
+  active_works: number
+  expired_works: number
 }
 
 export interface GenerationListParams {
   page?: number
   per_page?: number
   tool_type?: string
+  show_expired?: boolean
 }
 
 export const userApi = {

@@ -52,10 +52,10 @@ const femaleAvatars = [
   { id: 'female-4', gender: 'female' as const, name_zh: '淑芬', name_en: 'Shu-Fen', url: FEMALE_AVATAR_URLS[3] }
 ]
 
-// Male AI Avatars - Confirmed Asian/Taiwanese men (Unsplash free); v=4
+// Male AI Avatars - Confirmed Chinese/Taiwanese men (Unsplash free); v=5
 const MALE_AVATAR_URLS = [
-  'https://images.unsplash.com/photo-1643990081716-345352952d33?w=512&fit=crop&crop=faces',  // 志偉 - Asian man, young
-  'https://images.unsplash.com/photo-1634843824979-c89d2910b80f?w=512&fit=crop&crop=faces',  // 冠宇 - Asian man, glasses, red top
+  'https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=512&fit=crop&crop=faces',  // 志偉 - Chinese man, white T-shirt, yellow bg (by Anky Lau, tagged 'chinese')
+  'https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=512&fit=crop&crop=faces',  // 冠宇 - East Asian man, blue formal shirt (by phyo min)
   'https://images.unsplash.com/photo-1633177188754-980c2a6b6266?w=512&fit=crop&crop=faces',  // 宗翰 - Asian man, green top
   'https://images.unsplash.com/photo-1727605507453-dfe1e74abfbc?w=512&fit=crop&crop=faces'   // 家豪 - Asian man, glasses, black suit
 ]

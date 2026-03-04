@@ -45,8 +45,11 @@ class SubscribeResponse(BaseModel):
     """Response from subscribe endpoint."""
     success: bool
     subscription_id: Optional[str] = None
+    order_number: Optional[str] = None
     status: Optional[str] = None
     checkout_url: Optional[str] = None
+    payment_method: Optional[str] = None
+    ecpay_form: Optional[dict] = None  # ECPay form data (action_url + params)
     is_mock: bool = False
     message: Optional[str] = None
     error: Optional[str] = None

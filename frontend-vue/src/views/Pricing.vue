@@ -106,14 +106,31 @@ async function fetchSubscriptionStatus() {
   }
 }
 
+// Submit ECPay form (auto-submit hidden form to ECPay payment page)
+function submitECPayForm(ecpayForm: { action_url: string; params: Record<string, string> }) {
+  const form = document.createElement('form')
+  form.method = 'POST'
+  form.action = ecpayForm.action_url
+  form.target = '_self'
+  Object.entries(ecpayForm.params).forEach(([key, value]) => {
+    const input = document.createElement('input')
+    input.type = 'hidden'
+    input.name = key
+    input.value = String(value)
+    form.appendChild(input)
+  })
+  document.body.appendChild(form)
+  form.submit()
+}
+
 // Subscribe to a plan
-async function handleSubscribe(plan: PlanInfo) {
+async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paddle' | 'ecpay' = 'ecpay') {
   if (!isLoggedIn.value) {
     router.push('/auth/login')
     return
   }
 
-  if (plan.name === 'free') {
+  if (plan.name === 'free' || plan.name === 'demo') {
     // Free plan - just redirect to dashboard
     router.push('/dashboard')
     return
@@ -124,23 +141,24 @@ async function handleSubscribe(plan: PlanInfo) {
     error.value = null
     successMessage.value = null
 
-    // Use subscribe() for real Paddle checkout; backend returns checkout_url when not mock
     const result = await subscriptionApi.subscribe({
       plan_id: plan.id,
       billing_cycle: billingPeriod.value,
-      payment_method: 'paddle'
+      payment_method: paymentMethod
     })
 
     if (result.success) {
-      successMessage.value = result.is_mock
-        ? t('pricing.subscribeSuccess')
-        : t('pricing.redirectingToPayment')
-
-      if (result.checkout_url && !result.is_mock) {
-        // Redirect to Paddle payment page
+      if (result.payment_method === 'ecpay' && result.ecpay_form) {
+        // ECPay: auto-submit form to ECPay payment page
+        successMessage.value = '正在導向 ECPay 付款頁面...'
+        setTimeout(() => submitECPayForm(result.ecpay_form!), 500)
+      } else if (result.checkout_url && !result.is_mock) {
+        // Paddle: redirect to checkout URL
+        successMessage.value = t('pricing.redirectingToPayment')
         window.location.href = result.checkout_url
       } else {
-        // Mock mode or no checkout URL - refresh status
+        // Mock mode - refresh status
+        successMessage.value = result.message || t('pricing.subscribeSuccess')
         await fetchSubscriptionStatus()
       }
     } else {
@@ -362,24 +380,40 @@ onMounted(async () => {
           </p>
 
           <!-- CTA Button -->
-          <button
-            v-if="!isCurrentPlan(plan.id)"
-            @click="handleSubscribe(plan)"
-            :disabled="subscribing === plan.id"
-            class="block w-full text-center py-3 rounded-xl font-medium transition-colors mb-6 disabled:opacity-50"
-            :class="isPlanPopular(plan.name) ? 'bg-primary-500 hover:bg-primary-600 text-dark-900' : 'bg-gray-100 hover:bg-dark-600 text-dark-900'"
-          >
-            <span v-if="subscribing === plan.id" class="flex items-center justify-center gap-2">
-              <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {{ t('pricing.subscribing') }}
-            </span>
-            <span v-else>
-              {{ plan.price_monthly === 0 ? t('hero.cta') : (isLoggedIn ? t('pricing.upgrade') : t('pricing.getStarted')) }}
-            </span>
-          </button>
+          <div v-if="!isCurrentPlan(plan.id)">
+            <!-- ECPay Credit Card Payment Button (for paid plans) -->
+            <button
+              v-if="plan.price_monthly > 0 && isLoggedIn"
+              @click="handleSubscribe(plan, 'ecpay')"
+              :disabled="subscribing === plan.id"
+              class="block w-full text-center py-3 rounded-xl font-medium transition-colors mb-2 disabled:opacity-50"
+              :class="isPlanPopular(plan.name) ? 'bg-primary-500 hover:bg-primary-600 text-dark-900' : 'bg-dark-900 hover:bg-dark-800 text-white'"
+            >
+              <span v-if="subscribing === plan.id" class="flex items-center justify-center gap-2">
+                <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                正在處理...
+              </span>
+              <span v-else class="flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+                信用卡付款 (ECPay)
+              </span>
+            </button>
+            <!-- Free plan / Not logged in button -->
+            <button
+              v-else
+              @click="handleSubscribe(plan, 'ecpay')"
+              :disabled="subscribing === plan.id"
+              class="block w-full text-center py-3 rounded-xl font-medium transition-colors mb-2 disabled:opacity-50"
+              :class="isPlanPopular(plan.name) ? 'bg-primary-500 hover:bg-primary-600 text-dark-900' : 'bg-gray-100 hover:bg-gray-200 text-dark-900'"
+            >
+              {{ plan.price_monthly === 0 ? t('hero.cta') : t('pricing.getStarted') }}
+            </button>
+          </div>
           <div v-else class="w-full text-center py-3 rounded-xl font-medium bg-green-500/20 text-green-400 mb-6">
             {{ t('pricing.currentPlan') }}
           </div>

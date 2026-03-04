@@ -33,8 +33,14 @@ export interface SubscribeRequest {
 export interface SubscribeResponse {
   success: boolean
   subscription_id?: string
+  order_number?: string
   status?: string
   checkout_url?: string
+  payment_method?: string
+  ecpay_form?: {
+    action_url: string
+    params: Record<string, string>
+  }
   is_mock: boolean
   message?: string
   error?: string

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8501"]
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501", "http://localhost:4173"]
 
     # AI Services - Provider Configuration
     # Primary: PiAPI (Wan API access)
@@ -81,7 +81,8 @@ class Settings(BaseSettings):
 
     # Email Verification
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
-    FRONTEND_URL: str = "http://localhost:8501"
+    FRONTEND_URL: str = "http://localhost:5173"
+    BACKEND_URL: str = "http://localhost:8000"  # Backend URL for ECPay callbacks (must be publicly accessible)
 
     # Referral System
     REFERRAL_BONUS_CREDITS: int = 50       # Credits awarded to referrer per successful referral

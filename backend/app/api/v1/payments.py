@@ -1,11 +1,9 @@
 """
 Payment API Endpoints
 
-Paddle is the ONLY payment provider for this platform.
 Supports:
-- Subscription checkout
-- Webhook handling
-- Invoice PDF retrieval
+- Paddle: Subscription checkout, webhook handling, invoice PDF retrieval
+- ECPay: Taiwan credit card payment, callback handling
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from fastapi.responses import JSONResponse
@@ -15,11 +13,13 @@ from datetime import datetime
 from typing import Optional
 import logging
 
+from fastapi.responses import HTMLResponse
 from app.api import deps
 from app.core.config import get_settings
 from app.models.billing import Order
 from app.models.user import User
 from app.services.paddle_service import get_paddle_service
+from app.services.ecpay.client import ECPayClient
 
 settings = get_settings()
 router = APIRouter()
@@ -248,6 +248,116 @@ async def get_paddle_customer_portal(
         "success": True,
         "portal_url": portal_result.get("portal_url"),
         "is_mock": portal_result.get("is_mock", False)
+    }
+
+
+# =============================================================================
+# ECPAY ENDPOINTS
+# =============================================================================
+
+@router.post("/ecpay/callback")
+async def ecpay_payment_callback(
+    request: Request,
+    db: AsyncSession = Depends(deps.get_db)
+):
+    """
+    ECPay payment result callback (ReturnURL - server-side notification).
+
+    ECPay POSTs payment result to this URL after payment is processed.
+    Must return '1|OK' to acknowledge receipt.
+    """
+    try:
+        form_data = await request.form()
+        callback_data = dict(form_data)
+
+        logger.info(f"ECPay callback received for order: {callback_data.get('MerchantTradeNo')}")
+        logger.debug(f"ECPay callback data: {callback_data}")
+
+        # Verify CheckMacValue
+        if not settings.ECPAY_MERCHANT_ID or not settings.ECPAY_HASH_KEY or not settings.ECPAY_HASH_IV:
+            logger.error("ECPay credentials not configured for callback verification")
+            return HTMLResponse(content="0|Error", status_code=200)
+
+        ecpay_client = ECPayClient(
+            merchant_id=settings.ECPAY_MERCHANT_ID,
+            hash_key=settings.ECPAY_HASH_KEY,
+            hash_iv=settings.ECPAY_HASH_IV,
+            payment_url=settings.ECPAY_PAYMENT_URL
+        )
+
+        # Verify signature
+        if not ecpay_client.verify_callback(callback_data.copy()):
+            logger.error(f"ECPay callback signature verification failed for order: {callback_data.get('MerchantTradeNo')}")
+            return HTMLResponse(content="0|SignatureError", status_code=200)
+
+        # Check payment status (RtnCode=1 means success)
+        rtn_code = callback_data.get("RtnCode", "0")
+        order_number = callback_data.get("MerchantTradeNo", "")
+
+        if rtn_code == "1" and order_number:
+            # Payment successful - activate subscription
+            from app.services.subscription_service import get_subscription_service
+            subscription_service = get_subscription_service()
+
+            result = await subscription_service.handle_payment_success(
+                db,
+                order_number,
+                {
+                    "payment_method": "ecpay",
+                    "ecpay_trade_no": callback_data.get("TradeNo"),
+                    "ecpay_rtn_code": rtn_code,
+                    "ecpay_rtn_msg": callback_data.get("RtnMsg"),
+                    "payment_type": callback_data.get("PaymentType"),
+                    "payment_date": callback_data.get("PaymentDate"),
+                    "trade_amt": callback_data.get("TradeAmt"),
+                    "completed_at": datetime.utcnow().isoformat()
+                }
+            )
+
+            if result.get("success"):
+                logger.info(f"ECPay payment processed successfully: {order_number}")
+            else:
+                logger.error(f"ECPay payment processing failed: {result.get('error')}")
+        else:
+            logger.warning(f"ECPay payment failed for order {order_number}: RtnCode={rtn_code}, Msg={callback_data.get('RtnMsg')}")
+
+        # Must return '1|OK' to ECPay to acknowledge receipt
+        return HTMLResponse(content="1|OK", status_code=200)
+
+    except Exception as e:
+        logger.error(f"ECPay callback error: {e}")
+        return HTMLResponse(content="0|Error", status_code=200)
+
+
+@router.get("/ecpay/result")
+async def ecpay_payment_result(
+    order: str = "",
+    db: AsyncSession = Depends(deps.get_db)
+):
+    """
+    ECPay payment result query endpoint.
+
+    Frontend polls this to check if ECPay payment was processed.
+    Returns order status for the frontend to display.
+    """
+    if not order:
+        return {"success": False, "error": "Order number required"}
+
+    result = await db.execute(
+        select(Order).where(Order.order_number == order)
+    )
+    order_obj = result.scalars().first()
+
+    if not order_obj:
+        return {"success": False, "error": "Order not found"}
+
+    return {
+        "success": True,
+        "order_number": order_obj.order_number,
+        "status": order_obj.status,
+        "payment_method": order_obj.payment_method,
+        "amount": float(order_obj.amount or 0),
+        "paid_at": order_obj.paid_at.isoformat() if order_obj.paid_at else None
     }
 
 

@@ -202,6 +202,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/subscription/SubscriptionMockCheckout.vue'),
     meta: { requiresAuth: true }
   },
+  // ECPay payment result (ECPay redirects here after payment)
+  {
+    path: '/subscription/ecpay-result',
+    name: 'subscription-ecpay-result',
+    component: () => import('@/views/subscription/ECPayResult.vue')
+  },
   // Admin Dashboard
   {
     path: '/admin',

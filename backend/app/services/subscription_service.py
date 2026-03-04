@@ -26,6 +26,7 @@ def utc_now() -> datetime:
 from app.models.user import User
 from app.models.billing import Plan, Subscription, Order, CreditTransaction
 from app.services.paddle_service import get_paddle_service
+from app.services.ecpay.client import ECPayClient
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -106,11 +107,16 @@ class SubscriptionService:
                 }
 
         # Determine if we should use mock mode
-        use_mock = skip_payment or self.paddle.is_mock
+        use_mock = skip_payment or (self.paddle.is_mock and payment_method != 'ecpay')
 
         if use_mock:
             # Direct activation without payment
             return await self._activate_subscription_directly(
+                db, user, plan, billing_cycle
+            )
+        elif payment_method == 'ecpay':
+            # Create ECPay checkout (Taiwan credit card)
+            return await self._create_ecpay_checkout(
                 db, user, plan, billing_cycle
             )
         else:
@@ -201,6 +207,111 @@ class SubscriptionService:
             "credits_allocated": credits_to_add,
             "is_mock": True,
             "message": "Subscription activated successfully (development mode)"
+        }
+
+    async def _create_ecpay_checkout(
+        self,
+        db: AsyncSession,
+        user: User,
+        plan: Plan,
+        billing_cycle: str
+    ) -> Dict[str, Any]:
+        """Create ECPay checkout form data for Taiwan credit card payment."""
+        import uuid
+        from datetime import datetime
+
+        # Validate ECPay configuration
+        if not settings.ECPAY_MERCHANT_ID or not settings.ECPAY_HASH_KEY or not settings.ECPAY_HASH_IV:
+            logger.error("ECPay credentials not configured")
+            return {"success": False, "error": "ECPay payment not configured"}
+
+        # Get price in TWD (use price_twd if available, else convert from USD at ~32 TWD/USD)
+        if billing_cycle == "yearly":
+            price_usd = float(plan.price_yearly or plan.price_usd or 0)
+        else:
+            price_usd = float(plan.price_monthly or plan.price_usd or 0)
+
+        # Use TWD price if available, otherwise convert
+        price_twd = int(float(plan.price_twd or 0))
+        if price_twd == 0:
+            price_twd = max(1, int(price_usd * 32))  # Convert USD to TWD
+
+        # Create pending subscription record
+        now = utc_now()
+        if billing_cycle == "yearly":
+            end_date = now + timedelta(days=365)
+        else:
+            end_date = now + timedelta(days=30)
+
+        subscription = Subscription(
+            user_id=user.id,
+            plan_id=plan.id,
+            status="pending",
+            start_date=now,
+            end_date=end_date,
+            auto_renew=True
+        )
+        db.add(subscription)
+        await db.flush()
+
+        # Create order record
+        order_number = f"EC-{uuid.uuid4().hex[:8].upper()}"
+        order = Order(
+            order_number=order_number,
+            user_id=user.id,
+            subscription_id=subscription.id,
+            amount=price_twd,
+            status="pending",
+            payment_method="ecpay",
+            payment_data={
+                "plan_id": str(plan.id),
+                "plan_name": plan.name,
+                "billing_cycle": billing_cycle,
+                "currency": "TWD",
+                "price_twd": price_twd
+            }
+        )
+        db.add(order)
+        await db.commit()
+
+        # Create ECPay client
+        ecpay_client = ECPayClient(
+            merchant_id=settings.ECPAY_MERCHANT_ID,
+            hash_key=settings.ECPAY_HASH_KEY,
+            hash_iv=settings.ECPAY_HASH_IV,
+            payment_url=settings.ECPAY_PAYMENT_URL
+        )
+
+        # Generate ECPay payment form
+        trade_date = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        # Use backend URL for ReturnURL (server callback)
+        return_url = f"{settings.BACKEND_URL}/api/v1/payments/ecpay/callback"
+        # Use frontend URL for OrderResultURL (user-facing result page)
+        order_result_url = f"{settings.FRONTEND_URL}/subscription/ecpay-result?order={order_number}"
+        client_back_url = f"{settings.FRONTEND_URL}/pricing"
+
+        payment_data = ecpay_client.create_payment(
+            merchant_trade_no=order_number,
+            merchant_trade_date=trade_date,
+            total_amount=price_twd,
+            trade_desc=f"VidGo {plan.display_name or plan.name} {billing_cycle} subscription",
+            item_name=f"VidGo {plan.display_name or plan.name} Plan",
+            return_url=return_url,
+            order_result_url=order_result_url,
+            client_back_url=client_back_url,
+            choose_payment="Credit"
+        )
+
+        logger.info(f"ECPay checkout created for order: {order_number}")
+
+        return {
+            "success": True,
+            "subscription_id": str(subscription.id),
+            "order_number": order_number,
+            "payment_method": "ecpay",
+            "ecpay_form": payment_data,  # Contains action_url and params
+            "status": "pending_payment",
+            "is_mock": False
         }
 
     async def _create_payment_checkout(

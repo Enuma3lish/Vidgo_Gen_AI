@@ -84,6 +84,18 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_URL: str = "http://localhost:8000"  # Backend URL for ECPay callbacks (must be publicly accessible)
 
+    # Social Media Integration
+    # Facebook / Instagram (Meta Graph API)
+    # Create app at: https://developers.facebook.com/
+    FACEBOOK_APP_ID: str = ""           # Meta App ID
+    FACEBOOK_APP_SECRET: str = ""       # Meta App Secret
+    INSTAGRAM_APP_ID: str = ""          # Same as FACEBOOK_APP_ID if using same Meta app
+    INSTAGRAM_APP_SECRET: str = ""      # Same as FACEBOOK_APP_SECRET if using same Meta app
+    # TikTok Content Posting API
+    # Create app at: https://developers.tiktok.com/
+    TIKTOK_CLIENT_KEY: str = ""         # TikTok Client Key
+    TIKTOK_CLIENT_SECRET: str = ""      # TikTok Client Secret
+
     # Referral System
     REFERRAL_BONUS_CREDITS: int = 50       # Credits awarded to referrer per successful referral
     REFERRAL_WELCOME_CREDITS: int = 20     # Credits awarded to new user who used a referral code

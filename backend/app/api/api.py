@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth, payments, demo, plans, promotions, credits, effects, generation,
     landing, quota, tools, admin, session, interior, workflow, subscriptions,
-    prompts, user_works, uploads, referrals,
+    prompts, user_works, uploads, referrals, social_media,
 )
 
 api_router = APIRouter()
@@ -26,3 +26,4 @@ api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(user_works.router, prefix="/user", tags=["user"])
 api_router.include_router(uploads.router, tags=["uploads"])
 api_router.include_router(referrals.router, tags=["referrals"])
+api_router.include_router(social_media.router, tags=["social"])

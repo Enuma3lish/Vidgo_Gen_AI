@@ -108,6 +108,14 @@ onUnmounted(() => {
             >
               {{ t('nav.dashboard') }}
             </RouterLink>
+            <RouterLink
+              to="/dashboard/social-accounts"
+              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors"
+              style="color: #a8c8e8;"
+              title="社交媒體帳號"
+            >
+              📡 社交發布
+            </RouterLink>
             <button
               @click="handleLogout"
               class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors"
@@ -170,6 +178,9 @@ onUnmounted(() => {
         <div v-else class="pt-3 space-y-2" style="border-top: 1px solid rgba(0,184,230,0.15);">
           <RouterLink to="/dashboard" class="block px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #a8c8e8;" @click="mobileMenuOpen = false">
             {{ t('nav.dashboard') }}
+          </RouterLink>
+          <RouterLink to="/dashboard/social-accounts" class="block px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #a8c8e8;" @click="mobileMenuOpen = false">
+            📡 社交媒體帳號
           </RouterLink>
           <button @click="handleLogout; mobileMenuOpen = false" class="block w-full text-left px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #6b9ab8;">
             {{ t('nav.logout') }}

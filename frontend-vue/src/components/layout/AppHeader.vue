@@ -36,50 +36,53 @@ onUnmounted(() => {
     class="fixed top-0 left-0 right-0 z-50 transition-all duration-300"
     :class="[
       isScrolled
-        ? 'bg-white/95 backdrop-blur-lg shadow-sm border-b border-black/8'
-        : 'bg-white/90 backdrop-blur-sm'
+        ? 'bg-dark-900/95 backdrop-blur-lg shadow-lg'
+        : 'bg-dark-900/80 backdrop-blur-sm'
     ]"
+    style="border-bottom: 1px solid rgba(0,184,230,0.15);"
   >
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <!-- Logo -->
         <RouterLink to="/" class="flex items-center gap-2 flex-shrink-0">
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm" style="background: #111111;">
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm"
+            style="background: linear-gradient(135deg, #00b8e6, #0077a8); box-shadow: 0 0 12px rgba(0,184,230,0.4);">
             V
           </div>
-          <span class="text-lg font-black text-dark-900 tracking-tight">VidGo AI</span>
+          <span class="text-lg font-black tracking-tight" style="color: #e8f4ff;">VidGo <span style="color: #00b8e6;">AI</span></span>
         </RouterLink>
 
         <!-- Center Nav -->
         <nav class="hidden md:flex items-center gap-1">
-          <RouterLink to="/" class="nav-link rounded-lg hover:bg-black/5 font-medium text-dark-700">
+          <RouterLink to="/" class="nav-link rounded-lg font-medium" style="color: #a8c8e8;" active-class="!text-[#00b8e6]">
             {{ t('nav.home') }}
           </RouterLink>
-          <RouterLink to="/pricing" class="nav-link rounded-lg hover:bg-black/5 font-medium text-dark-700">
+          <RouterLink to="/pricing" class="nav-link rounded-lg font-medium" style="color: #a8c8e8;" active-class="!text-[#00b8e6]">
             {{ t('nav.pricing') }}
           </RouterLink>
           <div class="relative group">
-            <button class="nav-link rounded-lg hover:bg-black/5 font-medium text-dark-700 flex items-center gap-1">
+            <button class="nav-link rounded-lg font-medium flex items-center gap-1" style="color: #a8c8e8;">
               {{ t('nav.tools') }}
               <svg class="w-3.5 h-3.5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </button>
-            <div class="absolute top-full left-0 mt-1 w-52 bg-white rounded-2xl shadow-xl border border-black/8 overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-              <RouterLink to="/tools/short-video" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
+            <div class="absolute top-full left-0 mt-1 w-52 rounded-2xl shadow-xl overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50"
+              style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.2);">
+              <RouterLink to="/tools/short-video" class="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors" style="color: #a8c8e8;" onmouseover="this.style.background='rgba(0,184,230,0.08)';this.style.color='#00b8e6'" onmouseout="this.style.background='';this.style.color='#a8c8e8'">
                 <span class="text-lg">🎬</span> AI 短影片
               </RouterLink>
-              <RouterLink to="/tools/try-on" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
+              <RouterLink to="/tools/try-on" class="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors" style="color: #a8c8e8;" onmouseover="this.style.background='rgba(0,184,230,0.08)';this.style.color='#00b8e6'" onmouseout="this.style.background='';this.style.color='#a8c8e8'">
                 <span class="text-lg">👔</span> 虛擬試穿
               </RouterLink>
-              <RouterLink to="/tools/product-scene" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
+              <RouterLink to="/tools/product-scene" class="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors" style="color: #a8c8e8;" onmouseover="this.style.background='rgba(0,184,230,0.08)';this.style.color='#00b8e6'" onmouseout="this.style.background='';this.style.color='#a8c8e8'">
                 <span class="text-lg">🛍️</span> 商品場景
               </RouterLink>
-              <RouterLink to="/tools/background-removal" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
+              <RouterLink to="/tools/background-removal" class="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors" style="color: #a8c8e8;" onmouseover="this.style.background='rgba(0,184,230,0.08)';this.style.color='#00b8e6'" onmouseout="this.style.background='';this.style.color='#a8c8e8'">
                 <span class="text-lg">✂️</span> 背景去除
               </RouterLink>
-              <RouterLink to="/tools/room-redesign" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
+              <RouterLink to="/tools/room-redesign" class="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors" style="color: #a8c8e8;" onmouseover="this.style.background='rgba(0,184,230,0.08)';this.style.color='#00b8e6'" onmouseout="this.style.background='';this.style.color='#a8c8e8'">
                 <span class="text-lg">🏠</span> 室內設計
               </RouterLink>
-              <RouterLink to="/tools/avatar" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-dark-700 text-sm font-medium">
+              <RouterLink to="/tools/avatar" class="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors" style="color: #a8c8e8;" onmouseover="this.style.background='rgba(0,184,230,0.08)';this.style.color='#00b8e6'" onmouseout="this.style.background='';this.style.color='#a8c8e8'">
                 <span class="text-lg">🤖</span> AI 頭像
               </RouterLink>
             </div>
@@ -92,21 +95,23 @@ onUnmounted(() => {
           <template v-if="authStore.isAuthenticated">
             <RouterLink
               to="/dashboard"
-              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-colors"
-              style="background: #d4f06b; color: #111111;"
+              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all"
+              style="background: rgba(0,184,230,0.15); color: #00b8e6; border: 1px solid rgba(0,184,230,0.3);"
             >
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 14a6 6 0 110-12 6 6 0 010 12zm1-9H9v4l3.5 2.1.7-1.2-2.2-1.3V7z"/></svg>
               {{ creditsStore.balance }} 點
             </RouterLink>
             <RouterLink
               to="/dashboard"
-              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-dark-700 hover:text-dark-900 transition-colors"
+              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors"
+              style="color: #a8c8e8;"
             >
               {{ t('nav.dashboard') }}
             </RouterLink>
             <button
               @click="handleLogout"
-              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-dark-500 hover:text-dark-700 transition-colors"
+              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors"
+              style="color: #6b9ab8;"
             >
               {{ t('nav.logout') }}
             </button>
@@ -114,14 +119,15 @@ onUnmounted(() => {
           <template v-else>
             <RouterLink
               to="/auth/login"
-              class="hidden md:inline-flex px-4 py-2 text-sm font-medium text-dark-700 hover:text-dark-900 transition-colors"
+              class="hidden md:inline-flex px-4 py-2 text-sm font-medium transition-colors"
+              style="color: #a8c8e8;"
             >
               {{ t('nav.login') }}
             </RouterLink>
             <RouterLink
               to="/auth/register"
-              class="inline-flex items-center px-4 py-2 text-sm font-semibold bg-dark-900 text-white rounded-full hover:bg-dark-800 transition-all duration-200"
-              style="box-shadow: 0 2px 8px rgba(0,0,0,0.15);"
+              class="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-full transition-all duration-200"
+              style="background: linear-gradient(135deg, #00b8e6, #0077a8); color: white; box-shadow: 0 2px 12px rgba(0,184,230,0.35);"
             >
               免費開始
             </RouterLink>
@@ -129,7 +135,8 @@ onUnmounted(() => {
           <!-- Mobile Menu Button -->
           <button
             @click="mobileMenuOpen = !mobileMenuOpen"
-            class="md:hidden p-2 text-dark-600 hover:text-dark-900 rounded-lg hover:bg-black/5"
+            class="md:hidden p-2 rounded-lg transition-colors"
+            style="color: #a8c8e8;"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path v-if="!mobileMenuOpen" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -141,30 +148,30 @@ onUnmounted(() => {
     </div>
 
     <!-- Mobile Menu -->
-    <div v-if="mobileMenuOpen" class="md:hidden bg-white border-t border-black/8 shadow-lg">
+    <div v-if="mobileMenuOpen" class="md:hidden shadow-lg" style="background: #0f1f3d; border-top: 1px solid rgba(0,184,230,0.15);">
       <div class="px-4 py-4 space-y-1">
-        <RouterLink to="/" class="block px-4 py-2.5 rounded-xl text-dark-700 hover:bg-black/5 font-medium" @click="mobileMenuOpen = false">
+        <RouterLink to="/" class="block px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #a8c8e8;" @click="mobileMenuOpen = false">
           {{ t('nav.home') }}
         </RouterLink>
-        <RouterLink to="/pricing" class="block px-4 py-2.5 rounded-xl text-dark-700 hover:bg-black/5 font-medium" @click="mobileMenuOpen = false">
+        <RouterLink to="/pricing" class="block px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #a8c8e8;" @click="mobileMenuOpen = false">
           {{ t('nav.pricing') }}
         </RouterLink>
-        <RouterLink to="/tools/short-video" class="block px-4 py-2.5 rounded-xl text-dark-700 hover:bg-black/5 font-medium" @click="mobileMenuOpen = false">
+        <RouterLink to="/tools/short-video" class="block px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #a8c8e8;" @click="mobileMenuOpen = false">
           AI 影片
         </RouterLink>
-        <div v-if="!authStore.isAuthenticated" class="pt-3 border-t border-black/8 space-y-2">
-          <RouterLink to="/auth/login" class="block px-4 py-2.5 rounded-xl text-dark-700 hover:bg-black/5 font-medium" @click="mobileMenuOpen = false">
+        <div v-if="!authStore.isAuthenticated" class="pt-3 space-y-2" style="border-top: 1px solid rgba(0,184,230,0.15);">
+          <RouterLink to="/auth/login" class="block px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #a8c8e8;" @click="mobileMenuOpen = false">
             {{ t('nav.login') }}
           </RouterLink>
-          <RouterLink to="/auth/register" class="block px-4 py-2.5 rounded-xl bg-dark-900 text-white text-center font-semibold" @click="mobileMenuOpen = false">
+          <RouterLink to="/auth/register" class="block px-4 py-2.5 rounded-xl text-white text-center font-semibold" style="background: linear-gradient(135deg, #00b8e6, #0077a8);" @click="mobileMenuOpen = false">
             免費開始
           </RouterLink>
         </div>
-        <div v-else class="pt-3 border-t border-black/8 space-y-2">
-          <RouterLink to="/dashboard" class="block px-4 py-2.5 rounded-xl text-dark-700 hover:bg-black/5 font-medium" @click="mobileMenuOpen = false">
+        <div v-else class="pt-3 space-y-2" style="border-top: 1px solid rgba(0,184,230,0.15);">
+          <RouterLink to="/dashboard" class="block px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #a8c8e8;" @click="mobileMenuOpen = false">
             {{ t('nav.dashboard') }}
           </RouterLink>
-          <button @click="handleLogout; mobileMenuOpen = false" class="block w-full text-left px-4 py-2.5 rounded-xl text-dark-500 hover:bg-black/5 font-medium">
+          <button @click="handleLogout; mobileMenuOpen = false" class="block w-full text-left px-4 py-2.5 rounded-xl font-medium transition-colors" style="color: #6b9ab8;">
             {{ t('nav.logout') }}
           </button>
         </div>

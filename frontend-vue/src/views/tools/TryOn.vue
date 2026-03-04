@@ -36,12 +36,12 @@ const selectedModel = ref('female-1')
 
 // Default model options (6 models matching backend generate_model_library() naming)
 const modelOptions = ref([
-  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: 'https://randomuser.me/api/portraits/women/2.jpg' },
-  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: 'https://randomuser.me/api/portraits/women/6.jpg' },
-  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: 'https://randomuser.me/api/portraits/women/17.jpg' },
-  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: 'https://randomuser.me/api/portraits/men/4.jpg' },
-  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: 'https://randomuser.me/api/portraits/men/12.jpg' },
-  { id: 'male-3', name: 'Male Model 3', name_zh: '男模特 3', preview: 'https://randomuser.me/api/portraits/men/9.jpg' }
+  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&h=200&fit=crop&crop=face' },
+  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=200&h=200&fit=crop&crop=face' },
+  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=200&h=200&fit=crop&crop=face' },
+  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: 'https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=200&h=200&fit=crop&crop=face' },
+  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: 'https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=200&h=200&fit=crop&crop=face' },
+  { id: 'male-3', name: 'Male Model 3', name_zh: '男模特 3', preview: 'https://images.unsplash.com/photo-1667127752169-74c7e4d8822f?w=200&h=200&fit=crop&crop=face' }
 ])
 
 // Clothing types that are restricted for male models

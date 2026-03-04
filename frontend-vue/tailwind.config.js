@@ -1,58 +1,70 @@
 /** @type {import("tailwindcss").Config} */
 const colors = {
+  // Primary: Electric Cyan / Tech Blue
   primary: {
-    50: "#f9ffe0",
-    100: "#f0ffb3",
-    200: "#e4ff80",
-    300: "#d4f06b",
-    400: "#c8e840",
-    500: "#b8d400",
-    600: "#9ab800",
-    700: "#7a9200",
-    800: "#5c6e00",
-    900: "#3d4900",
+    50:  "#e0f8ff",
+    100: "#b3eeff",
+    200: "#80e2ff",
+    300: "#4dd4f5",
+    400: "#22c8f0",
+    500: "#00b8e6",   // Main brand cyan
+    600: "#0099cc",
+    700: "#0077a8",
+    800: "#005580",
+    900: "#003350",
   },
+  // Light tones
   light: {
-    50: "#ffffff",
-    100: "#fafff0",
-    200: "#f5ffe0",
-    300: "#edffc0",
-    400: "#e4f5a0",
-    500: "#d8ec80",
+    50:  "#ffffff",
+    100: "#f0f8ff",
+    200: "#e0f0ff",
+    300: "#c8e4f8",
+    400: "#a8ccec",
+    500: "#88b4e0",
   },
+  // Dark backgrounds (deep navy/charcoal)
   dark: {
-    950: "#0a0a0a",
-    900: "#111111",
-    800: "#1a1a1a",
-    700: "#222222",
-    600: "#333333",
-    500: "#444444",
-    400: "#666666",
-    300: "#888888",
-    200: "#aaaaaa",
-    100: "#cccccc",
+    950: "#020817",   // Deepest navy
+    900: "#0a1628",   // Deep navy
+    800: "#0f1f3d",   // Navy
+    700: "#162447",   // Dark navy
+    600: "#1e3a5f",   // Medium navy
+    500: "#2d5282",   // Blue-grey
+    400: "#4a7bb5",   // Muted blue
+    300: "#7aa8d4",   // Light blue-grey
+    200: "#a8c8e8",   // Very light blue
+    100: "#d0e4f5",   // Near white blue
   },
   accent: {
-    purple: "#c4a8ff",
-    "purple-light": "#ede0ff",
-    "purple-bg": "#f0e8ff",
-    orange: "#ff6b2b",
-    "orange-light": "#fff0e8",
-    cyan: "#00d4e8",
-    green: "#00c48c",
-    yellow: "#ffd600",
-    pink: "#ff4d8d",
-    red: "#ef4444",
-    blue: "#3b82f6",
+    cyan:          "#00d4f5",
+    "cyan-light":  "#b3f0ff",
+    "cyan-bg":     "#e0f8ff",
+    blue:          "#3b82f6",
+    "blue-light":  "#93c5fd",
+    indigo:        "#6366f1",
+    purple:        "#a855f7",
+    "purple-light":"#d8b4fe",
+    "purple-bg":   "rgba(168,85,247,0.1)",
+    teal:          "#14b8a6",
+    green:         "#10b981",
+    orange:        "#f97316",
+    "orange-light":"rgba(249,115,22,0.15)",
+    red:           "#ef4444",
+    yellow:        "#eab308",
+    pink:          "#ec4899",
   },
   card: {
-    yellow: "#d4f06b",
-    purple: "#e8d5ff",
-    orange: "#ffd4b3",
-    blue: "#d0e8ff",
-    pink: "#ffd0e8",
-    white: "#ffffff",
-    dark: "#1a1a1a",
+    navy:   "#0f1f3d",
+    blue:   "#162447",
+    cyan:   "#0c2a3a",
+    purple: "#1a1040",
+    teal:   "#0c2a2a",
+    dark:   "#0a1628",
+    white:  "#ffffff",
+    // Legacy aliases
+    yellow: "#0f1f3d",
+    orange: "#162447",
+    pink:   "#1a1040",
   }
 }
 
@@ -102,11 +114,21 @@ export default {
         },
       },
       boxShadow: {
-        "card": "0 4px 20px rgba(0, 0, 0, 0.08)",
-        "card-hover": "0 8px 40px rgba(0, 0, 0, 0.15)",
-        "btn": "0 4px 15px rgba(0, 0, 0, 0.2)",
-        "glow-sm": "0 0 15px rgba(184, 212, 0, 0.3)",
-        "glow": "0 0 30px rgba(184, 212, 0, 0.4)",
+        "card":       "0 4px 20px rgba(0,0,0,0.4)",
+        "card-hover": "0 8px 40px rgba(0,184,230,0.25)",
+        "btn":        "0 4px 15px rgba(0,184,230,0.35)",
+        "glow-sm":    "0 0 15px rgba(0,184,230,0.4)",
+        "glow":       "0 0 30px rgba(0,184,230,0.5)",
+        "glow-lg":    "0 0 60px rgba(0,184,230,0.4)",
+        "inner-glow": "inset 0 0 20px rgba(0,184,230,0.1)",
+      },
+      backgroundImage: {
+        "tech-grid":     "linear-gradient(rgba(0,184,230,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,184,230,0.06) 1px, transparent 1px)",
+        "hero-gradient": "linear-gradient(135deg, #020817 0%, #0a1628 40%, #0f1f3d 70%, #162447 100%)",
+        "card-gradient": "linear-gradient(135deg, #0f1f3d 0%, #162447 100%)",
+        "cyan-gradient": "linear-gradient(135deg, #00b8e6 0%, #0077a8 100%)",
+        "blue-gradient": "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
+        "glow-gradient": "radial-gradient(ellipse at center, rgba(0,184,230,0.15) 0%, transparent 70%)",
       },
     },
   },

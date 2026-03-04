@@ -12,4 +12,5 @@ from app.models.prompt_template import (
     PromptTemplate, PromptTemplateUsage, PromptGroup, PromptSubTopic,
     GROUP_DISPLAY_NAMES, SUB_TOPIC_DISPLAY_NAMES
 )
+from app.models.social_account import SocialAccount
 from app.core.database import Base

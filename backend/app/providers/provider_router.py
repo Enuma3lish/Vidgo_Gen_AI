@@ -35,6 +35,7 @@ class TaskType(str, Enum):
     MULTI_MODEL = "multi_model"
     MODERATION = "moderation"
     BACKGROUND_REMOVAL = "background_removal"
+    INTERIOR_3D = "interior_3d"
     I2I = "image_to_image"
 
 

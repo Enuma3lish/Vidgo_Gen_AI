@@ -43,7 +43,12 @@ async def heartbeat(
     # Get user info
     if current_user:
         user_id = str(current_user.id)
-        plan = current_user.plan or "demo"
+        # Get plan name from current_plan relationship or default to 'free'
+        plan = "free"
+        if current_user.current_plan:
+            plan = getattr(current_user.current_plan, 'slug', None) or getattr(current_user.current_plan, 'name', 'free')
+        elif current_user.current_plan_id is None:
+            plan = "free"
     else:
         # For anonymous users, use IP-based session
         client_ip = request.client.host if request.client else "unknown"

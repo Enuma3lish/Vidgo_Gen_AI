@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import {
   getConnectedAccounts,
@@ -11,7 +10,6 @@ import {
   type SocialAccountInfo,
 } from '@/api/socialMedia'
 
-const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
 
@@ -276,7 +274,7 @@ onMounted(async () => {
                 <div v-if="isConnected(platform.id)" class="flex items-center gap-2 mb-2">
                   <img
                     v-if="getConnectedAccount(platform.id)?.platform_avatar"
-                    :src="getConnectedAccount(platform.id)?.platform_avatar"
+                    :src="getConnectedAccount(platform.id)?.platform_avatar ?? undefined"
                     class="w-6 h-6 rounded-full"
                     :alt="getConnectedAccount(platform.id)?.platform_username || ''"
                   />

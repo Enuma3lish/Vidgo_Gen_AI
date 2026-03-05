@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useAuthStore } from '@/stores/auth'
 import {
   getConnectedAccounts,
   publishWork,
@@ -20,7 +19,6 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const authStore = useAuthStore()
 const accounts = ref<SocialAccountInfo[]>([])
 const selectedPlatforms = ref<string[]>([])
 const caption = ref('')

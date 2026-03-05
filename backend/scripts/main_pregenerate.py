@@ -119,56 +119,56 @@ AVATAR_MAPPING = {
         "gender": "female",
         "name_zh": "怡君",
         "name_en": "Yi-Jun",
-        "url": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop&crop=faces"
+        "url": "https://images.unsplash.com/photo-1615262239828-a4d49e6503ea?w=512&fit=crop&crop=faces"
     },
     "female-2": {
         "prompt": "Professional portrait of a Chinese woman in her early 30s, elegant makeup, warm expression, soft lighting, headshot, Asian face",
         "gender": "female",
         "name_zh": "雅婷",
         "name_en": "Ya-Ting",
-        "url": "https://images.unsplash.com/photo-1524504388940-b1c1722653e6?w=512&fit=crop&crop=faces"
+        "url": "https://images.unsplash.com/photo-1615262239126-1931bdb03182?w=512&fit=crop&crop=faces"
     },
     "female-3": {
         "prompt": "Professional portrait of a young Chinese woman, business blazer, approachable smile, corporate headshot, Asian face",
         "gender": "female",
         "name_zh": "佳穎",
         "name_en": "Jia-Ying",
-        "url": "https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=512&fit=crop&crop=faces"
+        "url": "https://images.unsplash.com/photo-1566589430181-a51c280be4b1?w=512&fit=crop&crop=faces"
     },
     "female-4": {
         "prompt": "Professional portrait of a Taiwanese woman, trendy style, friendly expression, modern headshot, Chinese face",
         "gender": "female",
         "name_zh": "淑芬",
         "name_en": "Shu-Fen",
-        "url": "https://images.unsplash.com/photo-1544006943-0e92b9a3b95d?w=512&fit=crop&crop=faces"
+        "url": "https://images.unsplash.com/photo-1614387256720-5b994a2bb8e5?w=512&fit=crop&crop=faces"
     },
     "male-1": {
         "prompt": "Professional portrait of an Asian man, plaid shirt, calm expression, studio portrait, Chinese face",
         "gender": "male",
         "name_zh": "志偉",
         "name_en": "Zhi-Wei",
-        "url": "https://images.unsplash.com/photo-1758600431229-191932ccee81?w=512&fit=crop&crop=faces"
+        "url": "https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=512&fit=crop&crop=faces"
     },
     "male-2": {
         "prompt": "Professional portrait of a Chinese man in his 30s, business suit, trustworthy smile, corporate headshot, Asian face",
         "gender": "male",
         "name_zh": "冠宇",
         "name_en": "Guan-Yu",
-        "url": "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=512&fit=crop&crop=faces"
+        "url": "https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=512&fit=crop&crop=faces"
     },
     "male-3": {
         "prompt": "Professional portrait of a young Chinese man, friendly smile, casual professional headshot, Asian face",
         "gender": "male",
         "name_zh": "宗翰",
         "name_en": "Zong-Han",
-        "url": "https://images.unsplash.com/photo-1600486914327-2f364e2d7731?w=512&fit=crop&crop=faces"
+        "url": "https://images.unsplash.com/photo-1633177188754-980c2a6b6266?w=512&fit=crop&crop=faces"
     },
     "male-4": {
         "prompt": "Professional portrait of a mature Chinese man, confident expression, business headshot, Asian face",
         "gender": "male",
         "name_zh": "家豪",
         "name_en": "Jia-Hao",
-        "url": "https://images.unsplash.com/photo-1552375816-4b96b919e67a?w=512&fit=crop&crop=faces"
+        "url": "https://images.unsplash.com/photo-1727605507453-dfe1e74abfbc?w=512&fit=crop&crop=faces"
     }
 }
 
@@ -883,6 +883,48 @@ PATTERN_GENERATE_MAPPING = {
                 {
                     "en": "Japanese wave pattern for tea and beverage packaging, blue gradient, traditional motif",
                     "zh": "茶飲與飲料包裝用日式青海波紋，藍色漸層，傳統紋樣"
+                }
+            ]
+        },
+        "3d": {
+            "name": "3D",
+            "name_zh": "3D圖案",
+            "prompts": [
+                {
+                    "en": "3D embossed pattern for premium product packaging, raised geometric shapes, metallic finish, luxury brand",
+                    "zh": "高級產品包裝用3D浮雕圖案，凸起幾何形狀，金屬光澤，奢華品牌"
+                },
+                {
+                    "en": "3D isometric pattern for tech product branding, cubes and blocks, modern digital aesthetic",
+                    "zh": "科技產品品牌用3D等角圖案，立方體與方塊，現代數位美學"
+                }
+            ]
+        },
+        "interior": {
+            "name": "Interior",
+            "name_zh": "室內裝飾圖案",
+            "prompts": [
+                {
+                    "en": "Wallpaper pattern for cafe and restaurant interior, botanical leaves, earthy tones, cozy atmosphere",
+                    "zh": "咖啡廳與餐廳室內壁紙圖案，植物葉片，大地色系，溫馨氛圍"
+                },
+                {
+                    "en": "Tile pattern for bakery and dessert shop floor, geometric mosaic, pastel colors, vintage charm",
+                    "zh": "烘焙與甜點店地板磁磚圖案，幾何馬賽克，粉彩色系，復古魅力"
+                }
+            ]
+        },
+        "mockup": {
+            "name": "Mockup",
+            "name_zh": "產品展示圖案",
+            "prompts": [
+                {
+                    "en": "Product packaging mockup pattern for gift box and shopping bag, elegant brand identity, clean design",
+                    "zh": "禮盒與購物袋產品包裝展示圖案，優雅品牌識別，乾淨設計"
+                },
+                {
+                    "en": "Label and sticker mockup pattern for food and beverage products, round and rectangular shapes, craft style",
+                    "zh": "食品與飲料產品標籤貼紙展示圖案，圓形與矩形，手作風格"
                 }
             ]
         }

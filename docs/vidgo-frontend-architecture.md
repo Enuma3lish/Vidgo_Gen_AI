@@ -1,7 +1,7 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 5.0
-**Last Updated:** February 21, 2026
+**Version:** 6.0
+**Last Updated:** March 5, 2026
 **Framework:** Vue 3 + Vite + TypeScript
 **Mode:** Dual-Mode — Preset-Only (free) + Real-API with model selection (subscribers)
 **Target Audience:** Small businesses (SMB) selling everyday products/services
@@ -105,8 +105,10 @@ frontend-vue/
 │   │   ├── landing.ts               # Landing page API
 │   │   ├── quota.ts                 # Quota API
 │   │   ├── subscription.ts          # Subscription API
-│   │   ├── uploads.ts               # NEW: Subscriber upload + real-API generation
-│   │   └── referrals.ts             # NEW: Referral code/stats/apply
+│   │   ├── uploads.ts               # Subscriber upload + real-API generation
+│   │   ├── referrals.ts             # Referral code/stats/apply
+│   │   ├── socialMedia.ts           # Social media OAuth + publishing
+│   │   └── user.ts                  # User generation history/stats
 │   │
 │   ├── components/
 │   │   ├── atoms/                   # Basic UI components
@@ -118,6 +120,7 @@ frontend-vue/
 │   │   │   └── index.ts
 │   │   │
 │   │   ├── common/                  # Shared components
+│   │   │   ├── ImageUploader.vue
 │   │   │   ├── LoadingOverlay.vue
 │   │   │   └── Toast.vue
 │   │   │
@@ -134,11 +137,15 @@ frontend-vue/
 │   │   │   ├── UpgradePrompt.vue
 │   │   │   └── index.ts
 │   │   │
+│   │   ├── social/                  # Social media components
+│   │   │   └── ShareToSocialModal.vue  # Publish to FB/IG/TikTok
+│   │   │
 │   │   ├── tools/                   # Tool-specific components
 │   │   │   ├── BeforeAfterSlider.vue
 │   │   │   ├── CreditCost.vue
-│   │   │   ├── UploadZone.vue
-│   │   │   └── SubscriberUploadPanel.vue  # NEW: Subscriber upload + model selection
+│   │   │   ├── SubscriberUploadPanel.vue  # Subscriber upload + model selection
+│   │   │   ├── ThreeViewer.vue            # 3D model viewer (Three.js)
+│   │   │   └── UploadZone.vue
 │   │   │
 │   │   └── index.ts                 # Component exports
 │   │
@@ -194,12 +201,14 @@ frontend-vue/
 │   │   │   ├── Dashboard.vue
 │   │   │   ├── MyWorks.vue
 │   │   │   ├── Invoices.vue             # Invoice history & download
-│   │   │   └── Referrals.vue            # NEW: Referral program, stats, leaderboard
+│   │   │   ├── Referrals.vue            # Referral program, stats, leaderboard
+│   │   │   └── SocialAccounts.vue       # Connected social media accounts
 │   │   │
-│   │   ├── subscription/            # Paddle redirect result pages
+│   │   ├── subscription/            # Payment result pages
+│   │   │   ├── ECPayResult.vue           # ECPay payment result
 │   │   │   ├── SubscriptionSuccess.vue   # Payment success (order= query)
 │   │   │   ├── SubscriptionCancelled.vue # User cancelled payment
-│   │   │   └── SubscriptionMockCheckout.vue # Mock payment complete → redirect dashboard
+│   │   │   └── SubscriptionMockCheckout.vue # Mock payment (dev)
 │   │   │
 │   │   ├── tools/                   # 8 Core Tool Pages
 │   │   │   ├── BackgroundRemoval.vue
@@ -248,23 +257,24 @@ const routes: RouteRecordRaw[] = [
   { path: '/subscription/cancelled', name: 'subscription-cancelled', component: SubscriptionCancelled },
   { path: '/subscription/mock-checkout', name: 'subscription-mock-checkout', component: SubscriptionMockCheckout, meta: { requiresAuth: true } },
 
-  // ===== 8 Core Tools =====
+  // ===== Core Tools =====
   { path: '/tools/background-removal', name: 'background-removal', component: BackgroundRemoval },
   { path: '/tools/effects', name: 'effects', component: ImageEffects },
+  { path: '/tools/image-transform', name: 'image-transform', component: ImageEffects },
   { path: '/tools/product-scene', name: 'product-scene', component: ProductScene },
+  { path: '/tools/product-enhance', name: 'product-enhance', component: ProductScene },
   { path: '/tools/try-on', name: 'try-on', component: TryOn },
   { path: '/tools/room-redesign', name: 'room-redesign', component: RoomRedesign },
   { path: '/tools/short-video', name: 'short-video', component: ShortVideo },
+  { path: '/tools/image-to-video', name: 'image-to-video', component: ShortVideo },
+  { path: '/tools/video-transform', name: 'video-transform', component: ShortVideo },
+  { path: '/tools/product-video', name: 'product-video', component: ShortVideo },
   { path: '/tools/avatar', name: 'avatar', component: AIAvatar },
-  { path: '/tools/pattern-design', name: 'pattern-design', component: PatternDesign },
 
-  // ===== Effects Tool Alias =====
-  { path: '/tools/image-transform', redirect: '/tools/effects' },
-
-  // ===== Video Tool Aliases =====
-  { path: '/tools/image-to-video', redirect: '/tools/short-video' },
-  { path: '/tools/video-transform', redirect: '/tools/short-video' },
-  { path: '/tools/product-video', redirect: '/tools/short-video' },
+  // ===== Pattern Tools =====
+  { path: '/tools/pattern-generate', name: 'pattern-generate', component: PatternTopic },
+  { path: '/tools/pattern-transfer', name: 'pattern-transfer', component: PatternTopic },
+  { path: '/tools/pattern-seamless', name: 'pattern-seamless', component: PatternTopic },
 
   // ===== Topic Pages =====
   { path: '/topics/pattern', name: 'topic-pattern', component: PatternTopic },
@@ -281,7 +291,14 @@ const routes: RouteRecordRaw[] = [
   { path: '/dashboard', name: 'dashboard', component: Dashboard, meta: { requiresAuth: true } },
   { path: '/dashboard/my-works', name: 'my-works', component: MyWorks, meta: { requiresAuth: true } },
   { path: '/dashboard/invoices', name: 'invoices', component: Invoices, meta: { requiresAuth: true } },
-  { path: '/dashboard/referrals', name: 'referrals', component: Referrals, meta: { requiresAuth: true } },  // NEW
+  { path: '/dashboard/referrals', name: 'referrals', component: Referrals, meta: { requiresAuth: true } },
+  { path: '/dashboard/social-accounts', name: 'social-accounts', component: SocialAccounts, meta: { requiresAuth: true } },
+
+  // ===== Subscription Result Pages =====
+  { path: '/subscription/success', name: 'subscription-success', component: SubscriptionSuccess, meta: { requiresAuth: true } },
+  { path: '/subscription/cancelled', name: 'subscription-cancelled', component: SubscriptionCancelled },
+  { path: '/subscription/mock-checkout', name: 'subscription-mock-checkout', component: SubscriptionMockCheckout, meta: { requiresAuth: true } },
+  { path: '/subscription/ecpay-result', name: 'subscription-ecpay-result', component: ECPayResult },
 
   // ===== Admin Routes (Admin Only) =====
   { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresAuth: true, requiresAdmin: true } },
@@ -1116,14 +1133,13 @@ Pattern Design generates seamless textile patterns for fashion and interior desi
 
 ---
 
-## 15. New Features (v5.0)
+## 15. Key Components
 
-### 15.1 SubscriberUploadPanel Component
+### 15.1 SubscriberUploadPanel
 
 Reusable drop-in component added to all tool pages. Shows a "Subscribe to unlock" gate for free users.
 
 ```vue
-<!-- Usage in any tool page -->
 <SubscriberUploadPanel
   :tool-type="'background_removal'"
   :is-subscribed="isSubscribed"
@@ -1132,55 +1148,69 @@ Reusable drop-in component added to all tool pages. Shows a "Subscribe to unlock
 />
 ```
 
-**Features:**
-- Model selector (shows available models with credit costs)
-- Drag-and-drop file upload zone
-- Upload progress bar
-- Status polling (every 3s) until generation completes
-- Download button (no watermark) on completion
-- Subscriber gate overlay for free users
+Features: Model selector, drag-and-drop upload, progress bar, status polling, download button.
 
-### 15.2 3D Model Viewer
+### 15.2 ThreeViewer (3D Model Viewer)
 
 Three.js-based GLB model viewer for interior design 3D outputs.
-- **Location:** `src/components/tools/ThreeViewer.vue`
-- **Used by:** `RoomRedesign.vue` (3D Model tab) — actively renders GLB models generated via PiAPI Trellis
-- Uses GLTFLoader to load .glb files from Trellis API
-- OrbitControls for rotation, zoom, pan
-- Auto-rotation on load
-- Responsive container sizing
+- Location: `src/components/tools/ThreeViewer.vue`
+- Used by: `RoomRedesign.vue` (3D Model tab)
+- GLTFLoader, OrbitControls, auto-rotation
 - Dependencies: `three`, `@types/three`
 
-### 15.3 Referrals Dashboard Page
+### 15.3 ShareToSocialModal
 
-New route: `/dashboard/referrals` — `views/dashboard/Referrals.vue`
+Modal for publishing generations to connected social media accounts.
+- Location: `src/components/social/ShareToSocialModal.vue`
+- Platforms: Facebook, Instagram, TikTok
+- Shows connected accounts, allows multi-platform publishing
 
-**Sections:**
-1. Stats cards (invited count, credits earned, referred-by)
-2. Referral link with copy + social share buttons (LINE, X, Facebook)
-3. How it works (3-step guide)
-4. Apply referral code form (if not already referred)
-5. Top 10 leaderboard
+### 15.4 Referrals Dashboard
 
-### 15.3 API Clients
+Route: `/dashboard/referrals` — `views/dashboard/Referrals.vue`
+- Stats cards (invited count, credits earned)
+- Shareable referral link (LINE, X, Facebook)
+- Apply referral code form
+- Top 10 leaderboard
+
+### 15.5 Social Accounts Dashboard
+
+Route: `/dashboard/social-accounts` — `views/dashboard/SocialAccounts.vue`
+- Connect/disconnect social media accounts
+- OAuth flow for Facebook, Instagram, TikTok
+
+### 15.6 API Clients
 
 ```typescript
 // src/api/uploads.ts
-uploadsApi.getToolModels(toolType)           // models with credit costs
-uploadsApi.uploadAndGenerate(...)            // upload + trigger generation
-uploadsApi.getUploadStatus(uploadId)         // poll for result
-uploadsApi.getDownloadUrl(uploadId)          // direct download URL
+uploadsApi.getToolModels(toolType)
+uploadsApi.uploadAndGenerate(...)
+uploadsApi.getUploadStatus(uploadId)
+uploadsApi.getDownloadUrl(uploadId)
 
 // src/api/referrals.ts
-referralsApi.getCode()                       // get/create referral code
-referralsApi.getStats()                      // count, credits, referred_by
-referralsApi.applyCode(code)                 // apply a referral code
-referralsApi.getLeaderboard()                // top 10 referrers
+referralsApi.getCode()
+referralsApi.getStats()
+referralsApi.applyCode(code)
+referralsApi.getLeaderboard()
+
+// src/api/socialMedia.ts
+socialMediaApi.getAccounts()
+socialMediaApi.disconnectAccount(platform)
+socialMediaApi.getOAuthUrl(platform)
+socialMediaApi.publish(generationId, platforms)
+
+// src/api/user.ts
+userApi.getGenerations(params)
+userApi.getGenerationDetail(id)
+userApi.downloadGeneration(id)
+userApi.deleteGeneration(id)
+userApi.getStats()
 ```
 
 ---
 
-*Document Version: 5.0*
-*Last Updated: February 21, 2026*
+*Document Version: 6.0*
+*Last Updated: March 5, 2026*
 *Mode: Dual-Mode — Preset-Only (free) + Real-API with model selection (subscribers)*
 *Target: SMB (small businesses selling everyday products/services)*

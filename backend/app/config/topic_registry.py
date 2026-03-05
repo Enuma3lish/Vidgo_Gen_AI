@@ -114,6 +114,9 @@ TOOL_TOPICS: Dict[str, List[TopicInfo]] = {
         {"id": "geometric", "name_en": "Geometric Pattern", "name_zh": "幾何圖案"},
         {"id": "abstract", "name_en": "Abstract Pattern", "name_zh": "抽象圖案"},
         {"id": "traditional", "name_en": "Traditional Pattern", "name_zh": "傳統紋樣"},
+        {"id": "3d", "name_en": "3D Pattern", "name_zh": "3D圖案"},
+        {"id": "interior", "name_en": "Interior Pattern", "name_zh": "室內裝飾圖案"},
+        {"id": "mockup", "name_en": "Mockup Pattern", "name_zh": "產品展示圖案"},
     ],
 
     # -------------------------------------------------------------------------

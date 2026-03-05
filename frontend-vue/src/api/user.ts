@@ -14,6 +14,7 @@ export interface UserGeneration {
   media_expired: boolean
   days_until_expiry?: number
   hours_until_expiry?: number
+  input_params?: Record<string, unknown>
 }
 
 export interface UserGenerationDetail extends UserGeneration {

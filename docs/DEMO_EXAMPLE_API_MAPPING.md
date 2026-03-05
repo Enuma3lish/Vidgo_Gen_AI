@@ -1,5 +1,7 @@
 # Demo Example ↔ API Mapping
 
+> Last Updated: March 5, 2026
+
 This doc describes how frontend "try/play" examples map to backend APIs and Material DB so that **home style change** and other demo flows work.
 
 ## Room Redesign (Home Style Change)
@@ -24,6 +26,7 @@ This doc describes how frontend "try/play" examples map to backend APIs and Mate
 | **try_on** | `GET /api/v1/demo/presets/try_on` | model, clothing, gender | try_on mapping |
 | **short_video** | `GET /api/v1/demo/presets/short_video` | topic, prompt | motion types, prompts |
 | **ai_avatar** | `GET /api/v1/demo/presets/ai_avatar` | topic, script, language | A2E topics × scripts × languages |
+| **pattern_generate** | `GET /api/v1/demo/presets/pattern_generate` | topic, prompt | PATTERN_GENERATE_MAPPING patterns |
 
 ## Important
 

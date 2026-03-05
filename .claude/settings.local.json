@@ -115,7 +115,11 @@
       "Bash(docker run:*)",
       "Bash(more:*)",
       "Bash(SKIP_PREGENERATION=true docker-compose up:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(docker port fenzvideo-redis)",
+      "Bash(docker port fenzvideo-mysql)",
+      "Bash(for tool in background_removal product_scene try_on room_redesign short_video ai_avatar pattern_generate effect)",
+      "Bash(do echo \"=== $tool ===\")"
     ]
   }
 }

@@ -2,7 +2,7 @@
  * Social Media API client
  * Handles account binding, OAuth flow, and content publishing
  */
-import apiClient from './index'
+import { apiClient } from './index'
 
 export interface SocialAccountInfo {
   platform: 'facebook' | 'instagram' | 'tiktok'

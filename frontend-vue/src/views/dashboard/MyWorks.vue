@@ -38,10 +38,6 @@ const isSubscribed = computed(() => {
   return plan && plan !== 'free' && plan !== 'demo'
 })
 
-// Stats
-const activeCount = computed(() => works.value.filter(w => !w.media_expired).length)
-const expiredCount = computed(() => works.value.filter(w => w.media_expired).length)
-
 async function fetchWorks() {
   loading.value = true
   try {

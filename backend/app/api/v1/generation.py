@@ -19,6 +19,11 @@ from pydantic import BaseModel, HttpUrl, Field
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
+from PIL import Image
+from io import BytesIO
+from pathlib import Path
+import httpx
+import uuid
 
 from app.providers.provider_router import get_provider_router, TaskType
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
@@ -357,7 +362,10 @@ async def generate_pattern(
             "floral": "floral botanical flower pattern",
             "geometric": "geometric abstract shapes pattern",
             "abstract": "artistic abstract texture pattern",
-            "traditional": "cultural traditional motifs pattern"
+            "traditional": "cultural traditional motifs pattern",
+            "3d": "3D embossed pattern, raised geometric shapes, metallic finish, three-dimensional texture",
+            "interior": "wallpaper interior decorative pattern, botanical leaves, earthy tones, cozy atmosphere",
+            "mockup": "product packaging mockup pattern, brand identity design, clean elegant layout"
         }
         style_desc = style_prompts.get(request.style, "seamless pattern")
 
@@ -413,15 +421,18 @@ async def transfer_pattern(
     current_user=Depends(get_current_user_optional)
 ):
     """
-    Transfer pattern onto a product image
-    Blends pattern with product while maintaining product shape
+    Transfer pattern onto a product image.
+    True I2I: uses the product image as source and applies pattern style to it.
     """
     try:
         result = await provider_router.route(
-            TaskType.T2I,
+            TaskType.I2I,
             {
-                "prompt": "Product with pattern overlay, seamless integration, professional product photography",
-                "size": "1024*1024"
+                "image_url": str(request.product_image_url),
+                "prompt": "Apply seamless decorative pattern texture as overlay onto this product, maintain the product shape and form, professional product photography, pattern style transfer",
+                "strength": request.blend_strength,
+                "width": 1024,
+                "height": 1024
             }
         )
 
@@ -566,7 +577,10 @@ async def generate_product_scene(
             detail="Active subscription required. No demo examples available.",
         )
 
-    # Subscriber path: call real API
+    # Subscriber path: 3-step I2I pipeline
+    # Step 1: Remove background from user's product image
+    # Step 2: Generate scene background via T2I
+    # Step 3: Composite product onto scene using PIL
     scene_prompts = {
         "studio": "professional studio lighting, white background, soft shadows, commercial photography",
         "nature": "natural outdoor setting, soft sunlight, greenery, organic environment",
@@ -581,48 +595,75 @@ async def generate_product_scene(
     )
 
     try:
-        full_prompt = f"Product photography, {scene_prompt}, professional quality"
-        result = await provider_router.route(
-            TaskType.T2I,
-            {
-                "prompt": full_prompt,
-                "size": "1024*1024"
-            }
+        product_url = str(request.product_image_url)
+
+        # Step 1: Remove background
+        rembg_result = await provider_router.route(
+            TaskType.BACKGROUND_REMOVAL,
+            {"image_url": product_url}
         )
+        if not rembg_result.get("success"):
+            raise Exception(f"Background removal failed: {rembg_result.get('error')}")
+        product_no_bg_url = rembg_result["output"]["image_url"]
 
-        if result.get("success"):
-            output = result.get("output", {})
-            image_url = output.get("image_url")
-            images = output.get("images", [])
-            if not images and image_url:
-                images = [{"url": image_url}]
+        # Step 2: Generate scene background
+        full_prompt = f"{scene_prompt}, empty background for product placement, professional studio lighting, high-end commercial photography, 8K quality"
+        t2i_result = await provider_router.route(
+            TaskType.T2I,
+            {"prompt": full_prompt, "size": "1024*1024"}
+        )
+        if not t2i_result.get("success"):
+            raise Exception(f"Scene generation failed: {t2i_result.get('error')}")
+        scene_url = t2i_result["output"]["image_url"]
 
-            result_url = images[0]["url"] if images else image_url
+        # Step 3: Composite product onto scene
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            p_resp = await client.get(product_no_bg_url)
+            s_resp = await client.get(scene_url)
+            p_img = Image.open(BytesIO(p_resp.content)).convert("RGBA")
+            s_img = Image.open(BytesIO(s_resp.content)).convert("RGBA")
 
-            # Save to UserGeneration
-            generation = UserGeneration(
-                user_id=current_user.id,
-                tool_type=ToolType.PRODUCT_SCENE,
-                input_image_url=str(request.product_image_url),
-                input_params={"scene_type": request.scene_type, "custom_prompt": request.custom_prompt},
-                result_image_url=result_url,
-                credits_used=10,
-            )
-            db.add(generation)
-            await db.commit()
+            scene_w, scene_h = s_img.size
+            target_w = int(scene_w * 0.6)
+            prod_w, prod_h = p_img.size
+            scale = target_w / prod_w
+            new_w, new_h = target_w, int(prod_h * scale)
+            if new_h > scene_h * 0.8:
+                scale = (scene_h * 0.8) / prod_h
+                new_h, new_w = int(prod_h * scale), int(prod_w * scale)
 
-            return GenerationResponse(
-                success=True,
-                result_url=result_url,
-                results=images,
-                credits_used=10,
-                message="Product scene generated successfully"
-            )
-        else:
-            return GenerationResponse(
-                success=False,
-                message=result.get("error", "Scene generation failed")
-            )
+            p_resized = p_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            x_off = (scene_w - new_w) // 2
+            y_off = (scene_h - new_h) // 2
+            s_img.paste(p_resized, (x_off, y_off), p_resized)
+            final_img = s_img.convert("RGB")
+
+            output_dir = Path("/app/static/user_generated")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
+            final_img.save(output_dir / filename, "PNG", quality=95)
+            result_url = f"/static/user_generated/{filename}"
+
+        # Save to UserGeneration
+        generation = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.PRODUCT_SCENE,
+            input_image_url=product_url,
+            input_params={"scene_type": request.scene_type, "custom_prompt": request.custom_prompt},
+            input_text=full_prompt,
+            result_image_url=result_url,
+            credits_used=10,
+        )
+        db.add(generation)
+        await db.commit()
+
+        return GenerationResponse(
+            success=True,
+            result_url=result_url,
+            results=[{"url": result_url}],
+            credits_used=10,
+            message="Product scene generated successfully"
+        )
     except Exception as e:
         logger.error(f"Product scene error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

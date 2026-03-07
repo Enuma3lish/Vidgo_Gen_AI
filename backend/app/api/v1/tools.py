@@ -129,23 +129,28 @@ SCENE_TEMPLATES = [
 ]
 
 # Interior design styles for Room Redesign
+# IDs must match DESIGN_STYLES keys in interior_design_service.py so demo Material DB lookup works
 INTERIOR_STYLES = [
-    {"id": "modern", "name": "Modern", "name_zh": "現代風格", "preview_url": "/static/interior/modern.jpg",
-     "prompt": "modern interior design, clean lines, contemporary furniture, neutral colors"},
-    {"id": "nordic", "name": "Nordic", "name_zh": "北歐風格", "preview_url": "/static/interior/nordic.jpg",
-     "prompt": "scandinavian nordic interior, light wood, white walls, minimalist cozy"},
-    {"id": "japanese", "name": "Japanese", "name_zh": "日式風格", "preview_url": "/static/interior/japanese.jpg",
-     "prompt": "japanese zen interior, tatami, natural materials, minimal elegant"},
+    {"id": "modern_minimalist", "name": "Modern Minimalist", "name_zh": "現代極簡", "preview_url": "/static/interior/modern_minimalist.jpg",
+     "prompt": "modern minimalist style, clean lines, neutral color palette, minimal furniture, open space, natural light, contemporary design"},
+    {"id": "scandinavian", "name": "Scandinavian", "name_zh": "北歐風格", "preview_url": "/static/interior/scandinavian.jpg",
+     "prompt": "scandinavian nordic style, light wood furniture, white walls, cozy textiles, hygge atmosphere, functional design, natural materials"},
+    {"id": "japanese", "name": "Japanese Zen", "name_zh": "日式禪風", "preview_url": "/static/interior/japanese.jpg",
+     "prompt": "japanese zen style, tatami mats, shoji screens, natural wood, bamboo elements, zen simplicity, peaceful atmosphere, minimalist"},
     {"id": "industrial", "name": "Industrial", "name_zh": "工業風", "preview_url": "/static/interior/industrial.jpg",
-     "prompt": "industrial loft style, exposed brick, metal pipes, concrete floors"},
-    {"id": "minimalist", "name": "Minimalist", "name_zh": "極簡主義", "preview_url": "/static/interior/minimalist.jpg",
-     "prompt": "minimalist interior, white space, essential furniture only, clean design"},
-    {"id": "luxury", "name": "Luxury", "name_zh": "奢華風格", "preview_url": "/static/interior/luxury.jpg",
-     "prompt": "luxury interior design, premium materials, gold accents, elegant sophisticated"},
-    {"id": "bohemian", "name": "Bohemian", "name_zh": "波希米亞", "preview_url": "/static/interior/bohemian.jpg",
-     "prompt": "bohemian boho interior, colorful textiles, plants, eclectic warm"},
+     "prompt": "industrial style, exposed brick walls, metal accents, raw textures, urban loft, concrete floors, vintage factory elements"},
+    {"id": "bohemian", "name": "Bohemian", "name_zh": "波西米亞", "preview_url": "/static/interior/bohemian.jpg",
+     "prompt": "bohemian boho style, eclectic patterns, rich vibrant colors, layered textiles, macrame, plants, artistic free-spirited decor"},
+    {"id": "mediterranean", "name": "Mediterranean", "name_zh": "地中海風格", "preview_url": "/static/interior/mediterranean.jpg",
+     "prompt": "mediterranean style, terracotta tiles, blue and white accents, arched doorways, rustic charm, natural stone, warm sunlit atmosphere"},
+    {"id": "mid_century_modern", "name": "Mid-Century Modern", "name_zh": "中世紀現代", "preview_url": "/static/interior/mid_century_modern.jpg",
+     "prompt": "mid-century modern style, organic curved furniture, retro 1950s 1960s design, bold accent colors, teak wood, iconic furniture pieces"},
     {"id": "coastal", "name": "Coastal", "name_zh": "海岸風格", "preview_url": "/static/interior/coastal.jpg",
-     "prompt": "coastal beach house interior, white blue colors, nautical elements, breezy"},
+     "prompt": "coastal beach style, blue and white color palette, nautical elements, light airy atmosphere, rattan furniture, seaside decor"},
+    {"id": "farmhouse", "name": "Farmhouse", "name_zh": "農舍風格", "preview_url": "/static/interior/farmhouse.jpg",
+     "prompt": "farmhouse country style, rustic reclaimed wood, vintage accents, shiplap walls, cozy warmth, antique furniture, country charm"},
+    {"id": "art_deco", "name": "Art Deco", "name_zh": "裝飾藝術", "preview_url": "/static/interior/art_deco.jpg",
+     "prompt": "art deco style, geometric patterns, gold and black accents, luxurious materials, velvet, mirrors, glamorous sophisticated design"},
 ]
 
 # Preset models for Try-On
@@ -400,7 +405,7 @@ async def generate_product_scene(
         full_prompt = f"{scene_prompt}, empty background for product placement, professional studio lighting, high-end commercial photography, 8K quality"
         
         t2i_result = await provider_router.route(
-            TaskType.TEXT_TO_IMAGE,
+            TaskType.T2I,
             {"prompt": full_prompt}
         )
         if not t2i_result.get("success"):
@@ -817,21 +822,25 @@ async def generate_short_video(
     try:
         credits_used = 25
         
-        # Use Provider Router for standard I2V
+        # Use Provider Router for I2V
+        # motion_strength (1-10) maps to PiAPI prompt intensity description
         provider_router = get_provider_router()
+        strength = request.motion_strength or 5
+        if strength <= 3:
+            motion_desc = "subtle gentle camera motion, slow smooth pan"
+        elif strength <= 7:
+            motion_desc = "natural camera motion, smooth animation"
+        else:
+            motion_desc = "dynamic energetic camera motion, dramatic zoom and movement"
+
         task_params = {
             "image_url": str(request.image_url),
-            "prompt": "Natural camera motion, smooth animation", # Default prompt if none provided
-            "motion_score": request.motion_strength # specific param for some providers
+            "prompt": motion_desc,
+            "duration": 5
         }
-        
-        # If script provided, it might be an avatar video or TTS? 
-        # Short Video tool usually just animates the image.
-        # If script is present, maybe use it as prompting guidance?
-        # For now, stick to standard animation.
-        
+
         result = await provider_router.route(
-            TaskType.IMAGE_TO_VIDEO,
+            TaskType.I2V,
             task_params
         )
 

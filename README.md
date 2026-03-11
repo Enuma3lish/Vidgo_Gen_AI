@@ -218,6 +218,7 @@ Invite friends and earn credits:
 |----------|--------|--------|
 | Paddle | International | **Primary** - credit card, PayPal |
 | ECPay | Taiwan | Legacy (optional, still in codebase) |
+| ECPay E-Invoice | Taiwan | B2C/B2B e-invoice issue + void |
 
 **Credit Packages**: Starter / Standard / Premium tiers. Gift codes and promotional discounts supported.
 
@@ -421,7 +422,8 @@ npm run dev
 | `/api/v1/tools` | Tool operations (BG removal, try-on, I2I, etc.) |
 | `/api/v1/credits` | Credit management |
 | `/api/v1/subscriptions` | Subscription plans + Paddle checkout |
-| `/api/v1/admin` | Admin dashboard |
+| `/api/v1/admin` | Admin dashboard (stats, costs, active users) |
+| `/api/v1/einvoices` | Taiwan e-invoice (issue, void) |
 | `/api/v1/interior` | Interior design & 3D models |
 | `/api/v1/workflow` | Workflow management |
 | `/api/v1/effects` | Style effects & HD enhance |
@@ -489,5 +491,5 @@ The Dockerfile's `ENTRYPOINT` (the full startup sequence with migration + materi
 
 ---
 
-*Last Updated: February 23, 2026*
+*Last Updated: March 11, 2026*
 

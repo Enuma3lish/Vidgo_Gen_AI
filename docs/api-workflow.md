@@ -1,7 +1,7 @@
 # VidGo API Workflow
 
 > Current system architecture and API flow documentation.
-> Last Updated: 2026-03-05
+> Last Updated: 2026-03-11
 
 ---
 
@@ -529,10 +529,30 @@ All admin routes require superuser authentication.
 | `GET /admin/health` | System health |
 | `GET /admin/ai-services` | AI service status |
 | `GET /admin/generations` | All generations |
+| `GET /admin/stats/tool-usage` | Tool usage by frequency and credits |
+| `GET /admin/stats/earnings` | Weekly/monthly earnings |
+| `GET /admin/stats/api-costs` | Per-service API cost breakdown (week/month) |
+| `GET /admin/stats/active-users` | Active generations + online sessions |
+| `WS /admin/ws/realtime` | Real-time stats (online users, active generations) |
 
 ---
 
-## 19. Media Cleanup (14-Day Retention)
+## 19. E-Invoice (Taiwan)
+
+All e-invoice routes require authentication. Integrates with ECPay staging/production API.
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /einvoices/b2c` | Issue B2C invoice (consumer, with carrier/donation support) |
+| `POST /einvoices/b2b` | Issue B2B invoice (business, requires 8-digit tax ID) |
+| `POST /einvoices/void` | Void invoice (same bimonthly tax period only) |
+| `GET /einvoices/` | List user's invoices |
+| `GET /einvoices/{id}` | Get invoice detail |
+| `PUT /einvoices/preferences` | Update default carrier/donation preferences |
+
+---
+
+## 20. Media Cleanup (14-Day Retention)
 
 ```
 Startup:
@@ -548,7 +568,7 @@ Every hour:
 
 ---
 
-## 20. Frontend Routes
+## 21. Frontend Routes
 
 ### Public Pages
 
@@ -616,7 +636,7 @@ Every hour:
 
 ---
 
-## 21. Root-Level Endpoints
+## 22. Root-Level Endpoints
 
 | Endpoint | Description |
 |----------|-------------|

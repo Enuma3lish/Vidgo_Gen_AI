@@ -12,7 +12,8 @@
     "logout": "로그아웃",
     "dashboard": "대시보드",
     "myWorks": "내 작업",
-    "tools": "도구"
+    "tools": "도구",
+    "credits": "크레딧"
   },
   "hero": {
     "title": "AI로 놀라운 비주얼 만들기",
@@ -461,11 +462,20 @@
     }
   },
   "footer": {
+    "tagline": "AI 기반 크리에이티브 플랫폼",
+    "company": "회사",
     "about": "회사 소개",
+    "pricing": "가격",
+    "contact": "문의하기",
+    "blog": "Blog",
+    "affiliate": "제휴 프로그램",
+    "legal": "법적 정보",
     "terms": "이용약관",
     "privacy": "개인정보처리방침",
-    "contact": "문의하기",
-    "copyright": "© 2024 VidGo AI. All rights reserved."
+    "cookies": "쿠키 정책",
+    "refunds": "환불 정책",
+    "securePayment": "안전한 결제",
+    "copyright": "© 2025 VidGo AI. 모든 권리 보유."
   },
   "interior": {
     "badge": "AI 인테리어 디자인",
@@ -662,5 +672,133 @@
       "contactSales": "영업팀 연락",
       "socialProof": "500개 이상의 기업이 VIDGO 선택"
     }
+  },
+  "lp": {
+    "badge": "14개 이상의 AI 도구, 100만 이상의 브랜드가 신뢰",
+    "headline": "최고의 AI 이커머스 디자이너",
+    "sub1": "VidGo AI로 제품을 판매하는 이미지를 만드세요.",
+    "sub2": "클릭률 54.7% 향상 입증!",
+    "ctaPrimary": "지금 만들기 시작",
+    "ctaSecondary": "가격 보기",
+    "trust1": "40 무료 크레딧으로 시작",
+    "trust2": "신용카드 불필요",
+    "trust3": "언제든 취소 가능",
+    "trustBrands": "<b>1,000,000+</b> 패션 및 이커머스 브랜드의 신뢰",
+    "tryNow": "지금 시도",
+    "readStory": "스토리 읽기",
+    "seasonShowcase": "AI 생성",
+    "sec3Title": "모든 AI 창작 도구 탐색",
+    "sec3Sub": "제품 비주얼과 크리에이티브 워크플로우를 지원하는 전체 AI 도구를 경험하세요.",
+    "sec4Title": "원클릭으로 무한한 가능성 생성",
+    "sec4Sub": "원활하게 통합된 AI 기능으로 기업의 디자인 효율성, 창의성 및 시장 경쟁력을 크게 향상.",
+    "sec5Title": "마케팅을 진정으로 이해하는 최초의 AI",
+    "sec5Sub": "모든 시나리오와 상황에 맞는 제품 이미지를 생성.",
+    "sec8Title": "모두가 VidGo AI를 사용하고 있습니다",
+    "sec8Sub": "103만 이상 판매자의 높은 매출 비결",
+    "sec9Title": "다음 성공 스토리의 주인공이 되세요",
+    "sec9Sub": "고객들이 제품에 대해 말하는 것을 확인하세요",
+    "sec10Title": "왜 VidGo AI를 선택하나요",
+    "sec10Sub": "이커머스 디자인을 간소화하고 비용을 절감하며 매출을 향상 — 손쉽게!",
+    "ctaFinalTitle": "오늘 무료로 만들기 시작",
+    "ctaFinalSub": "100만 이상의 브랜드와 크리에이터에 합류 — AI로 창의력을 무한히 확장",
+    "ctaFinalBtn": "지금 만들기 시작",
+    "ctaFinalNote": "신용카드 불필요 · 즉시 이용 가능 · 언제든 취소",
+    "allTools": {
+      "tryOn": { "name": "가상 피팅", "desc": "AI 패션 모델로 의류 전시" },
+      "aiModelSwap": { "name": "AI 모델 교체", "desc": "제품 사진의 모델 교체" },
+      "fashionReels": { "name": "패션 릴스", "desc": "AI 패션 모델 의상 동영상 및 쇼츠 제작" },
+      "productAvatars": { "name": "제품 아바타", "desc": "제품 대변인 동영상 제작" },
+      "productAnyshoot": { "name": "제품 애니슛", "desc": "AI로 모든 장면의 제품 사진" },
+      "tryOnAccessories": { "name": "액세서리 가상 피팅", "desc": "주얼리, 시계, 액세서리 착용" },
+      "aiBackgrounds": { "name": "AI 배경", "desc": "제품에 즉시 전문 배경" },
+      "styleClone": { "name": "스타일 클론", "desc": "대상 이미지 배경 스타일을 쉽게 복제" },
+      "removeWatermark": { "name": "워터마크 제거", "desc": "모든 이미지에서 워터마크 제거" },
+      "aiTemplates": { "name": "AI 템플릿", "desc": "AI 기반 이커머스 광고 템플릿" },
+      "imageTranslator": { "name": "이미지 번역", "desc": "이미지 텍스트를 정확하게 번역" },
+      "aiShadows": { "name": "AI 그림자", "desc": "모든 객체에 자연스러운 그림자 추가" },
+      "roomRedesign": { "name": "공간 리디자인", "desc": "AI 기반 인테리어 공간 리디자인" },
+      "bgRemoval": { "name": "배경 제거", "desc": "이미지 배경 무료 제거" }
+    },
+    "categories": {
+      "fashionAI": "패션 AI",
+      "fashionAIDesc": "가상 피팅, 패션 릴스, AI 모델 쇼케이스 — 패션 이커머스 비주얼 콘텐츠의 완벽한 솔루션.",
+      "ecommerceAI": "이커머스 AI",
+      "ecommerceAIDesc": "제품 장면 생성, 배경 제거, AI 그림자 — 모든 플랫폼에서 제품을 돋보이게.",
+      "designAI": "디자인 & 콘텐츠 AI",
+      "designAIDesc": "공간 리디자인, 스타일 클론, 이미지 번역 — 크리에이티브 디자인 워크플로우를 위한 강력한 도구."
+    },
+    "seasons": {
+      "spring": "봄 세일",
+      "valentines": "발렌타인데이",
+      "blackFriday": "블랙 프라이데이",
+      "christmas": "크리스마스",
+      "newYear": "새해"
+    },
+    "imageTranslation": {
+      "title": "이미지 번역",
+      "desc": "VidGo AI의 이미지 번역 기능으로 글로벌 도달 범위를 확장하세요. 이미지 내 텍스트를 여러 언어로 즉시 번역."
+    },
+    "videoDubbing": {
+      "title": "동영상 번역 & 더빙",
+      "desc": "동영상을 자동으로 번역하고 더빙하는 강력한 AI로 글로벌 시청자를 위한 콘텐츠를 강화."
+    },
+    "stories": {
+      "fashionBrand": {
+        "brand": "패션 브랜드",
+        "role": "패션 브랜드 기업가",
+        "title": "캠퍼스 스타트업에서 글로벌 기업가로: 가상 피팅이 브랜드를 성장시키다",
+        "quote": "VidGo AI의 가상 피팅을 사용한 후 몇 초 만에 사실적인 모델 사진을 생성할 수 있어 비용과 시간을 절약했습니다. 클릭률이 50% 증가하고 전환율이 40% 이상 향상되었습니다."
+      },
+      "furnitureBrand": {
+        "brand": "가구 브랜드",
+        "role": "마케팅 책임자",
+        "title": "다국어 콘텐츠 마케팅: 글로벌 시장 수요를 손쉽게 충족",
+        "quote": "VidGo AI의 이미지 번역으로 시간이 많이 걸리는 다국어 디자인 프로세스가 수월한 워크플로우로 바뀌었습니다."
+      },
+      "techBrand": {
+        "brand": "ZEUSLAP",
+        "role": "공동 창업자",
+        "title": "제로에서 1위로: 태블릿 브랜드가 획기적 성장을 달성한 방법",
+        "quote": "VidGo AI의 마케팅 비주얼과 템플릿으로 비주얼 제작 주기를 며칠에서 몇 초로 단축했습니다."
+      },
+      "ebikeBrand": {
+        "brand": "전동 자전거 스타트업",
+        "role": "브랜드 창업자",
+        "title": "고비용에서 효율적 성장으로: 마케팅 돌파구",
+        "quote": "VidGo AI의 템플릿 기능을 사용한 이후 광고 CTR이 50% 증가하고 ROAS가 40% 개선되었습니다."
+      }
+    },
+    "deepDives": {
+      "tryOn": {
+        "title": "가상 피팅",
+        "desc": "의류 이미지를 업로드하여 몇 초 만에 스튜디오 품질의 모델 쇼케이스 사진을 생성.",
+        "before": "의류 제품 사진",
+        "after": "AI 모델 착용 결과"
+      },
+      "bgRemoval": {
+        "title": "원클릭 스마트 배경 제거",
+        "desc": "최첨단 AI 알고리즘으로 복잡한 배경을 쉽게 제거.",
+        "before": "원본 이미지 (배경 있음)",
+        "after": "투명 PNG"
+      },
+      "room": {
+        "title": "공간 리디자인",
+        "desc": "인테리어 사진을 업로드. AI가 여러 스타일로 지능적으로 리디자인.",
+        "before": "원본 방 사진",
+        "after": "AI 북유럽 스타일 리디자인"
+      }
+    },
+    "testimonials": [
+      { "name": "Ryan Chen", "role": "전동 자전거 브랜드 창업자", "text": "VidGo AI의 동영상 및 마케팅 이미지 도구를 사용한 이후 광고 CTR이 50% 증가하고 ROAS가 40% 개선되었습니다." },
+      { "name": "Lisa Wang", "role": "패션 소매업자", "text": "VidGo AI는 제 매장의 게임 체인저입니다. 의류 플랫 이미지를 업로드하기만 하면 즉시 사실적인 모델 착용 사진을 얻을 수 있습니다." },
+      { "name": "Mark Thompson", "role": "동영상 프로듀서", "text": "VidGo AI의 AI 더빙은 콘텐츠 제작 방식을 바꿨습니다." },
+      { "name": "Sarah Kim", "role": "콘텐츠 크리에이터", "text": "VidGo AI의 이미지 번역은 글로벌 이커머스의 걸작입니다." }
+    ],
+    "stats": [
+      { "value": "54.7%", "label": "클릭률 향상" },
+      { "value": "79%", "label": "마케팅 디자인 비용 절감" },
+      { "value": "57%", "label": "구매 전환율 향상" },
+      { "value": "90%", "label": "시간 비용 절감" }
+    ]
   }
 }

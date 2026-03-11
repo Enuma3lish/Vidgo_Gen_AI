@@ -24,16 +24,16 @@ const colors = {
   },
   // Dark backgrounds (deep navy/charcoal)
   dark: {
-    950: "#020817",   // Deepest navy
-    900: "#0a1628",   // Deep navy
-    800: "#0f1f3d",   // Navy
-    700: "#162447",   // Dark navy
-    600: "#1e3a5f",   // Medium navy
-    500: "#2d5282",   // Blue-grey
-    400: "#4a7bb5",   // Muted blue
-    300: "#7aa8d4",   // Light blue-grey
-    200: "#a8c8e8",   // Very light blue
-    100: "#d0e4f5",   // Near white blue
+    950: "#f7f8fa",   // Light page bg
+    900: "#1F1F1F",   // Primary text
+    800: "#ffffff",   // White card bg
+    700: "#f0f2f5",   // Light gray bg
+    600: "#d9d9d9",   // Border light
+    500: "#595959",   // Secondary text
+    400: "#8c8c8c",   // Muted text
+    300: "#bfbfbf",   // Disabled text
+    200: "#e8e8e8",   // Light border
+    100: "#f5f5f5",   // Very light bg
   },
   accent: {
     cyan:          "#00d4f5",
@@ -59,7 +59,7 @@ const colors = {
     cyan:   "#0c2a3a",
     purple: "#1a1040",
     teal:   "#0c2a2a",
-    dark:   "#0a1628",
+    dark:   "#ffffff",
     white:  "#ffffff",
     // Legacy aliases
     yellow: "#0f1f3d",

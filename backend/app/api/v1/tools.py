@@ -25,14 +25,38 @@ from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_styl
 from app.services.a2e_service import get_a2e_service, A2E_VOICES
 from app.services.rescue_service import get_rescue_service
 from app.providers.provider_router import get_provider_router, TaskType
-from app.api.deps import get_current_user_optional, get_db, is_subscribed_user
+from app.api.deps import get_current_user_optional, get_db, get_redis, is_subscribed_user
 from app.models.user_generation import UserGeneration
 from app.models.material import Material, ToolType
+from app.services.credit_service import CreditService
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _check_and_deduct_credits(
+    db: AsyncSession,
+    user,
+    amount: int,
+    service_type: str,
+    redis_client=None
+) -> tuple:
+    """Check if user has enough credits and deduct them.
+    Returns (ok: bool, error_msg: str | None)"""
+    credit_svc = CreditService(db, redis_client)
+    has_enough = await credit_svc.check_sufficient(str(user.id), amount)
+    if not has_enough:
+        return False, f"Insufficient credits. Need {amount} credits."
+    success, result = await credit_svc.deduct_credits(
+        user_id=str(user.id),
+        amount=amount,
+        service_type=service_type,
+    )
+    if not success:
+        return False, result.get("error", "Credit deduction failed")
+    return True, None
 
 
 # ============================================================================
@@ -227,6 +251,11 @@ async def remove_background(
             )
     
     # ========== SUBSCRIBER: Real-time Generation ==========
+    CREDIT_COST = 3
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "background_removal")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
     try:
         provider_router = get_provider_router()
         result = await provider_router.route(
@@ -245,7 +274,7 @@ async def remove_background(
                 input_image_url=str(request.image_url),
                 input_params={"output_format": request.output_format},
                 result_image_url=result_url,
-                credits_used=3,
+                credits_used=CREDIT_COST,
             )
             db.add(user_gen)
             await db.commit()
@@ -263,7 +292,10 @@ async def remove_background(
             )
     except Exception as e:
         logger.error(f"Background removal error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return ToolResponse(
+            success=False,
+            message=f"Generation failed: {str(e)}"
+        )
 
 
 @router.post("/remove-bg/batch", response_model=ToolResponse)
@@ -383,6 +415,11 @@ async def generate_product_scene(
             )
     
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
+    CREDIT_COST = 10
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "product_scene")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
     logger.info(f"Subscriber: Starting 3-step I2I generation for {request.product_image_url}")
     
     try:
@@ -473,7 +510,10 @@ async def generate_product_scene(
         
     except Exception as e:
         logger.error(f"Product scene error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return ToolResponse(
+            success=False,
+            message=f"Generation failed: {str(e)}"
+        )
 
 
 async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> dict:
@@ -596,6 +636,11 @@ async def ai_try_on(
             )
     
     # ========== SUBSCRIBER: Real-time Generation ==========
+    CREDIT_COST = 15
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
     logger.info(f"Subscriber: Starting real-time Try-On")
     
     try:
@@ -719,6 +764,11 @@ async def room_redesign(
             )
     
     # ========== SUBSCRIBER: Real-time Generation ==========
+    CREDIT_COST = 20
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "room_redesign")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
     interior = next((s for s in INTERIOR_STYLES if s["id"] == request.style), None)
     if not interior:
         interior = INTERIOR_STYLES[0]
@@ -769,7 +819,10 @@ async def room_redesign(
             )
     except Exception as e:
         logger.error(f"Room Redesign error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return ToolResponse(
+            success=False,
+            message=f"Generation failed: {str(e)}"
+        )
 
 
 # ============================================================================
@@ -819,8 +872,13 @@ async def generate_short_video(
             )
     
     # ========== SUBSCRIBER: Real-time Generation ==========
+    CREDIT_COST = 25
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "short_video")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
     try:
-        credits_used = 25
+        credits_used = CREDIT_COST
         
         # Use Provider Router for I2V
         # motion_strength (1-10) maps to PiAPI prompt intensity description
@@ -863,7 +921,10 @@ async def generate_short_video(
                 output_url = style_result.get("video_url") or style_result.get("output_url") or style_result.get("output", {}).get("video_url")
                 if output_url:
                     video_url = output_url
-                    credits_used += 5
+                    # Deduct extra 5 credits for style transfer
+                    extra_ok, _ = await _check_and_deduct_credits(db, current_user, 5, "short_video_style")
+                    if extra_ok:
+                        credits_used += 5
 
         if video_url:
             # Save to UserGeneration
@@ -892,7 +953,10 @@ async def generate_short_video(
 
     except Exception as e:
         logger.error(f"Short video error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return ToolResponse(
+            success=False,
+            message=f"Generation failed: {str(e)}"
+        )
 
 
 # ============================================================================
@@ -945,6 +1009,11 @@ async def generate_avatar_video(
             )
     
     # ========== SUBSCRIBER: Real-time Generation ==========
+    CREDIT_COST = 30
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "ai_avatar")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
     try:
         # Validate language
         if request.language not in ["en", "zh-TW", "ja", "ko"]:
@@ -1015,7 +1084,10 @@ async def generate_avatar_video(
         raise
     except Exception as e:
         logger.error(f"Avatar generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return ToolResponse(
+            success=False,
+            message=f"Generation failed: {str(e)}"
+        )
 
 
 @router.get("/avatar/voices")
@@ -1155,16 +1227,9 @@ async def image_transform(
     tier = get_user_tier(current_user)
     cost = get_credit_cost("i2i", current_user)
 
-    if current_user.total_credits < cost:
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "error": "insufficient_credits",
-                "message": "Insufficient credits",
-                "required": cost,
-                "current": current_user.total_credits,
-            }
-        )
+    ok, err = await _check_and_deduct_credits(db, current_user, cost, "image_transform")
+    if not ok:
+        return ToolResponse(success=False, message=err)
 
     try:
         provider_router = get_provider_router()
@@ -1198,9 +1263,6 @@ async def image_transform(
                 credits_used=cost,
             )
             db.add(user_gen)
-
-            # Deduct credits
-            current_user.total_credits -= cost
             await db.commit()
 
             return ToolResponse(
@@ -1218,7 +1280,10 @@ async def image_transform(
         raise
     except Exception as e:
         logger.error(f"Image transform error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return ToolResponse(
+            success=False,
+            message=f"Generation failed: {str(e)}"
+        )
 
 
 # ============================================================================

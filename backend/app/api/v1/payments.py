@@ -16,7 +16,7 @@ import logging
 from fastapi.responses import HTMLResponse
 from app.api import deps
 from app.core.config import get_settings
-from app.models.billing import Order
+from app.models.billing import Order, Subscription
 from app.models.user import User
 from app.services.paddle_service import get_paddle_service
 from app.services.ecpay.client import ECPayClient
@@ -320,6 +320,23 @@ async def ecpay_payment_callback(
                 logger.error(f"ECPay payment processing failed: {result.get('error')}")
         else:
             logger.warning(f"ECPay payment failed for order {order_number}: RtnCode={rtn_code}, Msg={callback_data.get('RtnMsg')}")
+            # Mark subscription and order as failed so user can retry
+            if order_number:
+                order_result = await db.execute(
+                    select(Order).where(Order.order_number == order_number)
+                )
+                failed_order = order_result.scalars().first()
+                if failed_order:
+                    failed_order.status = "failed"
+                    if failed_order.subscription_id:
+                        sub_result = await db.execute(
+                            select(Subscription).where(Subscription.id == failed_order.subscription_id)
+                        )
+                        failed_sub = sub_result.scalars().first()
+                        if failed_sub:
+                            failed_sub.status = "failed"
+                    await db.commit()
+                    logger.info(f"Marked order {order_number} and subscription as failed")
 
         # Must return '1|OK' to ECPay to acknowledge receipt
         return HTMLResponse(content="1|OK", status_code=200)

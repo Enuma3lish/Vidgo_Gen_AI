@@ -163,7 +163,7 @@ onMounted(() => {
             type="text"
             inputmode="numeric"
             maxlength="1"
-            class="w-12 h-14 text-center text-2xl font-bold bg-dark-800 border-2 border-dark-600 rounded-xl focus:border-primary-500 focus:outline-none transition-colors"
+            class="w-12 h-14 text-center text-2xl font-bold bg-dark-800 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
             @input="handleInput(index, $event)"
             @keydown="handleKeydown(index, $event)"
           />

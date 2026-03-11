@@ -12,7 +12,8 @@
     "logout": "登出",
     "dashboard": "控制台",
     "myWorks": "我的作品",
-    "tools": "工具"
+    "tools": "工具",
+    "credits": "點數"
   },
   "hero": {
     "title": "用 AI 創造驚艷視覺內容",
@@ -424,7 +425,32 @@
     "noAccount": "還沒有帳戶？",
     "hasAccount": "已經有帳戶？",
     "signUp": "註冊",
-    "signIn": "登入"
+    "signIn": "登入",
+    "loginSubtitle2": "登入您的帳號繼續創作",
+    "freeCreditsTitle": "新用戶免費獲得 40 點",
+    "freeCreditsDesc": "立即體驗所有 AI 工具",
+    "signingIn": "登入中...",
+    "signingUp": "註冊中...",
+    "signUpFree": "免費註冊 — 獲得 40 點",
+    "loginBrandingTitle": "用 AI 讓創作更簡單、更高效",
+    "loginBrandingDesc": "加入超過 100 萬個品牌與創作者，從影片生成到電商視覺一站搞定。",
+    "loginFeature1Name": "AI 短影片生成",
+    "loginFeature1Desc": "輸入文字，一鍵生成專業影片",
+    "loginFeature2Name": "虛擬試穿",
+    "loginFeature2Desc": "服裝 AI 模特展示，提升轉化率",
+    "loginFeature3Name": "產品場景合成",
+    "loginFeature3Desc": "商品圖智能場景，電商級品質",
+    "registerBrandingTitle": "立即免費開始 AI 創作之旅",
+    "registerBrandingDesc": "不需要信用卡，註冊即可使用全套 AI 工具，包含影片生成、電商視覺、空間設計。",
+    "perk1": "免費 40 點，無需信用卡",
+    "perk2": "6 種 AI 工具，立即可用",
+    "perk3": "台灣電子發票，合法報帳",
+    "perk4": "隨時取消，無綁約風險",
+    "registerSubtitle2": "立即獲得 40 點免費點數，無需信用卡",
+    "setPassword": "設定密碼",
+    "registerBtn": "免費開始 — 獲得 40 點",
+    "termsAgree": "點擊「免費開始」即表示您同意我們的服務條款與隱私政策",
+    "fillAllFields": "請填寫所有欄位"
   },
   "dashboard": {
     "welcome": "歡迎回來",
@@ -488,11 +514,20 @@
     }
   },
   "footer": {
+    "tagline": "VidGo AI — 讓影片與視覺創作變得簡單、高效、有創意。",
+    "company": "公司",
     "about": "關於我們",
+    "pricing": "定價方案",
+    "contact": "聯絡我們",
+    "blog": "Blog",
+    "affiliate": "聯盟計畫",
+    "legal": "法律",
     "terms": "服務條款",
     "privacy": "隱私政策",
-    "contact": "聯繫我們",
-    "copyright": "© 2024 VidGo AI. 保留所有權利。"
+    "cookies": "Cookie 政策",
+    "refunds": "退款政策",
+    "securePayment": "安全支付",
+    "copyright": "© 2025 VidGo AI. 保留所有權利。"
   },
   "interior": {
     "badge": "室內設計範例庫",
@@ -746,5 +781,149 @@
     "resultReady": "生成完成",
     "download": "下載",
     "startOver": "重新開始"
+  },
+  "lp": {
+    "badge": "14+ AI 工具，受 100 萬+ 品牌信賴",
+    "headline": "AI 時代的頂級電商設計師",
+    "sub1": "使用 VidGo AI，打造讓產品暢銷的圖片。",
+    "sub2": "實測可幫助您的點擊率提升 54.7%！",
+    "ctaPrimary": "立即開始創作",
+    "ctaSecondary": "查看定價方案",
+    "trust1": "免費 40 點起步",
+    "trust2": "無需信用卡",
+    "trust3": "隨時取消",
+    "trustBrands": "受到全球 <b>1,000,000+</b> 家時尚與電商品牌的信賴",
+    "tryNow": "立即體驗",
+    "readStory": "閱讀故事",
+    "seasonShowcase": "AI 生成",
+    "sec3Title": "探索全部 AI 創作工具",
+    "sec3Sub": "體驗驅動您的產品視覺和創意工作流程的全套 AI 工具。",
+    "sec4Title": "一鍵生成無限可能",
+    "sec4Sub": "通過無縫整合的 AI 功能，我們幫助企業顯著提升設計效率、創造力和市場競爭力。",
+    "sec5Title": "首個真正了解行銷的 AI",
+    "sec5Sub": "為任何場景和節日生成產品圖片。",
+    "sec8Title": "他們都在使用 VidGo AI",
+    "sec8Sub": "超過 1,030,000 名商家實現高銷量的秘訣",
+    "sec9Title": "成為我們的下一個成功案例",
+    "sec9Sub": "看看我們的客戶怎麼說",
+    "sec10Title": "為什麼選擇 VidGo AI",
+    "sec10Sub": "我們簡化電商設計，降低成本，輕鬆提高銷售額！",
+    "ctaFinalTitle": "立即開始免費創作",
+    "ctaFinalSub": "加入超過 100 萬個品牌與創作者，用 AI 讓您的創意無限延伸",
+    "ctaFinalBtn": "立即開始創作",
+    "ctaFinalNote": "無需信用卡 · 立即可用 · 隨時取消",
+    "allTools": {
+      "tryOn": { "name": "虛擬試穿", "desc": "AI 時尚模特展示服裝效果" },
+      "aiModelSwap": { "name": "AI 換模特", "desc": "為產品圖替換模特" },
+      "fashionReels": { "name": "時尚短影片", "desc": "AI 模特穿搭影片短片生成" },
+      "productAvatars": { "name": "產品代言人", "desc": "創建會說話的產品代言人影片" },
+      "productAnyshoot": { "name": "產品全景拍", "desc": "AI 為產品拍攝任何場景" },
+      "tryOnAccessories": { "name": "虛擬試戴配飾", "desc": "試戴珠寶、手錶等配飾" },
+      "aiBackgrounds": { "name": "AI 背景", "desc": "即時專業產品背景" },
+      "styleClone": { "name": "風格克隆", "desc": "輕鬆克隆目標圖片的背景風格" },
+      "removeWatermark": { "name": "去除浮水印", "desc": "清除任何圖片中的浮水印" },
+      "aiTemplates": { "name": "AI 模板", "desc": "AI 驅動的電商廣告模板" },
+      "imageTranslator": { "name": "圖片翻譯", "desc": "準確翻譯圖片中的文字" },
+      "aiShadows": { "name": "AI 陰影", "desc": "為任何物體添加自然陰影" },
+      "roomRedesign": { "name": "空間設計", "desc": "AI 驅動的室內空間重新設計" },
+      "bgRemoval": { "name": "智能去背", "desc": "免費去除圖片背景" }
+    },
+    "categories": {
+      "fashionAI": "時尚 AI",
+      "fashionAIDesc": "虛擬試穿、時尚短影片和 AI 模特展示——時尚電商視覺內容的完整解決方案。",
+      "ecommerceAI": "電商 AI",
+      "ecommerceAIDesc": "產品場景生成、背景去除和 AI 陰影——讓您的產品在每個平台上脫穎而出。",
+      "designAI": "設計與內容 AI",
+      "designAIDesc": "空間設計、風格克隆和圖片翻譯——為創意設計工作流程提供強大工具。"
+    },
+    "seasons": {
+      "spring": "春季特賣",
+      "valentines": "情人節",
+      "blackFriday": "黑色星期五",
+      "christmas": "聖誕節",
+      "newYear": "新年"
+    },
+    "imageTranslation": {
+      "title": "圖片翻譯",
+      "desc": "使用 VidGo AI 的圖片翻譯功能拓展您的全球市場。即時將圖片中的文字翻譯成多種語言，突破語言障礙，與全球客戶建立聯繫。"
+    },
+    "videoDubbing": {
+      "title": "影片翻譯配音",
+      "desc": "用強大的 AI 為全球觀眾賦能您的內容，自動翻譯並重新配音您的影片。確保您的內容在不同文化中產生共鳴，提升全球參與度和轉化率。"
+    },
+    "stories": {
+      "fashionBrand": {
+        "brand": "時裝品牌",
+        "role": "時裝品牌創業者",
+        "title": "從校園創業到全球商家：虛擬試穿讓品牌崛起",
+        "quote": "使用 VidGo AI 虛擬試穿後，可以在數秒內生成逼真的模特照片，降低成本並節省時間。點擊率提升 50%，轉化率提升超過 40%。"
+      },
+      "furnitureBrand": {
+        "brand": "家具品牌",
+        "role": "行銷負責人",
+        "title": "多語言內容行銷：輕鬆滿足全球市場需求",
+        "quote": "通過 VidGo AI 的圖片翻譯功能，我們將耗時的多語言設計流程變成了輕鬆的工作。翻譯準確度大幅提升，設計效率提升了五倍。"
+      },
+      "techBrand": {
+        "brand": "ZEUSLAP",
+        "role": "聯合創始人",
+        "title": "從零到第一：平板品牌如何實現突破性成長",
+        "quote": "借助 VidGo AI 的行銷視覺和模板功能，我們將視覺製作周期從幾天壓縮到幾秒。設計效率提升 80%，成本降低 90%。"
+      },
+      "ebikeBrand": {
+        "brand": "電動車初創公司",
+        "role": "品牌創始人",
+        "title": "從高成本到高效成長：行銷突破之路",
+        "quote": "自從使用 VidGo AI 模板功能後，廣告點擊率提升 50%，ROAS 提高 40%，原本需要 3 天的工作現在只需 10 分鐘，成本節省 90%。"
+      }
+    },
+    "deepDives": {
+      "tryOn": {
+        "title": "虛擬試穿",
+        "desc": "上傳服飾圖片，即可生成堪比專業工作室質量的模特展示圖，所需時間和費用遠低於傳統拍攝。大幅簡化您的電商流程。",
+        "before": "服裝商品圖",
+        "after": "AI 模特穿搭效果"
+      },
+      "bgRemoval": {
+        "title": "一鍵智能去背",
+        "desc": "在線輕鬆去除雜亂的背景。採用最先進的人工智能算法，一鍵快速批量處理，讓每個細節都盡善盡美。",
+        "before": "原始圖片（含背景）",
+        "after": "透明背景 PNG"
+      },
+      "room": {
+        "title": "空間設計改造",
+        "desc": "上傳室內照片，AI 智能改造成多種風格。現代、北歐、日系、工業風，一鍵呈現設計方案，提升客戶提案效率 5 倍。",
+        "before": "原始房間照片",
+        "after": "AI 北歐風格改造"
+      }
+    },
+    "testimonials": [
+      {
+        "name": "Ryan Chen",
+        "role": "電動車品牌創始人",
+        "text": "自從使用了 VidGo AI 的影片與行銷圖工具後，廣告點擊率提升 50%，ROAS 提高 40%，素材製作從 3 天縮短到 10 分鐘，成本節省 90%。"
+      },
+      {
+        "name": "Lisa Wang",
+        "role": "時裝零售商",
+        "text": "VidGo AI 徹底改變了我的店鋪。只需上傳服裝平面圖，就能立即獲得逼真的模特試穿照片。讓商品展示更加吸引人。"
+      },
+      {
+        "name": "Mark Thompson",
+        "role": "影片製作人",
+        "text": "VidGo AI 的配音功能改變了我們的內容創作方式。影片翻譯功能非常流暢，為國際客戶提供了自然且引人入勝的體驗。"
+      },
+      {
+        "name": "Sarah Kim",
+        "role": "內容創作者",
+        "text": "VidGo AI 的圖片翻譯是全球電商的傑作。它輕鬆翻譯圖片中的文字，使我們的產品能夠觸及全球受眾。"
+      }
+    ],
+    "stats": [
+      { "value": "54.7%", "label": "提升產品點擊率" },
+      { "value": "79%", "label": "節省行銷設計成本" },
+      { "value": "57%", "label": "提高購買轉化率" },
+      { "value": "90%", "label": "節省時間成本" }
+    ]
   }
 }

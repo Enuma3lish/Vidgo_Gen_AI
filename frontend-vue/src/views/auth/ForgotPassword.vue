@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUIStore } from '@/stores'
+import apiClient from '@/api/client'
 
 const { t } = useI18n()
 const uiStore = useUIStore()
@@ -19,9 +20,11 @@ async function handleSubmit() {
 
   isLoading.value = true
   try {
-    // API call would go here
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    await apiClient.post('/api/v1/auth/forgot-password', { email: email.value })
     isSubmitted.value = true
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { detail?: string } } }
+    uiStore.showError(e.response?.data?.detail || 'Failed to send reset email')
   } finally {
     isLoading.value = false
   }

@@ -1,0 +1,66 @@
+# VidGo Backend Environment Variables
+# Copy this file to .env and fill in your values
+# NEVER commit .env to version control!
+
+# ===================
+# Database
+# ===================
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/vidgo
+
+# ===================
+# Redis
+# ===================
+REDIS_URL=redis://localhost:6379/0
+
+# ===================
+# Security
+# ===================
+SECRET_KEY=9375626ad2099c8668dd80660f76cf1d5e20910664c21fdfac7c5c0dbd1cbf1d
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# ===================
+# AI Services
+# ===================
+# Gemini API (Content Moderation) - Get from: https://ai.google.dev/
+GEMINI_API_KEY=AIzaSyDiNxTyCHFGanH17J3W6g_p6jOkhixe4Ic
+
+# Pollo AI (Premium Features) - Get from: https://pollo.ai/
+POLLO_API_KEY="pollo_7f6ZiszaD2B3eXSpbLjuPj7rc7Ivc3GuzYiuODroyTYX"
+
+#PiAPI is for replace the Wan official api
+PIAPI_KEY=49900d3e1a18b0f79ffbe5b47a9dbfce04fe4775956e00014ddba24e7547dddb
+A2E_API_KEY="sk_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OTViMzMwNDExNTc2MzAwNWJjZmUyOTIiLCJuYW1lIjoidmlkZ28xNjhAZ21haWwuY29tIiwicm9sZSI6ImNvaW4iLCJpYXQiOjE3NjgxMjc4MTZ9.Hg7wZwlTg-RqTCdvnWr78d0sW_EvGLbFbXUh5ICpttw"
+# A2E API ID (account ID from JWT token)
+A2E_API_ID="695b3304115763005bcfe292"
+# A2E Default Creator ID (anchor ID from video.a2e.ai)
+A2E_DEFAULT_CREATOR_ID="693bf9bd3caab0848a4cd107"
+# ===================
+# Payment - Paddle (International)
+# ===================
+# Get credentials from: https://paddle.com/
+PADDLE_API_KEY="pdl_sdbx_apikey_01kedx5qy6zp7tjpkajd3yb9t5_Fczyp1QH0hnC2FW6vfkr4G_ABz"
+
+# ===================
+# Email (Gmail SMTP)
+# ===================
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=qaz0978005418@gmail.com
+SMTP_PASSWORD=huxi xfiu ntes qici
+SMTP_FROM_EMAIL=qaz0978005418@gmail.com
+SMTP_FROM_NAME=administrator
+SMTP_TLS=true
+
+# ===================
+# App Settings
+# ===================
+DEBUG=true
+WATERMARK_TEXT=VidGo Demo
+FRONTEND_URL=http://localhost:8501
+# ===================
+# Admin Settings
+# ===================
+Account:Vidgo168@gmail.com
+Password:Vidgo168

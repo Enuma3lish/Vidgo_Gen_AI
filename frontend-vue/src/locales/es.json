@@ -12,7 +12,8 @@
     "logout": "Cerrar sesión",
     "dashboard": "Panel",
     "myWorks": "Mis trabajos",
-    "tools": "Herramientas"
+    "tools": "Herramientas",
+    "credits": "Créditos"
   },
   "hero": {
     "title": "Crea visuales impresionantes con IA",
@@ -461,11 +462,20 @@
     }
   },
   "footer": {
-    "about": "Acerca de",
-    "terms": "Términos",
-    "privacy": "Privacidad",
-    "contact": "Contacto",
-    "copyright": "© 2024 VidGo AI. Todos los derechos reservados."
+    "tagline": "Plataforma Creativa con IA",
+    "company": "Empresa",
+    "about": "Sobre Nosotros",
+    "pricing": "Precios",
+    "contact": "Contáctanos",
+    "blog": "Blog",
+    "affiliate": "Programa de Afiliados",
+    "legal": "Legal",
+    "terms": "Términos de Servicio",
+    "privacy": "Política de Privacidad",
+    "cookies": "Política de Cookies",
+    "refunds": "Política de Reembolso",
+    "securePayment": "Pago Seguro",
+    "copyright": "© 2025 VidGo AI. Todos los derechos reservados."
   },
   "interior": {
     "badge": "Diseño de Interiores IA",
@@ -662,5 +672,133 @@
       "contactSales": "Contactar Ventas",
       "socialProof": "Más de 500+ empresas eligen VIDGO"
     }
+  },
+  "lp": {
+    "badge": "14+ Herramientas de IA, Confianza de 1M+ Marcas",
+    "headline": "El Mejor Diseñador IA para E-commerce",
+    "sub1": "Crea imágenes que vendan tus productos con VidGo AI.",
+    "sub2": "¡Demostrado que aumenta la tasa de clics en un 54.7%!",
+    "ctaPrimary": "Empieza a Crear Ahora",
+    "ctaSecondary": "Ver Precios",
+    "trust1": "Comienza con 40 créditos gratis",
+    "trust2": "No se requiere tarjeta de crédito",
+    "trust3": "Cancela en cualquier momento",
+    "trustBrands": "Confianza de <b>1,000,000+</b> Marcas de Moda y E-Commerce",
+    "tryNow": "Probar Ahora",
+    "readStory": "Leer Historia",
+    "seasonShowcase": "Generado por IA",
+    "sec3Title": "Explora Todas las Herramientas de Creación IA",
+    "sec3Sub": "Experimenta la gama completa de herramientas de IA que impulsan tus visuales de productos y flujos de trabajo creativos.",
+    "sec4Title": "Genera Posibilidades Infinitas con Un Clic",
+    "sec4Sub": "A través de capacidades de IA integradas sin problemas, empoderamos a las empresas para mejorar significativamente la eficiencia del diseño, la creatividad y la competitividad del mercado.",
+    "sec5Title": "La Primera IA Que Realmente Entiende el Marketing",
+    "sec5Sub": "Generando imágenes de productos para cualquier escenario y ocasión.",
+    "sec8Title": "Todos Están Usando VidGo AI",
+    "sec8Sub": "El secreto de las altas ventas de más de 1,030,000 comerciantes",
+    "sec9Title": "Conviértete en Nuestra Próxima Historia de Éxito",
+    "sec9Sub": "Mira lo que nuestros clientes dicen sobre los productos",
+    "sec10Title": "Por Qué Elegir VidGo AI",
+    "sec10Sub": "¡Simplificamos el diseño de e-commerce, reducimos costos y aumentamos ventas — sin esfuerzo!",
+    "ctaFinalTitle": "Empieza a Crear Gratis Hoy",
+    "ctaFinalSub": "Únete a más de 1 millón de marcas y creadores — deja que la IA extienda tu creatividad sin límites",
+    "ctaFinalBtn": "Empieza a Crear Ahora",
+    "ctaFinalNote": "Sin tarjeta de crédito · Listo inmediatamente · Cancela en cualquier momento",
+    "allTools": {
+      "tryOn": { "name": "Prueba Virtual", "desc": "Exhibe ropa con modelos de moda IA" },
+      "aiModelSwap": { "name": "Intercambio de Modelo IA", "desc": "Intercambia modelos en fotos de productos" },
+      "fashionReels": { "name": "Reels de Moda", "desc": "Creador de videos y shorts de modelos de moda IA" },
+      "productAvatars": { "name": "Avatares de Producto", "desc": "Crea videos de portavoces de productos" },
+      "productAnyshoot": { "name": "Product AnyShoot", "desc": "Fotos de productos en cualquier escena con IA" },
+      "tryOnAccessories": { "name": "Prueba Virtual de Accesorios", "desc": "Prueba joyas, relojes y accesorios" },
+      "aiBackgrounds": { "name": "Fondos IA", "desc": "Fondos profesionales instantáneos para productos" },
+      "styleClone": { "name": "Clonar Estilo", "desc": "Clona fácilmente el estilo de fondo de la imagen objetivo" },
+      "removeWatermark": { "name": "Eliminar Marca de Agua", "desc": "Limpia marcas de agua de cualquier imagen" },
+      "aiTemplates": { "name": "Plantillas IA", "desc": "Plantillas de anuncios de e-commerce impulsadas por IA" },
+      "imageTranslator": { "name": "Traductor de Imágenes", "desc": "Traduce con precisión el texto de imágenes" },
+      "aiShadows": { "name": "Sombras IA", "desc": "Añade sombras naturales a cualquier objeto" },
+      "roomRedesign": { "name": "Rediseño de Habitación", "desc": "Rediseño de espacios interiores con IA" },
+      "bgRemoval": { "name": "Eliminar Fondo", "desc": "Elimina fondos de imágenes gratis" }
+    },
+    "categories": {
+      "fashionAI": "IA de Moda",
+      "fashionAIDesc": "Prueba virtual, reels de moda y exhibición de modelos IA — la solución completa para contenido visual de e-commerce de moda.",
+      "ecommerceAI": "IA de E-commerce",
+      "ecommerceAIDesc": "Generación de escenas de productos, eliminación de fondos y sombras IA — haz que tus productos destaquen en cada plataforma.",
+      "designAI": "IA de Diseño y Contenido",
+      "designAIDesc": "Rediseño de habitaciones, clonación de estilos y traducción de imágenes — herramientas poderosas para flujos de trabajo de diseño creativo."
+    },
+    "seasons": {
+      "spring": "Rebajas de Primavera",
+      "valentines": "San Valentín",
+      "blackFriday": "Black Friday",
+      "christmas": "Navidad",
+      "newYear": "Año Nuevo"
+    },
+    "imageTranslation": {
+      "title": "Traducción de Imágenes",
+      "desc": "Expande tu alcance global con la función de Traducción de Imágenes de VidGo AI. Traduce instantáneamente el texto dentro de imágenes a múltiples idiomas."
+    },
+    "videoDubbing": {
+      "title": "Traducción y Doblaje de Video",
+      "desc": "Potencia tu contenido para una audiencia global con IA poderosa que traduce y dobla automáticamente tus videos."
+    },
+    "stories": {
+      "fashionBrand": {
+        "brand": "Marca de Moda",
+        "role": "Emprendedor de Marca de Moda",
+        "title": "De Startup Universitaria a Emprendedor Global: La Prueba Virtual Impulsa una Marca",
+        "quote": "Después de usar la prueba virtual de VidGo AI, puedo generar fotos de modelos realistas en segundos, reduciendo costos y ahorrando tiempo. Mi tasa de clics aumentó un 50% y las conversiones subieron más del 40%."
+      },
+      "furnitureBrand": {
+        "brand": "Marca de Muebles",
+        "role": "Director de Marketing",
+        "title": "Marketing de Contenido Multilingüe: Cumple Fácilmente con las Demandas del Mercado Global",
+        "quote": "Con la traducción de imágenes de VidGo AI, convertimos un proceso de diseño multilingüe que consumía tiempo en un flujo de trabajo sin esfuerzo."
+      },
+      "techBrand": {
+        "brand": "ZEUSLAP",
+        "role": "Cofundador",
+        "title": "De Cero a Nº1: Cómo una Marca de Tablets Logró un Crecimiento Revolucionario",
+        "quote": "Con los visuales de marketing y plantillas de VidGo AI, redujimos nuestro ciclo de producción visual de días a segundos."
+      },
+      "ebikeBrand": {
+        "brand": "Startup de E-Bike",
+        "role": "Fundador de Marca",
+        "title": "De Altos Costos a Crecimiento Eficiente: Avances en Marketing",
+        "quote": "Desde que usamos la función de Plantillas de VidGo AI, nuestro CTR de anuncios aumentó un 50%, el ROAS mejoró un 40%."
+      }
+    },
+    "deepDives": {
+      "tryOn": {
+        "title": "Prueba Virtual",
+        "desc": "Sube imágenes de ropa para generar fotos de exhibición de modelos con calidad de estudio en segundos.",
+        "before": "Foto de Producto de Ropa",
+        "after": "Resultado de Modelo IA"
+      },
+      "bgRemoval": {
+        "title": "Eliminación Inteligente de Fondo con Un Clic",
+        "desc": "Elimina fácilmente fondos desordenados usando algoritmos de IA de última generación.",
+        "before": "Imagen Original (con fondo)",
+        "after": "PNG Transparente"
+      },
+      "room": {
+        "title": "Rediseño de Habitación",
+        "desc": "Sube una foto de interior. La IA rediseña inteligentemente en múltiples estilos.",
+        "before": "Foto Original de Habitación",
+        "after": "Rediseño IA Estilo Nórdico"
+      }
+    },
+    "testimonials": [
+      { "name": "Ryan Chen", "role": "Fundador de Marca de E-bike", "text": "Desde que usamos las herramientas de video e imágenes de marketing de VidGo AI, nuestro CTR de anuncios aumentó 50%, el ROAS mejoró 40%." },
+      { "name": "Lisa Wang", "role": "Minorista de Moda", "text": "VidGo AI ha sido un cambio radical para mi tienda. Solo sube una imagen plana de la ropa y al instante obtienes una foto realista de prueba virtual con modelo." },
+      { "name": "Mark Thompson", "role": "Productor de Video", "text": "El Doblaje IA de VidGo AI ha transformado nuestra forma de crear contenido." },
+      { "name": "Sarah Kim", "role": "Creadora de Contenido", "text": "La Traducción de Imágenes de VidGo AI es una obra maestra para el e-commerce global." }
+    ],
+    "stats": [
+      { "value": "54.7%", "label": "Aumento de Tasa de Clics" },
+      { "value": "79%", "label": "Ahorro en Costos de Diseño de Marketing" },
+      { "value": "57%", "label": "Aumento de Conversión de Compra" },
+      { "value": "90%", "label": "Ahorro de Tiempo" }
+    ]
   }
 }

@@ -199,7 +199,7 @@ function closeShareModal() {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #0a1628;">
+  <div class="min-h-screen pt-24 pb-20" style="background: #f7f8fa;">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <!-- Header -->
@@ -269,7 +269,7 @@ function closeShareModal() {
             class="rounded-2xl overflow-hidden group cursor-pointer transition-all"
             :style="work.media_expired
               ? 'background: #0c1830; border: 1px solid rgba(255,80,80,0.15); opacity: 0.85;'
-              : 'background: #0f1f3d; border: 1px solid rgba(0,184,230,0.1);'"
+              : 'background: #ffffff; border: 1px solid rgba(0,0,0,0.08);'"
             @mouseover="($event.currentTarget as HTMLElement).style.borderColor = work.media_expired ? 'rgba(255,80,80,0.3)' : 'rgba(0,184,230,0.3)'"
             @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = work.media_expired ? 'rgba(255,80,80,0.15)' : 'rgba(0,184,230,0.1)'"
           >
@@ -343,7 +343,7 @@ function closeShareModal() {
                   v-if="isSubscribed && !work.media_expired"
                   @click="openShareModal(work)"
                   class="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  style="background: rgba(0,184,230,0.1); color: #00b8e6; border: 1px solid rgba(0,184,230,0.2);"
+                  style="background: rgba(0,184,230,0.1); color: #00b8e6; border: 1px solid rgba(22,119,255,0.15);"
                   title="發布至社交媒體"
                 >
                   📡 發布
@@ -394,7 +394,7 @@ function closeShareModal() {
         @click.self="closeModal"
       >
         <div class="relative rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-             style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.2);">
+             style="background: #ffffff; border: 1px solid rgba(22,119,255,0.15);">
           <!-- Close Button -->
           <button
             @click="closeModal"
@@ -416,7 +416,7 @@ function closeShareModal() {
             </div>
 
             <!-- 生成記錄卡片 -->
-            <div class="rounded-xl p-5 mb-4" style="background: rgba(0,184,230,0.05); border: 1px solid rgba(0,184,230,0.1);">
+            <div class="rounded-xl p-5 mb-4" style="background: rgba(0,184,230,0.05); border: 1px solid rgba(0,0,0,0.08);">
               <h4 class="text-sm font-semibold mb-4 flex items-center gap-2" style="color: #00b8e6;">
                 <span>🔧</span> 生成記錄
               </h4>
@@ -483,14 +483,14 @@ function closeShareModal() {
                 :src="selectedWork.result_video_url!"
                 controls
                 class="w-full h-full object-contain"
-                style="background: #0a1628;"
+                style="background: #f7f8fa;"
               />
               <img
                 v-else
                 :src="getThumbnail(selectedWork)"
                 :alt="selectedWork.tool_type"
                 class="w-full h-full object-contain"
-                style="background: #0a1628;"
+                style="background: #f7f8fa;"
               />
             </div>
 

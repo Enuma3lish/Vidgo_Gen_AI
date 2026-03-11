@@ -194,6 +194,73 @@ class AdminDashboardService:
         ]
 
     # =========================================================================
+    # Tool Usage & Earnings
+    # =========================================================================
+
+    async def get_tool_usage_stats(self) -> Dict[str, Any]:
+        """Get tool usage: most frequently used tools and most credit-consuming tools."""
+        from app.models.user_generation import UserGeneration
+
+        # Most frequently used tools (count of generations per tool_type)
+        freq_result = await self.db.execute(
+            select(
+                UserGeneration.tool_type,
+                func.count(UserGeneration.id).label('usage_count')
+            ).group_by(UserGeneration.tool_type)
+            .order_by(desc(func.count(UserGeneration.id)))
+        )
+        by_frequency = [
+            {"tool": row.tool_type.value if hasattr(row.tool_type, 'value') else str(row.tool_type),
+             "count": row.usage_count}
+            for row in freq_result.all()
+        ]
+
+        # Most credit-consuming tools (sum of credits_used per tool_type)
+        credit_result = await self.db.execute(
+            select(
+                UserGeneration.tool_type,
+                func.sum(UserGeneration.credits_used).label('total_credits')
+            ).group_by(UserGeneration.tool_type)
+            .order_by(desc(func.sum(UserGeneration.credits_used)))
+        )
+        by_credits = [
+            {"tool": row.tool_type.value if hasattr(row.tool_type, 'value') else str(row.tool_type),
+             "total_credits": int(row.total_credits or 0)}
+            for row in credit_result.all()
+        ]
+
+        return {
+            "by_frequency": by_frequency,
+            "by_credits": by_credits,
+        }
+
+    async def get_earnings_stats(self) -> Dict[str, Any]:
+        """Get weekly and monthly earnings from paid orders."""
+        today = datetime.utcnow().date()
+        week_ago = today - timedelta(days=7)
+        month_start = today.replace(day=1)
+
+        week_revenue = await self._get_revenue_for_period(week_ago, today)
+        month_revenue = await self._get_revenue_for_period(month_start, today)
+
+        # Monthly breakdown for the last 6 months
+        monthly = []
+        for i in range(5, -1, -1):
+            m_start = (today.replace(day=1) - timedelta(days=30 * i)).replace(day=1)
+            if i > 0:
+                m_end = (m_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            else:
+                m_end = today
+            rev = await self._get_revenue_for_period(m_start, m_end)
+            monthly.append({"month": m_start.strftime("%Y-%m"), "revenue": rev})
+
+        return {
+            "week": week_revenue,
+            "month": month_revenue,
+            "monthly_breakdown": monthly,
+        }
+
+    # =========================================================================
     # User Management
     # =========================================================================
 

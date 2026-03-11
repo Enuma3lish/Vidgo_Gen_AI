@@ -45,6 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authApi.register(data)
       pendingEmail.value = data.email
+      sessionStorage.setItem('pendingVerifyEmail', data.email)
       return response
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } }

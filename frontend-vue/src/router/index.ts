@@ -90,6 +90,41 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tools/AIAvatar.vue'),
     meta: { requiresAuth: false }
   },
+  // Tool 7: AI Model Swap
+  {
+    path: '/tools/ai-model-swap',
+    name: 'ai-model-swap',
+    component: () => import('@/views/tools/TryOn.vue'),
+    meta: { requiresAuth: false }
+  },
+  // Tool 8: Try On Accessories
+  {
+    path: '/tools/try-on-accessories',
+    name: 'try-on-accessories',
+    component: () => import('@/views/tools/TryOn.vue'),
+    meta: { requiresAuth: false }
+  },
+  // Tool 9: Remove Watermark
+  {
+    path: '/tools/remove-watermark',
+    name: 'remove-watermark',
+    component: () => import('@/views/tools/ImageEffects.vue'),
+    meta: { requiresAuth: false }
+  },
+  // Tool 10: AI Templates
+  {
+    path: '/tools/ai-templates',
+    name: 'ai-templates',
+    component: () => import('@/views/tools/ProductScene.vue'),
+    meta: { requiresAuth: false }
+  },
+  // Tool 11: Image Translator
+  {
+    path: '/tools/image-translator',
+    name: 'image-translator',
+    component: () => import('@/views/tools/ImageEffects.vue'),
+    meta: { requiresAuth: false }
+  },
   // Pattern tools
   {
     path: '/tools/pattern-generate',
@@ -279,7 +314,23 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (to.meta.guestOnly && isAuthenticated) {
-    next({ name: 'dashboard' })
+    // Validate token before redirecting away from auth pages
+    const { useAuthStore } = await import('@/stores/auth')
+    const authStore = useAuthStore()
+    if (!authStore.user) {
+      try {
+        await authStore.fetchUser()
+      } catch {
+        // Token is invalid/expired — let user access auth page
+        next()
+        return
+      }
+    }
+    if (authStore.user) {
+      next({ name: 'dashboard' })
+    } else {
+      next()
+    }
   } else if (to.meta.requiresAdmin) {
     // For admin routes, we need to check user's admin status
     // This requires the auth store to be initialized

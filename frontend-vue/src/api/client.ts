@@ -49,6 +49,14 @@ apiClient.interceptors.response.use(
             localStorage.setItem('refresh_token', newRefreshToken)
           }
 
+          // Sync Pinia auth store with new tokens
+          try {
+            const { useAuthStore } = await import('@/stores/auth')
+            const authStore = useAuthStore()
+            authStore.accessToken = access
+            if (newRefreshToken) authStore.refreshToken = newRefreshToken
+          } catch { /* store not ready yet */ }
+
           // Retry original request with new token
           if (originalRequest.headers) {
             originalRequest.headers.Authorization = `Bearer ${access}`

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { adminApi, createAdminWebSocket } from '@/api/admin'
-import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse } from '@/api/admin'
+import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse, ToolUsageStats, EarningsStats } from '@/api/admin'
 
 export const useAdminStore = defineStore('admin', () => {
   // State
@@ -21,6 +21,8 @@ export const useAdminStore = defineStore('admin', () => {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const wsConnection = ref<WebSocket | null>(null)
+  const toolUsage = ref<ToolUsageStats | null>(null)
+  const earnings = ref<EarningsStats | null>(null)
 
   // Computed
   const onlineCount = computed(() => dashboardStats.value?.online?.online_users ?? 0)
@@ -184,6 +186,22 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function fetchToolUsage() {
+    try {
+      toolUsage.value = await adminApi.getToolUsageStats()
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch tool usage'
+    }
+  }
+
+  async function fetchEarnings() {
+    try {
+      earnings.value = await adminApi.getEarningsStats()
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch earnings'
+    }
+  }
+
   function connectWebSocket() {
     if (wsConnection.value) {
       wsConnection.value.close()
@@ -221,6 +239,8 @@ export const useAdminStore = defineStore('admin', () => {
     generationChart,
     revenueChart,
     userGrowthChart,
+    toolUsage,
+    earnings,
     isLoading,
     error,
 
@@ -242,6 +262,8 @@ export const useAdminStore = defineStore('admin', () => {
     fetchSystemHealth,
     fetchAIServicesStatus,
     fetchCharts,
+    fetchToolUsage,
+    fetchEarnings,
     connectWebSocket,
     disconnectWebSocket
   }

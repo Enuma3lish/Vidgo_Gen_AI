@@ -12,7 +12,8 @@
     "logout": "ログアウト",
     "dashboard": "ダッシュボード",
     "myWorks": "作品一覧",
-    "tools": "ツール"
+    "tools": "ツール",
+    "credits": "クレジット"
   },
   "hero": {
     "title": "AIで素晴らしいビジュアルを作成",
@@ -461,11 +462,20 @@
     }
   },
   "footer": {
+    "tagline": "AIパワード創作プラットフォーム",
+    "company": "会社",
     "about": "会社概要",
+    "pricing": "料金",
+    "contact": "お問い合わせ",
+    "blog": "Blog",
+    "affiliate": "アフィリエイトプログラム",
+    "legal": "法的情報",
     "terms": "利用規約",
     "privacy": "プライバシーポリシー",
-    "contact": "お問い合わせ",
-    "copyright": "© 2024 VidGo AI. All rights reserved."
+    "cookies": "Cookieポリシー",
+    "refunds": "返金ポリシー",
+    "securePayment": "安全な決済",
+    "copyright": "© 2025 VidGo AI. 全著作権所有。"
   },
   "interior": {
     "badge": "AIインテリアデザイン",
@@ -662,5 +672,133 @@
       "contactSales": "営業に連絡",
       "socialProof": "500以上の企業がVIDGOを選択"
     }
+  },
+  "lp": {
+    "badge": "14以上のAIツール、100万以上のブランドに信頼",
+    "headline": "トップAI Eコマースデザイナー",
+    "sub1": "VidGo AIで売れる商品画像を作成。",
+    "sub2": "クリック率54.7%向上が実証済み！",
+    "ctaPrimary": "今すぐ作成開始",
+    "ctaSecondary": "料金を見る",
+    "trust1": "40無料クレジットで開始",
+    "trust2": "クレジットカード不要",
+    "trust3": "いつでもキャンセル可能",
+    "trustBrands": "<b>1,000,000+</b>のファッション・Eコマースブランドに信頼",
+    "tryNow": "今すぐ試す",
+    "readStory": "ストーリーを読む",
+    "seasonShowcase": "AI生成",
+    "sec3Title": "すべてのAI作成ツールを探索",
+    "sec3Sub": "商品ビジュアルとクリエイティブワークフローを支えるAIツールの全ラインナップを体験。",
+    "sec4Title": "ワンクリックで無限の可能性を生成",
+    "sec4Sub": "シームレスに統合されたAI機能で、企業はデザイン効率、創造性、市場競争力を大幅に向上。",
+    "sec5Title": "マーケティングを真に理解する初のAI",
+    "sec5Sub": "あらゆるシーンやシチュエーションに対応した商品画像を生成。",
+    "sec8Title": "みんなVidGo AIを使っています",
+    "sec8Sub": "103万以上の加盟店の高売上の秘密",
+    "sec9Title": "次のサクセスストーリーになろう",
+    "sec9Sub": "お客様の商品に対する声をご覧ください",
+    "sec10Title": "なぜVidGo AIを選ぶのか",
+    "sec10Sub": "Eコマースデザインを簡素化し、コストを削減し、売上を向上 — 手間なく！",
+    "ctaFinalTitle": "今日から無料で作成開始",
+    "ctaFinalSub": "100万以上のブランドとクリエイターに参加 — AIであなたの創造性を無限に拡張",
+    "ctaFinalBtn": "今すぐ作成開始",
+    "ctaFinalNote": "クレジットカード不要 · すぐに利用可能 · いつでもキャンセル",
+    "allTools": {
+      "tryOn": { "name": "バーチャル試着", "desc": "AIファッションモデルでアパレルを展示" },
+      "aiModelSwap": { "name": "AIモデルチェンジ", "desc": "商品写真のモデルを入れ替え" },
+      "fashionReels": { "name": "ファッションリール", "desc": "AIファッションモデルの着こなし動画・ショート作成" },
+      "productAvatars": { "name": "商品アバター", "desc": "商品スポークスパーソン動画を作成" },
+      "productAnyshoot": { "name": "商品エニーシュート", "desc": "AIであらゆるシーンの商品写真" },
+      "tryOnAccessories": { "name": "アクセサリー試着", "desc": "ジュエリー、時計、アクセサリーを試着" },
+      "aiBackgrounds": { "name": "AI背景", "desc": "商品に即座にプロフェッショナル背景" },
+      "styleClone": { "name": "スタイルクローン", "desc": "ターゲット画像の背景スタイルを簡単に複製" },
+      "removeWatermark": { "name": "ウォーターマーク除去", "desc": "画像からウォーターマークをクリーンアップ" },
+      "aiTemplates": { "name": "AIテンプレート", "desc": "AIパワードのEコマース広告テンプレート" },
+      "imageTranslator": { "name": "画像翻訳", "desc": "画像テキストを正確に翻訳" },
+      "aiShadows": { "name": "AIシャドウ", "desc": "任意のオブジェクトに自然な影を追加" },
+      "roomRedesign": { "name": "ルームリデザイン", "desc": "AIパワードのインテリア空間リデザイン" },
+      "bgRemoval": { "name": "背景除去", "desc": "画像背景を無料で除去" }
+    },
+    "categories": {
+      "fashionAI": "ファッションAI",
+      "fashionAIDesc": "バーチャル試着、ファッションリール、AIモデルショーケース — ファッションEコマースビジュアルコンテンツの完全ソリューション。",
+      "ecommerceAI": "EコマースAI",
+      "ecommerceAIDesc": "商品シーン生成、背景除去、AIシャドウ — すべてのプラットフォームで商品を際立たせる。",
+      "designAI": "デザイン＆コンテンツAI",
+      "designAIDesc": "ルームリデザイン、スタイルクローン、画像翻訳 — クリエイティブデザインワークフローのための強力なツール。"
+    },
+    "seasons": {
+      "spring": "春セール",
+      "valentines": "バレンタインデー",
+      "blackFriday": "ブラックフライデー",
+      "christmas": "クリスマス",
+      "newYear": "新年"
+    },
+    "imageTranslation": {
+      "title": "画像翻訳",
+      "desc": "VidGo AIの画像翻訳機能でグローバルリーチを拡大。画像内のテキストを複数の言語に即座に翻訳。"
+    },
+    "videoDubbing": {
+      "title": "動画翻訳＆吹き替え",
+      "desc": "動画を自動的に翻訳・吹き替えする強力なAIで、グローバルオーディエンス向けにコンテンツを強化。"
+    },
+    "stories": {
+      "fashionBrand": {
+        "brand": "ファッションブランド",
+        "role": "ファッションブランド起業家",
+        "title": "キャンパススタートアップからグローバル起業家へ：バーチャル試着がブランドを躍進させた",
+        "quote": "VidGo AIのバーチャル試着を使用して、数秒でリアルなモデル写真を生成でき、コストと時間を節約。クリック率は50%増加し、コンバージョンは40%以上向上。"
+      },
+      "furnitureBrand": {
+        "brand": "家具ブランド",
+        "role": "マーケティング責任者",
+        "title": "多言語コンテンツマーケティング：グローバル市場ニーズに簡単対応",
+        "quote": "VidGo AIの画像翻訳で、時間のかかる多言語デザインプロセスが楽なワークフローに変わりました。"
+      },
+      "techBrand": {
+        "brand": "ZEUSLAP",
+        "role": "共同創業者",
+        "title": "ゼロからNo.1へ：タブレットブランドが飛躍的成長を達成した方法",
+        "quote": "VidGo AIのマーケティングビジュアルとテンプレートで、ビジュアル制作サイクルを数日から数秒に短縮。"
+      },
+      "ebikeBrand": {
+        "brand": "電動バイクスタートアップ",
+        "role": "ブランド創業者",
+        "title": "高コストから効率的成長へ：マーケティングブレークスルー",
+        "quote": "VidGo AIのテンプレート機能を使用して以来、広告CTRは50%増加し、ROASは40%改善。"
+      }
+    },
+    "deepDives": {
+      "tryOn": {
+        "title": "バーチャル試着",
+        "desc": "衣服の画像をアップロードし、数秒でスタジオ品質のモデルショーケース写真を生成。",
+        "before": "衣服商品写真",
+        "after": "AIモデル着用結果"
+      },
+      "bgRemoval": {
+        "title": "ワンクリックスマート背景除去",
+        "desc": "最先端のAIアルゴリズムで散らかった背景を簡単に除去。",
+        "before": "オリジナル画像（背景あり）",
+        "after": "透明PNG"
+      },
+      "room": {
+        "title": "ルームリデザイン",
+        "desc": "インテリア写真をアップロード。AIが複数のスタイルにインテリジェントにリデザイン。",
+        "before": "オリジナル部屋写真",
+        "after": "AI北欧スタイルリデザイン"
+      }
+    },
+    "testimonials": [
+      { "name": "Ryan Chen", "role": "電動バイクブランド創業者", "text": "VidGo AIの動画・マーケティング画像ツールを使用して以来、広告CTRは50%増加、ROASは40%改善。" },
+      { "name": "Lisa Wang", "role": "ファッション小売業者", "text": "VidGo AIは私の店舗のゲームチェンジャーです。衣服のフラット画像をアップロードするだけで、即座にリアルなモデル試着写真が得られます。" },
+      { "name": "Mark Thompson", "role": "動画プロデューサー", "text": "VidGo AIのAI吹き替えは、コンテンツ制作の方法を変えました。" },
+      { "name": "Sarah Kim", "role": "コンテンツクリエイター", "text": "VidGo AIの画像翻訳は、グローバルEコマースの傑作です。" }
+    ],
+    "stats": [
+      { "value": "54.7%", "label": "クリック率向上" },
+      { "value": "79%", "label": "マーケティングデザインコスト節約" },
+      { "value": "57%", "label": "購入コンバージョン向上" },
+      { "value": "90%", "label": "時間コスト節約" }
+    ]
   }
 }

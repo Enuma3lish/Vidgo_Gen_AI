@@ -106,6 +106,9 @@ class SubscriptionService:
                     "subscription_id": str(current_sub.id)
                 }
 
+        # Cancel any existing active/pending subscriptions before creating new one
+        await self._cancel_existing_subscriptions(db, user_id)
+
         # Determine if we should use mock mode
         use_mock = skip_payment or (self.paddle.is_mock and payment_method != 'ecpay')
 
@@ -752,7 +755,7 @@ class SubscriptionService:
         db: AsyncSession,
         user_id: UUID
     ) -> Optional[Subscription]:
-        """Get user's active subscription."""
+        """Get user's active subscription (most recent active or pending)."""
         result = await db.execute(
             select(Subscription)
             .where(
@@ -763,7 +766,7 @@ class SubscriptionService:
             )
             .order_by(Subscription.created_at.desc())
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def _get_subscription_order(
         self,
@@ -781,13 +784,13 @@ class SubscriptionService:
         db: AsyncSession,
         user_id: UUID
     ) -> None:
-        """Cancel all existing active subscriptions for user."""
+        """Cancel all existing active/pending subscriptions for user."""
         result = await db.execute(
             select(Subscription)
             .where(
                 and_(
                     Subscription.user_id == user_id,
-                    Subscription.status == "active"
+                    Subscription.status.in_(["active", "pending"])
                 )
             )
         )

@@ -125,6 +125,23 @@ export interface AIServicesResponse {
   }
 }
 
+export interface ToolUsageItem {
+  tool: string
+  count?: number
+  total_credits?: number
+}
+
+export interface ToolUsageStats {
+  by_frequency: ToolUsageItem[]
+  by_credits: ToolUsageItem[]
+}
+
+export interface EarningsStats {
+  week: number
+  month: number
+  monthly_breakdown: { month: string; revenue: number }[]
+}
+
 // ============================================================================
 // Admin API
 // ============================================================================
@@ -236,6 +253,18 @@ export const adminApi = {
   // AI Service Status
   async getAIServicesStatus(): Promise<AIServicesResponse> {
     const response = await apiClient.get('/api/v1/admin/ai-services')
+    return response.data
+  },
+
+  // Tool Usage Stats
+  async getToolUsageStats(): Promise<ToolUsageStats> {
+    const response = await apiClient.get('/api/v1/admin/stats/tool-usage')
+    return response.data
+  },
+
+  // Earnings Stats (weekly/monthly)
+  async getEarningsStats(): Promise<EarningsStats> {
+    const response = await apiClient.get('/api/v1/admin/stats/earnings')
     return response.data
   }
 }

@@ -331,7 +331,7 @@ onMounted(() => {
     </section>
 
     <!-- Quick Generate Section -->
-    <section id="quick-generate" class="py-16 bg-dark-800/50">
+    <section id="quick-generate" class="py-16 bg-gray-50">
       <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2 class="section-title text-center mb-8">{{ t('sections.quickGenerate') }}</h2>
 

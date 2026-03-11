@@ -112,6 +112,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # allow env vars used by scripts (SKIP_PREGENERATION, DEMO_VIDEO_*, etc.) without crashing
 
 
 @lru_cache()

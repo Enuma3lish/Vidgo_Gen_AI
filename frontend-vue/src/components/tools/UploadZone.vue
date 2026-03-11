@@ -75,7 +75,7 @@ function triggerFileSelect() {
     :class="[
       isDragging
         ? 'border-primary-500 bg-primary-500/10'
-        : 'border-dark-600 hover:border-primary-500/50 hover:bg-dark-800/50'
+        : 'border-gray-200 hover:border-blue-400/50 hover:bg-blue-50/30'
     ]"
   >
     <input

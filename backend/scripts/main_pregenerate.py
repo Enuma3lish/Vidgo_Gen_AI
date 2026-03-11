@@ -1446,12 +1446,32 @@ class VidGoPreGenerator:
 
                 logger.info(f"[{count+1}] Room: {room_data['name']} -> Style: {style_data['name']}")
 
-                prompt = f"Photorealistic interior design of a {room_data['name'].lower()}, {style_data['prompt']}, architectural visualization, professional rendering, 8K"
+                # Use I2I (image-to-image) so output is derived from the actual input room photo.
+                # Style prompt only describes the desired art style — the room photo drives the content.
+                style_prompt = f"{style_data['prompt']}, photorealistic interior design, architectural visualization, 8K"
 
-                t2i = await self.piapi.generate_image(prompt=prompt)
+                i2i = await self.piapi.image_to_image(
+                    image_url=room_data["url"],
+                    prompt=style_prompt,
+                    strength=0.65  # preserves room structure while applying style
+                )
 
-                if not t2i["success"]:
-                    logger.error(f"  Failed: {t2i.get('error')}")
+                if not i2i.get("success"):
+                    logger.error(f"  I2I Failed: {i2i.get('error')}")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["room_redesign"]["failed"] += 1
+                    count += 1
+                    self._topic_mark_generated(style_id, topic_counts)
+                    continue
+
+                result_image_url = i2i.get("image_url") or i2i.get("output", {}).get("image_url")
+                if not result_image_url:
+                    images = i2i.get("output", {}).get("images", [])
+                    if images:
+                        result_image_url = images[0].get("url") if isinstance(images[0], dict) else images[0]
+
+                if not result_image_url:
+                    logger.error("  No result URL in I2I response")
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["room_redesign"]["failed"] += 1
                     count += 1
@@ -1460,9 +1480,12 @@ class VidGoPreGenerator:
 
                 local_entry = {
                     "topic": room_data["room_type"],  # so topic matches selectedRoomType in frontend
-                    "prompt": prompt,
-                    "input_image_url": room_data["url"],
-                    "result_image_url": t2i["image_url"],
+                    "prompt": style_prompt,
+                    "input_image_url": room_data["url"],  # actual room photo passed to I2I
+                    "result_image_url": result_image_url,  # I2I output derived from input photo
+                    "generation_steps": [
+                        {"step": 1, "api": "piapi", "action": "i2i_style", "input_url": room_data["url"], "result_url": result_image_url}
+                    ],
                     "input_params": {
                         "room_id": room_id,
                         "style_id": style_id,  # matches DESIGN_STYLES e.g. modern_minimalist, scandinavian
@@ -1472,7 +1495,7 @@ class VidGoPreGenerator:
                 }
                 self.local_results["room_redesign"].append(local_entry)
 
-                logger.info(f"  Result: {t2i['image_url']}")
+                logger.info(f"  Result: {result_image_url}")
                 self.stats["success"] += 1
                 self.stats["by_tool"]["room_redesign"]["success"] += 1
                 count += 1

@@ -345,6 +345,100 @@ class PiAPIProvider(BaseProvider):
             "steps": 10
         })
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # BACKGROUND REMOVAL (using local rembg library)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def background_removal(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Remove background from image using local rembg library.
+
+        Args:
+            params: {
+                "image_url": str,
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"image_url": str}}
+        """
+        self._log_request("background_removal", params)
+
+        try:
+            import httpx as _httpx
+            from rembg import remove
+            from PIL import Image
+            from io import BytesIO
+            import base64
+            import uuid
+            import os
+
+            # Download the image
+            async with _httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": "VidGo/1.0"}) as dl_client:
+                resp = await dl_client.get(params["image_url"])
+                resp.raise_for_status()
+                image_data = resp.content
+
+            # Remove background using rembg (runs in thread to avoid blocking)
+            input_image = Image.open(BytesIO(image_data))
+            loop = asyncio.get_event_loop()
+            output_image = await loop.run_in_executor(None, remove, input_image)
+
+            # Save to static/generated/
+            filename = f"rembg_{uuid.uuid4().hex}.png"
+            output_dir = os.path.join("static", "generated")
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, filename)
+            output_image.save(output_path, "PNG")
+
+            result_url = f"/static/generated/{filename}"
+            self._log_response("background_removal", True)
+
+            return {
+                "success": True,
+                "task_id": f"local-rembg-{filename}",
+                "output": {"image_url": result_url}
+            }
+        except Exception as e:
+            self._log_response("background_removal", False, str(e))
+            raise
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # VIDEO STYLE TRANSFER (Wan VACE via PiAPI)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply style transfer to video using Wan 2.1 VACE via PiAPI.
+
+        Args:
+            params: {
+                "video_url": str,
+                "prompt": str,
+                "style": str (optional),
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"video_url": str}}
+        """
+        self._log_request("video_style_transfer", params)
+
+        style = params.get("style", "")
+        prompt = params.get("prompt", "")
+        if style and style not in prompt:
+            prompt = f"{style} style, {prompt}"
+
+        payload = {
+            "model": "Wan",
+            "task_type": "wan21-vace",
+            "input": {
+                "video": params["video_url"],
+                "prompt": prompt,
+                "watermark": False
+            }
+        }
+
+        return await self._submit_and_poll(payload)
+
 
     # ─────────────────────────────────────────────────────────────────────────
     # UPSCALE

@@ -126,11 +126,11 @@ onMounted(async () => {
          style="background: rgba(0,0,0,0.8);"
          @click.self="emit('close')">
       <div class="w-full max-w-lg rounded-2xl overflow-hidden"
-           style="background: #0f1f3d; border: 1px solid rgba(0,184,230,0.2);">
+           style="background: #ffffff; border: 1px solid rgba(22,119,255,0.15);">
 
         <!-- Header -->
         <div class="flex items-center justify-between p-6 border-b"
-             style="border-color: rgba(0,184,230,0.1);">
+             style="border-color: rgba(0,0,0,0.08);">
           <div class="flex items-center gap-3">
             <span class="text-2xl">📡</span>
             <h2 class="text-xl font-bold" style="color: #e8f4ff;">發布至社交媒體</h2>
@@ -238,7 +238,7 @@ onMounted(async () => {
                 rows="3"
                 placeholder="輸入貼文說明..."
                 class="w-full rounded-xl px-4 py-3 text-sm resize-none outline-none transition-all"
-                style="background: rgba(255,255,255,0.05); border: 1px solid rgba(0,184,230,0.2); color: #e8f4ff;"
+                style="background: rgba(255,255,255,0.05); border: 1px solid rgba(22,119,255,0.15); color: #e8f4ff;"
                 @focus="($event.target as HTMLElement).style.borderColor = 'rgba(0,184,230,0.5)'"
                 @blur="($event.target as HTMLElement).style.borderColor = 'rgba(0,184,230,0.2)'"
               ></textarea>

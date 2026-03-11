@@ -130,6 +130,30 @@ async def get_user_growth_chart(
 
 
 # ============================================================================
+# Tool Usage & Earnings Statistics
+# ============================================================================
+
+@router.get("/stats/tool-usage")
+async def get_tool_usage_stats(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Get tool usage stats: most frequent tool and most credit-consuming tool"""
+    service = AdminDashboardService(db)
+    return await service.get_tool_usage_stats()
+
+
+@router.get("/stats/earnings")
+async def get_earnings_stats(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Get weekly and monthly earnings from orders"""
+    service = AdminDashboardService(db)
+    return await service.get_earnings_stats()
+
+
+# ============================================================================
 # User Management Endpoints
 # ============================================================================
 

@@ -174,7 +174,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #0a1628;">
+  <div class="min-h-screen pt-24 pb-20" style="background: #f7f8fa;">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <!-- Header -->
@@ -245,7 +245,7 @@ onMounted(async () => {
           :key="platform.id"
           class="rounded-2xl border p-6 transition-all"
           :style="{
-            background: '#0f1f3d',
+            background: '#ffffff',
             borderColor: isConnected(platform.id) ? 'rgba(0,184,230,0.4)' : 'rgba(0,184,230,0.1)',
           }"
         >
@@ -292,7 +292,7 @@ onMounted(async () => {
                     v-for="type in platform.supportedTypes"
                     :key="type"
                     class="text-xs px-2 py-0.5 rounded-full"
-                    style="background: rgba(0,184,230,0.1); color: #00b8e6; border: 1px solid rgba(0,184,230,0.2);"
+                    style="background: rgba(0,184,230,0.1); color: #00b8e6; border: 1px solid rgba(22,119,255,0.15);"
                   >
                     {{ type }}
                   </span>
@@ -339,7 +339,7 @@ onMounted(async () => {
 
       <!-- How to Use -->
       <div class="mt-10 rounded-2xl border p-6"
-           style="background: #0f1f3d; border-color: rgba(0,184,230,0.1);">
+           style="background: #ffffff; border-color: rgba(0,0,0,0.08);">
         <h3 class="font-bold text-lg mb-4" style="color: #e8f4ff;">📖 如何使用一鍵發布</h3>
         <div class="grid md:grid-cols-3 gap-4">
           <div class="flex items-start gap-3">
@@ -367,7 +367,7 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-        <div class="mt-4 pt-4 border-t" style="border-color: rgba(0,184,230,0.1);">
+        <div class="mt-4 pt-4 border-t" style="border-color: rgba(0,0,0,0.08);">
           <router-link to="/dashboard/my-works"
             class="inline-flex items-center gap-2 text-sm font-medium transition-colors"
             style="color: #00b8e6;">

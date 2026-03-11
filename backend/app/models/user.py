@@ -70,6 +70,11 @@ class User(Base):
     referred_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     referral_count = Column(Integer, default=0)  # Number of successful referrals
 
+    # E-Invoice Preferences (auto-issue on payment)
+    default_carrier_type = Column(String(20), nullable=True)  # mobile_barcode, citizen_cert, email
+    default_carrier_number = Column(String(64), nullable=True)
+    default_love_code = Column(String(7), nullable=True)  # 愛心碼 for donation
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

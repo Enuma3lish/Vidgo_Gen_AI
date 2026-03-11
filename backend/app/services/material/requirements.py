@@ -137,8 +137,8 @@ MATERIAL_REQUIREMENTS: Dict[str, CategoryRequirement] = {
                 min_featured=5,
                 generation_type="video",  # This tool generates videos
                 default_prompts=[
-                    {"prompt": "Create luxury product commercial with elegant rotation and spotlight",
-                     "prompt_zh": "創建豪華產品廣告，優雅旋轉和聚光燈效果"},
+                    {"prompt": "Create product commercial with smooth rotation and clean spotlight",
+                     "prompt_zh": "創建產品廣告，流暢旋轉和清晰聚光燈效果"},
                     {"prompt": "Product showcase with dynamic lighting and floating effect",
                      "prompt_zh": "產品展示，動態燈光和漂浮效果"},
                     {"prompt": "Cinematic product reveal with particle effects",

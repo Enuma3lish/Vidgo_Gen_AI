@@ -115,6 +115,11 @@ async def main():
         choices=SEED_TOOLS,
         help="Only seed a specific tool (e.g. --tool ai_avatar)",
     )
+    parser.add_argument(
+        "--background",
+        action="store_true",
+        help="Run in background mode: generate in priority order, write to DB in batches",
+    )
     args = parser.parse_args()
 
     # Determine which tools to process (when no --tool, respect SKIP_TRY_ON)

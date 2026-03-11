@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
@@ -12,12 +12,13 @@ const authStore = useAuthStore()
 const demoImages = ref<Record<string, { before: string; after: string }[]>>({})
 const demoLoading = ref(true)
 
+// SMB-focused fallback images (food, products, stores - not luxury items)
 const FALLBACK: Record<string, { before: string; after: string }> = {
-  try_on:            { before: 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=600&q=80', after: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&q=80' },
-  background_removal:{ before: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=600&q=80', after: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=80' },
-  room_redesign:     { before: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80', after: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80' },
-  short_video:       { before: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=600&q=80', after: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600&q=80' },
-  product_scene:     { before: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=80', after: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80' },
+  try_on:            { before: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&q=80', after: 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=600&q=80' },
+  background_removal:{ before: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600&q=80', after: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=600&q=80' },
+  room_redesign:     { before: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=600&q=80', after: 'https://images.unsplash.com/photo-1559329007-40df8a9345d8?w=600&q=80' },
+  short_video:       { before: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&q=80', after: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600&q=80' },
+  product_scene:     { before: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=600&q=80', after: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&q=80' },
   ai_avatar:         { before: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&q=80', after: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&q=80' },
 }
 
@@ -27,21 +28,36 @@ function demo(cat: string, idx: 'before' | 'after') {
   return FALLBACK[cat]?.[idx] || ''
 }
 
+const demoCats = ['try_on', 'background_removal', 'room_redesign', 'short_video', 'product_scene']
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
 async function loadDemos() {
-  const cats = ['try_on', 'background_removal', 'room_redesign', 'short_video', 'product_scene']
   const results = await Promise.allSettled(
-    cats.map(cat =>
+    demoCats.map(cat =>
       import('@/api/client').then(m => m.default.get(`/api/v1/demo/presets/${cat}?limit=2`))
     )
   )
   results.forEach((r, i) => {
     if (r.status === 'fulfilled' && r.value?.data?.presets?.length) {
-      demoImages.value[cats[i]] = r.value.data.presets
+      demoImages.value[demoCats[i]] = r.value.data.presets
         .filter((p: any) => p.input_image_url && p.result_image_url)
         .map((p: any) => ({ before: p.input_image_url, after: p.result_image_url }))
     }
   })
   demoLoading.value = false
+
+  // Progressive polling: if some categories are still empty, poll every 60s
+  const sparse = demoCats.filter(c => (demoImages.value[c]?.length || 0) < 2)
+  if (sparse.length > 0 && !pollTimer) {
+    pollTimer = setInterval(async () => {
+      await loadDemos()
+      const stillSparse = demoCats.filter(c => (demoImages.value[c]?.length || 0) < 2)
+      if (stillSparse.length === 0 && pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+    }, 60000)
+  }
 }
 
 // ── All AI Creation Tools (PicCopilot-style grid) ──
@@ -102,6 +118,7 @@ function handleStartCreating() {
 }
 
 onMounted(() => { loadDemos() })
+onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } })
 </script>
 
 <template>

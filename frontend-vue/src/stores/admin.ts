@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { adminApi, createAdminWebSocket } from '@/api/admin'
-import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse, ToolUsageStats, EarningsStats } from '@/api/admin'
+import type { DashboardStats, AdminUser, AdminMaterial, ModerationItem, SystemHealth, ChartDataPoint, AIServicesResponse, ToolUsageStats, EarningsStats, ApiCostStats, ActiveUsersStats } from '@/api/admin'
 
 export const useAdminStore = defineStore('admin', () => {
   // State
@@ -23,6 +23,9 @@ export const useAdminStore = defineStore('admin', () => {
   const wsConnection = ref<WebSocket | null>(null)
   const toolUsage = ref<ToolUsageStats | null>(null)
   const earnings = ref<EarningsStats | null>(null)
+  const apiCosts = ref<ApiCostStats | null>(null)
+  const activeUsers = ref<ActiveUsersStats | null>(null)
+  const activeGenerationsCount = ref(0)
 
   // Computed
   const onlineCount = computed(() => dashboardStats.value?.online?.online_users ?? 0)
@@ -202,6 +205,23 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function fetchApiCosts() {
+    try {
+      apiCosts.value = await adminApi.getApiCostStats()
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch API costs'
+    }
+  }
+
+  async function fetchActiveUsers() {
+    try {
+      activeUsers.value = await adminApi.getActiveUsersStats()
+      activeGenerationsCount.value = activeUsers.value?.active_generations_count ?? 0
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch active users'
+    }
+  }
+
   function connectWebSocket() {
     if (wsConnection.value) {
       wsConnection.value.close()
@@ -212,6 +232,10 @@ export const useAdminStore = defineStore('admin', () => {
         // Update online stats in real-time
         if (dashboardStats.value) {
           dashboardStats.value.online = data.data
+        }
+        // Update active generations count from WebSocket
+        if (data.data.active_generations_count !== undefined) {
+          activeGenerationsCount.value = data.data.active_generations_count
         }
       }
     })
@@ -241,6 +265,9 @@ export const useAdminStore = defineStore('admin', () => {
     userGrowthChart,
     toolUsage,
     earnings,
+    apiCosts,
+    activeUsers,
+    activeGenerationsCount,
     isLoading,
     error,
 
@@ -264,6 +291,8 @@ export const useAdminStore = defineStore('admin', () => {
     fetchCharts,
     fetchToolUsage,
     fetchEarnings,
+    fetchApiCosts,
+    fetchActiveUsers,
     connectWebSocket,
     disconnectWebSocket
   }

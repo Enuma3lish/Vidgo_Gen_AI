@@ -68,54 +68,33 @@ if [ -n "$CLEAN_MATERIALS" ]; then
 fi
 
 # ============================================
-# STEP 5: Material DB Check (wait until ready, run pregen if empty)
+# STEP 5: Load seed fixtures (instant) + start background generation
 # ============================================
-echo "Step 5: Checking Material DB status..."
-START=$(date +%s)
-GENERATED=false
-PREGEN_TIMEOUT=7200
+echo "Step 5: Loading seed fixtures (instant SMB examples)..."
+set +e
+python -m scripts.seed_fixtures 2>&1 || echo "  (Seed fixtures skipped or failed - will generate from scratch)"
+set -e
+echo ""
 
-while true; do
-    # Check all 8 tools
-    echo "  --- Material DB Status ---"
-    if python -m scripts.check_material_status 2>/dev/null; then
-        echo "  Material DB ready - all tools have enough examples!"
-        break
-    fi
-
-    ELAPSED=$(($(date +%s) - START))
-    if [ $ELAPSED -ge $MATERIAL_CHECK_TIMEOUT ]; then
-        echo "  Timeout: Material DB not ready after ${MATERIAL_CHECK_TIMEOUT}s"
-        exit 1
-    fi
-
-    # First attempt: seed missing tools only (not --all to save API credits)
-    if [ "$GENERATED" = "false" ]; then
-        echo ""
-        echo "  Material DB not ready - seeding missing tools..."
-        echo "  This may take 30-90 minutes on first run."
-        echo ""
-        set +e
-        python -m scripts.seed_materials_if_empty --force 2>&1 || true
-        set -e
-        GENERATED=true
-        echo ""
-        echo "  Seeding done. Checking status again..."
-        continue
-    fi
-
-    echo "  Waiting ${MATERIAL_CHECK_INTERVAL}s (timeout in $((MATERIAL_CHECK_TIMEOUT - ELAPSED))s)..."
-    sleep $MATERIAL_CHECK_INTERVAL
-done
+echo "Step 5b: Checking Material DB status..."
+if python -m scripts.check_material_status 2>/dev/null; then
+    echo "  Material DB ready - all tools have enough examples!"
+else
+    echo "  Material DB incomplete - starting background generation..."
+    echo "  Server will start immediately. Examples will appear progressively."
+    nohup python -m scripts.seed_materials_if_empty --force --background > /tmp/pregen.log 2>&1 &
+    PREGEN_PID=$!
+    echo "  Background pre-generation started (PID: $PREGEN_PID)"
+fi
 echo ""
 
 # ============================================
-# STEP 6: Final Status Report
+# STEP 6: Status Report (non-blocking)
 # ============================================
 echo "========================================"
-echo "Material DB Final Status:"
+echo "Material DB Status (server starting regardless):"
 echo "========================================"
-python -m scripts.check_material_status 2>/dev/null || true
+python -m scripts.check_material_status 2>/dev/null || echo "  (Partial - background generation in progress)"
 echo ""
 
 # ============================================

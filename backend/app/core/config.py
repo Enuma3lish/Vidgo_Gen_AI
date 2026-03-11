@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     ECPAY_HASH_IV: str = ""
     ECPAY_PAYMENT_URL: str = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5"
 
+    # E-Invoice - ECPay (Taiwan)
+    ECPAY_EINVOICE_MERCHANT_ID: str = ""
+    ECPAY_EINVOICE_HASH_KEY: str = ""
+    ECPAY_EINVOICE_HASH_IV: str = ""
+    ECPAY_EINVOICE_URL: str = "https://einvoice-stage.ecpay.com.tw/B2CInvoice/Issue"
+    ECPAY_EINVOICE_B2B_URL: str = "https://einvoice-stage.ecpay.com.tw/B2BInvoice/Issue"
+    ECPAY_EINVOICE_VOID_URL: str = "https://einvoice-stage.ecpay.com.tw/B2CInvoice/Invalid"
+    ECPAY_EINVOICE_B2B_VOID_URL: str = "https://einvoice-stage.ecpay.com.tw/B2BInvoice/Invalid"
+
     # Payment - Paddle (International)
     PADDLE_API_KEY: str = ""
     PADDLE_PUBLIC_KEY: str = ""

@@ -42,6 +42,8 @@ onMounted(async () => {
     adminStore.fetchCharts(),
     adminStore.fetchToolUsage(),
     adminStore.fetchEarnings(),
+    adminStore.fetchApiCosts(),
+    adminStore.fetchActiveUsers(),
   ])
   adminStore.connectWebSocket()
 })
@@ -75,6 +77,17 @@ function creditBarWidth(credits: number): string {
   const max = items.length ? Math.max(...items.map(i => i.total_credits || 0)) : 1
   return `${Math.max((credits / max) * 100, 4)}%`
 }
+
+function formatTimeAgo(isoStr: string | null): string {
+  if (!isoStr) return '-'
+  const diff = Date.now() - new Date(isoStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 </script>
 
 <template>
@@ -96,6 +109,19 @@ function creditBarWidth(credits: number): string {
         <div class="stat-content">
           <span class="stat-value">{{ formatNumber(adminStore.onlineCount) }}</span>
           <span class="stat-label">Online Now</span>
+        </div>
+        <div class="stat-badge live">LIVE</div>
+      </div>
+
+      <div class="stat-card active-gen">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value">{{ formatNumber(adminStore.activeGenerationsCount) }}</span>
+          <span class="stat-label">Active Generations</span>
         </div>
         <div class="stat-badge live">LIVE</div>
       </div>
@@ -181,6 +207,78 @@ function creditBarWidth(credits: number): string {
       </div>
     </section>
 
+    <!-- ===== Profit Summary: Earnings vs API Costs ===== -->
+    <section class="section" v-if="adminStore.earnings && adminStore.apiCosts">
+      <h2>Profit Summary</h2>
+      <div class="profit-grid">
+        <div class="profit-row">
+          <div class="profit-card earn">
+            <span class="profit-label">Earnings (Week)</span>
+            <span class="profit-value">{{ formatCurrency(adminStore.earnings.week) }}</span>
+          </div>
+          <div class="profit-card cost">
+            <span class="profit-label">API Cost (Week)</span>
+            <span class="profit-value">{{ formatCurrency(adminStore.apiCosts.week_total) }}</span>
+          </div>
+          <div class="profit-card" :class="adminStore.earnings.week - adminStore.apiCosts.week_total >= 0 ? 'profit' : 'loss'">
+            <span class="profit-label">Net Profit (Week)</span>
+            <span class="profit-value">{{ formatCurrency(adminStore.earnings.week - adminStore.apiCosts.week_total) }}</span>
+          </div>
+        </div>
+        <div class="profit-row">
+          <div class="profit-card earn">
+            <span class="profit-label">Earnings (Month)</span>
+            <span class="profit-value">{{ formatCurrency(adminStore.earnings.month) }}</span>
+          </div>
+          <div class="profit-card cost">
+            <span class="profit-label">API Cost (Month)</span>
+            <span class="profit-value">{{ formatCurrency(adminStore.apiCosts.month_total) }}</span>
+          </div>
+          <div class="profit-card" :class="adminStore.earnings.month - adminStore.apiCosts.month_total >= 0 ? 'profit' : 'loss'">
+            <span class="profit-label">Net Profit (Month)</span>
+            <span class="profit-value">{{ formatCurrency(adminStore.earnings.month - adminStore.apiCosts.month_total) }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== API Cost Breakdown ===== -->
+    <section class="section" v-if="adminStore.apiCosts">
+      <h2>API Cost Breakdown</h2>
+      <div class="cost-table-wrap" v-if="adminStore.apiCosts.by_service.length">
+        <table class="cost-table">
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th class="num">Calls (Week)</th>
+              <th class="num">Cost (Week)</th>
+              <th class="num">Calls (Month)</th>
+              <th class="num">Cost (Month)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="svc in adminStore.apiCosts.by_service" :key="svc.service">
+              <td>{{ svc.display_name }}</td>
+              <td class="num">{{ svc.week_calls }}</td>
+              <td class="num">{{ formatCurrency(svc.week_cost) }}</td>
+              <td class="num">{{ svc.month_calls }}</td>
+              <td class="num">{{ formatCurrency(svc.month_cost) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td><strong>Total</strong></td>
+              <td class="num"><strong>{{ adminStore.apiCosts.by_service.reduce((s, r) => s + r.week_calls, 0) }}</strong></td>
+              <td class="num"><strong>{{ formatCurrency(adminStore.apiCosts.week_total) }}</strong></td>
+              <td class="num"><strong>{{ adminStore.apiCosts.by_service.reduce((s, r) => s + r.month_calls, 0) }}</strong></td>
+              <td class="num"><strong>{{ formatCurrency(adminStore.apiCosts.month_total) }}</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p v-else class="empty-state">No API cost data yet.</p>
+    </section>
+
     <!-- ===== Tool Usage: Most Frequent ===== -->
     <div class="two-col" v-if="adminStore.toolUsage">
       <section class="section">
@@ -226,6 +324,53 @@ function creditBarWidth(credits: number): string {
         <p v-else class="empty-state">No credit consumption data yet.</p>
       </section>
     </div>
+
+    <!-- ===== Active Sessions ===== -->
+    <section class="section" v-if="adminStore.activeUsers">
+      <h2>Active Sessions ({{ adminStore.activeUsers.online_count }} online)</h2>
+      <div class="cost-table-wrap" v-if="adminStore.activeUsers.online_sessions.length">
+        <table class="cost-table sessions-table">
+          <thead>
+            <tr>
+              <th>User ID</th>
+              <th>Plan</th>
+              <th>Last Seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="session in adminStore.activeUsers.online_sessions" :key="session.user_id">
+              <td class="mono">{{ session.user_id.substring(0, 12) }}...</td>
+              <td><span class="plan-tag">{{ session.plan }}</span></td>
+              <td>{{ formatTimeAgo(session.last_seen) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="empty-state">No active sessions.</p>
+    </section>
+
+    <!-- ===== Active Generations ===== -->
+    <section class="section" v-if="adminStore.activeUsers && adminStore.activeUsers.active_generations.length">
+      <h2>Active Generations ({{ adminStore.activeUsers.active_generations_count }} running)</h2>
+      <div class="cost-table-wrap">
+        <table class="cost-table">
+          <thead>
+            <tr>
+              <th>User ID</th>
+              <th>Tool / Service</th>
+              <th>Started</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(gen, idx) in adminStore.activeUsers.active_generations" :key="idx">
+              <td class="mono">{{ gen.user_id.substring(0, 12) }}...</td>
+              <td>{{ toolLabel(gen.tool_type) }}</td>
+              <td>{{ formatTimeAgo(gen.started_at) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <!-- ===== Users by Plan ===== -->
     <section class="section" v-if="stats?.users?.by_plan">
@@ -325,6 +470,7 @@ function creditBarWidth(credits: number): string {
 
 .stat-icon svg { width: 24px; height: 24px; }
 .stat-card.online .stat-icon { background: #e3f2fd; color: #1976d2; }
+.stat-card.active-gen .stat-icon { background: #fce4ec; color: #c62828; }
 .stat-card.users .stat-icon { background: #f3e5f5; color: #7b1fa2; }
 .stat-card.generations .stat-icon { background: #e8f5e9; color: #388e3c; }
 .stat-card.revenue .stat-icon { background: #fff3e0; color: #f57c00; }
@@ -401,6 +547,102 @@ function creditBarWidth(credits: number): string {
   font-size: 2rem; font-weight: 700; color: white;
 }
 
+/* ===== Profit Summary ===== */
+.profit-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.profit-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+}
+
+.profit-card {
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.profit-card.earn { background: #e8f5e9; }
+.profit-card.cost { background: #fce4ec; }
+.profit-card.profit { background: #e8f5e9; border: 2px solid #4caf50; }
+.profit-card.loss { background: #fce4ec; border: 2px solid #f44336; }
+
+.profit-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #666;
+  margin-bottom: 0.25rem;
+}
+
+.profit-value {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.profit-card.profit .profit-value { color: #2e7d32; }
+.profit-card.loss .profit-value { color: #c62828; }
+
+/* ===== Cost Table ===== */
+.cost-table-wrap {
+  overflow-x: auto;
+}
+
+.cost-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.cost-table th,
+.cost-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.cost-table th {
+  background: #f9f9f9;
+  font-weight: 600;
+  color: #444;
+  white-space: nowrap;
+}
+
+.cost-table th.num,
+.cost-table td.num {
+  text-align: right;
+}
+
+.cost-table tfoot td {
+  border-top: 2px solid #ddd;
+  background: #f9f9f9;
+}
+
+.cost-table tbody tr:hover {
+  background: #f5f5ff;
+}
+
+.mono {
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.plan-tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: #e8eaf6;
+  color: #3949ab;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
 /* ===== Bar Charts ===== */
 .bar-chart {
   display: flex;
@@ -461,6 +703,7 @@ function creditBarWidth(credits: number): string {
   .two-col { grid-template-columns: 1fr; }
   .bar-item { grid-template-columns: 120px 1fr 80px; }
   .earnings-grid { grid-template-columns: 1fr; }
+  .profit-row { grid-template-columns: 1fr; }
 }
 
 /* ===== Plan Grid ===== */

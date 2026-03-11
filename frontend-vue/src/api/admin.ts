@@ -142,6 +142,40 @@ export interface EarningsStats {
   monthly_breakdown: { month: string; revenue: number }[]
 }
 
+export interface ApiCostItem {
+  service: string
+  display_name: string
+  week_calls: number
+  week_cost: number
+  month_calls: number
+  month_cost: number
+}
+
+export interface ApiCostStats {
+  by_service: ApiCostItem[]
+  week_total: number
+  month_total: number
+}
+
+export interface ActiveGeneration {
+  user_id: string
+  tool_type: string
+  started_at: string | null
+}
+
+export interface OnlineSession {
+  user_id: string
+  plan: string
+  last_seen: string
+}
+
+export interface ActiveUsersStats {
+  active_generations_count: number
+  active_generations: ActiveGeneration[]
+  online_sessions: OnlineSession[]
+  online_count: number
+}
+
 // ============================================================================
 // Admin API
 // ============================================================================
@@ -265,6 +299,18 @@ export const adminApi = {
   // Earnings Stats (weekly/monthly)
   async getEarningsStats(): Promise<EarningsStats> {
     const response = await apiClient.get('/api/v1/admin/stats/earnings')
+    return response.data
+  },
+
+  // API Cost Stats (weekly/monthly per service)
+  async getApiCostStats(): Promise<ApiCostStats> {
+    const response = await apiClient.get('/api/v1/admin/stats/api-costs')
+    return response.data
+  },
+
+  // Active Users Stats (generations + sessions)
+  async getActiveUsersStats(): Promise<ActiveUsersStats> {
+    const response = await apiClient.get('/api/v1/admin/stats/active-users')
     return response.data
   }
 }

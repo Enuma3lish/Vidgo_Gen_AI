@@ -153,6 +153,26 @@ async def get_earnings_stats(
     return await service.get_earnings_stats()
 
 
+@router.get("/stats/api-costs")
+async def get_api_cost_stats(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Get API cost breakdown by service type (weekly and monthly)"""
+    service = AdminDashboardService(db)
+    return await service.get_api_cost_stats()
+
+
+@router.get("/stats/active-users")
+async def get_active_users_stats(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Get active generations count and online user sessions"""
+    service = AdminDashboardService(db)
+    return await service.get_active_users_stats()
+
+
 # ============================================================================
 # User Management Endpoints
 # ============================================================================
@@ -508,6 +528,13 @@ async def admin_realtime_websocket(
         while True:
             # Get real-time stats
             stats = await session_tracker.get_stats()
+
+            # Get active generations count
+            try:
+                active_data = await service.get_active_users_stats()
+                stats["active_generations_count"] = active_data["active_generations_count"]
+            except Exception:
+                stats["active_generations_count"] = 0
 
             # Send to client
             await websocket.send_json({

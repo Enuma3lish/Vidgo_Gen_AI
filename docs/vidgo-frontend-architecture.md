@@ -95,7 +95,8 @@ frontend-vue/
 │   ├── api/                         # API Client Layer
 │   │   ├── index.ts                 # API exports
 │   │   ├── client.ts                # Axios client configuration
-│   │   ├── admin.ts                 # Admin API endpoints
+│   │   ├── admin.ts                 # Admin API endpoints (stats, costs, active users)
+│   │   ├── einvoice.ts              # Taiwan e-invoice API (B2C/B2B issue, void)
 │   │   ├── auth.ts                  # Authentication API
 │   │   ├── credits.ts               # Credits API
 │   │   ├── demo.ts                  # Demo/preset API
@@ -140,6 +141,10 @@ frontend-vue/
 │   │   ├── social/                  # Social media components
 │   │   │   └── ShareToSocialModal.vue  # Publish to FB/IG/TikTok
 │   │   │
+│   │   ├── invoice/                 # E-invoice components
+│   │   │   ├── InvoiceCreateForm.vue    # B2C/B2B e-invoice creation form
+│   │   │   └── InvoiceVoidDialog.vue    # Invoice void confirmation dialog
+│   │   │
 │   │   ├── tools/                   # Tool-specific components
 │   │   │   ├── BeforeAfterSlider.vue
 │   │   │   ├── CreditCost.vue
@@ -172,7 +177,7 @@ frontend-vue/
 │   │
 │   ├── stores/                      # Pinia State Management
 │   │   ├── index.ts                 # Store exports
-│   │   ├── admin.ts                 # Admin state
+│   │   ├── admin.ts                 # Admin state (stats, API costs, active users)
 │   │   ├── auth.ts                  # Authentication state
 │   │   ├── credits.ts               # Credits state
 │   │   ├── generation.ts            # Generation state
@@ -183,8 +188,8 @@ frontend-vue/
 │   │   ├── Pricing.vue              # Pricing page
 │   │   ├── NotFound.vue             # 404 page
 │   │   │
-│   │   ├── admin/                   # Admin dashboard
-│   │   │   ├── AdminDashboard.vue
+│   │   ├── admin/                   # Admin dashboard (stats, costs, profit, active users)
+│   │   │   ├── AdminDashboard.vue   # Overview: stats, profit, API costs, sessions
 │   │   │   ├── AdminUsers.vue
 │   │   │   ├── AdminMaterials.vue
 │   │   │   ├── AdminModeration.vue
@@ -200,7 +205,7 @@ frontend-vue/
 │   │   ├── dashboard/               # User dashboard
 │   │   │   ├── Dashboard.vue
 │   │   │   ├── MyWorks.vue
-│   │   │   ├── Invoices.vue             # Invoice history & download
+│   │   │   ├── Invoices.vue             # Invoice history, e-invoice issue/void
 │   │   │   ├── Referrals.vue            # Referral program, stats, leaderboard
 │   │   │   └── SocialAccounts.vue       # Connected social media accounts
 │   │   │

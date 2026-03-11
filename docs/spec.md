@@ -1,7 +1,7 @@
 # VidGo Platform – Function & Tool Coverage Spec
 
 **Purpose:** Check that each function/tool is implemented in both **Backend** and **Frontend**. Use this to find gaps.
-**Last Updated:** March 5, 2026
+**Last Updated:** March 11, 2026
 
 **Legend:**
 - ✅ Implemented and wired
@@ -179,10 +179,28 @@
 | System health | ✅ `GET /admin/health` | ✅ AdminSystem.vue | ✅ |
 | AI services | ✅ `GET /admin/ai-services` | ✅ | ✅ |
 | All generations | ✅ `GET /admin/generations` | ✅ | ✅ |
+| Tool usage stats | ✅ `GET /admin/stats/tool-usage` | ✅ AdminDashboard.vue | ✅ |
+| Earnings stats | ✅ `GET /admin/stats/earnings` | ✅ AdminDashboard.vue | ✅ |
+| API cost breakdown | ✅ `GET /admin/stats/api-costs` | ✅ AdminDashboard.vue | ✅ |
+| Active users/generations | ✅ `GET /admin/stats/active-users` | ✅ AdminDashboard.vue | ✅ |
+| Real-time WebSocket | ✅ `WS /admin/ws/realtime` | ✅ AdminDashboard.vue | ✅ |
 
 ---
 
-## 12. Effects (Subscriber)
+## 12. E-Invoice (Taiwan)
+
+| Function | Backend | Frontend | Status |
+|----------|---------|----------|--------|
+| Issue B2C invoice | ✅ `POST /einvoices/b2c` | ✅ InvoiceCreateForm.vue | ✅ |
+| Issue B2B invoice | ✅ `POST /einvoices/b2b` | ✅ InvoiceCreateForm.vue | ✅ |
+| Void invoice | ✅ `POST /einvoices/void` | ✅ InvoiceVoidDialog.vue | ✅ |
+| List invoices | ✅ `GET /einvoices/` | ✅ Invoices.vue | ✅ |
+| Invoice detail | ✅ `GET /einvoices/{id}` | ✅ Invoices.vue | ✅ |
+| Invoice preferences | ✅ `PUT /einvoices/preferences` | ✅ Invoices.vue | ✅ |
+
+---
+
+## 13. Effects (Subscriber)
 
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
@@ -193,7 +211,7 @@
 
 ---
 
-## 13. Interior Design
+## 14. Interior Design
 
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
@@ -209,7 +227,7 @@
 
 ---
 
-## 14. Generation API (Advanced)
+## 15. Generation API (Advanced)
 
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
@@ -223,7 +241,7 @@
 
 ---
 
-## 15. Promotions
+## 16. Promotions
 
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
@@ -235,7 +253,7 @@
 
 ---
 
-## 16. Session & Quota
+## 17. Session & Quota
 
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
@@ -248,7 +266,7 @@
 
 ---
 
-## 17. Prompts & Templates
+## 18. Prompts & Templates
 
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
@@ -261,7 +279,7 @@
 
 ---
 
-## 18. Workflow
+## 19. Workflow
 
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
@@ -290,7 +308,8 @@
 | `/api/v1/plans` | Plan listing |
 | `/api/v1/promotions` | Promo codes, packages |
 | `/api/v1/landing` | Stats, features, examples, testimonials, pricing, FAQ |
-| `/api/v1/admin` | Dashboard stats, users, materials, moderation |
+| `/api/v1/admin` | Dashboard stats, users, materials, moderation, API costs, active users |
+| `/api/v1/einvoices` | Taiwan e-invoice (B2C/B2B issue, void, preferences) |
 | `/api/v1/prompts` | Groups, templates, demo/subscriber generation |
 | `/api/v1/session` | Heartbeat, online count |
 | `/api/v1/quota` | Daily, user, promo quota |

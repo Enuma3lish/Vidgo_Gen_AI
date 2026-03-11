@@ -17,7 +17,7 @@ from sqlalchemy import select, func, and_, or_, desc
 from sqlalchemy.orm import selectinload
 
 from app.models.user import User
-from app.models.billing import Plan, Subscription, Order, CreditTransaction, Generation
+from app.models.billing import Plan, Subscription, Order, CreditTransaction, Generation, ServicePricing
 from app.models.material import Material, MaterialStatus, ToolType
 from app.services.session_tracker import session_tracker
 
@@ -258,6 +258,167 @@ class AdminDashboardService:
             "week": week_revenue,
             "month": month_revenue,
             "monthly_breakdown": monthly,
+        }
+
+    async def get_api_cost_stats(self) -> Dict[str, Any]:
+        """
+        Get API cost breakdown by service type for this week and this month.
+        JOINs generations with service_pricing to compute actual USD costs.
+        """
+        today = datetime.utcnow().date()
+        week_ago = today - timedelta(days=7)
+        month_start = today.replace(day=1)
+
+        # Per-service costs for this week
+        week_result = await self.db.execute(
+            select(
+                Generation.service_type,
+                ServicePricing.display_name,
+                func.count(Generation.id).label('call_count'),
+                func.sum(ServicePricing.api_cost_usd).label('total_cost')
+            ).join(
+                ServicePricing,
+                Generation.service_type == ServicePricing.service_type
+            ).where(
+                and_(
+                    Generation.created_at >= week_ago,
+                    Generation.status == "completed"
+                )
+            ).group_by(
+                Generation.service_type, ServicePricing.display_name
+            ).order_by(desc(func.sum(ServicePricing.api_cost_usd)))
+        )
+        week_data = {
+            row.service_type: {
+                "service": row.service_type,
+                "display_name": row.display_name,
+                "calls": row.call_count,
+                "cost": float(row.total_cost or 0)
+            }
+            for row in week_result.all()
+        }
+
+        # Per-service costs for this month
+        month_result = await self.db.execute(
+            select(
+                Generation.service_type,
+                ServicePricing.display_name,
+                func.count(Generation.id).label('call_count'),
+                func.sum(ServicePricing.api_cost_usd).label('total_cost')
+            ).join(
+                ServicePricing,
+                Generation.service_type == ServicePricing.service_type
+            ).where(
+                and_(
+                    Generation.created_at >= month_start,
+                    Generation.status == "completed"
+                )
+            ).group_by(
+                Generation.service_type, ServicePricing.display_name
+            ).order_by(desc(func.sum(ServicePricing.api_cost_usd)))
+        )
+        month_data = {
+            row.service_type: {
+                "service": row.service_type,
+                "display_name": row.display_name,
+                "calls": row.call_count,
+                "cost": float(row.total_cost or 0)
+            }
+            for row in month_result.all()
+        }
+
+        # Merge into unified list
+        all_services = set(list(week_data.keys()) + list(month_data.keys()))
+        by_service = []
+        week_total = 0.0
+        month_total = 0.0
+
+        for svc in sorted(all_services):
+            w = week_data.get(svc, {})
+            m = month_data.get(svc, {})
+            w_cost = w.get("cost", 0.0)
+            m_cost = m.get("cost", 0.0)
+            week_total += w_cost
+            month_total += m_cost
+            by_service.append({
+                "service": svc,
+                "display_name": w.get("display_name") or m.get("display_name", svc),
+                "week_calls": w.get("calls", 0),
+                "week_cost": w_cost,
+                "month_calls": m.get("calls", 0),
+                "month_cost": m_cost,
+            })
+
+        # Sort by month cost descending
+        by_service.sort(key=lambda x: x["month_cost"], reverse=True)
+
+        return {
+            "by_service": by_service,
+            "week_total": week_total,
+            "month_total": month_total,
+        }
+
+    async def get_active_users_stats(self) -> Dict[str, Any]:
+        """
+        Get active generation count and online user sessions.
+        """
+        from app.models.user_generation import UserGeneration
+        from app.models.user_upload import UserUpload, UploadStatus
+
+        # Active generations (processing status) from UserUpload
+        try:
+            active_gen_result = await self.db.execute(
+                select(
+                    UserUpload.user_id,
+                    UserUpload.tool_type,
+                    UserUpload.created_at
+                ).where(
+                    UserUpload.status == UploadStatus.PROCESSING
+                ).order_by(desc(UserUpload.created_at))
+                .limit(50)
+            )
+            active_generations = [
+                {
+                    "user_id": str(row.user_id),
+                    "tool_type": row.tool_type.value if hasattr(row.tool_type, 'value') else str(row.tool_type) if row.tool_type else "unknown",
+                    "started_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in active_gen_result.all()
+            ]
+        except Exception as e:
+            logger.warning(f"Could not query active generations: {e}")
+            active_generations = []
+
+        # Also check Generation model for pending/processing
+        try:
+            active_gen_billing = await self.db.execute(
+                select(
+                    Generation.user_id,
+                    Generation.service_type,
+                    Generation.started_at,
+                    Generation.created_at
+                ).where(
+                    Generation.status.in_(["pending", "processing"])
+                ).order_by(desc(Generation.created_at))
+                .limit(50)
+            )
+            for row in active_gen_billing.all():
+                active_generations.append({
+                    "user_id": str(row.user_id),
+                    "tool_type": row.service_type or "unknown",
+                    "started_at": (row.started_at or row.created_at).isoformat() if (row.started_at or row.created_at) else None,
+                })
+        except Exception:
+            pass
+
+        # Online sessions from Redis
+        online_sessions = await session_tracker.get_online_users(limit=100)
+
+        return {
+            "active_generations_count": len(active_generations),
+            "active_generations": active_generations,
+            "online_sessions": online_sessions,
+            "online_count": len(online_sessions),
         }
 
     # =========================================================================

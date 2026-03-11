@@ -108,18 +108,77 @@ class Order(Base):
 
 class Invoice(Base):
     __tablename__ = "invoices"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), unique=True)
+    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), unique=True, nullable=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    
-    invoice_number = Column(String, unique=True)
+
+    # Core invoice fields
+    invoice_number = Column(String, unique=True)  # e.g., AB12345678
     amount = Column(DECIMAL(10, 2))
     pdf_url = Column(String, nullable=True)
-    
     issued_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
+    # Taiwan e-invoice fields
+    invoice_type = Column(String(10), nullable=True, default="b2c")  # b2c or b2b
+
+    # Tax fields
+    tax_type = Column(String(20), nullable=True, default="taxable")  # taxable, zero_tax, tax_free, mixed
+    tax_rate = Column(DECIMAL(5, 4), nullable=True, default=0.05)  # 5% standard
+    tax_amount = Column(DECIMAL(10, 2), nullable=True)
+    sales_amount = Column(DECIMAL(10, 2), nullable=True)  # before tax
+
+    # Buyer info (B2B)
+    buyer_company_name = Column(String(100), nullable=True)
+    buyer_tax_id = Column(String(8), nullable=True)  # 統一編號
+
+    # Buyer info (B2C)
+    buyer_email = Column(String(255), nullable=True)
+
+    # Carrier info (B2C)
+    carrier_type = Column(String(20), nullable=True)  # mobile_barcode, citizen_cert, email
+    carrier_number = Column(String(64), nullable=True)
+
+    # Donation (B2C)
+    is_donation = Column(Boolean, default=False)
+    love_code = Column(String(7), nullable=True)  # 愛心碼
+
+    # ECPay e-invoice tracking
+    ecpay_invoice_no = Column(String(20), nullable=True)
+    ecpay_relate_number = Column(String(30), nullable=True, unique=True)
+    ecpay_response_data = Column(JSONB, nullable=True)
+
+    # Invoice period (bimonthly)
+    invoice_period = Column(String(6), nullable=True)  # e.g., "202603" = Mar-Apr 2026
+
+    # Status and void tracking
+    status = Column(String(20), default="issued")  # issued, voided, failed, pending_issue
+    voided_at = Column(DateTime(timezone=True), nullable=True)
+    void_reason = Column(String(255), nullable=True)
+    void_response_data = Column(JSONB, nullable=True)
+
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
     order = relationship("Order", backref="invoice")
+    items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
+
+
+class InvoiceItem(Base):
+    """Line items for Taiwan e-invoices (required by ECPay API)."""
+    __tablename__ = "invoice_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+
+    item_name = Column(String(255), nullable=False)
+    item_count = Column(Integer, default=1)
+    item_unit = Column(String(10), default="式")  # unit of measurement
+    item_price = Column(DECIMAL(10, 2), nullable=False)
+    item_amount = Column(DECIMAL(10, 2), nullable=False)  # price * count
+    item_tax_type = Column(String(20), default="taxable")  # For mixed-tax invoices
+
+    invoice = relationship("Invoice", back_populates="items")
 
 
 class Promotion(Base):

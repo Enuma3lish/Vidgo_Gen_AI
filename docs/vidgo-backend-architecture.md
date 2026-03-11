@@ -151,6 +151,7 @@ backend/
 │   │       ├── credits.py           # Credit management
 │   │       ├── demo.py              # Demo/preset endpoints
 │   │       ├── effects.py           # Style transfer & enhancement
+│   │       ├── einvoices.py         # Taiwan e-invoice (B2C/B2B issue, void)
 │   │       ├── generation.py        # Content generation (T2I, I2V, patterns)
 │   │       ├── interior.py          # Interior design endpoints
 │   │       ├── landing.py           # Landing page data
@@ -204,11 +205,13 @@ backend/
 │   │   ├── payment.py               # Payment schemas
 │   │   ├── plan.py                  # Plan schemas
 │   │   ├── promotion.py             # Promotion schemas
+│   │   ├── einvoice.py              # Taiwan e-invoice schemas
 │   │   └── user.py                  # User schemas
 │   │
 │   ├── services/
 │   │   ├── a2e_service.py           # A2E Avatar service
-│   │   ├── admin_dashboard.py       # Admin dashboard service
+│   │   ├── admin_dashboard.py       # Admin dashboard service (stats, API costs, active users)
+│   │   ├── invoice_service.py      # Taiwan e-invoice business logic
 │   │   ├── block_cache.py           # Block-level caching
 │   │   ├── credit_service.py        # Credit management
 │   │   ├── demo.py                  # Demo data service
@@ -285,6 +288,7 @@ api_router.include_router(user_works.router, prefix="/user", tags=["user"])
 api_router.include_router(uploads.router, tags=["uploads"])
 api_router.include_router(referrals.router, tags=["referrals"])
 api_router.include_router(social_media.router, tags=["social"])
+api_router.include_router(einvoices.router, prefix="/einvoices", tags=["einvoices"])
 ```
 
 ### Endpoint Summary
@@ -303,7 +307,8 @@ api_router.include_router(social_media.router, tags=["social"])
 | `/landing` | landing | Landing page data (stats, features, examples, FAQ) |
 | `/quota` | quota | Daily/user/promo quota management |
 | `/tools` | tools | 8 core AI tools (remove-bg, product-scene, try-on, etc.) |
-| `/admin` | admin | Admin dashboard, user/material management, moderation |
+| `/admin` | admin | Admin dashboard, user/material management, moderation, API costs, active users |
+| `/einvoices` | einvoices | Taiwan e-invoice (B2C/B2B issue, void, preferences) |
 | `/session` | session | Session heartbeat, online count |
 | `/interior` | interior | Interior design (redesign, generate, fusion, edit, style-transfer) |
 | `/workflow` | workflow | Workflow topics, categories, generation |
@@ -327,7 +332,8 @@ User                    # User account (email, password, plan, referral fields)
 Plan                    # Subscription plan definitions
 Subscription            # Active subscriptions
 Order                   # Payment orders
-Invoice                 # Invoice records
+Invoice                 # Invoice records (Taiwan e-invoice fields: carrier, donation, ECPay tracking)
+InvoiceItem             # Invoice line items (required by ECPay API)
 Promotion               # Promotional campaigns
 CreditPackage           # Purchasable credit packs
 PromotionUsage          # Promo code usage tracking

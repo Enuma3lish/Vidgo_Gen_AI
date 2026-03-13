@@ -11,7 +11,7 @@ Tools:
 6. AI Avatar - /tools/avatar (NEW: Photo-to-Avatar with lip sync)
 """
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -25,15 +25,31 @@ from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_styl
 from app.services.a2e_service import get_a2e_service, A2E_VOICES
 from app.services.rescue_service import get_rescue_service
 from app.providers.provider_router import get_provider_router, TaskType
-from app.api.deps import get_current_user_optional, get_db, get_redis, is_subscribed_user
+from app.api.deps import get_current_user_optional, get_current_user, get_db, get_redis, is_subscribed_user
 from app.models.user_generation import UserGeneration
 from app.models.material import Material, ToolType
 from app.services.credit_service import CreditService
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str):
+    """Refund credits on operation failure."""
+    try:
+        credit_svc = CreditService(db)
+        await credit_svc.add_credits(
+            user_id=str(user.id),
+            amount=amount,
+            credit_type="subscription",
+            description=f"Refund: {service_type} failed",
+        )
+        logger.info(f"Refunded {amount} credits to user {user.id} for failed {service_type}")
+    except Exception as e:
+        logger.error(f"Failed to refund {amount} credits to user {user.id}: {e}")
 
 
 async def _check_and_deduct_credits(
@@ -65,27 +81,27 @@ async def _check_and_deduct_credits(
 
 class RemoveBackgroundRequest(BaseModel):
     """Remove background from image"""
-    image_url: HttpUrl
+    image_url: str
     output_format: str = "png"  # png (transparent) or white
 
 
 class RemoveBackgroundBatchRequest(BaseModel):
     """Batch remove background"""
-    image_urls: List[HttpUrl]
+    image_urls: List[str]
     output_format: str = "png"
 
 
 class ProductSceneRequest(BaseModel):
     """Generate product in new scene"""
-    product_image_url: HttpUrl
+    product_image_url: str
     scene_type: str = "studio"  # studio, nature, elegant, minimal, lifestyle
     custom_prompt: Optional[str] = None
 
 
 class TryOnRequest(BaseModel):
     """AI Try-On - virtual clothing try-on"""
-    garment_image_url: HttpUrl
-    model_image_url: Optional[HttpUrl] = None  # Use preset model if None
+    garment_image_url: str
+    model_image_url: Optional[str] = None  # Use preset model if None
     model_id: Optional[str] = None  # Preset model ID
     angle: str = "front"  # front, side, back
     background: str = "white"  # white, transparent, studio
@@ -93,7 +109,7 @@ class TryOnRequest(BaseModel):
 
 class RoomRedesignRequest(BaseModel):
     """Room Redesign - transform room style"""
-    room_image_url: HttpUrl
+    room_image_url: str
     style: str = "modern"  # modern, nordic, japanese, industrial, minimalist, luxury
     custom_prompt: Optional[str] = None
     preserve_structure: bool = True
@@ -101,7 +117,7 @@ class RoomRedesignRequest(BaseModel):
 
 class ShortVideoRequest(BaseModel):
     """Short Video - image to video with optional TTS"""
-    image_url: HttpUrl
+    image_url: str
     motion_strength: int = 5  # 1-10
     style: Optional[str] = None  # Optional style transformation
     script: Optional[str] = None  # Optional TTS script
@@ -110,7 +126,7 @@ class ShortVideoRequest(BaseModel):
 
 class AvatarRequest(BaseModel):
     """AI Avatar - Photo-to-Avatar with lip sync"""
-    image_url: HttpUrl  # Clear headshot photo
+    image_url: str  # Clear headshot photo
     script: str  # Text for the avatar to speak
     language: str = "en"  # Language code: 'en' or 'zh-TW'
     voice_id: Optional[str] = None  # Voice ID (defaults to first voice for language)
@@ -177,21 +193,15 @@ INTERIOR_STYLES = [
      "prompt": "art deco style, geometric patterns, gold and black accents, luxurious materials, velvet, mirrors, glamorous sophisticated design"},
 ]
 
-# Preset models for Try-On
-TRYON_MODELS = [
-    {"id": "female_01", "name": "Female Model 1", "name_zh": "女模特 1",
-     "preview_url": "/static/models/female_01.jpg", "gender": "female", "body_type": "slim"},
-    {"id": "female_02", "name": "Female Model 2", "name_zh": "女模特 2",
-     "preview_url": "/static/models/female_02.jpg", "gender": "female", "body_type": "average"},
-    {"id": "female_03", "name": "Female Model 3", "name_zh": "女模特 3",
-     "preview_url": "/static/models/female_03.jpg", "gender": "female", "body_type": "plus"},
-    {"id": "male_01", "name": "Male Model 1", "name_zh": "男模特 1",
-     "preview_url": "/static/models/male_01.jpg", "gender": "male", "body_type": "slim"},
-    {"id": "male_02", "name": "Male Model 2", "name_zh": "男模特 2",
-     "preview_url": "/static/models/male_02.jpg", "gender": "male", "body_type": "average"},
-    {"id": "male_03", "name": "Male Model 3", "name_zh": "男模特 3",
-     "preview_url": "/static/models/male_03.jpg", "gender": "male", "body_type": "athletic"},
-]
+# Preset models for Try-On (IDs match frontend: "female-1", "male-1" etc.)
+TRYON_MODELS = {
+    "female-1": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop",
+    "female-2": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=512&fit=crop",
+    "female-3": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512&fit=crop",
+    "male-1": "https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=512&fit=crop",
+    "male-2": "https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=512&fit=crop",
+    "male-3": "https://images.unsplash.com/photo-1667127752169-74c7e4d8822f?w=512&fit=crop&crop=face",
+}
 
 # TTS Voices
 TTS_VOICES = [
@@ -276,6 +286,7 @@ async def remove_background(
                 result_image_url=result_url,
                 credits_used=CREDIT_COST,
             )
+            user_gen.set_expiry()
             db.add(user_gen)
             await db.commit()
             
@@ -286,12 +297,14 @@ async def remove_background(
                 message="Background removed successfully"
             )
         else:
+            await _refund_credits(db, current_user, CREDIT_COST, "background_removal")
             return ToolResponse(
                 success=False,
                 message=result.get("error", "Background removal failed")
             )
     except Exception as e:
         logger.error(f"Background removal error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "background_removal")
         return ToolResponse(
             success=False,
             message=f"Generation failed: {str(e)}"
@@ -301,16 +314,26 @@ async def remove_background(
 @router.post("/remove-bg/batch", response_model=ToolResponse)
 async def remove_background_batch(
     request: RemoveBackgroundBatchRequest,
-    current_user=Depends(get_current_user_optional)
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
     """
     Batch remove background from multiple images.
     Maximum 10 images per request.
 
-    Credits: 3 per image
+    Credits: 3 per image (requires authenticated user)
     """
     if len(request.image_urls) > 10:
         raise HTTPException(status_code=400, detail="Maximum 10 images per batch")
+
+    if not is_subscribed_user(current_user):
+        raise HTTPException(status_code=403, detail="Subscription required for batch processing")
+
+    total_cost = len(request.image_urls) * 3
+    credit_service = CreditService(db)
+    balance = await credit_service.get_balance(str(current_user.id))
+    if balance["total"] < total_cost:
+        raise HTTPException(status_code=403, detail=f"Insufficient credits. Need {total_cost}, have {balance['total']}")
 
     results = []
     credits_used = 0
@@ -452,41 +475,48 @@ async def generate_product_scene(
         
         # Step 3: Composite (Local PIL processing)
         logger.info("Step 3: Compositing...")
-        async with httpx.AsyncClient() as client:
-            p_resp = await client.get(product_no_bg_url)
-            s_resp = await client.get(scene_url)
-            
-            p_img = Image.open(BytesIO(p_resp.content)).convert("RGBA")
-            s_img = Image.open(BytesIO(s_resp.content)).convert("RGBA")
-            
-            # Smart Placement Logic
-            scene_w, scene_h = s_img.size
-            target_w = int(scene_w * 0.6)
-            prod_w, prod_h = p_img.size
-            scale = target_w / prod_w
-            new_w = target_w
+
+        async def _load_image(url: str) -> Image.Image:
+            """Load image from local path or remote URL."""
+            if url.startswith("/static") or url.startswith("static"):
+                local_path = Path("/app") / url.lstrip("/")
+                return Image.open(local_path)
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as c:
+                resp = await c.get(url)
+                resp.raise_for_status()
+                return Image.open(BytesIO(resp.content))
+
+        p_img = (await _load_image(product_no_bg_url)).convert("RGBA")
+        s_img = (await _load_image(scene_url)).convert("RGBA")
+
+        # Smart Placement Logic
+        scene_w, scene_h = s_img.size
+        target_w = int(scene_w * 0.6)
+        prod_w, prod_h = p_img.size
+        scale = target_w / prod_w
+        new_w = target_w
+        new_h = int(prod_h * scale)
+
+        if new_h > scene_h * 0.8:
+            scale = (scene_h * 0.8) / prod_h
             new_h = int(prod_h * scale)
-            
-            if new_h > scene_h * 0.8:
-                scale = (scene_h * 0.8) / prod_h
-                new_h = int(prod_h * scale)
-                new_w = int(prod_w * scale)
-                
-            p_resized = p_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            x_off = (scene_w - new_w) // 2
-            y_off = (scene_h - new_h) // 2
-            
-            s_img.paste(p_resized, (x_off, y_off), p_resized)
-            final_img = s_img.convert("RGB")
-            
-            # Save final result
-            output_dir = Path("/app/static/user_generated")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
-            final_path = output_dir / filename
-            final_img.save(final_path, "PNG", quality=95)
-            
-            result_url = f"/static/user_generated/{filename}"
+            new_w = int(prod_w * scale)
+
+        p_resized = p_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        x_off = (scene_w - new_w) // 2
+        y_off = (scene_h - new_h) // 2
+
+        s_img.paste(p_resized, (x_off, y_off), p_resized)
+        final_img = s_img.convert("RGB")
+
+        # Save final result
+        output_dir = Path("/app/static/user_generated")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
+        final_path = output_dir / filename
+        final_img.save(final_path, "PNG", quality=95)
+
+        result_url = f"/static/user_generated/{filename}"
 
         # Save to UserGeneration
         user_gen = UserGeneration(
@@ -498,6 +528,7 @@ async def generate_product_scene(
             result_image_url=result_url,
             credits_used=10,
         )
+        user_gen.set_expiry()
         db.add(user_gen)
         await db.commit()
         
@@ -510,6 +541,7 @@ async def generate_product_scene(
         
     except Exception as e:
         logger.error(f"Product scene error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "product_scene")
         return ToolResponse(
             success=False,
             message=f"Generation failed: {str(e)}"
@@ -649,19 +681,14 @@ async def ai_try_on(
         if request.model_image_url:
             model_url = str(request.model_image_url)
         elif request.model_id:
-             # Look for matching model in config
-             # Frontend passes "female-1", "male-1" etc.
-             # We should map to backend path if not provided
-             # Try /static/models/...
-             gender = "female" if "female" in request.model_id else "male"
-             model_url = f"/static/models/{gender}/{request.model_id}.png"
-             # If using full URL service (PIAPI), and running locally in docker,
-             # we might need to rely on the Client handling local paths.
-             # PiAPIClient._resolve_image_input does this.
+            model_url = TRYON_MODELS.get(request.model_id)
+            if not model_url:
+                await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+                return ToolResponse(success=False, message=f"Unknown model_id: {request.model_id}")
 
         # Route via PIAPI Client directly for specialized Try-On
         from scripts.services.piapi_client import PiAPIClient
-        piapi = PiAPIClient()
+        piapi = PiAPIClient(api_key=os.getenv("PIAPI_KEY", ""))
         
         result = await piapi.virtual_try_on(
              model_image_url=model_url,
@@ -696,6 +723,7 @@ async def ai_try_on(
             result_image_url=result_url,
             credits_used=15,
         )
+        user_gen.set_expiry()
         db.add(user_gen)
         await db.commit()
         
@@ -708,6 +736,7 @@ async def ai_try_on(
 
     except Exception as e:
         logger.error(f"Try-On error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
         return ToolResponse(
             success=False,
             message=f"Try-On generation failed: {str(e)}"
@@ -803,6 +832,7 @@ async def room_redesign(
                 result_image_url=output_url,
                 credits_used=20,
             )
+            user_gen.set_expiry()
             db.add(user_gen)
             await db.commit()
             
@@ -813,12 +843,14 @@ async def room_redesign(
                 message="Room redesign successful"
             )
         else:
+            await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
             return ToolResponse(
                 success=False,
                 message=result.get("error", "Room redesign failed")
             )
     except Exception as e:
         logger.error(f"Room Redesign error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
         return ToolResponse(
             success=False,
             message=f"Generation failed: {str(e)}"
@@ -903,6 +935,7 @@ async def generate_short_video(
         )
 
         if not result.get("success"):
+            await _refund_credits(db, current_user, CREDIT_COST, "short_video")
             return ToolResponse(
                 success=False,
                 message=result.get("error", "Video generation failed")
@@ -936,6 +969,7 @@ async def generate_short_video(
                 result_video_url=video_url,
                 credits_used=credits_used,
             )
+            user_gen.set_expiry()
             db.add(user_gen)
             await db.commit()
 
@@ -946,6 +980,7 @@ async def generate_short_video(
                 message="Short video generated successfully"
             )
         else:
+            await _refund_credits(db, current_user, CREDIT_COST, "short_video")
             return ToolResponse(
                 success=False,
                 message="Video generation returned no URL"
@@ -953,6 +988,7 @@ async def generate_short_video(
 
     except Exception as e:
         logger.error(f"Short video error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "short_video")
         return ToolResponse(
             success=False,
             message=f"Generation failed: {str(e)}"
@@ -1017,6 +1053,7 @@ async def generate_avatar_video(
     try:
         # Validate language
         if request.language not in ["en", "zh-TW", "ja", "ko"]:
+            await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported language: {request.language}. Supported: en, zh-TW, ja, ko"
@@ -1024,6 +1061,7 @@ async def generate_avatar_video(
 
         # Validate duration
         if request.duration < 5 or request.duration > 120:
+            await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
             raise HTTPException(
                 status_code=400,
                 detail="Duration must be between 5 and 120 seconds"
@@ -1065,6 +1103,7 @@ async def generate_avatar_video(
                 },
                 credits_used=30,
             )
+            user_gen.set_expiry()
             db.add(user_gen)
             await db.commit()
 
@@ -1075,6 +1114,7 @@ async def generate_avatar_video(
                 message=f"Avatar video generated successfully in {request.language}"
             )
         else:
+            await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
             return ToolResponse(
                 success=False,
                 message=result.get("error", "Avatar generation failed")
@@ -1084,6 +1124,7 @@ async def generate_avatar_video(
         raise
     except Exception as e:
         logger.error(f"Avatar generation error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
         return ToolResponse(
             success=False,
             message=f"Generation failed: {str(e)}"
@@ -1170,7 +1211,7 @@ async def get_avatar_characters():
 
 class ImageTransformRequest(BaseModel):
     """Image-to-Image transformation using PiAPI Flux"""
-    image_url: HttpUrl
+    image_url: str
     prompt: str
     strength: float = 0.75  # 0.0 (subtle) to 1.0 (dramatic)
     negative_prompt: Optional[str] = None
@@ -1262,6 +1303,7 @@ async def image_transform(
                 result_image_url=result_url,
                 credits_used=cost,
             )
+            user_gen.set_expiry()
             db.add(user_gen)
             await db.commit()
 
@@ -1272,6 +1314,7 @@ async def image_transform(
                 message="Image transformed successfully"
             )
         else:
+            await _refund_credits(db, current_user, cost, "image_transform")
             return ToolResponse(
                 success=False,
                 message=result.get("error", "Image transformation failed")
@@ -1280,6 +1323,7 @@ async def image_transform(
         raise
     except Exception as e:
         logger.error(f"Image transform error: {e}")
+        await _refund_credits(db, current_user, cost, "image_transform")
         return ToolResponse(
             success=False,
             message=f"Generation failed: {str(e)}"
@@ -1308,11 +1352,12 @@ async def get_tryon_models(
     body_type: Optional[str] = None
 ):
     """Get available models for AI Try-On tool"""
-    models = TRYON_MODELS
+    models = [
+        {"id": mid, "preview_url": url, "gender": "female" if "female" in mid else "male"}
+        for mid, url in TRYON_MODELS.items()
+    ]
     if gender:
         models = [m for m in models if m["gender"] == gender]
-    if body_type:
-        models = [m for m in models if m["body_type"] == body_type]
     return models
 
 

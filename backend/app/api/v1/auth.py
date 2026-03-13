@@ -92,11 +92,23 @@ async def login(
     await db.commit()
     await db.refresh(user)
 
+    # Resolve plan_type from Plan table
+    plan_type = None
+    if user.current_plan_id:
+        from app.models.billing import Plan
+        plan_result = await db.execute(select(Plan).where(Plan.id == user.current_plan_id))
+        plan = plan_result.scalar_one_or_none()
+        if plan:
+            plan_type = plan.plan_type
+
     # Generate token pair
     access_token, refresh_token = security.create_token_pair(str(user.id))
 
+    user_data = UserSchema.model_validate(user)
+    user_data.plan_type = plan_type
+
     return LoginResponse(
-        user=UserSchema.model_validate(user),
+        user=user_data,
         tokens=TokenPair(access=access_token, refresh=refresh_token)
     )
 
@@ -230,6 +242,8 @@ async def register(
         email_verified=False,
         email_verification_sent_at=datetime.now(timezone.utc),
         referred_by_id=referrer_id,
+        bonus_credits=settings.REGISTRATION_BONUS_CREDITS,
+        bonus_credits_expiry=datetime.now(timezone.utc) + timedelta(days=settings.REGISTRATION_BONUS_DAYS),
     )
 
     db.add(user)
@@ -441,12 +455,40 @@ async def reset_password(
 
 @router.get("/me", response_model=UserWithDetails)
 async def get_current_user_profile(
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user: User = Depends(deps.get_current_active_user),
+    db: AsyncSession = Depends(deps.get_db)
 ) -> Any:
     """
-    Get current user's profile.
+    Get current user's profile with plan_type resolved from the Plan table.
     """
-    return current_user
+    # Resolve plan_type from the Plan table so frontend can determine demo vs paid
+    plan_type = None
+    if current_user.current_plan_id:
+        from app.models.billing import Plan
+        plan_result = await db.execute(
+            select(Plan).where(Plan.id == current_user.current_plan_id)
+        )
+        plan = plan_result.scalar_one_or_none()
+        if plan:
+            plan_type = plan.plan_type
+
+    # Build response dict from ORM object
+    user_data = {
+        "id": current_user.id,
+        "email": current_user.email,
+        "username": current_user.username,
+        "full_name": current_user.full_name,
+        "is_active": current_user.is_active,
+        "email_verified": current_user.email_verified,
+        "is_superuser": current_user.is_superuser,
+        "referral_code": current_user.referral_code,
+        "referral_count": current_user.referral_count or 0,
+        "plan_type": plan_type,
+        "created_at": current_user.created_at,
+        "updated_at": current_user.updated_at,
+        "last_login_at": current_user.last_login_at,
+    }
+    return user_data
 
 
 @router.put("/me", response_model=UserWithDetails)
@@ -554,8 +596,21 @@ async def verify_email_code(
             pass  # Don't block verification if referral bonus fails
 
     access_token, refresh_token = security.create_token_pair(str(user.id))
+
+    # Resolve plan_type from Plan table
+    plan_type = None
+    if user.current_plan_id:
+        from app.models.billing import Plan
+        plan_result = await db.execute(select(Plan).where(Plan.id == user.current_plan_id))
+        plan = plan_result.scalar_one_or_none()
+        if plan:
+            plan_type = plan.plan_type
+
+    user_data = UserSchema.model_validate(user)
+    user_data.plan_type = plan_type
+
     return AuthResponse(
-        user=UserSchema.model_validate(user),
+        user=user_data,
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer"

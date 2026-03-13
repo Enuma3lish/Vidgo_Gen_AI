@@ -77,6 +77,7 @@ const roomTypeIcons: Record<string, string> = {
 // Rooms and styles are independent - any room can be combined with any style
 interface DemoRoom {
   id: string
+  type_id: string
   input: string
   name: string
   nameZh: string
@@ -85,24 +86,28 @@ interface DemoRoom {
 const defaultRooms: DemoRoom[] = [
   {
     id: 'room-1',
+    type_id: 'living_room',
     input: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800',
     name: 'Living Room',
     nameZh: '客廳'
   },
   {
     id: 'room-2',
+    type_id: 'bedroom',
     input: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800',
     name: 'Bedroom',
     nameZh: '臥室'
   },
   {
     id: 'room-3',
+    type_id: 'kitchen',
     input: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800',
     name: 'Kitchen',
     nameZh: '廚房'
   },
   {
     id: 'room-4',
+    type_id: 'bathroom',
     input: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800',
     name: 'Bathroom',
     nameZh: '浴室'
@@ -169,9 +174,9 @@ onMounted(async () => {
     // For demo users, auto-select first default room
     if (isDemoUser.value && defaultRooms.length > 0) {
       const firstRoom = defaultRooms[0]
+      selectedRoomType.value = firstRoom.type_id
       selectedDemoRoomId.value = firstRoom.id
       uploadedImage.value = firstRoom.input
-      selectedRoomType.value = 'living_room'  // Default room type
       selectedStyle.value = 'modern_minimalist'  // Default style
 
       // Load all pre-generated results for room×roomType×style combinations
@@ -214,14 +219,6 @@ function loadAllPreGeneratedResults() {
 }
 
 // Handlers
-function selectDefaultRoom(room: DemoRoom) {
-  selectedDemoRoomId.value = room.id
-  uploadedImage.value = room.input
-  // Don't change room type or style - user can select any combination independently
-  resultImage.value = null
-  resultDescription.value = ''
-}
-
 async function handleRedesign() {
   // For demo users, use cached result based on room×roomType×style combination
   if (isDemoUser.value) {
@@ -510,6 +507,22 @@ function reset() {
 
 
 
+// Update demo room pattern when room type changes
+watch(selectedRoomType, (newType) => {
+  if (isDemoUser.value) {
+    const matchingRoom = defaultRooms.find(r => r.type_id === newType)
+    if (matchingRoom) {
+      selectedDemoRoomId.value = matchingRoom.id
+      uploadedImage.value = matchingRoom.input
+    } else {
+      selectedDemoRoomId.value = null
+      uploadedImage.value = undefined
+    }
+    resultImage.value = null
+    resultDescription.value = ''
+  }
+})
+
 // Watch tab changes for demo users
 watch(activeTab, (newTab) => {
   if (isDemoUser.value && (newTab === 'generate' || newTab === '3dModel')) {
@@ -589,64 +602,7 @@ watch(activeTab, (newTab) => {
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Left Panel - Input -->
         <div class="space-y-6">
-          <!-- Upload Zone (for redesign, style transfer, and 3D) -->
-          <div v-if="activeTab !== 'generate'" class="card bg-white border border-gray-200">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
-              <span>📷</span>
-              {{ t('interior.uploadTitle') }}
-            </h3>
-
-            <!-- PRESET-ONLY MODE: All users select from preset rooms -->
-            <div class="mb-4">
-              <p class="text-sm text-dark-500 mb-3">
-                {{ isZh ? '選擇房間圖片' : 'Select Room Image' }}
-              </p>
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  v-for="room in defaultRooms"
-                  :key="room.id"
-                  @click="selectDefaultRoom(room)"
-                  class="relative aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all"
-                  :class="selectedDemoRoomId === room.id
-                    ? 'border-primary-500 ring-2 ring-primary-500/50'
-                    : 'border-gray-200 hover:border-dark-500'"
-                >
-                  <img
-                    :src="room.input"
-                    alt="Room"
-                    class="w-full h-full object-cover"
-                  />
-                  <!-- Room name badge -->
-                  <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                    <span class="text-xs text-dark-900">
-                      {{ isZh ? room.nameZh : room.name }}
-                    </span>
-                  </div>
-                </button>
-              </div>
-              <p class="text-xs text-dark-400 mt-2">
-                {{ isZh ? '4個房間 × 多種類型 × 多種風格 = 多種組合' : '4 rooms × multiple types × multiple styles = many combinations' }}
-              </p>
-            </div>
-
-            <!-- Subscriber Interface: Upload Zone -->
-            <div v-if="!isDemoUser" class="mb-6">
-               <h4 class="text-sm font-medium text-dark-500 mb-2">{{ isZh ? '上傳房間照片' : 'Upload Room Photo' }}</h4>
-               <ImageUploader 
-                 v-model="uploadedImage" 
-                 :label="isZh ? '點擊上傳或拖放房間照片' : 'Drop room photo here'"
-                 class="mb-4"
-                 @file-selected="(file) => uploadedFile = file"
-               />
-            </div>
-
-            <!-- Selected Image Preview -->
-            <div v-if="uploadedImage" class="mt-4 space-y-2">
-              <img :src="uploadedImage" alt="Selected Room" class="w-full rounded-xl" />
-            </div>
-          </div>
-
-          <!-- Room Type Selection -->
+          <!-- 1. Room Type Selection -->
           <div class="card bg-white border border-gray-200">
             <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
               <span>🏠</span>
@@ -665,6 +621,46 @@ watch(activeTab, (newTab) => {
                 <span class="text-2xl block">{{ roomTypeIcons[room.id] || '🏠' }}</span>
                 <p class="text-xs text-dark-500 mt-1 truncate">{{ roomTypeName(room) }}</p>
               </button>
+            </div>
+          </div>
+
+          <!-- 2. Room Image -->
+          <div v-if="activeTab !== 'generate'" class="card bg-white border border-gray-200">
+            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
+              <span>📷</span>
+              {{ isZh ? '房間圖片' : 'Room Image' }}
+            </h3>
+
+            <!-- For Demo users: automatically show the image based on selected room type -->
+            <div v-if="isDemoUser" class="mb-4">
+              <div v-if="selectedDemoRoomId && uploadedImage" class="relative aspect-[4/3] rounded-lg overflow-hidden border-2 border-primary-500">
+                <img :src="uploadedImage" alt="Room" class="w-full h-full object-cover" />
+                <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                  <span class="text-xs text-white">
+                    {{ isZh ? defaultRooms.find(r => r.id === selectedDemoRoomId)?.nameZh : defaultRooms.find(r => r.id === selectedDemoRoomId)?.name }}
+                  </span>
+                </div>
+              </div>
+              <div v-else class="flex flex-col items-center justify-center p-8 bg-gray-100 rounded-lg text-dark-400">
+                <span class="text-4xl mb-2">📷</span>
+                <p class="text-sm text-center">
+                  {{ isZh ? '目前所選擇的空間類型尚未有示範圖片，請切換至客廳、臥室、廚房或浴室。' : 'No demo image available for this space type. Please select Living Room, Bedroom, Kitchen, or Bathroom.' }}
+                </p>
+              </div>
+            </div>
+
+            <!-- For Paid Users: Upload Zone -->
+            <div v-else class="mb-6">
+               <h4 class="text-sm font-medium text-dark-500 mb-2">{{ isZh ? '上傳房間照片' : 'Upload Room Photo' }}</h4>
+               <ImageUploader 
+                 v-model="uploadedImage" 
+                 :label="isZh ? '點擊上傳或拖放房間照片' : 'Drop room photo here'"
+                 class="mb-4"
+                 @file-selected="(file) => uploadedFile = file"
+               />
+               <div v-if="uploadedImage" class="mt-4 space-y-2">
+                 <img :src="uploadedImage" alt="Selected Room" class="w-full rounded-xl" />
+               </div>
             </div>
           </div>
 

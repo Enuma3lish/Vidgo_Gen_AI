@@ -158,10 +158,13 @@ async def apply_style_effect(
     )
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=result.get("error", "Failed to apply style")
-        )
+        error_msg = result.get("error", "Failed to apply style")
+        # Access-related errors → 403; processing errors → 500
+        if any(kw in error_msg.lower() for kw in ("subscription", "insufficient", "plan", "not found")):
+            code = status.HTTP_403_FORBIDDEN
+        else:
+            code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise HTTPException(status_code=code, detail=error_msg)
 
     # Save to UserGeneration
     generation = UserGeneration(

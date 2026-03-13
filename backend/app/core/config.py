@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     TIKTOK_CLIENT_KEY: str = ""         # TikTok Client Key
     TIKTOK_CLIENT_SECRET: str = ""      # TikTok Client Secret
 
+    # Registration System
+    REGISTRATION_BONUS_CREDITS: int = 40   # Credits awarded to new user upon registration
+    REGISTRATION_BONUS_DAYS: int = 30      # Days until registration bonus credits expire
+
     # Referral System
     REFERRAL_BONUS_CREDITS: int = 50       # Credits awarded to referrer per successful referral
     REFERRAL_WELCOME_CREDITS: int = 20     # Credits awarded to new user who used a referral code

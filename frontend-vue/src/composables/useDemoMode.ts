@@ -53,16 +53,17 @@ export function useDemoMode() {
   const dbEmpty = ref(false)
 
   /**
-   * PRESET-ONLY MODE: ALL users are treated as "demo" users
-   * This ensures everyone sees the same UI and uses preset templates only.
+   * PRESET-ONLY MODE: Demo user check
+   * A user is a demo user if they have no paid plan AND no active subscription.
    */
   const isDemoUser = computed(() => {
-    // Check real subscription status
-    // If user has active plan (not null) and it's not expired
     const user = authStore.user
     if (!user) return true // No user = demo
     
-    // Check if user has a non-demo plan
+    // If subscription API confirmed active subscription, user is NOT demo
+    if (hasSubscription.value) return false
+    
+    // Check if user has a non-demo plan from user profile
     const hasPlan = user.plan_type && user.plan_type !== 'demo' && user.plan_type !== 'free'
     
     // Simple check: if user has a paid plan, they are NOT a demo user

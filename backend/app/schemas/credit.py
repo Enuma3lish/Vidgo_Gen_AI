@@ -12,6 +12,8 @@ class CreditBalance(BaseModel):
     bonus: int = Field(default=0, description="Bonus/promotional credits")
     bonus_expiry: Optional[datetime] = Field(default=None, description="When bonus credits expire")
     total: int = Field(default=0, description="Total available credits")
+    weekly_limit: int = Field(default=0, description="Weekly credit allowance from plan")
+    weekly_used: int = Field(default=0, description="Credits used this week")
 
     class Config:
         from_attributes = True

@@ -48,6 +48,13 @@ python -m scripts.seed_service_pricing 2>/dev/null || echo "  (Pricing already s
 echo ""
 
 # ============================================
+# STEP 4: Seed Demo Data
+# ============================================
+echo "Step 5: Seeding static demo data into database..."
+python -m scripts.seed_demo_data 2>&1 || echo "  (Demo data seed failed or skipped)"
+echo ""
+
+# ============================================
 # STEP 4: Clean Materials (if CLEAN_MATERIALS is set)
 # ============================================
 if [ -n "$CLEAN_MATERIALS" ]; then

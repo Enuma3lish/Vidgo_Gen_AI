@@ -4,8 +4,9 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
-import { demoApi } from '@/api'
-// PRESET-ONLY MODE: UploadZone removed - all users use presets
+import { toolsApi } from '@/api'
+import ImageUploader from '@/components/common/ImageUploader.vue'
+import CreditCost from '@/components/tools/CreditCost.vue'
 
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
@@ -24,11 +25,10 @@ const {
   dbEmpty
 } = useDemoMode()
 
-const uploadedImage = ref<string | null>(null)
+const uploadedImage = ref<string | undefined>(undefined)
 const resultImage = ref<string | null>(null)
 const isProcessing = ref(false)
 const selectedBgType = ref<'transparent' | 'white' | 'custom'>('transparent')
-const customBgColor = ref('#ffffff')
 
 // Demo images from database only (no hardcoded fallbacks)
 const selectedDemoIndex = ref<number>(0)
@@ -98,7 +98,7 @@ onMounted(async () => {
   // For demo users, auto-select first example
   const effective = demoImages.value.length > 0 ? demoImages.value : STATIC_BG_EXAMPLES
   if (isDemoUser.value && effective.length > 0) {
-    uploadedImage.value = effective[0].input || null
+    uploadedImage.value = effective[0].input || undefined
   }
 })
 
@@ -107,7 +107,7 @@ function selectDemoExample(index: number) {
   const effective2 = demoImages.value.length > 0 ? demoImages.value : STATIC_BG_EXAMPLES
   const example = effective2[index]
   if (example) {
-    uploadedImage.value = example.input || null
+    uploadedImage.value = example.input || undefined
     resultImage.value = null
   }
 }
@@ -168,22 +168,15 @@ async function removeBackground() {
     }
 
     // Upload image first
-    const uploadResult = await demoApi.uploadImage(
+    const uploadResult = await toolsApi.uploadImage(
       dataURItoBlob(uploadedImage.value) as File
     )
 
-    // Call generate API
-    const result = await demoApi.generate({
-      tool: 'background_removal',
-      image_url: uploadResult.url,
-      params: {
-        bg_type: selectedBgType.value,
-        bg_color: selectedBgType.value === 'custom' ? customBgColor.value : null
-      }
-    })
+    // Call tools API for background removal
+    const result = await toolsApi.removeBackground(uploadResult.url, 'png')
 
-    if (result.success && result.image_url) {
-      resultImage.value = result.image_url
+    if (result.success && (result.image_url || result.result_url)) {
+      resultImage.value = result.image_url || result.result_url || null
       creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success'))
     } else {
@@ -253,8 +246,8 @@ function dataURItoBlob(dataURI: string): Blob {
 
       <!-- PRESET-ONLY MODE: All users see the same preset-based layout -->
       <div class="space-y-8">
-        <!-- Example Selection -->
-        <div class="card">
+        <!-- Example Selection (Demo Users) -->
+        <div v-if="isDemoUser || effectiveDemoImages.length > 0" class="card">
           <h3 class="text-lg font-semibold text-dark-900 mb-4">
             {{ isZh ? '選擇範例圖片' : 'Select Example Image' }}
           </h3>
@@ -271,7 +264,7 @@ function dataURItoBlob(dataURI: string): Blob {
               :key="example.id || idx"
               @click="selectDemoExample(idx)"
               class="aspect-square rounded-lg overflow-hidden border-2 transition-all"
-              :class="selectedDemoIndex === idx
+              :class="selectedDemoIndex === idx && uploadedImage === example.input
                 ? 'border-primary-500 ring-2 ring-primary-500/50'
                 : 'border-gray-200 hover:border-dark-500'"
             >
@@ -284,8 +277,19 @@ function dataURItoBlob(dataURI: string): Blob {
           </div>
         </div>
 
+        <!-- Custom Upload (Paid Users) -->
+        <div v-if="!isDemoUser" class="card mt-4">
+          <h3 class="text-lg font-semibold text-dark-900 mb-4">
+            {{ isZh ? '上傳圖片' : 'Upload Image' }}
+          </h3>
+          <ImageUploader 
+            v-model="uploadedImage" 
+            :label="isZh ? '點擊上傳或拖放圖片' : 'Drop image here'"
+          />
+        </div>
+
         <!-- Input and Result Side by Side -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
           <!-- Input -->
           <div class="card">
             <h3 class="text-lg font-semibold text-dark-900 mb-4">
@@ -312,8 +316,18 @@ function dataURItoBlob(dataURI: string): Blob {
               <!-- Watermark badge -->
               <div class="text-center text-xs text-dark-400">vidgo.ai</div>
 
-              <!-- PRESET-ONLY: Download blocked - show subscribe CTA -->
+              <!-- Paid users: Download button -->
+              <a
+                v-if="!isDemoUser && resultImage"
+                :href="resultImage"
+                download="vidgo-bg-removed.png"
+                class="btn-primary w-full text-center block"
+              >
+                {{ isZh ? '下載結果' : 'Download Result' }}
+              </a>
+              <!-- Demo users: Subscribe CTA -->
               <RouterLink
+                v-else
                 to="/pricing"
                 class="btn-primary w-full text-center block"
               >
@@ -326,8 +340,9 @@ function dataURItoBlob(dataURI: string): Blob {
           </div>
         </div>
 
-        <!-- Remove Button -->
-        <div class="flex justify-center">
+        <!-- Remove Button and Credit Cost -->
+        <div class="flex flex-col items-center gap-4 mt-6 border-t border-gray-200 pt-6">
+          <CreditCost service="background_removal" />
           <button
             @click="removeBackground"
             :disabled="!uploadedImage || isProcessing"
@@ -347,7 +362,6 @@ function dataURItoBlob(dataURI: string): Blob {
           </button>
         </div>
       </div>
-      <!-- PRESET-ONLY MODE: Subscribed user layout REMOVED - all users use presets -->
     </div>
   </div>
 </template>

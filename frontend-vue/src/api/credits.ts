@@ -47,8 +47,8 @@ export const creditsApi = {
       total_credits: total,
       remaining_credits: total,
       used_credits: 0,
-      weekly_limit: 0,
-      weekly_used: 0,
+      weekly_limit: d.weekly_limit ?? 0,
+      weekly_used: d.weekly_used ?? 0,
       reset_date: d.bonus_expiry ?? '',
     }
   },

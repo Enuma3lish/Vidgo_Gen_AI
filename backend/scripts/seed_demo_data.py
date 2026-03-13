@@ -231,13 +231,36 @@ ROOM_STYLES = [
     {"id": "mid_century_modern", "name": "Mid-Century Modern", "name_zh": "中世紀現代"},
 ]
 
-ROOM_RESULT_IMAGES = [
-    "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80",
-    "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?w=600&q=80",
-    "https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=600&q=80",
-    "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&q=80",
-    "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=600&q=80",
-]
+ROOM_RESULT_MAPPING = {
+    "living_room": [
+        "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80",
+        "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=600&q=80",
+        "https://images.unsplash.com/photo-1583847268964-b28ce8fba1f3?w=600&q=80",
+        "https://images.unsplash.com/photo-1567016432779-094069958ea5?w=600&q=80",
+        "https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&q=80",
+    ],
+    "bedroom": [
+        "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?w=600&q=80",
+        "https://images.unsplash.com/photo-1505693314120-0d443867891c?w=600&q=80",
+        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=600&q=80",
+        "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=600&q=80",
+        "https://images.unsplash.com/photo-1540518614846-7eded433c457?w=600&q=80",
+    ],
+    "kitchen": [
+        "https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=600&q=80",
+        "https://images.unsplash.com/photo-1556909212-d5b604d0c90d?w=600&q=80",
+        "https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=600&q=80",
+        "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=600&q=80",
+        "https://images.unsplash.com/photo-1556909190-eccf4a8bf97a?w=600&q=80",
+    ],
+    "bathroom": [
+        "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&q=80",
+        "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=600&q=80",
+        "https://images.unsplash.com/photo-1600566752355-35792bedcfea?w=600&q=80",
+        "https://images.unsplash.com/photo-1620626011761-996317b8d101?w=600&q=80",
+        "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=600&q=80",
+    ]
+}
 
 
 # =============================================================================
@@ -547,7 +570,8 @@ async def seed_materials(db):
         for si, style in enumerate(ROOM_STYLES):
             prompt = f"{room['name']} in {style['name']} style"
             prompt_zh = f"{room['name']}{style['name_zh']}風格"
-            result = ROOM_RESULT_IMAGES[(ri + si) % len(ROOM_RESULT_IMAGES)]
+            room_imgs = ROOM_RESULT_MAPPING.get(room["room_type"], ROOM_RESULT_MAPPING["living_room"])
+            result = room_imgs[si % len(room_imgs)]
             m = Material(
                 id=uuid.uuid4(),
                 lookup_hash=_hash("room_redesign", prompt, extra=f"{room['id']}_{style['id']}"),
@@ -727,7 +751,7 @@ async def seed_tool_showcases(db):
         {"tool_category": "architecture", "tool_id": "room_redesign",
          "tool_name": "Room Redesign", "tool_name_zh": "房間重設計",
          "source_image_url": ROOMS[0]["url"],
-         "result_image_url": ROOM_RESULT_IMAGES[0],
+         "result_image_url": ROOM_RESULT_MAPPING["living_room"][0],
          "prompt": "Modern minimalist living room", "prompt_zh": "現代極簡客廳",
          "title": "Modern Living Room", "title_zh": "現代客廳",
          "is_featured": True},

@@ -7,11 +7,12 @@ Credit Deduction Priority:
 3. Purchased Credits (never expire)
 """
 from typing import Optional, Tuple, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
+                        
 
 from app.core.config import get_settings
 from app.models.user import User
@@ -28,7 +29,7 @@ class CreditService:
         self.redis = redis_client
 
     async def get_balance(self, user_id: str) -> Dict[str, Any]:
-        """Get user's credit balance breakdown."""
+        """Get user's credit balance breakdown including weekly usage info."""
         result = await self.db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
 
@@ -38,7 +39,9 @@ class CreditService:
                 "purchased": 0,
                 "bonus": 0,
                 "bonus_expiry": None,
-                "total": 0
+                "total": 0,
+                "weekly_limit": 0,
+                "weekly_used": 0,
             }
 
         subscription = user.subscription_credits or 0
@@ -46,21 +49,65 @@ class CreditService:
         bonus = user.bonus_credits or 0
 
         # Check if bonus credits have expired
-        if user.bonus_credits_expiry and user.bonus_credits_expiry < datetime.utcnow():
+        if user.bonus_credits_expiry and user.bonus_credits_expiry < datetime.now(timezone.utc):
             bonus = 0
+
+        # Get weekly limit from user's plan
+        weekly_limit = 0
+        if user.current_plan_id:
+            from app.models.billing import Plan
+            plan_result = await self.db.execute(
+                select(Plan).where(Plan.id == user.current_plan_id)
+            )
+            plan = plan_result.scalar_one_or_none()
+            if plan:
+                weekly_limit = plan.weekly_credits or plan.monthly_credits or 0
+
+        # Calculate weekly usage from transactions this week
+        weekly_used = 0
+        try:
+            from app.models.billing import CreditTransaction
+            from datetime import timedelta
+            # Start of current week (Monday 00:00 UTC)
+            now = datetime.now(timezone.utc)
+            days_since_monday = now.weekday()
+            week_start = (now - timedelta(days=days_since_monday)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            weekly_result = await self.db.execute(
+                select(func.coalesce(func.sum(CreditTransaction.amount), 0))
+                .where(
+                    CreditTransaction.user_id == user_id,
+                    CreditTransaction.amount < 0,  # Only deductions
+                    CreditTransaction.created_at >= week_start,
+                )
+            )
+            weekly_used = abs(weekly_result.scalar_one() or 0)
+        except Exception:
+            # CreditTransaction may not exist yet, ignore
+            pass
 
         return {
             "subscription": subscription,
             "purchased": purchased,
             "bonus": bonus,
             "bonus_expiry": user.bonus_credits_expiry,
-            "total": subscription + purchased + bonus
+            "total": subscription + purchased + bonus,
+            "weekly_limit": weekly_limit,
+            "weekly_used": weekly_used,
         }
 
     async def check_sufficient(self, user_id: str, amount: int) -> bool:
-        """Check if user has sufficient credits."""
+        """Check if user has sufficient credits and weekly limit."""
         balance = await self.get_balance(user_id)
-        return balance["total"] >= amount
+        if balance["total"] < amount:
+            return False
+        # Enforce weekly limit
+        weekly_limit = balance.get("weekly_limit", 0)
+        weekly_used = balance.get("weekly_used", 0)
+        if weekly_limit > 0 and (weekly_used + amount) > weekly_limit:
+            return False
+        return True
 
     async def deduct_credits(
         self,
@@ -123,7 +170,7 @@ class CreditService:
         # 1. Deduct from bonus first (expiring soonest)
         if user.bonus_credits and user.bonus_credits > 0 and remaining > 0:
             # Check if bonus not expired
-            if not user.bonus_credits_expiry or user.bonus_credits_expiry >= datetime.utcnow():
+            if not user.bonus_credits_expiry or user.bonus_credits_expiry >= datetime.now(timezone.utc):
                 deduct = min(user.bonus_credits, remaining)
                 user.bonus_credits -= deduct
                 remaining -= deduct
@@ -342,7 +389,7 @@ class CreditService:
             raise ValueError("User not found")
 
         if user.bonus_credits and user.bonus_credits > 0:
-            if user.bonus_credits_expiry and user.bonus_credits_expiry < datetime.utcnow():
+            if user.bonus_credits_expiry and user.bonus_credits_expiry < datetime.now(timezone.utc):
                 expired_credits = user.bonus_credits
                 user.bonus_credits = 0
                 user.bonus_credits_expiry = None

@@ -151,25 +151,71 @@ async def get_current_superuser(
 def is_subscribed_user(user: Optional[User]) -> bool:
     """
     Check if user has an active subscription plan.
-    
+
     Returns True if:
     - User exists AND
     - User has current_plan_id set AND
     - User's plan hasn't expired
-    
+
     Demo users (no subscription) return False.
     """
     if not user:
         return False
-    
+
     if not user.current_plan_id:
         return False
-    
+
     # Check if plan hasn't expired
     from datetime import datetime, timezone
     if user.plan_expires_at:
         if user.plan_expires_at < datetime.now(timezone.utc):
             return False
-    
+
     return True
+
+
+async def get_user_plan_features(
+    user: Optional[User],
+    db: AsyncSession
+) -> Optional[dict]:
+    """
+    Get the user's current plan features for per-plan access control.
+
+    Returns None if user has no active plan.
+    Returns dict with plan features if subscribed:
+    - plan_name: str (demo, starter, pro, pro_plus)
+    - plan_type: str (free, basic, pro, enterprise)
+    - max_resolution: str (720p, 1080p, 4k)
+    - has_watermark: bool
+    - can_use_effects: bool
+    - batch_processing: bool
+    - custom_styles: bool
+    - priority_queue: bool
+    - api_access: bool
+    - weekly_credits: int
+    - monthly_credits: int
+    """
+    if not is_subscribed_user(user):
+        return None
+
+    from app.models.billing import Plan
+    result = await db.execute(select(Plan).where(Plan.id == user.current_plan_id))
+    plan = result.scalar_one_or_none()
+
+    if not plan:
+        return None
+
+    return {
+        "plan_name": plan.name,
+        "plan_type": plan.plan_type,
+        "max_resolution": plan.max_resolution or "720p",
+        "has_watermark": plan.has_watermark if plan.has_watermark is not None else True,
+        "can_use_effects": plan.can_use_effects or False,
+        "batch_processing": plan.feature_batch_processing or False,
+        "custom_styles": plan.feature_custom_styles or False,
+        "priority_queue": plan.priority_queue or False,
+        "api_access": plan.api_access or False,
+        "weekly_credits": plan.weekly_credits or 0,
+        "monthly_credits": plan.monthly_credits or 0,
+    }
 

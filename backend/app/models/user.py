@@ -75,6 +75,10 @@ class User(Base):
     default_carrier_number = Column(String(64), nullable=True)
     default_love_code = Column(String(7), nullable=True)  # 愛心碼 for donation
 
+    # Cancellation / Work Retention
+    subscription_cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    work_retention_until = Column(DateTime(timezone=True), nullable=True)  # 7 days after cancel
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

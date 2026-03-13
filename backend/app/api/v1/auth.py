@@ -107,10 +107,27 @@ async def login(
     user_data = UserSchema.model_validate(user)
     user_data.plan_type = plan_type
 
-    return LoginResponse(
+    # Build cancellation notice if applicable
+    cancellation_notice = None
+    if user.work_retention_until and user.work_retention_until > datetime.now(timezone.utc):
+        days_left = (user.work_retention_until - datetime.now(timezone.utc)).days
+        cancellation_notice = {
+            "message": f"Your subscription has been cancelled. You have {days_left} day(s) to download your work before it is removed.",
+            "work_retention_until": user.work_retention_until.isoformat(),
+            "days_remaining": days_left
+        }
+
+    response = LoginResponse(
         user=user_data,
         tokens=TokenPair(access=access_token, refresh=refresh_token)
     )
+
+    # Attach notice as extra field
+    response_dict = response.model_dump()
+    if cancellation_notice:
+        response_dict["cancellation_notice"] = cancellation_notice
+
+    return response_dict
 
 
 @router.post("/login/form", response_model=LoginResponse)
@@ -196,6 +213,15 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Passwords do not match"
+        )
+
+    # Block reserved email prefixes (admin, support, etc.)
+    RESERVED_EMAIL_PREFIXES = ["admin", "administrator", "support", "root", "system", "superadmin"]
+    email_local = user_in.email.split("@")[0].lower()
+    if email_local in RESERVED_EMAIL_PREFIXES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This email address is already in use"
         )
 
     # Check if email already exists
@@ -472,6 +498,20 @@ async def get_current_user_profile(
         if plan:
             plan_type = plan.plan_type
 
+    # Check for cancellation notice
+    cancellation_notice = None
+    if (
+        hasattr(current_user, 'work_retention_until')
+        and current_user.work_retention_until
+        and current_user.work_retention_until > datetime.now(timezone.utc)
+    ):
+        days_left = (current_user.work_retention_until - datetime.now(timezone.utc)).days
+        cancellation_notice = {
+            "message": f"Your subscription has been cancelled. You have {days_left} day(s) to download your work before it is removed.",
+            "work_retention_until": current_user.work_retention_until.isoformat(),
+            "days_remaining": days_left
+        }
+
     # Build response dict from ORM object
     user_data = {
         "id": current_user.id,
@@ -487,6 +527,7 @@ async def get_current_user_profile(
         "created_at": current_user.created_at,
         "updated_at": current_user.updated_at,
         "last_login_at": current_user.last_login_at,
+        "cancellation_notice": cancellation_notice,
     }
     return user_data
 
@@ -511,6 +552,80 @@ async def update_current_user_profile(
     await db.refresh(current_user)
 
     return current_user
+
+
+@router.delete("/me", response_model=MessageResponse)
+async def delete_account(
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+    password: str = Body(..., embed=True)
+) -> Any:
+    """
+    Delete current user's account permanently.
+
+    This will:
+    1. Cancel any active subscriptions (no refund)
+    2. Delete all user generations (work/media)
+    3. Delete credit transactions
+    4. Anonymize and deactivate the user account
+
+    Requires password confirmation for security.
+    """
+    # Verify password
+    if not security.verify_password(password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect password"
+        )
+
+    import uuid as uuid_mod
+
+    # 1. Cancel active subscriptions
+    from app.models.billing import Subscription, CreditTransaction
+    sub_result = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == current_user.id,
+            Subscription.status.in_(["active", "pending", "pending_downgrade"])
+        )
+    )
+    for sub in sub_result.scalars().all():
+        sub.status = "cancelled"
+        sub.auto_renew = False
+
+    # 2. Delete user generations (work/media)
+    from app.models.user_generation import UserGeneration
+    gen_result = await db.execute(
+        select(UserGeneration).where(UserGeneration.user_id == current_user.id)
+    )
+    for gen in gen_result.scalars().all():
+        await db.delete(gen)
+
+    # 3. Delete credit transactions
+    tx_result = await db.execute(
+        select(CreditTransaction).where(CreditTransaction.user_id == current_user.id)
+    )
+    for tx in tx_result.scalars().all():
+        await db.delete(tx)
+
+    # 4. Anonymize and deactivate user
+    current_user.is_active = False
+    current_user.email = f"deleted_{uuid_mod.uuid4().hex[:8]}@deleted.vidgo.ai"
+    current_user.username = None
+    current_user.full_name = None
+    current_user.hashed_password = "DELETED"
+    current_user.email_verified = False
+    current_user.current_plan_id = None
+    current_user.plan_expires_at = None
+    current_user.subscription_credits = 0
+    current_user.purchased_credits = 0
+    current_user.bonus_credits = 0
+    current_user.referral_code = None
+
+    await db.commit()
+
+    return MessageResponse(
+        message="Your account has been deleted. All your data and work have been removed."
+    )
 
 
 @router.post("/me/change-password", response_model=MessageResponse)

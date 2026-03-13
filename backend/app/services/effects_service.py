@@ -239,10 +239,10 @@ class VidGoEffectsService:
             return False, {"error": f"Invalid style. Available: {', '.join(valid_styles)}"}
 
         try:
-            # Use PiAPI with the style's prompt from unified definition
+            # Use PiAPI img2img with the style's prompt from unified definition
             prompt = style_def.get("prompt", "artistic style")
             result = await self.router.route(
-                TaskType.T2I,
+                TaskType.I2I,
                 {
                     "prompt": prompt,
                     "image_url": image_url,
@@ -250,7 +250,7 @@ class VidGoEffectsService:
                 }
             )
 
-            output_url = result.get("image_url") or result.get("output_url")
+            output_url = result.get("image_url") or result.get("output_url") or (result.get("output", {}).get("image_url") if isinstance(result.get("output"), dict) else None)
             if output_url:
                 # Deduct credits
                 credit_service = CreditService(self.db)

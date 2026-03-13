@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore, useCreditsStore } from '@/stores'
 import { userApi } from '@/api/user'
@@ -11,6 +11,13 @@ const creditsStore = useCreditsStore()
 const recentWorks = ref<UserGeneration[]>([])
 const userStats = ref<UserStatsResponse | null>(null)
 const loadingWorks = ref(false)
+
+const creditsProgressWidth = computed(() => {
+  const total = creditsStore.balance?.total_credits ?? 0
+  const remaining = creditsStore.balance?.remaining_credits ?? 0
+  if (total <= 0) return '0%'
+  return `${Math.round((remaining / total) * 100)}%`
+})
 
 const quickActions = [
   { key: 'shortVideo', icon: '🎬', route: '/tools/short-video', label: 'AI 短影片', color: '#1677ff', bg: 'rgba(22,119,255,0.08)' },
@@ -87,7 +94,7 @@ onMounted(async () => {
           <p class="text-3xl font-black mb-1" style="color: #1F1F1F;">{{ creditsStore.balance?.remaining_credits ?? 0 }}</p>
           <p class="text-xs" style="color: rgba(0,0,0,0.35);">共 {{ creditsStore.balance?.total_credits ?? 0 }} 點</p>
           <div class="mt-3 h-1.5 rounded-full overflow-hidden" style="background: rgba(22,119,255,0.1);">
-            <div class="h-full rounded-full transition-all" style="background: #1677ff; width: 60%;"></div>
+            <div class="h-full rounded-full transition-all" :style="{ background: '#1677ff', width: creditsProgressWidth }"></div>
           </div>
         </div>
 

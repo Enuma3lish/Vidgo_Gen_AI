@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
-import { demoApi } from '@/api'
+import { toolsApi } from '@/api'
 // PRESET-ONLY MODE: UploadZone removed - all users use presets
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
@@ -219,21 +219,18 @@ async function generateScenes() {
       return
     }
 
-    const uploadResult = await demoApi.uploadImage(
+    const uploadResult = await toolsApi.uploadImage(
       dataURItoBlob(uploadedImage.value) as File
     )
 
-    const result = await demoApi.generate({
-      tool: 'product_scene',
-      image_url: uploadResult.url,
-      prompt: selectedScene.value === 'custom' ? prompt.value : undefined,
-      params: {
-        scene_type: selectedScene.value
-      }
-    })
+    const result = await toolsApi.productScene(
+      uploadResult.url,
+      selectedScene.value,
+      selectedScene.value === 'custom' ? prompt.value : undefined
+    )
 
-    if (result.success && result.image_url) {
-      resultImages.value = [result.image_url]
+    if (result.success && (result.image_url || result.result_url)) {
+      resultImages.value = [result.image_url || result.result_url || '']
       creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success'))
     }

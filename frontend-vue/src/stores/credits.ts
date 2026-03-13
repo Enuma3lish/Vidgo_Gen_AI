@@ -83,8 +83,9 @@ export const useCreditsStore = defineStore('credits', () => {
   function deductCredits(amount: number) {
     if (balance.value) {
       balance.value.used_credits += amount
-      balance.value.remaining_credits -= amount
+      balance.value.remaining_credits = Math.max(0, balance.value.remaining_credits - amount)
       balance.value.weekly_used += amount
+      balance.value.total_credits = Math.max(0, balance.value.total_credits - amount)
     }
   }
 

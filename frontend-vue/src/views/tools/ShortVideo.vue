@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore, useAuthStore } from '@/stores'
 import { useDemoMode } from '@/composables'
-import { demoApi } from '@/api'
+import { toolsApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -224,24 +224,19 @@ async function generateVideo() {
 
     let imageUrl = null
     if (uploadedImage.value) {
-      const uploadResult = await demoApi.uploadImage(
+      const uploadResult = await toolsApi.uploadImage(
         dataURItoBlob(uploadedImage.value) as File
       )
       imageUrl = uploadResult.url
     }
 
-    const result = await demoApi.generate({
-      tool: 'short_video',
-      image_url: imageUrl || undefined,
-      params: {
-        duration: selectedDuration.value,
-        motion: selectedMotion.value,
-        model: selectedModel.value
-      }
+    const result = await toolsApi.shortVideo(imageUrl!, {
+      motionStrength: selectedMotion.value === 'high' ? 8 : selectedMotion.value === 'low' ? 3 : 5,
+      style: selectedModel.value !== 'default' ? selectedModel.value : undefined,
     })
 
-    if (result.success && result.video_url) {
-      resultVideo.value = result.video_url
+    if (result.success && (result.video_url || result.result_url)) {
+      resultVideo.value = result.video_url || result.result_url || null
       creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success'))
     }

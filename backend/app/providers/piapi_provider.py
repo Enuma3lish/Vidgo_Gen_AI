@@ -61,6 +61,18 @@ class PiAPIProvider(BaseProvider):
             logger.error(f"PiAPI health check failed: {e}")
             return False
 
+    def _resolve_image_url(self, url: str) -> str:
+        """Convert local /static/ paths to base64 data URIs for external API calls."""
+        if url.startswith("/static") or url.startswith("static"):
+            import base64
+            import mimetypes
+            local_path = os.path.join("/app", url.lstrip("/"))
+            mime_type = mimetypes.guess_type(local_path)[0] or "image/png"
+            with open(local_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+            return f"data:{mime_type};base64,{b64}"
+        return url
+
     # ─────────────────────────────────────────────────────────────────────────
     # TEXT TO IMAGE (using Flux via PiAPI)
     # ─────────────────────────────────────────────────────────────────────────
@@ -129,7 +141,7 @@ class PiAPIProvider(BaseProvider):
             "model": "Qubico/flux1-schnell",
             "task_type": "img2img",
             "input": {
-                "image": params["image_url"],  # PiAPI uses "image" not "image_url"
+                "image": self._resolve_image_url(params["image_url"]),
                 "prompt": params["prompt"],
                 "negative_prompt": params.get("negative_prompt", ""),
                 "strength": params.get("strength", 0.75),
@@ -164,7 +176,7 @@ class PiAPIProvider(BaseProvider):
             "model": "Qubico/flux1-dev-advanced",
             "task_type": "kontext",
             "input": {
-                "image": params["image_url"],
+                "image": self._resolve_image_url(params["image_url"]),
                 "prompt": params["prompt"],
                 "width": params.get("width", 1024),
                 "height": params.get("height", 768),
@@ -261,7 +273,7 @@ class PiAPIProvider(BaseProvider):
             "model": "Wan",
             "task_type": "wan26-img2video",
             "input": {
-                "image": params["image_url"],
+                "image": self._resolve_image_url(params["image_url"]),
                 "prompt": params.get("prompt", "smooth natural motion"),
                 "duration": params.get("duration", 5),
                 "resolution": params.get("resolution", "1080P"),
@@ -372,11 +384,17 @@ class PiAPIProvider(BaseProvider):
             import uuid
             import os
 
-            # Download the image
-            async with _httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": "VidGo/1.0"}) as dl_client:
-                resp = await dl_client.get(params["image_url"])
-                resp.raise_for_status()
-                image_data = resp.content
+            # Load the image (local path or remote URL)
+            image_url = params["image_url"]
+            if image_url.startswith("/static") or image_url.startswith("static"):
+                local_path = os.path.join("/app", image_url.lstrip("/"))
+                with open(local_path, "rb") as f:
+                    image_data = f.read()
+            else:
+                async with _httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": "VidGo/1.0"}) as dl_client:
+                    resp = await dl_client.get(image_url)
+                    resp.raise_for_status()
+                    image_data = resp.content
 
             # Remove background using rembg (runs in thread to avoid blocking)
             input_image = Image.open(BytesIO(image_data))

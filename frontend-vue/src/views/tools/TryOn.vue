@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
-import { demoApi } from '@/api'
+import { toolsApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -222,7 +222,7 @@ async function generateTryOn() {
 
     // Upload if custom image
     if (clothingImage.value && !clothingImage.value.startsWith('http')) {
-      const uploadResult = await demoApi.uploadImage(
+      const uploadResult = await toolsApi.uploadImage(
         dataURItoBlob(clothingImage.value) as File
       )
       imageUrl = uploadResult.url
@@ -230,23 +230,19 @@ async function generateTryOn() {
 
     let modelUrl = null
     if (selectedModel.value === 'custom' && modelImage.value) {
-      const modelUpload = await demoApi.uploadImage(
+      const modelUpload = await toolsApi.uploadImage(
         dataURItoBlob(modelImage.value) as File
       )
       modelUrl = modelUpload.url
     }
 
-    const result = await demoApi.generate({
-      tool: 'virtual_try_on',
-      image_url: imageUrl!,
-      params: {
-        model_id: selectedModel.value,
-        model_image: modelUrl
-      }
+    const result = await toolsApi.tryOn(imageUrl!, {
+      modelImageUrl: modelUrl ?? undefined,
+      modelId: selectedModel.value !== 'custom' ? selectedModel.value : undefined,
     })
 
-    if (result.success && result.image_url) {
-      resultImage.value = result.image_url
+    if (result.success && (result.image_url || result.result_url)) {
+      resultImage.value = result.image_url || result.result_url || null
       if (result.credits_used) {
         creditsStore.deductCredits(result.credits_used)
       }
@@ -451,13 +447,13 @@ function dataURItoBlob(dataURI: string): Blob {
 
             <button
               @click="generateTryOn"
-              :disabled="(!clothingImage && !selectedClothingId) || isProcessing || !isValidCombination || dbEmpty"
+              :disabled="(!clothingImage && !selectedClothingId) || isProcessing || !isValidCombination || (isDemoUser && dbEmpty)"
               class="btn-primary w-full mt-4"
-              :class="{ 'opacity-50 cursor-not-allowed': !isValidCombination || dbEmpty }"
+              :class="{ 'opacity-50 cursor-not-allowed': !isValidCombination || (isDemoUser && dbEmpty) }"
             >
-              {{ dbEmpty ? (isZh ? '預覽模式' : 'Preview Mode') : t('common.generate') }}
+              {{ (isDemoUser && dbEmpty) ? (isZh ? '預覽模式' : 'Preview Mode') : t('common.generate') }}
             </button>
-            <p v-if="dbEmpty" class="text-xs text-dark-400 text-center mt-2">
+            <p v-if="isDemoUser && dbEmpty" class="text-xs text-dark-400 text-center mt-2">
               {{ isZh ? '訂閱後即可生成試穿結果' : 'Subscribe to generate try-on results' }}
             </p>
           </div>

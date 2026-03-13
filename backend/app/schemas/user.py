@@ -46,11 +46,13 @@ class User(UserInDBBase):
     """User response schema (public info)"""
     referral_code: Optional[str] = None
     referral_count: int = 0
+    plan_type: Optional[str] = None
 
 
 class UserWithDetails(User):
     """User with more details (for profile page); includes referral fields from User."""
     is_superuser: bool = False
+    plan_type: Optional[str] = None
     updated_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
 

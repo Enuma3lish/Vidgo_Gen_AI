@@ -55,6 +55,7 @@ class UserWithDetails(User):
     plan_type: Optional[str] = None
     updated_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
+    cancellation_notice: Optional[dict] = None
 
 
 # Token Schemas
@@ -72,6 +73,7 @@ class LoginResponse(BaseModel):
     """Login response matching frontend expectations"""
     user: User
     tokens: TokenPair
+    cancellation_notice: Optional[dict] = None
 
 
 class AuthResponse(BaseModel):

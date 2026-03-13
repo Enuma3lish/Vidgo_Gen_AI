@@ -51,6 +51,9 @@ class SubscribeResponse(BaseModel):
     payment_method: Optional[str] = None
     ecpay_form: Optional[dict] = None  # ECPay form data (action_url + params)
     is_mock: bool = False
+    is_upgrade: bool = False
+    effective_date: Optional[str] = None  # For scheduled downgrades
+    credits_allocated: Optional[int] = None
     message: Optional[str] = None
     error: Optional[str] = None
 
@@ -67,6 +70,7 @@ class SubscriptionStatusResponse(BaseModel):
     auto_renew: bool = False
     refund_eligible: bool = False
     refund_days_remaining: int = 0
+    pending_downgrade: Optional[dict] = None
     credits: dict = {}
 
 
@@ -86,6 +90,7 @@ class CancelResponse(BaseModel):
     refund_processed: bool = False
     refund_amount: Optional[float] = None
     active_until: Optional[str] = None
+    work_retention_until: Optional[str] = None  # 7-day work download deadline
     message: Optional[str] = None
     error: Optional[str] = None
 
@@ -493,6 +498,53 @@ async def get_invoice_pdf(
             error=pdf_result.get("error", "Failed to retrieve invoice PDF")
         )
     return InvoicePdfResponse(success=True, pdf_url=pdf_result["pdf_url"])
+
+
+@router.get("/plan-features")
+async def get_plan_features(
+    current_user: User = Depends(deps.get_current_active_user),
+    db: AsyncSession = Depends(deps.get_db)
+):
+    """
+    Get current user's plan features for frontend UI gating.
+
+    Returns plan-specific feature flags so the frontend can show/hide
+    features based on the user's plan level.
+    """
+    from app.api.deps import get_user_plan_features
+    features = await get_user_plan_features(current_user, db)
+
+    if not features:
+        return {
+            "success": True,
+            "has_plan": False,
+            "plan_name": None,
+            "features": {
+                "max_resolution": "720p",
+                "has_watermark": True,
+                "can_use_effects": False,
+                "batch_processing": False,
+                "custom_styles": False,
+                "priority_queue": False,
+                "api_access": False,
+            }
+        }
+
+    return {
+        "success": True,
+        "has_plan": True,
+        "plan_name": features["plan_name"],
+        "plan_type": features["plan_type"],
+        "features": {
+            "max_resolution": features["max_resolution"],
+            "has_watermark": features["has_watermark"],
+            "can_use_effects": features["can_use_effects"],
+            "batch_processing": features["batch_processing"],
+            "custom_styles": features["custom_styles"],
+            "priority_queue": features["priority_queue"],
+            "api_access": features["api_access"],
+        }
+    }
 
 
 @router.get("/refund-eligibility")

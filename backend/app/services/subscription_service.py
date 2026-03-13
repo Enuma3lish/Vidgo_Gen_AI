@@ -35,6 +35,9 @@ settings = get_settings()
 # Refund eligibility period (7 days)
 REFUND_ELIGIBILITY_DAYS = 7
 
+# Work retention period after cancellation (7 days)
+WORK_RETENTION_DAYS = 7
+
 
 class SubscriptionService:
     """
@@ -65,15 +68,12 @@ class SubscriptionService:
         skip_payment: bool = False
     ) -> Dict[str, Any]:
         """
-        Subscribe user to a plan.
+        Subscribe user to a plan with upgrade/downgrade detection.
 
-        If Paddle API key is configured and skip_payment=False:
-            - Creates Paddle checkout session
-            - Returns checkout URL for payment
-
-        If Paddle API key is NOT configured or skip_payment=True:
-            - Directly activates subscription (mock mode)
-            - Allocates credits immediately
+        Upgrade (higher plan): Activate immediately, allocate new credits.
+        Downgrade (lower plan): Schedule change at end of current billing period.
+        Same plan: Reject.
+        New subscription (no current plan): Activate normally.
 
         Args:
             db: Database session
@@ -106,7 +106,14 @@ class SubscriptionService:
                     "subscription_id": str(current_sub.id)
                 }
 
-        # Cancel any existing active/pending subscriptions before creating new one
+        # Detect upgrade vs downgrade vs new subscription
+        change_type = await self._detect_plan_change(db, user, plan)
+
+        if change_type == "downgrade":
+            # Downgrade: schedule for end of current period
+            return await self._schedule_downgrade(db, user, plan, billing_cycle)
+
+        # For upgrade or new subscription: cancel existing and activate new
         await self._cancel_existing_subscriptions(db, user_id)
 
         # Determine if we should use mock mode
@@ -115,7 +122,7 @@ class SubscriptionService:
         if use_mock:
             # Direct activation without payment
             return await self._activate_subscription_directly(
-                db, user, plan, billing_cycle
+                db, user, plan, billing_cycle, is_upgrade=(change_type == "upgrade")
             )
         elif payment_method == 'ecpay':
             # Create ECPay checkout (Taiwan credit card)
@@ -128,12 +135,90 @@ class SubscriptionService:
                 db, user, plan, billing_cycle
             )
 
+    PLAN_LEVEL = {"demo": 0, "starter": 1, "pro": 2, "pro_plus": 3}
+
+    async def _detect_plan_change(
+        self, db: AsyncSession, user: User, new_plan: Plan
+    ) -> str:
+        """Detect if this is an upgrade, downgrade, or new subscription.
+        Returns: 'upgrade', 'downgrade', or 'new'"""
+        if not user.current_plan_id:
+            return "new"
+
+        # Only treat as upgrade/downgrade if user has an ACTIVE subscription
+        active_sub = await self._get_active_subscription(db, user.id)
+        if not active_sub:
+            return "new"
+
+        current_plan = await db.get(Plan, user.current_plan_id)
+        if not current_plan:
+            return "new"
+
+        current_level = self.PLAN_LEVEL.get(current_plan.name, 0)
+        new_level = self.PLAN_LEVEL.get(new_plan.name, 0)
+
+        if new_level > current_level:
+            return "upgrade"
+        elif new_level < current_level:
+            return "downgrade"
+        return "new"  # Same level but different plan somehow
+
+    async def _schedule_downgrade(
+        self,
+        db: AsyncSession,
+        user: User,
+        new_plan: Plan,
+        billing_cycle: str
+    ) -> Dict[str, Any]:
+        """Schedule a downgrade to take effect at end of current billing period."""
+        current_sub = await self._get_active_subscription(db, user.id)
+        if not current_sub:
+            return {"success": False, "error": "No active subscription to downgrade from"}
+
+        current_plan = await db.get(Plan, current_sub.plan_id)
+        end_date = current_sub.end_date or user.plan_expires_at
+
+        # Store pending downgrade info
+        current_sub.auto_renew = False
+        # Store the scheduled downgrade plan in subscription metadata or a new field
+        # For now, we create a pending subscription that activates at end_date
+        pending_sub = Subscription(
+            user_id=user.id,
+            plan_id=new_plan.id,
+            status="pending_downgrade",
+            start_date=end_date,
+            end_date=end_date + timedelta(days=30) if end_date else utc_now() + timedelta(days=60),
+            auto_renew=True
+        )
+        db.add(pending_sub)
+        await db.commit()
+
+        logger.info(
+            f"Downgrade scheduled: user {user.id} from {current_plan.name if current_plan else '?'} "
+            f"to {new_plan.name} effective {end_date}"
+        )
+
+        return {
+            "success": True,
+            "subscription_id": str(pending_sub.id),
+            "status": "pending_downgrade",
+            "plan_name": new_plan.name,
+            "effective_date": end_date.isoformat() if end_date else None,
+            "is_mock": True,
+            "message": (
+                f"Downgrade to {new_plan.display_name or new_plan.name} scheduled. "
+                f"Your current plan remains active until {end_date.strftime('%Y-%m-%d') if end_date else 'end of period'}. "
+                f"New plan will activate automatically."
+            )
+        }
+
     async def _activate_subscription_directly(
         self,
         db: AsyncSession,
         user: User,
         plan: Plan,
-        billing_cycle: str
+        billing_cycle: str,
+        is_upgrade: bool = False
     ) -> Dict[str, Any]:
         """
         Activate subscription without payment (mock/dev mode).
@@ -142,8 +227,11 @@ class SubscriptionService:
         - Paddle API key is not configured
         - skip_payment=True (for testing)
         - Free plan subscription
+
+        On upgrade: preserves purchased_credits and bonus_credits,
+        sets subscription_credits to new plan level.
         """
-        logger.info(f"Activating subscription directly for user {user.id}")
+        logger.info(f"Activating subscription directly for user {user.id} (upgrade={is_upgrade})")
 
         now = utc_now()
 
@@ -172,23 +260,35 @@ class SubscriptionService:
         user.plan_started_at = now
         user.plan_expires_at = end_date
 
+        # Clear any cancellation/retention state from previous cancel
+        user.subscription_cancelled_at = None
+        user.work_retention_until = None
+
         # Allocate subscription credits
         credits_to_add = plan.monthly_credits or plan.weekly_credits or plan.credits_per_month or 0
+        old_sub_credits = user.subscription_credits or 0
+
         if credits_to_add > 0:
             user.subscription_credits = credits_to_add
             user.credits_reset_at = now
 
             # Record credit transaction
+            description = f"{'Upgrade' if is_upgrade else 'Subscription'} credits for {plan.name} plan"
+            if is_upgrade and old_sub_credits > 0:
+                description += f" (replaced {old_sub_credits} from previous plan)"
+
             transaction = CreditTransaction(
                 user_id=user.id,
                 amount=credits_to_add,
                 balance_after=user.total_credits,
                 transaction_type="subscription",
-                description=f"Subscription credits for {plan.name} plan",
+                description=description,
                 extra_data={
                     "plan_id": str(plan.id),
                     "plan_name": plan.name,
-                    "billing_cycle": billing_cycle
+                    "billing_cycle": billing_cycle,
+                    "is_upgrade": is_upgrade,
+                    "previous_sub_credits": old_sub_credits
                 }
             )
             db.add(transaction)
@@ -198,6 +298,10 @@ class SubscriptionService:
         await db.refresh(user)
 
         logger.info(f"Subscription activated: {subscription.id}")
+
+        msg = "Subscription activated successfully (development mode)"
+        if is_upgrade:
+            msg = f"Upgraded to {plan.display_name or plan.name} plan successfully (development mode)"
 
         return {
             "success": True,
@@ -209,7 +313,8 @@ class SubscriptionService:
             "end_date": subscription.end_date.isoformat(),
             "credits_allocated": credits_to_add,
             "is_mock": True,
-            "message": "Subscription activated successfully (development mode)"
+            "is_upgrade": is_upgrade,
+            "message": msg
         }
 
     async def _create_ecpay_checkout(
@@ -443,6 +548,27 @@ class SubscriptionService:
         refund_eligible = days_since_start <= REFUND_ELIGIBILITY_DAYS
         refund_days_remaining = max(0, REFUND_ELIGIBILITY_DAYS - days_since_start)
 
+        # Check for pending downgrade
+        pending_downgrade = None
+        pending_result = await db.execute(
+            select(Subscription)
+            .where(
+                and_(
+                    Subscription.user_id == user_id,
+                    Subscription.status == "pending_downgrade"
+                )
+            )
+            .order_by(Subscription.created_at.desc())
+        )
+        pending_sub = pending_result.scalars().first()
+        if pending_sub:
+            pending_plan = await db.get(Plan, pending_sub.plan_id)
+            pending_downgrade = {
+                "plan_name": pending_plan.name if pending_plan else None,
+                "plan_display_name": pending_plan.display_name if pending_plan else None,
+                "effective_date": pending_sub.start_date.isoformat() if pending_sub.start_date else None
+            }
+
         return {
             "success": True,
             "has_subscription": True,
@@ -458,6 +584,7 @@ class SubscriptionService:
             "auto_renew": subscription.auto_renew,
             "refund_eligible": refund_eligible,
             "refund_days_remaining": refund_days_remaining,
+            "pending_downgrade": pending_downgrade,
             "credits": {
                 "subscription": user.subscription_credits or 0,
                 "purchased": user.purchased_credits or 0,
@@ -538,10 +665,19 @@ class SubscriptionService:
                 # Clear user's plan
                 user.current_plan_id = None
                 user.plan_expires_at = None
+
+                # Set 7-day work retention period
+                user.subscription_cancelled_at = utc_now()
+                user.work_retention_until = utc_now() + timedelta(days=WORK_RETENTION_DAYS)
         else:
             # Cancel at end of billing period (no refund)
             subscription.status = "cancelled"
             # Keep end_date as is - subscription remains active until then
+
+            # Set work retention to 7 days after end_date
+            user.subscription_cancelled_at = utc_now()
+            end = subscription.end_date or utc_now()
+            user.work_retention_until = end + timedelta(days=WORK_RETENTION_DAYS)
 
             # If using Paddle, notify them
             if order and order.payment_data.get("paddle_subscription_id"):
@@ -560,6 +696,7 @@ class SubscriptionService:
             "refund_processed": refund_result.get("success") if refund_result else False,
             "refund_amount": refund_result.get("amount") if refund_result else None,
             "active_until": subscription.end_date.isoformat() if subscription.end_date else None,
+            "work_retention_until": user.work_retention_until.isoformat() if user.work_retention_until else None,
             "message": "Subscription cancelled successfully" + (
                 " with refund" if refund_result and refund_result.get("success") else ""
             )

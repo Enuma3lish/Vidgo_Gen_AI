@@ -25,7 +25,7 @@ from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_styl
 from app.services.a2e_service import get_a2e_service, A2E_VOICES
 from app.services.rescue_service import get_rescue_service
 from app.providers.provider_router import get_provider_router, TaskType
-from app.api.deps import get_current_user_optional, get_current_user, get_db, get_redis, is_subscribed_user
+from app.api.deps import get_current_user_optional, get_current_user, get_db, get_redis, is_subscribed_user, get_user_plan_features
 from app.models.user_generation import UserGeneration
 from app.models.material import Material, ToolType
 from app.services.credit_service import CreditService
@@ -50,6 +50,43 @@ async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str
         logger.info(f"Refunded {amount} credits to user {user.id} for failed {service_type}")
     except Exception as e:
         logger.error(f"Failed to refund {amount} credits to user {user.id}: {e}")
+
+
+async def _check_plan_feature(
+    db: AsyncSession,
+    user,
+    feature: str,
+    feature_label: str = ""
+) -> tuple:
+    """Check if user's plan allows a specific feature.
+    Returns (allowed: bool, error_msg: str | None, plan_features: dict | None)"""
+    plan_features = await get_user_plan_features(user, db)
+    if not plan_features:
+        return False, "Subscription required", None
+    if not plan_features.get(feature, False):
+        plan_name = plan_features.get("plan_name", "current")
+        label = feature_label or feature.replace("_", " ")
+        return False, f"Your {plan_name} plan does not include {label}. Please upgrade your plan.", plan_features
+    return True, None, plan_features
+
+
+async def _check_plan_resolution(
+    db: AsyncSession,
+    user,
+    requested_resolution: str
+) -> tuple:
+    """Check if user's plan allows the requested resolution.
+    Returns (allowed: bool, error_msg: str | None)"""
+    plan_features = await get_user_plan_features(user, db)
+    if not plan_features:
+        return False, "Subscription required"
+    resolution_order = {"720p": 0, "1080p": 1, "4k": 2}
+    max_res = plan_features.get("max_resolution", "720p")
+    max_level = resolution_order.get(max_res, 0)
+    req_level = resolution_order.get(requested_resolution, 0)
+    if req_level > max_level:
+        return False, f"Your {plan_features['plan_name']} plan supports up to {max_res}. Please upgrade for {requested_resolution}."
+    return True, None
 
 
 async def _check_and_deduct_credits(
@@ -326,8 +363,10 @@ async def remove_background_batch(
     if len(request.image_urls) > 10:
         raise HTTPException(status_code=400, detail="Maximum 10 images per batch")
 
-    if not is_subscribed_user(current_user):
-        raise HTTPException(status_code=403, detail="Subscription required for batch processing")
+    # Check plan-level batch processing permission
+    allowed, err, _ = await _check_plan_feature(db, current_user, "batch_processing", "batch processing")
+    if not allowed:
+        raise HTTPException(status_code=403, detail=err)
 
     total_cost = len(request.image_urls) * 3
     credit_service = CreditService(db)
@@ -944,7 +983,15 @@ async def generate_short_video(
         video_url = result.get("video_url") or result.get("output", {}).get("video_url") or result.get("output_url")
 
         # Optional: Apply style transformation (Video-to-Video)
+        # Requires can_use_effects plan feature
+        apply_style = False
         if request.style and video_url:
+            effects_ok, _, _ = await _check_plan_feature(
+                db, current_user, "can_use_effects", "video style effects"
+            )
+            apply_style = effects_ok
+
+        if apply_style and request.style and video_url:
             style_prompt = get_style_prompt(request.style)
             if style_prompt:
                 style_result = await provider_router.route(
@@ -1045,6 +1092,11 @@ async def generate_avatar_video(
             )
     
     # ========== SUBSCRIBER: Real-time Generation ==========
+    # Check plan-level resolution limit
+    res_ok, res_err = await _check_plan_resolution(db, current_user, request.resolution)
+    if not res_ok:
+        return ToolResponse(success=False, message=res_err)
+
     CREDIT_COST = 30
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "ai_avatar")
     if not ok:
@@ -1263,6 +1315,11 @@ async def image_transform(
             )
 
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
+    # Check plan-level effects permission
+    allowed, err, _ = await _check_plan_feature(db, current_user, "can_use_effects", "effects/image transform")
+    if not allowed:
+        return ToolResponse(success=False, message=err)
+
     from app.services.tier_config import get_credit_cost, get_user_tier
 
     tier = get_user_tier(current_user)

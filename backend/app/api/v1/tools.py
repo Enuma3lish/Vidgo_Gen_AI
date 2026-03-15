@@ -806,7 +806,8 @@ async def room_redesign(
     # ========== DEMO USER: Use pre-generated Material DB ==========
     if not is_subscribed_user(current_user):
         logger.info(f"Demo user: Looking up pre-generated room redesign for style={request.style}")
-        
+
+        # Try exact style match first, then fall back to any room_redesign material
         result = await db.execute(
             select(Material)
             .where(Material.tool_type == ToolType.ROOM_REDESIGN)
@@ -815,7 +816,16 @@ async def room_redesign(
             .limit(1)
         )
         material = result.scalars().first()
-        
+
+        if not material:
+            result = await db.execute(
+                select(Material)
+                .where(Material.tool_type == ToolType.ROOM_REDESIGN)
+                .where(Material.is_active == True)
+                .limit(1)
+            )
+            material = result.scalars().first()
+
         if material:
             result_url = material.result_watermarked_url or material.result_image_url
             return ToolResponse(

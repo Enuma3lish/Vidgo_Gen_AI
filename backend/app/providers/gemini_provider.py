@@ -308,7 +308,7 @@ Format your response as JSON:
 
             # CRITICAL: Must use gemini-2.0-flash-exp for image generation
             # The production model (gemini-2.0-flash) does NOT support image output
-            model_name = "gemini-2.0-flash-exp"
+            model_name = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.0-flash-exp-image-generation")
 
             logger.info(f"[Gemini] Editing image with: {prompt[:100]}...")
             logger.info(f"[Gemini] Using model: {model_name} (experimental - required for image output)")
@@ -378,6 +378,34 @@ Format your response as JSON:
             return {"success": False, "error": error_msg, "error_type": type(e).__name__}
 
 
+
+    async def upscale(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Upscale image using Gemini 2.0 Flash Exp as a fallback for PiAPI.
+
+        Uses Gemini's image editing capability with an upscale prompt
+        to enhance image resolution and detail.
+
+        Args:
+            params: {
+                "image_url": str,
+                "scale": int (2 or 4, default 2)
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"image_url": str}}
+        """
+        scale = params.get("scale", 2)
+        prompt = (
+            f"Upscale this image to {scale}x resolution. "
+            "Enhance all details, sharpen edges, improve clarity and texture. "
+            "Keep the exact same composition, colors, and content. "
+            "Output a high-resolution, photorealistic version."
+        )
+        return await self.edit_image({
+            "image_url": params["image_url"],
+            "prompt": prompt,
+        })
 
     async def close(self):
         """Close HTTP client."""

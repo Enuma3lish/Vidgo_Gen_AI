@@ -478,7 +478,7 @@ class PiAPIProvider(BaseProvider):
         self._log_request("upscale", params)
 
         payload = {
-            "model": "wanx",
+            "model": "Qubico/image-toolkit",
             "task_type": "upscale",
             "input": {
                 "image_url": params["image_url"],

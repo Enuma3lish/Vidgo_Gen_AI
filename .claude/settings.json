@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(UNPAID=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzM0NTYzMDAsInN1YiI6IjQ2OGFhY2FmLTIzM2MtNDAzMi05NTNmLTk5YTlmMDgyMDU4ZSIsInR5cGUiOiJhY2Nlc3MifQ.-5gqv5Y7oQDk-0RyoIzkGnR_GAnJ1KV1V6Q6haowiy8\" PAID=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzM0NTYzMDIsInN1YiI6IjgwM2E0NmQwLTI2ZjctNDU4MS05NGFhLTFmOTcyOGQwODYwMyIsInR5cGUiOiJhY2Nlc3MifQ.zpFyJzCiF1s22F0_UGLggF8ZdJ6AVYu7drerUKTETPY\" __NEW_LINE_a9eccd1503da1411__ echo \"=== ROOM-REDESIGN \\(UNPAID\\) - was failing, should now fallback ===\" curl -s -X POST http://localhost:8001/api/v1/tools/room-redesign -H \"Authorization: Bearer $UNPAID\" -H \"Content-Type: application/json\" -d '{\"\"\"\"room_image_url\"\"\"\":\"\"\"\"https://example.com/room.jpg\"\"\"\",\"\"\"\"style\"\"\"\":\"\"\"\"modern_minimalist\"\"\"\"}')",
+      "Bash(echo \"=== CREDITS AFTER ALL TESTS ===\" curl -s http://localhost:8001/api/v1/credits/balance -H \"Authorization: Bearer $TK\")"
+    ]
+  }
+}

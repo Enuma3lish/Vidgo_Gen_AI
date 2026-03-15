@@ -94,7 +94,7 @@ class ProviderRouter:
         },
         TaskType.UPSCALE: {
             "primary": "piapi",
-            "backup": None,
+            "backup": "gemini",
         },
         TaskType.KEYFRAMES: {
             "primary": "pollo",
@@ -183,20 +183,17 @@ class ProviderRouter:
         backup_provider = config.get("backup")
         if backup_provider:
             logger.info(f"Attempting backup provider: {backup_provider}")
-            backup_healthy = await self._check_provider_health(backup_provider)
-
-            if backup_healthy:
-                try:
-                    result = await self._execute_on_provider(
-                        backup_provider, task_type, params
-                    )
-                    self._record_success(backup_provider)
-                    result["used_backup"] = True
-                    result["backup_provider"] = backup_provider
-                    return result
-                except Exception as e:
-                    logger.error(f"Backup provider {backup_provider} failed: {e}")
-                    self._record_failure(backup_provider, str(e))
+            try:
+                result = await self._execute_on_provider(
+                    backup_provider, task_type, params
+                )
+                self._record_success(backup_provider)
+                result["used_backup"] = True
+                result["backup_provider"] = backup_provider
+                return result
+            except Exception as e:
+                logger.error(f"Backup provider {backup_provider} failed: {e}")
+                self._record_failure(backup_provider, str(e))
 
         # All providers failed
         raise Exception(f"All providers failed for task: {task_type}")
@@ -336,6 +333,8 @@ class ProviderRouter:
             return await self.gemini.interior_design(params)
         elif task_type == TaskType.MODERATION:
             return await self.gemini.moderate_content(params)
+        elif task_type == TaskType.UPSCALE:
+            return await self.gemini.upscale(params)
         else:
             raise ValueError(f"Gemini doesn't support: {task_type}")
 

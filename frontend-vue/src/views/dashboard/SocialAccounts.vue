@@ -57,6 +57,18 @@ const platforms = [
     supportedTypes: ['影片'],
     note: '僅支援影片內容',
   },
+  {
+    id: 'youtube',
+    name: 'YouTube',
+    description: '上傳影片至 YouTube 頻道',
+    icon: '📺',
+    color: 'from-red-600 to-red-700',
+    borderColor: 'border-red-500/30',
+    bgColor: 'bg-red-500/10',
+    textColor: 'text-red-400',
+    supportedTypes: ['影片'],
+    note: '僅支援影片內容',
+  },
 ]
 
 const isSubscribed = computed(() => {

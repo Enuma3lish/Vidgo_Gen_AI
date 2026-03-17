@@ -1,7 +1,7 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 6.0
-**Last Updated:** March 5, 2026
+**Version:** 7.0
+**Last Updated:** March 17, 2026
 **Framework:** Vue 3 + Vite + TypeScript
 **Mode:** Dual-Mode — Preset-Only (free) + Real-API with model selection (subscribers)
 **Target Audience:** Small businesses (SMB) selling everyday products/services
@@ -138,8 +138,15 @@ frontend-vue/
 │   │   │   ├── UpgradePrompt.vue
 │   │   │   └── index.ts
 │   │   │
+│   │   ├── admin/                   # Admin dashboard components
+│   │   │   ├── DateRangeSelector.vue    # Date range filter (7D, 30D, 90D, 1Y, Custom)
+│   │   │   └── charts/                 # Chart.js chart components (vue-chartjs)
+│   │   │       ├── LineChart.vue        # Reusable line chart
+│   │   │       ├── BarChart.vue         # Reusable bar chart
+│   │   │       └── DoughnutChart.vue    # Reusable doughnut chart
+│   │   │
 │   │   ├── social/                  # Social media components
-│   │   │   └── ShareToSocialModal.vue  # Publish to FB/IG/TikTok
+│   │   │   └── ShareToSocialModal.vue  # Publish to FB/IG/TikTok/YouTube
 │   │   │
 │   │   ├── invoice/                 # E-invoice components
 │   │   │   ├── InvoiceCreateForm.vue    # B2C/B2B e-invoice creation form
@@ -177,7 +184,7 @@ frontend-vue/
 │   │
 │   ├── stores/                      # Pinia State Management
 │   │   ├── index.ts                 # Store exports
-│   │   ├── admin.ts                 # Admin state (stats, API costs, active users)
+│   │   ├── admin.ts                 # Admin state (stats, API costs, active users, lastRefreshed, refreshAll)
 │   │   ├── auth.ts                  # Authentication state
 │   │   ├── credits.ts               # Credits state
 │   │   ├── generation.ts            # Generation state
@@ -189,7 +196,7 @@ frontend-vue/
 │   │   ├── NotFound.vue             # 404 page
 │   │   │
 │   │   ├── admin/                   # Admin dashboard (stats, costs, profit, active users)
-│   │   │   ├── AdminDashboard.vue   # Overview: stats, profit, API costs, sessions
+│   │   │   ├── AdminDashboard.vue   # Overview: Chart.js charts (generation/revenue/user-growth/tool-usage/credits-by-tool/users-by-plan), error banner, manual refresh with timestamp, date range selector, CSV export for API Cost and Tool Usage tables
 │   │   │   ├── AdminUsers.vue
 │   │   │   ├── AdminMaterials.vue
 │   │   │   ├── AdminModeration.vue
@@ -229,6 +236,9 @@ frontend-vue/
 │   │       ├── PatternTopic.vue
 │   │       ├── ProductTopic.vue
 │   │       └── VideoTopic.vue
+│   │
+│   ├── utils/
+│   │   └── exportCsv.ts             # CSV export utility for admin tables
 │   │
 │   ├── App.vue                      # Root component
 │   ├── main.ts                      # Application entry
@@ -1167,7 +1177,7 @@ Three.js-based GLB model viewer for interior design 3D outputs.
 
 Modal for publishing generations to connected social media accounts.
 - Location: `src/components/social/ShareToSocialModal.vue`
-- Platforms: Facebook, Instagram, TikTok
+- Platforms: Facebook, Instagram, TikTok, YouTube
 - Shows connected accounts, allows multi-platform publishing
 
 ### 15.4 Referrals Dashboard
@@ -1182,7 +1192,8 @@ Route: `/dashboard/referrals` — `views/dashboard/Referrals.vue`
 
 Route: `/dashboard/social-accounts` — `views/dashboard/SocialAccounts.vue`
 - Connect/disconnect social media accounts
-- OAuth flow for Facebook, Instagram, TikTok
+- OAuth flow for Facebook, Instagram, TikTok, YouTube
+- YouTube uses Google OAuth 2.0
 
 ### 15.6 API Clients
 
@@ -1204,6 +1215,8 @@ socialMediaApi.getAccounts()
 socialMediaApi.disconnectAccount(platform)
 socialMediaApi.getOAuthUrl(platform)
 socialMediaApi.publish(generationId, platforms)
+socialMediaApi.getPostHistory(params)      // Paginated post history
+socialMediaApi.getPostAnalytics()          // Aggregated analytics
 
 // src/api/user.ts
 userApi.getGenerations(params)
@@ -1215,7 +1228,7 @@ userApi.getStats()
 
 ---
 
-*Document Version: 6.0*
-*Last Updated: March 5, 2026*
+*Document Version: 7.0*
+*Last Updated: March 17, 2026*
 *Mode: Dual-Mode — Preset-Only (free) + Real-API with model selection (subscribers)*
 *Target: SMB (small businesses selling everyday products/services)*

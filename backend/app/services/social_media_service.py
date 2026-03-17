@@ -1,6 +1,6 @@
 """
 Social Media Publishing Service
-Supports: Facebook Pages, Instagram Business, TikTok
+Supports: Facebook Pages, Instagram Business, TikTok, YouTube
 
 Architecture:
 - OAuth 2.0 flow for account binding
@@ -8,13 +8,17 @@ Architecture:
 - Mock mode for development/testing (when API keys not configured)
 
 Facebook/Instagram:
-  - Uses Meta Graph API v19.0
+  - Uses Meta Graph API v21.0
   - Facebook: POST /me/feed (text) or /me/photos (image) or /me/videos (video)
   - Instagram: POST /{ig-user-id}/media + /{ig-user-id}/media_publish
 
 TikTok:
   - Uses TikTok Content Posting API v2
   - POST /v2/post/publish/video/init/ + /v2/post/publish/status/fetch/
+
+YouTube:
+  - Uses Google OAuth 2.0 + YouTube Data API v3
+  - Resumable upload to /upload/youtube/v3/videos
 """
 import hashlib
 import hmac
@@ -37,14 +41,21 @@ INSTAGRAM_APP_ID = getattr(settings, "INSTAGRAM_APP_ID", FACEBOOK_APP_ID)  # Sam
 INSTAGRAM_APP_SECRET = getattr(settings, "INSTAGRAM_APP_SECRET", FACEBOOK_APP_SECRET)
 TIKTOK_CLIENT_KEY = getattr(settings, "TIKTOK_CLIENT_KEY", "")
 TIKTOK_CLIENT_SECRET = getattr(settings, "TIKTOK_CLIENT_SECRET", "")
+YOUTUBE_CLIENT_ID = getattr(settings, "YOUTUBE_CLIENT_ID", "")
+YOUTUBE_CLIENT_SECRET = getattr(settings, "YOUTUBE_CLIENT_SECRET", "")
 
-FACEBOOK_GRAPH_URL = "https://graph.facebook.com/v19.0"
+FACEBOOK_GRAPH_URL = "https://graph.facebook.com/v21.0"
 TIKTOK_API_URL = "https://open.tiktokapis.com"
+YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3"
+YOUTUBE_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3"
+GOOGLE_OAUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 # OAuth redirect URIs (must match app settings)
 FACEBOOK_REDIRECT_URI = f"{settings.BACKEND_URL}/api/v1/social/oauth/facebook/callback"
 INSTAGRAM_REDIRECT_URI = f"{settings.BACKEND_URL}/api/v1/social/oauth/instagram/callback"
 TIKTOK_REDIRECT_URI = f"{settings.BACKEND_URL}/api/v1/social/oauth/tiktok/callback"
+YOUTUBE_REDIRECT_URI = f"{settings.BACKEND_URL}/api/v1/social/oauth/youtube/callback"
 
 # Mock mode: enabled when API keys are not configured
 MOCK_MODE = not (FACEBOOK_APP_ID and TIKTOK_CLIENT_KEY)
@@ -65,7 +76,7 @@ def get_facebook_oauth_url(state: str) -> str:
         "response_type": "code",
         "state": state,
     }
-    return f"https://www.facebook.com/v19.0/dialog/oauth?{urllib.parse.urlencode(params)}"
+    return f"https://www.facebook.com/v21.0/dialog/oauth?{urllib.parse.urlencode(params)}"
 
 
 def get_instagram_oauth_url(state: str) -> str:
@@ -80,7 +91,7 @@ def get_instagram_oauth_url(state: str) -> str:
         "response_type": "code",
         "state": state,
     }
-    return f"https://www.facebook.com/v19.0/dialog/oauth?{urllib.parse.urlencode(params)}"
+    return f"https://www.facebook.com/v21.0/dialog/oauth?{urllib.parse.urlencode(params)}"
 
 
 def get_tiktok_oauth_url(state: str) -> str:
@@ -484,6 +495,234 @@ async def publish_to_tiktok(
             "platform": "tiktok",
             "note": "Video is being processed by TikTok. It will appear in your profile shortly.",
         }
+
+
+# ─── YouTube OAuth & Publishing ──────────────────────────────────────────────
+
+def get_youtube_oauth_url(state: str) -> str:
+    """Generate YouTube (Google) OAuth authorization URL."""
+    if MOCK_MODE:
+        return f"{settings.FRONTEND_URL}/dashboard/social-accounts?mock_connect=youtube&state={state}"
+
+    params = {
+        "client_id": YOUTUBE_CLIENT_ID,
+        "redirect_uri": YOUTUBE_REDIRECT_URI,
+        "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+        "response_type": "code",
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+    }
+    return f"{GOOGLE_OAUTH_URL}?{urllib.parse.urlencode(params)}"
+
+
+async def exchange_youtube_code(code: str) -> Dict[str, Any]:
+    """Exchange YouTube/Google auth code for access token."""
+    if MOCK_MODE:
+        return {
+            "access_token": f"mock_yt_token_{int(time.time())}",
+            "refresh_token": f"mock_yt_refresh_{int(time.time())}",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        }
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "client_id": YOUTUBE_CLIENT_ID,
+                "client_secret": YOUTUBE_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": YOUTUBE_REDIRECT_URI,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_youtube_user_info(access_token: str) -> Dict[str, Any]:
+    """Get YouTube channel info."""
+    if MOCK_MODE or access_token.startswith("mock_"):
+        return {
+            "channel_id": "mock_channel_123",
+            "title": "Mock YouTube Channel",
+            "thumbnail_url": "https://via.placeholder.com/100",
+        }
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{YOUTUBE_API_URL}/channels",
+            params={"part": "snippet", "mine": "true"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        resp.raise_for_status()
+        items = resp.json().get("items", [])
+        if not items:
+            return {"error": "No YouTube channel found"}
+        channel = items[0]
+        snippet = channel.get("snippet", {})
+        return {
+            "channel_id": channel["id"],
+            "title": snippet.get("title", ""),
+            "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url", ""),
+        }
+
+
+async def publish_to_youtube(
+    access_token: str,
+    title: str,
+    description: str,
+    video_url: str,
+    privacy_status: str = "public",
+) -> Dict[str, Any]:
+    """
+    Upload video to YouTube using resumable upload.
+    Downloads video from URL first, then uploads to YouTube.
+    """
+    if MOCK_MODE or access_token.startswith("mock_"):
+        return {
+            "success": True,
+            "post_id": f"mock_yt_video_{int(time.time())}",
+            "post_url": "https://www.youtube.com/watch?v=mock_video_id",
+            "platform": "youtube",
+            "mock": True,
+        }
+
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        # Download the video
+        video_resp = await client.get(video_url)
+        video_resp.raise_for_status()
+        video_bytes = video_resp.content
+        content_type = video_resp.headers.get("content-type", "video/mp4")
+
+        # Step 1: Initialize resumable upload
+        metadata = json.dumps({
+            "snippet": {
+                "title": title[:100],
+                "description": description[:5000],
+                "categoryId": "22",  # People & Blogs
+            },
+            "status": {
+                "privacyStatus": privacy_status,
+                "selfDeclaredMadeForKids": False,
+            },
+        })
+
+        init_resp = await client.post(
+            f"{YOUTUBE_UPLOAD_URL}/videos?uploadType=resumable&part=snippet,status",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json; charset=UTF-8",
+                "X-Upload-Content-Type": content_type,
+                "X-Upload-Content-Length": str(len(video_bytes)),
+            },
+            content=metadata,
+        )
+        init_resp.raise_for_status()
+        upload_url = init_resp.headers.get("Location")
+
+        if not upload_url:
+            return {"success": False, "error": "Failed to initialize YouTube upload"}
+
+        # Step 2: Upload video data
+        upload_resp = await client.put(
+            upload_url,
+            content=video_bytes,
+            headers={"Content-Type": content_type},
+        )
+        upload_resp.raise_for_status()
+        video_data = upload_resp.json()
+        video_id = video_data.get("id", "")
+
+        return {
+            "success": True,
+            "post_id": video_id,
+            "post_url": f"https://www.youtube.com/watch?v={video_id}",
+            "platform": "youtube",
+        }
+
+
+async def check_tiktok_publish_status(access_token: str, publish_id: str) -> Dict[str, Any]:
+    """Check the status of a TikTok video publish."""
+    if MOCK_MODE or access_token.startswith("mock_"):
+        return {"status": "PUBLISH_COMPLETE", "publish_id": publish_id}
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{TIKTOK_API_URL}/v2/post/publish/status/fetch/",
+            json={"publish_id": publish_id},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        resp.raise_for_status()
+        return resp.json().get("data", {})
+
+
+# ─── Token Refresh Functions ─────────────────────────────────────────────────
+
+async def refresh_facebook_token(access_token: str) -> Dict[str, Any]:
+    """Exchange short-lived Facebook token for long-lived token."""
+    if MOCK_MODE:
+        return {"access_token": f"mock_fb_long_{int(time.time())}", "expires_in": 5184000}
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{FACEBOOK_GRAPH_URL}/oauth/access_token",
+            params={
+                "grant_type": "fb_exchange_token",
+                "client_id": FACEBOOK_APP_ID,
+                "client_secret": FACEBOOK_APP_SECRET,
+                "fb_exchange_token": access_token,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def refresh_tiktok_token(refresh_token: str) -> Dict[str, Any]:
+    """Refresh TikTok access token using refresh token."""
+    if MOCK_MODE:
+        return {
+            "access_token": f"mock_tt_refreshed_{int(time.time())}",
+            "refresh_token": f"mock_tt_refresh_{int(time.time())}",
+            "expires_in": 86400,
+        }
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{TIKTOK_API_URL}/v2/oauth/token/",
+            data={
+                "client_key": TIKTOK_CLIENT_KEY,
+                "client_secret": TIKTOK_CLIENT_SECRET,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp.raise_for_status()
+        return resp.json().get("data", {})
+
+
+async def refresh_youtube_token(refresh_token: str) -> Dict[str, Any]:
+    """Refresh YouTube/Google access token using refresh token."""
+    if MOCK_MODE:
+        return {
+            "access_token": f"mock_yt_refreshed_{int(time.time())}",
+            "expires_in": 3600,
+        }
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "client_id": YOUTUBE_CLIENT_ID,
+                "client_secret": YOUTUBE_CLIENT_SECRET,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
 
 
 # ─── Utility ──────────────────────────────────────────────────────────────────

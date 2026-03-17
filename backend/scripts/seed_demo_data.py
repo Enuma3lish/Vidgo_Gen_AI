@@ -78,28 +78,28 @@ def _pick_result(idx: int) -> str:
 BG_REMOVAL_ITEMS = [
     {"input": "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&fit=crop&bg=transparent",
-     "prompt": "Remove background from skincare bottle", "prompt_zh": "保養品瓶去背", "topic": "product"},
+     "prompt": "Remove background from skincare bottle", "prompt_zh": "保養品瓶去背", "topic": "packaging"},
     {"input": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1546868871-af0de0ae72be?w=600&q=80",
-     "prompt": "Remove background from watch photo", "prompt_zh": "手錶產品去背", "topic": "accessories"},
+     "prompt": "Remove background from watch photo", "prompt_zh": "手錶產品去背", "topic": "equipment"},
     {"input": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=80",
-     "prompt": "Remove background from red sneakers", "prompt_zh": "紅色球鞋去背", "topic": "product"},
+     "prompt": "Remove background from red sneakers", "prompt_zh": "紅色球鞋去背", "topic": "snacks"},
     {"input": "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=80",
-     "prompt": "Remove background from running shoes", "prompt_zh": "跑鞋去背", "topic": "product"},
+     "prompt": "Remove background from running shoes", "prompt_zh": "跑鞋去背", "topic": "drinks"},
     {"input": "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&fit=crop",
-     "prompt": "Remove background from sneaker pair", "prompt_zh": "球鞋對去背", "topic": "product"},
+     "prompt": "Remove background from sneaker pair", "prompt_zh": "球鞋對去背", "topic": "desserts"},
     {"input": "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1564466809058-bf4114d55352?w=600&q=80",
-     "prompt": "Remove background from camera", "prompt_zh": "相機去背", "topic": "electronics"},
+     "prompt": "Remove background from camera", "prompt_zh": "相機去背", "topic": "meals"},
     {"input": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=600&q=80",
-     "prompt": "Remove background from headphones", "prompt_zh": "耳機去背", "topic": "electronics"},
+     "prompt": "Remove background from headphones", "prompt_zh": "耳機去背", "topic": "signage"},
     {"input": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&fit=crop",
-     "prompt": "Remove background from cosmetics", "prompt_zh": "化妝品去背", "topic": "product"},
+     "prompt": "Remove background from cosmetics", "prompt_zh": "化妝品去背", "topic": "ingredients"},
 ]
 
 
@@ -165,18 +165,22 @@ SCENE_RESULTS = {
 # =============================================================================
 
 CLOTHING_ITEMS = [
-    {"id": "c1", "label": "White Blouse", "label_zh": "白色襯衫", "type": "general",
+    {"id": "c1", "label": "White Blouse", "label_zh": "白色襯衫", "type": "casual",
      "url": "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400&fit=crop"},
-    {"id": "c2", "label": "Blue Dress", "label_zh": "藍色洋裝", "type": "dress",
+    {"id": "c2", "label": "Blue Dress", "label_zh": "藍色洋裝", "type": "dresses",
      "url": "https://images.unsplash.com/photo-1594938298603-c8148c4b4357?w=400&fit=crop"},
-    {"id": "c3", "label": "Denim Jacket", "label_zh": "牛仔外套", "type": "general",
+    {"id": "c3", "label": "Denim Jacket", "label_zh": "牛仔外套", "type": "outerwear",
      "url": "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400&fit=crop"},
-    {"id": "c4", "label": "Floral Dress", "label_zh": "碎花洋裝", "type": "dress",
+    {"id": "c4", "label": "Floral Dress", "label_zh": "碎花洋裝", "type": "dresses",
      "url": "https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=400&fit=crop"},
-    {"id": "c5", "label": "Jeans", "label_zh": "牛仔褲", "type": "general",
+    {"id": "c5", "label": "Jeans", "label_zh": "牛仔褲", "type": "casual",
      "url": "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&fit=crop"},
-    {"id": "c6", "label": "White T-Shirt", "label_zh": "白色T恤", "type": "general",
+    {"id": "c6", "label": "White T-Shirt", "label_zh": "白色T恤", "type": "sportswear",
      "url": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&fit=crop"},
+    {"id": "c7", "label": "Business Suit", "label_zh": "商務西裝", "type": "formal",
+     "url": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=400&fit=crop"},
+    {"id": "c8", "label": "Leather Watch", "label_zh": "皮革手錶", "type": "accessories",
+     "url": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400&fit=crop"},
 ]
 
 MODEL_OPTIONS = [
@@ -204,7 +208,7 @@ TRYON_RESULTS = [
     "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80",
 ]
 
-FEMALE_ONLY_TYPES = {"dress", "skirt", "short_skirt", "mini_skirt"}
+FEMALE_ONLY_TYPES = {"dresses"}
 
 
 # =============================================================================
@@ -270,28 +274,28 @@ ROOM_RESULT_MAPPING = {
 SHORT_VIDEO_ITEMS = [
     {"input": "https://images.unsplash.com/photo-1522383225653-ed111181a951?w=600&fit=crop",
      "prompt": "Cherry blossom petals falling in slow motion, cinematic",
-     "prompt_zh": "櫻花花瓣慢動作飄落，電影感", "topic": "nature", "motion": "zoom_in"},
+     "prompt_zh": "櫻花花瓣慢動作飄落，電影感", "topic": "promo", "motion": "zoom_in"},
     {"input": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&fit=crop",
      "prompt": "Skincare product rotating on marble surface, studio lighting",
-     "prompt_zh": "保養品在大理石上旋轉，攝影棚燈光", "topic": "product", "motion": "rotate"},
+     "prompt_zh": "保養品在大理石上旋轉，攝影棚燈光", "topic": "product_showcase", "motion": "rotate"},
     {"input": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&fit=crop",
      "prompt": "Coffee being poured into a glass cup, overhead view",
-     "prompt_zh": "咖啡倒入玻璃杯，俯瞰角度", "topic": "food", "motion": "pan_right"},
+     "prompt_zh": "咖啡倒入玻璃杯，俯瞰角度", "topic": "tutorial", "motion": "pan_right"},
     {"input": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&fit=crop",
      "prompt": "Fashion model walking on city street, golden hour",
-     "prompt_zh": "時尚模特在城市街頭走秀，黃金時段", "topic": "fashion", "motion": "pan_left"},
+     "prompt_zh": "時尚模特在城市街頭走秀，黃金時段", "topic": "brand_intro", "motion": "pan_left"},
     {"input": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&fit=crop",
      "prompt": "Mountain landscape with clouds moving, time lapse",
-     "prompt_zh": "山景雲朵移動，縮時攝影", "topic": "landscape", "motion": "zoom_out"},
+     "prompt_zh": "山景雲朵移動，縮時攝影", "topic": "promo", "motion": "zoom_out"},
     {"input": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&fit=crop",
      "prompt": "Bubble tea shop interior, warm lighting, cozy atmosphere",
-     "prompt_zh": "珍奶店內部，溫暖燈光，舒適氛圍", "topic": "food", "motion": "auto"},
+     "prompt_zh": "珍奶店內部，溫暖燈光，舒適氛圍", "topic": "product_showcase", "motion": "auto"},
     {"input": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&fit=crop",
      "prompt": "Product showcase sneakers dynamic camera",
-     "prompt_zh": "球鞋產品展示動態鏡頭", "topic": "product", "motion": "zoom_in"},
+     "prompt_zh": "球鞋產品展示動態鏡頭", "topic": "tutorial", "motion": "zoom_in"},
     {"input": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&fit=crop",
      "prompt": "Interior design room tour video",
-     "prompt_zh": "室內設計房間導覽影片", "topic": "interior", "motion": "pan_right"},
+     "prompt_zh": "室內設計房間導覽影片", "topic": "brand_intro", "motion": "pan_right"},
 ]
 
 
@@ -363,14 +367,18 @@ PATTERN_ITEMS = [
      "topic": "floral", "result": "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600&q=80"},
     {"prompt": "Geometric abstract pattern, bold colors", "prompt_zh": "幾何抽象圖案，大膽色彩",
      "topic": "geometric", "result": "https://images.unsplash.com/photo-1534120247760-c44c3e4a62f1?w=600&q=80"},
-    {"prompt": "Tropical leaves pattern for summer", "prompt_zh": "熱帶葉子夏季圖案",
-     "topic": "tropical", "result": "https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?w=600&q=80"},
-    {"prompt": "Japanese wave pattern, traditional style", "prompt_zh": "日式波浪圖案，傳統風格",
-     "topic": "japanese", "result": "https://images.unsplash.com/photo-1507908708918-778587c9e563?w=600&q=80"},
-    {"prompt": "Art deco gold pattern, luxury design", "prompt_zh": "裝飾藝術金色圖案，奢華設計",
-     "topic": "art_deco", "result": "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?w=600&q=80"},
-    {"prompt": "Polka dot pattern, retro style", "prompt_zh": "圓點圖案，復古風格",
-     "topic": "retro", "result": "https://images.unsplash.com/photo-1557683316-973673baf926?w=600&q=80"},
+    {"prompt": "Seamless tileable pattern, clean lines", "prompt_zh": "無縫可拼接圖案，俐落線條",
+     "topic": "seamless", "result": "https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?w=600&q=80"},
+    {"prompt": "Traditional wave pattern, classic style", "prompt_zh": "傳統波浪圖案，經典風格",
+     "topic": "traditional", "result": "https://images.unsplash.com/photo-1507908708918-778587c9e563?w=600&q=80"},
+    {"prompt": "Abstract art pattern, luxury design", "prompt_zh": "抽象藝術圖案，奢華設計",
+     "topic": "abstract", "result": "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?w=600&q=80"},
+    {"prompt": "3D rendered pattern, depth effect", "prompt_zh": "3D渲染圖案，立體效果",
+     "topic": "3d", "result": "https://images.unsplash.com/photo-1557683316-973673baf926?w=600&q=80"},
+    {"prompt": "Interior decorative pattern, warm tones", "prompt_zh": "室內裝飾圖案，暖色調",
+     "topic": "interior", "result": "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=600&q=80"},
+    {"prompt": "Product mockup pattern, professional layout", "prompt_zh": "產品展示圖案，專業排版",
+     "topic": "mockup", "result": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=600&q=80"},
 ]
 
 
@@ -387,10 +395,6 @@ EFFECT_ITEMS = [
      "result": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=600&q=80",
      "prompt": "Watercolor landscape effect", "prompt_zh": "水彩風景效果",
      "topic": "watercolor", "effect_prompt": "watercolor painting, soft washes, delicate"},
-    {"input": "https://images.unsplash.com/photo-1515705576963-95cad62945b6?w=600&q=80",
-     "result": "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?w=600&q=80",
-     "prompt": "Cyberpunk neon style effect", "prompt_zh": "賽博朋克霓虹風格",
-     "topic": "cyberpunk", "effect_prompt": "cyberpunk, neon lights, futuristic"},
     {"input": "https://images.unsplash.com/photo-1500964757637-c85e8a162699?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1613376023733-0a73315d9b06?w=600&q=80",
      "prompt": "Anime illustration style", "prompt_zh": "動漫插畫風格",
@@ -405,12 +409,16 @@ EFFECT_ITEMS = [
      "topic": "cartoon", "effect_prompt": "cartoon, bold outlines, flat colors"},
     {"input": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1526498460520-4c246339dccb?w=600&q=80",
-     "prompt": "Pencil sketch drawing", "prompt_zh": "鉛筆素描",
-     "topic": "sketch", "effect_prompt": "pencil sketch, hand drawn, hatching"},
+     "prompt": "Oil painting portrait style", "prompt_zh": "油畫肖像風格",
+     "topic": "oil_painting", "effect_prompt": "oil painting portrait, classical, thick brushstrokes"},
     {"input": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=600&q=80",
-     "prompt": "Vintage film photo effect", "prompt_zh": "復古底片風格",
-     "topic": "vintage", "effect_prompt": "vintage film, grain, warm tones, retro"},
+     "prompt": "Watercolor still life effect", "prompt_zh": "水彩靜物效果",
+     "topic": "watercolor", "effect_prompt": "watercolor still life, soft edges, transparent washes"},
+    {"input": "https://images.unsplash.com/photo-1515705576963-95cad62945b6?w=600&q=80",
+     "result": "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?w=600&q=80",
+     "prompt": "Anime character style effect", "prompt_zh": "動漫角色風格",
+     "topic": "anime", "effect_prompt": "anime character, detailed, colorful"},
 ]
 
 

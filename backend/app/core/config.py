@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     # Create app at: https://developers.tiktok.com/
     TIKTOK_CLIENT_KEY: str = ""         # TikTok Client Key
     TIKTOK_CLIENT_SECRET: str = ""      # TikTok Client Secret
+    # YouTube (Google OAuth 2.0 + YouTube Data API v3)
+    # Create project at: https://console.cloud.google.com/
+    YOUTUBE_CLIENT_ID: str = ""         # Google OAuth Client ID
+    YOUTUBE_CLIENT_SECRET: str = ""     # Google OAuth Client Secret
 
     # Registration System
     REGISTRATION_BONUS_CREDITS: int = 40   # Credits awarded to new user upon registration

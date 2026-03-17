@@ -31,6 +31,7 @@ const platforms = [
   { id: 'facebook', name: 'Facebook', icon: '📘', color: '#1877f2', supportsImage: true, supportsVideo: true },
   { id: 'instagram', name: 'Instagram', icon: '📸', color: '#e1306c', supportsImage: true, supportsVideo: true },
   { id: 'tiktok', name: 'TikTok', icon: '🎵', color: '#010101', supportsImage: false, supportsVideo: true },
+  { id: 'youtube', name: 'YouTube', icon: '📺', color: '#ff0000', supportsImage: false, supportsVideo: true },
 ]
 
 const availablePlatforms = computed(() => {

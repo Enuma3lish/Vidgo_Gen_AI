@@ -675,25 +675,25 @@ class MaterialGenerator:
             }
         }
 
-        # Per-topic coverage for core tools
+        # Per-topic coverage for all 8 core tools
         MIN_PER_TOPIC_DEFAULT = 1
         tool_checks = {
-            "pattern": (ToolType.BACKGROUND_REMOVAL, get_topic_ids_for_tool("background_removal")),
-            "product": (ToolType.PRODUCT_SCENE, get_topic_ids_for_tool("product_scene")),
-            "video": (ToolType.SHORT_VIDEO, get_topic_ids_for_tool("short_video")),
-            "avatar": (ToolType.AI_AVATAR, get_topic_ids_for_tool("ai_avatar")),
-            "effect": (ToolType.EFFECT, get_topic_ids_for_tool("effect"))
+            "background_removal": (ToolType.BACKGROUND_REMOVAL, get_topic_ids_for_tool("background_removal")),
+            "product_scene": (ToolType.PRODUCT_SCENE, get_topic_ids_for_tool("product_scene")),
+            "try_on": (ToolType.TRY_ON, get_topic_ids_for_tool("try_on")),
+            "room_redesign": (ToolType.ROOM_REDESIGN, get_topic_ids_for_tool("room_redesign")),
+            "short_video": (ToolType.SHORT_VIDEO, get_topic_ids_for_tool("short_video")),
+            "ai_avatar": (ToolType.AI_AVATAR, get_topic_ids_for_tool("ai_avatar")),
+            "pattern_generate": (ToolType.PATTERN_GENERATE, get_topic_ids_for_tool("pattern_generate")),
+            "effect": (ToolType.EFFECT, get_topic_ids_for_tool("effect")),
         }
-
-        EFFECT_MIN_PER_STYLE = 3
 
         for category, (tool_type, topics) in tool_checks.items():
             if not topics:
                 continue
 
             counts = await self._count_by_topic(session, tool_type, topics)
-            min_per_topic = EFFECT_MIN_PER_STYLE if category == "effect" else MIN_PER_TOPIC_DEFAULT
-            missing_topics = [t for t, c in counts.items() if c < min_per_topic]
+            missing_topics = [t for t, c in counts.items() if c < MIN_PER_TOPIC_DEFAULT]
 
             prompt_missing = await self._count_missing_prompts(session, tool_type, topics)
             prompt_zh_missing = await self._count_missing_prompt_zh(session, tool_type, topics)

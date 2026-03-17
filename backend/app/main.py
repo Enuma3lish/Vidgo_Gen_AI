@@ -199,7 +199,10 @@ async def materials_status():
     return {
         "status": "ok",
         "materials": status,
-        "all_ready": all(status.values())
+        "all_ready": all(
+            v.get("ready", False) if isinstance(v, dict) else bool(v)
+            for v in status.values()
+        )
     }
 
 

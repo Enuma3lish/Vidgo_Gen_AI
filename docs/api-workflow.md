@@ -1,7 +1,7 @@
 # VidGo API Workflow
 
 > Current system architecture and API flow documentation.
-> Last Updated: 2026-03-11
+> Last Updated: 2026-03-17
 
 ---
 
@@ -445,10 +445,54 @@ Flow: User shares `?ref=CODE` link → new user registers → both get bonus cre
 | `GET /social/oauth/facebook/callback` | - | Facebook OAuth callback |
 | `GET /social/oauth/instagram/callback` | - | Instagram OAuth callback |
 | `GET /social/oauth/tiktok/callback` | - | TikTok OAuth callback |
+| `GET /social/oauth/youtube/callback` | - | YouTube OAuth callback (Google OAuth 2.0) |
 | `POST /social/oauth/mock-connect` | yes | Mock connect (dev) |
-| `POST /social/publish/{generation_id}` | yes | Publish to connected platforms |
+| `POST /social/publish/{generation_id}` | yes | Publish to connected platforms (auto-refreshes tokens before publish) |
+| `GET /social/posts` | yes | Paginated post history |
+| `GET /social/posts/analytics` | yes | Aggregated post analytics |
 
-Supported platforms: Facebook, Instagram, TikTok.
+Supported platforms: Facebook (Graph API v21.0), Instagram (Graph API v21.0), TikTok, YouTube (Data API v3 resumable upload).
+
+### Token Refresh Flow
+
+```
+Before each publish attempt:
+      |
+  Token refresh service checks token expiry
+      |
+  Token expires within 24 hours?
+      |                    |
+    YES                   NO
+      |                    |
+  Refresh token        Proceed with publish
+  (platform-specific)
+      |
+  Facebook: Exchange for long-lived token via Graph API
+  TikTok: Refresh via TikTok OAuth refresh endpoint
+  YouTube: Refresh via Google OAuth 2.0 refresh token
+      |
+  Update stored token + expires_at
+      |
+  Proceed with publish
+```
+
+### YouTube OAuth Flow
+
+```
+GET /api/v1/social/oauth/youtube
+      |
+  Generate Google OAuth 2.0 authorization URL
+  Scopes: youtube.upload, youtube.readonly
+      |
+  User authorizes on Google consent screen
+      |
+  Callback: GET /api/v1/social/oauth/youtube/callback
+      |
+  Exchange code for access_token + refresh_token
+  Store token with expires_at
+      |
+  Publishing: Resumable upload via YouTube Data API v3
+```
 
 ---
 

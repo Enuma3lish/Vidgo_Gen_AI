@@ -26,6 +26,7 @@ export const useAdminStore = defineStore('admin', () => {
   const apiCosts = ref<ApiCostStats | null>(null)
   const activeUsers = ref<ActiveUsersStats | null>(null)
   const activeGenerationsCount = ref(0)
+  const lastRefreshed = ref<Date | null>(null)
 
   // Computed
   const onlineCount = computed(() => dashboardStats.value?.online?.online_users ?? 0)
@@ -222,6 +223,18 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function refreshAll(days = 30, months = 12) {
+    await Promise.all([
+      fetchDashboardStats(),
+      fetchCharts(days, months),
+      fetchToolUsage(),
+      fetchEarnings(),
+      fetchApiCosts(),
+      fetchActiveUsers(),
+    ])
+    lastRefreshed.value = new Date()
+  }
+
   function connectWebSocket() {
     if (wsConnection.value) {
       wsConnection.value.close()
@@ -268,6 +281,7 @@ export const useAdminStore = defineStore('admin', () => {
     apiCosts,
     activeUsers,
     activeGenerationsCount,
+    lastRefreshed,
     isLoading,
     error,
 
@@ -293,6 +307,7 @@ export const useAdminStore = defineStore('admin', () => {
     fetchEarnings,
     fetchApiCosts,
     fetchActiveUsers,
+    refreshAll,
     connectWebSocket,
     disconnectWebSocket
   }

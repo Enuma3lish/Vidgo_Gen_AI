@@ -1,7 +1,7 @@
 # VidGo Platform – Function & Tool Coverage Spec
 
 **Purpose:** Check that each function/tool is implemented in both **Backend** and **Frontend**. Use this to find gaps.
-**Last Updated:** March 11, 2026
+**Last Updated:** March 17, 2026
 
 **Legend:**
 - ✅ Implemented and wired
@@ -147,7 +147,11 @@
 | Facebook callback | ✅ `GET /social/oauth/facebook/callback` | N/A | ✅ |
 | Instagram callback | ✅ `GET /social/oauth/instagram/callback` | N/A | ✅ |
 | TikTok callback | ✅ `GET /social/oauth/tiktok/callback` | N/A | ✅ |
+| YouTube callback | ✅ `GET /social/oauth/youtube/callback` | N/A | ✅ |
 | Publish to platforms | ✅ `POST /social/publish/{generation_id}` | ✅ ShareToSocialModal.vue | ✅ |
+| Post history | ✅ `GET /social/posts` | ✅ socialMediaApi | ✅ |
+| Post analytics | ✅ `GET /social/posts/analytics` | ✅ socialMediaApi | ✅ |
+| Token auto-refresh | ✅ token_refresh_service.py | N/A | ✅ |
 
 ---
 
@@ -168,7 +172,11 @@
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
 | Dashboard stats | ✅ `GET /admin/stats/*` | ✅ AdminDashboard.vue | ✅ |
-| Charts (generations, revenue, growth) | ✅ `GET /admin/charts/*` | ✅ | ✅ |
+| Charts (generations, revenue, growth, tool usage, credits by tool, users by plan) | ✅ `GET /admin/charts/*` | ✅ Chart.js (vue-chartjs) LineChart, BarChart, DoughnutChart | ✅ |
+| Date range selector | N/A | ✅ DateRangeSelector.vue (7D, 30D, 90D, 1Y, Custom) | ✅ |
+| CSV export (API Cost, Tool Usage) | N/A | ✅ exportCsv.ts utility | ✅ |
+| Manual refresh with timestamp | N/A | ✅ AdminDashboard.vue + admin store refreshAll() | ✅ |
+| Error banner | N/A | ✅ AdminDashboard.vue (shows adminStore.error) | ✅ |
 | Users list | ✅ `GET /admin/users` | ✅ AdminUsers.vue | ✅ |
 | User detail | ✅ `GET /admin/users/{id}` | ✅ | ✅ |
 | Ban/Unban user | ✅ `POST /admin/users/{id}/ban|unban` | ✅ | ✅ |
@@ -317,7 +325,7 @@
 | `/api/v1/user` | User generation history, stats |
 | `/api/v1/uploads` | Subscriber uploads, models, download |
 | `/api/v1/referrals` | Referral code, stats, apply, leaderboard |
-| `/api/v1/social` | Social media OAuth, accounts, publish |
+| `/api/v1/social` | Social media OAuth (FB, IG, TikTok, YouTube), accounts, publish, post history, analytics |
 
 ---
 

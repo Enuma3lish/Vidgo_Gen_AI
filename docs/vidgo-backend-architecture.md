@@ -1,7 +1,7 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 6.0
-**Last Updated:** March 5, 2026
+**Version:** 7.0
+**Last Updated:** March 17, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
 **Mode:** Dual-Mode — Preset-Only (free) + Real-API (subscribers)
@@ -52,9 +52,14 @@ Users earn bonus credits by inviting others:
 
 ### 0.6 Social Media Publishing
 Users can connect social accounts and publish generations directly:
-- Supported platforms: Facebook, Instagram, TikTok
+- Supported platforms: Facebook, Instagram, TikTok, YouTube
 - OAuth flow: `GET /social/oauth/{platform}` → callback → account linked
+- YouTube uses Google OAuth 2.0 with resumable upload to YouTube Data API v3
+- Meta Graph API version: v21.0
 - Publish: `POST /social/publish/{generation_id}` → publish to selected platforms
+- Token refresh: Automatic refresh of tokens expiring within 24 hours (Facebook, TikTok, YouTube)
+- Post tracking: SocialPost model records each published post with status and analytics
+- Post history: `GET /social/posts` (paginated), `GET /social/posts/analytics` (aggregated)
 
 ### 0.7 Media Retention Policy
 14-day media retention with automatic cleanup:
@@ -185,6 +190,7 @@ backend/
 │   │   ├── material.py              # Material, MaterialView, MaterialTopic, ToolType
 │   │   ├── prompt_template.py       # PromptTemplate, PromptTemplateUsage
 │   │   ├── social_account.py        # SocialAccount (OAuth connections)
+│   │   ├── social_post.py          # SocialPost (published post tracking)
 │   │   ├── user.py                  # User model
 │   │   ├── user_generation.py       # UserGeneration (subscriber results)
 │   │   ├── user_upload.py           # UserUpload (subscriber uploads)
@@ -235,7 +241,8 @@ backend/
 │   │   ├── rescue_service.py        # Error recovery service
 │   │   ├── session_tracker.py       # Session/online tracking
 │   │   ├── similarity.py            # Similarity computation
-│   │   ├── social_media_service.py  # Social media OAuth & publishing
+│   │   ├── social_media_service.py  # Social media OAuth & publishing (FB, IG, TikTok, YouTube)
+│   │   ├── token_refresh_service.py # Auto-refresh expiring OAuth tokens (FB, TikTok, YouTube)
 │   │   ├── subscription_service.py  # Subscription management
 │   │   ├── taigi_tts.py             # Taiwanese TTS service
 │   │   ├── watermark.py             # Watermark application
@@ -316,7 +323,7 @@ api_router.include_router(einvoices.router, prefix="/einvoices", tags=["einvoice
 | `/user` | user | User generation history, stats, downloads |
 | `/uploads` | uploads | Subscriber material upload + real-API generation |
 | `/referrals` | referrals | Referral code, stats, apply, leaderboard |
-| `/social` | social | Social media OAuth + publishing (FB, IG, TikTok) |
+| `/social` | social | Social media OAuth + publishing (FB, IG, TikTok, YouTube), post history, analytics |
 
 ---
 
@@ -365,7 +372,8 @@ PromptGroup (enum)      # Template groups
 PromptSubTopic (enum)   # Template sub-topics
 
 # Social
-SocialAccount           # OAuth-connected social accounts (FB, IG, TikTok)
+SocialAccount           # OAuth-connected social accounts (FB, IG, TikTok, YouTube)
+SocialPost              # Published post tracking (platform, status, analytics)
 
 # User Content
 UserGeneration          # Subscriber generation results (14-day retention)
@@ -560,6 +568,10 @@ class Settings(BaseSettings):
     A2E_DEFAULT_CREATOR_ID: str = ""
     GEMINI_API_KEY: str = ""
 
+    # YouTube (Google OAuth 2.0 for YouTube Data API v3)
+    YOUTUBE_CLIENT_ID: str = ""
+    YOUTUBE_CLIENT_SECRET: str = ""
+
     # Taiwanese TTS
     TAIGI_TTS_API_KEY: str = ""
     TAI5UAN5_BASE_URL: str = ""
@@ -655,7 +667,7 @@ open http://localhost:8501
 
 ---
 
-*Document Version: 6.0*
-*Last Updated: March 5, 2026*
+*Document Version: 7.0*
+*Last Updated: March 17, 2026*
 *Mode: Dual-Mode — Preset-Only (free) + Real-API (subscribers)*
 *Target: SMB (small businesses selling everyday products/services)*

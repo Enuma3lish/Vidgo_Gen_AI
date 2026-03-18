@@ -1,7 +1,7 @@
 # VidGo AI Platform - Infrastructure Architecture
 
-**Version:** 3.2
-**Last Updated:** March 5, 2026
+**Version:** 3.3
+**Last Updated:** March 18, 2026
 **Cloud Provider:** Google Cloud Platform (GCP)  
 **DNS Provider:** GoDaddy  
 **Max Concurrent Users:** 1,000
@@ -1043,5 +1043,25 @@ dig api.vidgo.ai
 
 ---
 
-*Document Version: 3.2*
-*Last Updated: March 5, 2026*
+## 12. Material Cleanup & Re-seeding
+
+### Environment Variables
+
+| Variable | Values | Description |
+|----------|--------|-------------|
+| `CLEAN_MATERIALS` | `""` (default) | No cleanup on startup |
+| `CLEAN_MATERIALS` | `all` | Delete + re-seed ALL tool materials on startup |
+| `CLEAN_MATERIALS` | `ai_avatar` | Delete + re-seed specific tool |
+| `CLEAN_MATERIALS` | `ai_avatar,effect,short_video` | Comma-separated: multiple tools |
+| `SKIP_PREGENERATION` | `true` / `false` | Skip material pre-generation on startup |
+| `PREGENERATION_LIMIT` | `10` (default) | Max materials per tool per startup |
+
+### 14-Day Media Retention
+- Hourly background task scans `user_generations` table
+- Entries older than 14 days have media URLs (`result_url`, `result_video_url`) cleared
+- Initial cleanup runs on application startup
+
+---
+
+*Document Version: 3.3*
+*Last Updated: March 18, 2026*

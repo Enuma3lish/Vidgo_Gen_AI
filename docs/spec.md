@@ -1,7 +1,7 @@
 # VidGo Platform – Function & Tool Coverage Spec
 
 **Purpose:** Check that each function/tool is implemented in both **Backend** and **Frontend**. Use this to find gaps.
-**Last Updated:** March 17, 2026
+**Last Updated:** March 18, 2026
 
 **Legend:**
 - ✅ Implemented and wired
@@ -57,6 +57,7 @@
 | Resend verification | ✅ `POST /auth/resend-verification` | ✅ | ✅ |
 | Forgot password | ✅ `POST /auth/forgot-password` | ✅ ForgotPassword.vue | ✅ |
 | Reset password | ✅ `POST /auth/reset-password` | ✅ | ✅ |
+| Delete account | ✅ `DELETE /auth/me` | ✅ (7-day work retention) | ✅ |
 | Geo/language detect | ✅ `GET /auth/geo-language` | ✅ useGeoLanguage | ✅ |
 
 ---
@@ -66,6 +67,20 @@
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
 | List plans | ✅ `GET /subscriptions/plans` | ✅ Pricing.vue | ✅ |
+
+### Per-Plan Feature Restrictions
+
+| Feature Flag | Description |
+|-------------|-------------|
+| `feature_clothing_transform` | Try-on / clothing transform access |
+| `feature_goenhance` | GoEnhance style effects access |
+| `feature_video_gen` | Video generation access |
+| `feature_batch_processing` | Batch operations access |
+| `feature_custom_styles` | Custom style creation |
+| `pollo_limit` | Monthly Pollo AI generation limit |
+| `goenhance_limit` | Monthly GoEnhance generation limit |
+
+### Subscription Endpoints
 | Subscribe (Paddle) | ✅ `POST /subscriptions/subscribe` | ✅ | ✅ |
 | Subscribe (ECPay) | ✅ `POST /subscriptions/subscribe/direct` | ✅ | ✅ |
 | Subscription status | ✅ `GET /subscriptions/status` | ✅ | ✅ |
@@ -92,6 +107,18 @@
 | Packages | ✅ `GET /credits/packages` | ✅ | ✅ |
 | Purchase credits | ✅ `POST /credits/purchase` | ✅ | ✅ |
 | Pricing (services) | ✅ `GET /credits/pricing` | ✅ | ✅ |
+
+### Credit Types
+
+| Type | Reset | Expiry |
+|------|-------|--------|
+| `subscription_credits` | Weekly (Monday) via `credits_reset_at` | Resets each week |
+| `purchased_credits` | Never | Never expire |
+| `bonus_credits` | Never | Expire on `bonus_credits_expiry` |
+
+### Demo Usage Limits
+- Free users: limited to `demo_usage_limit` (default **2**) demo generations
+- Tracked via `demo_usage_count` on User model
 
 ---
 

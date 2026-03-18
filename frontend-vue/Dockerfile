@@ -2,13 +2,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install libc compatibility layer needed by native modules on Alpine ARM64
+RUN apk add --no-cache libc6-compat
+
 # Copy package files
 COPY package*.json ./
 
-# Clean install - remove existing lockfile and node_modules to avoid optional dependency issues
+# Clean install - fresh lockfile to resolve correct platform-specific dependencies
 RUN rm -f package-lock.json && \
     rm -rf node_modules && \
-    npm install --no-optional --legacy-peer-deps
+    npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .

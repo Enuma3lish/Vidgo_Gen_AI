@@ -6,7 +6,8 @@
       "Bash(git stash:*)",
       "Bash(xargs -I {} basename {})",
       "Bash(sed 's/\\(.*$//')",
-      "Bash(export TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzM3NDI4NDIsInN1YiI6Ijc3NDMyMmMwLTc5MDgtNDk5NC05NTkzLTVjYjk1YjA2OWE0ZiIsInR5cGUiOiJhY2Nlc3MifQ.BD1G4RMar2SVs4YtukjoNau3JuGrR6_IcZBRo9neUqI\" __NEW_LINE_f8c65807e9709cdb__ echo \"=== 1. LIST CONNECTED ACCOUNTS ===\" curl -s http://localhost:8001/api/v1/social/accounts -H \"Authorization: Bearer $TOKEN\")"
+      "Bash(export TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzM3NDI4NDIsInN1YiI6Ijc3NDMyMmMwLTc5MDgtNDk5NC05NTkzLTVjYjk1YjA2OWE0ZiIsInR5cGUiOiJhY2Nlc3MifQ.BD1G4RMar2SVs4YtukjoNau3JuGrR6_IcZBRo9neUqI\" __NEW_LINE_f8c65807e9709cdb__ echo \"=== 1. LIST CONNECTED ACCOUNTS ===\" curl -s http://localhost:8001/api/v1/social/accounts -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(docker volume:*)"
     ]
   }
 }

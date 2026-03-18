@@ -1,7 +1,7 @@
 # VidGo AI Platform - Frontend Architecture
 
-**Version:** 7.0
-**Last Updated:** March 17, 2026
+**Version:** 7.1
+**Last Updated:** March 18, 2026
 **Framework:** Vue 3 + Vite + TypeScript
 **Mode:** Dual-Mode — Preset-Only (free) + Real-API with model selection (subscribers)
 **Target Audience:** Small businesses (SMB) selling everyday products/services

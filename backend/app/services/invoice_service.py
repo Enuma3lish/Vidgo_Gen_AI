@@ -21,8 +21,22 @@ from sqlalchemy.orm import selectinload
 from app.models.billing import Invoice, InvoiceItem, Order
 from app.models.user import User
 from app.services.ecpay.einvoice_client import ECPayEInvoiceClient, get_einvoice_client
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _invoice_status_after_issue() -> str:
+    """
+    Determine invoice status after successful ECPay issuance.
+    In ECPay sandbox (MID 2000132), the 財政部 Stage system auto-sets
+    invoices to '已上傳' (uploaded) immediately, unlike production which
+    stays 'issued' until the next upload batch.
+    """
+    settings = get_settings()
+    if settings.ECPAY_ENV == "sandbox":
+        return "uploaded"
+    return "issued"
 
 
 def get_current_tax_period() -> str:
@@ -148,6 +162,7 @@ async def create_b2c_invoice(
 
     # Create successful invoice record
     invoice_number = response.get("InvoiceNo", "")
+    status = _invoice_status_after_issue()
     invoice = Invoice(
         id=uuid4(),
         order_id=order_id,
@@ -163,7 +178,7 @@ async def create_b2c_invoice(
         carrier_number=carrier_number,
         is_donation=is_donation,
         love_code=love_code,
-        status="issued",
+        status=status,
         ecpay_invoice_no=response.get("InvoiceNo"),
         ecpay_relate_number=relate_number,
         ecpay_response_data=response,
@@ -273,6 +288,7 @@ async def create_b2b_invoice(
         return {"success": False, "error": response.get("RtnMsg", "Invoice creation failed")}
 
     invoice_number = response.get("InvoiceNo", "")
+    status = _invoice_status_after_issue()
     invoice = Invoice(
         id=uuid4(),
         order_id=order_id,
@@ -286,7 +302,7 @@ async def create_b2b_invoice(
         buyer_company_name=buyer_company_name,
         buyer_tax_id=buyer_tax_id,
         buyer_email=buyer_email,
-        status="issued",
+        status=status,
         ecpay_invoice_no=response.get("InvoiceNo"),
         ecpay_relate_number=relate_number,
         ecpay_response_data=response,
@@ -329,7 +345,7 @@ async def void_invoice(
         return {"success": False, "error": "Invoice not found"}
     if str(invoice.user_id) != str(user_id):
         return {"success": False, "error": "Invoice does not belong to user"}
-    if invoice.status != "issued":
+    if invoice.status not in ("issued", "uploaded"):
         return {"success": False, "error": "Only issued invoices can be voided"}
     if not invoice.invoice_period or not is_same_tax_period(invoice.invoice_period):
         return {"success": False, "error": "Can only void invoices within current tax period (當期)"}
@@ -417,7 +433,7 @@ async def list_invoices(
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
             "voided_at": inv.voided_at.isoformat() if inv.voided_at else None,
             "void_reason": inv.void_reason,
-            "can_void": inv.status == "issued" and inv.invoice_period == current_period,
+            "can_void": inv.status in ("issued", "uploaded") and inv.invoice_period == current_period,
             "items": [
                 {
                     "item_name": item.item_name,
@@ -480,7 +496,7 @@ async def get_invoice(
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
             "voided_at": inv.voided_at.isoformat() if inv.voided_at else None,
             "void_reason": inv.void_reason,
-            "can_void": inv.status == "issued" and inv.invoice_period == current_period,
+            "can_void": inv.status in ("issued", "uploaded") and inv.invoice_period == current_period,
             "items": [
                 {
                     "item_name": item.item_name,

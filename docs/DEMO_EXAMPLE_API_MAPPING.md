@@ -1,6 +1,6 @@
 # Demo Example ↔ API Mapping
 
-> Last Updated: March 5, 2026
+> Last Updated: March 18, 2026
 
 This doc describes how frontend "try/play" examples map to backend APIs and Material DB so that **home style change** and other demo flows work.
 

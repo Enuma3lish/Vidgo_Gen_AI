@@ -1,7 +1,7 @@
 # VidGo API Workflow
 
 > Current system architecture and API flow documentation.
-> Last Updated: 2026-03-17
+> Last Updated: 2026-03-18
 
 ---
 
@@ -72,6 +72,7 @@ POST /api/v1/auth/login
 | `POST /auth/me/change-password` | yes | Change password |
 | `POST /auth/verify-code` | - | Verify auth code |
 | `POST /auth/resend-code` | - | Resend auth code |
+| `DELETE /auth/me` | yes | Delete account (7-day work retention) |
 | `GET /auth/geo-language` | - | Detect user region/language |
 
 ### Auth Dependency Chain
@@ -354,7 +355,17 @@ External AI services with failover:
 | `GET /credits/pricing` | Service pricing list |
 | `POST /credits/add` | Admin: add credits |
 
+### Credit Types
+
+| Type | Reset | Expiry |
+|------|-------|--------|
+| `subscription_credits` | Weekly (Monday) via `credits_reset_at` | Resets each week |
+| `purchased_credits` | Never | Never expire |
+| `bonus_credits` | Never | Expire on `bonus_credits_expiry` |
+
 ### Free Quota (Demo Users)
+
+- Demo usage limited to `demo_usage_limit` (default **2**) generations per user
 
 ```
 GET /api/v1/quota/daily   → {remaining, total, reset_at}

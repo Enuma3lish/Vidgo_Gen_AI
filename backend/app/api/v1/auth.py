@@ -231,7 +231,7 @@ async def register(
     if existing_user:
         if existing_user.email_verified:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="An account with this email already exists"
             )
         else:
@@ -245,8 +245,9 @@ async def register(
             if redis_client:
                 await redis_client.close()
 
-            return MessageResponse(
-                message="A verification code has been sent to your email. Please check your inbox."
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists. A new verification code has been sent to your email."
             )
 
     # Validate referral code if provided

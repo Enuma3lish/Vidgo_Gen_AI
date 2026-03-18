@@ -1,0 +1,1372 @@
+{
+  "timestamp": "2026-03-18T11:59:08.761671",
+  "summary": {
+    "total_tests": 154,
+    "passed": 49,
+    "failed": 2,
+    "blocked": 103,
+    "percent_passed": 31.818181818181817
+  },
+  "section_results": {
+    "1. Landing Page": {
+      "total": 12,
+      "passed": 7,
+      "failed": 0,
+      "blocked": 5
+    },
+    "2. Authentication": {
+      "total": 21,
+      "passed": 8,
+      "failed": 1,
+      "blocked": 12
+    },
+    "3. Demo/Preset Tools": {
+      "total": 23,
+      "passed": 20,
+      "failed": 1,
+      "blocked": 2
+    },
+    "4. Subscriber Tools": {
+      "total": 42,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 42
+    },
+    "5. Subscription & Billing": {
+      "total": 17,
+      "passed": 3,
+      "failed": 0,
+      "blocked": 14
+    },
+    "6. Credits System": {
+      "total": 8,
+      "passed": 2,
+      "failed": 0,
+      "blocked": 6
+    },
+    "7. Promotions & Referrals": {
+      "total": 10,
+      "passed": 2,
+      "failed": 0,
+      "blocked": 8
+    },
+    "8. User Dashboard": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 1
+    },
+    "9. Social Media Publishing": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 1
+    },
+    "10. E-Invoice \u2014 Taiwan": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 1
+    },
+    "11. Admin Dashboard": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 1
+    },
+    "12. Internationalization": {
+      "total": 2,
+      "passed": 1,
+      "failed": 0,
+      "blocked": 1
+    },
+    "13. Responsive Design": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 1
+    },
+    "14. Topic Pages": {
+      "total": 2,
+      "passed": 1,
+      "failed": 0,
+      "blocked": 1
+    },
+    "15. Prompt Templates": {
+      "total": 2,
+      "passed": 1,
+      "failed": 0,
+      "blocked": 1
+    },
+    "16. Effects & Enhancement": {
+      "total": 2,
+      "passed": 1,
+      "failed": 0,
+      "blocked": 1
+    },
+    "17. Session & Quota": {
+      "total": 3,
+      "passed": 2,
+      "failed": 0,
+      "blocked": 1
+    },
+    "18. Error Handling": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 1
+    },
+    "19. Security": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 1
+    },
+    "20. Performance": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "blocked": 1
+    },
+    "21. Workflow System": {
+      "total": 2,
+      "passed": 1,
+      "failed": 0,
+      "blocked": 1
+    }
+  },
+  "detailed_results": [
+    {
+      "section": "1. Landing Page",
+      "id": "1.1",
+      "description": "Landing page loads",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:06.941823"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.2",
+      "description": "Platform stats display",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:06.946351"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.3",
+      "description": "Feature highlights",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:06.951271"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.4",
+      "description": "Example gallery",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:06.954920"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.5",
+      "description": "Testimonials carousel",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires frontend visual testing",
+      "timestamp": "2026-03-18T11:59:06.954971"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.6",
+      "description": "Pricing section",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:06.957611"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.7",
+      "description": "FAQ section",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:06.960191"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.8",
+      "description": "Contact form",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires form submission testing",
+      "timestamp": "2026-03-18T11:59:06.960240"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.9",
+      "description": "Navigation links",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires frontend navigation testing",
+      "timestamp": "2026-03-18T11:59:06.960254"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.10",
+      "description": "Language selector endpoint",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:07.410598"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.11",
+      "description": "Responsive layout",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires browser resize testing",
+      "timestamp": "2026-03-18T11:59:07.410736"
+    },
+    {
+      "section": "1. Landing Page",
+      "id": "1.12",
+      "description": "CTA buttons",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires frontend interaction testing",
+      "timestamp": "2026-03-18T11:59:07.410763"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "Mailpit",
+      "description": "Mailpit email service",
+      "status": "\u2705 PASS",
+      "details": "Operational",
+      "timestamp": "2026-03-18T11:59:07.423711"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.1.1",
+      "description": "Register with valid email",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:07.785646"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.1.2",
+      "description": "Password validation (weak)",
+      "status": "\u2705 PASS",
+      "details": "HTTP 422",
+      "timestamp": "2026-03-18T11:59:07.789698"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.1.3",
+      "description": "Password mismatch",
+      "status": "\u2705 PASS",
+      "details": "HTTP 400",
+      "timestamp": "2026-03-18T11:59:07.793669"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.1.4",
+      "description": "Duplicate email",
+      "status": "\u274c FAIL",
+      "details": "HTTP 200 (expected [409, 400])",
+      "timestamp": "2026-03-18T11:59:07.804200"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.1.5",
+      "description": "Referral code registration",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires referral system testing",
+      "timestamp": "2026-03-18T11:59:07.804355"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.1.6",
+      "description": "Empty fields validation",
+      "status": "\u2705 PASS",
+      "details": "HTTP 422",
+      "timestamp": "2026-03-18T11:59:07.807491"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.2.1",
+      "description": "Verify email endpoint",
+      "status": "\u2705 PASS",
+      "details": "HTTP 400",
+      "timestamp": "2026-03-18T11:59:07.810828"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.3.1",
+      "description": "Login endpoint",
+      "status": "\u2705 PASS",
+      "details": "HTTP 401",
+      "timestamp": "2026-03-18T11:59:08.044654"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.4.1",
+      "description": "Forgot password endpoint",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.056338"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.3.2",
+      "description": "Login with wrong password",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056407"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.3.3",
+      "description": "Login with unverified email",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056420"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.3.4",
+      "description": "Login with banned account",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056425"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.3.5",
+      "description": "Token refresh",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056431"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.3.6",
+      "description": "Logout",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056436"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.4.2",
+      "description": "Reset password",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056441"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.4.3",
+      "description": "Reset with invalid token",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056445"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.5.1",
+      "description": "View profile",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056449"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.5.2",
+      "description": "Update profile",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056453"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.5.3",
+      "description": "Change password",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056457"
+    },
+    {
+      "section": "2. Authentication",
+      "id": "2.5.4",
+      "description": "Delete account",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user session",
+      "timestamp": "2026-03-18T11:59:08.056462"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.0",
+      "description": "Get demo topics",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.059311"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.1.1",
+      "description": "Load Background Removal presets",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.076603"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.1.3",
+      "description": "Apply Background Removal preset",
+      "status": "\u2705 PASS",
+      "details": "Preset available (input: False, watermark: True)",
+      "timestamp": "2026-03-18T11:59:08.076722"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.1.2",
+      "description": "Get Background Removal try prompts",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.085770"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.2.1",
+      "description": "Load Product Scene presets",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.090695"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.2.3",
+      "description": "Apply Product Scene preset",
+      "status": "\u2705 PASS",
+      "details": "Preset available (input: False, watermark: True)",
+      "timestamp": "2026-03-18T11:59:08.090802"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.2.2",
+      "description": "Get Product Scene try prompts",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.093229"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.3.1",
+      "description": "Load Virtual Try-On presets",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.096523"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.3.3",
+      "description": "Apply Virtual Try-On preset",
+      "status": "\u274c FAIL",
+      "details": "No presets available",
+      "timestamp": "2026-03-18T11:59:08.096647"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.4.1",
+      "description": "Load Room Redesign presets",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.105343"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.4.3",
+      "description": "Apply Room Redesign preset",
+      "status": "\u2705 PASS",
+      "details": "Preset available (input: False, watermark: True)",
+      "timestamp": "2026-03-18T11:59:08.105450"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.5.1",
+      "description": "Load Short Video presets",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.164946"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.5.3",
+      "description": "Apply Short Video preset",
+      "status": "\u2705 PASS",
+      "details": "Preset available (input: False, watermark: True)",
+      "timestamp": "2026-03-18T11:59:08.165059"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.6.1",
+      "description": "Load AI Avatar presets",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.170549"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.6.3",
+      "description": "Apply AI Avatar preset",
+      "status": "\u2705 PASS",
+      "details": "Preset available (input: False, watermark: True)",
+      "timestamp": "2026-03-18T11:59:08.170668"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.7.1",
+      "description": "Load Pattern Design presets",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.182651"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.7.3",
+      "description": "Apply Pattern Design preset",
+      "status": "\u2705 PASS",
+      "details": "Preset available (input: False, watermark: True)",
+      "timestamp": "2026-03-18T11:59:08.182750"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.8.1",
+      "description": "Load Image Effects / Style Transfer presets",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.186538"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.8.3",
+      "description": "Apply Image Effects / Style Transfer preset",
+      "status": "\u2705 PASS",
+      "details": "Preset available (input: False, watermark: True)",
+      "timestamp": "2026-03-18T11:59:08.186629"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.9.1",
+      "description": "Demo usage limit check",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.190421"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.9.4",
+      "description": "Inspiration gallery",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.201625"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.9.2",
+      "description": "Watermark on all results",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires visual inspection",
+      "timestamp": "2026-03-18T11:59:08.201695"
+    },
+    {
+      "section": "3. Demo/Preset Tools",
+      "id": "3.9.3",
+      "description": "No API calls in demo",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires browser DevTools inspection",
+      "timestamp": "2026-03-18T11:59:08.201706"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.1.1",
+      "description": "Upload image for background removal",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201750"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.1.2",
+      "description": "Remove background",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201791"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.1.3",
+      "description": "Download result",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201810"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.1.4",
+      "description": "Credits deducted",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201816"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.1.5",
+      "description": "Batch removal",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201821"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.1.6",
+      "description": "Invalid file type",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201825"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.1.7",
+      "description": "File too large",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201830"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.2.1",
+      "description": "Upload product image",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201834"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.2.2",
+      "description": "Select scene type",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201838"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.2.3",
+      "description": "Generate scene",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201845"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.2.4",
+      "description": "Download result",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201850"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.2.5",
+      "description": "Credits deducted",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201854"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.3.1",
+      "description": "Upload garment",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201858"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.3.2",
+      "description": "Select model",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201861"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.3.3",
+      "description": "Generate try-on",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201865"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.3.4",
+      "description": "Credits deducted",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201869"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.4.1",
+      "description": "Upload room photo",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201873"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.4.2",
+      "description": "Select style + room type",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201878"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.4.3",
+      "description": "Generate redesign",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201882"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.4.4",
+      "description": "Iterative edit",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201886"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.4.5",
+      "description": "Credits deducted",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201890"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.5.1",
+      "description": "Image-to-video",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201910"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.5.2",
+      "description": "Text-to-video",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201915"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.5.3",
+      "description": "Model selection",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201920"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.5.4",
+      "description": "Video playback",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201926"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.5.5",
+      "description": "Download video",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201930"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.5.6",
+      "description": "Credits by model",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201935"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.6.1",
+      "description": "Upload avatar image",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201939"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.6.2",
+      "description": "Enter script",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201942"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.6.3",
+      "description": "Select language",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201947"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.6.4",
+      "description": "Select voice",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201950"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.6.5",
+      "description": "Generate avatar",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201955"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.6.6",
+      "description": "Play result",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201959"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.6.7",
+      "description": "Credits deducted",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201963"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.7.1",
+      "description": "Default model",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201967"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.7.2",
+      "description": "Pixverse v5",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201971"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.7.3",
+      "description": "Kling v2",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201975"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.7.4",
+      "description": "Wan Pro",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201980"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.7.5",
+      "description": "Luma Ray2",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201984"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.7.6",
+      "description": "Cost estimate",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201988"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.8.1",
+      "description": "Insufficient credits",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201992"
+    },
+    {
+      "section": "4. Subscriber Tools",
+      "id": "4.8.2",
+      "description": "Credit estimate warning",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires subscribed user with credits",
+      "timestamp": "2026-03-18T11:59:08.201996"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.1.1",
+      "description": "View pricing page API",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.214244"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.1.2",
+      "description": "Get credit packages",
+      "status": "\u2705 PASS",
+      "details": "HTTP 401",
+      "timestamp": "2026-03-18T11:59:08.223214"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.1.3",
+      "description": "Get promotions",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.236645"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.1.4",
+      "description": "Plan feature flags",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.236817"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.2.1",
+      "description": "Subscribe (Paddle)",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.236862"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.2.2",
+      "description": "Mock payment (dev)",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.236930"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.2.3",
+      "description": "Success page",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.236947"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.2.4",
+      "description": "Credits added",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.236992"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.2.5",
+      "description": "Subscription status",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237015"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.3.1",
+      "description": "Cancel subscription",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237021"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.3.2",
+      "description": "Cancelled page",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237026"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.3.3",
+      "description": "Refund eligibility",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237035"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.3.4",
+      "description": "After 7 days",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237039"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.3.5",
+      "description": "Access after cancel",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237043"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.4.1",
+      "description": "View invoices",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237048"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.4.2",
+      "description": "Download PDF",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237052"
+    },
+    {
+      "section": "5. Subscription & Billing",
+      "id": "5.4.3",
+      "description": "Invoice details",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires payment integration or authenticated user",
+      "timestamp": "2026-03-18T11:59:08.237056"
+    },
+    {
+      "section": "6. Credits System",
+      "id": "6.1",
+      "description": "Credits pricing",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.245867"
+    },
+    {
+      "section": "6. Credits System",
+      "id": "6.4",
+      "description": "Credit packages",
+      "status": "\u2705 PASS",
+      "details": "HTTP 401",
+      "timestamp": "2026-03-18T11:59:08.250178"
+    },
+    {
+      "section": "6. Credits System",
+      "id": "6.2",
+      "description": "Transaction history",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.250240"
+    },
+    {
+      "section": "6. Credits System",
+      "id": "6.3",
+      "description": "Purchase extra credits",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.250250"
+    },
+    {
+      "section": "6. Credits System",
+      "id": "6.5",
+      "description": "Weekly reset",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.250255"
+    },
+    {
+      "section": "6. Credits System",
+      "id": "6.6",
+      "description": "Purchased credits persist",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.250261"
+    },
+    {
+      "section": "6. Credits System",
+      "id": "6.7",
+      "description": "Bonus credits expiry",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.250266"
+    },
+    {
+      "section": "6. Credits System",
+      "id": "6.8",
+      "description": "Credit cost estimate",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.250271"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.1.1",
+      "description": "Active promotions",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.253852"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.1.2",
+      "description": "Promotion packages",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.260246"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.1.3",
+      "description": "Apply promo code",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.260301"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.1.4",
+      "description": "Invalid promo code",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.260314"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.1.5",
+      "description": "Already used code",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.260320"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.2.1",
+      "description": "View referral code",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.260326"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.2.2",
+      "description": "Copy referral link",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.260332"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.2.3",
+      "description": "Referral stats",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.260337"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.2.4",
+      "description": "Referral leaderboard",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.260341"
+    },
+    {
+      "section": "7. Promotions & Referrals",
+      "id": "7.2.5",
+      "description": "New user uses referral",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated user",
+      "timestamp": "2026-03-18T11:59:08.260347"
+    },
+    {
+      "section": "8. User Dashboard",
+      "id": "Summary",
+      "description": "8. User Dashboard tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires authenticated subscriber",
+      "timestamp": "2026-03-18T11:59:08.260359"
+    },
+    {
+      "section": "9. Social Media Publishing",
+      "id": "Summary",
+      "description": "9. Social Media Publishing tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires OAuth integration",
+      "timestamp": "2026-03-18T11:59:08.260369"
+    },
+    {
+      "section": "10. E-Invoice \u2014 Taiwan",
+      "id": "Summary",
+      "description": "10. E-Invoice \u2014 Taiwan tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Taiwan specific feature",
+      "timestamp": "2026-03-18T11:59:08.260379"
+    },
+    {
+      "section": "11. Admin Dashboard",
+      "id": "Summary",
+      "description": "11. Admin Dashboard tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires admin privileges",
+      "timestamp": "2026-03-18T11:59:08.260389"
+    },
+    {
+      "section": "12. Internationalization",
+      "id": "12.1",
+      "description": "Geo language detection",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.689443"
+    },
+    {
+      "section": "12. Internationalization",
+      "id": "Summary",
+      "description": "12. Internationalization tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Language endpoints available",
+      "timestamp": "2026-03-18T11:59:08.689530"
+    },
+    {
+      "section": "13. Responsive Design",
+      "id": "Summary",
+      "description": "13. Responsive Design tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Requires browser testing",
+      "timestamp": "2026-03-18T11:59:08.689550"
+    },
+    {
+      "section": "14. Topic Pages",
+      "id": "14.1",
+      "description": "Demo topics",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.694687"
+    },
+    {
+      "section": "14. Topic Pages",
+      "id": "Summary",
+      "description": "14. Topic Pages tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Topic endpoints available",
+      "timestamp": "2026-03-18T11:59:08.694733"
+    },
+    {
+      "section": "15. Prompt Templates",
+      "id": "15.1",
+      "description": "Prompt groups",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.716427"
+    },
+    {
+      "section": "15. Prompt Templates",
+      "id": "Summary",
+      "description": "15. Prompt Templates tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Prompt endpoints available",
+      "timestamp": "2026-03-18T11:59:08.716504"
+    },
+    {
+      "section": "16. Effects & Enhancement",
+      "id": "16.1",
+      "description": "Effects styles",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.751243"
+    },
+    {
+      "section": "16. Effects & Enhancement",
+      "id": "Summary",
+      "description": "16. Effects & Enhancement tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Effects endpoints available",
+      "timestamp": "2026-03-18T11:59:08.751320"
+    },
+    {
+      "section": "17. Session & Quota",
+      "id": "17.1",
+      "description": "Online count",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.755423"
+    },
+    {
+      "section": "17. Session & Quota",
+      "id": "17.3",
+      "description": "Daily quota",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.758497"
+    },
+    {
+      "section": "17. Session & Quota",
+      "id": "Summary",
+      "description": "17. Session & Quota tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Session endpoints available",
+      "timestamp": "2026-03-18T11:59:08.758544"
+    },
+    {
+      "section": "18. Error Handling",
+      "id": "Summary",
+      "description": "18. Error Handling tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Error responses tested",
+      "timestamp": "2026-03-18T11:59:08.758561"
+    },
+    {
+      "section": "19. Security",
+      "id": "Summary",
+      "description": "19. Security tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Basic security tested",
+      "timestamp": "2026-03-18T11:59:08.758574"
+    },
+    {
+      "section": "20. Performance",
+      "id": "Summary",
+      "description": "20. Performance tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "API performance tested",
+      "timestamp": "2026-03-18T11:59:08.758586"
+    },
+    {
+      "section": "21. Workflow System",
+      "id": "21.1",
+      "description": "Workflow topics",
+      "status": "\u2705 PASS",
+      "details": "HTTP 200",
+      "timestamp": "2026-03-18T11:59:08.761164"
+    },
+    {
+      "section": "21. Workflow System",
+      "id": "Summary",
+      "description": "21. Workflow System tests",
+      "status": "\u26d4 BLOCKED",
+      "details": "Workflow endpoints available",
+      "timestamp": "2026-03-18T11:59:08.761214"
+    }
+  ]
+}

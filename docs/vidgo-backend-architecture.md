@@ -1,7 +1,7 @@
 # VidGo AI Platform - Backend Architecture
 
-**Version:** 7.0
-**Last Updated:** March 17, 2026
+**Version:** 7.1
+**Last Updated:** March 18, 2026
 **Framework:** FastAPI + Python 3.12
 **Database:** PostgreSQL + Redis
 **Mode:** Dual-Mode — Preset-Only (free) + Real-API (subscribers)
@@ -61,7 +61,30 @@ Users can connect social accounts and publish generations directly:
 - Post tracking: SocialPost model records each published post with status and analytics
 - Post history: `GET /social/posts` (paginated), `GET /social/posts/analytics` (aggregated)
 
-### 0.7 Media Retention Policy
+### 0.7 Account Deletion & Work Retention
+- `DELETE /auth/me` — soft-deletes user account
+- User model fields: `subscription_cancelled_at`, `work_retention_until`
+- Works retained for **7 days** after deletion/cancellation before purge
+
+### 0.8 Demo Usage Limits
+- Free users limited to `demo_usage_limit` (default **2**) demo generations
+- Tracked via `demo_usage_count` on User model
+
+### 0.9 Credit Types & Weekly Reset
+Credits are split into three types:
+| Type | Reset | Expiry |
+|------|-------|--------|
+| `subscription_credits` | Weekly (Monday) via `credits_reset_at` | Resets each week |
+| `purchased_credits` | Never | Never expire |
+| `bonus_credits` | Never | Expire on `bonus_credits_expiry` |
+
+### 0.10 Per-Plan Feature Restrictions
+Plans can restrict tool access via feature flags:
+- `feature_clothing_transform`, `feature_goenhance`, `feature_video_gen`
+- `feature_batch_processing`, `feature_custom_styles`
+- `pollo_limit`, `goenhance_limit` (monthly caps)
+
+### 0.11 Media Retention Policy
 14-day media retention with automatic cleanup:
 - Hourly background task scans `user_generations` table
 - Entries older than 14 days have media URLs cleared

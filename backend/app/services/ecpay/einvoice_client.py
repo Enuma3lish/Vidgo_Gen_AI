@@ -30,18 +30,18 @@ class ECPayEInvoiceClient:
         merchant_id: str,
         hash_key: str,
         hash_iv: str,
-        b2c_issue_url: str,
-        b2b_issue_url: str,
-        b2c_void_url: str,
-        b2b_void_url: str,
+        base_url: str,
+        is_sandbox: bool = False,
     ):
         self.merchant_id = merchant_id
         self.hash_key = hash_key
         self.hash_iv = hash_iv
-        self.b2c_issue_url = b2c_issue_url
-        self.b2b_issue_url = b2b_issue_url
-        self.b2c_void_url = b2c_void_url
-        self.b2b_void_url = b2b_void_url
+        self.is_sandbox = is_sandbox
+        base = base_url.rstrip("/")
+        self.b2c_issue_url = f"{base}/B2CInvoice/Issue"
+        self.b2b_issue_url = f"{base}/B2BInvoice/Issue"
+        self.b2c_void_url = f"{base}/B2CInvoice/Invalid"
+        self.b2b_void_url = f"{base}/B2BInvoice/Invalid"
 
     def generate_check_mac_value(self, params: Dict[str, Any]) -> str:
         """
@@ -288,11 +288,9 @@ def get_einvoice_client() -> ECPayEInvoiceClient:
     from app.core.config import get_settings
     settings = get_settings()
     return ECPayEInvoiceClient(
-        merchant_id=settings.ECPAY_EINVOICE_MERCHANT_ID,
-        hash_key=settings.ECPAY_EINVOICE_HASH_KEY,
-        hash_iv=settings.ECPAY_EINVOICE_HASH_IV,
-        b2c_issue_url=settings.ECPAY_EINVOICE_URL,
-        b2b_issue_url=settings.ECPAY_EINVOICE_B2B_URL,
-        b2c_void_url=settings.ECPAY_EINVOICE_VOID_URL,
-        b2b_void_url=settings.ECPAY_EINVOICE_B2B_VOID_URL,
+        merchant_id=settings.ECPAY_MERCHANT_ID,
+        hash_key=settings.ECPAY_HASH_KEY,
+        hash_iv=settings.ECPAY_HASH_IV,
+        base_url=settings.ECPAY_INVOICE_URL,
+        is_sandbox=settings.ECPAY_ENV == "sandbox",
     )

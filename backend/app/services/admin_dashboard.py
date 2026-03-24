@@ -694,11 +694,10 @@ class AdminDashboardService:
         except Exception as e:
             health["redis"] = {"status": "unhealthy", "error": str(e)}
 
-        # Check external APIs (Leonardo, GoEnhance)
+        # Check external APIs (PiAPI, Gemini)
         # These would be actual API health checks in production
         health["api_services"] = {
-            "leonardo": {"status": "healthy"},
-            "goenhance": {"status": "healthy"},
+            "piapi": {"status": "healthy"},
             "gemini": {"status": "healthy"}
         }
 

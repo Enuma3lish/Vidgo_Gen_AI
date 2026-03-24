@@ -536,14 +536,14 @@ watch(activeTab, (newTab) => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 bg-white pb-20">
+  <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
     <LoadingOverlay :show="isProcessing" :message="t('interior.processing')" />
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
       <button
         @click="router.back()"
-        class="mb-6 flex items-center gap-2 text-dark-500 hover:text-dark-900 transition-colors"
+        class="mb-6 flex items-center gap-2 text-dark-300 hover:text-dark-50 transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -557,10 +557,10 @@ watch(activeTab, (newTab) => {
           <span class="text-2xl">🏠</span>
           <span class="text-primary-400 font-medium">{{ t('interior.badge') }}</span>
         </div>
-        <h1 class="text-4xl md:text-5xl font-bold text-dark-900 mb-4">
+        <h1 class="text-4xl md:text-5xl font-bold text-dark-50 mb-4">
           {{ t('interior.title') }}
         </h1>
-        <p class="text-xl text-dark-500 max-w-2xl mx-auto">
+        <p class="text-xl text-dark-300 max-w-2xl mx-auto">
           {{ t('interior.subtitle') }}
         </p>
 
@@ -574,7 +574,7 @@ watch(activeTab, (newTab) => {
 
       <!-- Tab Selection -->
       <div class="flex justify-center mb-8">
-        <div class="inline-flex bg-gray-100 rounded-xl p-1 border border-gray-200">
+        <div class="inline-flex rounded-xl p-1" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
           <button
             v-for="tab in [
               { id: 'redesign', icon: '🔄', label: t('interior.tabs.redesign') },
@@ -587,8 +587,8 @@ watch(activeTab, (newTab) => {
             class="px-6 py-3 rounded-lg font-medium transition-all"
             :class="[
               activeTab === tab.id
-                ? 'bg-primary-500 text-dark-900'
-                : 'text-dark-500 hover:text-dark-900',
+                ? 'bg-primary-500 text-dark-50'
+                : 'text-dark-300 hover:text-dark-50',
               tab.disabled ? 'opacity-50 cursor-not-allowed' : ''
             ]"
           >
@@ -603,8 +603,8 @@ watch(activeTab, (newTab) => {
         <!-- Left Panel - Input -->
         <div class="space-y-6">
           <!-- 1. Room Type Selection -->
-          <div class="card bg-white border border-gray-200">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
+          <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
               <span>🏠</span>
               {{ t('interior.roomType') }}
             </h3>
@@ -616,17 +616,17 @@ watch(activeTab, (newTab) => {
                 class="p-3 rounded-xl border-2 transition-all text-center"
                 :class="selectedRoomType === room.id
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-gray-200 hover:border-dark-500'"
+                  : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
               >
                 <span class="text-2xl block">{{ roomTypeIcons[room.id] || '🏠' }}</span>
-                <p class="text-xs text-dark-500 mt-1 truncate">{{ roomTypeName(room) }}</p>
+                <p class="text-xs text-dark-300 mt-1 truncate">{{ roomTypeName(room) }}</p>
               </button>
             </div>
           </div>
 
           <!-- 2. Room Image -->
-          <div v-if="activeTab !== 'generate'" class="card bg-white border border-gray-200">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
+          <div v-if="activeTab !== 'generate'" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
               <span>📷</span>
               {{ isZh ? '房間圖片' : 'Room Image' }}
             </h3>
@@ -641,7 +641,7 @@ watch(activeTab, (newTab) => {
                   </span>
                 </div>
               </div>
-              <div v-else class="flex flex-col items-center justify-center p-8 bg-gray-100 rounded-lg text-dark-400">
+              <div v-else class="flex flex-col items-center justify-center p-8 rounded-lg text-dark-400" style="background: #141420;">
                 <span class="text-4xl mb-2">📷</span>
                 <p class="text-sm text-center">
                   {{ isZh ? '目前所選擇的空間類型尚未有示範圖片，請切換至客廳、臥室、廚房或浴室。' : 'No demo image available for this space type. Please select Living Room, Bedroom, Kitchen, or Bathroom.' }}
@@ -651,7 +651,7 @@ watch(activeTab, (newTab) => {
 
             <!-- For Paid Users: Upload Zone -->
             <div v-else class="mb-6">
-               <h4 class="text-sm font-medium text-dark-500 mb-2">{{ isZh ? '上傳房間照片' : 'Upload Room Photo' }}</h4>
+               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳房間照片' : 'Upload Room Photo' }}</h4>
                <ImageUploader 
                  v-model="uploadedImage" 
                  :label="isZh ? '點擊上傳或拖放房間照片' : 'Drop room photo here'"
@@ -665,8 +665,8 @@ watch(activeTab, (newTab) => {
           </div>
 
           <!-- Style Selection -->
-          <div class="card bg-white border border-gray-200">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
+          <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
               <span>🎨</span>
               {{ t('interior.designStyle') }}
             </h3>
@@ -678,38 +678,38 @@ watch(activeTab, (newTab) => {
                 class="p-4 rounded-xl border-2 transition-all text-left"
                 :class="selectedStyle === style.id
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-gray-200 hover:border-dark-500'"
+                  : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
               >
                 <span class="text-2xl">{{ styleIcons[style.id] || '🏠' }}</span>
-                <p class="font-medium text-dark-900 mt-2">{{ styleName(style) }}</p>
+                <p class="font-medium text-dark-50 mt-2">{{ styleName(style) }}</p>
                 <p class="text-xs text-dark-400 line-clamp-2">{{ style.description }}</p>
               </button>
             </div>
           </div>
 
           <!-- Custom Prompt (not shown for 3D tab) -->
-          <div v-if="!isDemoUser && activeTab !== '3dModel'" class="card bg-white border border-gray-200">
-             <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
+          <div v-if="!isDemoUser && activeTab !== '3dModel'" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+             <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
                <span>✏️</span>
                {{ isZh ? '自訂描述 (可選)' : 'Custom Prompt (Optional)' }}
              </h3>
              <textarea
                v-model="prompt"
                rows="3"
-               class="w-full bg-gray-900 border border-gray-200 rounded-lg p-3 text-dark-900 focus:outline-none focus:border-primary-500"
+               class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
                :placeholder="isZh ? '描述您想要的房間細節，例如顏色、材質等...' : 'Describe specific details like colors, materials, etc...'"
              ></textarea>
           </div>
 
           <!-- 3D Model Settings -->
-          <div v-if="activeTab === '3dModel' && !isDemoUser" class="card bg-white border border-gray-200">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
+          <div v-if="activeTab === '3dModel' && !isDemoUser" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
               <span>🧊</span>
               {{ isZh ? '3D 模型設定' : '3D Model Settings' }}
             </h3>
             <div class="space-y-4">
               <div>
-                <p class="text-sm text-dark-600 mb-2">
+                <p class="text-sm text-dark-200 mb-2">
                   {{ isZh ? '將 2D 圖片轉換為可互動的 3D 模型（GLB 格式）。' : 'Convert a 2D image into an interactive 3D model (GLB format).' }}
                 </p>
                 <p v-if="resultImage" class="text-xs text-primary-400">
@@ -721,12 +721,12 @@ watch(activeTab, (newTab) => {
               </div>
 
               <div>
-                <label class="text-sm font-medium text-dark-600 mb-1 block">
+                <label class="text-sm font-medium text-dark-200 mb-1 block">
                   {{ isZh ? '貼圖品質' : 'Texture Quality' }}
                 </label>
                 <select
                   v-model.number="textureSize"
-                  class="w-full bg-gray-900 border border-gray-200 rounded-lg px-3 py-2 text-dark-900 focus:outline-none focus:border-primary-500"
+                  class="w-full rounded-lg px-3 py-2 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
                 >
                   <option :value="512">512px ({{ isZh ? '較快' : 'Faster' }})</option>
                   <option :value="1024">1024px ({{ isZh ? '高品質' : 'High Quality' }})</option>
@@ -735,10 +735,10 @@ watch(activeTab, (newTab) => {
 
               <div>
                 <div class="flex justify-between items-center mb-1">
-                  <label class="text-sm font-medium text-dark-600">
+                  <label class="text-sm font-medium text-dark-200">
                     {{ isZh ? '網格精細度' : 'Mesh Detail' }}
                   </label>
-                  <span class="text-xs text-dark-500">{{ Math.round(meshSimplify * 100) }}%</span>
+                  <span class="text-xs text-dark-300">{{ Math.round(meshSimplify * 100) }}%</span>
                 </div>
                 <input
                   v-model.number="meshSimplify"
@@ -746,7 +746,7 @@ watch(activeTab, (newTab) => {
                   min="0.5"
                   max="1"
                   step="0.05"
-                  class="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                  class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary-500" style="background: #1e1e32;">
                 />
               </div>
 
@@ -757,7 +757,7 @@ watch(activeTab, (newTab) => {
           </div>
 
           <!-- Generate Button -->
-          <div class="card bg-white border border-gray-200">
+          <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <button
               @click="handleSubmit"
               :disabled="isProcessing || (activeTab !== 'generate' && !uploadedImage)"
@@ -783,8 +783,8 @@ watch(activeTab, (newTab) => {
 
         <!-- Right Panel - Results -->
         <div class="space-y-6">
-          <div class="card bg-gray-50 backdrop-blur border border-gray-200 h-fit sticky top-24">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4 flex items-center gap-2">
+          <div class="card backdrop-blur h-fit sticky top-24" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
               <span>🖼️</span>
               {{ t('interior.result') }}
             </h3>
@@ -797,7 +797,7 @@ watch(activeTab, (newTab) => {
                 :after-label="t('interior.after')"
               />
 
-              <p v-if="resultDescription" class="text-sm text-dark-500 italic">
+              <p v-if="resultDescription" class="text-sm text-dark-300 italic">
                 {{ resultDescription }}
               </p>
 
@@ -835,7 +835,7 @@ watch(activeTab, (newTab) => {
                 <img :src="resultImage" alt="Generated Design" class="w-full" />
               </div>
 
-              <p v-if="resultDescription" class="text-sm text-dark-500 italic">
+              <p v-if="resultDescription" class="text-sm text-dark-300 italic">
                 {{ resultDescription }}
               </p>
 
@@ -875,7 +875,7 @@ watch(activeTab, (newTab) => {
                 :width="560"
                 :height="400"
               />
-              <p class="text-sm text-dark-500 text-center">
+              <p class="text-sm text-dark-300 text-center">
                 {{ isZh ? '拖曳旋轉 / 滾輪縮放' : 'Drag to rotate / Scroll to zoom' }}
               </p>
 
@@ -905,11 +905,11 @@ watch(activeTab, (newTab) => {
 
           <!-- Features Info -->
           <div class="card bg-gradient-to-br from-primary-500/10 to-purple-500/10 border border-primary-500/20">
-            <h4 class="font-semibold text-dark-900 mb-3 flex items-center gap-2">
+            <h4 class="font-semibold text-dark-50 mb-3 flex items-center gap-2">
               <span>💡</span>
               {{ t('interior.features.title') }}
             </h4>
-            <ul class="space-y-2 text-sm text-dark-500">
+            <ul class="space-y-2 text-sm text-dark-300">
               <li class="flex items-start gap-2">
                 <span class="text-primary-400">✓</span>
                 {{ t('interior.features.imageText') }}
@@ -937,16 +937,19 @@ watch(activeTab, (newTab) => {
 <style scoped>
 .card {
   @apply p-6 rounded-2xl;
+  background: #141420;
+  border: 1px solid rgba(255,255,255,0.06);
 }
 
 .btn-primary {
-  @apply px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-dark-900 font-medium rounded-xl
+  @apply px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-dark-50 font-medium rounded-xl
          hover:from-primary-600 hover:to-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .btn-ghost {
-  @apply px-6 py-3 bg-gray-100 text-dark-600 font-medium rounded-xl
-         hover:bg-dark-600 hover:text-dark-900 transition-all;
+  @apply px-6 py-3 text-dark-200 font-medium rounded-xl
+         hover:text-dark-50 transition-all;
+  background: #1e1e32;
 }
 
 .line-clamp-2 {

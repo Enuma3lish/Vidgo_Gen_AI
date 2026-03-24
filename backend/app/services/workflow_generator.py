@@ -24,8 +24,8 @@ Implements the Prompt Chaining Design workflow:
 Supports all category flows:
 - product_video: T2I (Wan) → I2V (Wan/fal.ai)
 - interior_design: Wan Doodle → Gemini (rescue)
-- style_transfer: T2I → I2V → V2V (GoEnhance)
-- avatar: A2E.ai Avatar API
+- style_transfer: T2I → I2V → V2V (PiAPI)
+- avatar: Gemini Avatar API
 - t2i_showcase: Wan T2I (patterns/textures)
 """
 import asyncio
@@ -47,8 +47,6 @@ from app.config.demo_topics import (
 )
 from app.services.rescue_service import get_rescue_service
 from app.services.interior_design_service import get_interior_design_service
-from app.services.a2e_service import get_a2e_service
-from app.services.pollo_ai import get_pollo_client
 from app.providers.provider_router import get_provider_router, TaskType
 from app.core.config import get_settings
 
@@ -95,18 +93,16 @@ class WorkflowGenerator:
     Unified workflow generator implementing prompt chaining.
 
     Routes generation based on topic category:
-    - product_video: Wan T2I → Wan/fal.ai I2V
+    - product_video: Wan T2I → PiAPI I2V
     - interior_design: Wan Doodle → Gemini (rescue)
-    - style_transfer: Wan T2I → I2V → GoEnhance V2V
-    - avatar: A2E.ai Avatar API
+    - style_transfer: Wan T2I → PiAPI I2V → PiAPI V2V
+    - avatar: Gemini Avatar API
     - t2i_showcase: Wan T2I (patterns/textures)
     """
 
     def __init__(self):
-        self.rescue_service = None  # AI rescue service (Wan primary, fal.ai rescue)
+        self.rescue_service = None  # AI rescue service (Wan primary, Gemini rescue)
         self.provider_router = None
-        self.pollo = None
-        self.avatar_service = None
         self.interior_service = None
         self._initialized = False
 
@@ -117,8 +113,6 @@ class WorkflowGenerator:
 
         self.rescue_service = get_rescue_service()
         self.provider_router = get_provider_router()
-        self.pollo = get_pollo_client()
-        self.avatar_service = get_a2e_service()
         self.interior_service = get_interior_design_service()
         self._initialized = True
 
@@ -195,13 +189,13 @@ class WorkflowGenerator:
         save_locally: bool
     ) -> GenerationResult:
         """
-        Product Video workflow: Leonardo T2I → Pollo I2V
+        Product Video workflow: T2I → PiAPI I2V
 
         Flow:
         1. Build image prompt from topic
-        2. Generate image with Leonardo
+        2. Generate image with rescue service
         3. Build effect prompt from topic
-        4. Generate video with Pollo AI
+        4. Generate video with rescue service (PiAPI primary)
         """
         result = GenerationResult(
             success=False,
@@ -336,13 +330,13 @@ class WorkflowGenerator:
         save_locally: bool
     ) -> GenerationResult:
         """
-        Style Transfer workflow: Leonardo T2I → Pollo I2V → GoEnhance V2V
+        Style Transfer workflow: T2I → PiAPI I2V → PiAPI V2V
 
         Flow:
         1. Build image prompt
-        2. Generate base image with Leonardo
-        3. Generate base video with Pollo AI
-        4. Apply style with GoEnhance V2V
+        2. Generate base image with rescue service
+        3. Generate base video with rescue service (PiAPI primary)
+        4. Apply style with PiAPI V2V
         """
         result = GenerationResult(
             success=False,
@@ -428,7 +422,7 @@ class WorkflowGenerator:
         return result
 
     # =========================================================================
-    # AVATAR: Pollo Avatar API
+    # AVATAR: Gemini Avatar API
     # =========================================================================
 
     async def _generate_avatar(
@@ -437,11 +431,11 @@ class WorkflowGenerator:
         save_locally: bool
     ) -> GenerationResult:
         """
-        Avatar workflow: Pollo Avatar API
+        Avatar workflow: Gemini Avatar API
 
         Flow:
         1. Get avatar image and script from topic metadata
-        2. Generate avatar video with Pollo Avatar
+        2. Generate avatar video with Gemini via provider router
         """
         result = GenerationResult(
             success=False,
@@ -462,16 +456,16 @@ class WorkflowGenerator:
         result.steps_completed.append("parameters_loaded")
         result.image_url = avatar_url
 
-        # Generate avatar video
+        # Generate avatar video via provider router (Gemini)
         logger.info(f"Step 2: Generating avatar video...")
 
-        avatar_result = await self.avatar_service.generate_and_wait(
-            image_url=avatar_url,
-            script=script,
-            language=language,
-            duration=30,
-            timeout=300,
-            save_locally=save_locally
+        avatar_result = await self.provider_router.route(
+            TaskType.AVATAR,
+            {
+                "image_url": avatar_url,
+                "script": script,
+                "language": language,
+            }
         )
 
         if not avatar_result.get("success"):

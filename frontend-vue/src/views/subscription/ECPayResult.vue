@@ -63,7 +63,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4 py-24 bg-white">
+  <div class="min-h-screen flex items-center justify-center px-4 py-24" style="background: #09090b;"
     <div class="max-w-md w-full text-center card p-8">
 
       <!-- Loading / Pending -->
@@ -134,7 +134,8 @@ onMounted(() => {
         <div class="flex gap-3">
           <button
             type="button"
-            class="flex-1 py-2 px-4 bg-gray-100 text-dark-600 rounded-lg hover:bg-gray-200 transition-colors"
+            class="flex-1 py-2 px-4 rounded-lg transition-colors"
+            style="background: #141420; color: #9494b0; border: 1px solid rgba(255,255,255,0.06);"
             @click="router.replace('/pricing')"
           >
             返回方案頁面

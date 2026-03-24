@@ -50,17 +50,15 @@ VidGo is a comprehensive AI platform that enables e-commerce businesses to creat
                                                |
                     +--------------------------+
                     |          |               |
-         +-------------+  +----------+  +--------------+
-         |    PiAPI     |  | Pollo AI |  |    A2E.ai    |
-         | - T2I / I2I  |  | - I2V    |  | - Avatar     |
-         | - I2V / T2V  |  | - T2V    |  | - Lip-sync   |
-         | - Try-On     |  | - V2V    |  +--------------+
-         | - 3D(Trellis)|  +----------+
-         +-------------+         +---------------+
-                                 | Google Gemini  |
-                                 | - Moderation   |
-                                 | - Interior(bkp)|
-                                 +---------------+
+         +-------------+  +---------------+
+         |    PiAPI     |  | Google Gemini  |
+         | ALL generation|  | - Backup for    |
+         | T2I,I2I,I2V  |  |   image tasks   |
+         | T2V,V2V,Avatar|  | - Moderation    |
+         | Try-On,BG Rem |  | - Pre-gen input |
+         | 3D, Effects   |  |   materials     |
+         | (primary)     |  +---------------+
+         +-------------+
 ```
 
 ### Dual-Mode Architecture
@@ -99,20 +97,50 @@ Subscribers receive real-time AI generation with:
 
 ### 10 Core AI Tools
 
-| Tool | Description | API Provider |
-|------|-------------|--------------|
-| **Background Removal** | Remove backgrounds from product images | PiAPI Wan / Gemini |
-| **Product Scene** | Product Photography Inspiration Gallery | PiAPI Wan T2I |
-| **Virtual Try-On** | Fashion Model Showcase | Kling AI via PiAPI |
-| **Room Redesign** | Interior Design Example Gallery | PiAPI Wan T2I |
-| **Short Video** | Image-to-video, Text-to-video | Pollo AI |
-| **AI Avatar** | Talking avatar with lip-sync TTS | A2E.ai |
-| **Image Effects** | Artistic style transfer | PiAPI I2I (Flux) |
-| **Pattern Design** | Seamless pattern generation | PiAPI Wan T2I |
-| **I2I Transform** | Image-to-image style transfer | PiAPI Flux I2I |
-| **Room 3D Model** | Generate 3D models from room images | PiAPI Trellis |
+| Tool | Description | Engine |
+|------|-------------|--------|
+| **Background Removal** | Remove backgrounds from product images | AI Engine |
+| **Product Scene** | Product Photography Inspiration Gallery | AI Image Engine |
+| **Virtual Try-On** | Fashion Model Showcase | AI Try-On Engine |
+| **Room Redesign** | Interior Design Example Gallery | AI Image Engine |
+| **Short Video** | Image-to-video, Text-to-video | AI Video Engine |
+| **AI Avatar** | Talking avatar with lip-sync TTS | AI Avatar Engine |
+| **Image Effects** | Artistic style transfer | AI Style Engine |
+| **Pattern Design** | Seamless pattern generation | AI Image Engine |
+| **I2I Transform** | Image-to-image style transfer | AI Style Engine |
+| **Room 3D Model** | Generate 3D models from room images | AI 3D Engine |
+
+### Inspiration Gallery
+
+The **Inspiration Gallery** (`/gallery`) provides a comprehensive showcase of AI-generated examples from real businesses, following the piapi.ai style while maintaining VidGo's design language:
+
+- **Search & Filter**: Search by keywords, filter by industry (Food & Beverage, Fashion, E-commerce, etc.) and tool type
+- **Freemium Access**: Free users can browse and try pre-generated examples; subscribers can upload custom materials
+- **Industry Targeting**: Specifically designed for small businesses and personal companies
+- **Instant Results**: All examples are pre-generated from the Material DB for instant viewing
+- **Try This Example**: Click any example to navigate to the corresponding tool with the preset selected
 
 ---
+
+## User Role Matrix
+
+VidGo supports **3-tier user system** with distinct capabilities:
+
+| Feature | Visitor (Guest) | Free Registered | Paid Subscriber | Admin |
+|---------|----------------|-----------------|-----------------|-------|
+| Browse landing page | ✅ | ✅ | ✅ | ✅ |
+| Demo tools (preset, DB results) | ✅ (limit 2) | ✅ (limit 2) | ✅ | ✅ |
+| Watermarked results | ✅ | ✅ | ❌ (clean) | N/A |
+| Download results | ❌ | ❌ | ✅ | ✅ |
+| Share to social media | ❌ | ❌ | ✅ | ❌ |
+| Upload own materials | ❌ | ❌ | ✅ | ❌ |
+| Real AI API generation | ❌ | ❌ | ✅ | ❌ |
+| Promotion code (own) | ❌ | ❌ | ✅ (auto-issued) | Can create special ones |
+| Use others' promo codes | ❌ | ✅ | ✅ | N/A |
+| Work repo (7-day retention) | ❌ | ❌ | ✅ | N/A |
+| View API analytics | ❌ | ❌ | ❌ | ✅ |
+| Manage users/credits | ❌ | ❌ | ❌ | ✅ |
+| Create special promo codes | ❌ | ❌ | ❌ | ✅ |
 
 ## Subscriber Features
 
@@ -134,6 +162,20 @@ Paid users can choose from multiple AI models per tool:
 | Wan Pro | 2× | High-quality image generation |
 | Luma Ray2 | 3× | Cinematic video quality |
 
+### Personal Promotion Code System
+Every **paid subscriber** automatically receives a unique promotion code:
+- Share your code: Earn **50 credits** when someone registers using your code
+- New users get **20 welcome credits** for using a referral code
+- Admin can create special promotion codes for specific users
+- Free users can use others' codes but cannot create their own
+
+### 7-Day Work Retention
+When a subscriber cancels their subscription:
+- All generated works are retained for **7 days**
+- Can download existing works during retention period
+- Cannot generate new works after cancellation
+- Account deletion: All works deleted immediately (no retention)
+
 ### Referral Program
 Invite friends and earn credits:
 - Referrer earns **50 credits** per successful registration
@@ -147,29 +189,46 @@ Invite friends and earn credits:
 |---|---|---|
 | Browse AI galleries | Pre-generated, watermarked | Full-quality, downloadable |
 | Upload custom images | -- | All tools |
-| I2I Transformations | Demo result | Real-time via PiAPI Flux |
+| I2I Transformations | Demo result | Real-time AI Engine |
 | Room Redesign + 3D | Gallery only | Real-time redesign + GLB export |
-| Product Scene Compositing | Gallery only | 3-step pipeline (rembg + T2I + composite) |
-| Virtual Try-On | Gallery only | Real-time via Kling AI (PiAPI) |
-| Style Effects | Browse styles | Real-time via GoEnhance |
+| Product Scene Compositing | Gallery only | 3-step pipeline (rembg + AI Engine + composite) |
+| Virtual Try-On | Gallery only | Real-time AI Try-On Engine |
+| Style Effects | Browse styles | Real-time AI Engine |
 | Credits on signup | 40 pts (30-day expiry) | Purchase packages (Starter / Standard / Premium) |
+| Personal promotion code | ❌ | ✅ (auto-generated) |
+| 7-day work retention | ❌ | ✅ (post-cancellation) |
+| Social media publishing | ❌ | ✅ (FB, IG, TikTok, YouTube) |
+
+## Admin Features
+Fixed admin account configured in `.env`:
+- `FIRST_SUPERUSER_EMAIL=admin@vidgo.ai`
+- `FIRST_SUPERUSER_PASSWORD=admin123`
+
+**Admin capabilities:**
+- View API cost breakdown
+- Monitor most popular APIs/tools usage
+- Track most active accounts
+- Real-time online user count via WebSocket
+- Send credits to specific users
+- Create special promotion codes for targeted users
+- Ban/unban users
 
 ## Core Features
 
 ### 10 Core AI Tools
 
-| Tool | Description | API Provider |
-|------|-------------|--------------|
-| **Background Removal** | Remove backgrounds from product images | PiAPI (Flux) |
-| **Product Scene** | Composite products into professional scenes (3-step I2I) | PiAPI T2I + PIL |
-| **Virtual Try-On** | Place garments on AI models | Kling AI via PiAPI |
-| **Room Redesign** | AI interior design with 10 styles + iterative editing | Gemini 2.5 Flash |
-| **3D Model Generation** | Convert 2D designs to interactive GLB models | PiAPI Trellis (Qubico) |
-| **Short Video** | Image-to-video, Text-to-video | PiAPI Wan / Pollo AI |
-| **AI Avatar** | Talking avatar with lip-sync TTS | A2E.ai |
-| **Image Effects** | Style transfer (anime, ghibli, 3D, etc.) + HD upscale | GoEnhance |
-| **I2I Transform** | Image-to-image transformation with prompt control | PiAPI Flux (img2img) |
-| **Pattern Design** | Seamless pattern generation | PiAPI Wan T2I |
+| Tool | Description | Engine |
+|------|-------------|--------|
+| **Background Removal** | Remove backgrounds from product images | AI Engine |
+| **Product Scene** | Composite products into professional scenes (3-step I2I) | AI Image Engine |
+| **Virtual Try-On** | Place garments on AI models | AI Try-On Engine |
+| **Room Redesign** | AI interior design with 10 styles + iterative editing | AI Image Engine |
+| **3D Model Generation** | Convert 2D designs to interactive GLB models | AI 3D Engine |
+| **Short Video** | Image-to-video, Text-to-video | AI Video Engine |
+| **AI Avatar** | Talking avatar with lip-sync TTS | AI Avatar Engine |
+| **Image Effects** | Style transfer (anime, ghibli, 3D, etc.) + HD upscale | AI Style Engine |
+| **I2I Transform** | Image-to-image transformation with prompt control | AI Style Engine |
+| **Pattern Design** | Seamless pattern generation | AI Image Engine |
 
 ---
 
@@ -206,12 +265,8 @@ Invite friends and earn credits:
 ### AI Providers
 | Provider | Services | Details |
 |----------|----------|---------|
-| PiAPI | T2I, I2I, I2V, T2V, Interior, BG Removal, 3D | Flux1-schnell (free) / Flux (paid); Wan for video; Trellis for 3D |
-| PiAPI (Kling) | Virtual Try-On | Kling AI accessed through PiAPI |
-| Pollo AI | I2V, T2V, V2V | Backup for video; keyframes, effects, multi-model |
-| A2E.ai | Avatar + Lip-sync TTS | Photo-to-avatar; Asian-focused; gender-voice matching |
-| Google Gemini | Moderation, Interior (backup) | Content moderation; emergency fallback for interior design |
-| GoEnhance | Style Effects, HD Enhance | White-labeled as VidGo Effects |
+| PiAPI | **Primary** for ALL generation: T2I, I2I, I2V, T2V, V2V, Avatar, Interior, BG Removal, Try-On, Effects, 3D | Flux (image); Wan (video); Kling (try-on); Trellis (3D). When PiAPI has no credits, image tasks fall back to Gemini |
+| Google Gemini | **Backup** for image tasks + Content moderation + Pre-generation | Backup for T2I, I2I, Interior, BG Removal, Upscale, Effects. Also handles content moderation and pre-generating demo materials |
 
 ### Payment & Billing
 | Provider | Region | Status |
@@ -270,8 +325,7 @@ Vidgo_Gen_AI/
 ### Prerequisites
 
 - Docker 24+ and Docker Compose 2.0+
-- API Keys for: PiAPI, Pollo AI, A2E.ai
-- (Optional) Gemini API key for backup
+- API Keys for: PiAPI, Google Gemini
 
 ### Quick Start
 
@@ -313,10 +367,6 @@ Vidgo_Gen_AI/
 
 # AI Providers
 PIAPI_KEY=your_piapi_key
-POLLO_API_KEY=your_pollo_key
-A2E_API_KEY=your_a2e_key
-A2E_API_ID=your_a2e_api_id
-A2E_DEFAULT_CREATOR_ID=your_creator_id
 GEMINI_API_KEY=your_gemini_key
 
 # Payment - Primary (International)
@@ -344,8 +394,8 @@ SMTP_PORT=1025
 |----------|---------|-------------|
 | `SKIP_PREGENERATION` | `false` | Skip AI API calls on startup |
 | `PREGENERATION_LIMIT` | `10` | Materials per tool |
-| `SKIP_AVATAR` | - | Skip A2E avatar generation |
-| `SKIP_VIDEO` | - | Skip Pollo video generation |
+| `SKIP_AVATAR` | - | Skip avatar generation |
+| `SKIP_VIDEO` | - | Skip video generation |
 
 ### Referral & Upload Settings
 
@@ -491,5 +541,5 @@ The Dockerfile's `ENTRYPOINT` (the full startup sequence with migration + materi
 
 ---
 
-*Last Updated: March 11, 2026*
+*Last Updated: March 23, 2026*
 

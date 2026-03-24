@@ -926,6 +926,44 @@
       { "value": "90%", "label": "節省時間成本" }
     ]
   },
+  "gallery": {
+    "title": "靈感作品庫",
+    "subtitle": "瀏覽真實企業的 AI 生成案例。免費用戶可查看並試用範例，訂閱後可上傳自己的素材。",
+    "searchPlaceholder": "搜尋範例：關鍵字、風格、行業...",
+    "filterByIndustry": "按行業篩選",
+    "filterByTool": "按工具篩選",
+    "showingResults": "顯示 {count} 個範例，共 {total} 個",
+    "clearFilters": "清除篩選",
+    "noResults": "找不到相關範例",
+    "noResultsHint": "請嘗試調整篩選條件或搜尋關鍵字",
+    "viewAllExamples": "查看所有範例",
+    "video": "影片",
+    "tryThis": "試試這個範例",
+    "ctaTitle": "準備好創作自己的作品了嗎？",
+    "ctaSubtitle": "訂閱後即可上傳自己的圖片，生成無浮水印的自訂結果。",
+    "ctaButtonPrimary": "免費註冊",
+    "ctaButtonSecondary": "查看方案",
+    "categories": {
+      "all": "全部範例",
+      "product_scene": "產品場景",
+      "background_removal": "智能去背",
+      "try_on": "虛擬試穿",
+      "room_redesign": "空間設計",
+      "short_video": "短視頻",
+      "ai_avatar": "AI數位人",
+      "effect": "圖片特效",
+      "pattern_generate": "圖案生成"
+    },
+    "industries": {
+      "all": "全部行業",
+      "food_beverage": "餐飲食品",
+      "fashion": "時尚服飾",
+      "ecommerce": "電商零售",
+      "interior_design": "室內設計",
+      "marketing": "行銷廣告",
+      "small_business": "中小企業"
+    }
+  },
   "einvoice": {
     "title": "電子發票",
     "description": "管理您的台灣電子發票",

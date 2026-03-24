@@ -1,3 +1,4 @@
+
 # VidGo Platform – Function & Tool Coverage Spec
 
 **Purpose:** Check that each function/tool is implemented in both **Backend** and **Frontend**. Use this to find gaps.
@@ -97,17 +98,6 @@
 
 ---
 
-## 5. Credits
-
-| Function | Backend | Frontend | Status |
-|----------|---------|----------|--------|
-| Balance | ✅ `GET /credits/balance` | ✅ credits store | ✅ |
-| Estimate cost | ✅ `POST /credits/estimate` | ✅ | ✅ |
-| Transactions | ✅ `GET /credits/transactions` | ✅ | ✅ |
-| Packages | ✅ `GET /credits/packages` | ✅ | ✅ |
-| Purchase credits | ✅ `POST /credits/purchase` | ✅ | ✅ |
-| Pricing (services) | ✅ `GET /credits/pricing` | ✅ | ✅ |
-
 ### Credit Types
 
 | Type | Reset | Expiry |
@@ -116,9 +106,31 @@
 | `purchased_credits` | Never | Never expire |
 | `bonus_credits` | Never | Expire on `bonus_credits_expiry` |
 
+### Model Selection & Multipliers
+Paid users can select AI models for upload-based generation. Better models cost more credits:
+
+| Model | Multiplier | Tools |
+|-------|------------|-------|
+| default | 1× | All tools |
+| wan_pro | 2× | product_scene, room_redesign, pattern_generate, effect, short_video |
+| gemini_pro | 2× | ai_avatar, try_on |
+
 ### Demo Usage Limits
 - Free users: limited to `demo_usage_limit` (default **2**) demo generations
 - Tracked via `demo_usage_count` on User model
+
+### Promotion Code Ownership
+- **Paid subscribers**: Automatically receive unique promotion code upon subscription
+- **Free users**: Cannot create promotion codes, but can use others' codes
+- **Admin**: Can create special promotion codes with custom credits/discounts
+- **Code usage**: When someone uses a promotion code, code owner earns credits
+
+### 7-Day Work Retention
+- **Active subscribers**: All works stored indefinitely
+- **Cancelled subscribers**: Works retained for 7 days post-cancellation
+- **During retention**: Can download existing works, cannot generate new works
+- **Account deletion**: All works deleted immediately (no retention)
+- **Media expiry**: Works older than 14 days have media URLs cleared
 
 ---
 
@@ -150,19 +162,31 @@
 | Invoices | ✅ `GET /subscriptions/invoices` | ✅ Invoices.vue | ✅ |
 | Referrals | ✅ `GET /referrals/*` | ✅ Referrals.vue | ✅ |
 | Social Accounts | ✅ `GET /social/accounts` | ✅ SocialAccounts.vue | ✅ |
+| Work retention notice | ✅ Subscription status endpoint | ✅ Dashboard.vue (cancelled users) | ✅ |
 
 ---
 
-## 8. Referral System
+## 8. Promotion & Referral System
 
 | Function | Backend | Frontend | Status |
 |----------|---------|----------|--------|
-| Get referral code | ✅ `GET /referrals/code` | ✅ Referrals.vue | ✅ |
+| Get personal promotion code | ✅ `GET /referrals/code` (paid users only) | ✅ Referrals.vue | ✅ |
 | Referral stats | ✅ `GET /referrals/stats` | ✅ | ✅ |
-| Apply referral code | ✅ `POST /referrals/apply` | ✅ | ✅ |
+| Apply promotion code | ✅ `POST /referrals/apply` | ✅ | ✅ |
 | Leaderboard | ✅ `GET /referrals/leaderboard` | ✅ | ✅ |
+| Admin: Create special promo code | ✅ `POST /admin/promotions` | ✅ AdminPromotions.vue | ✅ |
+| Admin: Assign code to user | ✅ `POST /admin/promotions/{id}/assign` | ✅ | ✅ |
+| Admin: Monitor code usage | ✅ `GET /admin/promotions/{id}/analytics` | ✅ | ✅ |
+
+### Promotion Code Types
+| Type | Who Can Create | Credits Awarded | Expiry |
+|------|---------------|-----------------|--------|
+| Personal referral code | Auto-generated for paid subscribers | Referrer: +50, New user: +20 | Never |
+| Special admin code | Admin only | Custom (e.g., 100 credits) | Custom date |
+| Public promo code | Admin only | Discount or credits | Fixed expiry |
 
 ---
+
 
 ## 9. Social Media Publishing
 
@@ -243,6 +267,14 @@
 | Apply style | ✅ `POST /effects/apply-style` | ✅ | ✅ |
 | HD enhance | ✅ `POST /effects/hd-enhance` | ✅ | ✅ |
 | Video enhance | ✅ `POST /effects/video-enhance` | ✅ | ✅ |
+| Image transform (free-form I2I) | ✅ `POST /tools/image-transform` | ✅ ImageEffects.vue (AI Transform tab) | ✅ |
+
+### Effects API Details
+- **Style Presets**: Existing preset-based style transfer (default tab)
+- **AI Transform**: Free-form I2I transformation with custom prompt + strength slider
+- **Subscription Required**: AI Transform tab blocked for demo users
+- **Parameters**: `{image_url, prompt, strength, negative_prompt?}`
+- **Response**: `ApplyStyleResponse` with transformed image URL
 
 ---
 
@@ -252,13 +284,22 @@
 |----------|---------|----------|--------|
 | Styles | ✅ `GET /interior/styles` | ✅ RoomRedesign.vue | ✅ |
 | Room types | ✅ `GET /interior/room-types` | ✅ | ✅ |
+| Room constraints | ✅ `GET /interior/room-constraints` | ✅ | ✅ |
 | Redesign | ✅ `POST /interior/redesign` | ✅ | ✅ |
 | Generate | ✅ `POST /interior/generate` | ✅ | ✅ |
 | Fusion | ✅ `POST /interior/fusion` | ✅ | ✅ |
 | Iterative edit | ✅ `POST /interior/edit` | ✅ | ✅ |
 | Style transfer | ✅ `POST /interior/style-transfer` | ✅ | ✅ |
+| 3D Model generation | ✅ `POST /interior/3d-model` (5-min timeout) | ✅ ThreeViewer.vue | ✅ |
 | Demo redesign | ✅ `POST /interior/demo/redesign` | ✅ | ✅ |
 | Demo generate | ✅ `POST /interior/demo/generate` | ✅ | ✅ |
+
+### Interior 3D Model Generation
+- **Endpoint**: `POST /interior/3d-model` (300,000ms timeout)
+- **Parameters**: `{image_url, texture_size?, mesh_simplify?}`
+- **Response**: `{model_url: "https://...file.glb"}`
+- **Frontend**: Rendered with `ThreeViewer.vue` (Three.js GLB viewer)
+- **Room constraints**: `GET /interior/room-constraints` returns `{constraints: {bathroom: ["bathroom"], kitchen: ["kitchen"], ...}}`
 
 ---
 

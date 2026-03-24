@@ -272,14 +272,14 @@ function dataURItoBlob(dataURI: string): Blob {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 bg-white pb-20">
+  <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
     <LoadingOverlay :show="isProcessing" :message="t('common.processing')" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
       <button
         @click="handleBack"
-        class="mb-6 flex items-center gap-2 text-dark-500 hover:text-dark-900 transition-colors"
+        class="mb-6 flex items-center gap-2 text-dark-300 hover:text-dark-50 transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -289,10 +289,10 @@ function dataURItoBlob(dataURI: string): Blob {
 
       <!-- Header -->
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-dark-900 mb-4">
+        <h1 class="text-4xl font-bold text-dark-50 mb-4">
           {{ t('tools.tryOn.name') }}
         </h1>
-        <p class="text-xl text-dark-500">
+        <p class="text-xl text-dark-300">
           {{ t('tools.tryOn.longDesc') }}
         </p>
 
@@ -307,7 +307,7 @@ function dataURItoBlob(dataURI: string): Blob {
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <!-- Left Panel - Clothing Selection -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-dark-900 mb-4">
+          <h3 class="text-lg font-semibold text-dark-50 mb-4">
             {{ isZh ? '選擇服裝' : 'Select Clothing' }}
           </h3>
 
@@ -334,7 +334,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
           <!-- Demo Clothing Items -->
           <div v-if="isDemoUser || displayClothingItems.length > 0" class="mb-4">
-            <p class="text-sm text-dark-500 mb-3">
+            <p class="text-sm text-dark-300 mb-3">
               {{ isZh ? '預設服裝（示範）' : 'Preset Clothing (Demo)' }}
             </p>
             <div v-if="isLoadingTemplates" class="flex justify-center py-8">
@@ -348,7 +348,7 @@ function dataURItoBlob(dataURI: string): Blob {
                 class="aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all"
                 :class="selectedClothingId === item.id
                   ? 'border-primary-500'
-                  : 'border-gray-200 hover:border-dark-500'"
+                  : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
               >
                 <img
                   v-if="item.preview"
@@ -356,7 +356,7 @@ function dataURItoBlob(dataURI: string): Blob {
                   :alt="item.name"
                   class="w-full h-full object-cover"
                 />
-                <div v-else class="w-full h-full bg-gray-100 flex items-center justify-center">
+                <div v-else class="w-full h-full flex items-center justify-center" style="background: #141420;">
                   <span class="text-3xl">👔</span>
                 </div>
               </button>
@@ -365,7 +365,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
           <!-- Subscriber Interface: Upload Zone -->
           <div v-if="!isDemoUser" class="mb-4">
-             <h4 class="text-sm font-medium text-dark-500 mb-2">{{ isZh ? '上傳服裝' : 'Upload Clothing' }}</h4>
+             <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳服裝' : 'Upload Clothing' }}</h4>
              <ImageUploader 
                v-model="clothingImage" 
                :label="isZh ? '點擊上傳或拖放服裝圖片' : 'Drop clothing image here'"
@@ -388,7 +388,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
         <!-- Middle Panel - Model Selection -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-dark-900 mb-4">
+          <h3 class="text-lg font-semibold text-dark-50 mb-4">
             {{ isZh ? '選擇模特' : 'Select Model' }}
           </h3>
 
@@ -400,12 +400,12 @@ function dataURItoBlob(dataURI: string): Blob {
               class="p-2 rounded-xl border-2 transition-all"
               :class="selectedModel === model.id
                 ? 'border-primary-500 bg-primary-500/10'
-                : 'border-gray-200 hover:border-dark-500'"
+                : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
             >
               <div class="aspect-[2/3] rounded-lg overflow-hidden mb-2">
                 <img :src="model.preview" :alt="isZh ? model.name_zh : model.name" class="w-full h-full object-cover" />
               </div>
-              <p class="text-xs text-center text-dark-900">{{ isZh ? model.name_zh : model.name }}</p>
+              <p class="text-xs text-center text-dark-50">{{ isZh ? model.name_zh : model.name }}</p>
             </button>
 
             <!-- Subscriber Interface: Custom Model Upload -->
@@ -413,15 +413,15 @@ function dataURItoBlob(dataURI: string): Blob {
                <button 
                  v-if="selectedModel !== 'custom'"
                  @click="selectedModel = 'custom'" 
-                 class="w-full py-2 border-2 border-dashed border-gray-600 rounded-xl hover:border-primary-500 hover:text-primary-500 transition-colors text-dark-500 text-sm flex items-center justify-center gap-2"
+                 class="w-full py-2 border-2 border-dashed rounded-xl hover:border-primary-500 hover:text-primary-500 transition-colors text-dark-300 text-sm flex items-center justify-center gap-2" style="border-color: rgba(255,255,255,0.12);">
                >
                  <span>➕</span> {{ isZh ? '上傳自定義模特' : 'Upload Custom Model' }}
                </button>
 
                <div v-else class="space-y-2">
                  <div class="flex justify-between items-center mb-1">
-                   <span class="text-sm font-medium text-dark-900">{{ isZh ? '自定義模特' : 'Custom Model' }}</span>
-                   <button @click="selectedModel = 'female-1'; modelImage = undefined" class="text-xs text-dark-500 hover:text-dark-900">
+                   <span class="text-sm font-medium text-dark-50">{{ isZh ? '自定義模特' : 'Custom Model' }}</span>
+                   <button @click="selectedModel = 'female-1'; modelImage = undefined" class="text-xs text-dark-300 hover:text-dark-50">
                      {{ isZh ? '取消' : 'Cancel' }}
                    </button>
                  </div>
@@ -435,7 +435,7 @@ function dataURItoBlob(dataURI: string): Blob {
           </div>
 
           <!-- Credit Cost & Generate -->
-          <div class="mt-6 pt-4 border-t border-gray-200">
+          <div class="mt-6 pt-4" style="border-top: 1px solid rgba(255,255,255,0.06);">
             <CreditCost service="virtual_try_on" />
 
             <!-- Warning message for invalid combination -->
@@ -461,7 +461,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
         <!-- Right Panel - Result -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-dark-900 mb-4">
+          <h3 class="text-lg font-semibold text-dark-50 mb-4">
             {{ isZh ? '試穿結果' : 'Try-On Result' }}
           </h3>
 

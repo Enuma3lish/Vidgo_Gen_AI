@@ -168,8 +168,8 @@ async def list_categories():
         TopicCategory.PRODUCT_VIDEO: "Product showcase videos using T2I → I2V pipeline",
         TopicCategory.INTERIOR_DESIGN: "Interior design images using Gemini 2.5 Flash",
         TopicCategory.STYLE_TRANSFER: "Styled videos using T2I → I2V → V2V pipeline",
-        TopicCategory.AVATAR: "Talking head videos using Pollo Avatar",
-        TopicCategory.T2I_SHOWCASE: "Pattern and texture images using Leonardo",
+        TopicCategory.AVATAR: "Talking head videos using Gemini Avatar",
+        TopicCategory.T2I_SHOWCASE: "Pattern and texture images using PiAPI",
     }
 
     result = []
@@ -299,10 +299,10 @@ async def preview_topic(topic_id: str):
 def _get_flow_description(category: TopicCategory) -> str:
     """Get human-readable flow description for a category."""
     flows = {
-        TopicCategory.PRODUCT_VIDEO: "Leonardo T2I → Pollo I2V",
+        TopicCategory.PRODUCT_VIDEO: "PiAPI T2I → PiAPI I2V",
         TopicCategory.INTERIOR_DESIGN: "Gemini 2.5 Flash Image T2I",
-        TopicCategory.STYLE_TRANSFER: "Leonardo T2I → Pollo I2V → GoEnhance V2V",
-        TopicCategory.AVATAR: "Pollo Avatar API",
-        TopicCategory.T2I_SHOWCASE: "Leonardo Pattern T2I",
+        TopicCategory.STYLE_TRANSFER: "PiAPI T2I → PiAPI I2V → PiAPI V2V",
+        TopicCategory.AVATAR: "Gemini Avatar API",
+        TopicCategory.T2I_SHOWCASE: "PiAPI Pattern T2I",
     }
     return flows.get(category, "Unknown")

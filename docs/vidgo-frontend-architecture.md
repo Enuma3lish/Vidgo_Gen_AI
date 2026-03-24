@@ -193,6 +193,7 @@ frontend-vue/
 │   ├── views/
 │   │   ├── LandingPage.vue          # Home page
 │   │   ├── Pricing.vue              # Pricing page
+│   │   ├── InspirationGallery.vue   # Inspiration Gallery (modern AI platform style)
 │   │   ├── NotFound.vue             # 404 page
 │   │   │
 │   │   ├── admin/                   # Admin dashboard (stats, costs, profit, active users)
@@ -266,6 +267,7 @@ const routes: RouteRecordRaw[] = [
   // ===== Public Routes =====
   { path: '/', name: 'home', component: LandingPage },
   { path: '/pricing', name: 'pricing', component: Pricing },
+  { path: '/gallery', name: 'gallery', component: InspirationGallery },
 
   // ===== Subscription payment result (Paddle redirects here) =====
   { path: '/subscription/success', name: 'subscription-success', component: SubscriptionSuccess, meta: { requiresAuth: true } },
@@ -707,13 +709,13 @@ export const useCreditsStore = defineStore('credits', () => {
 +-----------------------------------------------------------------------------+
 |                                                                              |
 |  Tool 1: Background Removal (一鍵白底圖)                                     |
-|  ├─ Backend: PiAPI T2I + Rembg / Gemini backup                               |
+|  ├─ Backend: AI Image Engine                               |
 |  ├─ Route: /tools/background-removal                                         |
 |  ├─ Topics: drinks, snacks, desserts, meals, packaging, equipment...         |
 |  └─ Mode: Pre-generated examples from Material DB                            |
 |                                                                              |
 |  Tool 2: Image Effects (圖片風格 / 風格轉換)                                 |
-|  ├─ Backend: PiAPI I2I (Flux model, strength 0.60-0.70)                      |
+|  ├─ Backend: AI Style Engine                      |
 |  ├─ Route: /tools/effects                                                    |
 |  ├─ Topics: anime, ghibli, cartoon, oil_painting, watercolor                 |
 |  ├─ Tabs:                                                                    |
@@ -723,13 +725,13 @@ export const useCreditsStore = defineStore('credits', () => {
 |  └─ Mode: Pre-generated before/after gallery, watermarked output             |
 |                                                                              |
 |  Tool 3: Product Scene (產品攝影靈感)                                        |
-|  ├─ Backend: PiAPI T2I (Flux model)                                          |
+|  ├─ Backend: AI Image Engine                                                 |
 |  ├─ Route: /tools/product-scene                                              |
 |  ├─ Topics: studio, nature, luxury, minimal, lifestyle, urban...             |
 |  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
 |  Tool 4: Virtual Try-On (時尚穿搭展示)                                       |
-|  ├─ Backend: Kling AI Try-On via PiAPI (with T2I fallback)                   |
+|  ├─ Backend: AI Try-On Engine                   |
 |  ├─ Route: /tools/try-on                                                     |
 |  ├─ Topics: casual, formal, dresses, sportswear, outerwear, accessories      |
 |  ├─ Model Library: AI-generated full-body models (3 female, 3 male)          |
@@ -738,7 +740,7 @@ export const useCreditsStore = defineStore('credits', () => {
 |  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
 |  Tool 5: Room Redesign (室內設計範例)                                        |
-|  ├─ Backend: PiAPI T2I (Flux model) + PiAPI Trellis (3D)                     |
+|  ├─ Backend: AI Design Engine + AI 3D Engine                     |
 |  ├─ Route: /tools/room-redesign                                              |
 |  ├─ Topics: living_room, bedroom, kitchen, bathroom                          |
 |  ├─ Tabs:                                                                    |
@@ -746,12 +748,12 @@ export const useCreditsStore = defineStore('credits', () => {
 |  │   ├─ "Generate" — Room image generation                                   |
 |  │   ├─ "Style Transfer" — Room style transfer                               |
 |  │   └─ "3D Model" — Converts 2D room image/design into interactive 3D GLB  |
-|  │       model via PiAPI Trellis. Renders with ThreeViewer.vue.              |
+|  │       model via AI 3D Engine. Renders with ThreeViewer.vue.              |
 |  │       Requires subscription; demo users blocked.                          |
 |  └─ Mode: Pre-generated gallery, watermarked output                          |
 |                                                                              |
 |  Tool 6: Short Video (短影片)                                                |
-|  ├─ Backend: Pollo AI I2V (Pixverse v4.5 default)                            |
+|  ├─ Backend: AI Video Engine                                                   |
 |  ├─ Route: /tools/short-video                                                |
 |  ├─ Topics: product_showcase, brand_intro, tutorial, promo                   |
 |  ├─ SMB focus: Everyday products (bubble tea, fried chicken, small shop)     |
@@ -759,7 +761,7 @@ export const useCreditsStore = defineStore('credits', () => {
 |  └─ Mode: Pre-generated videos from Material DB                              |
 |                                                                              |
 |  Tool 7: AI Avatar (AI數位人)                                                |
-|  ├─ Backend: A2E.ai (TTS + Lip-sync)                                         |
+|  ├─ Backend: AI Avatar Engine                                         |
 |  ├─ Route: /tools/avatar                                                     |
 |  ├─ Topics: spokesperson, product_intro, customer_service, social_media      |
 |  ├─ Landing Topics: ecommerce, social, brand, app, promo, service            |
@@ -768,7 +770,7 @@ export const useCreditsStore = defineStore('credits', () => {
 |  └─ Mode: Pre-generated avatar videos from Material DB                       |
 |                                                                              |
 |  Tool 8: Pattern Design (印花設計)                                           |
-|  ├─ Backend: PiAPI T2I (Flux model)                                          |
+|  ├─ Backend: AI Pattern Engine                                               |
 |  ├─ Route: /tools/pattern-design                                             |
 |  ├─ Topics: seamless, floral, geometric, abstract, traditional               |
 |  └─ Mode: Pre-generated seamless patterns from Material DB                   |
@@ -780,14 +782,14 @@ export const useCreditsStore = defineStore('credits', () => {
 
 | Tool | API Endpoint | Backend Provider | Pre-generation |
 |------|--------------|------------------|----------------|
-| Background Removal | `/api/v1/demo/presets/background_removal` | PiAPI T2I | Yes |
-| Image Effects | `/api/v1/demo/presets/effect` | PiAPI I2I (style transfer) | Yes |
-| Product Scene | `/api/v1/demo/presets/product_scene` | PiAPI T2I | Yes |
-| Try-On | `/api/v1/demo/presets/try_on` | Kling AI + T2I fallback | Yes |
-| Room Redesign | `/api/v1/demo/presets/room_redesign` | PiAPI T2I | Yes |
-| Short Video | `/api/v1/demo/presets/short_video` | Pollo AI I2V | Yes |
-| AI Avatar | `/api/v1/demo/presets/ai_avatar` | A2E.ai TTS+Lipsync | Yes |
-| Pattern Design | `/api/v1/demo/presets/pattern_generate` | PiAPI T2I | Yes |
+| Background Removal | `/api/v1/demo/presets/background_removal` | AI Image Engine | Yes |
+| Image Effects | `/api/v1/demo/presets/effect` | AI Style Engine | Yes |
+| Product Scene | `/api/v1/demo/presets/product_scene` | AI Image Engine | Yes |
+| Try-On | `/api/v1/demo/presets/try_on` | AI Try-On Engine | Yes |
+| Room Redesign | `/api/v1/demo/presets/room_redesign` | AI Design Engine | Yes |
+| Short Video | `/api/v1/demo/presets/short_video` | AI Video Engine | Yes |
+| AI Avatar | `/api/v1/demo/presets/ai_avatar` | AI Avatar Engine | Yes |
+| Pattern Design | `/api/v1/demo/presets/pattern_generate` | AI Pattern Engine | Yes |
 
 ### 7.2 Tool Page Template (Preset-Only Mode)
 
@@ -900,11 +902,56 @@ export function useGeoLanguage() {
 
 ---
 
-## 9. Preset-Only Mode
+## 9. 3-Tier User System
+
+VidGo supports **3-tier user system** with distinct capabilities:
+
+### 9.1 User Role Matrix
+
+| Feature | Visitor (Guest) | Free Registered | Paid Subscriber | Admin |
+|---------|----------------|-----------------|-----------------|-------|
+| Browse landing page | ✅ | ✅ | ✅ | ✅ |
+| Demo tools (preset, DB results) | ✅ (limit 2) | ✅ (limit 2) | ✅ | ✅ |
+| Watermarked results | ✅ | ✅ | ❌ (clean) | N/A |
+| Download results | ❌ | ❌ | ✅ | ✅ |
+| Share to social media | ❌ | ❌ | ✅ | ❌ |
+| Upload own materials | ❌ | ❌ | ✅ | ❌ |
+| Real AI API generation | ❌ | ❌ | ✅ | ❌ |
+| Promotion code (own) | ❌ | ❌ | ✅ (auto-issued) | Can create special ones |
+| Use others' promo codes | ❌ | ✅ | ✅ | N/A |
+| Work repo (7-day retention) | ❌ | ❌ | ✅ | N/A |
+| View API analytics | ❌ | ❌ | ❌ | ✅ |
+| Manage users/credits | ❌ | ❌ | ❌ | ✅ |
+| Create special promo codes | ❌ | ❌ | ❌ | ✅ |
+
+### 9.2 Promotion Code System
+
+**Personal Promotion Codes:**
+- **Paid subscribers**: Automatically receive unique promotion code upon subscription
+- **Free users**: Cannot create promotion codes, but can use others' codes
+- **Admin**: Can create special promotion codes with custom credits/discounts
+- **Code usage**: When someone uses a promotion code, code owner earns credits
+
+**Promotion Code Types:**
+| Type | Who Can Create | Credits Awarded | Expiry |
+|------|---------------|-----------------|--------|
+| Personal referral code | Auto-generated for paid subscribers | Referrer: +50, New user: +20 | Never |
+| Special admin code | Admin only | Custom (e.g., 100 credits) | Custom date |
+| Public promo code | Admin only | Discount or credits | Fixed expiry |
+
+### 9.3 7-Day Work Retention
+
+**Active subscribers**: All works stored indefinitely
+**Cancelled subscribers**: Works retained for 7 days post-cancellation
+**During retention**: Can download existing works, cannot generate new works
+**Account deletion**: All works deleted immediately (no retention)
+**Media expiry**: Works older than 14 days have media URLs cleared
+
+### 9.4 Preset-Only Mode (Demo/Trial)
 
 **Demo/Trial flow:** Users try default AI functions by selecting presets. Backend returns pre-generated results from Material DB—no runtime AI API calls. Examples are correctly linked (e.g., Effect tool: before = T2I image, after = I2I transform of that same image).
 
-### 9.1 Access Control Matrix
+### 9.5 Access Control Matrix
 
 | Feature | Free / Anonymous | Subscriber |
 |---------|-----------------|------------|
@@ -917,6 +964,36 @@ export function useGeoLanguage() {
 | Select AI model | No | Yes |
 | Real-API generation | No | Yes (credits deducted) |
 | Referral program | Earn credits | Earn credits |
+| Personal promotion code | ❌ | ✅ (auto-generated) |
+| 7-day work retention | ❌ | ✅ (post-cancellation) |
+| Social media publishing | ❌ | ✅ (FB, IG, TikTok, YouTube) |
+
+### 9.6 User Flow
+
+```
++---------------------------------------------------------------------+
+|                     PRESET-ONLY USER FLOW                            |
++---------------------------------------------------------------------+
+|                                                                      |
+|  1. User visits tool page (e.g., /tools/background-removal)          |
+|                                                                      |
+|  2. Frontend loads presets from /api/v1/demo/presets/{tool_type}     |
+|     └── Returns list of pre-generated materials                      |
+|                                                                      |
+|  3. User selects a preset (clicks on thumbnail)                      |
+|                                                                      |
+|  4. User clicks "View Result" button                                 |
+|                                                                      |
+|  5. Frontend calls /api/v1/demo/use-preset                           |
+|     └── O(1) lookup by material ID                                   |
+|     └── NO external API calls                                        |
+|                                                                      |
+|  6. Result displayed with watermark                                  |
+|     └── Download button disabled                                     |
+|     └── "Subscribe for full access" CTA shown                        |
+|                                                                      |
++---------------------------------------------------------------------+
+```
 
 ### 9.2 User Flow
 
@@ -1063,7 +1140,7 @@ docker-compose logs -f frontend
 
 ### 13.1 Model Library Overview
 
-The Virtual Try-On feature uses an AI-generated Model Library to provide full-body models that meet Kling AI API requirements.
+The Virtual Try-On feature uses an AI-generated Model Library to provide full-body models that meet AI Try-On Engine requirements.
 
 ```
 +---------------------------------------------------------------------+
@@ -1077,7 +1154,7 @@ The Virtual Try-On feature uses an AI-generated Model Library to provide full-bo
 |                                                                      |
 |  TRY-ON GENERATION                                                   |
 |  ├─ Load model from Model Library                                    |
-|  ├─ Attempt Kling AI Virtual Try-On API                              |
+|  ├─ Attempt AI Try-On Engine API                              |
 |  │   └─ If fails: Fallback to T2I with model+garment prompt          |
 |  └─ Store result in Material DB                                      |
 |                                                                      |
@@ -1141,7 +1218,7 @@ Pattern Design generates seamless textile patterns for fashion and interior desi
 - **Tool Type**: `pattern_generate`
 - **API Endpoint**: `/api/v1/demo/presets/pattern_generate`
 - **Topics API**: `/api/v1/demo/topics/pattern_generate`
-- **Provider**: PiAPI T2I (Flux model)
+- **Provider**: AI Image Engine
 - **Output**: Seamless tileable patterns
 
 ---

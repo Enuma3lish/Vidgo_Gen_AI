@@ -1,11 +1,16 @@
 """
-Gemini Provider - Content Moderation and Image Editing.
+Gemini Provider - Content Moderation and Image Generation/Editing.
 
 Supports:
 - Content moderation (NSFW detection)
-- Interior design (emergency backup for PiAPI)
-- Image analysis
-- Image editing (Gemini 2.0 Flash Exp with native image output)
+- Text-to-image generation (via Gemini 2.0 Flash Exp)
+- Image-to-image editing
+- Interior design suggestions (text descriptions)
+- Background removal (via image editing)
+- Image upscaling
+- Material generation for demos
+
+Note: Gemini does NOT support video generation (I2V, T2V, V2V) or avatar generation.
 """
 import httpx
 import asyncio
@@ -13,6 +18,10 @@ from typing import Dict, Any
 import logging
 import os
 import base64
+import uuid
+from pathlib import Path
+from PIL import Image
+import io
 
 from app.providers.base import BaseProvider
 
@@ -21,7 +30,8 @@ logger = logging.getLogger(__name__)
 
 class GeminiProvider(BaseProvider):
     """
-    Gemini Provider - Content moderation and image editing.
+    Gemini Provider - Backup provider for when PiAPI has no credits.
+    Supports image generation and editing, but not video.
     """
 
     name = "gemini"
@@ -405,6 +415,265 @@ Format your response as JSON:
         return await self.edit_image({
             "image_url": params["image_url"],
             "prompt": prompt,
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ADDITIONAL METHODS FOR COMPATIBILITY WITH PIAPI
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def text_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate image from text using Gemini 2.0 Flash Exp.
+
+        Args:
+            params: {
+                "prompt": str,
+                "negative_prompt": str (optional),
+                "size": str (optional, default "1024*1024"),
+            }
+
+        Returns:
+            {"success": True, "output": {"image_url": str}}
+        """
+        self._log_request("text_to_image", params)
+        
+        # Parse size
+        size = params.get("size", "1024*1024")
+        if "*" in size:
+            width, height = map(int, size.split("*"))
+        else:
+            width, height = 1024, 1024
+        
+        prompt = params["prompt"]
+        if params.get("negative_prompt"):
+            prompt = f"{prompt}. Avoid: {params['negative_prompt']}"
+        
+        # Use edit_image with a blank/placeholder image for text-to-image
+        # Note: This is a workaround since Gemini needs an input image
+        # We'll create a simple colored canvas as input
+        try:
+            # Create a simple canvas as input image
+            canvas = Image.new('RGB', (width, height), color=(240, 240, 240))
+            output_dir = Path("/app/static/temp")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            canvas_path = output_dir / f"canvas_{uuid.uuid4().hex[:8]}.png"
+            canvas.save(canvas_path)
+            
+            # Use edit_image with the canvas
+            return await self.edit_image({
+                "image_url": f"/static/temp/{canvas_path.name}",
+                "prompt": f"Generate an image of: {prompt}. Create a high-quality, photorealistic image."
+            })
+        except Exception as e:
+            logger.error(f"Gemini text_to_image failed: {e}")
+            return {
+                "success": False,
+                "error": f"Text-to-image generation not available via Gemini: {str(e)}",
+                "suggestion": "Please use PiAPI for text-to-image generation when credits are available."
+            }
+
+    async def image_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Transform image using Gemini img2img.
+
+        Args:
+            params: {
+                "image_url": str,
+                "prompt": str,
+                "negative_prompt": str (optional),
+                "strength": float (optional, 0.0-1.0, default 0.75),
+            }
+
+        Returns:
+            {"success": True, "output": {"image_url": str}}
+        """
+        self._log_request("image_to_image", params)
+        
+        prompt = params["prompt"]
+        if params.get("negative_prompt"):
+            prompt = f"{prompt}. Avoid: {params['negative_prompt']}"
+        
+        strength = params.get("strength", 0.75)
+        if strength > 0.5:
+            instruction = "Transform this image completely into:"
+        else:
+            instruction = "Make subtle adjustments to this image:"
+        
+        return await self.edit_image({
+            "image_url": params["image_url"],
+            "prompt": f"{instruction} {prompt}. Strength: {strength}."
+        })
+
+    async def doodle_interior(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate interior design from image.
+
+        Args:
+            params: {
+                "image_url": str,
+                "prompt": str (optional),
+                "style": str (optional, default "modern"),
+                "room_type": str (optional, default "living_room")
+            }
+
+        Returns:
+            {"success": True, "output": {"image_url": str, "description": str}}
+        """
+        self._log_request("doodle_interior", params)
+        
+        style = params.get("style", "modern")
+        room_type = params.get("room_type", "living room")
+        prompt = params.get("prompt", "")
+        
+        full_prompt = f"Transform this room into a {style} {room_type} interior design. {prompt}"
+        
+        try:
+            # Try to generate image
+            result = await self.edit_image({
+                "image_url": params["image_url"],
+                "prompt": full_prompt
+            })
+            
+            if result.get("success"):
+                # Also get text description
+                text_result = await self.interior_design(params)
+                if text_result.get("success"):
+                    result["output"]["description"] = text_result["output"].get("description", "")
+                
+                return result
+            else:
+                # Fall back to text-only interior design
+                return await self.interior_design(params)
+        except Exception as e:
+            logger.error(f"Gemini doodle_interior failed: {e}")
+            return await self.interior_design(params)
+
+    async def background_removal(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Remove background from image using Gemini image editing.
+
+        Args:
+            params: {
+                "image_url": str,
+            }
+
+        Returns:
+            {"success": True, "output": {"image_url": str}}
+        """
+        self._log_request("background_removal", params)
+        
+        return await self.edit_image({
+            "image_url": params["image_url"],
+            "prompt": "Remove the background completely, leaving only the main subject on a transparent background. Output as PNG with transparency."
+        })
+
+    async def image_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gemini does NOT support video generation.
+
+        Args:
+            params: {
+                "image_url": str,
+                "prompt": str (optional),
+                "duration": int (optional, 5/10/15, default 5),
+            }
+
+        Returns:
+            {"success": False, "error": "Video generation not supported"}
+        """
+        self._log_request("image_to_video", params)
+        
+        return {
+            "success": False,
+            "error": "Video generation is not available via Gemini API.",
+            "suggestion": "Please use PiAPI for video generation when credits are available."
+        }
+
+    async def text_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gemini does NOT support video generation.
+
+        Args:
+            params: {
+                "prompt": str,
+                "negative_prompt": str (optional),
+                "duration": int (optional, 5/10/15, default 5),
+            }
+
+        Returns:
+            {"success": False, "error": "Video generation not supported"}
+        """
+        self._log_request("text_to_video", params)
+        
+        return {
+            "success": False,
+            "error": "Video generation is not available via Gemini API.",
+            "suggestion": "Please use PiAPI for video generation when credits are available."
+        }
+
+    async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gemini does NOT support video generation.
+
+        Args:
+            params: {
+                "video_url": str,
+                "prompt": str,
+                "style": str (optional),
+            }
+
+        Returns:
+            {"success": False, "error": "Video generation not supported"}
+        """
+        self._log_request("video_style_transfer", params)
+        
+        return {
+            "success": False,
+            "error": "Video style transfer is not available via Gemini API.",
+            "suggestion": "Please use PiAPI for video style transfer when credits are available."
+        }
+
+    async def generate_avatar(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gemini does NOT support avatar generation.
+
+        Args:
+            params: {
+                "image_url": str (avatar/presenter image),
+                "text": str (script to speak),
+                "voice": str (voice ID or preset),
+                "language": str (default "en"),
+            }
+
+        Returns:
+            {"success": False, "error": "Avatar generation not supported"}
+        """
+        self._log_request("generate_avatar", params)
+        
+        return {
+            "success": False,
+            "error": "Avatar generation is not available via Gemini API.",
+            "suggestion": "Please use PiAPI for avatar generation when credits are available."
+        }
+
+    async def generate_material(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate material images for demos (compatibility method).
+
+        Args:
+            params: {
+                "prompt": str,
+                "category": str (optional),
+            }
+
+        Returns:
+            {"success": True, "output": {"image_url": str}}
+        """
+        self._log_request("generate_material", params)
+        
+        return await self.text_to_image({
+            "prompt": params["prompt"],
+            "size": "1024*1024"
         })
 
     async def close(self):

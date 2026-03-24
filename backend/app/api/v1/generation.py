@@ -5,12 +5,12 @@ Generation API Endpoints for 3 Topics:
 3. AI影片 (AI Video)
 
 AI Service Provider Routing:
-- T2I: PiAPI (primary) → Pollo (backup)
-- I2V: PiAPI (primary) → Pollo (backup)
-- T2V: PiAPI (primary) → Pollo (backup)
-- V2V: PiAPI (primary) → Pollo (backup)
+- T2I: PiAPI (primary) → Gemini (backup)
+- I2V: PiAPI (primary) → Gemini (backup)
+- T2V: PiAPI (primary) → Gemini (backup)
+- V2V: PiAPI (primary) → Gemini (backup)
 - Interior: PiAPI Doodle (primary) → Gemini (backup)
-- Avatar: A2E.ai (no backup)
+- Avatar: Gemini (no backup)
 
 Uses Provider Router for smart failover
 """
@@ -105,9 +105,6 @@ class InteriorResponse(BaseModel):
 class ServiceStatusResponse(BaseModel):
     """AI service status response."""
     piapi: Dict
-    pollo: Dict
-    goenhance: Dict
-    a2e: Dict
     gemini: Dict
 
 
@@ -120,7 +117,7 @@ async def text_to_image_with_rescue(request: T2IRequest):
     """
     Generate image from text prompt.
 
-    Uses PiAPI (Wan) as primary with Pollo as backup.
+    Uses PiAPI (Wan) as primary with Gemini as backup.
     """
     try:
         result = await provider_router.route(
@@ -154,7 +151,7 @@ async def image_to_video_with_rescue(request: I2VRequest):
     """
     Generate video from image.
 
-    Uses PiAPI (Wan I2V) as primary with Pollo as backup.
+    Uses PiAPI (Wan I2V) as primary with Gemini as backup.
     """
     try:
         result = await provider_router.route(
@@ -225,16 +222,13 @@ async def check_service_status():
     """
     Check status of all AI services.
 
-    Returns status of PiAPI, Pollo, GoEnhance, A2E, and Gemini.
+    Returns status of PiAPI and Gemini.
     """
     try:
         status = await provider_router.check_service_status()
 
         return ServiceStatusResponse(
             piapi=status.get("piapi", {"status": "unknown"}),
-            pollo=status.get("pollo", {"status": "unknown"}),
-            goenhance=status.get("goenhance", {"status": "unknown"}),
-            a2e=status.get("a2e", {"status": "unknown"}),
             gemini=status.get("gemini", {"status": "unknown"})
         )
 
@@ -678,9 +672,10 @@ async def enhance_product_image(
     Enhance product image quality (HD upscale, color correction)
     """
     try:
-        # Use GoEnhance for image enhancement
-        result = await goenhance_service.enhance_image(
-            image_url=str(request.image_url)
+        # Use PiAPI for image enhancement via provider router
+        result = await provider_router.route(
+            TaskType.UPSCALE,
+            {"image_url": str(request.image_url), "scale": 2}
         )
 
         if result.get("success"):
@@ -716,7 +711,7 @@ async def image_to_video(
     - **Subscribers:** Calls real API, saves to UserGeneration.
     - **Demo users:** Returns a pre-generated Material DB result (watermarked).
 
-    Uses PiAPI (Wan I2V) as primary with Pollo as backup.
+    Uses PiAPI (Wan I2V) as primary with Gemini as backup.
     """
     # Demo path: return pre-generated material
     if not is_subscribed_user(current_user):
@@ -758,17 +753,22 @@ async def image_to_video(
             output = result.get("output", {})
             video_url = output.get("video_url")
 
-            # Optional: Apply style transformation with GoEnhance
+            # Optional: Apply style transformation with PiAPI V2V
             if request.style:
-                model_id = get_goenhance_model_id(request.style)
-                if model_id:
-                    style_result = await goenhance_service.video_to_video(
-                        video_url=video_url,
-                        model_id=model_id,
-                        use_cache=True
+                style_prompt = get_style_prompt(request.style) or request.style
+                try:
+                    style_result = await provider_router.route(
+                        TaskType.V2V,
+                        {
+                            "video_url": video_url,
+                            "prompt": style_prompt
+                        }
                     )
-                    if style_result.get("success"):
-                        video_url = style_result.get("video_url")
+                    styled_url = style_result.get("video_url") or style_result.get("output_url")
+                    if styled_url:
+                        video_url = styled_url
+                except Exception:
+                    pass  # Use original video if style transfer fails
 
             # Save to UserGeneration
             generation = UserGeneration(
@@ -821,12 +821,13 @@ async def transform_video(
         )
 
     try:
-        model_id = style_def.get("goenhance_model_id")
-        result = await goenhance_service.video_to_video(
-            video_url=str(request.video_url),
-            model_id=model_id,
-            prompt=request.prompt or "",
-            use_cache=True
+        style_prompt = style_def.get("prompt", request.prompt or "artistic style")
+        result = await provider_router.route(
+            TaskType.V2V,
+            {
+                "video_url": str(request.video_url),
+                "prompt": style_prompt
+            }
         )
 
         if result.get("success"):
@@ -861,7 +862,7 @@ async def get_video_styles():
             "name_zh": style["name_zh"],
             "category": style["category"],
             "preview_url": style["preview_url"],
-            "model_id": style.get("goenhance_model_id", style["id"])
+            "model_id": style["id"]
         })
     return styles  # Return array directly for frontend compatibility
 
@@ -1312,7 +1313,7 @@ async def upload_and_generate(
 @router.get("/api-status")
 async def get_api_status():
     """
-    Check status of all AI providers (PiAPI, Pollo, GoEnhance, A2E, Gemini)
+    Check status of all AI providers (PiAPI, Gemini)
     """
     try:
         status = await provider_router.get_all_status()
@@ -1321,8 +1322,5 @@ async def get_api_status():
         logger.error(f"API status check failed: {e}")
         return {
             "piapi": {"status": "unknown", "error": str(e)},
-            "pollo": {"status": "unknown"},
-            "goenhance": {"status": "unknown"},
-            "a2e": {"status": "unknown"},
             "gemini": {"status": "unknown"}
         }

@@ -1,5 +1,5 @@
 # VidGo Full Stack
-# API keys: backend/.env must have PIAPI_KEY, POLLO_API_KEY, A2E_API_KEY
+# API keys: backend/.env must have PIAPI_KEY, GEMINI_API_KEY
 #
 # Flow: backend entrypoint checks Material DB, runs pregen if empty, then starts.
 #   docker compose up -d
@@ -9,6 +9,9 @@
 # Material DB Management:
 #   - CLEAN_MATERIALS=ai_avatar → delete + re-seed ai_avatar on startup
 #   - CLEAN_MATERIALS=all       → delete + re-seed ALL tools on startup
+#
+# Storage: Pre-generated materials stored in Docker volumes (vidgo_materials, vidgo_generated)
+# NOT local filesystem. Volumes persist across container restarts.
 
 services:
   # PostgreSQL Database

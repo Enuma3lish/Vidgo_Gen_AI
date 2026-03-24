@@ -25,7 +25,7 @@ Subscribers upload their own images and trigger live AI API calls. Results are r
 **Flow:**
 1. Upload: `POST /api/v1/uploads/material` (multipart form: file + tool_type + model_id + prompt)
 2. Credit deduction: Credits deducted based on `tool_type` base cost × model multiplier
-3. Generation: Backend calls AI provider (PiAPI / Pollo / A2E) in real time
+3. Generation: Backend calls AI provider in real time
 4. Result: `result_url` / `result_video_url` stored without watermark; `GET /api/v1/uploads/{id}/download`
 
 ### 0.3 Preset Download (Subscribers)
@@ -39,10 +39,8 @@ Paid users can select AI models for upload-based generation. Better models cost 
 | Model | Multiplier | Tools |
 |-------|------------|-------|
 | default | 1× | All tools |
-| pixverse_v5 | 1.5× | short_video |
-| kling_v2 | 2× | try_on, short_video |
-| wan_pro | 2× | product_scene, room_redesign, pattern_generate, effect |
-| luma_ray2 | 3× | short_video |
+| wan_pro | 2× | product_scene, room_redesign, pattern_generate, effect, short_video |
+| gemini_pro | 2× | ai_avatar, try_on |
 
 ### 0.5 Referral System
 Users earn bonus credits by inviting others:
@@ -80,9 +78,8 @@ Credits are split into three types:
 
 ### 0.10 Per-Plan Feature Restrictions
 Plans can restrict tool access via feature flags:
-- `feature_clothing_transform`, `feature_goenhance`, `feature_video_gen`
+- `feature_clothing_transform`, `feature_video_gen`
 - `feature_batch_processing`, `feature_custom_styles`
-- `pollo_limit`, `goenhance_limit` (monthly caps)
 
 ### 0.11 Media Retention Policy
 14-day media retention with automatic cleanup:
@@ -124,7 +121,7 @@ Plans can restrict tool access via feature flags:
 |  |  |  | Lookup        | | Service       | | Service       | | Service    | |  | |
 |  |  |  +---------------+ +---------------+ +---------------+ +------------+ |  | |
 |  |  |  +---------------+ +---------------+ +---------------+ +------------+ |  | |
-|  |  |  | A2E Avatar    | | Interior      | | Subscription  | | Payment    | |  | |
+|  |  |  | Interior      | | Subscription  | | Payment       | | Referral   | |  | |
 |  |  |  | Service       | | Service       | | Service       | | Service    | |  | |
 |  |  |  +---------------+ +---------------+ +---------------+ +------------+ |  | |
 |  |  |  +---------------+ +---------------+ +---------------+ +------------+ |  | |
@@ -135,24 +132,21 @@ Plans can restrict tool access via feature flags:
 |  |                                                                             | |
 |  |  +-----------------------------------------------------------------------+  | |
 |  |  |                       AI Provider Layer                               |  | |
-|  |  |  +-------------------+  +-------------------+  +-------------------+  |  | |
-|  |  |  |   PiAPI (Wan)     |  |   Pollo AI API    |  |    A2E.ai API     |  |  | |
-|  |  |  | - T2I, I2I        |  | - I2V (Pixverse)  |  | - Avatar Video    |  |  | |
-|  |  |  | - I2V, Interior   |  | - T2V (Pollo)     |  | - Lip-sync TTS    |  |  | |
-|  |  |  | - Try-On, BG Rem  |  |                   |  |                   |  |  | |
-|  |  |  +-------------------+  +-------------------+  +-------------------+  |  | |
-|  |  |  +-------------------+                                               |  | |
-|  |  |  |   Gemini API      |                                               |  | |
-|  |  |  | - Moderation      |                                               |  | |
-|  |  |  | - Backup Image    |                                               |  | |
-|  |  |  +-------------------+                                               |  | |
+|  |  |  +-------------------+  +-------------------+                        |  | |
+|  |  |  |   PiAPI (Wan)     |  |   Gemini API      |                        |  | |
+|  |  |  | ALL generation:   |  | - Backup for      |                        |  | |
+|  |  |  | T2I, I2I, I2V,    |  |   image tasks     |                        |  | |
+|  |  |  | T2V, V2V, Avatar, |  | - Moderation      |                        |  | |
+|  |  |  | Interior, BG Rem  |  | - Pre-gen input   |                        |  | |
+|  |  |  | 3D, Effects       |  |   materials       |                        |  | |
+|  |  |  +-------------------+  +-------------------+                        |  | |
 |  |  +-----------------------------------------------------------------------+  | |
 |  +-----------------------------------------------------------------------------+ |
 |                                                                                   |
 |  +-----------------------------------------------------------------------------+ |
 |  |                              Data Layer                                      | |
 |  |  +---------------+ +---------------+ +---------------+ +----------------+   | |
-|  |  |  PostgreSQL   | |    Redis      | | Local Storage | |  Material DB   |   | |
+|  |  |  PostgreSQL   | |    Redis      | | Docker Volume | |  Material DB   |   | |
 |  |  |  (Main DB)    | | (Cache/Queue) | | (Media Files) | | (Pre-generated)|   | |
 |  |  +---------------+ +---------------+ +---------------+ +----------------+   | |
 |  +-----------------------------------------------------------------------------+ |
@@ -221,10 +215,9 @@ backend/
 │   │
 │   ├── providers/
 │   │   ├── base.py                  # Base provider interface
-│   │   ├── a2e_provider.py          # A2E.ai Avatar provider
 │   │   ├── gemini_provider.py       # Google Gemini provider
 │   │   ├── piapi_provider.py        # PiAPI (Wan) provider - Primary
-│   │   ├── pollo_provider.py        # Pollo AI provider
+│   │   ├── gemini_provider.py       # Google Gemini provider
 │   │   └── provider_router.py       # Smart routing between providers
 │   │
 │   ├── schemas/
@@ -238,7 +231,7 @@ backend/
 │   │   └── user.py                  # User schemas
 │   │
 │   ├── services/
-│   │   ├── a2e_service.py           # A2E Avatar service
+│   │   ├── gemini_service.py        # Gemini AI service (avatar, moderation)
 │   │   ├── admin_dashboard.py       # Admin dashboard service (stats, API costs, active users)
 │   │   ├── invoice_service.py      # Taiwan e-invoice business logic
 │   │   ├── block_cache.py           # Block-level caching
@@ -248,7 +241,6 @@ backend/
 │   │   ├── effects_service.py       # Style transfer service
 │   │   ├── email_service.py         # Email sending
 │   │   ├── email_verify.py          # Email verification
-│   │   ├── gemini_service.py        # Gemini AI service
 │   │   ├── image_generator.py       # Image generation service
 │   │   ├── interior_design_service.py # Interior design service
 │   │   ├── leonardo_service.py      # Leonardo AI (legacy)
@@ -257,7 +249,7 @@ backend/
 │   │   ├── media_cleanup_service.py # 14-day media cleanup
 │   │   ├── moderation.py            # Content moderation (Gemini)
 │   │   ├── paddle_service.py        # Paddle payment service
-│   │   ├── pollo_ai.py              # Pollo AI client
+│   │   ├── piapi_client.py           # PiAPI client
 │   │   ├── prompt_generator.py      # Prompt generation & caching
 │   │   ├── prompt_matching.py       # Prompt similarity matching
 │   │   ├── referral_service.py      # Referral system
@@ -276,7 +268,7 @@ backend/
 │   │   │   └── material.py          # Base material service
 │   │   ├── generation/
 │   │   │   ├── factory.py           # Generation service factory
-│   │   │   └── pollo_service.py     # Pollo AI generation
+│   │   │   └── piapi_service.py     # PiAPI generation
 │   │   └── material/
 │   │       ├── collector.py         # Material collection
 │   │       ├── generator.py         # Material generation
@@ -448,10 +440,14 @@ class Material(Base):
 
 | Provider | API | Purpose | Env Variable |
 |----------|-----|---------|--------------|
-| PiAPI | Wan API | T2I, I2I, I2V, Interior, Try-On, BG Removal | `PIAPI_KEY` |
-| Pollo AI | Pixverse, Kling, Luma | I2V, T2V (backup) | `POLLO_API_KEY` |
-| A2E.ai | Lip-sync + TTS | Avatar Video | `A2E_API_KEY`, `A2E_API_ID`, `A2E_DEFAULT_CREATOR_ID` |
-| Gemini | Generative AI | Content Moderation, Backup Image | `GEMINI_API_KEY` |
+| PiAPI | Wan API | **Primary** for ALL generation: T2I, I2I, I2V, T2V, V2V, Interior, Avatar, Try-On, BG Removal, Effects, 3D | `PIAPI_KEY` |
+| Gemini | Generative AI | **Backup** for image tasks + Content moderation + Pre-generation | `GEMINI_API_KEY` |
+
+**Failover Strategy:** 
+- **Image tasks** (T2I, I2I, Interior, BG Removal, Upscale, Effects): Gemini serves as backup when PiAPI has no credits or fails
+- **Video tasks** (I2V, T2V, V2V, Avatar): No backup - will show appropriate error messages
+- **Moderation & Pre-generation**: Gemini only
+- Provider names are never exposed to end users
 
 ### 5.2 Provider Router
 
@@ -465,48 +461,19 @@ class TaskType(str, Enum):
     INTERIOR_3D = "interior_3d"
     AVATAR = "avatar"
     UPSCALE = "upscale"
-    KEYFRAMES = "keyframes"
     EFFECTS = "effects"
-    MULTI_MODEL = "multi_model"
     MODERATION = "moderation"
     BACKGROUND_REMOVAL = "background_removal"
     I2I = "image_to_image"
+    MATERIAL_GENERATION = "material_generation"
 
-# Routing config:
-# T2I: PiAPI (primary) → Gemini (backup)
-# I2V: Pollo (primary) → PiAPI (backup)
-# T2V: Pollo (primary) → PiAPI (backup)
-# Avatar: A2E.ai (no backup)
-# Interior: PiAPI (primary) → Gemini (backup)
-# BG Removal: PiAPI (no backup)
-# I2I: PiAPI (no backup)
-# Moderation: Gemini (no backup)
+# Routing configuration with Gemini as backup for image tasks:
+# Image tasks (T2I, I2I, Interior, BG Removal, Upscale, Effects) → PiAPI primary, Gemini backup
+# Video tasks (I2V, T2V, V2V, Avatar, Interior 3D) → PiAPI only, no backup
+# Moderation & Material pre-generation → Gemini only
 ```
 
-### 5.3 A2E.ai Avatar Service
-
-**Base URL:** `https://video.a2e.ai`
-**Auth:** Bearer token
-
-```
-Step 1: POST /api/v1/video/send_tts    → Generate TTS audio
-Step 2: POST /api/v1/video/generate     → Generate lipsync video
-Step 3: POST /api/v1/video/awsResult    → Poll for result (status: init → process → success)
-```
-
-### 5.4 Pollo AI Service
-
-**Base URL:** `https://pollo.ai/api/platform`
-**Auth:** x-api-key header
-
-Available models: pixverse_v4.5, pixverse_v5, kling_v2, kling_v1.5, luma_ray2
-
-```
-Step 1: POST /generation/{model}        → Create task
-Step 2: GET /generation/{taskId}/status  → Poll (pending → processing → succeed)
-```
-
-### 5.5 PiAPI Service
+### 5.3 PiAPI Service
 
 **Base URL:** `https://api.piapi.ai/api/v1`
 **Auth:** X-API-Key header
@@ -518,7 +485,7 @@ Step 1: POST /task                       → Create task
 Step 2: GET /task/{task_id}              → Poll for result
 ```
 
-### 5.6 Interior Design Service
+### 5.4 Interior Design Service
 
 - **Free users:** Browse pre-generated examples (watermarked)
 - **Subscribers:** Real-time generation with multiple modes:
@@ -585,10 +552,6 @@ class Settings(BaseSettings):
 
     # AI Providers
     PIAPI_KEY: str = ""
-    POLLO_API_KEY: str = ""
-    A2E_API_KEY: str = ""
-    A2E_API_ID: str = ""
-    A2E_DEFAULT_CREATOR_ID: str = ""
     GEMINI_API_KEY: str = ""
 
     # YouTube (Google OAuth 2.0 for YouTube Data API v3)
@@ -665,7 +628,16 @@ services:
   worker:         # ARQ background worker
   init-materials: # Initial pre-generation (runs once)
   frontend:       # Vue 3 frontend (port 8501)
+
+volumes:
+  postgres_data:         # Persist PostgreSQL data
+  redis_data:            # Persist Redis data
+  vidgo_generated:       # Persist generated images/videos (Docker volume)
+  vidgo_materials:       # Persist pre-generated materials (Docker volume)
+  vidgo_tryon_garments:  # Persist cached Virtual Try-On garment images
 ```
+
+**Storage:** Pre-generated materials and user-generated content are stored in **Docker named volumes** (`vidgo_materials`, `vidgo_generated`), NOT on the local filesystem. This ensures data persists across container restarts and rebuilds.
 
 ---
 

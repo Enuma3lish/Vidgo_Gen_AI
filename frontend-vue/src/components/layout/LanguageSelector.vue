@@ -31,15 +31,17 @@ function selectLanguage(code: string) {
     <!-- Trigger Button -->
     <button
       @click="isOpen = !isOpen"
-      class="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-sm font-medium hover:bg-gray-50"
-      style="color: rgba(0,0,0,0.65);"
+      class="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-sm font-medium"
+      style="color: #9494b0;"
+      @mouseenter="($event.target as HTMLElement).style.background='rgba(255,255,255,0.06)'"
+      @mouseleave="($event.target as HTMLElement).style.background='transparent'"
     >
       <span class="text-base leading-none">{{ currentLanguage.flag }}</span>
       <span class="hidden sm:inline text-sm">{{ currentLanguage.name }}</span>
       <svg
         class="w-3.5 h-3.5 transition-transform duration-200"
         :class="{ 'rotate-180': isOpen }"
-        style="color: rgba(0,0,0,0.35);"
+        style="color: #6b6b8a;"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -59,8 +61,7 @@ function selectLanguage(code: string) {
     >
       <div
         v-if="isOpen"
-        class="absolute right-0 mt-2 bg-white rounded-xl py-1.5 min-w-44 z-50 origin-top-right"
-        style="border: 1px solid rgba(0,0,0,0.1); box-shadow: 0 6px 16px rgba(0,0,0,0.12);"
+        class="absolute right-0 mt-2 rounded-xl py-1.5 min-w-44 z-50 origin-top-right dropdown-menu"
       >
         <button
           v-for="lang in languages"
@@ -68,8 +69,8 @@ function selectLanguage(code: string) {
           @click="selectLanguage(lang.code)"
           class="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-sm"
           :style="lang.code === locale
-            ? 'background: rgba(22,119,255,0.06); color: #1677ff; font-weight: 600;'
-            : 'color: rgba(0,0,0,0.65);'"
+            ? 'background: rgba(22,119,255,0.1); color: #1677ff; font-weight: 600;'
+            : 'color: #9494b0;'"
         >
           <span class="text-base leading-none">{{ lang.flag }}</span>
           <span>{{ lang.name }}</span>

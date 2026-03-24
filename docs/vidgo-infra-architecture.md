@@ -798,19 +798,13 @@ gcloud alpha monitoring policies create \
 │  └── PiAPI Pro Plan            1 month         $60          $60           │
 │  PiAPI Subtotal                                             $134          │
 │                                                                             │
-│  A2E.ai (Avatar)                                                           │
-│  ├── Pro Plan                  1 month         $9.90        $10           │
-│  └── Usage                     500 minutes     $0.10/min    $50           │
-│  A2E Subtotal                                               $60           │
-│                                                                             │
-│  Pollo.ai (Backup + Advanced)                                              │
-│  └── Backup usage (~10%)       1,000 gen       $0.15        $150          │
-│                                                                             │
-│  Gemini API (Moderation)                                                    │
-│  └── Flash 2.5                 10,000 calls    ~$0.001      $10           │
+│  Gemini API (Backup + Moderation)                                           │
+│  ├── Backup for image tasks    1,000 images    $0.002       $2            │
+│  └── Moderation                10,000 calls    ~$0.001      $10           │
+│  Gemini Subtotal                                            $12           │
 │                                                                             │
 │  ─────────────────────────────────────────────────────────────────────────│
-│  AI Services Subtotal                                       $354          │
+│  AI Services Subtotal                                       $146          │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -862,11 +856,9 @@ gcloud alpha monitoring policies create \
 │  ├── Load Balancer + SSL                           $22                     │
 │  └── Monitoring + Others                           $7 - $17                │
 │                                                                             │
-│  AI Services                                       $354                    │
+│  AI Services                                       $146                    │
 │  ├── PiAPI (Wan) - Primary                         $134                    │
-│  ├── A2E.ai (Avatar)                               $60                     │
-│  ├── Pollo.ai (Backup)                             $150                    │
-│  └── Gemini (Moderation)                           $10                     │
+│  └── Gemini (Backup + Moderation)                  $12                     │
 │                                                                             │
 │  Third-Party Services                              $28                     │
 │  ├── Sentry                                        $26                     │
@@ -874,7 +866,7 @@ gcloud alpha monitoring policies create \
 │                                                                             │
 │  ─────────────────────────────────────────────────────────────────────────│
 │                                                                             │
-│  TOTAL MONTHLY COST                                $524 - $574             │
+│  TOTAL MONTHLY COST                                $316 - $366             │
 │                                                                             │
 │  ─────────────────────────────────────────────────────────────────────────│
 │                                                                             │
@@ -890,8 +882,8 @@ gcloud alpha monitoring policies create \
 │  NET REVENUE                                       $25,360 - $900         │
 │                                                     = $24,460              │
 │                                                                             │
-│  GROSS PROFIT                                      $24,460 - $550         │
-│                                                     = $23,910              │
+│  GROSS PROFIT                                      $24,460 - $341         │
+│                                                     = $24,119              │
 │                                                                             │
 │  GROSS MARGIN                                      ~94%                   │
 │                                                                             │
@@ -907,9 +899,9 @@ gcloud alpha monitoring policies create \
 │                                                                             │
 │  Per User Metrics (1,000 Users):                                           │
 │                                                                             │
-│  Average Cost per User:        $550 / 1000 = $0.55/user/month             │
+│  Average Cost per User:        $341 / 1000 = $0.34/user/month             │
 │  Average Revenue per User:     $25,360 / 1000 = $25.36/user/month         │
-│  Net Profit per User:          $23,910 / 1000 = $23.91/user/month         │
+│  Net Profit per User:          $24,119 / 1000 = $24.12/user/month         │
 │                                                                             │
 │  ─────────────────────────────────────────────────────────────────────────│
 │                                                                             │
@@ -1060,6 +1052,70 @@ dig api.vidgo.ai
 - Hourly background task scans `user_generations` table
 - Entries older than 14 days have media URLs (`result_url`, `result_video_url`) cleared
 - Initial cleanup runs on application startup
+
+## 13. 3-Tier User System Infrastructure
+
+### 13.1 User Role Matrix
+
+| Feature | Visitor (Guest) | Free Registered | Paid Subscriber | Admin |
+|---------|----------------|-----------------|-----------------|-------|
+| Browse landing page | ✅ | ✅ | ✅ | ✅ |
+| Demo tools (preset, DB results) | ✅ (limit 2) | ✅ (limit 2) | ✅ | ✅ |
+| Watermarked results | ✅ | ✅ | ❌ (clean) | N/A |
+| Download results | ❌ | ❌ | ✅ | ✅ |
+| Share to social media | ❌ | ❌ | ✅ | ❌ |
+| Upload own materials | ❌ | ❌ | ✅ | ❌ |
+| Real AI API generation | ❌ | ❌ | ✅ | ❌ |
+| Promotion code (own) | ❌ | ❌ | ✅ (auto-issued) | Can create special ones |
+| Use others' promo codes | ❌ | ✅ | ✅ | N/A |
+| Work repo (7-day retention) | ❌ | ❌ | ✅ | N/A |
+| View API analytics | ❌ | ❌ | ❌ | ✅ |
+| Manage users/credits | ❌ | ❌ | ❌ | ✅ |
+| Create special promo codes | ❌ | ❌ | ❌ | ✅ |
+
+### 13.2 Promotion Code System Infrastructure
+
+**Personal Promotion Codes:**
+- **Paid subscribers**: Automatically receive unique promotion code upon subscription
+- **Free users**: Cannot create promotion codes, but can use others' codes
+- **Admin**: Can create special promotion codes with custom credits/discounts
+- **Code usage**: When someone uses a promotion code, code owner earns credits
+
+**Promotion Code Types:**
+| Type | Who Can Create | Credits Awarded | Expiry |
+|------|---------------|-----------------|--------|
+| Personal referral code | Auto-generated for paid subscribers | Referrer: +50, New user: +20 | Never |
+| Special admin code | Admin only | Custom (e.g., 100 credits) | Custom date |
+| Public promo code | Admin only | Discount or credits | Fixed expiry |
+
+### 13.3 7-Day Work Retention Infrastructure
+
+**Active subscribers**: All works stored indefinitely
+**Cancelled subscribers**: Works retained for 7 days post-cancellation
+**During retention**: Can download existing works, cannot generate new works
+**Account deletion**: All works deleted immediately (no retention)
+**Media expiry**: Works older than 14 days have media URLs cleared
+
+**Database Schema:**
+- `User` model: `subscription_cancelled_at`, `work_retention_until`
+- `UserGeneration` model: `media_expired` flag
+- Hourly cleanup task checks for expired media and cancelled subscriptions
+
+### 13.4 Infrastructure Requirements
+
+**Storage Requirements:**
+- **Active subscribers**: Full media storage (indefinite)
+- **Cancelled subscribers**: 7-day retention buffer
+- **Free users**: No media storage (watermarked results from Material DB only)
+
+**Database Indexing:**
+- Index on `UserGeneration.user_id` + `created_at` for retention queries
+- Index on `User.subscription_cancelled_at` for retention monitoring
+- Index on `Promotion.code` for fast lookup
+
+**Redis Caching:**
+- Cache promotion code validation results
+- Cache user tier permissions
 
 ---
 

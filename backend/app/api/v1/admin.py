@@ -438,37 +438,22 @@ async def get_ai_services_status(
     Check status of all AI services.
 
     Returns status of:
-    - Wan 2.6 (T2I and I2V primary)
-    - fal.ai (T2I and I2V rescue for Pro/Pro+)
-    - Gemini (Interior Design rescue)
-    - PiAPI (T2I, I2V, V2V, Interior)
-    - A2E.ai (Avatar Lip-Sync)
+    - PiAPI (T2I, I2V, V2V, Interior primary)
+    - Gemini (Interior Design rescue, Avatar)
     """
     from app.services.rescue_service import get_rescue_service
 
     rescue_service = get_rescue_service()
     status = await rescue_service.check_service_status()
 
-    # Add A2E status
-    try:
-        from app.services.a2e_service import A2EAvatarService
-        a2e = A2EAvatarService()
-        a2e_test = await a2e.test_connection()
-        status["a2e"] = {
-            "status": "ok" if a2e_test.get("success") else "pending",
-            "message": a2e_test.get("message") or a2e_test.get("error")
-        }
-    except Exception as e:
-        status["a2e"] = {"status": "error", "error": str(e)}
-
     return {
         "services": status,
         "rescue_config": {
-            "t2i": {"primary": "piapi_wan", "rescue": "pollo"},
-            "i2v": {"primary": "piapi_wan", "rescue": "pollo"},
-            "v2v": {"primary": "piapi_wan", "rescue": "pollo"},
+            "t2i": {"primary": "piapi", "rescue": "gemini"},
+            "i2v": {"primary": "piapi", "rescue": "gemini"},
+            "v2v": {"primary": "piapi", "rescue": "gemini"},
             "interior": {"primary": "piapi_wan_doodle", "rescue": "gemini"},
-            "avatar": {"primary": "a2e", "rescue": None}
+            "avatar": {"primary": "gemini", "rescue": None}
         }
     }
 

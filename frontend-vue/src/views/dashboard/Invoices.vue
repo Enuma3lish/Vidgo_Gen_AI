@@ -123,17 +123,17 @@ function onVoided() {
 
 function statusBadgeClass(status: string) {
   switch (status) {
-    case 'issued': return 'bg-green-100 text-green-700'
-    case 'voided': return 'bg-red-100 text-red-700'
-    case 'failed': return 'bg-gray-100 text-gray-500'
-    case 'pending_issue': return 'bg-yellow-100 text-yellow-700'
-    default: return 'bg-gray-100 text-gray-500'
+    case 'issued': return 'bg-green-500/10 text-green-400'
+    case 'voided': return 'bg-red-500/10 text-red-400'
+    case 'failed': return 'bg-gray-500/10 text-gray-400'
+    case 'pending_issue': return 'bg-yellow-500/10 text-yellow-400'
+    default: return 'bg-gray-500/10 text-gray-400'
   }
 }
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20 bg-white">
+  <div class="min-h-screen pt-24 pb-20" style="background: #09090b;">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="mb-8">
@@ -154,14 +154,16 @@ function statusBadgeClass(status: string) {
       </div>
 
       <!-- Tabs -->
-      <div class="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+      <div class="flex gap-1 mb-6 rounded-lg p-1 w-fit" style="background: rgba(255,255,255,0.04);">
         <button @click="activeTab = 'list'"
-                :class="activeTab === 'list' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'"
+                :class="activeTab === 'list' ? 'shadow-sm' : ''"
+                :style="activeTab === 'list' ? 'background: #141420; color: #f5f5fa;' : 'color: #9494b0;'"
                 class="px-4 py-2 rounded-md text-sm font-medium transition-colors">
           {{ t('einvoice.invoiceList', 'Invoice List') }}
         </button>
         <button @click="activeTab = 'create'"
-                :class="activeTab === 'create' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'"
+                :class="activeTab === 'create' ? 'shadow-sm' : ''"
+                :style="activeTab === 'create' ? 'background: #141420; color: #f5f5fa;' : 'color: #9494b0;'"
                 class="px-4 py-2 rounded-md text-sm font-medium transition-colors">
           {{ t('einvoice.issueInvoice', 'Issue Invoice') }}
         </button>
@@ -207,8 +209,8 @@ function statusBadgeClass(status: string) {
                     <th class="text-right py-3 px-4 text-sm font-medium text-dark-500">{{ t('einvoice.actions', 'Actions') }}</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <tr v-for="inv in einvoices" :key="inv.id" class="hover:bg-gray-50/50 transition-colors">
+                <tbody style="color: #f5f5fa;">
+                  <tr v-for="inv in einvoices" :key="inv.id" class="transition-colors" style="border-bottom: 1px solid rgba(255,255,255,0.06);"
                     <td class="py-3 px-4 text-dark-900 text-sm">{{ formatDate(inv.issued_at) }}</td>
                     <td class="py-3 px-4 font-mono text-sm">{{ inv.invoice_number || '—' }}</td>
                     <td class="py-3 px-4 text-center">
@@ -238,11 +240,11 @@ function statusBadgeClass(status: string) {
 
         <!-- Legacy Invoices (Paddle) -->
         <div v-if="invoices.length > 0">
-          <h2 class="text-lg font-semibold mb-4">{{ t('dashboard.invoices', 'Payment Invoices') }}</h2>
+          <h2 class="text-lg font-semibold mb-4" style="color: #f5f5fa;">{{ t('dashboard.invoices', 'Payment Invoices') }}</h2>
           <div class="card overflow-hidden p-0">
             <div class="overflow-x-auto">
               <table class="w-full">
-                <thead class="bg-gray-50/80 border-b border-gray-200">
+                <thead style="background: #0f0f17; border-bottom: 1px solid rgba(255,255,255,0.06);">
                   <tr>
                     <th class="text-left py-3 px-4 text-sm font-medium text-dark-500">Date</th>
                     <th class="text-left py-3 px-4 text-sm font-medium text-dark-500">Invoice / Order</th>
@@ -250,8 +252,8 @@ function statusBadgeClass(status: string) {
                     <th class="text-right py-3 px-4 text-sm font-medium text-dark-500">Actions</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <tr v-for="inv in invoices" :key="inv.order_id" class="hover:bg-gray-50/50 transition-colors">
+                <tbody style="color: #f5f5fa;">
+                  <tr v-for="inv in invoices" :key="inv.order_id" class="transition-colors" style="border-bottom: 1px solid rgba(255,255,255,0.06);"
                     <td class="py-3 px-4 text-dark-900 text-sm">{{ formatDate(inv.paid_at) }}</td>
                     <td class="py-3 px-4 font-mono text-sm">{{ inv.invoice_number || inv.order_number }}</td>
                     <td class="py-3 px-4 text-right text-dark-900">{{ formatAmount(inv.amount, inv.currency) }}</td>

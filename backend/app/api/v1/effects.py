@@ -1,7 +1,7 @@
 """
 VidGo Effects API Endpoints.
 
-White-labeled GoEnhance services:
+White-labeled PiAPI services:
 - VidGo Style Effects (style transfer)
 - VidGo HD Enhance (4K upscale)
 - VidGo Video Pro (video enhancement)

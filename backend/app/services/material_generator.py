@@ -28,9 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import AsyncSessionLocal
 from app.models.demo import ToolShowcase
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
-from app.services.pollo_ai import PolloAIClient, get_pollo_client
 from app.services.rescue_service import get_rescue_service
-from app.services.a2e_service import A2EAvatarService, get_a2e_service
 from app.services.watermark import WatermarkService, get_watermark_service
 from app.providers.provider_router import get_provider_router, TaskType
 from app.core.config import get_settings
@@ -414,8 +412,11 @@ def assign_voice_for_example(language: str, index: int) -> tuple[str, str]:
     Returns:
         Tuple of (voice_id, gender)
     """
-    from app.services.a2e_service import A2E_VOICES
-    
+    try:
+        from app.services.a2e_service import A2E_VOICES
+    except ImportError:
+        A2E_VOICES = {"en": [{"id": "en-US-alloy", "gender": "neutral"}], "zh-TW": [{"id": "zh-TW-xiaoxiao", "gender": "female"}]}
+
     voices = A2E_VOICES.get(language, A2E_VOICES["en"])
     voice = voices[index % len(voices)]
     return voice["id"], voice["gender"]
@@ -477,25 +478,19 @@ class MaterialGenerator:
     - avatar: AI avatar examples
 
     AI Services:
-    - Text-to-Image: GoEnhance Nano Banana / Provider Router
-    - Image-to-Video: Pollo AI
-    - Avatar Generation: A2E.ai (lip-sync)
-    - Video Style Transfer: GoEnhance V2V
+    - Text-to-Image: PiAPI / Provider Router
+    - Image-to-Video: PiAPI
+    - Avatar Generation: Gemini (lip-sync)
+    - Video Style Transfer: PiAPI V2V
     """
 
     def __init__(self):
-        self.pollo: Optional[PolloAIClient] = None
-        self.avatar_service: Optional[A2EAvatarService] = None
         self.provider_router = None
         self.rescue_service = None
         self.watermark_service: Optional[WatermarkService] = None
 
     def _init_services(self):
         """Initialize API services lazily."""
-        if not self.pollo:
-            self.pollo = get_pollo_client()
-        if not self.avatar_service:
-            self.avatar_service = get_a2e_service()
         if not self.provider_router:
             self.provider_router = get_provider_router()
         if not self.rescue_service:
@@ -815,17 +810,19 @@ class MaterialGenerator:
                         image_url = image_result['images'][0]['url']
 
                     vid_start = time.monotonic()
-                    success, task_id, _ = await self.pollo.generate_video(
-                        image_url=image_url,
-                        prompt=prompt_zh,
-                        length=SHORT_VIDEO_LENGTH
+                    video_router_result = await self.provider_router.route(
+                        TaskType.I2V,
+                        {
+                            "image_url": image_url,
+                            "prompt": prompt_zh,
+                            "duration": SHORT_VIDEO_LENGTH
+                        }
                     )
 
                     video_url = None
-                    if success:
-                        video_result = await self.pollo.wait_for_completion(task_id, timeout=180)
-                        if video_result.get('status') == 'succeed':
-                            video_url = video_result.get('video_url')
+                    if video_router_result.get('success'):
+                        output = video_router_result.get('output', {})
+                        video_url = output.get('video_url') or video_router_result.get('video_url')
 
                     vid_elapsed = time.monotonic() - vid_start
                     logger.info(f"Landing {topic_key} #{idx+1} video gen: {vid_elapsed:.1f}s")
@@ -879,12 +876,13 @@ class MaterialGenerator:
                         for lang, avatar_key in [("en", "avatar_en"), ("zh-TW", "avatar_zh")]:
                             avatar_script = example[avatar_key]
                             avatar_start = time.monotonic()
-                            avatar_result = await self.avatar_service.generate_and_wait(
-                                image_url=avatar_image,
-                                script=avatar_script,
-                                language=lang,
-                                duration=30,
-                                timeout=300
+                            avatar_result = await self.provider_router.route(
+                                TaskType.AVATAR,
+                                {
+                                    "image_url": avatar_image,
+                                    "script": avatar_script,
+                                    "language": lang,
+                                }
                             )
                             avatar_elapsed = time.monotonic() - avatar_start
                             logger.info(f"Landing {topic_key} #{idx+1} avatar {lang}: {avatar_elapsed:.1f}s")
@@ -935,8 +933,8 @@ class MaterialGenerator:
         await asyncio.gather(*tasks)
 
     async def _generate_pattern_materials(self, session: AsyncSession):
-        """Generate pattern design examples using GoEnhance T2I."""
-        logger.info("Generating pattern materials with GoEnhance T2I...")
+        """Generate pattern design examples using PiAPI T2I."""
+        logger.info("Generating pattern materials with PiAPI T2I...")
 
         await session.execute(
             delete(ToolShowcase).where(ToolShowcase.tool_category == 'pattern')
@@ -973,7 +971,7 @@ class MaterialGenerator:
                         is_featured=True,
                         is_active=True,
                         sort_order=idx,
-                        source_service='goenhance'
+                        source_service='piapi'
                     )
                     session.add(showcase)
                     await session.commit()
@@ -986,8 +984,8 @@ class MaterialGenerator:
                 logger.error(f"Error generating pattern {example['title']}: {e}")
 
     async def _generate_product_materials(self, session: AsyncSession):
-        """Generate product photo examples with real before/after using GoEnhance."""
-        logger.info("Generating product materials with GoEnhance...")
+        """Generate product photo examples with real before/after using PiAPI."""
+        logger.info("Generating product materials with PiAPI...")
 
         await session.execute(
             delete(ToolShowcase).where(ToolShowcase.tool_category == 'product')
@@ -1056,7 +1054,7 @@ class MaterialGenerator:
                         is_featured=True,
                         is_active=True,
                         sort_order=idx,
-                        source_service='goenhance'
+                        source_service='piapi'
                     )
                     session.add(showcase)
                     await session.commit()
@@ -1095,21 +1093,23 @@ class MaterialGenerator:
 
                 await asyncio.sleep(3)
 
-                # Convert to video using Pollo AI
-                success, task_id, _ = await self.pollo.generate_video(
-                    image_url=image_url,
-                    prompt=example['source_prompt'],
-                    length=SHORT_VIDEO_LENGTH
+                # Convert to video using PiAPI via provider router
+                video_router_result = await self.provider_router.route(
+                    TaskType.I2V,
+                    {
+                        "image_url": image_url,
+                        "prompt": example['source_prompt'],
+                        "duration": SHORT_VIDEO_LENGTH
+                    }
                 )
 
-                if not success:
+                if not video_router_result.get('success'):
                     continue
 
-                video_result = await self.pollo.wait_for_completion(task_id, timeout=180)
-                if video_result.get('status') != 'succeed':
+                vid_output = video_router_result.get('output', {})
+                source_video_url = vid_output.get('video_url') or video_router_result.get('video_url')
+                if not source_video_url:
                     continue
-
-                source_video_url = video_result['video_url']
 
                 await asyncio.sleep(5)
 
@@ -1142,7 +1142,7 @@ class MaterialGenerator:
                     is_featured=True,
                     is_active=True,
                     sort_order=idx,
-                    source_service='goenhance'
+                    source_service='piapi'
                 )
                 session.add(showcase)
                 await session.commit()
@@ -1155,8 +1155,8 @@ class MaterialGenerator:
                 logger.error(f"Error generating video {example['title']}: {e}")
 
     async def _generate_avatar_materials(self, session: AsyncSession):
-        """Generate AI avatar examples with product/service ads using A2E.ai."""
-        logger.info("Generating avatar materials with A2E.ai...")
+        """Generate AI avatar examples with product/service ads using Gemini."""
+        logger.info("Generating avatar materials with Gemini...")
 
         await session.execute(
             delete(ToolShowcase).where(ToolShowcase.tool_category == 'avatar')
@@ -1165,12 +1165,13 @@ class MaterialGenerator:
 
         for idx, example in enumerate(AVATAR_EXAMPLES):
             try:
-                result = await self.avatar_service.generate_and_wait(
-                    image_url=example['avatar_url'],
-                    script=example['script'],
-                    language=example['language'],
-                    duration=30,
-                    timeout=300
+                result = await self.provider_router.route(
+                    TaskType.AVATAR,
+                    {
+                        "image_url": example['avatar_url'],
+                        "script": example['script'],
+                        "language": example['language'],
+                    }
                 )
 
                 if result.get('success'):
@@ -1189,7 +1190,7 @@ class MaterialGenerator:
                         is_featured=True,
                         is_active=True,
                         sort_order=idx,
-                        source_service='a2e'
+                        source_service='gemini'
                     )
                     session.add(showcase)
                     await session.commit()

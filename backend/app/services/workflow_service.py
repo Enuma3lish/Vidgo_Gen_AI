@@ -3,9 +3,9 @@ Unified Workflow Service for VidGo Platform
 
 Handles complete generation workflows following the Architecture pipeline:
 1. Text-to-Image (T2I): Wan AI → Image
-2. Image-to-Video (I2V): Image → Pollo AI → Video
-3. Video-to-Video (V2V): Video → GoEnhance → Styled Video
-4. Avatar Generation: Image + Script → A2E.ai → Avatar Video
+2. Image-to-Video (I2V): Image → PiAPI → Video
+3. Video-to-Video (V2V): Video → PiAPI → Styled Video
+4. Avatar Generation: Image + Script → Gemini → Avatar Video
 
 All results are stored in the Material DB with:
 - prompt: Main generation prompt
@@ -26,9 +26,7 @@ from sqlalchemy import select, and_
 from app.core.database import AsyncSessionLocal
 from app.core.config import settings
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
-from app.services.a2e_service import get_a2e_service, A2EAvatarService
 from app.services.rescue_service import get_rescue_service
-from app.services.pollo_ai import get_pollo_client, PolloAIClient
 from app.providers.provider_router import get_provider_router, TaskType
 
 logger = logging.getLogger(__name__)
@@ -151,16 +149,14 @@ class WorkflowService:
 
     Workflows:
     1. T2I: Text → Wan AI → Image
-    2. I2V: Text → Wan AI → Image → Pollo AI → Video
-    3. V2V: Text → Wan AI → Image → Pollo AI → Video → GoEnhance → Styled Video
-    4. Avatar: Script → A2E.ai → Avatar Video
+    2. I2V: Text → Wan AI → Image → PiAPI → Video
+    3. V2V: Text → Wan AI → Image → PiAPI → Video → PiAPI → Styled Video
+    4. Avatar: Script → Gemini → Avatar Video
     """
 
     def __init__(self):
         self.rescue_service = None
         self.provider_router = None
-        self.pollo: Optional[PolloAIClient] = None
-        self.a2e: Optional[A2EAvatarService] = None
         self._initialized = False
 
     def _init_services(self):
@@ -169,8 +165,6 @@ class WorkflowService:
             return
         self.rescue_service = get_rescue_service()
         self.provider_router = get_provider_router()
-        self.pollo = get_pollo_client()
-        self.a2e = get_a2e_service()
         self._initialized = True
 
     async def translate_prompt(self, prompt: str, target_lang: str = "en") -> str:
@@ -342,7 +336,7 @@ class WorkflowService:
         save_to_db: bool = True
     ) -> Dict[str, Any]:
         """
-        Image-to-Video workflow: Text → Wan AI → Image → Pollo AI → Video
+        Image-to-Video workflow: Text → Wan AI → Image → PiAPI → Video
 
         Args:
             prompt: Generation prompt for the image
@@ -371,22 +365,21 @@ class WorkflowService:
         prompt_en = image_result.get("prompt_en", prompt)
         prompt_zh = image_result.get("prompt_zh", prompt)
 
-        # Step 2: Convert to video
-        success, task_id, _ = await self.pollo.generate_video(
-            image_url=image_url,
-            prompt=prompt,
-            length=video_length
+        # Step 2: Convert to video via provider router (PiAPI primary, Gemini backup)
+        video_result = await self.provider_router.route(
+            TaskType.I2V,
+            {
+                "image_url": image_url,
+                "prompt": prompt,
+                "duration": video_length
+            }
         )
 
-        if not success:
-            return {"success": False, "error": task_id}
-
-        # Wait for video completion
-        video_result = await self.pollo.wait_for_completion(task_id, timeout=180)
-        if video_result.get("status") != "succeed":
+        if not video_result.get("success"):
             return {"success": False, "error": video_result.get("error", "Video generation failed")}
 
-        video_url = video_result.get("video_url")
+        output = video_result.get("output", {})
+        video_url = output.get("video_url") or video_result.get("video_url")
         if not video_url:
             return {"success": False, "error": "No video URL returned"}
 
@@ -427,7 +420,7 @@ class WorkflowService:
                         },
                         {
                             "step": 2,
-                            "api": "pollo",
+                            "api": "piapi",
                             "action": "image_to_video",
                             "length": video_length,
                             "result_url": video_url
@@ -552,14 +545,14 @@ class WorkflowService:
                         },
                         {
                             "step": 2,
-                            "api": "pollo",
+                            "api": "piapi",
                             "action": "image_to_video",
                             "length": video_length,
                             "result_url": source_video_url
                         },
                         {
                             "step": 3,
-                            "api": "goenhance",
+                            "api": "piapi",
                             "action": "video_to_video",
                             "style": style,
                             "model_id": style_config["model_id"],
@@ -597,7 +590,7 @@ class WorkflowService:
         save_to_db: bool = True
     ) -> Dict[str, Any]:
         """
-        Avatar generation workflow using A2E.ai.
+        Avatar generation workflow using Gemini via provider router.
 
         Args:
             script: Text script for avatar to speak
@@ -614,10 +607,6 @@ class WorkflowService:
 
         # Use default avatar if not provided
         if not image_url:
-            default_avatars = self.a2e.get_default_avatars(language)
-            image_url = default_avatars[0] if default_avatars else None
-
-        if not image_url:
             return {"success": False, "error": "No avatar image available"}
 
         # Translate script if needed
@@ -625,12 +614,14 @@ class WorkflowService:
         script_en = script if lang == "en" else await self.translate_prompt(script, "en")
         script_zh = script if lang == "zh-TW" else await self.translate_prompt(script, "zh-TW")
 
-        # Generate avatar video
-        result = await self.a2e.generate_and_wait(
-            image_url=image_url,
-            script=script,
-            language=language,
-            timeout=300
+        # Generate avatar video via provider router (Gemini)
+        result = await self.provider_router.route(
+            TaskType.AVATAR,
+            {
+                "image_url": image_url,
+                "script": script,
+                "language": language,
+            }
         )
 
         if not result.get("success"):
@@ -664,7 +655,7 @@ class WorkflowService:
                     status=MaterialStatus.APPROVED,
                     generation_steps=[{
                         "step": 1,
-                        "api": "a2e",
+                        "api": "gemini",
                         "action": "avatar_generation",
                         "language": language,
                         "image_url": image_url,

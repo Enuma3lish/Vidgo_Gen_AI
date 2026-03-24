@@ -39,44 +39,44 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="min-h-screen flex" style="background: #f7f8fa;">
+  <div class="min-h-screen flex" style="background: #09090b;">
     <!-- Left: Branding panel (hidden on mobile) -->
     <div class="hidden lg:flex lg:w-5/12 xl:w-1/2 flex-col justify-center px-12 xl:px-20 relative overflow-hidden"
-      style="background: linear-gradient(160deg, rgba(216,255,0,0.3) 0%, rgba(211,162,255,0.35) 100%), #ffffff;">
+      style="background: linear-gradient(160deg, rgba(22,119,255,0.15) 0%, rgba(114,46,209,0.15) 100%), #0f0f17;">
       <div class="relative z-10">
         <RouterLink to="/" class="inline-flex items-center gap-2 mb-12">
           <div class="w-9 h-9 rounded-lg flex items-center justify-center font-black text-white text-sm"
             style="background: linear-gradient(135deg, #1677ff, #0958d9);">V</div>
-          <span class="text-xl font-black" style="color: #1F1F1F;">VidGo <span style="color: #1677ff;">AI</span></span>
+          <span class="text-xl font-black" style="color: #f5f5fa;">VidGo <span style="color: #1677ff;">AI</span></span>
         </RouterLink>
 
-        <h2 class="text-3xl xl:text-4xl font-black mb-4 leading-tight" style="color: #1F1F1F;">
+        <h2 class="text-3xl xl:text-4xl font-black mb-4 leading-tight" style="color: #f5f5fa;">
           {{ t('auth.loginBrandingTitle') }}
         </h2>
-        <p class="text-base mb-10 leading-relaxed" style="color: rgba(0,0,0,0.55);">
+        <p class="text-base mb-10 leading-relaxed" style="color: #9494b0;">
           {{ t('auth.loginBrandingDesc') }}
         </p>
 
         <div class="space-y-4">
-          <div class="flex items-center gap-3 p-4 rounded-xl bg-white" style="border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+          <div class="flex items-center gap-3 p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
             <span class="text-2xl">🎬</span>
             <div>
-              <div class="font-semibold text-sm" style="color: #1F1F1F;">{{ t('auth.loginFeature1Name') }}</div>
-              <div class="text-xs" style="color: rgba(0,0,0,0.45);">{{ t('auth.loginFeature1Desc') }}</div>
+              <div class="font-semibold text-sm" style="color: #f5f5fa;">{{ t('auth.loginFeature1Name') }}</div>
+              <div class="text-xs" style="color: #6b6b8a;">{{ t('auth.loginFeature1Desc') }}</div>
             </div>
           </div>
-          <div class="flex items-center gap-3 p-4 rounded-xl bg-white" style="border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+          <div class="flex items-center gap-3 p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
             <span class="text-2xl">👗</span>
             <div>
-              <div class="font-semibold text-sm" style="color: #1F1F1F;">{{ t('auth.loginFeature2Name') }}</div>
-              <div class="text-xs" style="color: rgba(0,0,0,0.45);">{{ t('auth.loginFeature2Desc') }}</div>
+              <div class="font-semibold text-sm" style="color: #f5f5fa;">{{ t('auth.loginFeature2Name') }}</div>
+              <div class="text-xs" style="color: #6b6b8a;">{{ t('auth.loginFeature2Desc') }}</div>
             </div>
           </div>
-          <div class="flex items-center gap-3 p-4 rounded-xl bg-white" style="border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+          <div class="flex items-center gap-3 p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
             <span class="text-2xl">📸</span>
             <div>
-              <div class="font-semibold text-sm" style="color: #1F1F1F;">{{ t('auth.loginFeature3Name') }}</div>
-              <div class="text-xs" style="color: rgba(0,0,0,0.45);">{{ t('auth.loginFeature3Desc') }}</div>
+              <div class="font-semibold text-sm" style="color: #f5f5fa;">{{ t('auth.loginFeature3Name') }}</div>
+              <div class="text-xs" style="color: #6b6b8a;">{{ t('auth.loginFeature3Desc') }}</div>
             </div>
           </div>
         </div>
@@ -91,13 +91,13 @@ async function handleSubmit() {
           <RouterLink to="/" class="inline-flex items-center gap-2">
             <div class="w-9 h-9 rounded-lg flex items-center justify-center font-black text-white text-sm"
               style="background: linear-gradient(135deg, #1677ff, #0958d9);">V</div>
-            <span class="text-xl font-black" style="color: #1F1F1F;">VidGo <span style="color: #1677ff;">AI</span></span>
+            <span class="text-xl font-black" style="color: #f5f5fa;">VidGo <span style="color: #1677ff;">AI</span></span>
           </RouterLink>
         </div>
 
-        <div class="bg-white rounded-2xl p-8 md:p-10" style="box-shadow: 0 4px 24px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.06);">
-          <h1 class="text-2xl font-bold mb-1" style="color: #1F1F1F;">{{ t('auth.loginTitle') }}</h1>
-          <p class="text-sm mb-6" style="color: rgba(0,0,0,0.45);">{{ t('auth.loginSubtitle2') }}</p>
+        <div class="rounded-2xl p-8 md:p-10" style="background: #141420; box-shadow: 0 4px 24px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06);">
+          <h1 class="text-2xl font-bold mb-1" style="color: #f5f5fa;">{{ t('auth.loginTitle') }}</h1>
+          <p class="text-sm mb-6" style="color: #6b6b8a;">{{ t('auth.loginSubtitle2') }}</p>
 
           <!-- Free Credits Banner -->
           <div class="mb-6 p-3 rounded-lg flex items-center gap-3"
@@ -105,7 +105,7 @@ async function handleSubmit() {
             <span class="text-lg">🎁</span>
             <div>
               <div class="font-semibold text-sm" style="color: #1677ff;">{{ t('auth.freeCreditsTitle') }}</div>
-              <div class="text-xs" style="color: rgba(0,0,0,0.45);">{{ t('auth.freeCreditsDesc') }}</div>
+              <div class="text-xs" style="color: #6b6b8a;">{{ t('auth.freeCreditsDesc') }}</div>
             </div>
           </div>
 
@@ -118,28 +118,28 @@ async function handleSubmit() {
           <!-- Form -->
           <form @submit.prevent="handleSubmit" class="space-y-4">
             <div>
-              <label class="block text-sm font-medium mb-1.5" style="color: #1F1F1F;">{{ t('auth.email') }}</label>
+              <label class="block text-sm font-medium mb-1.5" style="color: #f5f5fa;">{{ t('auth.email') }}</label>
               <input v-model="email" type="email"
                 class="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all"
-                style="background: #ffffff; border: 1px solid rgba(0,0,0,0.15); color: #1F1F1F;"
+                style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
                 placeholder="you@example.com" autocomplete="email"
                 onfocus="this.style.borderColor='#1677ff';this.style.boxShadow='0 0 0 3px rgba(22,119,255,0.1)'"
-                onblur="this.style.borderColor='rgba(0,0,0,0.15)';this.style.boxShadow=''"/>
+                onblur="this.style.borderColor='rgba(255,255,255,0.08)';this.style.boxShadow=''"/>
             </div>
             <div>
               <div class="flex items-center justify-between mb-1.5">
-                <label class="block text-sm font-medium" style="color: #1F1F1F;">{{ t('auth.password') }}</label>
+                <label class="block text-sm font-medium" style="color: #f5f5fa;">{{ t('auth.password') }}</label>
                 <RouterLink to="/auth/forgot-password" class="text-xs transition-colors" style="color: #1677ff;">{{ t('auth.forgotPassword') }}</RouterLink>
               </div>
               <div class="relative">
                 <input v-model="password" :type="showPassword ? 'text' : 'password'"
                   class="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all pr-10"
-                  style="background: #ffffff; border: 1px solid rgba(0,0,0,0.15); color: #1F1F1F;"
+                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
                   placeholder="••••••••" autocomplete="current-password"
                   onfocus="this.style.borderColor='#1677ff';this.style.boxShadow='0 0 0 3px rgba(22,119,255,0.1)'"
-                  onblur="this.style.borderColor='rgba(0,0,0,0.15)';this.style.boxShadow=''"/>
+                  onblur="this.style.borderColor='rgba(255,255,255,0.08)';this.style.boxShadow=''"/>
                 <button type="button" @click="showPassword = !showPassword"
-                  class="absolute right-3 top-1/2 -translate-y-1/2 transition-colors" style="color: rgba(0,0,0,0.35);">
+                  class="absolute right-3 top-1/2 -translate-y-1/2 transition-colors" style="color: rgba(255,255,255,0.35);">
                   <svg v-if="!showPassword" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                   <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
                 </button>
@@ -157,9 +157,9 @@ async function handleSubmit() {
 
           <!-- Divider -->
           <div class="flex items-center gap-3 my-6">
-            <div class="flex-1 h-px" style="background: rgba(0,0,0,0.08);"></div>
-            <span class="text-xs" style="color: rgba(0,0,0,0.35);">{{ t('auth.noAccount') }}</span>
-            <div class="flex-1 h-px" style="background: rgba(0,0,0,0.08);"></div>
+            <div class="flex-1 h-px" style="background: rgba(255,255,255,0.06);"></div>
+            <span class="text-xs" style="color: rgba(255,255,255,0.35);">{{ t('auth.noAccount') }}</span>
+            <div class="flex-1 h-px" style="background: rgba(255,255,255,0.06);"></div>
           </div>
 
           <RouterLink to="/auth/register"

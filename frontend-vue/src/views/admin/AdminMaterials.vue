@@ -191,12 +191,12 @@ function getToolLabel(toolType: string | null): string {
 .page-header h1 {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f5fa;
   margin: 0;
 }
 
 .subtitle {
-  color: #666;
+  color: #9494b0;
   margin-top: 0.5rem;
 }
 
@@ -208,10 +208,10 @@ function getToolLabel(toolType: string | null): string {
 
 .filter-select {
   padding: 0.75rem 1rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   font-size: 1rem;
-  background: white;
+  background: #141420;
   min-width: 150px;
 }
 
@@ -222,15 +222,15 @@ function getToolLabel(toolType: string | null): string {
 }
 
 .material-card {
-  background: white;
+  background: #141420;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   overflow: hidden;
 }
 
 .material-preview {
   aspect-ratio: 4/3;
-  background: #f5f5f5;
+  background: #0f0f17;
   overflow: hidden;
 }
 
@@ -247,7 +247,7 @@ function getToolLabel(toolType: string | null): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #999;
+  color: #6b6b8a;
 }
 
 .material-info {
@@ -263,7 +263,7 @@ function getToolLabel(toolType: string | null): string {
 
 .tool-type {
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .status-badge {
@@ -274,23 +274,23 @@ function getToolLabel(toolType: string | null): string {
   text-transform: capitalize;
 }
 
-.status-badge.pending { background: #fff3e0; color: #f57c00; }
-.status-badge.approved { background: #e8f5e9; color: #388e3c; }
-.status-badge.rejected { background: #ffebee; color: #d32f2f; }
-.status-badge.featured { background: #e3f2fd; color: #1976d2; }
+.status-badge.pending { background: rgba(245,158,11,0.15); color: #f57c00; }
+.status-badge.approved { background: rgba(16,185,129,0.15); color: #388e3c; }
+.status-badge.rejected { background: rgba(244,67,54,0.15); color: #d32f2f; }
+.status-badge.featured { background: rgba(25,118,210,0.15); color: #1976d2; }
 
 .material-title {
   font-size: 1rem;
   font-weight: 600;
   margin: 0 0 0.5rem;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .material-meta {
   display: flex;
   gap: 1rem;
   font-size: 0.75rem;
-  color: #999;
+  color: #6b6b8a;
   margin-bottom: 1rem;
 }
 
@@ -315,24 +315,24 @@ function getToolLabel(toolType: string | null): string {
 }
 
 .btn.approve {
-  background: #e8f5e9;
+  background: rgba(16,185,129,0.15);
   color: #388e3c;
 }
 
 .btn.feature {
-  background: #e3f2fd;
+  background: rgba(25,118,210,0.15);
   color: #1976d2;
 }
 
 .btn.reject {
-  background: #ffebee;
+  background: rgba(244,67,54,0.15);
   color: #d32f2f;
 }
 
 .empty-state {
   text-align: center;
   padding: 4rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .pagination {
@@ -345,9 +345,9 @@ function getToolLabel(toolType: string | null): string {
 
 .page-btn {
   padding: 0.5rem 1rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
-  background: white;
+  background: #141420;
   cursor: pointer;
 }
 
@@ -357,7 +357,7 @@ function getToolLabel(toolType: string | null): string {
 }
 
 .page-info {
-  color: #666;
+  color: #9494b0;
 }
 
 .loading {
@@ -369,7 +369,7 @@ function getToolLabel(toolType: string | null): string {
 .spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid #f0f0f0;
+  border: 3px solid rgba(255,255,255,0.1);
   border-top-color: #667eea;
   border-radius: 50%;
   animation: spin 1s linear infinite;

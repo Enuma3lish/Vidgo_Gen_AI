@@ -225,6 +225,12 @@ const routes: RouteRecordRaw[] = [
     name: 'pricing',
     component: () => import('@/views/Pricing.vue')
   },
+  // Inspiration Gallery
+  {
+    path: '/gallery',
+    name: 'gallery',
+    component: () => import('@/views/InspirationGallery.vue')
+  },
   // Subscription payment result (Paddle redirects here)
   {
     path: '/subscription/success',

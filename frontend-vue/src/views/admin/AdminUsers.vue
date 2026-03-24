@@ -301,12 +301,12 @@ function getTotalCredits(user: any): number {
 .page-header h1 {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f5fa;
   margin: 0;
 }
 
 .subtitle {
-  color: #666;
+  color: #9494b0;
   margin-top: 0.5rem;
 }
 
@@ -321,23 +321,23 @@ function getTotalCredits(user: any): number {
   flex: 1;
   min-width: 200px;
   padding: 0.75rem 1rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   font-size: 1rem;
 }
 
 .filter-select {
   padding: 0.75rem 1rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   font-size: 1rem;
-  background: white;
+  background: #141420;
 }
 
 .table-container {
-  background: white;
+  background: #141420;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   overflow-x: auto;
 }
 
@@ -350,13 +350,13 @@ function getTotalCredits(user: any): number {
 .users-table td {
   padding: 1rem;
   text-align: left;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .users-table th {
-  background: #f9fafb;
+  background: #0f0f17;
   font-weight: 600;
-  color: #666;
+  color: #9494b0;
 }
 
 .email {
@@ -371,10 +371,10 @@ function getTotalCredits(user: any): number {
   text-transform: uppercase;
 }
 
-.plan-badge.demo { background: #f0f0f0; color: #666; }
-.plan-badge.basic { background: #e3f2fd; color: #1976d2; }
-.plan-badge.pro { background: #f3e5f5; color: #7b1fa2; }
-.plan-badge.enterprise { background: #fff3e0; color: #f57c00; }
+.plan-badge.demo { background: rgba(255,255,255,0.05); color: #9494b0; }
+.plan-badge.basic { background: rgba(25,118,210,0.15); color: #1976d2; }
+.plan-badge.pro { background: rgba(123,31,162,0.15); color: #7b1fa2; }
+.plan-badge.enterprise { background: rgba(245,158,11,0.15); color: #f57c00; }
 
 .status-badge {
   padding: 0.25rem 0.5rem;
@@ -382,8 +382,8 @@ function getTotalCredits(user: any): number {
   font-size: 0.75rem;
 }
 
-.status-badge.active { background: #e8f5e9; color: #388e3c; }
-.status-badge.inactive { background: #ffebee; color: #d32f2f; }
+.status-badge.active { background: rgba(16,185,129,0.15); color: #388e3c; }
+.status-badge.inactive { background: rgba(244,67,54,0.15); color: #d32f2f; }
 
 .actions {
   display: flex;
@@ -392,16 +392,16 @@ function getTotalCredits(user: any): number {
 
 .btn-icon {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 4px;
-  background: white;
+  background: #141420;
   cursor: pointer;
   font-size: 0.75rem;
   transition: all 0.2s;
 }
 
 .btn-icon:hover {
-  background: #f5f5f5;
+  background: #0f0f17;
 }
 
 .btn-icon.danger {
@@ -410,7 +410,7 @@ function getTotalCredits(user: any): number {
 }
 
 .btn-icon.danger:hover {
-  background: #ffebee;
+  background: rgba(244,67,54,0.15);
 }
 
 .pagination {
@@ -423,9 +423,9 @@ function getTotalCredits(user: any): number {
 
 .page-btn {
   padding: 0.5rem 1rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
-  background: white;
+  background: #141420;
   cursor: pointer;
 }
 
@@ -435,7 +435,7 @@ function getTotalCredits(user: any): number {
 }
 
 .page-info {
-  color: #666;
+  color: #9494b0;
 }
 
 .modal-overlay {
@@ -444,7 +444,7 @@ function getTotalCredits(user: any): number {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0,0,0,0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -452,7 +452,7 @@ function getTotalCredits(user: any): number {
 }
 
 .modal {
-  background: white;
+  background: #141420;
   border-radius: 12px;
   max-width: 600px;
   width: 90%;
@@ -469,7 +469,7 @@ function getTotalCredits(user: any): number {
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .modal-header h2 {
@@ -482,7 +482,7 @@ function getTotalCredits(user: any): number {
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #666;
+  color: #9494b0;
 }
 
 .modal-body {
@@ -498,7 +498,7 @@ function getTotalCredits(user: any): number {
 .detail-item label {
   display: block;
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
   margin-bottom: 0.25rem;
 }
 
@@ -522,7 +522,7 @@ function getTotalCredits(user: any): number {
 .modal-body h3 {
   font-size: 1rem;
   margin: 1.5rem 0 1rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .credits-breakdown {
@@ -532,7 +532,7 @@ function getTotalCredits(user: any): number {
 
 .credit-type {
   flex: 1;
-  background: #f5f5f5;
+  background: #0f0f17;
   padding: 1rem;
   border-radius: 8px;
   text-align: center;
@@ -541,7 +541,7 @@ function getTotalCredits(user: any): number {
 .credit-type span {
   display: block;
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .credit-type strong {
@@ -558,7 +558,7 @@ function getTotalCredits(user: any): number {
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .tx-amount {
@@ -572,12 +572,12 @@ function getTotalCredits(user: any): number {
 .tx-desc {
   flex: 1;
   font-size: 0.875rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .tx-date {
   font-size: 0.75rem;
-  color: #999;
+  color: #6b6b8a;
 }
 
 .form-group {
@@ -588,13 +588,13 @@ function getTotalCredits(user: any): number {
   display: block;
   font-size: 0.875rem;
   margin-bottom: 0.5rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .form-input {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   font-size: 1rem;
 }

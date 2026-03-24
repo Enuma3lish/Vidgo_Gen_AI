@@ -132,12 +132,12 @@ function getToolLabel(toolType: string | null): string {
 .page-header h1 {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f5fa;
   margin: 0;
 }
 
 .subtitle {
-  color: #666;
+  color: #9494b0;
   margin-top: 0.5rem;
 }
 
@@ -148,22 +148,22 @@ function getToolLabel(toolType: string | null): string {
 }
 
 .stat {
-  background: white;
+  background: #141420;
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .stat-value {
   display: block;
   font-size: 2rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .moderation-queue {
@@ -173,9 +173,9 @@ function getToolLabel(toolType: string | null): string {
 }
 
 .moderation-item {
-  background: white;
+  background: #141420;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   display: grid;
   grid-template-columns: 300px 1fr auto;
   overflow: hidden;
@@ -183,7 +183,7 @@ function getToolLabel(toolType: string | null): string {
 
 .item-preview {
   aspect-ratio: 4/3;
-  background: #f5f5f5;
+  background: #0f0f17;
   overflow: hidden;
 }
 
@@ -200,7 +200,7 @@ function getToolLabel(toolType: string | null): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #999;
+  color: #6b6b8a;
 }
 
 .item-details {
@@ -214,11 +214,11 @@ function getToolLabel(toolType: string | null): string {
 }
 
 .tool-badge {
-  background: #f0f0f0;
+  background: rgba(255,255,255,0.05);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .source-badge {
@@ -228,19 +228,19 @@ function getToolLabel(toolType: string | null): string {
   text-transform: capitalize;
 }
 
-.source-badge.user { background: #e3f2fd; color: #1976d2; }
-.source-badge.admin { background: #f3e5f5; color: #7b1fa2; }
-.source-badge.seed { background: #e8f5e9; color: #388e3c; }
+.source-badge.user { background: rgba(25,118,210,0.15); color: #1976d2; }
+.source-badge.admin { background: rgba(123,31,162,0.15); color: #7b1fa2; }
+.source-badge.seed { background: rgba(16,185,129,0.15); color: #388e3c; }
 
 .item-topic {
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0 0 1rem;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .item-prompt {
-  background: #f9f9f9;
+  background: #0f0f17;
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1rem;
@@ -249,20 +249,20 @@ function getToolLabel(toolType: string | null): string {
 .item-prompt strong {
   display: block;
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
   margin-bottom: 0.5rem;
 }
 
 .item-prompt p {
   margin: 0;
   font-size: 0.875rem;
-  color: #333;
+  color: #9494b0;
   line-height: 1.5;
 }
 
 .item-meta {
   font-size: 0.75rem;
-  color: #999;
+  color: #6b6b8a;
 }
 
 .item-actions {
@@ -270,8 +270,8 @@ function getToolLabel(toolType: string | null): string {
   flex-direction: column;
   gap: 0.5rem;
   padding: 1.5rem;
-  background: #f9f9f9;
-  border-left: 1px solid #f0f0f0;
+  background: #0f0f17;
+  border-left: 1px solid rgba(255,255,255,0.06);
 }
 
 .action-btn {
@@ -292,44 +292,44 @@ function getToolLabel(toolType: string | null): string {
 }
 
 .action-btn.approve {
-  background: #e8f5e9;
+  background: rgba(16,185,129,0.15);
   color: #388e3c;
 }
 
 .action-btn.approve:hover {
-  background: #c8e6c9;
+  background: rgba(16,185,129,0.25);
 }
 
 .action-btn.feature {
-  background: #fff3e0;
+  background: rgba(245,158,11,0.15);
   color: #f57c00;
 }
 
 .action-btn.feature:hover {
-  background: #ffe0b2;
+  background: rgba(245,158,11,0.25);
 }
 
 .action-btn.reject {
-  background: #ffebee;
+  background: rgba(244,67,54,0.15);
   color: #d32f2f;
 }
 
 .action-btn.reject:hover {
-  background: #ffcdd2;
+  background: rgba(244,67,54,0.25);
 }
 
 .empty-state {
   text-align: center;
   padding: 4rem;
-  background: white;
+  background: #141420;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .empty-icon {
   width: 80px;
   height: 80px;
-  background: #e8f5e9;
+  background: rgba(16,185,129,0.15);
   color: #388e3c;
   border-radius: 50%;
   display: flex;
@@ -341,11 +341,11 @@ function getToolLabel(toolType: string | null): string {
 
 .empty-state h2 {
   margin: 0 0 0.5rem;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .empty-state p {
-  color: #666;
+  color: #9494b0;
   margin: 0;
 }
 
@@ -358,7 +358,7 @@ function getToolLabel(toolType: string | null): string {
 .spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid #f0f0f0;
+  border: 3px solid rgba(255,255,255,0.1);
   border-top-color: #667eea;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -376,7 +376,7 @@ function getToolLabel(toolType: string | null): string {
   .item-actions {
     flex-direction: row;
     border-left: none;
-    border-top: 1px solid #f0f0f0;
+    border-top: 1px solid rgba(255,255,255,0.06);
   }
 }
 </style>

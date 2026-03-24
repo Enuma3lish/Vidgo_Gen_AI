@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-slate-900 text-slate-50 p-4 md:p-8">
+  <div class="min-h-screen text-slate-50 p-4 md:p-8 pt-24" style="background: #09090b;"
     <div class="max-w-4xl mx-auto space-y-8">
 
       <!-- Header -->

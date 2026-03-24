@@ -422,14 +422,14 @@ watch(selectedAvatarId, () => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 bg-white pb-20">
+  <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
     <LoadingOverlay :show="isProcessing" :message="t('tools.avatar.processing')" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
       <button
         @click="router.back()"
-        class="mb-6 flex items-center gap-2 text-dark-500 hover:text-dark-900 transition-colors"
+        class="mb-6 flex items-center gap-2 text-dark-300 hover:text-dark-50 transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -439,10 +439,10 @@ watch(selectedAvatarId, () => {
 
       <!-- Header -->
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-dark-900 mb-4">
+        <h1 class="text-4xl font-bold text-dark-50 mb-4">
           {{ t('tools.avatar.name') }}
         </h1>
-        <p class="text-xl text-dark-500">
+        <p class="text-xl text-dark-300">
           {{ t('tools.avatar.longDesc') }}
         </p>
 
@@ -459,7 +459,7 @@ watch(selectedAvatarId, () => {
         <div class="space-y-6">
           <!-- 1. Language & Script (present first so user chooses language and script) -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4">{{ isZh ? '選擇語言與腳本' : 'Choose Language & Script' }}</h3>
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ isZh ? '選擇語言與腳本' : 'Choose Language & Script' }}</h3>
             <!-- Language -->
             <div class="mb-6">
               <label class="label">{{ t('tools.avatar.language') }}</label>
@@ -471,7 +471,7 @@ watch(selectedAvatarId, () => {
                   class="flex-1 py-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2"
                   :class="selectedLanguage === lang.id
                     ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-gray-200 hover:border-dark-500'"
+                    : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
                 >
                   <span>{{ lang.flag }}</span>
                   <span>{{ lang.name }}</span>
@@ -481,7 +481,7 @@ watch(selectedAvatarId, () => {
             <!-- Script Selection -->
             <div>
               <label class="label">{{ t('tools.avatar.script') }}</label>
-              <p class="text-sm text-dark-500 mb-2">{{ isZh ? '選擇預設腳本' : 'Select Script' }}</p>
+              <p class="text-sm text-dark-300 mb-2">{{ isZh ? '選擇預設腳本' : 'Select Script' }}</p>
               <div class="space-y-2 max-h-48 overflow-y-auto">
                 <button
                   v-for="scriptItem in defaultScripts"
@@ -490,31 +490,31 @@ watch(selectedAvatarId, () => {
                   class="w-full text-left p-3 rounded-lg border-2 transition-all text-sm"
                   :class="selectedDefaultScriptId === scriptItem.id
                     ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-gray-200 hover:border-dark-500'"
+                    : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
                 >
-                  <span class="inline-block px-2 py-0.5 text-xs bg-dark-600 text-dark-500 rounded mb-1">
+                  <span class="inline-block px-2 py-0.5 text-xs bg-dark-600 text-dark-300 rounded mb-1">
                     {{ isZh ? scriptItem.category_zh : scriptItem.category }}
                   </span>
-                  <p class="text-dark-600">
+                  <p class="text-dark-200">
                     {{ (isZh ? scriptItem.text_zh : scriptItem.text_en).slice(0, 60) }}...
                   </p>
                 </button>
               </div>
             </div>
             <!-- Show selected script -->
-            <div v-if="script" class="mt-4 p-3 bg-gray-100 rounded-lg">
-              <p class="text-sm text-dark-600">{{ script }}</p>
+            <div v-if="script" class="mt-4 p-3 rounded-lg" style="background: #141420;">
+              <p class="text-sm text-dark-200">{{ script }}</p>
             </div>
             <p class="text-xs text-dark-400 mt-2">{{ t('tools.avatar.maxSpeech') }}</p>
           </div>
 
           <!-- 2. Avatar Selection -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4">{{ t('tools.avatar.avatarPhoto') }}</h3>
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ t('tools.avatar.avatarPhoto') }}</h3>
 
             <!-- Female Avatars (Asian/Chinese) -->
             <div class="mb-4">
-              <p class="text-sm text-dark-500 mb-2">{{ isZh ? '女性頭像' : 'Female Avatars' }}</p>
+              <p class="text-sm text-dark-300 mb-2">{{ isZh ? '女性頭像' : 'Female Avatars' }}</p>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
                   v-for="avatar in femaleAvatars"
@@ -523,7 +523,7 @@ watch(selectedAvatarId, () => {
                   class="relative aspect-square rounded-xl overflow-hidden border-2 transition-all"
                   :class="selectedAvatarId === avatar.id
                     ? 'border-primary-500 ring-2 ring-primary-500/50'
-                    : 'border-gray-200 hover:border-dark-500'"
+                    : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
                 >
                   <!-- Always show static Asian/Chinese avatar photo (no video overlay) -->
                   <img
@@ -533,7 +533,7 @@ watch(selectedAvatarId, () => {
                     loading="lazy"
                   />
                   <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                    <p class="text-xs text-dark-900 text-center">{{ isZh ? avatar.name_zh : avatar.name_en }}</p>
+                    <p class="text-xs text-dark-50 text-center">{{ isZh ? avatar.name_zh : avatar.name_en }}</p>
                   </div>
                 </button>
               </div>
@@ -541,7 +541,7 @@ watch(selectedAvatarId, () => {
 
             <!-- Male Avatars -->
             <div class="mb-4">
-              <p class="text-sm text-dark-500 mb-2">{{ isZh ? '男性頭像' : 'Male Avatars' }}</p>
+              <p class="text-sm text-dark-300 mb-2">{{ isZh ? '男性頭像' : 'Male Avatars' }}</p>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
                   v-for="avatar in maleAvatars"
@@ -550,7 +550,7 @@ watch(selectedAvatarId, () => {
                   class="relative aspect-square rounded-xl overflow-hidden border-2 transition-all"
                   :class="selectedAvatarId === avatar.id
                     ? 'border-primary-500 ring-2 ring-primary-500/50'
-                    : 'border-gray-200 hover:border-dark-500'"
+                    : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
                 >
                   <!-- Always show static Asian/Chinese avatar photo (no video overlay) -->
                   <img
@@ -560,7 +560,7 @@ watch(selectedAvatarId, () => {
                     loading="lazy"
                   />
                   <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                    <p class="text-xs text-dark-900 text-center">{{ isZh ? avatar.name_zh : avatar.name_en }}</p>
+                    <p class="text-xs text-dark-50 text-center">{{ isZh ? avatar.name_zh : avatar.name_en }}</p>
                   </div>
                 </button>
               </div>
@@ -568,7 +568,7 @@ watch(selectedAvatarId, () => {
 
             <!-- Subscriber Interface: Upload Zone -->
             <div v-if="!isDemoUser" class="mb-6">
-               <h4 class="text-sm font-medium text-dark-500 mb-2">{{ isZh ? '上傳頭像 (正面人臉)' : 'Upload Portrait (Front-facing)' }}</h4>
+               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳頭像 (正面人臉)' : 'Upload Portrait (Front-facing)' }}</h4>
                <ImageUploader 
                  v-model="uploadedImage" 
                  :label="isZh ? '點擊上傳或拖放頭像照片' : 'Drop portrait photo here'"
@@ -582,13 +582,13 @@ watch(selectedAvatarId, () => {
 
           <!-- Custom Script Textarea (subscribers only) -->
           <div v-if="!isDemoUser" class="card">
-            <label class="block text-sm font-medium text-dark-500 mb-2">
+            <label class="block text-sm font-medium text-dark-300 mb-2">
               {{ isZh ? '自訂腳本' : 'Custom Script' }}
             </label>
             <textarea
               v-model="script"
               rows="4"
-              class="w-full bg-dark-900 border border-gray-200 rounded-lg p-3 text-dark-900 focus:outline-none focus:border-primary-500"
+              class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
               :placeholder="isZh ? '輸入您的腳本內容 (建議 100 字以內)...' : 'Enter your script here (max 100 words)...'"
               maxlength="500"
               @input="selectedDefaultScriptId = null"
@@ -600,7 +600,7 @@ watch(selectedAvatarId, () => {
 
           <!-- 3. Generate (voice is fixed per avatar – no user choice) -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4">{{ isZh ? '產生影片' : 'Generate' }}</h3>
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ isZh ? '產生影片' : 'Generate' }}</h3>
             <p class="text-xs text-dark-400 mb-4">
               {{ isZh ? '每位頭像已固定對應專屬聲音，只需選擇頭像與腳本即可。' : 'Each avatar has a fixed voice. Just pick an avatar and a script.' }}
             </p>
@@ -620,7 +620,7 @@ watch(selectedAvatarId, () => {
 
         <!-- Right Panel - Result -->
         <div class="card h-fit sticky top-24">
-          <h3 class="text-lg font-semibold text-dark-900 mb-4">{{ t('tools.avatar.generatedVideo') }}</h3>
+          <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ t('tools.avatar.generatedVideo') }}</h3>
 
           <div v-if="resultVideo" class="space-y-4">
             <video
@@ -651,7 +651,7 @@ watch(selectedAvatarId, () => {
             </div>
           </div>
 
-          <div v-else class="aspect-[9/16] max-h-96 flex items-center justify-center bg-gray-100 rounded-xl text-dark-400">
+          <div v-else class="aspect-[9/16] max-h-96 flex items-center justify-center rounded-xl text-dark-400" style="background: #141420;">
             <div class="text-center">
               <span class="text-5xl block mb-4">🎭</span>
               <p>{{ t('tools.avatar.videoPlaceholder') }}</p>

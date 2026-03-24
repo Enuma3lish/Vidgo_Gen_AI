@@ -237,44 +237,44 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #f7f8fa;">
+  <div class="min-h-screen pt-24 pb-20" style="background: #09090b;">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold mb-4" style="color: #1F1F1F;">{{ t('pricing.title') }}</h1>
-        <p class="text-xl" style="color: rgba(0,0,0,0.55);">{{ t('pricing.subtitle') }}</p>
+        <h1 class="text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ t('pricing.title') }}</h1>
+        <p class="text-xl" style="color: #9494b0;">{{ t('pricing.subtitle') }}</p>
 
         <!-- Billing Toggle -->
-        <div class="mt-8 inline-flex items-center rounded-lg p-1" style="background: #ffffff; border: 1px solid rgba(0,0,0,0.1); box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+        <div class="mt-8 inline-flex items-center rounded-lg p-1" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
           <button
             @click="billingPeriod = 'monthly'"
             class="px-6 py-2 rounded-md text-sm font-medium transition-all"
-            :style="billingPeriod === 'monthly' ? 'background: #1677ff; color: white;' : 'color: rgba(0,0,0,0.55);'"
+            :style="billingPeriod === 'monthly' ? 'background: #1677ff; color: white;' : 'color: #9494b0;'"
           >
             {{ t('pricing.monthly') }}
           </button>
           <button
             @click="billingPeriod = 'yearly'"
             class="px-6 py-2 rounded-md text-sm font-medium transition-all"
-            :style="billingPeriod === 'yearly' ? 'background: #1677ff; color: white;' : 'color: rgba(0,0,0,0.55);'"
+            :style="billingPeriod === 'yearly' ? 'background: #1677ff; color: white;' : 'color: #9494b0;'"
           >
             {{ t('pricing.yearly') }}
-            <span class="ml-1" style="color: #52c41a;">-20%</span>
+            <span class="ml-1" style="color: #10b981;">-20%</span>
           </button>
         </div>
       </div>
 
       <!-- Current Subscription Status -->
       <div v-if="isLoggedIn && subscriptionStatus?.has_subscription" class="mb-8">
-        <div class="p-4 rounded-xl bg-white" style="border: 1px solid rgba(22,119,255,0.2); box-shadow: 0 2px 8px rgba(22,119,255,0.08);">
+        <div class="p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(22,119,255,0.2);">
           <div class="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h3 class="text-lg font-semibold" style="color: #1F1F1F;">
+              <h3 class="text-lg font-semibold" style="color: #f5f5fa;">
                 {{ t('pricing.currentPlan') }}: {{ subscriptionStatus.plan?.display_name || subscriptionStatus.plan?.name }}
               </h3>
-              <p class="text-sm" style="color: rgba(0,0,0,0.45);">
+              <p class="text-sm" style="color: #6b6b8a;">
                 {{ t('pricing.status') }}:
-                <span :style="subscriptionStatus.status === 'active' ? 'color: #52c41a;' : 'color: #faad14;'">
+                <span :style="subscriptionStatus.status === 'active' ? 'color: #10b981;' : 'color: #f59e0b;'">
                   {{ subscriptionStatus.status }}
                 </span>
                 <span v-if="subscriptionStatus.end_date" class="ml-2">
@@ -298,7 +298,7 @@ onMounted(async () => {
                 @click="askCancel(false)"
                 :disabled="cancelling"
                 class="px-4 py-2 rounded-lg transition-colors disabled:opacity-50 text-sm font-medium"
-                style="background: rgba(0,0,0,0.04); color: rgba(0,0,0,0.65); border: 1px solid rgba(0,0,0,0.1);"
+                style="background: rgba(255,255,255,0.04); color: #9494b0; border: 1px solid rgba(255,255,255,0.1);"
               >
                 {{ cancelling ? t('pricing.processing') : t('pricing.cancelSubscription') }}
               </button>
@@ -321,10 +321,10 @@ onMounted(async () => {
       />
 
       <!-- Success/Error Messages -->
-      <div v-if="successMessage" class="mb-6 p-4 rounded-lg text-center text-sm font-medium" style="background: rgba(82,196,26,0.08); border: 1px solid rgba(82,196,26,0.2); color: #52c41a;">
+      <div v-if="successMessage" class="mb-6 p-4 rounded-lg text-center text-sm font-medium" style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); color: #10b981;">
         {{ successMessage }}
       </div>
-      <div v-if="error" class="mb-6 p-4 rounded-lg text-center text-sm font-medium" style="background: rgba(255,77,79,0.08); border: 1px solid rgba(255,77,79,0.2); color: #ff4d4f;">
+      <div v-if="error" class="mb-6 p-4 rounded-lg text-center text-sm font-medium" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #ef4444;">
         {{ error }}
       </div>
 
@@ -338,12 +338,12 @@ onMounted(async () => {
         <div
           v-for="plan in plans"
           :key="plan.id"
-          class="relative rounded-xl p-6 bg-white transition-all duration-300 hover:-translate-y-1"
+          class="relative rounded-xl p-6 transition-all duration-300 hover:-translate-y-1"
           :style="isPlanPopular(plan.name)
-            ? 'border: 2px solid #1677ff; box-shadow: 0 8px 24px rgba(22,119,255,0.12);'
+            ? 'background: #141420; border: 2px solid #1677ff; box-shadow: 0 0 40px rgba(22,119,255,0.15);'
             : isCurrentPlan(plan.id)
-              ? 'border: 2px solid #52c41a; box-shadow: 0 4px 16px rgba(82,196,26,0.12);'
-              : 'border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 2px 8px rgba(0,0,0,0.04);'"
+              ? 'background: #141420; border: 2px solid #10b981; box-shadow: 0 0 24px rgba(16,185,129,0.12);'
+              : 'background: #141420; border: 1px solid rgba(255,255,255,0.06);'"
         >
           <!-- Popular Badge -->
           <span
@@ -364,22 +364,22 @@ onMounted(async () => {
           </span>
 
           <!-- Plan Name -->
-          <h3 class="text-xl font-semibold mb-4" style="color: #1F1F1F;">
+          <h3 class="text-xl font-semibold mb-4" style="color: #f5f5fa;">
             {{ plan.display_name || t(`pricing.${getPlanDisplayKey(plan.name)}`) }}
           </h3>
 
           <!-- Price -->
           <div class="mb-6">
-            <span class="text-4xl font-bold" style="color: #1F1F1F;">
+            <span class="text-4xl font-bold" style="color: #f5f5fa;">
               NT${{ getPrice(plan) }}
             </span>
-            <span style="color: rgba(0,0,0,0.45);">
+            <span style="color: #6b6b8a;">
               /{{ billingPeriod === 'monthly' ? 'mo' : 'yr' }}
             </span>
           </div>
 
           <!-- Credits -->
-          <p class="mb-6 text-sm" style="color: rgba(0,0,0,0.55);">
+          <p class="mb-6 text-sm" style="color: #9494b0;">
             {{ plan.monthly_credits === -1 ? "無限制" : plan.monthly_credits }} 點數/月
           </p>
 
@@ -436,31 +436,31 @@ onMounted(async () => {
 
           <!-- Features -->
           <ul class="space-y-3">
-            <li class="flex items-start gap-2 text-sm" style="color: rgba(0,0,0,0.65);">
+            <li class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
               {{ plan.monthly_credits }} credits/month
             </li>
-            <li v-if="plan.features.max_resolution" class="flex items-start gap-2 text-sm" style="color: rgba(0,0,0,0.65);">
+            <li v-if="plan.features.max_resolution" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
               {{ plan.features.max_resolution }} quality
             </li>
-            <li v-if="plan.features.priority_queue" class="flex items-start gap-2 text-sm" style="color: rgba(0,0,0,0.65);">
+            <li v-if="plan.features.priority_queue" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
               Priority queue
             </li>
-            <li v-if="plan.features.api_access" class="flex items-start gap-2 text-sm" style="color: rgba(0,0,0,0.65);">
+            <li v-if="plan.features.api_access" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
               API access
             </li>
-            <li v-if="plan.features.batch_processing" class="flex items-start gap-2 text-sm" style="color: rgba(0,0,0,0.65);">
+            <li v-if="plan.features.batch_processing" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
               Batch processing
             </li>
-            <li v-if="!plan.features.has_watermark" class="flex items-start gap-2 text-sm" style="color: rgba(0,0,0,0.65);">
+            <li v-if="!plan.features.has_watermark" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
               No watermark
             </li>
-            <li v-if="plan.features.has_watermark" class="flex items-start gap-2 text-sm" style="color: rgba(0,0,0,0.45);">
+            <li v-if="plan.features.has_watermark" class="flex items-start gap-2 text-sm" style="color: #6b6b8a;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #faad14;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               With watermark
             </li>
@@ -470,23 +470,23 @@ onMounted(async () => {
 
       <!-- FAQ Section -->
       <div class="mt-20 max-w-3xl mx-auto">
-        <h2 class="text-2xl font-bold text-center mb-8" style="color: #1F1F1F;">{{ t('pricing.faq.title') }}</h2>
+        <h2 class="text-2xl font-bold text-center mb-8" style="color: #f5f5fa;">{{ t('pricing.faq.title') }}</h2>
         <div class="space-y-3">
-          <div class="rounded-xl p-6 bg-white" style="border: 1px solid rgba(0,0,0,0.08);">
-            <h3 class="text-base font-semibold mb-2" style="color: #1F1F1F;">{{ t('pricing.faq.credits.q') }}</h3>
-            <p class="text-sm" style="color: rgba(0,0,0,0.55);">{{ t('pricing.faq.credits.a') }}</p>
+          <div class="rounded-xl p-6" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-base font-semibold mb-2" style="color: #e8e8f0;">{{ t('pricing.faq.credits.q') }}</h3>
+            <p class="text-sm" style="color: #9494b0;">{{ t('pricing.faq.credits.a') }}</p>
           </div>
-          <div class="rounded-xl p-6 bg-white" style="border: 1px solid rgba(0,0,0,0.08);">
-            <h3 class="text-base font-semibold mb-2" style="color: #1F1F1F;">{{ t('pricing.faq.rollover.q') }}</h3>
-            <p class="text-sm" style="color: rgba(0,0,0,0.55);">{{ t('pricing.faq.rollover.a') }}</p>
+          <div class="rounded-xl p-6" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-base font-semibold mb-2" style="color: #e8e8f0;">{{ t('pricing.faq.rollover.q') }}</h3>
+            <p class="text-sm" style="color: #9494b0;">{{ t('pricing.faq.rollover.a') }}</p>
           </div>
-          <div class="rounded-xl p-6 bg-white" style="border: 1px solid rgba(0,0,0,0.08);">
-            <h3 class="text-base font-semibold mb-2" style="color: #1F1F1F;">{{ t('pricing.faq.change.q') }}</h3>
-            <p class="text-sm" style="color: rgba(0,0,0,0.55);">{{ t('pricing.faq.change.a') }}</p>
+          <div class="rounded-xl p-6" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-base font-semibold mb-2" style="color: #e8e8f0;">{{ t('pricing.faq.change.q') }}</h3>
+            <p class="text-sm" style="color: #9494b0;">{{ t('pricing.faq.change.a') }}</p>
           </div>
-          <div class="rounded-xl p-6 bg-white" style="border: 1px solid rgba(0,0,0,0.08);">
-            <h3 class="text-base font-semibold mb-2" style="color: #1F1F1F;">{{ t('pricing.faq.refund.q') }}</h3>
-            <p class="text-sm" style="color: rgba(0,0,0,0.55);">{{ t('pricing.faq.refund.a') }}</p>
+          <div class="rounded-xl p-6" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-base font-semibold mb-2" style="color: #e8e8f0;">{{ t('pricing.faq.refund.q') }}</h3>
+            <p class="text-sm" style="color: #9494b0;">{{ t('pricing.faq.refund.a') }}</p>
           </div>
         </div>
       </div>

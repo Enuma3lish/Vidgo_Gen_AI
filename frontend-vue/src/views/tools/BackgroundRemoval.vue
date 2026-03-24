@@ -204,14 +204,14 @@ function dataURItoBlob(dataURI: string): Blob {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 bg-white pb-20">
+  <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
     <LoadingOverlay :show="isProcessing" :message="t('common.processing')" />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
       <button
         @click="router.back()"
-        class="mb-6 flex items-center gap-2 text-dark-500 hover:text-dark-900 transition-colors"
+        class="mb-6 flex items-center gap-2 text-dark-300 hover:text-dark-50 transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -221,10 +221,10 @@ function dataURItoBlob(dataURI: string): Blob {
 
       <!-- Header -->
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-dark-900 mb-4">
+        <h1 class="text-4xl font-bold text-dark-50 mb-4">
           {{ t('tools.backgroundRemoval.name') }}
         </h1>
-        <p class="text-xl text-dark-500">
+        <p class="text-xl text-dark-300">
           {{ t('tools.backgroundRemoval.longDesc') }}
         </p>
 
@@ -236,10 +236,10 @@ function dataURItoBlob(dataURI: string): Blob {
         </div>
 
         <!-- DB Empty: Show try prompts -->
-        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-6 p-4 rounded-xl bg-gray-100/50 border border-gray-200">
-          <p class="text-sm text-dark-600 mb-2">{{ isZh ? '可試玩提示詞（資料庫尚無預生成）' : 'Try prompts (no pre-generated results yet)' }}</p>
+        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-6 p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+          <p class="text-sm text-dark-200 mb-2">{{ isZh ? '可試玩提示詞（資料庫尚無預生成）' : 'Try prompts (no pre-generated results yet)' }}</p>
           <div class="flex flex-wrap gap-2">
-            <span v-for="p in tryPrompts.slice(0, 5)" :key="p.id" class="px-2 py-1 rounded text-xs bg-dark-800 text-dark-600">{{ p.prompt }}</span>
+            <span v-for="p in tryPrompts.slice(0, 5)" :key="p.id" class="px-2 py-1 rounded text-xs bg-dark-800 text-dark-200">{{ p.prompt }}</span>
           </div>
         </div>
       </div>
@@ -248,7 +248,7 @@ function dataURItoBlob(dataURI: string): Blob {
       <div class="space-y-8">
         <!-- Example Selection (Demo Users) -->
         <div v-if="isDemoUser || effectiveDemoImages.length > 0" class="card">
-          <h3 class="text-lg font-semibold text-dark-900 mb-4">
+          <h3 class="text-lg font-semibold text-dark-50 mb-4">
             {{ isZh ? '選擇範例圖片' : 'Select Example Image' }}
           </h3>
           <div v-if="isLoadingTemplates" class="flex justify-center py-8">
@@ -266,7 +266,7 @@ function dataURItoBlob(dataURI: string): Blob {
               class="aspect-square rounded-lg overflow-hidden border-2 transition-all"
               :class="selectedDemoIndex === idx && uploadedImage === example.input
                 ? 'border-primary-500 ring-2 ring-primary-500/50'
-                : 'border-gray-200 hover:border-dark-500'"
+                : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
             >
               <img
                 :src="example.input"
@@ -279,7 +279,7 @@ function dataURItoBlob(dataURI: string): Blob {
 
         <!-- Custom Upload (Paid Users) -->
         <div v-if="!isDemoUser" class="card mt-4">
-          <h3 class="text-lg font-semibold text-dark-900 mb-4">
+          <h3 class="text-lg font-semibold text-dark-50 mb-4">
             {{ isZh ? '上傳圖片' : 'Upload Image' }}
           </h3>
           <ImageUploader 
@@ -292,20 +292,20 @@ function dataURItoBlob(dataURI: string): Blob {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
           <!-- Input -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">
               {{ isZh ? '原始圖片' : 'Original Image' }}
             </h3>
             <div v-if="uploadedImage" class="rounded-xl overflow-hidden">
               <img :src="uploadedImage" alt="Original" class="w-full" />
             </div>
-            <div v-else class="h-64 flex items-center justify-center bg-gray-100 rounded-xl">
+            <div v-else class="h-64 flex items-center justify-center rounded-xl" style="background: #141420;">
               <span class="text-dark-400">{{ isZh ? '請選擇圖片' : 'Select an image' }}</span>
             </div>
           </div>
 
           <!-- Result -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">
               {{ isZh ? '去背結果' : 'Result' }}
             </h3>
             <div v-if="resultImage" class="space-y-4">
@@ -334,14 +334,14 @@ function dataURItoBlob(dataURI: string): Blob {
                 {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
               </RouterLink>
             </div>
-            <div v-else class="h-64 flex items-center justify-center bg-gray-100 rounded-xl">
+            <div v-else class="h-64 flex items-center justify-center rounded-xl" style="background: #141420;">
               <span class="text-dark-400">{{ isZh ? '點擊下方按鈕去除背景' : 'Click button below to remove background' }}</span>
             </div>
           </div>
         </div>
 
         <!-- Remove Button and Credit Cost -->
-        <div class="flex flex-col items-center gap-4 mt-6 border-t border-gray-200 pt-6">
+        <div class="flex flex-col items-center gap-4 mt-6 pt-6" style="border-top: 1px solid rgba(255,255,255,0.06);">
           <CreditCost service="background_removal" />
           <button
             @click="removeBackground"

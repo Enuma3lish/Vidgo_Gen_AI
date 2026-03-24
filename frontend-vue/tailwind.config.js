@@ -1,46 +1,41 @@
 /** @type {import("tailwindcss").Config} */
 const colors = {
-  // Primary: Electric Cyan / Tech Blue
+  // Primary: Blue (PicCopilot accent on dark bg)
   primary: {
-    50:  "#e0f8ff",
-    100: "#b3eeff",
-    200: "#80e2ff",
-    300: "#4dd4f5",
-    400: "#22c8f0",
-    500: "#00b8e6",   // Main brand cyan
-    600: "#0099cc",
-    700: "#0077a8",
-    800: "#005580",
-    900: "#003350",
+    50:  "#eff6ff",
+    100: "#dbeafe",
+    200: "#bfdbfe",
+    300: "#93c5fd",
+    400: "#60a5fa",
+    500: "#1677ff",   // Main brand blue
+    600: "#0958d9",
+    700: "#1d4ed8",
+    800: "#1e40af",
+    900: "#1e3a8a",
   },
-  // Light tones
-  light: {
-    50:  "#ffffff",
-    100: "#f0f8ff",
-    200: "#e0f0ff",
-    300: "#c8e4f8",
-    400: "#a8ccec",
-    500: "#88b4e0",
-  },
-  // Dark backgrounds (deep navy/charcoal)
+  // Dark theme palette
   dark: {
-    950: "#f7f8fa",   // Light page bg
-    900: "#1F1F1F",   // Primary text
-    800: "#ffffff",   // White card bg
-    700: "#f0f2f5",   // Light gray bg
-    600: "#d9d9d9",   // Border light
-    500: "#595959",   // Secondary text
-    400: "#8c8c8c",   // Muted text
-    300: "#bfbfbf",   // Disabled text
-    200: "#e8e8e8",   // Light border
-    100: "#f5f5f5",   // Very light bg
+    950: "#09090b",   // Deepest bg
+    900: "#0a0a0f",   // Page bg
+    850: "#0f0f17",   // Section bg alt
+    800: "#141420",   // Card bg
+    750: "#18182a",   // Card bg hover
+    700: "#1e1e32",   // Elevated surface
+    600: "#2a2a42",   // Border
+    500: "#3a3a55",   // Subtle border
+    400: "#6b6b8a",   // Muted text
+    300: "#9494b0",   // Secondary text
+    200: "#c4c4d8",   // Primary text
+    100: "#e8e8f0",   // Bright text
+    50:  "#f5f5fa",   // Headings
   },
   accent: {
     cyan:          "#00d4f5",
     "cyan-light":  "#b3f0ff",
-    "cyan-bg":     "#e0f8ff",
-    blue:          "#3b82f6",
-    "blue-light":  "#93c5fd",
+    "cyan-bg":     "rgba(0,212,245,0.08)",
+    blue:          "#1677ff",
+    "blue-light":  "#69b1ff",
+    "blue-bg":     "rgba(22,119,255,0.12)",
     indigo:        "#6366f1",
     purple:        "#a855f7",
     "purple-light":"#d8b4fe",
@@ -54,17 +49,11 @@ const colors = {
     pink:          "#ec4899",
   },
   card: {
-    navy:   "#0f1f3d",
-    blue:   "#162447",
-    cyan:   "#0c2a3a",
-    purple: "#1a1040",
-    teal:   "#0c2a2a",
-    dark:   "#ffffff",
-    white:  "#ffffff",
-    // Legacy aliases
-    yellow: "#0f1f3d",
-    orange: "#162447",
-    pink:   "#1a1040",
+    dark:   "#141420",
+    darker: "#0f0f17",
+    navy:   "#0f1830",
+    blue:   "#101828",
+    purple: "#14102a",
   }
 }
 
@@ -94,6 +83,7 @@ export default {
         "float": "float 6s ease-in-out infinite",
         "marquee": "marquee 30s linear infinite",
         "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "shimmer": "shimmer 2s linear infinite",
       },
       keyframes: {
         fadeIn: {
@@ -112,23 +102,29 @@ export default {
           "0%": { transform: "translateX(0%)" },
           "100%": { transform: "translateX(-50%)" },
         },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
       },
       boxShadow: {
-        "card":       "0 4px 20px rgba(0,0,0,0.4)",
-        "card-hover": "0 8px 40px rgba(0,184,230,0.25)",
-        "btn":        "0 4px 15px rgba(0,184,230,0.35)",
-        "glow-sm":    "0 0 15px rgba(0,184,230,0.4)",
-        "glow":       "0 0 30px rgba(0,184,230,0.5)",
-        "glow-lg":    "0 0 60px rgba(0,184,230,0.4)",
-        "inner-glow": "inset 0 0 20px rgba(0,184,230,0.1)",
+        "card":       "0 4px 24px rgba(0,0,0,0.4)",
+        "card-hover": "0 8px 40px rgba(22,119,255,0.2)",
+        "btn":        "0 4px 15px rgba(22,119,255,0.35)",
+        "glow-sm":    "0 0 15px rgba(22,119,255,0.3)",
+        "glow":       "0 0 30px rgba(22,119,255,0.4)",
+        "glow-lg":    "0 0 60px rgba(22,119,255,0.3)",
+        "inner-glow": "inset 0 0 20px rgba(22,119,255,0.08)",
+        "dark-lg":    "0 8px 32px rgba(0,0,0,0.6)",
+        "dark-xl":    "0 16px 48px rgba(0,0,0,0.7)",
       },
       backgroundImage: {
-        "tech-grid":     "linear-gradient(rgba(0,184,230,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,184,230,0.06) 1px, transparent 1px)",
-        "hero-gradient": "linear-gradient(135deg, #020817 0%, #0a1628 40%, #0f1f3d 70%, #162447 100%)",
-        "card-gradient": "linear-gradient(135deg, #0f1f3d 0%, #162447 100%)",
-        "cyan-gradient": "linear-gradient(135deg, #00b8e6 0%, #0077a8 100%)",
-        "blue-gradient": "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
-        "glow-gradient": "radial-gradient(ellipse at center, rgba(0,184,230,0.15) 0%, transparent 70%)",
+        "hero-gradient":   "linear-gradient(135deg, #09090b 0%, #0a0a1a 40%, #0f1830 70%, #141420 100%)",
+        "card-gradient":   "linear-gradient(135deg, #141420 0%, #18182a 100%)",
+        "blue-gradient":   "linear-gradient(135deg, #1677ff 0%, #0958d9 100%)",
+        "purple-gradient": "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+        "glow-gradient":   "radial-gradient(ellipse at center, rgba(22,119,255,0.12) 0%, transparent 70%)",
+        "mesh-gradient":   "radial-gradient(at 40% 20%, rgba(22,119,255,0.08) 0px, transparent 50%), radial-gradient(at 80% 0%, rgba(99,102,241,0.06) 0px, transparent 50%), radial-gradient(at 0% 50%, rgba(22,119,255,0.04) 0px, transparent 50%)",
       },
     },
   },

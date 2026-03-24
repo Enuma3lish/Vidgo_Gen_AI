@@ -22,9 +22,13 @@ import httpx
 from io import BytesIO
 
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
-from app.services.a2e_service import get_a2e_service, A2E_VOICES
 from app.services.rescue_service import get_rescue_service
 from app.providers.provider_router import get_provider_router, TaskType
+# Voice data still sourced from a2e_service module for compatibility
+try:
+    from app.services.a2e_service import A2E_VOICES
+except ImportError:
+    A2E_VOICES = {"en": [], "zh-TW": []}
 from app.api.deps import get_current_user_optional, get_current_user, get_db, get_redis, is_subscribed_user, get_user_plan_features
 from app.models.user_generation import UserGeneration
 from app.models.material import Material, ToolType
@@ -380,7 +384,7 @@ async def remove_background_batch(
 
     for image_url in request.image_urls:
         try:
-            # Use provider router for background removal (GoEnhance)
+            # Use provider router for background removal (PiAPI)
             result = await provider_router.route(
                 TaskType.BACKGROUND_REMOVAL,
                 {"image_url": str(image_url)}
@@ -1129,18 +1133,19 @@ async def generate_avatar_video(
                 detail="Duration must be between 5 and 120 seconds"
             )
 
-        avatar_service = get_a2e_service()
+        provider_router = get_provider_router()
 
-        logger.info(f"Calling A2E.ai Avatar API for subscriber: {request.script[:50]}...")
+        logger.info(f"Calling Gemini Avatar API for subscriber: {request.script[:50]}...")
 
-        result = await avatar_service.generate_and_wait(
-            image_url=str(request.image_url),
-            script=request.script,
-            language=request.language,
-            voice_id=request.voice_id,
-            duration=request.duration,
-            timeout=300,
-            save_locally=True
+        result = await provider_router.route(
+            TaskType.AVATAR,
+            {
+                "image_url": str(request.image_url),
+                "script": request.script,
+                "language": request.language,
+                "voice_id": request.voice_id,
+                "duration": request.duration,
+            }
         )
 
         if result.get("success"):
@@ -1159,7 +1164,7 @@ async def generate_avatar_video(
                 input_text=request.script,
                 result_video_url=video_url,
                 result_metadata={
-                    "api": "a2e-avatar",
+                    "api": "gemini-avatar",
                     "action": "photo_to_avatar",
                     "language": request.language
                 },
@@ -1209,62 +1214,28 @@ async def get_avatar_voices(
 @router.get("/avatar/characters")
 async def get_avatar_characters():
     """
-    Get available A2E avatar characters.
-    
+    Get available avatar characters.
+
     Frontend should use these characters instead of fixed Unsplash images.
     Each character includes:
-    - _id: Anchor ID for generation
+    - id: Character ID for generation
     - name: Character name
-    - video_cover: Preview image URL
+    - preview_url: Preview image URL
     - lang: Supported language(s)
-    
+
     Characters are organized by gender where possible.
+    Note: Avatar generation now uses Gemini via provider router.
     """
-    from scripts.services import A2EClient
-    import os
-    
-    try:
-        a2e = A2EClient(os.getenv("A2E_API_KEY", ""))
-        characters = await a2e.get_characters()
-        
-        if not characters:
-            return {"success": False, "characters": [], "error": "No characters available"}
-        
-        # Organize by gender (detect from name)
-        female_chars = []
-        male_chars = []
-        other_chars = []
-        
-        for char in characters:
-            name_lower = (char.get("name") or "").lower()
-            char_info = {
-                "id": char.get("_id"),
-                "name": char.get("name"),
-                "preview_url": char.get("video_cover"),
-                "lang": char.get("lang", "en")
-            }
-            
-            if any(kw in name_lower for kw in ["女", "female", "woman", "girl", "小美", "小雅", "小玲"]):
-                char_info["gender"] = "female"
-                female_chars.append(char_info)
-            elif any(kw in name_lower for kw in ["男", "male", "man", "guy", "建明", "志偉", "俊傑"]):
-                char_info["gender"] = "male"
-                male_chars.append(char_info)
-            else:
-                char_info["gender"] = "unknown"
-                other_chars.append(char_info)
-        
-        # Limit to reasonable number for UI
-        return {
-            "success": True,
-            "female": female_chars[:6],
-            "male": male_chars[:6],
-            "other": other_chars[:6],
-            "total": len(characters)
-        }
-    except Exception as e:
-        logger.error(f"Failed to get A2E characters: {e}")
-        return {"success": False, "characters": [], "error": str(e)}
+    # Return empty list since A2E characters are no longer available
+    # Avatar generation now routes through Gemini
+    return {
+        "success": True,
+        "female": [],
+        "male": [],
+        "other": [],
+        "total": 0,
+        "note": "Avatar generation now uses Gemini. Use any headshot image."
+    }
 
 
 # ============================================================================

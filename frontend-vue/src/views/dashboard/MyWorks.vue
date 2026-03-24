@@ -199,7 +199,7 @@ function closeShareModal() {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #f7f8fa;">
+  <div class="min-h-screen pt-24 pb-20" style="background: #09090b;">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <!-- Header -->
@@ -269,7 +269,7 @@ function closeShareModal() {
             class="rounded-2xl overflow-hidden group cursor-pointer transition-all"
             :style="work.media_expired
               ? 'background: #0c1830; border: 1px solid rgba(255,80,80,0.15); opacity: 0.85;'
-              : 'background: #ffffff; border: 1px solid rgba(0,0,0,0.08);'"
+              : 'background: #141420; border: 1px solid rgba(255,255,255,0.06);'"
             @mouseover="($event.currentTarget as HTMLElement).style.borderColor = work.media_expired ? 'rgba(255,80,80,0.3)' : 'rgba(0,184,230,0.3)'"
             @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = work.media_expired ? 'rgba(255,80,80,0.15)' : 'rgba(0,184,230,0.1)'"
           >
@@ -394,7 +394,7 @@ function closeShareModal() {
         @click.self="closeModal"
       >
         <div class="relative rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-             style="background: #ffffff; border: 1px solid rgba(22,119,255,0.15);">
+             style="background: #141420; border: 1px solid rgba(22,119,255,0.15);">
           <!-- Close Button -->
           <button
             @click="closeModal"
@@ -483,14 +483,14 @@ function closeShareModal() {
                 :src="selectedWork.result_video_url!"
                 controls
                 class="w-full h-full object-contain"
-                style="background: #f7f8fa;"
+                style="background: #0f0f17;"
               />
               <img
                 v-else
                 :src="getThumbnail(selectedWork)"
                 :alt="selectedWork.tool_type"
                 class="w-full h-full object-contain"
-                style="background: #f7f8fa;"
+                style="background: #0f0f17;"
               />
             </div>
 

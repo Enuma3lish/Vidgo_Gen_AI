@@ -16,7 +16,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-white">
+  <div class="min-h-screen flex flex-col" style="background: #09090b; color: #f5f5fa;">
     <AppHeader />
     <main class="flex-1">
       <RouterView />

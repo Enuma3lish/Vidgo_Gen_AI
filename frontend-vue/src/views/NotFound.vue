@@ -3,7 +3,7 @@ import { RouterLink } from 'vue-router'
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4">
+  <div class="min-h-screen flex items-center justify-center px-4" style="background: #09090b;"
     <div class="text-center">
       <h1 class="text-8xl font-bold gradient-text mb-4">404</h1>
       <h2 class="text-2xl font-semibold text-white mb-4">Page Not Found</h2>

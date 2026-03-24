@@ -24,17 +24,11 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501", "http://localhost:4173"]
 
     # AI Services - Provider Configuration
-    # Primary: PiAPI (Wan API access)
-    PIAPI_KEY: str = ""  # PiAPI for Wan T2I, I2V, T2V, Interior
+    # Primary: PiAPI (Wan API access) — T2I, I2I, I2V, T2V, V2V, Interior, Try-On, BG Removal
+    PIAPI_KEY: str = ""
 
-    # Backup: Pollo.ai (Advanced features + backup)
-    POLLO_API_KEY: str = ""  # Pollo for keyframes, effects, multi-model
-
-    # Specialized Providers
-    A2E_API_KEY: str = ""  # A2E.ai for Avatar/Digital Human
-    A2E_API_ID: str = ""  # A2E.ai API ID (required for authentication)
-    A2E_DEFAULT_CREATOR_ID: str = ""  # A2E creator/anchor ID (create at video.a2e.ai)
-    GEMINI_API_KEY: str = ""  # Gemini for moderation + emergency backup
+    # Secondary: Gemini — Moderation, Avatar, Backup for Image/Video
+    GEMINI_API_KEY: str = ""
 
     # Legacy (deprecated)
     WAN_API_KEY: str = ""  # Deprecated - use PIAPI_API_KEY instead
@@ -117,7 +111,7 @@ class Settings(BaseSettings):
     # Model credit multipliers (model_id → credit cost per generation)
     # Base cost is defined in ServicePricing; these are multipliers
     # Format: JSON string parsed at runtime
-    MODEL_CREDIT_MULTIPLIERS: str = '{"default":1,"kling_v2":2,"luma_ray2":3,"pixverse_v5":1.5,"wan_pro":2}'
+    MODEL_CREDIT_MULTIPLIERS: str = '{"default":1,"wan_pro":2,"gemini_pro":2}'
 
     class Config:
         env_file = ".env"

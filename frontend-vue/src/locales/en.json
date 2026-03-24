@@ -940,6 +940,44 @@
       { "value": "90%", "label": "Time Cost Saved" }
     ]
   },
+  "gallery": {
+    "title": "Inspiration Gallery",
+    "subtitle": "Browse AI-generated examples from real businesses. Free users can view and try examples. Subscribe to upload your own materials.",
+    "searchPlaceholder": "Search examples by keyword, style, or industry...",
+    "filterByIndustry": "Filter by Industry",
+    "filterByTool": "Filter by Tool",
+    "showingResults": "Showing {count} of {total} examples",
+    "clearFilters": "Clear filters",
+    "noResults": "No examples found",
+    "noResultsHint": "Try changing your filters or search terms",
+    "viewAllExamples": "View all examples",
+    "video": "Video",
+    "tryThis": "Try This Example",
+    "ctaTitle": "Ready to create your own?",
+    "ctaSubtitle": "Subscribe to upload your own images and generate custom results without watermarks.",
+    "ctaButtonPrimary": "Sign Up Free",
+    "ctaButtonSecondary": "View Pricing",
+    "categories": {
+      "all": "All Examples",
+      "product_scene": "Product Scene",
+      "background_removal": "Background Removal",
+      "try_on": "Virtual Try-On",
+      "room_redesign": "Room Redesign",
+      "short_video": "Short Video",
+      "ai_avatar": "AI Avatar",
+      "effect": "Image Effects",
+      "pattern_generate": "Pattern Generate"
+    },
+    "industries": {
+      "all": "All Industries",
+      "food_beverage": "Food & Beverage",
+      "fashion": "Fashion & Apparel",
+      "ecommerce": "E-commerce",
+      "interior_design": "Interior Design",
+      "marketing": "Marketing & Ads",
+      "small_business": "Small Business"
+    }
+  },
   "einvoice": {
     "title": "E-Invoices",
     "description": "Manage your Taiwan electronic invoices",

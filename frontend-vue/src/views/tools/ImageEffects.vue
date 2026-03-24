@@ -237,19 +237,19 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-20">
+  <div class="min-h-screen pt-20" style="background: #09090b; color: #f5f5fa;">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
       <div class="mb-8">
-        <h1 class="text-2xl md:text-3xl font-bold text-dark-900 mb-2">
+        <h1 class="text-2xl md:text-3xl font-bold text-dark-50 mb-2">
           {{ isZh ? '圖片風格轉換' : 'Image Style Effects' }}
         </h1>
-        <p class="text-dark-500">
+        <p class="text-dark-300">
           {{ isZh ? '將照片快速轉換成不同的藝術風格，或使用 AI 自由描述變換效果。' : 'Transform photos into artistic styles or use AI to freely describe transformations.' }}
         </p>
-        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-4 p-4 rounded-xl bg-gray-100/50 border border-gray-200">
-          <p class="text-sm text-dark-600 mb-2">{{ isZh ? '可試玩提示詞（資料庫尚無預生成）' : 'Try prompts (no pre-generated results yet)' }}</p>
+        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-4 p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+          <p class="text-sm text-dark-200 mb-2">{{ isZh ? '可試玩提示詞（資料庫尚無預生成）' : 'Try prompts (no pre-generated results yet)' }}</p>
           <div class="flex flex-wrap gap-2">
-            <span v-for="p in tryPrompts.slice(0, 5)" :key="p.id" class="px-2 py-1 rounded text-xs bg-dark-800 text-dark-600">{{ p.prompt }}</span>
+            <span v-for="p in tryPrompts.slice(0, 5)" :key="p.id" class="px-2 py-1 rounded text-xs bg-dark-800 text-dark-200">{{ p.prompt }}</span>
           </div>
         </div>
       </div>
@@ -265,8 +265,8 @@ onMounted(async () => {
           @click="activeTab = tab.id as any"
           class="px-6 py-3 rounded-lg font-medium transition-all"
           :class="activeTab === tab.id
-            ? 'bg-primary-500 text-dark-900'
-            : 'bg-dark-800 text-dark-500 hover:text-dark-900'"
+            ? 'bg-primary-500 text-dark-50'
+            : 'bg-dark-800 text-dark-300 hover:text-dark-50'"
         >
           {{ tab.label }}
         </button>
@@ -278,12 +278,12 @@ onMounted(async () => {
       <div class="grid lg:grid-cols-3 gap-6">
         <!-- Input Panel -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-dark-900 mb-4">
+          <h3 class="text-lg font-semibold text-dark-50 mb-4">
             {{ isZh ? '選擇圖片' : 'Select Image' }}
           </h3>
 
           <div v-if="isDemoUser" class="space-y-4">
-            <p class="text-xs text-dark-500">
+            <p class="text-xs text-dark-300">
               {{ isZh ? '示範圖片（可切換）' : 'Demo images (switch to preview)' }}
             </p>
             <div v-if="isLoadingDemoImages" class="flex justify-center py-6">
@@ -298,7 +298,7 @@ onMounted(async () => {
                 v-for="(example, idx) in demoImages"
                 :key="example.id"
                 class="relative rounded-xl overflow-hidden border transition-colors"
-                :class="selectedDemoIndex === idx ? 'border-primary-500' : 'border-gray-200 hover:border-dark-500'"
+                :class="selectedDemoIndex === idx ? 'border-primary-500' : 'hover:border-dark-500'"
                 @click="selectDemoExample(idx)"
               >
                 <img :src="example.input" :alt="example.prompt" class="w-full h-24 object-cover" />
@@ -323,7 +323,7 @@ onMounted(async () => {
         <div class="card">
           <!-- Style Presets Mode -->
           <template v-if="activeTab === 'styles'">
-            <h3 class="text-lg font-semibold text-dark-900 mb-4">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">
               {{ isZh ? '選擇風格' : 'Choose Style' }}
             </h3>
 
@@ -333,11 +333,11 @@ onMounted(async () => {
                 :key="style.id"
                 @click="selectedStyle = style.id"
                 class="rounded-xl border-2 overflow-hidden text-left transition-all"
-                :class="selectedStyle === style.id ? 'border-primary-500 bg-primary-500/10' : 'border-gray-200 hover:border-dark-500'"
+                :class="selectedStyle === style.id ? 'border-primary-500 bg-primary-500/10' : 'hover:border-dark-500'"
               >
                 <img :src="style.preview_url" :alt="style.name" class="w-full h-20 object-cover" />
                 <div class="p-2">
-                  <p class="text-xs text-dark-900 font-medium">
+                  <p class="text-xs text-dark-50 font-medium">
                     {{ isZh ? style.name_zh : style.name }}
                   </p>
                 </div>
@@ -347,20 +347,20 @@ onMounted(async () => {
 
           <!-- AI Transform Mode -->
           <template v-else>
-            <h3 class="text-lg font-semibold text-dark-900 mb-4">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">
               {{ isZh ? 'AI 變換設定' : 'Transform Settings' }}
             </h3>
 
             <div class="space-y-5">
               <!-- Prompt -->
               <div>
-                <label class="block text-sm font-medium text-dark-600 mb-2">
+                <label class="block text-sm font-medium text-dark-200 mb-2">
                   {{ isZh ? '描述你想要的變換效果' : 'Describe the transformation' }}
                 </label>
                 <textarea
                   v-model="transformPrompt"
                   rows="4"
-                  class="w-full bg-dark-900 border border-gray-200 rounded-xl px-4 py-3 text-dark-900 placeholder-gray-500 focus:outline-none focus:border-primary-500 resize-none"
+                  class="w-full rounded-xl px-4 py-3 placeholder-gray-500 focus:outline-none focus:border-primary-500 resize-none" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
                   :placeholder="isZh ? '例如：轉換成水彩畫風格、添加日落氛圍、改為冬天雪景...' : 'e.g. watercolor painting style, add sunset mood, change to winter snow scene...'"
                 ></textarea>
               </div>
@@ -368,7 +368,7 @@ onMounted(async () => {
               <!-- Strength Slider -->
               <div>
                 <div class="flex justify-between items-center mb-2">
-                  <label class="text-sm font-medium text-dark-600">
+                  <label class="text-sm font-medium text-dark-200">
                     {{ isZh ? '變換強度' : 'Transform Strength' }}
                   </label>
                   <span class="text-xs text-primary-400 font-medium">
@@ -381,7 +381,7 @@ onMounted(async () => {
                   min="0.05"
                   max="1"
                   step="0.05"
-                  class="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                  class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary-500" style="background: #1e1e32;">
                 />
                 <div class="flex justify-between text-xs text-dark-400 mt-1">
                   <span>{{ isZh ? '微調' : 'Subtle' }}</span>
@@ -391,7 +391,7 @@ onMounted(async () => {
 
               <!-- Quick prompts -->
               <div>
-                <p class="text-xs text-dark-500 mb-2">{{ isZh ? '快速選擇：' : 'Quick picks:' }}</p>
+                <p class="text-xs text-dark-300 mb-2">{{ isZh ? '快速選擇：' : 'Quick picks:' }}</p>
                 <div class="flex flex-wrap gap-2">
                   <button
                     v-for="qp in [
@@ -403,7 +403,7 @@ onMounted(async () => {
                     ]"
                     :key="qp.en"
                     @click="transformPrompt = isZh ? qp.zh : qp.en"
-                    class="px-3 py-1.5 text-xs rounded-lg bg-gray-100 text-dark-600 hover:bg-dark-600 hover:text-dark-900 transition-colors"
+                    class="px-3 py-1.5 text-xs rounded-lg hover:text-dark-50 transition-colors" style="background: #1e1e32; color: #9494b0;">
                   >
                     {{ isZh ? qp.zh : qp.en }}
                   </button>
@@ -412,7 +412,7 @@ onMounted(async () => {
             </div>
           </template>
 
-          <div class="mt-6 pt-4 border-t border-gray-200">
+          <div class="mt-6 pt-4" style="border-top: 1px solid rgba(255,255,255,0.06);">
             <button
               class="btn-primary w-full"
               :disabled="!uploadedImage || isProcessing || (activeTab === 'transform' && !transformPrompt.trim())"
@@ -432,7 +432,7 @@ onMounted(async () => {
 
         <!-- Result Panel -->
         <div class="card">
-          <h3 class="text-lg font-semibold text-dark-900 mb-4">
+          <h3 class="text-lg font-semibold text-dark-50 mb-4">
             {{ isZh ? '生成結果' : 'Result' }}
           </h3>
 

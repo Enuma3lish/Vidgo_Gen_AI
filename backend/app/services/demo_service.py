@@ -4,7 +4,7 @@ Handles demo creation, storage, and retrieval with prompt matching.
 
 Full Pipeline Flow ("See It In Action"):
 1. User enters prompt → PiAPI Wan (text-to-image)
-2. Generated image → Pollo AI (image-to-video)
+2. Generated image → PiAPI (image-to-video)
 3. Generated video → PiAPI Wan VACE (video enhancement with style)
 
 Pre-generated Demos ("Explore Categories"):
@@ -24,7 +24,6 @@ from sqlalchemy import select, func, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.demo import ImageDemo, DemoCategory, DemoVideo, PromptCache
-from app.services.pollo_ai import get_pollo_client, POLLO_MODELS
 from app.services.prompt_matching import get_prompt_matching_service, PromptAnalysis
 from app.services.watermark import get_watermark_service
 from app.providers import ProviderRouter, TaskType
@@ -101,13 +100,12 @@ class DemoService:
 
     Pipeline:
     1. PiAPI Wan: Text → Image
-    2. Pollo AI: Image → Video
+    2. PiAPI: Image → Video
     3. PiAPI Wan VACE: Video → Enhanced Video (optional)
     """
 
     def __init__(self):
         self.router = ProviderRouter()
-        self.pollo = get_pollo_client()
         self.matcher = get_prompt_matching_service()
 
     async def get_or_create_demo(
@@ -181,7 +179,7 @@ class DemoService:
 
         Pipeline:
         1. PiAPI Wan: Prompt → Image
-        2. Pollo AI Pixverse: Image → Video
+        2. PiAPI: Image → Video
         3. PiAPI Wan VACE: Video → Enhanced Video (optional)
         """
         # Select style for generation
@@ -220,24 +218,30 @@ class DemoService:
         logger.info(f"Step 1 complete: Image generated at {image_url}")
 
         # =========================================
-        # Step 2: Generate Video (Pollo AI)
+        # Step 2: Generate Video (PiAPI I2V)
         # =========================================
-        logger.info("Step 2: Generating video with Pollo AI...")
+        logger.info("Step 2: Generating video with PiAPI...")
 
-        video_result = await self.pollo.generate_and_wait(
-            image_url=image_url,
-            prompt=analysis.normalized,
-            model="pixverse_v4.5",
-            timeout=300
-        )
+        try:
+            video_result = await self.router.route(
+                TaskType.I2V,
+                {
+                    "image_url": image_url,
+                    "prompt": analysis.normalized,
+                    "duration": 5
+                }
+            )
 
-        if not video_result.get("success"):
-            # Even if video fails, we still have the image - save partial result
-            logger.warning(f"Video generation failed: {video_result.get('error')}")
+            if not video_result.get("success"):
+                logger.warning(f"Video generation failed: {video_result.get('error')}")
+                video_url = None
+            else:
+                output = video_result.get("output", {})
+                video_url = output.get("video_url") or video_result.get("video_url")
+                logger.info(f"Step 2 complete: Video generated at {video_url}")
+        except Exception as e:
+            logger.warning(f"Video generation failed: {e}")
             video_url = None
-        else:
-            video_url = video_result.get("video_url")
-            logger.info(f"Step 2 complete: Video generated at {video_url}")
 
         # =========================================
         # Step 3: Enhance Video (PiAPI Wan VACE) - Optional
@@ -484,17 +488,26 @@ class DemoService:
         result["image_url"] = image_url
 
         # =========================================
-        # Step 2: Generate Video (Pollo AI)
+        # Step 2: Generate Video (PiAPI I2V)
         # =========================================
-        logger.info("Generating video with Pollo AI...")
+        logger.info("Generating video with PiAPI...")
         result["steps"].append({"step": 2, "name": "Video Generation", "status": "in_progress"})
 
-        video_result = await self.pollo.generate_and_wait(
-            image_url=image_url,
-            prompt=prompt,
-            model="pixverse_v4.5",
-            timeout=300
-        )
+        try:
+            video_result = await self.router.route(
+                TaskType.I2V,
+                {
+                    "image_url": image_url,
+                    "prompt": prompt,
+                    "duration": 5
+                }
+            )
+        except Exception as e:
+            result["steps"][-1]["status"] = "failed"
+            result["error"] = f"Video generation failed: {str(e)}"
+            result["success"] = True
+            result["partial"] = True
+            return result
 
         if not video_result.get("success"):
             result["steps"][-1]["status"] = "failed"
@@ -504,7 +517,8 @@ class DemoService:
             result["partial"] = True
             return result
 
-        video_url = video_result.get("video_url")
+        output = video_result.get("output", {})
+        video_url = output.get("video_url") or video_result.get("video_url")
         result["video_url"] = video_url
         result["steps"][-1]["status"] = "completed"
         logger.info(f"Video generated: {video_url}")
@@ -800,12 +814,20 @@ class DemoService:
         logger.info(f"Image generated: {image_url}")
 
         # Step 2: Generate video (5 seconds)
-        video_result = await self.pollo.generate_and_wait(
-            image_url=image_url,
-            prompt=prompt,
-            model="pixverse_v4.5",
-            timeout=300
-        )
+        try:
+            video_result = await self.router.route(
+                TaskType.I2V,
+                {
+                    "image_url": image_url,
+                    "prompt": prompt,
+                    "duration": 5
+                }
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Video generation failed: {str(e)}"
+            }
 
         if not video_result.get("success"):
             return {
@@ -813,7 +835,8 @@ class DemoService:
                 "error": f"Video generation failed: {video_result.get('error')}"
             }
 
-        video_url = video_result.get("video_url")
+        output = video_result.get("output", {})
+        video_url = output.get("video_url") or video_result.get("video_url")
         logger.info(f"Video generated: {video_url}")
 
         # Step 3: Save to database
@@ -828,7 +851,7 @@ class DemoService:
             duration_seconds=5.0,
             style=style_slug,
             style_slug=style_slug,
-            source_service="pollo_ai",
+            source_service="piapi",
             generation_params={
                 "prompt": prompt,
                 "style": style_slug,

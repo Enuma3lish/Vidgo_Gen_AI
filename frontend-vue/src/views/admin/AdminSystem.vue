@@ -256,12 +256,12 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 .page-header h1 {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f5fa;
   margin: 0;
 }
 
 .subtitle {
-  color: #666;
+  color: #9494b0;
   margin-top: 0.5rem;
 }
 
@@ -284,7 +284,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 
 .last-updated {
   font-size: 0.875rem;
-  color: #666;
+  color: #9494b0;
   margin-bottom: 2rem;
 }
 
@@ -296,10 +296,10 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 }
 
 .health-card {
-  background: white;
+  background: #141420;
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   display: flex;
   align-items: flex-start;
   gap: 1rem;
@@ -326,12 +326,12 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 }
 
 .health-card.healthy .health-icon {
-  background: #e8f5e9;
+  background: rgba(16,185,129,0.15);
   color: #4caf50;
 }
 
 .health-card.unhealthy .health-icon {
-  background: #ffebee;
+  background: rgba(244,67,54,0.15);
   color: #f44336;
 }
 
@@ -340,7 +340,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 }
 
 .health-card.pending .health-icon {
-  background: #fff3e0;
+  background: rgba(245,158,11,0.15);
   color: #ff9800;
 }
 
@@ -348,13 +348,13 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #f5f5fa;
   text-transform: capitalize;
 }
 
 .health-status {
   font-size: 0.875rem;
-  color: #666;
+  color: #9494b0;
   text-transform: capitalize;
 }
 
@@ -362,7 +362,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
   margin: 0.5rem 0 0;
   font-size: 0.75rem;
   color: #f44336;
-  background: #ffebee;
+  background: rgba(244,67,54,0.15);
   padding: 0.5rem;
   border-radius: 4px;
 }
@@ -370,10 +370,10 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 .info-section,
 .legend-section,
 .actions-section {
-  background: white;
+  background: #141420;
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   margin-bottom: 1.5rem;
 }
 
@@ -383,7 +383,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0 0 1rem;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .info-grid {
@@ -395,13 +395,13 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 .info-item label {
   display: block;
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
   margin-bottom: 0.25rem;
 }
 
 .info-item span {
   font-weight: 500;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .legend-grid {
@@ -415,7 +415,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
   align-items: center;
   gap: 0.75rem;
   font-size: 0.875rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .legend-dot {
@@ -437,8 +437,8 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 
 .action-btn {
   padding: 1rem;
-  background: #f5f5f5;
-  border: 1px solid #e0e0e0;
+  background: #0f0f17;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   text-align: left;
   cursor: not-allowed;
@@ -454,7 +454,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 
 .actions-note {
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
   margin: 0;
   font-style: italic;
 }
@@ -467,7 +467,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #f0f0f0;
+  border: 4px solid rgba(255,255,255,0.1);
   border-top-color: #667eea;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -475,7 +475,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 }
 
 .loading p {
-  color: #666;
+  color: #9494b0;
 }
 
 @keyframes spin {
@@ -484,10 +484,10 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 
 /* AI Services Section */
 .ai-services-section {
-  background: white;
+  background: #141420;
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   margin-bottom: 1.5rem;
 }
 
@@ -495,11 +495,11 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0 0 0.5rem;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .section-desc {
-  color: #666;
+  color: #9494b0;
   font-size: 0.875rem;
   margin: 0 0 1.5rem;
 }
@@ -512,7 +512,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 }
 
 .service-card {
-  background: #f8f9fa;
+  background: #0f0f17;
   border-radius: 8px;
   padding: 1rem;
   display: flex;
@@ -545,17 +545,17 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 }
 
 .service-card.healthy .service-icon {
-  background: #e8f5e9;
+  background: rgba(16,185,129,0.15);
   color: #4caf50;
 }
 
 .service-card.unhealthy .service-icon {
-  background: #ffebee;
+  background: rgba(244,67,54,0.15);
   color: #f44336;
 }
 
 .service-card.pending .service-icon {
-  background: #fff3e0;
+  background: rgba(245,158,11,0.15);
   color: #ff9800;
 }
 
@@ -563,32 +563,32 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
   margin: 0;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .service-status {
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
   text-transform: capitalize;
 }
 
 .service-message {
   margin: 0.5rem 0 0;
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .service-error {
   margin: 0.5rem 0 0;
   font-size: 0.75rem;
   color: #f44336;
-  background: #ffebee;
+  background: rgba(244,67,54,0.15);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
 }
 
 .rescue-config {
-  background: #f5f5f5;
+  background: #0f0f17;
   border-radius: 8px;
   padding: 1rem;
 }
@@ -597,7 +597,7 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
   margin: 0 0 1rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .rescue-grid {
@@ -615,17 +615,17 @@ function getRescueLabel(config: { primary: string; rescue: string | null }): str
 .feature-name {
   font-size: 0.75rem;
   font-weight: 500;
-  color: #666;
+  color: #9494b0;
 }
 
 .rescue-chain {
   font-size: 0.875rem;
-  color: #1a1a2e;
+  color: #f5f5fa;
   font-family: monospace;
-  background: white;
+  background: #141420;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.06);
 }
 
 .rescue-chain.has-rescue {

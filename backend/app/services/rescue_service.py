@@ -3,13 +3,12 @@ AI Service Rescue Mechanism
 Wrapper around ProviderRouter with automatic failover.
 
 Architecture (following vidgo-backend-architecture.md):
-- T2I: PiAPI/Wan (primary) → Pollo (backup)
-- I2V: PiAPI/Wan (primary) → Pollo (backup)
-- T2V: PiAPI/Wan (primary) → Pollo (backup)
+- T2I: PiAPI (primary) → Gemini (backup)
+- I2V: PiAPI (primary) → Gemini (backup)
+- T2V: PiAPI (primary) → Gemini (backup)
 - Interior: PiAPI/Wan Doodle (primary) → Gemini (backup)
-- V2V: GoEnhance only (no backup)
-- Avatar: A2E.ai only (no backup)
-- Background Removal: GoEnhance (local rembg)
+- V2V: PiAPI (primary) → Gemini (backup)
+- Avatar: Gemini (no backup)
 """
 import logging
 from typing import Optional, Dict, Any
@@ -37,7 +36,7 @@ class AIServiceWithRescue:
         return self._router
 
     # =========================================================================
-    # TEXT-TO-IMAGE (T2I): PiAPI/Wan primary → Pollo backup
+    # TEXT-TO-IMAGE (T2I): PiAPI primary → Gemini backup
     # =========================================================================
 
     async def generate_image(
@@ -50,8 +49,8 @@ class AIServiceWithRescue:
     ) -> Dict[str, Any]:
         """
         Generate image from text prompt.
-        Primary: PiAPI (Wan)
-        Backup: Pollo.ai
+        Primary: PiAPI
+        Backup: Gemini
 
         Args:
             prompt: Text description of image to generate
@@ -107,7 +106,7 @@ class AIServiceWithRescue:
             }
 
     # =========================================================================
-    # IMAGE-TO-VIDEO (I2V): PiAPI/Wan primary → Pollo backup
+    # IMAGE-TO-VIDEO (I2V): PiAPI primary → Gemini backup
     # =========================================================================
 
     async def generate_video(
@@ -122,7 +121,7 @@ class AIServiceWithRescue:
         """
         Generate video from image.
         Primary: PiAPI (Wan I2V)
-        Backup: Pollo.ai
+        Backup: Gemini
 
         Args:
             image_url: URL of source image

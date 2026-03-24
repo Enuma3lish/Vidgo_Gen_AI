@@ -176,12 +176,12 @@ function getBarHeight(revenue: number): string {
 .page-header h1 {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f5fa;
   margin: 0;
 }
 
 .subtitle {
-  color: #666;
+  color: #9494b0;
   margin-top: 0.5rem;
 }
 
@@ -193,9 +193,9 @@ function getBarHeight(revenue: number): string {
 
 .period-btn {
   padding: 0.5rem 1rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
-  background: white;
+  background: #141420;
   cursor: pointer;
   font-size: 0.875rem;
   transition: all 0.2s;
@@ -215,16 +215,16 @@ function getBarHeight(revenue: number): string {
 }
 
 .summary-card {
-  background: white;
+  background: #141420;
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .summary-label {
   display: block;
   font-size: 0.875rem;
-  color: #666;
+  color: #9494b0;
   margin-bottom: 0.5rem;
 }
 
@@ -232,14 +232,14 @@ function getBarHeight(revenue: number): string {
   display: block;
   font-size: 1.75rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .chart-section {
-  background: white;
+  background: #141420;
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   margin-bottom: 1.5rem;
 }
 
@@ -247,7 +247,7 @@ function getBarHeight(revenue: number): string {
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0 0 1.5rem;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .chart-container {
@@ -294,7 +294,7 @@ function getBarHeight(revenue: number): string {
   transform: translateX(-50%);
   font-size: 0.65rem;
   white-space: nowrap;
-  color: #666;
+  color: #9494b0;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -306,7 +306,7 @@ function getBarHeight(revenue: number): string {
 .bar-label {
   margin-top: 0.5rem;
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .line-chart {
@@ -343,7 +343,7 @@ function getBarHeight(revenue: number): string {
   display: flex;
   justify-content: space-between;
   font-size: 0.75rem;
-  color: #666;
+  color: #9494b0;
 }
 
 .growth-stats {
@@ -355,7 +355,7 @@ function getBarHeight(revenue: number): string {
 .growth-item {
   text-align: center;
   padding: 1rem;
-  background: #f9f9f9;
+  background: #0f0f17;
   border-radius: 8px;
 }
 
@@ -363,13 +363,13 @@ function getBarHeight(revenue: number): string {
   display: block;
   font-size: 2rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .growth-label {
   display: block;
   font-size: 0.875rem;
-  color: #666;
+  color: #9494b0;
   margin-top: 0.25rem;
 }
 
@@ -389,7 +389,7 @@ function getBarHeight(revenue: number): string {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #f0f0f0;
+  border: 4px solid rgba(255,255,255,0.1);
   border-top-color: #667eea;
   border-radius: 50%;
   animation: spin 1s linear infinite;

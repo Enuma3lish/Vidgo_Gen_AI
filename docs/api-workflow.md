@@ -179,7 +179,7 @@ POST /api/v1/tools/{tool}
 
 **Background Removal** — `POST /tools/remove-bg`
 - Input: `{image_url}`
-- API: PiAPI (GoEnhance)
+- API: PiAPI
 - Result: Transparent PNG
 - Batch: `POST /tools/remove-bg/batch` for multiple images
 
@@ -195,16 +195,15 @@ POST /api/v1/tools/{tool}
 
 **Room Redesign** — `POST /tools/room-redesign`
 - Input: `{image_url, style_id, room_type}`
-- API: PiAPI (Wan Doodle) → Gemini fallback
+- API: PiAPI (Wan Doodle) — no fallback
 
 **Short Video** — `POST /tools/short-video`
 - Input: `{image_url, motion_strength, style?, script?, voice_id?}`
-- API: PiAPI I2V → Pollo backup
-- Optional: V2V enhancement, TTS audio
+- API: PiAPI I2V — no fallback
 
 **AI Avatar** — `POST /tools/avatar`
 - Input: `{image_url, script, language, voice_id, aspect_ratio, resolution}`
-- API: A2E.ai (TTS → video → poll)
+- API: PiAPI
 - Languages: en, zh-TW, ja, ko
 
 ---
@@ -311,19 +310,37 @@ POST /api/v1/tools/{tool}
 
 ## 10. Provider Routing
 
-External AI services with failover:
+External AI services (no failover):
 
-| Task | Primary | Backup | Model |
-|------|---------|--------|-------|
-| Text-to-Image (T2I) | PiAPI | Pollo | flux1-schnell |
-| Image-to-Video (I2V) | PiAPI | Pollo | wan2.6-i2v |
-| Text-to-Video (T2V) | PiAPI | Pollo | wan2.6-t2v |
-| Video Style (V2V) | PiAPI | Pollo | wan2.1-vace |
-| Interior Design | PiAPI | Gemini | wan2.1-doodle |
-| Avatar | A2E.ai | NONE | — |
-| Background Removal | PiAPI | NONE | GoEnhance |
-| Effects / Style | GoEnhance | NONE | — |
-| Content Moderation | Gemini | NONE | — |
+| Task | Provider | Backup | Note |
+|------|----------|--------|------|
+| ALL generation (T2I, I2I, I2V, T2V, V2V, Interior, Avatar, BG Removal, Effects, 3D, Try-On, Upscale) | PiAPI | NONE | If down → "service updating, please wait" |
+| Content Moderation | Gemini | NONE | Detect illegal/inappropriate uploads |
+| Material Pre-generation | Gemini | NONE | Generate seed images for demo mode |
+
+### TaskType Enum
+```python
+class TaskType(str, Enum):
+    T2I = "text_to_image"
+    I2V = "image_to_video"
+    T2V = "text_to_video"
+    V2V = "video_style_transfer"
+    INTERIOR = "interior_design"
+    INTERIOR_3D = "interior_3d"
+    AVATAR = "avatar"
+    UPSCALE = "upscale"
+    EFFECTS = "effects"
+    MODERATION = "moderation"
+    BACKGROUND_REMOVAL = "background_removal"
+    I2I = "image_to_image"
+    MATERIAL_GENERATION = "material_generation"
+```
+
+### Provider Configuration
+- **PiAPI**: Base URL `https://api.piapi.ai/api/v1`, X-API-Key header
+- **Gemini**: Google Generative AI API for moderation and material pre-generation
+- **No failover**: If generation service is down, all endpoints return "Our service is currently being updated. Please wait a moment!"
+- **Provider names never exposed** to end users
 
 ---
 
@@ -362,6 +379,28 @@ External AI services with failover:
 | `subscription_credits` | Weekly (Monday) via `credits_reset_at` | Resets each week |
 | `purchased_credits` | Never | Never expire |
 | `bonus_credits` | Never | Expire on `bonus_credits_expiry` |
+
+### Model Selection & Multipliers
+Paid users can select AI models for upload-based generation. Better models cost more credits:
+
+| Model | Multiplier | Tools |
+|-------|------------|-------|
+| default | 1× | All tools |
+| wan_pro | 2× | product_scene, room_redesign, pattern_generate, effect, short_video |
+| gemini_pro | 2× | ai_avatar, try_on |
+
+### Promotion Code Ownership
+- **Paid subscribers**: Automatically receive unique promotion code upon subscription
+- **Free users**: Cannot create promotion codes, but can use others' codes
+- **Admin**: Can create special promotion codes with custom credits/discounts
+- **Code usage**: When someone uses a promotion code, code owner earns credits
+
+### 7-Day Work Retention
+- **Active subscribers**: All works stored indefinitely
+- **Cancelled subscribers**: Works retained for 7 days post-cancellation
+- **During retention**: Can download existing works, cannot generate new works
+- **Account deletion**: All works deleted immediately (no retention)
+- **Media expiry**: Works older than 14 days have media URLs cleared
 
 ### Free Quota (Demo Users)
 

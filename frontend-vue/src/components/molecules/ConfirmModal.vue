@@ -83,11 +83,12 @@ function handleCancel() {
 }
 
 .modal-container {
-  background: white;
+  background: #141420;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px;
   width: 90%;
   max-width: 400px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 
 .modal-header {
@@ -95,28 +96,28 @@ function handleCancel() {
   justify-content: space-between;
   align-items: center;
   padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .modal-title {
   margin: 0;
   font-size: 1.125rem;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #f5f5fa;
 }
 
 .close-btn {
   background: none;
   border: none;
   font-size: 1.5rem;
-  color: #999;
+  color: #6b6b8a;
   cursor: pointer;
   padding: 0;
   line-height: 1;
 }
 
 .close-btn:hover {
-  color: #666;
+  color: #9494b0;
 }
 
 .modal-body {
@@ -125,7 +126,7 @@ function handleCancel() {
 
 .modal-message {
   margin: 0;
-  color: #666;
+  color: #9494b0;
   line-height: 1.6;
 }
 
@@ -134,7 +135,7 @@ function handleCancel() {
   justify-content: flex-end;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid rgba(255,255,255,0.06);
 }
 
 /* Transitions */

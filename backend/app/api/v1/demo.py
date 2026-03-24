@@ -16,7 +16,7 @@ Features:
 - Smart prompt matching with multi-language support
 - Redis block cache for illegal content filtering
 - Gemini AI-powered content moderation with learning
-- GoEnhance style transformation demos
+- PiAPI style transformation demos
 """
 from typing import Optional, List, Dict, Any
 import uuid
@@ -921,7 +921,7 @@ async def generate_paid_tier(
     1. Verify user is paid tier (not demo)
     2. If image provided: moderate and describe with Gemini
     3. Enhance prompt with Gemini
-    4. Call generation API (Leonardo/GoEnhance/Pollo)
+    4. Call generation API (PiAPI/Gemini)
     5. Store result to Material DB with Gemini description as primary key
     6. Result becomes example for demo users
 
@@ -1043,22 +1043,27 @@ async def generate_paid_tier(
         start_time = time.time()
 
         if tool == "short_video":
-            # Video generation with Pollo AI
-            from app.services.pollo_service import get_pollo_client
-            pollo = get_pollo_client()
+            # Video generation with PiAPI via provider router
+            from app.providers.provider_router import get_provider_router, TaskType as ProvTaskType
+            router = get_provider_router()
 
-            result = await pollo.generate_video(
-                prompt=enhanced_prompt,
-                source_image_url=input_image_url
+            result = await router.route(
+                ProvTaskType.I2V,
+                {
+                    "image_url": input_image_url,
+                    "prompt": enhanced_prompt,
+                    "duration": SHORT_VIDEO_LENGTH
+                }
             )
 
             if result.get("success"):
-                result_video_url = result.get("video_url")
+                vid_output = result.get("output", {})
+                result_video_url = vid_output.get("video_url") or result.get("video_url")
                 total_cost += 0.10
 
                 generation_steps.append({
                     "step": len(generation_steps) + 1,
-                    "api": "pollo",
+                    "api": "piapi",
                     "action": "text_to_video",
                     "input": {"prompt": enhanced_prompt, "image_url": input_image_url},
                     "result_url": result_video_url,
@@ -1468,7 +1473,7 @@ async def generate_demo_image(
     Generate a demo image only (with watermark).
     This is the "Generate Demo" feature - Step 1.
 
-    Uses GoEnhance Nano Banana for text-to-image generation.
+    Uses PiAPI for text-to-image generation.
     Image includes watermark for demo purposes.
 
     Processing time: ~30-60 seconds
@@ -1511,7 +1516,7 @@ async def generate_demo_realtime(
     If image_url is provided, uses that image directly.
     Otherwise generates a new image first.
 
-    Uses Pollo AI Pixverse for image-to-video generation.
+    Uses PiAPI for image-to-video generation.
     V2V enhancement is disabled in current version.
 
     Processing time: ~1-3 minutes

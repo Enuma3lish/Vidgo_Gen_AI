@@ -8,50 +8,56 @@ from app.core.database import Base
 class Plan(Base):
     """
     Subscription plans available for users.
-    Updated to support credit-based billing system.
+    Updated to support credit-based billing system with new pricing tiers.
     """
     __tablename__ = "plans"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    name = Column(String(50), nullable=False)  # demo, starter, pro, pro_plus
+    name = Column(String(50), nullable=False)  # basic, pro, premium, enterprise
     slug = Column(String, unique=True, index=True, nullable=True)
     display_name = Column(String(100), nullable=True)  # Display name (i18n key)
     plan_type = Column(String, nullable=False, default="free")  # free, basic, pro, enterprise
     description = Column(String, nullable=True)
 
-    # Pricing
+    # Pricing (TWD based)
     price = Column(DECIMAL(10, 2), nullable=True)  # Legacy field
-    price_twd = Column(DECIMAL(10, 2), default=0)  # Price in TWD
+    price_twd = Column(DECIMAL(10, 2), default=0)  # Price in TWD (primary)
     price_usd = Column(DECIMAL(10, 2), default=0)  # Price in USD
     price_monthly = Column(Float, default=0.0)
     price_yearly = Column(Float, default=0.0)
-    currency = Column(String, default="USD")
+    currency = Column(String, default="TWD")
     billing_cycle = Column(String, default="monthly")
 
-    # Credit Allocation
-    monthly_credits = Column(Integer, default=0)  # Credits per month (legacy)
-    weekly_credits = Column(Integer, default=0)  # Credits per week (new weekly system)
+    # Credit Allocation (Monthly)
+    monthly_credits = Column(Integer, default=0)  # Credits per month
+    weekly_credits = Column(Integer, default=0)  # Credits per week (legacy)
     credits_per_month = Column(Integer, default=10)  # Legacy field
 
     # Discounts
     topup_discount_rate = Column(DECIMAL(3, 2), default=0)  # 0.00 = no discount, 0.20 = 20% off
 
-    # VidGo Effects Access
+    # Model Access Control
+    allowed_models = Column(JSON, default=["default"])  # List of allowed models: default, wan_pro, gemini_pro, sora
+    
+    # Feature flags
     can_use_effects = Column(Boolean, default=False)  # Can access VidGo Effects (GoEnhance)
+    social_media_batch_posting = Column(Boolean, default=False)  # 社交媒體一鍵批次發布
+    priority_queue = Column(Boolean, default=False)  # 優先任務處理佇列
+    enterprise_features = Column(Boolean, default=False)  # 企業功能: 專屬素材庫、自訂浮水印
+    api_access = Column(Boolean, default=False)
 
-    # Features & Limits
+    # Limits
     max_video_length = Column(Integer, default=5)  # Seconds
     max_resolution = Column(String(20), default="720p")  # 720p, 1080p, 4k
+    max_concurrent_generations = Column(Integer, default=1)  # 同時產生影片的數量限制
     has_watermark = Column(Boolean, default=True)
     watermark = Column(Boolean, default=True)  # Legacy field
-    priority_queue = Column(Boolean, default=False)
-    api_access = Column(Boolean, default=False)
 
     # Service Limits (per month)
     pollo_limit = Column(Integer, nullable=True)  # NULL = no limit
     goenhance_limit = Column(Integer, nullable=True)
 
-    # Feature flags
+    # Feature flags (legacy)
     feature_clothing_transform = Column(Boolean, default=True)
     feature_goenhance = Column(Boolean, default=True)
     feature_video_gen = Column(Boolean, default=False)
@@ -334,11 +340,12 @@ class ServicePricing(Base):
     """
     Service pricing table for credit-based billing.
     Defines how many credits each service costs.
+    Updated with new pricing tiers from specification.
     """
     __tablename__ = "service_pricing"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    service_type = Column(String(50), unique=True, nullable=False)  # leonardo_720p, leonardo_1080p, pollo_basic, etc.
+    service_type = Column(String(50), unique=True, nullable=False)  # text_to_image, image_to_video, ai_try_on, etc.
     display_name = Column(String(100), nullable=False)
 
     # Credit Cost
@@ -347,14 +354,20 @@ class ServicePricing(Base):
     # API Cost (for internal tracking)
     api_cost_usd = Column(DECIMAL(10, 4), nullable=False)  # Actual API cost in USD
 
+    # Model and Tool Classification
+    model_type = Column(String(50), default="default")  # default, wan_pro, gemini_pro, sora
+    tool_category = Column(String(50), default="static")  # static, dynamic, premium
+    
     # Access Control
     min_plan = Column(String(50), nullable=True)  # Minimum plan required (NULL = all)
     subscribers_only = Column(Boolean, default=False)  # Requires paid subscription (VidGo Effects)
+    allowed_models = Column(JSON, default=["default"])  # List of allowed models for this service
 
     # Metadata
     description = Column(Text, nullable=True)
     resolution = Column(String(20), nullable=True)
     max_duration = Column(Integer, nullable=True)  # Max duration in seconds
+    tool_type = Column(String(50), nullable=True)  # text_to_image, image_to_video, background_removal, etc.
 
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

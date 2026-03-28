@@ -76,15 +76,19 @@ SHORT_VIDEO_LENGTH = int(getattr(settings, "SHORT_VIDEO_LENGTH", 8))
 
 # Tool-specific limits when running --all: ensures enough examples for customers
 # Effect: 8 sources × 5 styles = 40 | Try-on: ~6 models × ~10 clothing (male skips female-only)
+# Cost-optimized limits: fewer demos for expensive tools, more for cheap ones.
+# Cheap tools (T2I/I2I only, ~$0.005-0.01): higher counts
+# Medium tools (Kling/Interior, ~$0.05): moderate counts
+# Expensive tools (I2V/A2E, ~$0.05-0.30): minimal counts
 TOOL_LIMITS = {
-    "effect": 40,           # 8 sources × 5 styles
-    "try_on": 70,           # 6 models × clothing (male skips dresses/blouse/scarf)
-    "product_scene": 32,    # 8 products × 4 scenes (subset for demo)
-    "short_video": 24,      # 4 topics × 6 prompts
-    "background_removal": 24,  # 8 topics × 3 prompts
-    "room_redesign": 24,    # 4 rooms × 6 styles
-    "pattern_generate": 10, # 5 styles × 2 prompts
-    "ai_avatar": 24,        # 4 topics × 3 scripts × 2 languages
+    "background_removal": 15,  # 1 API call each (RemBG), cheap → 5 topics × 3
+    "effect": 15,              # 1 API call each (I2I), cheap → 3 sources × 5 styles
+    "product_scene": 18,       # 1 API call (RemBG) + local composite → 6 products × 3 scenes
+    "pattern_generate": 10,    # 1 API call each (T2I only), cheapest → 5 styles × 2
+    "room_redesign": 20,       # 1 API call each (I2I), cheap → 4 rooms × 5 styles
+    "try_on": 12,              # Kling API, medium cost → 3 models × 4 clothing
+    "short_video": 8,          # I2V API, expensive → 2 per topic × 4 topics
+    "ai_avatar": 8,            # A2E API, most expensive → 2 per category × 4 categories
 }
 
 

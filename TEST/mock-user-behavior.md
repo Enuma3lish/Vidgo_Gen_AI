@@ -2,8 +2,8 @@
 
 **Purpose**: This document outlines realistic user behavior scenarios for testing the VidGo AI platform, including the new Inspiration Gallery feature. Use these scenarios to simulate real-world usage patterns.
 
-**Last Updated**: March 24, 2026
-**Platform Version**: VidGo AI 7.1 with Inspiration Gallery
+**Last Updated**: March 27, 2026
+**Platform Version**: VidGo AI 8.0 with New Pricing Tiers & Credit System
 
 ---
 
@@ -220,55 +220,110 @@
 
 ## 4. Paid Subscriber Scenarios
 
-### 4.1 New Subscriber First Day
-**User**: Sarah Chen (just upgraded)
+### 4.1 New Subscriber First Day (Current OLD Pricing System)
+**User**: Sarah Chen (just upgraded to Starter plan - OLD pricing system)
 **Goal**: Maximize value from new subscription
 
 **Steps**:
 1. **Subscription Activation**
-   - Complete payment flow
+   - Complete payment flow (TWD 299/month for Starter plan)
    - Land on success page
-   - Verify dashboard shows "Pro" badge
-   - Check increased credit balance
+   - Verify dashboard shows "Starter" badge
+   - Check monthly credits (100 credits added)
    - Verify personal promotion code is generated
+   - Check allowed models: ["default"] (basic models only)
 
 2. **First Custom Upload**
    - Navigate to `/tools/background-removal`
    - Upload own product image (JPEG, <20MB)
-   - Select AI model (Standard)
-   - Generate result
+   - Generate result (no model selection in OLD system)
    - Download clean (no watermark) result
+   - Verify 3 credits deducted from balance
 
-3. **Model Selection Testing**
-   - Same tool, different image
-   - Select "Wan Pro" model (2× credits)
-   - Compare quality vs. Standard
-   - Evaluate credit cost vs. quality
-   - Test gemini_pro model for try_on tool
+3. **Plan Feature Verification**
+   - Check max concurrent generations: 1 (Starter plan)
+   - Verify social media batch posting disabled
+   - Check priority queue access: false
+   - Test enterprise features: not available
 
-4. **Batch Processing**
-   - Upload 5 product images
-   - Process all with same settings
-   - Download all as ZIP
-   - Verify file organization
+4. **Credit System Testing**
+   - Check credit balance: 97 credits remaining (100 - 3)
+   - Test credit deduction priority: subscription credits first
+   - Verify monthly credit expiration (no carryover)
+   - Test concurrent generation limit (1 simultaneous)
 
-5. **Gallery Integration**
-   - Browse gallery with "subscriber" eyes
-   - Note "Upload Your Own" CTAs
-   - Use examples as starting points
-   - Save favorite prompts/styles
+5. **Service Pricing Verification**
+   - Check `/api/v1/credits/pricing` for service costs
+   - Verify access to basic services only
+   - Test model permission checking (basic models only)
+   - Validate credit costs match OLD pricing table
 
-6. **Social Media Connection**
-   - Connect YouTube account via OAuth 2.0
-   - Verify token auto-refresh works
-   - Connect Facebook/Instagram/TikTok accounts
+6. **Gallery Integration**
+   - Browse gallery with "subscriber" access
+   - Note "Upload Your Own" CTAs work
+   - Use examples as starting points with custom images
+   - Save favorite prompts/styles for reuse
 
 **Expected Outcomes**:
-- Immediate value realization
-- Successful custom uploads with model selection
-- Understanding of model trade-offs and multipliers
-- Efficient workflow establishment
-- Social media integration ready
+- Immediate value realization with 100 monthly credits
+- Successful custom uploads with basic models
+- Understanding of Starter plan limitations
+- Proper credit system functionality
+- Access to basic services only
+- Efficient workflow within plan limits
+
+### 4.2 New Subscriber First Day (Future NEW Pricing System)
+**User**: Sarah Chen (just upgraded to Pro plan - NEW pricing system)
+**Goal**: Maximize value from new subscription with new pricing tiers
+
+**Steps**:
+1. **Subscription Activation**
+   - Complete payment flow (TWD 599/month for Pro plan)
+   - Land on success page
+   - Verify dashboard shows "Pro" badge
+   - Check monthly credits (250 credits added)
+   - Verify personal promotion code is generated
+   - Check allowed models: ["default", "wan_pro", "gemini_pro"]
+
+2. **First Custom Upload with Model Selection**
+   - Navigate to `/tools/background-removal`
+   - Upload own product image (JPEG, <20MB)
+   - Select AI model: "default" (3 credits) vs "wan_pro" (6 credits)
+   - Generate result with both models
+   - Compare quality vs. credit cost
+   - Download clean (no watermark) result
+
+3. **Plan Feature Verification**
+   - Check max concurrent generations: 2 (Pro plan)
+   - Verify social media batch posting enabled
+   - Check priority queue access: true
+   - Test enterprise features: custom watermark, API access
+
+4. **Credit System Testing**
+   - Check credit balance breakdown: subscription vs purchased vs bonus
+   - Test credit deduction priority: bonus → subscription → purchased
+   - Verify monthly credit expiration (no carryover)
+   - Test concurrent generation limit (2 simultaneous)
+
+5. **Service Pricing Verification**
+   - Check `/api/v1/plans/check-permission?service_type=image_to_video_wan`
+   - Verify access to premium services
+   - Test model permission checking
+   - Validate credit costs match NEW service pricing table
+
+6. **Gallery Integration**
+   - Browse gallery with "subscriber" access
+   - Note "Upload Your Own" CTAs work
+   - Use examples as starting points with custom images
+   - Save favorite prompts/styles for reuse
+
+**Expected Outcomes**:
+- Immediate value realization with 250 monthly credits
+- Successful custom uploads with model selection and cost comparison
+- Understanding of Pro plan features and limits
+- Proper credit system functionality
+- Access to premium services based on plan tier
+- Efficient workflow with concurrent processing
 
 ### 4.2 Power User Workflow
 **User**: James Lee (interior designer, heavy user)

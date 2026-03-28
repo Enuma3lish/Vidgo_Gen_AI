@@ -75,23 +75,20 @@ onUnmounted(() => {
               style="width: 600px;"
             >
               <div class="grid grid-cols-3 gap-0 p-4">
-                <!-- Fashion AI Column -->
+                <!-- Fashion & Video Column -->
                 <div>
                   <div class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider" style="color: #6b6b8a;">{{ t('lp.categories.fashionAI') }}</div>
                   <RouterLink to="/tools/try-on" class="dropdown-item" @click="toolsOpen = false">
                     <span>👗</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.tryOn.name') }}</span>
                   </RouterLink>
-                  <RouterLink to="/tools/ai-model-swap" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🧑‍🎤</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.aiModelSwap.name') }}</span>
-                  </RouterLink>
                   <RouterLink to="/tools/short-video" class="dropdown-item" @click="toolsOpen = false">
                     <span>🎬</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.fashionReels.name') }}</span>
                   </RouterLink>
+                  <RouterLink to="/tools/text-to-video" class="dropdown-item" @click="toolsOpen = false">
+                    <span>🎥</span><span class="font-medium" style="color: #e8e8f0;">Text to Video</span>
+                  </RouterLink>
                   <RouterLink to="/tools/avatar" class="dropdown-item" @click="toolsOpen = false">
                     <span>🎭</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.productAvatars.name') }}</span>
-                  </RouterLink>
-                  <RouterLink to="/tools/try-on-accessories" class="dropdown-item" @click="toolsOpen = false">
-                    <span>💍</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.tryOnAccessories.name') }}</span>
                   </RouterLink>
                 </div>
                 <!-- E-commerce AI Column -->
@@ -103,17 +100,14 @@ onUnmounted(() => {
                   <RouterLink to="/tools/background-removal" class="dropdown-item" @click="toolsOpen = false">
                     <span>✂️</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.bgRemoval.name') }}</span>
                   </RouterLink>
-                  <RouterLink to="/tools/background-removal" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🖼️</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.aiBackgrounds.name') }}</span>
+                  <RouterLink to="/tools/upscale" class="dropdown-item" @click="toolsOpen = false">
+                    <span>🔍</span><span class="font-medium" style="color: #e8e8f0;">HD Upscale</span>
                   </RouterLink>
-                  <RouterLink to="/tools/effects" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🌑</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.aiShadows.name') }}</span>
-                  </RouterLink>
-                  <RouterLink to="/tools/ai-templates" class="dropdown-item" @click="toolsOpen = false">
-                    <span>📐</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.aiTemplates.name') }}</span>
+                  <RouterLink to="/tools/pattern-generate" class="dropdown-item" @click="toolsOpen = false">
+                    <span>🎨</span><span class="font-medium" style="color: #e8e8f0;">Pattern Design</span>
                   </RouterLink>
                 </div>
-                <!-- Design AI Column -->
+                <!-- Design & Effects Column -->
                 <div>
                   <div class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider" style="color: #6b6b8a;">{{ t('lp.categories.designAI') }}</div>
                   <RouterLink to="/tools/room-redesign" class="dropdown-item" @click="toolsOpen = false">
@@ -122,11 +116,11 @@ onUnmounted(() => {
                   <RouterLink to="/tools/effects" class="dropdown-item" @click="toolsOpen = false">
                     <span>🎨</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.styleClone.name') }}</span>
                   </RouterLink>
-                  <RouterLink to="/tools/image-translator" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🌐</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.imageTranslator.name') }}</span>
+                  <RouterLink to="/tools/image-transform" class="dropdown-item" @click="toolsOpen = false">
+                    <span>🔄</span><span class="font-medium" style="color: #e8e8f0;">Image Transform</span>
                   </RouterLink>
-                  <RouterLink to="/tools/remove-watermark" class="dropdown-item" @click="toolsOpen = false">
-                    <span>💧</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.removeWatermark.name') }}</span>
+                  <RouterLink to="/tools/video-transform" class="dropdown-item" @click="toolsOpen = false">
+                    <span>🎞️</span><span class="font-medium" style="color: #e8e8f0;">Video Style Transfer</span>
                   </RouterLink>
                 </div>
               </div>
@@ -183,13 +177,14 @@ onUnmounted(() => {
         <RouterLink to="/pricing" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">{{ t('nav.pricing') }}</RouterLink>
         <div class="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider" style="color: #6b6b8a;">{{ t('nav.tools') }}</div>
         <RouterLink to="/tools/try-on" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">👗 {{ t('lp.allTools.tryOn.name') }}</RouterLink>
-        <RouterLink to="/tools/ai-model-swap" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🧑‍🎤 {{ t('lp.allTools.aiModelSwap.name') }}</RouterLink>
         <RouterLink to="/tools/short-video" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🎬 {{ t('lp.allTools.fashionReels.name') }}</RouterLink>
+        <RouterLink to="/tools/text-to-video" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🎥 Text to Video</RouterLink>
         <RouterLink to="/tools/avatar" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🎭 {{ t('lp.allTools.productAvatars.name') }}</RouterLink>
         <RouterLink to="/tools/product-scene" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">📸 {{ t('lp.allTools.productAnyshoot.name') }}</RouterLink>
         <RouterLink to="/tools/background-removal" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">✂️ {{ t('lp.allTools.bgRemoval.name') }}</RouterLink>
+        <RouterLink to="/tools/upscale" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🔍 HD Upscale</RouterLink>
         <RouterLink to="/tools/room-redesign" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🏠 {{ t('lp.allTools.roomRedesign.name') }}</RouterLink>
-        <RouterLink to="/tools/image-translator" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🌐 {{ t('lp.allTools.imageTranslator.name') }}</RouterLink>
+        <RouterLink to="/tools/effects" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🎨 {{ t('lp.allTools.styleClone.name') }}</RouterLink>
         <div v-if="!authStore.isAuthenticated" class="pt-3 space-y-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
           <RouterLink to="/auth/login" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">{{ t('nav.login') }}</RouterLink>
           <RouterLink to="/auth/register" class="block px-4 py-2.5 rounded-lg text-white text-center font-semibold" style="background: #1677ff;" @click="mobileMenuOpen = false">{{ t('lp.ctaPrimary') }}</RouterLink>

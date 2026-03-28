@@ -135,7 +135,18 @@
       "Bash(sed -i 's/100: \"\"#d0e4f5\"\",.*$/100: \"\"#f5f5f5\"\",   \\\\/\\\\/ Very light bg/' /home/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/tailwind.config.js)",
       "Bash(for f:*)",
       "Bash(do sed:*)",
-      "Bash(npx vue-tsc:*)"
+      "Bash(npx vue-tsc:*)",
+      "Bash(chmod +x /Users/mailungwu/Desktop/Vidgo_Gen_AI/gcp/deploy-production.sh /Users/mailungwu/Desktop/Vidgo_Gen_AI/gcp/cloud-armor-policy.sh)",
+      "Bash(do python:*)",
+      "Bash(echo \"FAIL: $f\")",
+      "Bash(chmod +x /Users/mailungwu/Desktop/Vidgo_Gen_AI/gcp/deploy.sh)",
+      "Bash(gcloud config:*)",
+      "Bash(gcloud --version)",
+      "Bash(~/google-cloud-sdk/bin/gcloud sql:*)",
+      "Bash(~/google-cloud-sdk/bin/gcloud run:*)",
+      "Bash(~/google-cloud-sdk/bin/gcloud logging:*)",
+      "Bash(~/google-cloud-sdk/bin/gcloud secrets:*)",
+      "Bash(gcloud logging:*)"
     ]
   }
 }

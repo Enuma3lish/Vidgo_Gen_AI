@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
+import type { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -26,9 +26,25 @@ apiClient.interceptors.request.use(
   }
 )
 
-// Response interceptor - handle token refresh
+// Response interceptor - handle non-JSON responses and token refresh
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response: AxiosResponse) => {
+    // Guard against nginx returning index.html instead of JSON (misconfigured proxy)
+    const contentType = response.headers['content-type'] || ''
+    if (
+      response.config.headers?.['Content-Type'] === 'application/json' &&
+      !contentType.includes('application/json') &&
+      typeof response.data === 'string' &&
+      response.data.startsWith('<!') // HTML response
+    ) {
+      return Promise.reject(
+        Object.assign(new Error('API returned non-JSON response. The backend may be unreachable.'), {
+          response: { ...response, data: { detail: 'Service temporarily unavailable. Please try again.' } },
+        })
+      )
+    }
+    return response
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
 

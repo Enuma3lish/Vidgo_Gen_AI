@@ -5,8 +5,11 @@ Architecture:
 1. PiAPI — Primary provider for ALL generation tasks
 2. Gemini — Backup provider for image tasks when PiAPI has no credits
    - Supports: T2I, I2I, Interior, Background Removal, Upscale
-   - Does NOT support: I2V, T2V, V2V, Avatar (video generation)
-3. When PiAPI fails, Gemini is used as fallback for compatible tasks
+3. Pollo — Backup provider for video tasks when PiAPI fails
+   - Supports: I2V, T2V, V2V (via effects method)
+4. A2E — Backup provider for avatar tasks when PiAPI fails
+   - Supports: Avatar generation with lip sync
+5. When PiAPI fails, the appropriate backup is used for compatible tasks
 """
 from typing import Dict, Any, Optional
 from enum import Enum
@@ -16,6 +19,8 @@ import logging
 
 from app.providers.piapi_provider import PiAPIProvider
 from app.providers.gemini_provider import GeminiProvider
+from app.providers.pollo_provider import PolloProvider
+from app.providers.a2e_provider import A2EProvider
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +54,9 @@ class ProviderRouter:
     """
     Routes AI tasks to the correct provider.
 
-    PiAPI is primary for all tasks. Gemini is backup for image tasks only.
-    Video tasks (I2V, T2V, V2V, Avatar) have no backup - will fail if PiAPI is down.
+    PiAPI is primary for all tasks. Gemini is backup for image tasks.
+    Pollo is backup for video tasks (I2V, T2V, V2V).
+    A2E is backup for avatar tasks. INTERIOR_3D has no backup.
     """
 
     # Routing configuration with Gemini as backup for image tasks
@@ -63,11 +69,12 @@ class ProviderRouter:
         TaskType.UPSCALE:            {"primary": "piapi", "backup": "gemini"},
         TaskType.EFFECTS:            {"primary": "piapi", "backup": "gemini", "model": "flux1-schnell"},
         
-        # Video tasks - NO backup (Gemini doesn't support video)
-        TaskType.I2V:                {"primary": "piapi", "backup": None, "model": "wan2.6-i2v"},
-        TaskType.T2V:                {"primary": "piapi", "backup": None, "model": "wan2.6-t2v"},
-        TaskType.V2V:                {"primary": "piapi", "backup": None, "model": "wan2.1-vace"},
-        TaskType.AVATAR:             {"primary": "piapi", "backup": None},
+        # Video tasks - Pollo backup
+        TaskType.I2V:                {"primary": "piapi", "backup": "pollo", "model": "wan2.6-i2v"},
+        TaskType.T2V:                {"primary": "piapi", "backup": "pollo", "model": "wan2.6-t2v"},
+        TaskType.V2V:                {"primary": "piapi", "backup": "pollo", "model": "wan2.1-vace"},
+        # Avatar - A2E backup
+        TaskType.AVATAR:             {"primary": "piapi", "backup": "a2e"},
         TaskType.INTERIOR_3D:        {"primary": "piapi", "backup": None},
         
         # Gemini-only tasks
@@ -78,6 +85,8 @@ class ProviderRouter:
     def __init__(self):
         self.piapi = PiAPIProvider()
         self.gemini = GeminiProvider()
+        self.pollo = PolloProvider()
+        self.a2e = A2EProvider()
 
         self._status_cache: Dict[str, Dict] = {}
         self._last_health_check: Dict[str, datetime] = {}
@@ -207,6 +216,10 @@ class ProviderRouter:
             return await self._execute_piapi(task_type, params)
         elif provider == "gemini":
             return await self._execute_gemini(task_type, params)
+        elif provider == "pollo":
+            return await self._execute_pollo(task_type, params)
+        elif provider == "a2e":
+            return await self._execute_a2e(task_type, params)
         else:
             raise ValueError(f"Unknown provider: {provider}")
 
@@ -271,6 +284,33 @@ class ProviderRouter:
         else:
             raise ValueError(f"Gemini doesn't support: {task_type}")
 
+    async def _execute_pollo(
+        self, task_type: TaskType, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Execute task on Pollo — backup for video tasks."""
+        if task_type == TaskType.I2V:
+            return await self.pollo.image_to_video(params)
+        elif task_type == TaskType.T2V:
+            return await self.pollo.text_to_video(params)
+        elif task_type == TaskType.V2V:
+            # Pollo has no dedicated video_style_transfer method.
+            # Use effects() as best-effort approximation.
+            if params.get("video_url"):
+                return await self.pollo.effects(params)
+            else:
+                return await self.pollo.multi_model(params)
+        else:
+            raise ValueError(f"Pollo doesn't support: {task_type}")
+
+    async def _execute_a2e(
+        self, task_type: TaskType, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Execute task on A2E — backup for avatar tasks."""
+        if task_type == TaskType.AVATAR:
+            return await self.a2e.generate_avatar(params)
+        else:
+            raise ValueError(f"A2E doesn't support: {task_type}")
+
     # ─────────────────────────────────────────────────────────────────────────
     # HEALTH CHECKING
     # ─────────────────────────────────────────────────────────────────────────
@@ -309,7 +349,9 @@ class ProviderRouter:
         """Get provider instance by name."""
         providers = {
             "piapi": self.piapi,
-            "gemini": self.gemini
+            "gemini": self.gemini,
+            "pollo": self.pollo,
+            "a2e": self.a2e,
         }
         return providers.get(provider)
 
@@ -345,11 +387,18 @@ class ProviderRouter:
         """
         Generate user-friendly error messages based on task type and available backups.
         """
-        # Check if it's a video task (no backup available)
-        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.V2V, TaskType.AVATAR}
-        
+        # Check if it's a video task
+        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.V2V}
+
         if task_type in video_tasks:
+            if backup_provider:
+                return "Video generation services are experiencing issues on all providers. Please try again in a few minutes."
             return "Video generation services are temporarily unavailable. Please try again later or contact support."
+
+        if task_type == TaskType.AVATAR:
+            if backup_provider:
+                return "Avatar generation services are experiencing issues on all providers. Please try again in a few minutes."
+            return "Avatar generation service is temporarily unavailable. Please try again later or contact support."
         
         # Check if it's an image task with Gemini backup
         image_tasks_with_backup = {
@@ -381,7 +430,7 @@ class ProviderRouter:
     async def get_all_status(self) -> Dict[str, Any]:
         """Get status of all providers."""
         status = {}
-        for provider in ["piapi", "gemini"]:
+        for provider in ["piapi", "gemini", "pollo", "a2e"]:
             await self._check_provider_health(provider)
             cached = self._status_cache.get(provider, {})
             status[provider] = {
@@ -394,7 +443,7 @@ class ProviderRouter:
     async def check_service_status(self) -> Dict[str, Any]:
         """Check status of all services (for admin dashboard)."""
         status = {}
-        for name, provider in [("piapi", self.piapi), ("gemini", self.gemini)]:
+        for name, provider in [("piapi", self.piapi), ("gemini", self.gemini), ("pollo", self.pollo), ("a2e", self.a2e)]:
             try:
                 is_healthy = await provider.health_check()
                 status[name] = {
@@ -409,7 +458,9 @@ class ProviderRouter:
         """Close all provider connections."""
         await asyncio.gather(
             self.piapi.close(),
-            self.gemini.close()
+            self.gemini.close(),
+            self.pollo.close(),
+            self.a2e.close(),
         )
 
 

@@ -59,22 +59,20 @@ async function loadDemos() {
   }
 }
 
-// ── All AI Creation Tools (PicCopilot-style grid) ──
+// ── All AI Creation Tools (only real PiAPI-backed tools) ──
 const allTools = [
   { id: 'tryOn',           route: '/tools/try-on',             emoji: '👗', color: '#eb2f96', tag: 'Hot' },
-  { id: 'aiModelSwap',     route: '/tools/ai-model-swap',      emoji: '🧑‍🎤', color: '#722ed1', tag: 'New' },
   { id: 'fashionReels',    route: '/tools/short-video',        emoji: '🎬', color: '#1677ff', tag: 'Hot' },
   { id: 'productAvatars',  route: '/tools/avatar',             emoji: '🎭', color: '#531dab', tag: '' },
   { id: 'productAnyshoot', route: '/tools/product-scene',      emoji: '📸', color: '#fa8c16', tag: '' },
-  { id: 'tryOnAccessories',route: '/tools/try-on-accessories',  emoji: '💍', color: '#c41d7f', tag: 'New' },
-  { id: 'aiBackgrounds',   route: '/tools/background-removal', emoji: '🖼️', color: '#13c2c2', tag: '' },
-  { id: 'styleClone',      route: '/tools/effects',            emoji: '🎨', color: '#9254de', tag: '' },
-  { id: 'removeWatermark', route: '/tools/remove-watermark',   emoji: '💧', color: '#597ef7', tag: '' },
-  { id: 'aiTemplates',     route: '/tools/ai-templates',       emoji: '📐', color: '#f5222d', tag: '' },
-  { id: 'imageTranslator', route: '/tools/image-translator',   emoji: '🌐', color: '#13c2c2', tag: '' },
-  { id: 'aiShadows',       route: '/tools/effects',            emoji: '🌑', color: '#434343', tag: '' },
-  { id: 'roomRedesign',    route: '/tools/room-redesign',      emoji: '🏠', color: '#52c41a', tag: '' },
   { id: 'bgRemoval',       route: '/tools/background-removal', emoji: '✂️', color: '#08979c', tag: 'Free' },
+  { id: 'styleClone',      route: '/tools/effects',            emoji: '🎨', color: '#9254de', tag: '' },
+  { id: 'roomRedesign',    route: '/tools/room-redesign',      emoji: '🏠', color: '#52c41a', tag: '' },
+  { id: 'textToVideo',     route: '/tools/text-to-video',      emoji: '🎥', color: '#722ed1', tag: 'New' },
+  { id: 'hdUpscale',       route: '/tools/upscale',            emoji: '🔍', color: '#13c2c2', tag: 'New' },
+  { id: 'imageTransform',  route: '/tools/image-transform',    emoji: '🔄', color: '#597ef7', tag: '' },
+  { id: 'videoTransform',  route: '/tools/video-transform',    emoji: '🎞️', color: '#434343', tag: '' },
+  { id: 'patternGenerate', route: '/tools/pattern-generate',   emoji: '🎨', color: '#f5222d', tag: '' },
 ]
 
 // ── Seasonal marketing scenarios ──

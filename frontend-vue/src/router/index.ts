@@ -7,144 +7,123 @@ const routes: RouteRecordRaw[] = [
     name: 'home',
     component: () => import('@/views/LandingPage.vue')
   },
-  // ===== 5 Core Tools (per ARCHITECTURE_FINAL.md) =====
-  // Tool 1: Background Removal (一鍵白底圖)
+
+  // ===== Real Tools (backed by PiAPI / rembg / A2E APIs) =====
+
+  // Background Removal — local rembg
   {
     path: '/tools/background-removal',
     name: 'background-removal',
     component: () => import('@/views/tools/BackgroundRemoval.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool: Image Effects (風格轉換)
+
+  // Style Effects — PiAPI I2I (Flux)
   {
     path: '/tools/effects',
     name: 'effects',
     component: () => import('@/views/tools/ImageEffects.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool: Image Transform (AI 自由變換) - alias to ImageEffects with transform tab
+
+  // Image Transform — PiAPI I2I (Flux), auto-selects transform tab
   {
     path: '/tools/image-transform',
     name: 'image-transform',
     component: () => import('@/views/tools/ImageEffects.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool 2: Product Scene (商品場景圖)
+
+  // Product Scene — T2I + rembg + PIL composite
   {
     path: '/tools/product-scene',
     name: 'product-scene',
     component: () => import('@/views/tools/ProductScene.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool 3: AI Try-On (AI試穿)
+
+  // AI Try-On — PiAPI Kling ai_try_on
   {
     path: '/tools/try-on',
     name: 'try-on',
     component: () => import('@/views/tools/TryOn.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool 4: Room Redesign (毛坯精裝)
+
+  // Room Redesign — PiAPI Kontext (Flux advanced)
   {
     path: '/tools/room-redesign',
     name: 'room-redesign',
     component: () => import('@/views/tools/RoomRedesign.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool 5: Short Video (短影片)
+
+  // Image-to-Video — PiAPI Wan 2.6 I2V
   {
     path: '/tools/short-video',
     name: 'short-video',
     component: () => import('@/views/tools/ShortVideo.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool: Product Enhancement (產品增強)
-  {
-    path: '/tools/product-enhance',
-    name: 'product-enhance',
-    component: () => import('@/views/tools/ProductScene.vue'),
-    meta: { requiresAuth: false }
-  },
-  // Video tools (redirects to short-video for now)
   {
     path: '/tools/image-to-video',
     name: 'image-to-video',
     component: () => import('@/views/tools/ShortVideo.vue'),
     meta: { requiresAuth: false }
   },
+
+  // Video Style Transfer — PiAPI Wan VACE V2V
   {
     path: '/tools/video-transform',
     name: 'video-transform',
     component: () => import('@/views/tools/ShortVideo.vue'),
     meta: { requiresAuth: false }
   },
+
+  // Text-to-Video — PiAPI Wan 2.6 T2V (NEW)
   {
-    path: '/tools/product-video',
-    name: 'product-video',
-    component: () => import('@/views/tools/ShortVideo.vue'),
+    path: '/tools/text-to-video',
+    name: 'text-to-video',
+    component: () => import('@/views/tools/TextToVideo.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool 6: AI Avatar (AI數位人)
+
+  // Image Upscale — PiAPI image-toolkit (NEW)
+  {
+    path: '/tools/upscale',
+    name: 'upscale',
+    component: () => import('@/views/tools/ImageUpscale.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // AI Avatar — A2E provider
   {
     path: '/tools/avatar',
     name: 'avatar',
     component: () => import('@/views/tools/AIAvatar.vue'),
     meta: { requiresAuth: false }
   },
-  // Tool 7: AI Model Swap
-  {
-    path: '/tools/ai-model-swap',
-    name: 'ai-model-swap',
-    component: () => import('@/views/tools/TryOn.vue'),
-    meta: { requiresAuth: false }
-  },
-  // Tool 8: Try On Accessories
-  {
-    path: '/tools/try-on-accessories',
-    name: 'try-on-accessories',
-    component: () => import('@/views/tools/TryOn.vue'),
-    meta: { requiresAuth: false }
-  },
-  // Tool 9: Remove Watermark
-  {
-    path: '/tools/remove-watermark',
-    name: 'remove-watermark',
-    component: () => import('@/views/tools/ImageEffects.vue'),
-    meta: { requiresAuth: false }
-  },
-  // Tool 10: AI Templates
-  {
-    path: '/tools/ai-templates',
-    name: 'ai-templates',
-    component: () => import('@/views/tools/ProductScene.vue'),
-    meta: { requiresAuth: false }
-  },
-  // Tool 11: Image Translator
-  {
-    path: '/tools/image-translator',
-    name: 'image-translator',
-    component: () => import('@/views/tools/ImageEffects.vue'),
-    meta: { requiresAuth: false }
-  },
-  // Pattern tools
+
+  // Pattern Generate — PiAPI T2I (Flux)
   {
     path: '/tools/pattern-generate',
     name: 'pattern-generate',
     component: () => import('@/views/topics/PatternTopic.vue'),
     meta: { requiresAuth: false }
   },
-  {
-    path: '/tools/pattern-transfer',
-    name: 'pattern-transfer',
-    component: () => import('@/views/topics/PatternTopic.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/tools/pattern-seamless',
-    name: 'pattern-seamless',
-    component: () => import('@/views/topics/PatternTopic.vue'),
-    meta: { requiresAuth: false }
-  },
-  // Topic pages (navigation categories)
+
+  // ===== Redirects for removed/aliased routes =====
+  { path: '/tools/remove-watermark', redirect: '/tools/effects' },
+  { path: '/tools/image-translator', redirect: '/tools/effects' },
+  { path: '/tools/ai-model-swap', redirect: '/tools/try-on' },
+  { path: '/tools/try-on-accessories', redirect: '/tools/try-on' },
+  { path: '/tools/ai-templates', redirect: '/tools/product-scene' },
+  { path: '/tools/product-video', redirect: '/tools/short-video' },
+  { path: '/tools/product-enhance', redirect: '/tools/upscale' },
+  { path: '/tools/pattern-transfer', redirect: '/tools/pattern-generate' },
+  { path: '/tools/pattern-seamless', redirect: '/tools/pattern-generate' },
+
+  // Topic pages
   {
     path: '/topics/pattern',
     name: 'topic-pattern',
@@ -163,6 +142,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/topics/VideoTopic.vue'),
     meta: { requiresAuth: false }
   },
+
   // Auth routes
   {
     path: '/auth/login',
@@ -188,6 +168,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/ForgotPassword.vue'),
     meta: { guestOnly: true }
   },
+
   // Dashboard routes
   {
     path: '/dashboard',
@@ -219,19 +200,22 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/dashboard/SocialAccounts.vue'),
     meta: { requiresAuth: true }
   },
+
   // Pricing
   {
     path: '/pricing',
     name: 'pricing',
     component: () => import('@/views/Pricing.vue')
   },
+
   // Inspiration Gallery
   {
     path: '/gallery',
     name: 'gallery',
     component: () => import('@/views/InspirationGallery.vue')
   },
-  // Subscription payment result (Paddle redirects here)
+
+  // Subscription payment results
   {
     path: '/subscription/success',
     name: 'subscription-success',
@@ -249,12 +233,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/subscription/SubscriptionMockCheckout.vue'),
     meta: { requiresAuth: true }
   },
-  // ECPay payment result (ECPay redirects here after payment)
   {
     path: '/subscription/ecpay-result',
     name: 'subscription-ecpay-result',
     component: () => import('@/views/subscription/ECPayResult.vue')
   },
+
   // Admin Dashboard
   {
     path: '/admin',
@@ -292,6 +276,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminSystem.vue'),
     meta: { requiresAuth: true, requiresAdmin: true }
   },
+
   // 404
   {
     path: '/:pathMatch(.*)*',
@@ -320,14 +305,12 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (to.meta.guestOnly && isAuthenticated) {
-    // Validate token before redirecting away from auth pages
     const { useAuthStore } = await import('@/stores/auth')
     const authStore = useAuthStore()
     if (!authStore.user) {
       try {
         await authStore.fetchUser()
       } catch {
-        // Token is invalid/expired — let user access auth page
         next()
         return
       }
@@ -338,16 +321,11 @@ router.beforeEach(async (to, _from, next) => {
       next()
     }
   } else if (to.meta.requiresAdmin) {
-    // For admin routes, we need to check user's admin status
-    // This requires the auth store to be initialized
     const { useAuthStore } = await import('@/stores/auth')
     const authStore = useAuthStore()
-
-    // Fetch user if not already loaded
     if (!authStore.user && token) {
       await authStore.fetchUser()
     }
-
     if (!authStore.isAdmin) {
       next({ name: 'dashboard' })
     } else {

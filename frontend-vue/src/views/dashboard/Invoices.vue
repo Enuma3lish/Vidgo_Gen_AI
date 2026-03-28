@@ -210,7 +210,7 @@ function statusBadgeClass(status: string) {
                   </tr>
                 </thead>
                 <tbody style="color: #f5f5fa;">
-                  <tr v-for="inv in einvoices" :key="inv.id" class="transition-colors" style="border-bottom: 1px solid rgba(255,255,255,0.06);"
+                  <tr v-for="inv in einvoices" :key="inv.id" class="transition-colors" style="border-bottom: 1px solid rgba(255,255,255,0.06);">
                     <td class="py-3 px-4 text-dark-900 text-sm">{{ formatDate(inv.issued_at) }}</td>
                     <td class="py-3 px-4 font-mono text-sm">{{ inv.invoice_number || '—' }}</td>
                     <td class="py-3 px-4 text-center">
@@ -253,7 +253,7 @@ function statusBadgeClass(status: string) {
                   </tr>
                 </thead>
                 <tbody style="color: #f5f5fa;">
-                  <tr v-for="inv in invoices" :key="inv.order_id" class="transition-colors" style="border-bottom: 1px solid rgba(255,255,255,0.06);"
+                  <tr v-for="inv in invoices" :key="inv.order_id" class="transition-colors" style="border-bottom: 1px solid rgba(255,255,255,0.06);">
                     <td class="py-3 px-4 text-dark-900 text-sm">{{ formatDate(inv.paid_at) }}</td>
                     <td class="py-3 px-4 font-mono text-sm">{{ inv.invoice_number || inv.order_number }}</td>
                     <td class="py-3 px-4 text-right text-dark-900">{{ formatAmount(inv.amount, inv.currency) }}</td>

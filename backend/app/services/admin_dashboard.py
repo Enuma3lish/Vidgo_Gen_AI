@@ -358,6 +358,95 @@ class AdminDashboardService:
             "month_total": month_total,
         }
 
+    async def get_costs_dashboard(self) -> Dict[str, Any]:
+        """
+        Admin /admin/costs dashboard.
+        Shows PiAPI monthly spend, model cost analysis,
+        credit-to-API-cost ratio, and margin analysis.
+        """
+        today = datetime.utcnow().date()
+        month_start = today.replace(day=1)
+
+        # 1) Per-model cost breakdown for current month
+        model_result = await self.db.execute(
+            select(
+                ServicePricing.model_type,
+                ServicePricing.tool_type,
+                ServicePricing.display_name,
+                func.count(Generation.id).label("call_count"),
+                func.sum(ServicePricing.api_cost_usd).label("total_api_cost"),
+                func.sum(ServicePricing.credit_cost).label("total_credits_charged"),
+            )
+            .join(ServicePricing, Generation.service_type == ServicePricing.service_type)
+            .where(
+                and_(
+                    Generation.created_at >= month_start,
+                    Generation.status == "completed",
+                )
+            )
+            .group_by(
+                ServicePricing.model_type,
+                ServicePricing.tool_type,
+                ServicePricing.display_name,
+            )
+            .order_by(desc(func.sum(ServicePricing.api_cost_usd)))
+        )
+
+        models_breakdown = []
+        total_api_cost = 0.0
+        total_credits = 0
+        for row in model_result.all():
+            cost = float(row.total_api_cost or 0)
+            credits = int(row.total_credits_charged or 0)
+            total_api_cost += cost
+            total_credits += credits
+            models_breakdown.append({
+                "model_type": row.model_type or "default",
+                "tool_type": row.tool_type or "unknown",
+                "display_name": row.display_name,
+                "calls": row.call_count,
+                "api_cost_usd": round(cost, 4),
+                "credits_charged": credits,
+            })
+
+        # 2) Credit revenue vs API cost ratio
+        # Get total credit revenue this month (orders with status=paid)
+        revenue_result = await self.db.execute(
+            select(func.sum(Order.amount)).where(
+                and_(
+                    Order.paid_at >= month_start,
+                    Order.status == "paid",
+                )
+            )
+        )
+        month_revenue_twd = float(revenue_result.scalar_one() or 0)
+        month_revenue_usd = round(month_revenue_twd / 31, 2)  # Approx TWD/USD
+
+        # 3) Margin analysis
+        margin_usd = month_revenue_usd - total_api_cost
+        margin_pct = round((margin_usd / month_revenue_usd * 100), 1) if month_revenue_usd > 0 else 0
+
+        # 4) Model type distribution (pie chart data)
+        model_distribution = {}
+        for item in models_breakdown:
+            mt = item["model_type"]
+            if mt not in model_distribution:
+                model_distribution[mt] = {"calls": 0, "api_cost_usd": 0.0}
+            model_distribution[mt]["calls"] += item["calls"]
+            model_distribution[mt]["api_cost_usd"] += item["api_cost_usd"]
+
+        return {
+            "month": today.strftime("%Y-%m"),
+            "piapi_monthly_spend_usd": round(total_api_cost, 4),
+            "total_credits_consumed": total_credits,
+            "revenue_twd": round(month_revenue_twd, 2),
+            "revenue_usd_approx": month_revenue_usd,
+            "margin_usd": round(margin_usd, 2),
+            "margin_percent": margin_pct,
+            "models_breakdown": models_breakdown,
+            "model_distribution": model_distribution,
+        }
+
     async def get_active_users_stats(self) -> Dict[str, Any]:
         """
         Get active generation count and online user sessions.

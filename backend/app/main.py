@@ -19,7 +19,7 @@ async def _media_cleanup_loop():
     from app.services.media_cleanup_service import run_media_cleanup
     while True:
         try:
-            await asyncio.sleep(3600)  # 每小時執行一次
+            await asyncio.sleep(3600)
             async with AsyncSessionLocal() as db:
                 result = await run_media_cleanup(db)
                 if result['expired_count'] > 0:
@@ -28,6 +28,30 @@ async def _media_cleanup_loop():
             break
         except Exception as e:
             logger.error(f"[MediaCleanup] Error during cleanup: {e}")
+
+
+# ── Demo Cache Persistence Task ───────────────────────────────────────────────
+async def _demo_persist_loop():
+    """Hourly: persist expiring Redis demo cache entries to Material DB."""
+    from app.core.database import AsyncSessionLocal
+    from app.services.demo_cache_service import DemoCacheService
+    from app.api.deps import get_redis
+    while True:
+        try:
+            await asyncio.sleep(3600)
+            try:
+                redis = await get_redis()
+            except Exception:
+                continue
+            async with AsyncSessionLocal() as db:
+                svc = DemoCacheService(db, redis)
+                count = await svc.persist_expiring_to_db()
+                if count > 0:
+                    logger.info(f"[DemoPersist] Persisted {count} demo(s) to DB")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[DemoPersist] Error: {e}")
 
 
 # Ensure static directory exists
@@ -110,39 +134,48 @@ async def lifespan(app: FastAPI):
     PRESET-ONLY MODE: Uses BLOCKING validation to ensure all materials
     are ready before accepting requests.
     """
-    # Startup
+    # Startup — must be fast so Cloud Run health check passes
     logger.info("VidGo AI Backend starting up...")
-    logger.info("Mode: PRESET-ONLY (Material DB Lookup, No Runtime API Calls)")
 
-    # BLOCKING: Validate all pre-generated materials exist
-    # This ensures the service has all required materials before accepting requests
-    validation_result = await validate_materials_on_startup()
+    # NON-BLOCKING: validate materials in background (don't block server start)
+    app.state.materials_validated = False
+    app.state.materials_status = {}
 
-    # Store validation result in app state for health checks
-    app.state.materials_validated = validation_result.get('all_ready', False)
-    app.state.materials_status = validation_result
+    async def _background_init():
+        """Run DB-dependent init tasks after server is already listening."""
+        await asyncio.sleep(5)  # let server fully start first
+        try:
+            result = await asyncio.wait_for(validate_materials_on_startup(), timeout=30)
+            app.state.materials_validated = result.get('all_ready', False)
+            app.state.materials_status = result
+            if not result.get('all_ready', False):
+                logger.warning("Some materials may be missing — generate via admin endpoint")
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Material validation failed (non-fatal): {e}")
 
-    if not validation_result.get('all_ready', False):
-        logger.warning("=" * 60)
-        logger.warning("WARNING: Some materials may be missing!")
-        logger.warning("Run 'python scripts/pregenerate_all.py' to generate materials")
-        logger.warning("=" * 60)
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.services.media_cleanup_service import run_media_cleanup
+            async with AsyncSessionLocal() as db:
+                cleanup = await run_media_cleanup(db)
+                logger.info(f"[MediaCleanup] Startup cleanup: {cleanup['expired_count']} expired")
+        except Exception as e:
+            logger.warning(f"[MediaCleanup] Startup cleanup failed (non-fatal): {e}")
 
-    # Run initial media cleanup on startup (clear any already-expired media)
-    try:
-        from app.core.database import AsyncSessionLocal
-        from app.services.media_cleanup_service import run_media_cleanup
-        async with AsyncSessionLocal() as db:
-            result = await run_media_cleanup(db)
-            logger.info(f"[MediaCleanup] Startup cleanup: {result['expired_count']} generation(s) expired")
-    except Exception as e:
-        logger.warning(f"[MediaCleanup] Startup cleanup failed (non-fatal): {e}")
+    asyncio.create_task(_background_init())
 
-    # Start hourly background cleanup task
+    # Start hourly background tasks
     cleanup_task = asyncio.create_task(_media_cleanup_loop())
-    logger.info("[MediaCleanup] Hourly cleanup task started (14-day media retention policy)")
+    persist_task = asyncio.create_task(_demo_persist_loop())
+    logger.info("[Background] Hourly cleanup + demo persistence tasks started")
 
     yield
+
+    persist_task.cancel()
+    try:
+        await persist_task
+    except asyncio.CancelledError:
+        pass
 
     # Shutdown: cancel cleanup task
     cleanup_task.cancel()
@@ -160,7 +193,16 @@ app = FastAPI(
 )
 
 # Set all CORS enabled origins
-if settings.BACKEND_CORS_ORIGINS:
+# On GCP Cloud Run, frontend/backend have dynamic URLs — use wildcard when CORS_ALLOW_ALL=True
+if settings.CORS_ALLOW_ALL:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,  # Must be False when using wildcard origins (auth uses Bearer tokens, not cookies)
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+elif settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.BACKEND_CORS_ORIGINS,

@@ -740,6 +740,49 @@ class SubscriptionService:
                 "message": "Refund processed (mock mode)"
             }
 
+        # Route refund by payment method
+        payment_method = order.payment_method or order.payment_data.get("payment_method", "")
+
+        if payment_method == "ecpay":
+            # ECPay refund — requires manual processing by merchant
+            # ECPay does not provide an automated refund API for credit card payments.
+            # Mark as pending refund so admin can process manually via ECPay merchant portal.
+            order.status = "refund_pending"
+            order.payment_data["refund"] = {
+                "status": "pending_manual",
+                "amount": refund_amount,
+                "requested_at": utc_now().isoformat(),
+                "note": "ECPay refunds require manual processing via merchant portal",
+                "ecpay_trade_no": order.payment_data.get("ecpay_trade_no"),
+            }
+            await db.commit()
+
+            # Record refund transaction
+            transaction = CreditTransaction(
+                user_id=user.id,
+                amount=0,
+                balance_after=user.total_credits,
+                transaction_type="refund",
+                description=f"Subscription refund requested - {refund_amount} TWD (ECPay - pending manual processing)",
+                extra_data={
+                    "subscription_id": str(subscription.id),
+                    "order_id": str(order.id),
+                    "refund_amount": refund_amount,
+                    "payment_method": "ecpay",
+                }
+            )
+            db.add(transaction)
+            await db.commit()
+
+            logger.info(f"ECPay refund requested for order {order.order_number} — requires manual processing")
+
+            return {
+                "success": True,
+                "amount": refund_amount,
+                "message": "Refund requested. ECPay refunds are processed within 3-5 business days.",
+                "requires_manual": True,
+            }
+
         # Real Paddle refund
         transaction_id = order.payment_data.get("paddle_transaction_id")
         if not transaction_id:

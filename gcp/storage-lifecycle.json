@@ -1,0 +1,51 @@
+{
+  "_comment": "Cloud Storage lifecycle policy for vidgo-media bucket. Apply with: gsutil lifecycle set gcp/storage-lifecycle.json gs://vidgo-media",
+  "rule": [
+    {
+      "action": {
+        "type": "Delete"
+      },
+      "condition": {
+        "age": 14,
+        "matchesPrefix": ["generated/"]
+      }
+    },
+    {
+      "action": {
+        "type": "Delete"
+      },
+      "condition": {
+        "age": 30,
+        "matchesPrefix": ["uploads/"]
+      }
+    },
+    {
+      "action": {
+        "type": "SetStorageClass",
+        "storageClass": "NEARLINE"
+      },
+      "condition": {
+        "age": 7,
+        "matchesPrefix": ["materials/"]
+      }
+    },
+    {
+      "action": {
+        "type": "Delete"
+      },
+      "condition": {
+        "age": 90,
+        "matchesPrefix": ["materials/"]
+      }
+    },
+    {
+      "action": {
+        "type": "Delete"
+      },
+      "condition": {
+        "age": 7,
+        "matchesPrefix": ["temp/"]
+      }
+    }
+  ]
+}

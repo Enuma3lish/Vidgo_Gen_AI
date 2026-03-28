@@ -9,7 +9,7 @@ const orderNumber = route.query.order as string
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4 py-24" style="background: #09090b;"
+  <div class="min-h-screen flex items-center justify-center px-4 py-24" style="background: #09090b;">
     <div class="max-w-md w-full text-center card p-8">
       <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
         <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

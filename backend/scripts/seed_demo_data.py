@@ -48,23 +48,29 @@ ADMIN_PASSWORD = "Admin1234!"
 # =============================================================================
 
 # Generic result images pool - used as "generated" outputs
+# Taiwan SMB focus: food, drinks, daily products, small shop items
 RESULT_IMAGES = [
-    "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=80",
-    "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=80",
-    "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80",
-    "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&q=80",
-    "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80",
-    "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&q=80",
-    "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600&q=80",
-    "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=600&q=80",
-    "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=600&q=80",
-    "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?w=600&q=80",
-    "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=600&q=80",
-    "https://images.unsplash.com/photo-1577803645773-f96470509666?w=600&q=80",
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80",
-    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&q=80",
-    "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?w=600&q=80",
-    "https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=600&q=80",
+    # Food & Drinks
+    "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80",  # Bubble tea
+    "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&q=80",  # Food plate
+    "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=600&q=80",  # Cake
+    "https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=600&q=80",  # Coffee beans
+    # Daily Products
+    "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&q=80",  # Skincare bottle
+    "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&q=80",  # Cosmetics
+    "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=600&q=80",  # Candle
+    "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&q=80",  # Gift box
+    # Shop & Scenes
+    "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80",  # Living room
+    "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&q=80",  # Interior
+    "https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=600&q=80",  # Kitchen
+    "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?w=600&q=80",  # Bedroom
+    # Fashion (for try-on)
+    "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80",  # Fashion
+    "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&q=80",  # Fashion
+    # Art style results
+    "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=600&q=80",  # Art
+    "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=600&q=80",  # Art
 ]
 
 def _pick_result(idx: int) -> str:
@@ -76,30 +82,31 @@ def _pick_result(idx: int) -> str:
 # =============================================================================
 
 BG_REMOVAL_ITEMS = [
+    # Taiwan SMB: food, drinks, daily products — NOT luxury/tech
+    {"input": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&fit=crop",
+     "result": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&fit=crop",
+     "prompt": "Remove background from bubble tea", "prompt_zh": "珍珠奶茶去背", "topic": "drinks"},
+    {"input": "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=600&fit=crop",
+     "result": "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=600&fit=crop",
+     "prompt": "Remove background from birthday cake", "prompt_zh": "生日蛋糕去背", "topic": "desserts"},
     {"input": "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&fit=crop",
-     "result": "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&fit=crop&bg=transparent",
+     "result": "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&fit=crop",
      "prompt": "Remove background from skincare bottle", "prompt_zh": "保養品瓶去背", "topic": "packaging"},
-    {"input": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&fit=crop",
-     "result": "https://images.unsplash.com/photo-1546868871-af0de0ae72be?w=600&q=80",
-     "prompt": "Remove background from watch photo", "prompt_zh": "手錶產品去背", "topic": "equipment"},
-    {"input": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&fit=crop",
-     "result": "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=80",
-     "prompt": "Remove background from red sneakers", "prompt_zh": "紅色球鞋去背", "topic": "snacks"},
-    {"input": "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&fit=crop",
-     "result": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=80",
-     "prompt": "Remove background from running shoes", "prompt_zh": "跑鞋去背", "topic": "drinks"},
-    {"input": "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&fit=crop",
-     "result": "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&fit=crop",
-     "prompt": "Remove background from sneaker pair", "prompt_zh": "球鞋對去背", "topic": "desserts"},
-    {"input": "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&fit=crop",
-     "result": "https://images.unsplash.com/photo-1564466809058-bf4114d55352?w=600&q=80",
-     "prompt": "Remove background from camera", "prompt_zh": "相機去背", "topic": "meals"},
-    {"input": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&fit=crop",
-     "result": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=600&q=80",
-     "prompt": "Remove background from headphones", "prompt_zh": "耳機去背", "topic": "signage"},
+    {"input": "https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=600&fit=crop",
+     "result": "https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=600&fit=crop",
+     "prompt": "Remove background from coffee beans bag", "prompt_zh": "咖啡豆包裝去背", "topic": "drinks"},
+    {"input": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=600&fit=crop",
+     "result": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=600&fit=crop",
+     "prompt": "Remove background from handmade candle", "prompt_zh": "手工蠟燭去背", "topic": "equipment"},
     {"input": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&fit=crop",
      "result": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&fit=crop",
-     "prompt": "Remove background from cosmetics", "prompt_zh": "化妝品去背", "topic": "ingredients"},
+     "prompt": "Remove background from cosmetics set", "prompt_zh": "化妝品組合去背", "topic": "ingredients"},
+    {"input": "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&fit=crop",
+     "result": "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&fit=crop",
+     "prompt": "Remove background from gift box", "prompt_zh": "禮盒去背", "topic": "packaging"},
+    {"input": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&fit=crop",
+     "result": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&fit=crop",
+     "prompt": "Remove background from food plate", "prompt_zh": "餐點去背", "topic": "meals"},
 ]
 
 
@@ -387,38 +394,39 @@ PATTERN_ITEMS = [
 # =============================================================================
 
 EFFECT_ITEMS = [
-    {"input": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80",
+    # SMB focus: product photos → style transfer for menus, social ads, branding
+    {"input": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=600&q=80",
-     "prompt": "Oil painting style transfer", "prompt_zh": "油畫風格轉換",
-     "topic": "oil_painting", "effect_prompt": "oil painting, masterpiece, brushstrokes"},
-    {"input": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=600&q=80",
+     "prompt": "Bubble tea anime style for menu", "prompt_zh": "珍珠奶茶動漫風格菜單用",
+     "topic": "anime", "effect_prompt": "anime style, vibrant colors, cel shading, social media ad"},
+    {"input": "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=600&q=80",
-     "prompt": "Watercolor landscape effect", "prompt_zh": "水彩風景效果",
-     "topic": "watercolor", "effect_prompt": "watercolor painting, soft washes, delicate"},
-    {"input": "https://images.unsplash.com/photo-1500964757637-c85e8a162699?w=600&q=80",
+     "prompt": "Cake in Ghibli style for bakery poster", "prompt_zh": "蛋糕吉卜力風格烘焙坊海報用",
+     "topic": "ghibli", "effect_prompt": "studio ghibli style, hand-drawn, warm, soft lighting"},
+    {"input": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1613376023733-0a73315d9b06?w=600&q=80",
-     "prompt": "Anime illustration style", "prompt_zh": "動漫插畫風格",
-     "topic": "anime", "effect_prompt": "anime style, cel shading, vibrant"},
-    {"input": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=80",
+     "prompt": "Food plate cartoon style for shop menu", "prompt_zh": "餐點卡通風格店面菜單用",
+     "topic": "cartoon", "effect_prompt": "cartoon, bold outlines, flat colors, menu illustration"},
+    {"input": "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80",
-     "prompt": "Ghibli anime style", "prompt_zh": "吉卜力動漫風格",
-     "topic": "ghibli", "effect_prompt": "studio ghibli style, hand-drawn, soft"},
-    {"input": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&q=80",
+     "prompt": "Skincare oil painting style for branding", "prompt_zh": "保養品油畫風格品牌用",
+     "topic": "oil_painting", "effect_prompt": "oil painting, masterpiece, elegant brushstrokes, luxury feel"},
+    {"input": "https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1533628635777-112b2239b1c7?w=600&q=80",
-     "prompt": "Cartoon illustration style", "prompt_zh": "卡通插畫風格",
-     "topic": "cartoon", "effect_prompt": "cartoon, bold outlines, flat colors"},
-    {"input": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80",
+     "prompt": "Coffee beans watercolor style for cafe", "prompt_zh": "咖啡豆水彩風格咖啡廳用",
+     "topic": "watercolor", "effect_prompt": "watercolor painting, soft washes, cafe branding"},
+    {"input": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1526498460520-4c246339dccb?w=600&q=80",
-     "prompt": "Oil painting portrait style", "prompt_zh": "油畫肖像風格",
-     "topic": "oil_painting", "effect_prompt": "oil painting portrait, classical, thick brushstrokes"},
-    {"input": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=600&q=80",
-     "result": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=600&q=80",
-     "prompt": "Watercolor still life effect", "prompt_zh": "水彩靜物效果",
-     "topic": "watercolor", "effect_prompt": "watercolor still life, soft edges, transparent washes"},
-    {"input": "https://images.unsplash.com/photo-1515705576963-95cad62945b6?w=600&q=80",
+     "prompt": "Handmade candle anime style for market", "prompt_zh": "手工蠟燭動漫風格市集用",
+     "topic": "anime", "effect_prompt": "anime illustration, warm tones, cozy atmosphere"},
+    {"input": "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&q=80",
      "result": "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?w=600&q=80",
-     "prompt": "Anime character style effect", "prompt_zh": "動漫角色風格",
-     "topic": "anime", "effect_prompt": "anime character, detailed, colorful"},
+     "prompt": "Gift box oil painting style", "prompt_zh": "禮盒油畫風格",
+     "topic": "oil_painting", "effect_prompt": "oil painting, warm golden light, gift wrapping texture"},
+    {"input": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&q=80",
+     "result": "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=600&q=80",
+     "prompt": "Cosmetics watercolor style for poster", "prompt_zh": "化妝品水彩風格海報用",
+     "topic": "watercolor", "effect_prompt": "watercolor, delicate, pastel tones, beauty branding"},
 ]
 
 

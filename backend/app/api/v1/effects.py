@@ -15,12 +15,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, get_current_user_optional, is_subscribed_user
+from app.api.deps import get_db, get_current_user, get_current_user_optional, get_redis, is_subscribed_user
 from app.models.user import User
-from app.models.material import Material, ToolType
+from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
 from app.models.user_generation import UserGeneration
 from app.services.effects_service import VidGoEffectsService, VIDGO_STYLES
+from app.services.demo_cache_service import DemoCacheService
 from sqlalchemy import select, func
+import logging
+import hashlib
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/effects", tags=["effects"])
 
@@ -47,6 +52,10 @@ class ApplyStyleResponse(BaseModel):
     style: Optional[str] = None
     credits_used: Optional[int] = None
     error: Optional[str] = None
+    # Demo before/after pair
+    is_demo: bool = False
+    demo_input_url: Optional[str] = None
+    demo_prompt: Optional[str] = None
 
 
 class HDEnhanceRequest(BaseModel):
@@ -60,6 +69,8 @@ class HDEnhanceResponse(BaseModel):
     resolution: Optional[str] = None
     credits_used: Optional[int] = None
     error: Optional[str] = None
+    is_demo: bool = False
+    demo_input_url: Optional[str] = None
 
 
 class VideoEnhanceRequest(BaseModel):
@@ -73,6 +84,8 @@ class VideoEnhanceResponse(BaseModel):
     enhancement: Optional[str] = None
     credits_used: Optional[int] = None
     error: Optional[str] = None
+    is_demo: bool = False
+    demo_input_url: Optional[str] = None
 
 
 # ============ Endpoints ============
@@ -122,29 +135,23 @@ async def apply_style_effect(
 
     **Credits:** 8 points per use (subscribers only)
     """
-    # Demo path: return pre-generated material
+    # Demo path: return cached demo example
     if not is_subscribed_user(current_user):
-        result = await db.execute(
-            select(Material)
-            .where(
-                Material.tool_type == ToolType.EFFECT,
-                Material.topic == request.style_id,
-                Material.is_active == True,
-            )
-            .order_by(func.random())
-            .limit(1)
-        )
-        material = result.scalar_one_or_none()
-        if material:
-            return ApplyStyleResponse(
-                success=True,
-                output_url=material.result_watermarked_url or material.result_image_url,
-                style=request.style_id,
-                credits_used=0,
-            )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Active subscription required. No demo examples available for this style.",
+        try:
+            redis = await get_redis()
+        except Exception:
+            redis = None
+        demo = await DemoCacheService(db, redis).get_or_generate(ToolType.EFFECT, topic=request.style_id)
+        if not demo:
+            raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable.")
+        return ApplyStyleResponse(
+            success=True,
+            output_url=demo["result_url"],
+            style=request.style_id,
+            credits_used=0,
+            is_demo=True,
+            demo_input_url=demo.get("input_image_url"),
+            demo_prompt=demo.get("prompt"),
         )
 
     # Subscriber path: call real API
@@ -176,6 +183,39 @@ async def apply_style_effect(
         credits_used=result.get("credits_used", 8),
     )
     db.add(generation)
+
+    # Recycle for demo gallery (admin review required)
+    output_url = result.get("output_url")
+    if output_url:
+        try:
+            existing_count = await db.execute(
+                select(func.count()).select_from(Material).where(
+                    Material.tool_type == ToolType.EFFECT,
+                    Material.topic == request.style_id,
+                    Material.source == MaterialSource.USER,
+                )
+            )
+            if (existing_count.scalar() or 0) < 10:
+                lookup_content = f"effect:{request.image_url}:{request.style_id}:{generation.id}"
+                lookup_hash = hashlib.sha256(lookup_content.encode()).hexdigest()[:64]
+                material = Material(
+                    lookup_hash=lookup_hash,
+                    tool_type=ToolType.EFFECT,
+                    topic=request.style_id,
+                    prompt=f"User effect: {request.style_id}",
+                    effect_prompt=request.style_id,
+                    input_image_url=request.image_url,
+                    result_image_url=output_url,
+                    result_watermarked_url=output_url,
+                    source=MaterialSource.USER,
+                    status=MaterialStatus.PENDING,
+                    is_active=False,
+                    input_params={"style_id": request.style_id, "intensity": request.intensity},
+                )
+                db.add(material)
+        except Exception as e:
+            logger.debug(f"[Recycle] Skip effect: {e}")
+
     await db.commit()
 
     return ApplyStyleResponse(
@@ -201,10 +241,7 @@ async def hd_enhance(
     **Credits:** 10 points per use (subscribers only)
     """
     if not is_subscribed_user(current_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Active subscription required for HD enhance.",
-        )
+        raise HTTPException(status_code=403, detail="Active subscription required for HD enhance.")
 
     effects_service = VidGoEffectsService(db)
 
@@ -260,10 +297,7 @@ async def video_enhance(
     - denoise: Noise reduction
     """
     if not is_subscribed_user(current_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Active subscription required for video enhance.",
-        )
+        raise HTTPException(status_code=403, detail="Active subscription required for video enhance.")
 
     effects_service = VidGoEffectsService(db)
 

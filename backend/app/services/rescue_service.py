@@ -4,11 +4,11 @@ Wrapper around ProviderRouter with automatic failover.
 
 Architecture (following vidgo-backend-architecture.md):
 - T2I: PiAPI (primary) → Gemini (backup)
-- I2V: PiAPI (primary) → Gemini (backup)
-- T2V: PiAPI (primary) → Gemini (backup)
+- I2V: PiAPI (primary) → Pollo (backup)
+- T2V: PiAPI (primary) → Pollo (backup)
+- V2V: PiAPI (primary) → Pollo (backup, via effects method)
 - Interior: PiAPI/Wan Doodle (primary) → Gemini (backup)
-- V2V: PiAPI (primary) → Gemini (backup)
-- Avatar: Gemini (no backup)
+- Avatar: PiAPI (primary) → A2E (backup)
 """
 import logging
 from typing import Optional, Dict, Any

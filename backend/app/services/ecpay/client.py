@@ -137,7 +137,9 @@ class ECPayClient:
 
     def verify_callback(self, callback_data: Dict[str, Any]) -> bool:
         """
-        Verify ECPay payment callback data
+        Verify ECPay payment callback data.
+
+        Uses a copy to avoid mutating the original dict.
 
         Args:
             callback_data: Callback data from ECPay
@@ -149,11 +151,12 @@ class ECPayClient:
             logger.error("CheckMacValue not found in callback data")
             return False
 
-        # Extract CheckMacValue from callback
-        received_check_mac = callback_data.pop('CheckMacValue')
+        # Use .get() to avoid mutating the original dict
+        received_check_mac = callback_data.get('CheckMacValue')
 
-        # Generate CheckMacValue from callback data
-        calculated_check_mac = self.generate_check_mac_value(callback_data)
+        # Generate CheckMacValue from callback data (excluding CheckMacValue itself)
+        params_without_mac = {k: v for k, v in callback_data.items() if k != 'CheckMacValue'}
+        calculated_check_mac = self.generate_check_mac_value(params_without_mac)
 
         # Compare
         is_valid = received_check_mac == calculated_check_mac
@@ -163,14 +166,11 @@ class ECPayClient:
         else:
             logger.error(f"Payment callback verification failed for order: {callback_data.get('MerchantTradeNo')}")
 
-        # Restore CheckMacValue
-        callback_data['CheckMacValue'] = received_check_mac
-
         return is_valid
 
-    def query_payment(self, merchant_trade_no: str, query_url: str) -> Dict[str, Any]:
+    async def query_payment_async(self, merchant_trade_no: str, query_url: str) -> Dict[str, Any]:
         """
-        Query payment status from ECPay
+        Query payment status from ECPay (async version).
 
         Args:
             merchant_trade_no: Order number
@@ -179,7 +179,7 @@ class ECPayClient:
         Returns:
             Dict containing payment status
         """
-        import requests
+        import httpx
 
         params = {
             'MerchantID': self.merchant_id,
@@ -192,14 +192,49 @@ class ECPayClient:
         params['CheckMacValue'] = check_mac_value
 
         try:
-            response = requests.post(query_url, data=params)
-            response.raise_for_status()
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(query_url, data=params)
+                response.raise_for_status()
 
             # Parse response
             result = {}
             for item in response.text.split('&'):
-                key, value = item.split('=')
-                result[key] = value
+                if '=' in item:
+                    key, value = item.split('=', 1)
+                    result[key] = value
+
+            logger.info(f"Queried payment status for order: {merchant_trade_no}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to query payment: {str(e)}")
+            return {}
+
+    def query_payment(self, merchant_trade_no: str, query_url: str) -> Dict[str, Any]:
+        """
+        Query payment status from ECPay (sync fallback).
+        Prefer query_payment_async() for async contexts.
+        """
+        import httpx
+
+        params = {
+            'MerchantID': self.merchant_id,
+            'MerchantTradeNo': merchant_trade_no,
+            'TimeStamp': str(int(time.time())),
+        }
+
+        check_mac_value = self.generate_check_mac_value(params)
+        params['CheckMacValue'] = check_mac_value
+
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(query_url, data=params)
+                response.raise_for_status()
+
+            result = {}
+            for item in response.text.split('&'):
+                if '=' in item:
+                    key, value = item.split('=', 1)
+                    result[key] = value
 
             logger.info(f"Queried payment status for order: {merchant_trade_no}")
             return result

@@ -2,7 +2,6 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { demoApi } from '@/api/demo'
 
 const { t } = useI18n()
 const router = useRouter()

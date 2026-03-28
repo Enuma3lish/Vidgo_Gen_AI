@@ -21,10 +21,13 @@ from datetime import datetime
 import logging
 
 from app.api import deps
+from app.core.config import get_settings
 from app.models.user import User
 from app.models.billing import Plan, Subscription, Order, Invoice
 from app.services.subscription_service import get_subscription_service, REFUND_ELIGIBILITY_DAYS
 from app.services.paddle_service import get_paddle_service
+
+settings = get_settings()
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 logger = logging.getLogger(__name__)
@@ -196,12 +199,13 @@ async def subscribe_to_plan(
 
     **Behavior:**
     - If Paddle API key is configured: Returns checkout URL for payment
-    - If Paddle API key is NOT configured: Activates subscription immediately (mock mode)
+    - If ECPay credentials are configured: Returns ECPay form data
+    - If NEITHER is configured: Activates subscription immediately (mock mode)
 
     **Mock Mode:**
-    When running without Paddle keys (development), subscriptions are activated
-    immediately with full credits allocated. This allows testing the full user
-    flow without actual payments.
+    When running without payment keys (development/GCP without keys),
+    subscriptions are activated immediately with full credits allocated.
+    This allows testing the full user flow without actual payments.
 
     **Args:**
     - plan_id: UUID of the plan to subscribe to
@@ -219,13 +223,28 @@ async def subscribe_to_plan(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID format")
 
+    # Check if payment providers are actually configured
+    paddle = get_paddle_service()
+    ecpay_configured = bool(
+        settings.ECPAY_MERCHANT_ID and settings.ECPAY_HASH_KEY and settings.ECPAY_HASH_IV
+    )
+
+    # If neither payment provider is configured, force mock/direct mode
+    force_skip = False
+    if paddle.is_mock and not ecpay_configured:
+        logger.info("No payment providers configured — activating subscription in mock mode")
+        force_skip = True
+    elif request.payment_method == 'ecpay' and not ecpay_configured:
+        logger.info("ECPay not configured — falling back to mock mode")
+        force_skip = True
+
     result = await subscription_service.subscribe(
         db=db,
         user_id=current_user.id,
         plan_id=plan_uuid,
         billing_cycle=request.billing_cycle,
         payment_method=request.payment_method,
-        skip_payment=False  # Let the service decide based on mock mode
+        skip_payment=force_skip  # Force skip when no payment provider available
     )
 
     if not result.get("success"):

@@ -138,12 +138,12 @@ NEW_CREDIT_PACKAGE_DATA = [
         "name_en": "Standard Pack",
         "name_zh": "標準包",
         "display_name": "標準包 (多送 10%)",
-        "credits": 5000,
+        "credits": 5500,
         "price": 499.0,
         "price_twd": Decimal("499"),
         "price_usd": Decimal("16"),
         "min_plan": "basic",
-        "bonus_credits": 500,  # 10% bonus
+        "bonus_credits": 500,  # 10% bonus included in 5500
         "is_popular": True,
         "is_best_value": False,
         "sort_order": 2
@@ -153,12 +153,12 @@ NEW_CREDIT_PACKAGE_DATA = [
         "name_en": "Heavy Pack",
         "name_zh": "重度包",
         "display_name": "重度包 (多送 20%)",
-        "credits": 10000,
+        "credits": 12000,
         "price": 999.0,
         "price_twd": Decimal("999"),
         "price_usd": Decimal("32"),
         "min_plan": "pro",
-        "bonus_credits": 2000,  # 20% bonus
+        "bonus_credits": 2000,  # 20% bonus included in 12000
         "is_popular": False,
         "is_best_value": True,
         "sort_order": 3

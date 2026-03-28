@@ -28,15 +28,42 @@ import uuid
 from app.providers.provider_router import get_provider_router, TaskType
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.similarity import get_similarity_service
-from app.api.deps import get_current_user_optional, get_db, is_subscribed_user
+from app.api.deps import get_current_user_optional, get_db, get_redis, is_subscribed_user
 from app.models.demo import ToolShowcase, PromptCache
 from app.models.material import Material, ToolType
 from app.models.user_generation import UserGeneration
+from app.services.demo_cache_service import DemoCacheService
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _gen_demo_response(
+    db,
+    tool_type: str,
+    topic: str | None = None,
+    cta: str = "Subscribe for custom generation.",
+):
+    """Get cached demo or generate one via real API on first visit."""
+    try:
+        redis = await get_redis()
+    except Exception:
+        redis = None
+    demo = await DemoCacheService(db, redis).get_or_generate(tool_type, topic)
+    if not demo:
+        raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable. Please try again.")
+    return GenerationResponse(
+        success=True,
+        result_url=demo["result_url"],
+        credits_used=0,
+        cached=True,
+        is_demo=True,
+        demo_input_url=demo.get("input_image_url"),
+        demo_prompt=demo.get("prompt"),
+        message=f"This is a demo example. {cta}",
+    )
 
 # Initialize provider router singleton
 provider_router = get_provider_router()
@@ -304,6 +331,10 @@ class GenerationResponse(BaseModel):
     credits_used: int = 0
     message: Optional[str] = None
     cached: bool = False
+    # Demo before/after pair — set when returning a pre-generated example
+    is_demo: bool = False
+    demo_input_url: Optional[str] = None   # "before" image from the pre-generated example
+    demo_prompt: Optional[str] = None      # prompt used to generate the example
 
 
 # ============================================================================
@@ -324,30 +355,9 @@ async def generate_pattern(
 
     Styles: seamless, floral, geometric, abstract, traditional
     """
-    # Demo path: return pre-generated material
+    # Demo path: return cached demo example
     if not is_subscribed_user(current_user):
-        result = await db.execute(
-            select(Material)
-            .where(
-                Material.tool_type == ToolType.PATTERN_GENERATE,
-                Material.topic == request.style,
-                Material.is_active == True,
-            )
-            .order_by(func.random())
-            .limit(1)
-        )
-        material = result.scalar_one_or_none()
-        if material:
-            return GenerationResponse(
-                success=True,
-                result_url=material.result_watermarked_url or material.result_image_url,
-                credits_used=0,
-                message="Demo pattern (watermarked). Subscribe to generate custom patterns.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Active subscription required. No demo examples available.",
-        )
+        return await _gen_demo_response(db, ToolType.PATTERN_GENERATE, topic=request.style, cta="Subscribe to generate custom patterns.")
 
     # Subscriber path: call real API
     try:
@@ -470,29 +480,9 @@ async def remove_background(
     - **Subscribers:** Calls real API, saves to UserGeneration.
     - **Demo users:** Returns a pre-generated Material DB result (watermarked).
     """
-    # Demo path: return pre-generated material
+    # Demo path: return cached demo example
     if not is_subscribed_user(current_user):
-        result = await db.execute(
-            select(Material)
-            .where(
-                Material.tool_type == ToolType.BACKGROUND_REMOVAL,
-                Material.is_active == True,
-            )
-            .order_by(func.random())
-            .limit(1)
-        )
-        material = result.scalar_one_or_none()
-        if material:
-            return GenerationResponse(
-                success=True,
-                result_url=material.result_watermarked_url or material.result_image_url,
-                credits_used=0,
-                message="Demo background removal (watermarked). Subscribe to process your own images.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Active subscription required. No demo examples available.",
-        )
+        return await _gen_demo_response(db, ToolType.BACKGROUND_REMOVAL, cta="Subscribe to process your own images.")
 
     # Subscriber path: call real API
     try:
@@ -546,30 +536,9 @@ async def generate_product_scene(
 
     Scene types: studio, nature, elegant, minimal, lifestyle
     """
-    # Demo path: return pre-generated material
+    # Demo path: return cached demo example
     if not is_subscribed_user(current_user):
-        result = await db.execute(
-            select(Material)
-            .where(
-                Material.tool_type == ToolType.PRODUCT_SCENE,
-                Material.topic == request.scene_type,
-                Material.is_active == True,
-            )
-            .order_by(func.random())
-            .limit(1)
-        )
-        material = result.scalar_one_or_none()
-        if material:
-            return GenerationResponse(
-                success=True,
-                result_url=material.result_watermarked_url or material.result_image_url,
-                credits_used=0,
-                message="Demo product scene (watermarked). Subscribe to generate custom scenes.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Active subscription required. No demo examples available.",
-        )
+        return await _gen_demo_response(db, ToolType.PRODUCT_SCENE, topic=request.scene_type, cta="Subscribe to generate custom scenes.")
 
     # Subscriber path: 3-step I2I pipeline
     # Step 1: Remove background from user's product image
@@ -713,30 +682,9 @@ async def image_to_video(
 
     Uses PiAPI (Wan I2V) as primary with Gemini as backup.
     """
-    # Demo path: return pre-generated material
+    # Demo path: return cached demo example
     if not is_subscribed_user(current_user):
-        result = await db.execute(
-            select(Material)
-            .where(
-                Material.tool_type == ToolType.SHORT_VIDEO,
-                Material.is_active == True,
-                Material.result_video_url.isnot(None),
-            )
-            .order_by(func.random())
-            .limit(1)
-        )
-        material = result.scalar_one_or_none()
-        if material:
-            return GenerationResponse(
-                success=True,
-                result_url=material.result_watermarked_url or material.result_video_url,
-                credits_used=0,
-                message="Demo video (watermarked). Subscribe to generate custom videos.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Active subscription required. No demo examples available.",
-        )
+        return await _gen_demo_response(db, ToolType.SHORT_VIDEO, cta="Subscribe to generate custom videos.")
 
     # Subscriber path: call real API
     try:

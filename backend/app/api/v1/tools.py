@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 import uuid
 from pathlib import Path
 from PIL import Image
@@ -31,12 +32,101 @@ except ImportError:
     A2E_VOICES = {"en": [], "zh-TW": []}
 from app.api.deps import get_current_user_optional, get_current_user, get_db, get_redis, is_subscribed_user, get_user_plan_features
 from app.models.user_generation import UserGeneration
-from app.models.material import Material, ToolType
+from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
 from app.services.credit_service import CreditService
+from app.services.demo_cache_service import DemoCacheService
 import logging
 import os
+import hashlib
 
 logger = logging.getLogger(__name__)
+
+
+async def _maybe_recycle_for_demo(
+    db: AsyncSession,
+    user_gen: UserGeneration,
+    tool_type: ToolType,
+    topic: str = "_all",
+    prompt: str = "",
+    input_image_url: str | None = None,
+    result_image_url: str | None = None,
+    result_video_url: str | None = None,
+    effect_prompt: str | None = None,
+    input_params: dict | None = None,
+):
+    """
+    Flag high-quality subscriber generations as candidates for demo gallery.
+
+    Creates a Material record with status=PENDING and source=USER.
+    Admin can later approve/feature these via the admin dashboard,
+    providing free, authentic demo content from real SMB use cases.
+    """
+    # Only recycle if we have a result
+    if not result_image_url and not result_video_url:
+        return
+
+    try:
+        # Check if we already have enough user-sourced materials for this tool+topic
+        existing_count = await db.execute(
+            select(func.count()).select_from(Material).where(
+                Material.tool_type == tool_type,
+                Material.topic == topic,
+                Material.source == MaterialSource.USER,
+            )
+        )
+        count = existing_count.scalar() or 0
+        if count >= 10:  # Cap at 10 pending user materials per tool+topic
+            return
+
+        lookup_content = f"{tool_type.value}:{prompt}:{effect_prompt or ''}:{user_gen.id}"
+        lookup_hash = hashlib.sha256(lookup_content.encode()).hexdigest()[:64]
+
+        material = Material(
+            lookup_hash=lookup_hash,
+            tool_type=tool_type,
+            topic=topic,
+            prompt=prompt,
+            effect_prompt=effect_prompt,
+            input_image_url=input_image_url,
+            result_image_url=result_image_url,
+            result_video_url=result_video_url,
+            result_watermarked_url=result_image_url or result_video_url,
+            source=MaterialSource.USER,
+            status=MaterialStatus.PENDING,  # Needs admin approval
+            is_active=False,  # Not visible until approved
+            input_params=input_params or {},
+        )
+        db.add(material)
+        # Don't commit here — let the caller's commit handle it
+        logger.info(f"[Recycle] Flagged user generation for demo review: {tool_type.value}/{topic}")
+    except Exception as e:
+        logger.debug(f"[Recycle] Skip: {e}")
+
+
+async def _demo_response(
+    db: AsyncSession,
+    tool_type: str,
+    topic: str | None = None,
+    cta: str = "Subscribe for custom generation.",
+):
+    """Get cached demo or generate one via real API on first visit."""
+    try:
+        redis = await get_redis()
+    except Exception:
+        redis = None
+    demo = await DemoCacheService(db, redis).get_or_generate(tool_type, topic)
+    if not demo:
+        raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable. Please try again.")
+    return ToolResponse(
+        success=True,
+        result_url=demo["result_url"],
+        credits_used=0,
+        cached=True,
+        is_demo=True,
+        demo_input_url=demo.get("input_image_url"),
+        demo_prompt=demo.get("prompt"),
+        message=f"This is a demo example. {cta}",
+    )
 
 router = APIRouter()
 
@@ -93,6 +183,16 @@ async def _check_plan_resolution(
     return True, None
 
 
+async def _check_concurrent_limit(db: AsyncSession, user) -> tuple:
+    """Check if user has reached concurrent generation limit.
+    Returns (ok: bool, error_msg: str | None)"""
+    credit_svc = CreditService(db)
+    within_limit, error_msg = await credit_svc.check_concurrent_limit(str(user.id))
+    if not within_limit:
+        return False, error_msg
+    return True, None
+
+
 async def _check_and_deduct_credits(
     db: AsyncSession,
     user,
@@ -100,8 +200,13 @@ async def _check_and_deduct_credits(
     service_type: str,
     redis_client=None
 ) -> tuple:
-    """Check if user has enough credits and deduct them.
+    """Check concurrent limit, check credits, and deduct.
     Returns (ok: bool, error_msg: str | None)"""
+    # Check concurrent generation limit first
+    ok, err = await _check_concurrent_limit(db, user)
+    if not ok:
+        return False, err
+
     credit_svc = CreditService(db, redis_client)
     has_enough = await credit_svc.check_sufficient(str(user.id), amount)
     if not has_enough:
@@ -184,6 +289,10 @@ class ToolResponse(BaseModel):
     credits_used: int = 0
     message: Optional[str] = None
     cached: bool = False
+    # Demo before/after pair — set when returning a pre-generated example
+    is_demo: bool = False
+    demo_input_url: Optional[str] = None   # "before" image from the pre-generated example
+    demo_prompt: Optional[str] = None      # prompt used to generate the example
 
 
 # ============================================================================
@@ -274,33 +383,10 @@ async def remove_background(
 
     Credits: 3 per image
     """
-    # ========== DEMO USER: Use pre-generated Material DB ==========
+    # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        logger.info("Demo user: Looking up pre-generated background removal result")
-        
-        result = await db.execute(
-            select(Material)
-            .where(Material.tool_type == ToolType.BACKGROUND_REMOVAL)
-            .where(Material.is_active == True)
-            .limit(1)
-        )
-        material = result.scalars().first()
-        
-        if material:
-            result_url = material.result_watermarked_url or material.result_image_url
-            return ToolResponse(
-                success=True,
-                result_url=result_url,
-                credits_used=0,
-                cached=True,
-                message="Demo result (watermarked)"
-            )
-        else:
-            return ToolResponse(
-                success=False,
-                message="No pre-generated examples available. Please subscribe."
-            )
-    
+        return await _demo_response(db, ToolType.BACKGROUND_REMOVAL, cta="Subscribe to process your own images.")
+
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 3
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "background_removal")
@@ -329,8 +415,17 @@ async def remove_background(
             )
             user_gen.set_expiry()
             db.add(user_gen)
+
+            # Recycle for demo gallery (admin review required)
+            await _maybe_recycle_for_demo(
+                db, user_gen, ToolType.BACKGROUND_REMOVAL,
+                topic="product", prompt="User background removal",
+                input_image_url=str(request.image_url),
+                result_image_url=result_url,
+            )
+
             await db.commit()
-            
+
             return ToolResponse(
                 success=True,
                 result_url=result_url,
@@ -450,36 +545,10 @@ async def generate_product_scene(
 
     scene_prompt = request.custom_prompt or scene["prompt"]
     
-    # ========== DEMO USER: Use pre-generated Material DB ==========
+    # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        logger.info(f"Demo user: Looking up pre-generated result for scene={request.scene_type}")
-        
-        # Find matching pre-generated material
-        result = await db.execute(
-            select(Material)
-            .where(Material.tool_type == ToolType.PRODUCT_SCENE)
-            .where(Material.topic == request.scene_type)
-            .where(Material.is_active == True)
-            .limit(1)
-        )
-        material = result.scalars().first()
-        
-        if material:
-            # Return watermarked result for demo users
-            result_url = material.result_watermarked_url or material.result_image_url
-            return ToolResponse(
-                success=True,
-                result_url=result_url,
-                credits_used=0,  # Demo users don't use credits
-                cached=True,
-                message="Demo result (watermarked)"
-            )
-        else:
-            return ToolResponse(
-                success=False,
-                message="No pre-generated examples available. Please subscribe for custom generation."
-            )
-    
+        return await _demo_response(db, ToolType.PRODUCT_SCENE, topic=request.scene_type, cta="Subscribe to generate custom scenes.")
+
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
     CREDIT_COST = 10
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "product_scene")
@@ -573,8 +642,19 @@ async def generate_product_scene(
         )
         user_gen.set_expiry()
         db.add(user_gen)
+
+        # Recycle for demo gallery
+        await _maybe_recycle_for_demo(
+            db, user_gen, ToolType.PRODUCT_SCENE,
+            topic=request.scene_type or "studio",
+            prompt=full_prompt,
+            input_image_url=str(request.product_image_url),
+            result_image_url=result_url,
+            input_params={"scene_type": request.scene_type},
+        )
+
         await db.commit()
-        
+
         return ToolResponse(
             success=True,
             result_url=result_url,
@@ -683,33 +763,10 @@ async def ai_try_on(
 
     Credits: 15 per generation
     """
-    # ========== DEMO USER: Use pre-generated Material DB ==========
+    # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        logger.info("Demo user: Looking up pre-generated try-on result")
-        
-        result = await db.execute(
-            select(Material)
-            .where(Material.tool_type == ToolType.TRY_ON)
-            .where(Material.is_active == True)
-            .limit(1)
-        )
-        material = result.scalars().first()
-        
-        if material:
-            result_url = material.result_watermarked_url or material.result_image_url
-            return ToolResponse(
-                success=True,
-                result_url=result_url,
-                credits_used=0,
-                cached=True,
-                message="Demo result (watermarked)"
-            )
-        else:
-            return ToolResponse(
-                success=False,
-                message="No pre-generated examples available. Please subscribe."
-            )
-    
+        return await _demo_response(db, ToolType.TRY_ON, cta="Subscribe to try on your own garments.")
+
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 15
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "virtual_try_on")
@@ -768,8 +825,18 @@ async def ai_try_on(
         )
         user_gen.set_expiry()
         db.add(user_gen)
+
+        # Recycle for demo gallery
+        await _maybe_recycle_for_demo(
+            db, user_gen, ToolType.TRY_ON,
+            topic="casual", prompt="User try-on",
+            input_image_url=str(request.garment_image_url),
+            result_image_url=result_url,
+            input_params={"model_id": request.model_id},
+        )
+
         await db.commit()
-        
+
         return ToolResponse(
             success=True,
             result_url=result_url,
@@ -807,44 +874,10 @@ async def room_redesign(
     Styles: modern, nordic, japanese, industrial, minimalist, luxury, bohemian, coastal
     Credits: 20 per generation
     """
-    # ========== DEMO USER: Use pre-generated Material DB ==========
+    # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        logger.info(f"Demo user: Looking up pre-generated room redesign for style={request.style}")
+        return await _demo_response(db, ToolType.ROOM_REDESIGN, topic=request.style, cta="Subscribe to redesign your own rooms.")
 
-        # Try exact style match first, then fall back to any room_redesign material
-        result = await db.execute(
-            select(Material)
-            .where(Material.tool_type == ToolType.ROOM_REDESIGN)
-            .where(Material.topic == request.style)
-            .where(Material.is_active == True)
-            .limit(1)
-        )
-        material = result.scalars().first()
-
-        if not material:
-            result = await db.execute(
-                select(Material)
-                .where(Material.tool_type == ToolType.ROOM_REDESIGN)
-                .where(Material.is_active == True)
-                .limit(1)
-            )
-            material = result.scalars().first()
-
-        if material:
-            result_url = material.result_watermarked_url or material.result_image_url
-            return ToolResponse(
-                success=True,
-                result_url=result_url,
-                credits_used=0,
-                cached=True,
-                message="Demo result (watermarked)"
-            )
-        else:
-            return ToolResponse(
-                success=False,
-                message="No pre-generated examples available. Please subscribe."
-            )
-    
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 20
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "room_redesign")
@@ -887,8 +920,19 @@ async def room_redesign(
             )
             user_gen.set_expiry()
             db.add(user_gen)
+
+            # Recycle for demo gallery
+            await _maybe_recycle_for_demo(
+                db, user_gen, ToolType.ROOM_REDESIGN,
+                topic=request.style or "modern",
+                prompt=f"Room redesign: {request.style}",
+                input_image_url=str(request.room_image_url),
+                result_image_url=output_url,
+                input_params={"style": request.style},
+            )
+
             await db.commit()
-            
+
             return ToolResponse(
                 success=True,
                 result_url=output_url,
@@ -929,33 +973,10 @@ async def generate_short_video(
 
     Credits: 25-35 (varies by features used)
     """
-    # ========== DEMO USER: Use pre-generated Material DB ==========
+    # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        logger.info("Demo user: Looking up pre-generated short video result")
-        
-        result = await db.execute(
-            select(Material)
-            .where(Material.tool_type == ToolType.SHORT_VIDEO)
-            .where(Material.is_active == True)
-            .limit(1)
-        )
-        material = result.scalars().first()
-        
-        if material:
-            result_url = material.result_watermarked_url or material.result_video_url
-            return ToolResponse(
-                success=True,
-                result_url=result_url,
-                credits_used=0,
-                cached=True,
-                message="Demo result (watermarked)"
-            )
-        else:
-            return ToolResponse(
-                success=False,
-                message="No pre-generated examples available. Please subscribe."
-            )
-    
+        return await _demo_response(db, ToolType.SHORT_VIDEO, cta="Subscribe to create your own videos.")
+
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 25
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "short_video")
@@ -1032,6 +1053,15 @@ async def generate_short_video(
             )
             user_gen.set_expiry()
             db.add(user_gen)
+
+            # Recycle for demo gallery
+            await _maybe_recycle_for_demo(
+                db, user_gen, ToolType.SHORT_VIDEO,
+                topic="product_showcase", prompt="User short video",
+                input_image_url=str(request.image_url),
+                result_video_url=video_url,
+            )
+
             await db.commit()
 
             return ToolResponse(
@@ -1057,6 +1087,225 @@ async def generate_short_video(
 
 
 # ============================================================================
+# Text-to-Video — PiAPI Wan 2.6 T2V
+# ============================================================================
+
+class TextToVideoRequest(BaseModel):
+    """Generate video from text prompt"""
+    prompt: str
+    duration: int = 5  # 5, 10, or 15 seconds
+    resolution: str = "1080P"  # 720P or 1080P
+    aspect_ratio: str = "16:9"  # 16:9, 9:16, 1:1
+
+
+@router.post("/text-to-video", response_model=ToolResponse)
+async def text_to_video(
+    request: TextToVideoRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional)
+):
+    """
+    Generate video from text description.
+
+    Uses PiAPI Wan 2.6 text-to-video.
+    Credits: 30 per generation
+    """
+    if not is_subscribed_user(current_user):
+        return await _demo_response(db, ToolType.SHORT_VIDEO, cta="Subscribe to generate custom videos.")
+
+    CREDIT_COST = 30
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "text_to_video")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        router_instance = get_provider_router()
+        result = await router_instance.route(
+            TaskType.T2V,
+            {
+                "prompt": request.prompt,
+                "duration": request.duration,
+                "resolution": request.resolution,
+                "aspect_ratio": request.aspect_ratio,
+            }
+        )
+
+        if result.get("success"):
+            output = result.get("output", {})
+            video_url = output.get("video_url")
+
+            generation = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.SHORT_VIDEO,
+                input_text=request.prompt,
+                input_params={"duration": request.duration, "resolution": request.resolution, "aspect_ratio": request.aspect_ratio},
+                result_video_url=video_url,
+                credits_used=CREDIT_COST,
+            )
+            generation.set_expiry()
+            db.add(generation)
+            await db.commit()
+
+            return ToolResponse(
+                success=True,
+                result_url=video_url,
+                credits_used=CREDIT_COST,
+                message="Video generated successfully"
+            )
+        else:
+            await _refund_credits(db, current_user, CREDIT_COST, "text_to_video")
+            return ToolResponse(success=False, message=result.get("error", "Video generation failed"))
+    except Exception as e:
+        logger.error(f"Text-to-video error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "text_to_video")
+        return ToolResponse(success=False, message=f"Generation failed: {str(e)}")
+
+
+# ============================================================================
+# Video Style Transfer — PiAPI Wan VACE V2V
+# ============================================================================
+
+class VideoTransformRequest(BaseModel):
+    """Transform video with style"""
+    video_url: str
+    prompt: str  # style description
+    style: Optional[str] = None
+
+
+@router.post("/video-transform", response_model=ToolResponse)
+async def video_transform(
+    request: VideoTransformRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional)
+):
+    """
+    Apply style transfer to a video.
+
+    Uses PiAPI Wan VACE video-to-video.
+    Credits: 35 per generation
+    """
+    if not is_subscribed_user(current_user):
+        return await _demo_response(db, ToolType.SHORT_VIDEO, cta="Subscribe for video style transfer.")
+
+    CREDIT_COST = 35
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "video_transform")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        router_instance = get_provider_router()
+        result = await router_instance.route(
+            TaskType.V2V,
+            {
+                "video_url": request.video_url,
+                "prompt": request.prompt,
+                "style": request.style,
+            }
+        )
+
+        if result.get("success"):
+            output = result.get("output", {})
+            video_url = output.get("video_url")
+
+            generation = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.SHORT_VIDEO,
+                input_video_url=request.video_url,
+                input_params={"prompt": request.prompt, "style": request.style},
+                result_video_url=video_url,
+                credits_used=CREDIT_COST,
+            )
+            generation.set_expiry()
+            db.add(generation)
+            await db.commit()
+
+            return ToolResponse(
+                success=True,
+                result_url=video_url,
+                credits_used=CREDIT_COST,
+                message="Video transformed successfully"
+            )
+        else:
+            await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
+            return ToolResponse(success=False, message=result.get("error", "Video transform failed"))
+    except Exception as e:
+        logger.error(f"Video transform error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
+        return ToolResponse(success=False, message=f"Generation failed: {str(e)}")
+
+
+# ============================================================================
+# Image Upscale — PiAPI image-toolkit
+# ============================================================================
+
+class UpscaleRequest(BaseModel):
+    """Upscale image to higher resolution"""
+    image_url: str
+    scale: int = 2  # 2x or 4x
+
+
+@router.post("/upscale", response_model=ToolResponse)
+async def upscale_image(
+    request: UpscaleRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional)
+):
+    """
+    Upscale image to 2x or 4x resolution.
+
+    Uses PiAPI image-toolkit upscale.
+    Credits: 10 per generation
+    """
+    if not is_subscribed_user(current_user):
+        return await _demo_response(db, ToolType.EFFECT, cta="Subscribe for HD upscale.")
+
+    CREDIT_COST = 10
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "upscale")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        router_instance = get_provider_router()
+        result = await router_instance.route(
+            TaskType.UPSCALE,
+            {
+                "image_url": request.image_url,
+                "scale": request.scale,
+            }
+        )
+
+        if result.get("success"):
+            output = result.get("output", {})
+            image_url = output.get("image_url")
+
+            generation = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.EFFECT,
+                input_image_url=request.image_url,
+                input_params={"scale": request.scale, "action": "upscale"},
+                result_image_url=image_url,
+                credits_used=CREDIT_COST,
+            )
+            generation.set_expiry()
+            db.add(generation)
+            await db.commit()
+
+            return ToolResponse(
+                success=True,
+                result_url=image_url,
+                credits_used=CREDIT_COST,
+                message=f"Image upscaled {request.scale}x successfully"
+            )
+        else:
+            await _refund_credits(db, current_user, CREDIT_COST, "upscale")
+            return ToolResponse(success=False, message=result.get("error", "Upscale failed"))
+    except Exception as e:
+        logger.error(f"Upscale error: {e}")
+        await _refund_credits(db, current_user, CREDIT_COST, "upscale")
+        return ToolResponse(success=False, message=f"Upscale failed: {str(e)}")
+
+
+# ============================================================================
 # Tool 6: AI Avatar
 # ============================================================================
 
@@ -1078,33 +1327,10 @@ async def generate_avatar_video(
     """
     from app.models.material import MaterialSource, MaterialStatus
 
-    # ========== DEMO USER: Use pre-generated Material DB ==========
+    # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        logger.info("Demo user: Looking up pre-generated avatar result")
-        
-        result = await db.execute(
-            select(Material)
-            .where(Material.tool_type == ToolType.AI_AVATAR)
-            .where(Material.is_active == True)
-            .limit(1)
-        )
-        material = result.scalars().first()
-        
-        if material:
-            result_url = material.result_watermarked_url or material.result_video_url
-            return ToolResponse(
-                success=True,
-                result_url=result_url,
-                credits_used=0,
-                cached=True,
-                message="Demo result (watermarked)"
-            )
-        else:
-            return ToolResponse(
-                success=False,
-                message="No pre-generated examples available. Please subscribe."
-            )
-    
+        return await _demo_response(db, ToolType.AI_AVATAR, cta="Subscribe to create your own avatars.")
+
     # ========== SUBSCRIBER: Real-time Generation ==========
     # Check plan-level resolution limit
     res_ok, res_err = await _check_plan_resolution(db, current_user, request.resolution)
@@ -1172,6 +1398,16 @@ async def generate_avatar_video(
             )
             user_gen.set_expiry()
             db.add(user_gen)
+
+            # Recycle for demo gallery
+            await _maybe_recycle_for_demo(
+                db, user_gen, ToolType.AI_AVATAR,
+                topic="spokesperson", prompt=request.script[:100],
+                input_image_url=str(request.image_url),
+                result_video_url=video_url,
+                input_params={"language": request.language},
+            )
+
             await db.commit()
 
             return ToolResponse(
@@ -1268,32 +1504,9 @@ async def image_transform(
 
     Credits: 20 (free) / 80 (paid) per generation
     """
-    # ========== DEMO USER: Use pre-generated Material DB ==========
+    # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        logger.info("Demo user: Looking up pre-generated effect result for I2I")
-
-        result = await db.execute(
-            select(Material)
-            .where(Material.tool_type == ToolType.EFFECT)
-            .where(Material.is_active == True)
-            .limit(1)
-        )
-        material = result.scalars().first()
-
-        if material:
-            result_url = material.result_watermarked_url or material.result_image_url
-            return ToolResponse(
-                success=True,
-                result_url=result_url,
-                credits_used=0,
-                cached=True,
-                message="Demo result (watermarked). Subscribe for custom I2I transformations."
-            )
-        else:
-            return ToolResponse(
-                success=False,
-                message="No pre-generated examples available. Please subscribe."
-            )
+        return await _demo_response(db, ToolType.EFFECT, cta="Subscribe for custom I2I transformations.")
 
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
     # Check plan-level effects permission

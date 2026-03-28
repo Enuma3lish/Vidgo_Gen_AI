@@ -64,6 +64,33 @@ export const toolsApi = {
     return response.data
   },
 
+  async textToVideo(prompt: string, opts?: { duration?: number; resolution?: string; aspectRatio?: string }): Promise<ToolResponse> {
+    const response = await apiClient.post('/api/v1/tools/text-to-video', {
+      prompt,
+      duration: opts?.duration ?? 5,
+      resolution: opts?.resolution ?? '1080P',
+      aspect_ratio: opts?.aspectRatio ?? '16:9',
+    })
+    return response.data
+  },
+
+  async videoTransform(videoUrl: string, prompt: string, style?: string): Promise<ToolResponse> {
+    const response = await apiClient.post('/api/v1/tools/video-transform', {
+      video_url: videoUrl,
+      prompt,
+      style,
+    })
+    return response.data
+  },
+
+  async upscale(imageUrl: string, scale = 2): Promise<ToolResponse> {
+    const response = await apiClient.post('/api/v1/tools/upscale', {
+      image_url: imageUrl,
+      scale,
+    })
+    return response.data
+  },
+
   async uploadImage(file: File): Promise<{ url: string }> {
     const formData = new FormData()
     formData.append('file', file)

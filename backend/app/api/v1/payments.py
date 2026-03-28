@@ -113,7 +113,9 @@ async def paddle_webhook(
         logger.info(f"Paddle webhook received: {event_type}")
 
         if event_type == "transaction.completed":
-            await handle_transaction_completed(db, event_data)
+            result = await handle_transaction_completed(db, event_data)
+            if result and result.get("already_processed"):
+                logger.info(f"Paddle webhook duplicate ignored: {event_data.get('id')}")
         elif event_type == "subscription.created":
             await handle_subscription_created(db, event_data)
         elif event_type == "subscription.updated":
@@ -128,7 +130,7 @@ async def paddle_webhook(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def handle_transaction_completed(db: AsyncSession, data: dict):
+async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
     """Handle successful payment transaction and send invoice email."""
     custom_data = data.get("custom_data", {})
     user_id = custom_data.get("user_id")
@@ -139,10 +141,10 @@ async def handle_transaction_completed(db: AsyncSession, data: dict):
 
     if not user_id:
         logger.warning(f"Transaction without user_id: {transaction_id}")
-        return
+        return {"success": False, "error": "no user_id"}
     if not transaction_id:
         logger.warning("Transaction completed webhook missing id")
-        return
+        return {"success": False, "error": "no transaction_id"}
 
     # Find order by transaction ID (normalize to string for JSONB comparison)
     result = await db.execute(
@@ -152,12 +154,20 @@ async def handle_transaction_completed(db: AsyncSession, data: dict):
     )
     order = result.scalars().first()
 
-    if order:
-        from app.services.subscription_service import get_subscription_service
-        subscription_service = get_subscription_service()
-        await subscription_service.handle_payment_success(
-            db, order.order_number, data
-        )
+    if not order:
+        logger.warning(f"No order found for Paddle transaction: {transaction_id}")
+        return {"success": False, "error": "order not found"}
+
+    # Idempotency: skip if already paid (duplicate webhook)
+    if order.status == "paid":
+        logger.info(f"Order {order.order_number} already paid — ignoring duplicate webhook")
+        return {"success": True, "already_processed": True}
+
+    from app.services.subscription_service import get_subscription_service
+    subscription_service = get_subscription_service()
+    await subscription_service.handle_payment_success(
+        db, order.order_number, data
+    )
 
     # --- Send Invoice Email ---
     try:
@@ -195,6 +205,7 @@ async def handle_transaction_completed(db: AsyncSession, data: dict):
         # Don't fail the webhook for email errors
 
     logger.info(f"Transaction completed: {transaction_id}")
+    return {"success": True}
 
 
 async def handle_subscription_created(db: AsyncSession, data: dict):
@@ -295,6 +306,15 @@ async def ecpay_payment_callback(
         order_number = callback_data.get("MerchantTradeNo", "")
 
         if rtn_code == "1" and order_number:
+            # Idempotency: check if order already paid (duplicate callback)
+            existing_order = await db.execute(
+                select(Order).where(Order.order_number == order_number)
+            )
+            existing = existing_order.scalars().first()
+            if existing and existing.status == "paid":
+                logger.info(f"ECPay callback duplicate ignored — order {order_number} already paid")
+                return HTMLResponse(content="1|OK", status_code=200)
+
             # Payment successful - activate subscription
             from app.services.subscription_service import get_subscription_service
             subscription_service = get_subscription_service()

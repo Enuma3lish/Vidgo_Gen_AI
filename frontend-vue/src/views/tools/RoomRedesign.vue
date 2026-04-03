@@ -20,7 +20,8 @@ const isZh = computed(() => locale.value.startsWith('zh'))
 const {
   isDemoUser,
   loadDemoTemplates,
-  demoTemplates
+  demoTemplates,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 // Data
@@ -135,16 +136,16 @@ const displayStyles = computed(() => {
 // Track which demo room is selected
 const selectedDemoRoomId = ref<string | null>('room-1')
 
-// Pre-generated results cache: key = "room-id_roomType_style", value = result URL
-const preGeneratedResults = ref<Record<string, string>>({})
+// Pre-generated preset cache: key = "room-id_roomType_style", value = preset ID
+const preGeneratedTemplateIds = ref<Record<string, string>>({})
 // Get result key for current selection
 const currentResultKey = computed(() => {
   return `${selectedDemoRoomId.value}_${selectedRoomType.value}_${selectedStyle.value}`
 })
 
-// Get pre-generated result for current combination
-const currentPreGeneratedResult = computed(() => {
-  return preGeneratedResults.value[currentResultKey.value] || null
+// Get pre-generated preset ID for current combination
+const currentPreGeneratedTemplateId = computed(() => {
+  return preGeneratedTemplateIds.value[currentResultKey.value] || null
 })
 
 // Computed
@@ -189,10 +190,9 @@ onMounted(async () => {
   }
 })
 
-// Load pre-generated results for ALL room×roomType×style combinations from database
+// Load pre-generated preset IDs for ALL room×roomType×style combinations from database
 function loadAllPreGeneratedResults() {
-  // Clear existing cache
-  preGeneratedResults.value = {}
+  preGeneratedTemplateIds.value = {}
 
   // For demo, we'll check templates that match room input + room type + style
   for (const room of defaultRooms) {
@@ -210,8 +210,8 @@ function loadAllPreGeneratedResults() {
           (t as any).input_params?.style_id === style.id
         )
 
-        if (template?.result_watermarked_url || template?.result_image_url) {
-          preGeneratedResults.value[resultKey] = template.result_watermarked_url || template.result_image_url || ''
+        if (template?.id) {
+          preGeneratedTemplateIds.value[resultKey] = template.id
         }
       }
     }
@@ -220,23 +220,23 @@ function loadAllPreGeneratedResults() {
 
 // Handlers
 async function handleRedesign() {
-  // For demo users, use cached result based on room×roomType×style combination
+  // For demo users, resolve the exact room×roomType×style preset through backend lookup
   if (isDemoUser.value) {
     isProcessing.value = true
     try {
-      // Simulate processing delay for demo effect
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Check if we have a pre-generated result for this exact combination
-      const preGenResult = currentPreGeneratedResult.value
-      if (preGenResult) {
-        resultImage.value = preGenResult
-        resultDescription.value = ''
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
+      const preGeneratedTemplateId = currentPreGeneratedTemplateId.value
+      if (preGeneratedTemplateId) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(preGeneratedTemplateId)
+        if (demoResultUrl) {
+          resultImage.value = demoResultUrl
+          resultDescription.value = ''
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
+        }
       }
 
-      // Try to find a preset that matches the selected room, room type, AND style
       const selectedRoom = defaultRooms.find(r => r.id === selectedDemoRoomId.value)
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
@@ -248,13 +248,15 @@ async function handleRedesign() {
         return matchesRoom && matchesRoomType && matchesStyle
       })
 
-      if (template?.result_watermarked_url || template?.result_image_url) {
-        resultImage.value = template.result_watermarked_url || template.result_image_url || null
-        resultDescription.value = (template as any).result_description || ''
-        // Cache for future use
-        preGeneratedResults.value[currentResultKey.value] = template.result_watermarked_url || template.result_image_url || ''
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
+      if (template?.id) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
+        if (demoResultUrl) {
+          resultImage.value = demoResultUrl
+          resultDescription.value = (template as any).result_description || ''
+          preGeneratedTemplateIds.value[currentResultKey.value] = template.id
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
+        }
       }
 
       // No matching pre-generated result - show info message
@@ -342,23 +344,23 @@ async function handleGenerate() {
 }
 
 async function handleStyleTransfer() {
-  // For demo users, use cached result for room×roomType×style combination
+  // For demo users, resolve the exact room×roomType×style preset through backend lookup
   if (isDemoUser.value) {
     isProcessing.value = true
     try {
-      // Simulate processing delay for demo effect
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Check if we have a pre-generated result for this exact combination
-      const preGenResult = currentPreGeneratedResult.value
-      if (preGenResult) {
-        resultImage.value = preGenResult
-        resultDescription.value = ''
-        uiStore.showSuccess(isZh.value ? '風格轉換成功（示範）' : 'Style applied successfully (Demo)')
-        return
+      const preGeneratedTemplateId = currentPreGeneratedTemplateId.value
+      if (preGeneratedTemplateId) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(preGeneratedTemplateId)
+        if (demoResultUrl) {
+          resultImage.value = demoResultUrl
+          resultDescription.value = ''
+          uiStore.showSuccess(isZh.value ? '風格轉換成功（示範）' : 'Style applied successfully (Demo)')
+          return
+        }
       }
 
-      // Try to find a preset that matches the selected room AND style
       const selectedRoom = defaultRooms.find(r => r.id === selectedDemoRoomId.value)
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
@@ -369,13 +371,15 @@ async function handleStyleTransfer() {
         return matchesRoom && matchesStyle
       })
 
-      if (template?.result_watermarked_url || template?.result_image_url) {
-        resultImage.value = template.result_watermarked_url || template.result_image_url || null
-        resultDescription.value = (template as any).result_description || ''
-        // Cache for future use
-        preGeneratedResults.value[currentResultKey.value] = template.result_watermarked_url || template.result_image_url || ''
-        uiStore.showSuccess(isZh.value ? '風格轉換成功（示範）' : 'Style applied successfully (Demo)')
-        return
+      if (template?.id) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
+        if (demoResultUrl) {
+          resultImage.value = demoResultUrl
+          resultDescription.value = (template as any).result_description || ''
+          preGeneratedTemplateIds.value[currentResultKey.value] = template.id
+          uiStore.showSuccess(isZh.value ? '風格轉換成功（示範）' : 'Style applied successfully (Demo)')
+          return
+        }
       }
 
       // No matching pre-generated result - show info message

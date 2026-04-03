@@ -1,15 +1,16 @@
 """
-Provider Router - Routes AI tasks to the correct provider.
+Provider Router — Routes AI tasks to the correct provider.
 
-Architecture:
-1. PiAPI — Primary provider for ALL generation tasks
-2. Gemini — Backup provider for image tasks when PiAPI has no credits
-   - Supports: T2I, I2I, Interior, Background Removal, Upscale
-3. Pollo — Backup provider for video tasks when PiAPI fails
-   - Supports: I2V, T2V, V2V (via effects method)
-4. A2E — Backup provider for avatar tasks when PiAPI fails
-   - Supports: Avatar generation with lip sync
-5. When PiAPI fails, the appropriate backup is used for compatible tasks
+Architecture (MCP-based):
+1. Pollo.ai MCP  — PRIMARY for video tasks (I2V, T2V, V2V)
+2. PiAPI MCP     — PRIMARY for image/specialized tasks (T2I, I2I, Try-On, Interior, Avatar, TTS, Upscale, 3D)
+                 — BACKUP for video tasks when Pollo fails
+3. Gemini        — BACKUP for image tasks when PiAPI fails + Moderation + Material generation
+4. A2E           — BACKUP for avatar tasks when PiAPI fails
+5. GCS Storage   — Persists CDN URLs to Google Cloud Storage
+
+Legacy direct-API providers (PiAPI REST, Pollo REST) are kept as fallback
+when MCP servers are unavailable.
 """
 from typing import Dict, Any, Optional
 from enum import Enum
@@ -17,10 +18,13 @@ from datetime import datetime, timedelta
 import asyncio
 import logging
 
+from app.providers.piapi_mcp_provider import PiAPIMCPProvider
+from app.providers.pollo_mcp_provider import PolloMCPProvider
 from app.providers.piapi_provider import PiAPIProvider
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.pollo_provider import PolloProvider
 from app.providers.a2e_provider import A2EProvider
+from app.services.gcs_storage_service import get_gcs_storage
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +43,10 @@ class TaskType(str, Enum):
     BACKGROUND_REMOVAL = "background_removal"
     INTERIOR_3D = "interior_3d"
     I2I = "image_to_image"
-    # Gemini-only tasks
     MATERIAL_GENERATION = "material_generation"
 
 
 class ProviderStatus(str, Enum):
-    """Provider health status."""
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     DOWN = "down"
@@ -54,35 +56,47 @@ class ProviderRouter:
     """
     Routes AI tasks to the correct provider.
 
-    PiAPI is primary for all tasks. Gemini is backup for image tasks.
-    Pollo is backup for video tasks (I2V, T2V, V2V).
-    A2E is backup for avatar tasks. INTERIOR_3D has no backup.
+    Primary routing (MCP-based):
+      - Video tasks (I2V, T2V, V2V) → Pollo MCP (primary) → PiAPI MCP (backup)
+      - Image tasks (T2I, I2I, Effects) → PiAPI MCP (primary) → Gemini (backup)
+      - Specialized (Try-On, Interior, Avatar, Upscale, 3D, TTS) → PiAPI MCP (primary)
+      - Moderation / Material Gen → Gemini (only)
+      - BG Removal → Local rembg (via PiAPI MCP provider)
+
+    Fallback: If MCP servers are unavailable, falls back to direct REST providers.
     """
 
-    # Routing configuration with Gemini as backup for image tasks
+    # ── Routing config ──
+    # "primary" is tried first, "backup" on failure, "fallback" if MCP is down
     ROUTING_CONFIG = {
-        # Image tasks with Gemini backup
-        TaskType.T2I:                {"primary": "piapi", "backup": "gemini", "model": "flux1-schnell"},
-        TaskType.I2I:                {"primary": "piapi", "backup": "gemini", "model": "flux1-schnell"},
-        TaskType.INTERIOR:           {"primary": "piapi", "backup": "gemini", "model": "wan2.1-doodle"},
-        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi", "backup": "gemini"},
-        TaskType.UPSCALE:            {"primary": "piapi", "backup": "gemini"},
-        TaskType.EFFECTS:            {"primary": "piapi", "backup": "gemini", "model": "flux1-schnell"},
-        
-        # Video tasks - Pollo backup
-        TaskType.I2V:                {"primary": "piapi", "backup": "pollo", "model": "wan2.6-i2v"},
-        TaskType.T2V:                {"primary": "piapi", "backup": "pollo", "model": "wan2.6-t2v"},
-        TaskType.V2V:                {"primary": "piapi", "backup": "pollo", "model": "wan2.1-vace"},
-        # Avatar - A2E backup
-        TaskType.AVATAR:             {"primary": "piapi", "backup": "a2e"},
-        TaskType.INTERIOR_3D:        {"primary": "piapi", "backup": None},
-        
+        # Video tasks — Pollo MCP primary, PiAPI MCP backup
+        TaskType.I2V: {"primary": "pollo_mcp", "backup": "piapi_mcp", "fallback": "pollo"},
+        TaskType.T2V: {"primary": "pollo_mcp", "backup": "piapi_mcp", "fallback": "pollo"},
+        TaskType.V2V: {"primary": "pollo_mcp", "backup": "piapi_mcp", "fallback": "pollo"},
+
+        # Image tasks — PiAPI MCP primary, Gemini backup
+        TaskType.T2I:                {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
+        TaskType.I2I:                {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
+        TaskType.EFFECTS:            {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
+        TaskType.UPSCALE:            {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
+        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
+
+        # Specialized tasks — PiAPI MCP only (no other provider supports these)
+        TaskType.INTERIOR:    {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
+        TaskType.INTERIOR_3D: {"primary": "piapi_mcp", "backup": None,    "fallback": "piapi"},
+        TaskType.AVATAR:      {"primary": "piapi_mcp", "backup": "a2e",   "fallback": "piapi"},
+
         # Gemini-only tasks
-        TaskType.MODERATION:         {"primary": "gemini", "backup": None},
-        TaskType.MATERIAL_GENERATION:{"primary": "gemini", "backup": None},
+        TaskType.MODERATION:          {"primary": "gemini", "backup": None, "fallback": None},
+        TaskType.MATERIAL_GENERATION: {"primary": "gemini", "backup": None, "fallback": None},
     }
 
     def __init__(self):
+        # MCP providers (primary)
+        self.pollo_mcp = PolloMCPProvider()
+        self.piapi_mcp = PiAPIMCPProvider()
+
+        # Legacy REST providers (fallback)
         self.piapi = PiAPIProvider()
         self.gemini = GeminiProvider()
         self.pollo = PolloProvider()
@@ -100,55 +114,89 @@ class ProviderRouter:
         self,
         task_type: TaskType,
         params: Dict[str, Any],
-        user_tier: str = "starter"
+        user_tier: str = "starter",
+        persist_to_gcs: bool = True,
     ) -> Dict[str, Any]:
         """
         Route request to the appropriate provider.
-        Tries primary provider first, falls back to backup if available.
+        Tries: primary (MCP) → backup → fallback (REST).
+        Optionally persists result to GCS.
         """
         config = self.ROUTING_CONFIG.get(task_type)
         if not config:
             raise ValueError(f"Unknown task type: {task_type}")
 
-        primary_provider = config["primary"]
-        backup_provider = config.get("backup")
+        providers_to_try = []
+        for key in ("primary", "backup", "fallback"):
+            p = config.get(key)
+            if p and p not in providers_to_try:
+                providers_to_try.append(p)
 
-        # Try primary provider first
-        try:
-            result = await self._execute_on_provider(
-                primary_provider, task_type, params
-            )
-            self._record_success(primary_provider)
-            return {
-                **result,
-                "used_backup": False,
-                "primary_provider": primary_provider
-            }
-        except Exception as e:
-            logger.error(f"Primary provider {primary_provider} failed for {task_type}: {e}")
-            self._record_failure(primary_provider, str(e))
-            
-            # Try backup provider if available
-            if backup_provider:
+        last_error = None
+        for i, provider_name in enumerate(providers_to_try):
+            try:
+                result = await self._execute_on_provider(
+                    provider_name, task_type, params
+                )
+                self._record_success(provider_name)
+
+                # Persist to GCS if enabled
+                if persist_to_gcs:
+                    result = await self._persist_result_to_gcs(result, task_type)
+
+                return {
+                    **result,
+                    "used_backup": i > 0,
+                    "primary_provider": providers_to_try[0],
+                    "provider_used": provider_name,
+                    **({"backup_provider": provider_name, "primary_failed": True} if i > 0 else {}),
+                }
+            except Exception as e:
+                logger.error(f"Provider {provider_name} failed for {task_type}: {e}")
+                self._record_failure(provider_name, str(e))
+                last_error = str(e)
+
+        error_msg = self._get_user_friendly_error(
+            task_type, providers_to_try[0],
+            providers_to_try[1] if len(providers_to_try) > 1 else None,
+            last_error or "All providers failed",
+        )
+        raise Exception(error_msg)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # GCS PERSISTENCE
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def _persist_result_to_gcs(
+        self, result: Dict[str, Any], task_type: TaskType
+    ) -> Dict[str, Any]:
+        """Download CDN URL and persist to GCS, replacing the URL in result."""
+        gcs = get_gcs_storage()
+        if not gcs.enabled:
+            return result
+
+        output = result.get("output", {})
+        media_type = self._task_to_media_type(task_type)
+
+        for key in ("image_url", "video_url", "audio_url", "model_url"):
+            url = output.get(key)
+            if url and url.startswith("http"):
                 try:
-                    logger.info(f"Trying backup provider {backup_provider} for {task_type}")
-                    result = await self._execute_on_provider(
-                        backup_provider, task_type, params
-                    )
-                    self._record_success(backup_provider)
-                    return {
-                        **result,
-                        "used_backup": True,
-                        "backup_provider": backup_provider,
-                        "primary_failed": True
-                    }
-                except Exception as backup_error:
-                    logger.error(f"Backup provider {backup_provider} also failed for {task_type}: {backup_error}")
-                    self._record_failure(backup_provider, str(backup_error))
-            
-            # No backup available or backup also failed
-            error_msg = self._get_user_friendly_error(task_type, primary_provider, backup_provider, str(e))
-            raise Exception(error_msg)
+                    persisted_url = await gcs.persist_url(url, media_type=media_type)
+                    output[key] = persisted_url
+                except Exception as e:
+                    logger.warning(f"GCS persist failed for {key}, keeping CDN URL: {e}")
+
+        result["output"] = output
+        return result
+
+    def _task_to_media_type(self, task_type: TaskType) -> str:
+        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.V2V, TaskType.AVATAR}
+        if task_type in video_tasks:
+            return "video"
+        if task_type == TaskType.INTERIOR_3D:
+            return "model"
+        return "image"
 
     # ─────────────────────────────────────────────────────────────────────────
     # PROVIDER EXECUTION
@@ -209,10 +257,16 @@ class ProviderRouter:
         self,
         provider: str,
         task_type: TaskType,
-        params: Dict[str, Any]
+        params: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Execute task on specific provider."""
-        if provider == "piapi":
+        # MCP providers
+        if provider == "pollo_mcp":
+            return await self._execute_pollo_mcp(task_type, params)
+        elif provider == "piapi_mcp":
+            return await self._execute_piapi_mcp(task_type, params)
+        # Legacy REST providers
+        elif provider == "piapi":
             return await self._execute_piapi(task_type, params)
         elif provider == "gemini":
             return await self._execute_gemini(task_type, params)
@@ -223,10 +277,56 @@ class ProviderRouter:
         else:
             raise ValueError(f"Unknown provider: {provider}")
 
+    # ── MCP Providers ──
+
+    async def _execute_pollo_mcp(
+        self, task_type: TaskType, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Execute on Pollo MCP — primary for video."""
+        if task_type == TaskType.I2V:
+            return await self.pollo_mcp.image_to_video(params)
+        elif task_type == TaskType.T2V:
+            return await self.pollo_mcp.text_to_video(params)
+        elif task_type == TaskType.V2V:
+            return await self.pollo_mcp.video_style_transfer(params)
+        else:
+            raise ValueError(f"Pollo MCP doesn't support: {task_type}")
+
+    async def _execute_piapi_mcp(
+        self, task_type: TaskType, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Execute on PiAPI MCP — primary for image/specialized, backup for video."""
+        if task_type == TaskType.T2I:
+            return await self.piapi_mcp.text_to_image(params)
+        elif task_type == TaskType.I2I:
+            return await self.piapi_mcp.image_to_image(params)
+        elif task_type == TaskType.I2V:
+            return await self.piapi_mcp.image_to_video(params)
+        elif task_type == TaskType.T2V:
+            return await self.piapi_mcp.text_to_video(params)
+        elif task_type == TaskType.V2V:
+            return await self.piapi_mcp.video_style_transfer(params)
+        elif task_type == TaskType.INTERIOR:
+            return await self.piapi_mcp.doodle_interior(params)
+        elif task_type == TaskType.UPSCALE:
+            return await self.piapi_mcp.upscale(params)
+        elif task_type == TaskType.BACKGROUND_REMOVAL:
+            return await self.piapi_mcp.background_removal(params)
+        elif task_type == TaskType.EFFECTS:
+            return await self.piapi_mcp.image_to_image(params)
+        elif task_type == TaskType.INTERIOR_3D:
+            return await self.piapi_mcp.trellis_3d(params)
+        elif task_type == TaskType.AVATAR:
+            return await self.piapi_mcp.generate_avatar(params)
+        else:
+            raise ValueError(f"PiAPI MCP doesn't support: {task_type}")
+
+    # ── Legacy REST Providers ──
+
     async def _execute_piapi(
         self, task_type: TaskType, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute task on PiAPI — handles ALL generation."""
+        """Execute on PiAPI REST (legacy fallback)."""
         if task_type == TaskType.T2I:
             return await self.piapi.text_to_image(params)
         elif task_type == TaskType.I2V:
@@ -255,7 +355,7 @@ class ProviderRouter:
     async def _execute_gemini(
         self, task_type: TaskType, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute task on Gemini — supports image tasks as backup."""
+        """Execute on Gemini (backup for image tasks)."""
         if task_type == TaskType.MODERATION:
             return await self.gemini.moderate_content(params)
         elif task_type == TaskType.MATERIAL_GENERATION:
@@ -271,7 +371,6 @@ class ProviderRouter:
         elif task_type == TaskType.UPSCALE:
             return await self.gemini.upscale(params)
         elif task_type == TaskType.EFFECTS:
-            # Effects is similar to image-to-image
             return await self.gemini.image_to_image(params)
         elif task_type == TaskType.I2V:
             return await self.gemini.image_to_video(params)
@@ -287,36 +386,31 @@ class ProviderRouter:
     async def _execute_pollo(
         self, task_type: TaskType, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute task on Pollo — backup for video tasks."""
+        """Execute on Pollo REST (legacy fallback for video)."""
         if task_type == TaskType.I2V:
             return await self.pollo.image_to_video(params)
         elif task_type == TaskType.T2V:
             return await self.pollo.text_to_video(params)
         elif task_type == TaskType.V2V:
-            # Pollo has no dedicated video_style_transfer method.
-            # Use effects() as best-effort approximation.
             if params.get("video_url"):
                 return await self.pollo.effects(params)
-            else:
-                return await self.pollo.multi_model(params)
+            return await self.pollo.multi_model(params)
         else:
             raise ValueError(f"Pollo doesn't support: {task_type}")
 
     async def _execute_a2e(
         self, task_type: TaskType, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute task on A2E — backup for avatar tasks."""
+        """Execute on A2E (backup for avatar)."""
         if task_type == TaskType.AVATAR:
             return await self.a2e.generate_avatar(params)
-        else:
-            raise ValueError(f"A2E doesn't support: {task_type}")
+        raise ValueError(f"A2E doesn't support: {task_type}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # HEALTH CHECKING
     # ─────────────────────────────────────────────────────────────────────────
 
     async def _check_provider_health(self, provider: str) -> bool:
-        """Check if provider is healthy (with caching)."""
         if provider in self._last_health_check:
             if datetime.now() - self._last_health_check[provider] < timedelta(seconds=60):
                 cached = self._status_cache.get(provider, {})
@@ -324,11 +418,12 @@ class ProviderRouter:
 
         try:
             provider_instance = self._get_provider_instance(provider)
+            if provider_instance is None:
+                return False
             is_healthy = await provider_instance.health_check()
-
             self._status_cache[provider] = {
                 "status": ProviderStatus.HEALTHY if is_healthy else ProviderStatus.DOWN,
-                "last_check": datetime.now()
+                "last_check": datetime.now(),
             }
             self._last_health_check[provider] = datetime.now()
             return is_healthy
@@ -337,17 +432,21 @@ class ProviderRouter:
             self._status_cache[provider] = {
                 "status": ProviderStatus.DOWN,
                 "error": str(e),
-                "last_check": datetime.now()
+                "last_check": datetime.now(),
             }
             return False
 
     async def is_piapi_healthy(self) -> bool:
-        """Check if PiAPI is available. If not, service should be unavailable."""
+        # Check MCP first, then REST fallback
+        mcp_ok = await self._check_provider_health("piapi_mcp")
+        if mcp_ok:
+            return True
         return await self._check_provider_health("piapi")
 
     def _get_provider_instance(self, provider: str):
-        """Get provider instance by name."""
         providers = {
+            "pollo_mcp": self.pollo_mcp,
+            "piapi_mcp": self.piapi_mcp,
             "piapi": self.piapi,
             "gemini": self.gemini,
             "pollo": self.pollo,
@@ -363,7 +462,7 @@ class ProviderRouter:
         self._failure_counts[provider] = 0
         self._status_cache[provider] = {
             "status": ProviderStatus.HEALTHY,
-            "last_success": datetime.now()
+            "last_success": datetime.now(),
         }
 
     def _record_failure(self, provider: str, error: str):
@@ -374,94 +473,79 @@ class ProviderRouter:
                 "status": ProviderStatus.DOWN,
                 "error": error,
                 "failure_count": count,
-                "last_failure": datetime.now()
+                "last_failure": datetime.now(),
             }
 
     def _get_user_friendly_error(
-        self, 
-        task_type: TaskType, 
-        primary_provider: str, 
-        backup_provider: Optional[str], 
-        error: str
+        self,
+        task_type: TaskType,
+        primary_provider: str,
+        backup_provider: Optional[str],
+        error: str,
     ) -> str:
-        """
-        Generate user-friendly error messages based on task type and available backups.
-        """
-        # Check if it's a video task
         video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.V2V}
-
         if task_type in video_tasks:
-            if backup_provider:
-                return "Video generation services are experiencing issues on all providers. Please try again in a few minutes."
-            return "Video generation services are temporarily unavailable. Please try again later or contact support."
-
+            return "Video generation services are experiencing issues on all providers. Please try again in a few minutes."
         if task_type == TaskType.AVATAR:
-            if backup_provider:
-                return "Avatar generation services are experiencing issues on all providers. Please try again in a few minutes."
-            return "Avatar generation service is temporarily unavailable. Please try again later or contact support."
-        
-        # Check if it's an image task with Gemini backup
-        image_tasks_with_backup = {
-            TaskType.T2I, TaskType.I2I, TaskType.INTERIOR, 
-            TaskType.BACKGROUND_REMOVAL, TaskType.UPSCALE, TaskType.EFFECTS
-        }
-        
-        if task_type in image_tasks_with_backup and backup_provider:
-            # Both primary and backup failed
+            return "Avatar generation services are experiencing issues. Please try again in a few minutes."
+        image_tasks = {TaskType.T2I, TaskType.I2I, TaskType.INTERIOR, TaskType.BACKGROUND_REMOVAL, TaskType.UPSCALE, TaskType.EFFECTS}
+        if task_type in image_tasks:
             return "Image generation services are experiencing issues. Please try again in a few minutes."
-        elif task_type in image_tasks_with_backup and not backup_provider:
-            # Image task but no backup configured
-            return "Image generation service is temporarily unavailable. Please try again later."
-        
-        # Default error message
-        if "credit" in error.lower() or "balance" in error.lower() or "payment" in error.lower():
-            return "Service credits are currently depleted. Please try again later or contact support to add credits."
-        elif "timeout" in error.lower():
-            return "The request timed out. Please try again with a simpler prompt or smaller image."
-        elif "connection" in error.lower() or "network" in error.lower():
-            return "Network connection issue. Please check your internet connection and try again."
-        else:
-            return "Our service is currently experiencing technical difficulties. Please wait a moment and try again!"
+        if "credit" in error.lower() or "balance" in error.lower():
+            return "Service credits are currently depleted. Please try again later."
+        if "timeout" in error.lower():
+            return "The request timed out. Please try again with a simpler prompt."
+        return "Our service is currently experiencing technical difficulties. Please wait a moment and try again!"
 
     # ─────────────────────────────────────────────────────────────────────────
     # STATUS REPORTING
     # ─────────────────────────────────────────────────────────────────────────
 
     async def get_all_status(self) -> Dict[str, Any]:
-        """Get status of all providers."""
         status = {}
-        for provider in ["piapi", "gemini", "pollo", "a2e"]:
+        for provider in ["pollo_mcp", "piapi_mcp", "piapi", "gemini", "pollo", "a2e"]:
             await self._check_provider_health(provider)
             cached = self._status_cache.get(provider, {})
             status[provider] = {
-                "status": cached.get("status", ProviderStatus.DOWN).value if isinstance(cached.get("status"), ProviderStatus) else cached.get("status", "unknown"),
-                "last_check": cached.get("last_check", datetime.now()).isoformat() if cached.get("last_check") else None,
-                "failure_count": self._failure_counts.get(provider, 0)
+                "status": cached.get("status", ProviderStatus.DOWN).value
+                if isinstance(cached.get("status"), ProviderStatus)
+                else cached.get("status", "unknown"),
+                "last_check": cached.get("last_check", datetime.now()).isoformat()
+                if cached.get("last_check")
+                else None,
+                "failure_count": self._failure_counts.get(provider, 0),
             }
         return status
 
     async def check_service_status(self) -> Dict[str, Any]:
-        """Check status of all services (for admin dashboard)."""
         status = {}
-        for name, provider in [("piapi", self.piapi), ("gemini", self.gemini), ("pollo", self.pollo), ("a2e", self.a2e)]:
+        all_providers = [
+            ("pollo_mcp", self.pollo_mcp),
+            ("piapi_mcp", self.piapi_mcp),
+            ("piapi", self.piapi),
+            ("gemini", self.gemini),
+            ("pollo", self.pollo),
+            ("a2e", self.a2e),
+        ]
+        for name, provider in all_providers:
             try:
                 is_healthy = await provider.health_check()
                 status[name] = {
                     "status": "ok" if is_healthy else "error",
-                    "message": f"{name} is operational" if is_healthy else f"{name} is not responding"
+                    "message": f"{name} is operational" if is_healthy else f"{name} is not responding",
                 }
             except Exception as e:
                 status[name] = {"status": "error", "error": str(e)}
         return status
 
     async def close(self):
-        """Close all provider connections."""
         await asyncio.gather(
             self.piapi.close(),
             self.gemini.close(),
             self.pollo.close(),
             self.a2e.close(),
         )
+        # MCP providers don't need explicit close — managed by MCPClientManager
 
 
 # Global router instance

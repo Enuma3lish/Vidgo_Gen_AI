@@ -408,11 +408,39 @@
   },
   "dashboard": {
     "welcome": "おかえりなさい",
+    "subtitle": "アカウントの概要です",
     "totalCredits": "総クレジット",
+    "remainingCredits": "残りクレジット",
+    "totalOf": "合計 {n} クレジット",
     "usedThisWeek": "今週の使用量",
+    "weeklyLimit": "週間上限 {n} クレジット",
     "recentWorks": "最近の作品",
     "quickActions": "クイックアクション",
-    "viewAll": "すべて表示"
+    "viewAll": "すべて表示",
+    "currentPlan": "現在のプラン",
+    "upgradePlan": "プランをアップグレード",
+    "manageOrUpgradePlan": "プランの管理またはアップグレード",
+    "invoices": "請求書",
+    "referrals": "紹介報酬",
+    "socialMedia": "ソーシャルメディア",
+    "view": "表示",
+    "noWorks": "作品がありません",
+    "noWorksDesc": "AIツールで作品を作りましょう！",
+    "startCreating": "今すぐ作成開始",
+    "tools": {
+      "shortVideo": "AIショート動画",
+      "avatar": "AIアバター",
+      "tryOn": "バーチャル試着",
+      "productScene": "商品シーン",
+      "bgRemoval": "背景除去",
+      "roomRedesign": "ルームリデザイン"
+    },
+    "time": {
+      "justNow": "たった今",
+      "hoursAgo": "{n}時間前",
+      "yesterday": "昨日",
+      "daysAgo": "{n}日前"
+    }
   },
   "pricing": {
     "title": "プランを選択",
@@ -717,7 +745,12 @@
       "imageTranslator": { "name": "画像翻訳", "desc": "画像テキストを正確に翻訳" },
       "aiShadows": { "name": "AIシャドウ", "desc": "任意のオブジェクトに自然な影を追加" },
       "roomRedesign": { "name": "ルームリデザイン", "desc": "AIパワードのインテリア空間リデザイン" },
-      "bgRemoval": { "name": "背景除去", "desc": "画像背景を無料で除去" }
+      "bgRemoval": { "name": "背景除去", "desc": "画像背景を無料で除去" },
+      "textToVideo": { "name": "テキストから動画", "desc": "テキスト説明から動画を生成" },
+      "hdUpscale": { "name": "HD アップスケール", "desc": "画像を4K高解像度にアップスケール" },
+      "imageTransform": { "name": "画像変換", "desc": "AIパワードの画像スタイル変換" },
+      "videoTransform": { "name": "動画変換", "desc": "AIパワードの動画スタイル変換" },
+      "patternGenerate": { "name": "パターンデザイン", "desc": "ブランド向けシームレスパターン生成" }
     },
     "categories": {
       "fashionAI": "ファッションAI",

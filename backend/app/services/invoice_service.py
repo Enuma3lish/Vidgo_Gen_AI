@@ -21,18 +21,22 @@ from sqlalchemy.orm import selectinload
 from app.models.billing import Invoice, InvoiceItem, Order
 from app.models.user import User
 from app.services.ecpay.einvoice_client import ECPayEInvoiceClient, get_einvoice_client
+from app.services.giveme.client import get_giveme_client
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
+def _use_giveme() -> bool:
+    """Check if Giveme is configured and should be used for e-invoicing."""
+    settings = get_settings()
+    return getattr(settings, "GIVEME_ENABLED", False) and bool(getattr(settings, "GIVEME_IDNO", ""))
+
+
 def _invoice_status_after_issue() -> str:
-    """
-    Determine invoice status after successful ECPay issuance.
-    In ECPay sandbox (MID 2000132), the 財政部 Stage system auto-sets
-    invoices to '已上傳' (uploaded) immediately, unlike production which
-    stays 'issued' until the next upload batch.
-    """
+    """Determine invoice status after successful issuance."""
+    if _use_giveme():
+        return "issued"  # Giveme issues directly to 財政部
     settings = get_settings()
     if settings.ECPAY_ENV == "sandbox":
         return "uploaded"
@@ -69,6 +73,115 @@ def calculate_tax(total_amount: Decimal, tax_type: str) -> tuple[Decimal, Decima
     sales_amount = (total_amount / tax_rate).quantize(Decimal("1"))
     tax_amount = total_amount - sales_amount
     return sales_amount, tax_amount
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Provider-specific issuance helpers
+# ─────────────────────────────────────────────────────────────────────────
+
+async def _issue_b2c_giveme(
+    total_amount, buyer_email, carrier_type, carrier_number,
+    is_donation, love_code, items, order,
+) -> tuple:
+    """Issue B2C invoice via Giveme."""
+    giveme = get_giveme_client()
+    if not giveme:
+        return {"success": False, "msg": "Giveme not configured"}, "", ""
+
+    giveme_items = [
+        {"name": item["item_name"], "money": int(item["item_price"]), "number": item.get("item_count", 1)}
+        for item in items
+    ]
+
+    # Map carrier type to Giveme fields
+    phone = None
+    order_code = None
+    if carrier_type == "mobile_barcode" and carrier_number:
+        phone = carrier_number  # e.g. "/1234567"
+    elif carrier_type and carrier_number:
+        order_code = carrier_number
+
+    response = await giveme.create_b2c_invoice(
+        total_fee=int(total_amount),
+        content=f"VidGo AI - Order {order.order_number}",
+        items=giveme_items,
+        customer_name=f"VidGo Order {order.order_number}",
+        phone=phone,
+        order_code=order_code,
+        email=buyer_email,
+        is_donation=is_donation,
+        donation_code=love_code,
+    )
+
+    invoice_number = response.get("code", "")
+    return response, invoice_number, order.order_number
+
+
+async def _issue_b2c_ecpay(
+    total_amount, buyer_email, tax_type, carrier_type, carrier_number,
+    is_donation, love_code, items,
+) -> tuple:
+    """Issue B2C invoice via ECPay."""
+    client = get_einvoice_client()
+    relate_number = client.generate_relate_number()
+
+    ecpay_items = [
+        {
+            "name": item["item_name"],
+            "count": item.get("item_count", 1),
+            "unit": item.get("item_unit", "式"),
+            "price": item["item_price"],
+            "amount": item.get("item_amount", item["item_price"] * item.get("item_count", 1)),
+            "tax_type": item.get("item_tax_type", "taxable"),
+        }
+        for item in items
+    ]
+
+    try:
+        response = await client.issue_b2c_invoice(
+            relate_number=relate_number,
+            customer_email=buyer_email or "",
+            sales_amount=int(total_amount),
+            tax_type=tax_type,
+            items=ecpay_items,
+            carrier_type=carrier_type,
+            carrier_num=carrier_number,
+            donation=is_donation,
+            love_code=love_code,
+        )
+    except Exception as e:
+        logger.error(f"ECPay B2C invoice error: {e}")
+        return {"success": False, "error": f"ECPay API error: {str(e)}"}, "", relate_number
+
+    invoice_number = response.get("InvoiceNo", "")
+    # Mark as ECPay-style response (has RtnCode)
+    return response, invoice_number, relate_number
+
+
+async def _issue_b2b_giveme(
+    total_amount, buyer_tax_id, buyer_email, buyer_company_name, items, order,
+) -> tuple:
+    """Issue B2B invoice via Giveme."""
+    giveme = get_giveme_client()
+    if not giveme:
+        return {"success": False, "msg": "Giveme not configured"}, "", ""
+
+    giveme_items = [
+        {"name": item["item_name"], "money": int(item["item_price"]), "number": item.get("item_count", 1)}
+        for item in items
+    ]
+
+    response = await giveme.create_b2b_invoice(
+        buyer_tax_id=buyer_tax_id,
+        total_fee=int(total_amount),
+        content=f"VidGo AI - Order {order.order_number}",
+        items=giveme_items,
+        customer_name=buyer_company_name,
+        email=buyer_email,
+    )
+
+    invoice_number = response.get("code", "")
+    return response, invoice_number, order.order_number
 
 
 async def create_b2c_invoice(
@@ -109,59 +222,58 @@ async def create_b2c_invoice(
     total_amount = order.amount
     sales_amount, tax_amount = calculate_tax(Decimal(str(total_amount)), tax_type)
 
-    # Call ECPay
-    client = get_einvoice_client()
-    relate_number = client.generate_relate_number()
-
-    ecpay_items = [
-        {
-            "name": item["item_name"],
-            "count": item.get("item_count", 1),
-            "unit": item.get("item_unit", "式"),
-            "price": item["item_price"],
-            "amount": item.get("item_amount", item["item_price"] * item.get("item_count", 1)),
-            "tax_type": item.get("item_tax_type", "taxable"),
-        }
-        for item in items
-    ]
-
-    try:
-        response = await client.issue_b2c_invoice(
-            relate_number=relate_number,
-            customer_email=buyer_email or "",
-            sales_amount=int(total_amount),
-            tax_type=tax_type,
-            items=ecpay_items,
+    # ── Issue via Giveme or ECPay ──
+    if _use_giveme():
+        response, invoice_number, relate_number = await _issue_b2c_giveme(
+            total_amount=total_amount,
+            buyer_email=buyer_email,
             carrier_type=carrier_type,
-            carrier_num=carrier_number,
-            donation=is_donation,
+            carrier_number=carrier_number,
+            is_donation=is_donation,
             love_code=love_code,
+            items=items,
+            order=order,
         )
-    except Exception as e:
-        logger.error(f"ECPay B2C invoice error: {e}")
-        return {"success": False, "error": f"ECPay API error: {str(e)}"}
+    else:
+        response, invoice_number, relate_number = await _issue_b2c_ecpay(
+            total_amount=total_amount,
+            buyer_email=buyer_email,
+            tax_type=tax_type,
+            carrier_type=carrier_type,
+            carrier_number=carrier_number,
+            is_donation=is_donation,
+            love_code=love_code,
+            items=items,
+        )
 
-    # Check response
-    rtn_code = response.get("RtnCode")
-    if str(rtn_code) != "1":
-        # Create failed invoice record for tracking
+    if not response.get("success", False) and not response.get("RtnCode"):
+        # Giveme-style failure
         invoice = Invoice(
-            id=uuid4(),
-            order_id=order_id,
-            user_id=user_id,
-            invoice_type="b2c",
-            amount=total_amount,
-            status="failed",
-            ecpay_relate_number=relate_number,
-            ecpay_response_data=response,
+            id=uuid4(), order_id=order_id, user_id=user_id,
+            invoice_type="b2c", amount=total_amount, status="failed",
+            ecpay_response_data=response, invoice_period=get_current_tax_period(),
+        )
+        db.add(invoice)
+        await db.commit()
+        return {"success": False, "error": response.get("msg") or response.get("error", "Invoice creation failed")}
+
+    # ECPay-style failure check
+    rtn_code = response.get("RtnCode")
+    if rtn_code and str(rtn_code) != "1":
+        invoice = Invoice(
+            id=uuid4(), order_id=order_id, user_id=user_id,
+            invoice_type="b2c", amount=total_amount, status="failed",
+            ecpay_relate_number=relate_number, ecpay_response_data=response,
             invoice_period=get_current_tax_period(),
         )
         db.add(invoice)
         await db.commit()
         return {"success": False, "error": response.get("RtnMsg", "Invoice creation failed")}
 
+    if not invoice_number:
+        invoice_number = response.get("InvoiceNo") or response.get("code") or ""
+
     # Create successful invoice record
-    invoice_number = response.get("InvoiceNo", "")
     status = _invoice_status_after_issue()
     invoice = Invoice(
         id=uuid4(),
@@ -179,9 +291,9 @@ async def create_b2c_invoice(
         is_donation=is_donation,
         love_code=love_code,
         status=status,
-        ecpay_invoice_no=response.get("InvoiceNo"),
+        ecpay_invoice_no=invoice_number,
         ecpay_relate_number=relate_number,
-        ecpay_response_data=response,
+        ecpay_response_data=response.get("raw", response),
         invoice_period=get_current_tax_period(),
     )
     db.add(invoice)
@@ -242,36 +354,61 @@ async def create_b2b_invoice(
     total_amount = order.amount
     sales_amount, tax_amount = calculate_tax(Decimal(str(total_amount)), tax_type)
 
-    client = get_einvoice_client()
-    relate_number = client.generate_relate_number()
-
-    ecpay_items = [
-        {
-            "name": item["item_name"],
-            "count": item.get("item_count", 1),
-            "unit": item.get("item_unit", "式"),
-            "price": item["item_price"],
-            "amount": item.get("item_amount", item["item_price"] * item.get("item_count", 1)),
-        }
-        for item in items
-    ]
-
-    try:
-        response = await client.issue_b2b_invoice(
-            relate_number=relate_number,
-            customer_identifier=buyer_tax_id,
-            customer_name=buyer_company_name,
-            customer_email=buyer_email or "",
-            sales_amount=int(total_amount),
-            tax_type=tax_type,
-            items=ecpay_items,
+    # ── Issue via Giveme or ECPay ──
+    if _use_giveme():
+        response, invoice_number, relate_number = await _issue_b2b_giveme(
+            total_amount=total_amount,
+            buyer_tax_id=buyer_tax_id,
+            buyer_email=buyer_email,
+            buyer_company_name=buyer_company_name,
+            items=items,
+            order=order,
         )
-    except Exception as e:
-        logger.error(f"ECPay B2B invoice error: {e}")
-        return {"success": False, "error": f"ECPay API error: {str(e)}"}
+    else:
+        client = get_einvoice_client()
+        relate_number = client.generate_relate_number()
 
+        ecpay_items = [
+            {
+                "name": item["item_name"],
+                "count": item.get("item_count", 1),
+                "unit": item.get("item_unit", "式"),
+                "price": item["item_price"],
+                "amount": item.get("item_amount", item["item_price"] * item.get("item_count", 1)),
+            }
+            for item in items
+        ]
+
+        try:
+            response = await client.issue_b2b_invoice(
+                relate_number=relate_number,
+                customer_identifier=buyer_tax_id,
+                customer_name=buyer_company_name,
+                customer_email=buyer_email or "",
+                sales_amount=int(total_amount),
+                tax_type=tax_type,
+                items=ecpay_items,
+            )
+        except Exception as e:
+            logger.error(f"ECPay B2B invoice error: {e}")
+            return {"success": False, "error": f"ECPay API error: {str(e)}"}
+
+        invoice_number = response.get("InvoiceNo", "")
+
+    # Check for Giveme-style failure
+    if not response.get("success", False) and not response.get("RtnCode"):
+        invoice = Invoice(
+            id=uuid4(), order_id=order_id, user_id=user_id,
+            invoice_type="b2b", amount=total_amount, status="failed",
+            ecpay_response_data=response, invoice_period=get_current_tax_period(),
+        )
+        db.add(invoice)
+        await db.commit()
+        return {"success": False, "error": response.get("msg") or response.get("error", "Invoice creation failed")}
+
+    # Check for ECPay-style failure
     rtn_code = response.get("RtnCode")
-    if str(rtn_code) != "1":
+    if rtn_code and str(rtn_code) != "1":
         invoice = Invoice(
             id=uuid4(),
             order_id=order_id,
@@ -287,7 +424,9 @@ async def create_b2b_invoice(
         await db.commit()
         return {"success": False, "error": response.get("RtnMsg", "Invoice creation failed")}
 
-    invoice_number = response.get("InvoiceNo", "")
+    if not invoice_number:
+        invoice_number = response.get("InvoiceNo") or response.get("code") or ""
+
     status = _invoice_status_after_issue()
     invoice = Invoice(
         id=uuid4(),
@@ -352,24 +491,35 @@ async def void_invoice(
     if not invoice.invoice_number:
         return {"success": False, "error": "Invoice has no invoice number"}
 
-    client = get_einvoice_client()
-    invoice_date = invoice.issued_at.strftime("%Y-%m-%d") if invoice.issued_at else ""
-    is_b2b = invoice.invoice_type == "b2b"
-
-    try:
-        response = await client.void_invoice(
-            invoice_no=invoice.invoice_number,
-            invoice_date=invoice_date,
-            reason=reason,
-            is_b2b=is_b2b,
-        )
-    except Exception as e:
-        logger.error(f"ECPay void invoice error: {e}")
-        return {"success": False, "error": f"ECPay API error: {str(e)}"}
-
-    rtn_code = response.get("RtnCode")
-    if str(rtn_code) != "1":
-        return {"success": False, "error": response.get("RtnMsg", "Invoice void failed")}
+    # Void via Giveme or ECPay
+    if _use_giveme():
+        giveme = get_giveme_client()
+        if not giveme:
+            return {"success": False, "error": "Giveme not configured"}
+        try:
+            response = await giveme.void_invoice(invoice.invoice_number, reason)
+        except Exception as e:
+            logger.error(f"Giveme void invoice error: {e}")
+            return {"success": False, "error": f"Giveme API error: {str(e)}"}
+        if not response.get("success"):
+            return {"success": False, "error": response.get("msg", "Invoice void failed")}
+    else:
+        client = get_einvoice_client()
+        invoice_date = invoice.issued_at.strftime("%Y-%m-%d") if invoice.issued_at else ""
+        is_b2b = invoice.invoice_type == "b2b"
+        try:
+            response = await client.void_invoice(
+                invoice_no=invoice.invoice_number,
+                invoice_date=invoice_date,
+                reason=reason,
+                is_b2b=is_b2b,
+            )
+        except Exception as e:
+            logger.error(f"ECPay void invoice error: {e}")
+            return {"success": False, "error": f"ECPay API error: {str(e)}"}
+        rtn_code = response.get("RtnCode")
+        if str(rtn_code) != "1":
+            return {"success": False, "error": response.get("RtnMsg", "Invoice void failed")}
 
     invoice.status = "voided"
     invoice.voided_at = datetime.utcnow()

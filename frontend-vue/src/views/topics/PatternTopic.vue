@@ -18,7 +18,8 @@ const isZh = computed(() => locale.value.startsWith('zh'))
 const {
   isDemoUser,
   loadDemoTemplates,
-  demoTemplates
+  demoTemplates,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 // Example prompts for each tool (aligned with backend PATTERN_GENERATE_MAPPING, common business use)
@@ -194,45 +195,32 @@ async function generatePattern() {
   result.value = null
 
   try {
-    // For demo users, use cached results from database
+    // For demo users, resolve the selected preset through backend lookup
     if (isDemoUser.value) {
-      // Simulate processing delay for demo effect
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // First try to find template matching selected demo prompt ID
       if (selectedDemoPromptId.value) {
-        const template = demoTemplates.value.find(t => t.id === selectedDemoPromptId.value)
-        if (template?.result_watermarked_url || template?.result_image_url) {
-          result.value = template.result_watermarked_url || template.result_image_url || null
+        const demoResultUrl = await resolveDemoTemplateResultUrl(selectedDemoPromptId.value)
+        if (demoResultUrl) {
+          result.value = demoResultUrl
           uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
           return
         }
       }
 
-      // Try to match by prompt text
       const matchingTemplate = demoTemplates.value.find(t =>
-        (t.prompt === prompt.value || t.prompt_zh === prompt.value) &&
-        (t.result_watermarked_url || t.result_image_url)
+        t.prompt === prompt.value || t.prompt_zh === prompt.value
       )
 
-      if (matchingTemplate) {
-        result.value = matchingTemplate.result_watermarked_url || matchingTemplate.result_image_url || null
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
+      if (matchingTemplate?.id) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(matchingTemplate.id)
+        if (demoResultUrl) {
+          result.value = demoResultUrl
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
+        }
       }
 
-      // Fallback: Find ANY template with a result (for demo purposes)
-      const anyTemplate = demoTemplates.value.find(t =>
-        t.result_watermarked_url || t.result_image_url
-      )
-
-      if (anyTemplate) {
-        result.value = anyTemplate.result_watermarked_url || anyTemplate.result_image_url || null
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
-      }
-
-      // No pre-generated results available
       uiStore.showInfo(isZh.value ? '此提示詞尚未生成，請訂閱以使用完整功能' : 'This prompt is not pre-generated. Subscribe for full features.')
       return
     }

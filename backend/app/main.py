@@ -30,30 +30,6 @@ async def _media_cleanup_loop():
             logger.error(f"[MediaCleanup] Error during cleanup: {e}")
 
 
-# ── Demo Cache Persistence Task ───────────────────────────────────────────────
-async def _demo_persist_loop():
-    """Hourly: persist expiring Redis demo cache entries to Material DB."""
-    from app.core.database import AsyncSessionLocal
-    from app.services.demo_cache_service import DemoCacheService
-    from app.api.deps import get_redis
-    while True:
-        try:
-            await asyncio.sleep(3600)
-            try:
-                redis = await get_redis()
-            except Exception:
-                continue
-            async with AsyncSessionLocal() as db:
-                svc = DemoCacheService(db, redis)
-                count = await svc.persist_expiring_to_db()
-                if count > 0:
-                    logger.info(f"[DemoPersist] Persisted {count} demo(s) to DB")
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"[DemoPersist] Error: {e}")
-
-
 # Ensure static directory exists
 STATIC_DIR = Path("/app/static")
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -164,24 +140,31 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_background_init())
 
+    # Start MCP servers (Pollo.ai + PiAPI)
+    try:
+        from app.services.mcp_client import get_mcp_manager
+        mcp_manager = get_mcp_manager()
+        await mcp_manager.startup()
+        logger.info("[MCP] MCP client manager started")
+    except Exception as e:
+        logger.warning(f"[MCP] Failed to start MCP servers (non-fatal, REST fallback active): {e}")
+
     # Start hourly background tasks
     cleanup_task = asyncio.create_task(_media_cleanup_loop())
-    persist_task = asyncio.create_task(_demo_persist_loop())
-    logger.info("[Background] Hourly cleanup + demo persistence tasks started")
+    logger.info("[Background] Hourly media cleanup task started")
 
     yield
 
-    persist_task.cancel()
-    try:
-        await persist_task
-    except asyncio.CancelledError:
-        pass
-
-    # Shutdown: cancel cleanup task
+    # Shutdown: cancel cleanup task and MCP servers
     cleanup_task.cancel()
     try:
         await cleanup_task
     except asyncio.CancelledError:
+        pass
+    try:
+        from app.services.mcp_client import get_mcp_manager
+        await get_mcp_manager().shutdown()
+    except Exception:
         pass
     logger.info("VidGo AI Backend shutting down...")
 

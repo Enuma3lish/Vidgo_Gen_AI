@@ -135,15 +135,18 @@ async def apply_style_effect(
 
     **Credits:** 8 points per use (subscribers only)
     """
-    # Demo path: return cached demo example
+    # Demo/free user path: cache-first with on-demand generation
+    # Everyone can trigger generation — results are cached for future requests
     if not is_subscribed_user(current_user):
         try:
             redis = await get_redis()
         except Exception:
             redis = None
-        demo = await DemoCacheService(db, redis).get_or_generate(ToolType.EFFECT, topic=request.style_id)
+        cache_service = DemoCacheService(db, redis)
+        # Try cache first, then generate on-demand if missing
+        demo = await cache_service.get_or_generate(ToolType.EFFECT, topic=request.style_id)
         if not demo:
-            raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable.")
+            raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable. Please try again.")
         return ApplyStyleResponse(
             success=True,
             output_url=demo["result_url"],
@@ -157,9 +160,17 @@ async def apply_style_effect(
     # Subscriber path: call real API
     effects_service = VidGoEffectsService(db)
 
+    # Resolve /static/ paths to public URLs for external AI APIs
+    import os as _os
+    resolved_url = request.image_url
+    if resolved_url.startswith("/static/"):
+        pub = _os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+        if pub:
+            resolved_url = f"{pub}{resolved_url}"
+
     success, result = await effects_service.apply_style(
         user_id=str(current_user.id),
-        image_url=request.image_url,
+        image_url=resolved_url,
         style_id=request.style_id,
         intensity=request.intensity
     )
@@ -198,22 +209,31 @@ async def apply_style_effect(
             if (existing_count.scalar() or 0) < 10:
                 lookup_content = f"effect:{request.image_url}:{request.style_id}:{generation.id}"
                 lookup_hash = hashlib.sha256(lookup_content.encode()).hexdigest()[:64]
-                material = Material(
-                    lookup_hash=lookup_hash,
-                    tool_type=ToolType.EFFECT,
-                    topic=request.style_id,
-                    prompt=f"User effect: {request.style_id}",
-                    effect_prompt=request.style_id,
-                    input_image_url=request.image_url,
-                    result_image_url=output_url,
-                    result_watermarked_url=output_url,
-                    source=MaterialSource.USER,
-                    status=MaterialStatus.PENDING,
-                    is_active=False,
-                    input_params={"style_id": request.style_id, "intensity": request.intensity},
+                # Check for existing hash first
+                existing_mat = await db.execute(
+                    select(Material.id).where(Material.lookup_hash == lookup_hash)
                 )
-                db.add(material)
+                if not existing_mat.scalar_one_or_none():
+                    material = Material(
+                        lookup_hash=lookup_hash,
+                        tool_type=ToolType.EFFECT,
+                        topic=request.style_id,
+                        prompt=f"User effect: {request.style_id}",
+                        effect_prompt=request.style_id,
+                        input_image_url=request.image_url,
+                        result_image_url=output_url,
+                        result_watermarked_url=output_url,
+                        source=MaterialSource.USER,
+                        status=MaterialStatus.PENDING,
+                        is_active=False,
+                        input_params={"style_id": request.style_id, "intensity": request.intensity},
+                    )
+                    db.add(material)
         except Exception as e:
+            try:
+                await db.rollback()
+            except Exception:
+                pass
             logger.debug(f"[Recycle] Skip effect: {e}")
 
     await db.commit()

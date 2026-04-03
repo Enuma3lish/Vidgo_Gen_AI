@@ -408,11 +408,39 @@
   },
   "dashboard": {
     "welcome": "다시 오신 것을 환영합니다",
+    "subtitle": "계정 개요입니다",
     "totalCredits": "총 크레딧",
+    "remainingCredits": "남은 크레딧",
+    "totalOf": "총 {n} 크레딧",
     "usedThisWeek": "이번 주 사용량",
+    "weeklyLimit": "주간 한도 {n} 크레딧",
     "recentWorks": "최근 작업",
     "quickActions": "빠른 작업",
-    "viewAll": "모두 보기"
+    "viewAll": "모두 보기",
+    "currentPlan": "현재 플랜",
+    "upgradePlan": "플랜 업그레이드",
+    "manageOrUpgradePlan": "플랜 관리 또는 업그레이드",
+    "invoices": "청구서",
+    "referrals": "추천 보상",
+    "socialMedia": "소셜 미디어",
+    "view": "보기",
+    "noWorks": "작업이 없습니다",
+    "noWorksDesc": "AI 도구로 작품을 만들어 보세요!",
+    "startCreating": "지금 만들기 시작",
+    "tools": {
+      "shortVideo": "AI 쇼트 비디오",
+      "avatar": "AI 아바타",
+      "tryOn": "가상 피팅",
+      "productScene": "제품 장면",
+      "bgRemoval": "배경 제거",
+      "roomRedesign": "공간 리디자인"
+    },
+    "time": {
+      "justNow": "방금",
+      "hoursAgo": "{n}시간 전",
+      "yesterday": "어제",
+      "daysAgo": "{n}일 전"
+    }
   },
   "pricing": {
     "title": "플랜 선택",
@@ -717,7 +745,12 @@
       "imageTranslator": { "name": "이미지 번역", "desc": "이미지 텍스트를 정확하게 번역" },
       "aiShadows": { "name": "AI 그림자", "desc": "모든 객체에 자연스러운 그림자 추가" },
       "roomRedesign": { "name": "공간 리디자인", "desc": "AI 기반 인테리어 공간 리디자인" },
-      "bgRemoval": { "name": "배경 제거", "desc": "이미지 배경 무료 제거" }
+      "bgRemoval": { "name": "배경 제거", "desc": "이미지 배경 무료 제거" },
+      "textToVideo": { "name": "텍스트-비디오", "desc": "텍스트 설명으로 비디오 생성" },
+      "hdUpscale": { "name": "HD 업스케일", "desc": "이미지를 4K 고해상도로 업스케일" },
+      "imageTransform": { "name": "이미지 변환", "desc": "AI 기반 이미지 스타일 변환" },
+      "videoTransform": { "name": "비디오 변환", "desc": "AI 기반 비디오 스타일 변환" },
+      "patternGenerate": { "name": "패턴 디자인", "desc": "브랜드를 위한 원활한 패턴 생성" }
     },
     "categories": {
       "fashionAI": "패션 AI",

@@ -41,8 +41,25 @@ function handleDrop(event: DragEvent) {
   }
 }
 
+const MAX_SIZE_MB = 10
+const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
+const uploadError = ref('')
+
 function processFile(file: File) {
-  if (!file.type.startsWith('image/')) return
+  uploadError.value = ''
+
+  if (!file.type.startsWith('image/')) {
+    uploadError.value = isZh ? '僅支援圖片檔案（PNG、JPG、WebP）' : 'Only image files are supported (PNG, JPG, WebP)'
+    return
+  }
+
+  if (file.size > MAX_SIZE_BYTES) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+    uploadError.value = isZh
+      ? `檔案大小 ${sizeMB}MB 超過上限 ${MAX_SIZE_MB}MB，請壓縮或裁剪後重試`
+      : `File size ${sizeMB}MB exceeds the ${MAX_SIZE_MB}MB limit. Please compress or resize and try again.`
+    return
+  }
 
   const reader = new FileReader()
   reader.onload = (e) => {
@@ -92,7 +109,12 @@ function processFile(file: File) {
       <p class="font-medium text-center px-4">
         {{ label || (isZh ? '點擊或拖放圖片' : 'Click or drop image here') }}
       </p>
-      <p class="text-xs text-gray-500 mt-1">PNG, JPG up to 10MB</p>
+      <p class="text-xs text-gray-500 mt-1">PNG, JPG {{ isZh ? '最大' : 'up to' }} 10MB</p>
+    </div>
+
+    <!-- Error message -->
+    <div v-if="uploadError" class="absolute bottom-2 left-2 right-2 bg-red-500/90 text-white text-xs font-medium rounded-lg px-3 py-2 text-center">
+      {{ uploadError }}
     </div>
   </div>
 </template>

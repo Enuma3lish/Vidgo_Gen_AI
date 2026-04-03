@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import {
   getConnectedAccounts,
@@ -12,6 +13,8 @@ import {
 
 const route = useRoute()
 const authStore = useAuthStore()
+const { locale } = useI18n()
+const isZh = computed(() => locale.value.startsWith('zh'))
 
 const accounts = ref<SocialAccountInfo[]>([])
 const loading = ref(false)
@@ -19,57 +22,41 @@ const connecting = ref<string | null>(null)
 const disconnecting = ref<string | null>(null)
 const notification = ref<{ type: 'success' | 'error'; message: string } | null>(null)
 
-const isMockMode = ref(true) // Will be updated from API response
+const isMockMode = ref(true)
 
-const platforms = [
+const platforms = computed(() => [
   {
     id: 'facebook',
     name: 'Facebook',
-    description: '發布至 Facebook 粉絲專頁',
+    description: isZh.value ? '發布至 Facebook 粉絲專頁' : 'Publish to Facebook Page',
     icon: '📘',
-    color: 'from-blue-600 to-blue-700',
-    borderColor: 'border-blue-500/30',
-    bgColor: 'bg-blue-500/10',
-    textColor: 'text-blue-400',
-    supportedTypes: ['圖片', '影片', '文字'],
+    supportedTypes: isZh.value ? ['圖片', '影片', '文字'] : ['Image', 'Video', 'Text'],
   },
   {
     id: 'instagram',
     name: 'Instagram',
-    description: '發布至 Instagram 商業帳號',
+    description: isZh.value ? '發布至 Instagram 商業帳號' : 'Publish to Instagram Business',
     icon: '📸',
-    color: 'from-pink-500 to-purple-600',
-    borderColor: 'border-pink-500/30',
-    bgColor: 'bg-pink-500/10',
-    textColor: 'text-pink-400',
-    supportedTypes: ['圖片', '影片（Reels）'],
-    note: '需要 Instagram 商業帳號',
+    supportedTypes: isZh.value ? ['圖片', '影片（Reels）'] : ['Image', 'Video (Reels)'],
+    note: isZh.value ? '需要 Instagram 商業帳號' : 'Requires Instagram Business account',
   },
   {
     id: 'tiktok',
     name: 'TikTok',
-    description: '發布影片至 TikTok',
+    description: isZh.value ? '發布影片至 TikTok' : 'Publish videos to TikTok',
     icon: '🎵',
-    color: 'from-gray-800 to-black',
-    borderColor: 'border-gray-500/30',
-    bgColor: 'bg-gray-500/10',
-    textColor: 'text-gray-300',
-    supportedTypes: ['影片'],
-    note: '僅支援影片內容',
+    supportedTypes: isZh.value ? ['影片'] : ['Video'],
+    note: isZh.value ? '僅支援影片內容' : 'Video content only',
   },
   {
     id: 'youtube',
     name: 'YouTube',
-    description: '上傳影片至 YouTube 頻道',
+    description: isZh.value ? '上傳影片至 YouTube 頻道' : 'Upload videos to YouTube channel',
     icon: '📺',
-    color: 'from-red-600 to-red-700',
-    borderColor: 'border-red-500/30',
-    bgColor: 'bg-red-500/10',
-    textColor: 'text-red-400',
-    supportedTypes: ['影片'],
-    note: '僅支援影片內容',
+    supportedTypes: isZh.value ? ['影片'] : ['Video'],
+    note: isZh.value ? '僅支援影片內容' : 'Video content only',
   },
-]
+])
 
 const isSubscribed = computed(() => {
   const plan = authStore.user?.plan_type
@@ -97,7 +84,7 @@ async function loadAccounts() {
 
 async function connectPlatform(platformId: string) {
   if (!isSubscribed.value) {
-    showNotification('error', '需要付費訂閱才能連結社交媒體帳號')
+    showNotification('error', isZh.value ? '需要付費訂閱才能連結社交媒體帳號' : 'Paid subscription required to connect social media accounts')
     return
   }
 
@@ -107,19 +94,15 @@ async function connectPlatform(platformId: string) {
     isMockMode.value = mock_mode
 
     if (mock_mode) {
-      // In mock mode, directly call mock-connect
       await mockConnect(platformId)
       await loadAccounts()
-      showNotification('success', `已成功連結 ${platformId}（測試模式）`)
+      showNotification('success', isZh.value ? `已成功連結 ${platformId}（測試模式）` : `Successfully connected ${platformId} (test mode)`)
     } else {
-      // Real OAuth: open popup window
       const popup = window.open(
         oauth_url,
         `${platformId}_oauth`,
         'width=600,height=700,scrollbars=yes,resizable=yes'
       )
-
-      // Poll for popup close
       const pollTimer = setInterval(() => {
         if (popup?.closed) {
           clearInterval(pollTimer)
@@ -128,7 +111,8 @@ async function connectPlatform(platformId: string) {
       }, 1000)
     }
   } catch (e: any) {
-    showNotification('error', `連結失敗：${e?.response?.data?.detail || e.message}`)
+    const detail = e?.response?.data?.detail || e.message
+    showNotification('error', isZh.value ? `連結失敗：${detail}` : `Connection failed: ${detail}`)
   } finally {
     connecting.value = null
   }
@@ -139,9 +123,10 @@ async function disconnectPlatform(platformId: string) {
   try {
     await disconnectAccount(platformId)
     await loadAccounts()
-    showNotification('success', `已成功解除連結 ${platformId}`)
+    showNotification('success', isZh.value ? `已成功解除連結 ${platformId}` : `Successfully disconnected ${platformId}`)
   } catch (e: any) {
-    showNotification('error', `解除連結失敗：${e?.response?.data?.detail || e.message}`)
+    const detail = e?.response?.data?.detail || e.message
+    showNotification('error', isZh.value ? `解除連結失敗：${detail}` : `Disconnect failed: ${detail}`)
   } finally {
     disconnecting.value = null
   }
@@ -153,8 +138,8 @@ function showNotification(type: 'success' | 'error', message: string) {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '未知'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
+  if (!dateStr) return isZh.value ? '未知' : 'Unknown'
+  return new Date(dateStr).toLocaleDateString(locale.value, {
     year: 'numeric', month: 'long', day: 'numeric'
   })
 }
@@ -162,22 +147,20 @@ function formatDate(dateStr: string | null): string {
 onMounted(async () => {
   await loadAccounts()
 
-  // Handle OAuth callback params
   const connected = route.query.connected as string
   const error = route.query.error as string
   const mockConnect_ = route.query.mock_connect as string
 
   if (connected) {
-    showNotification('success', `已成功連結 ${connected}！`)
+    showNotification('success', isZh.value ? `已成功連結 ${connected}！` : `Successfully connected ${connected}!`)
     await loadAccounts()
   } else if (error) {
-    showNotification('error', `連結 ${error} 失敗，請重試`)
+    showNotification('error', isZh.value ? `連結 ${error} 失敗，請重試` : `Failed to connect ${error}. Please try again.`)
   } else if (mockConnect_) {
-    // Handle mock connect from OAuth redirect
     try {
       await mockConnect(mockConnect_)
       await loadAccounts()
-      showNotification('success', `已成功連結 ${mockConnect_}（測試模式）`)
+      showNotification('success', isZh.value ? `已成功連結 ${mockConnect_}（測試模式）` : `Successfully connected ${mockConnect_} (test mode)`)
     } catch (e) {
       console.error('Mock connect failed:', e)
     }
@@ -196,9 +179,13 @@ onMounted(async () => {
                style="background: linear-gradient(135deg, #00b8e6, #0066cc);">
             📡
           </div>
-          <h1 class="text-3xl font-bold" style="color: #e8f4ff;">社交媒體帳號</h1>
+          <h1 class="text-3xl font-bold" style="color: #e8f4ff;">
+            {{ isZh ? '社交媒體帳號' : 'Social Media Accounts' }}
+          </h1>
         </div>
-        <p style="color: #6b9ab8;">連結您的社交媒體帳號，一鍵將 AI 創作發布至各平台</p>
+        <p style="color: #6b9ab8;">
+          {{ isZh ? '連結您的社交媒體帳號，一鍵將 AI 創作發布至各平台' : 'Connect your social media accounts to publish AI creations to any platform with one click' }}
+        </p>
       </div>
 
       <!-- Subscription Required Banner -->
@@ -208,12 +195,16 @@ onMounted(async () => {
         <div class="flex items-start gap-4">
           <span class="text-3xl">🔒</span>
           <div>
-            <h3 class="font-bold text-lg mb-1" style="color: #ffa500;">需要付費訂閱</h3>
-            <p class="mb-3" style="color: #a8c8e8;">社交媒體一鍵發布功能僅限付費會員使用。升級後即可連結 Facebook、Instagram、TikTok 帳號。</p>
+            <h3 class="font-bold text-lg mb-1" style="color: #ffa500;">
+              {{ isZh ? '需要付費訂閱' : 'Subscription Required' }}
+            </h3>
+            <p class="mb-3" style="color: #a8c8e8;">
+              {{ isZh ? '社交媒體一鍵發布功能僅限付費會員使用。升級後即可連結 Facebook、Instagram、TikTok 帳號。' : 'One-click social media publishing is available for paid subscribers only. Upgrade to connect Facebook, Instagram, TikTok accounts.' }}
+            </p>
             <router-link to="/pricing"
               class="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all"
               style="background: linear-gradient(135deg, #00b8e6, #0066cc); color: white;">
-              立即升級 →
+              {{ isZh ? '立即升級 →' : 'Upgrade Now →' }}
             </router-link>
           </div>
         </div>
@@ -226,10 +217,11 @@ onMounted(async () => {
         <div class="flex items-center gap-3">
           <span class="text-xl">🧪</span>
           <div>
-            <p class="font-medium text-sm" style="color: #00b8e6;">測試模式</p>
+            <p class="font-medium text-sm" style="color: #00b8e6;">
+              {{ isZh ? '測試模式' : 'Test Mode' }}
+            </p>
             <p class="text-xs mt-0.5" style="color: #6b9ab8;">
-              目前使用模擬連結（尚未設定真實 API 金鑰）。連結的帳號為測試帳號，發布動作不會真正發布至社交平台。
-              正式上線前請在 <code class="px-1 rounded" style="background: rgba(0,0,0,0.3);">.env</code> 中設定 API 金鑰。
+              {{ isZh ? '目前使用模擬連結（尚未設定真實 API 金鑰）。連結的帳號為測試帳號，發布動作不會真正發布至社交平台。' : 'Currently using simulated connections (real API keys not configured). Connected accounts are test accounts — publishing will not post to real platforms.' }}
             </p>
           </div>
         </div>
@@ -264,20 +256,18 @@ onMounted(async () => {
           <div class="flex items-start justify-between gap-4">
             <!-- Platform Info -->
             <div class="flex items-start gap-4 flex-1">
-              <!-- Icon -->
               <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0"
                    :style="{ background: `linear-gradient(135deg, ${platform.id === 'facebook' ? '#1877f2, #0d5ab5' : platform.id === 'instagram' ? '#e1306c, #833ab4' : '#010101, #333'})` }">
                 {{ platform.icon }}
               </div>
 
-              <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                   <h3 class="text-lg font-bold" style="color: #e8f4ff;">{{ platform.name }}</h3>
                   <span v-if="isConnected(platform.id)"
                         class="text-xs px-2 py-0.5 rounded-full font-medium"
                         style="background: rgba(0,200,100,0.15); color: #00c864;">
-                    已連結
+                    {{ isZh ? '已連結' : 'Connected' }}
                   </span>
                 </div>
                 <p class="text-sm mb-2" style="color: #6b9ab8;">{{ platform.description }}</p>
@@ -291,10 +281,10 @@ onMounted(async () => {
                     :alt="getConnectedAccount(platform.id)?.platform_username || ''"
                   />
                   <span class="text-sm font-medium" style="color: #a8c8e8;">
-                    @{{ getConnectedAccount(platform.id)?.platform_username || '未知帳號' }}
+                    @{{ getConnectedAccount(platform.id)?.platform_username || (isZh ? '未知帳號' : 'Unknown') }}
                   </span>
                   <span class="text-xs" style="color: #4a7bb5;">
-                    · 連結於 {{ formatDate(getConnectedAccount(platform.id)?.connected_at || null) }}
+                    · {{ isZh ? '連結於' : 'Connected' }} {{ formatDate(getConnectedAccount(platform.id)?.connected_at || null) }}
                   </span>
                 </div>
 
@@ -326,9 +316,9 @@ onMounted(async () => {
               >
                 <span v-if="connecting === platform.id" class="flex items-center gap-2">
                   <span class="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></span>
-                  連結中...
+                  {{ isZh ? '連結中...' : 'Connecting...' }}
                 </span>
-                <span v-else>🔗 連結帳號</span>
+                <span v-else>🔗 {{ isZh ? '連結帳號' : 'Connect' }}</span>
               </button>
 
               <button
@@ -340,51 +330,12 @@ onMounted(async () => {
               >
                 <span v-if="disconnecting === platform.id" class="flex items-center gap-2">
                   <span class="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin"></span>
-                  解除中...
+                  {{ isZh ? '解除中...' : 'Disconnecting...' }}
                 </span>
-                <span v-else>🔓 解除連結</span>
+                <span v-else>🔓 {{ isZh ? '解除連結' : 'Disconnect' }}</span>
               </button>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- How to Use -->
-      <div class="mt-10 rounded-2xl border p-6"
-           style="background: #141420; border-color: rgba(255,255,255,0.06);">
-        <h3 class="font-bold text-lg mb-4" style="color: #e8f4ff;">📖 如何使用一鍵發布</h3>
-        <div class="grid md:grid-cols-3 gap-4">
-          <div class="flex items-start gap-3">
-            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                 style="background: rgba(0,184,230,0.2); color: #00b8e6;">1</div>
-            <div>
-              <p class="font-medium text-sm mb-1" style="color: #e8f4ff;">連結帳號</p>
-              <p class="text-xs" style="color: #6b9ab8;">在此頁面連結您的 Facebook、Instagram 或 TikTok 帳號</p>
-            </div>
-          </div>
-          <div class="flex items-start gap-3">
-            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                 style="background: rgba(0,184,230,0.2); color: #00b8e6;">2</div>
-            <div>
-              <p class="font-medium text-sm mb-1" style="color: #e8f4ff;">前往我的作品</p>
-              <p class="text-xs" style="color: #6b9ab8;">在「我的作品」頁面選擇要發布的 AI 創作</p>
-            </div>
-          </div>
-          <div class="flex items-start gap-3">
-            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                 style="background: rgba(0,184,230,0.2); color: #00b8e6;">3</div>
-            <div>
-              <p class="font-medium text-sm mb-1" style="color: #e8f4ff;">一鍵發布</p>
-              <p class="text-xs" style="color: #6b9ab8;">點擊「發布至社交媒體」按鈕，選擇平台並輸入說明文字</p>
-            </div>
-          </div>
-        </div>
-        <div class="mt-4 pt-4 border-t" style="border-color: rgba(255,255,255,0.06);">
-          <router-link to="/dashboard/my-works"
-            class="inline-flex items-center gap-2 text-sm font-medium transition-colors"
-            style="color: #00b8e6;">
-            前往我的作品 →
-          </router-link>
         </div>
       </div>
 
@@ -393,6 +344,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

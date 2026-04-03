@@ -46,7 +46,7 @@ async def _gen_demo_response(
     topic: str | None = None,
     cta: str = "Subscribe for custom generation.",
 ):
-    """Get cached demo or generate one via real API on first visit."""
+    """Get a pre-generated demo from cache or Material DB."""
     try:
         redis = await get_redis()
     except Exception:

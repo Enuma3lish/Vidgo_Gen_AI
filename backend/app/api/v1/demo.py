@@ -626,21 +626,6 @@ async def get_try_prompts(
     }
 
 
-@router.get("/download/{preset_id}")
-async def download_result(preset_id: str):
-    """
-    Download is BLOCKED for ALL users in preset-only mode.
-    """
-    raise HTTPException(
-        status_code=403,
-        detail={
-            "error": "download_blocked",
-            "message": "Downloads are not available. Subscribe for full access.",
-            "redirect": "/pricing"
-        }
-    )
-
-
 # =============================================================================
 # NEW ENDPOINTS - Demo Tier with Leonardo AI
 # =============================================================================
@@ -710,23 +695,15 @@ async def generate_product_video(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Generate product ads video from prompt (Demo Tier).
+    Demo generation endpoint — cache-first with on-demand fallback.
 
-    Flow:
-    1. Check demo usage limit (2 uses per user)
-    2. Content moderation (reject illegal/18+ content)
-    3. Enhance prompt with Gemini AI
-    4. Check for similar cached prompts (>85% similarity)
-    5. If similar found: return cached result (saves credits)
-    6. If not found: generate new image & video with Leonardo AI
-    7. Cache result for future similarity matching
-    8. Increment demo usage count
+    1. Check Material DB / Redis cache for existing result
+    2. If found → return cached result instantly
+    3. If not found → generate on-the-fly via AI API → cache → return
 
-    Demo tier limitations:
-    - 720p resolution
-    - Watermark on video
-    - 2 uses per user (resets weekly)
+    Everyone can use this endpoint. Results are cached for future requests.
     """
+
     from app.models.user import User
     from datetime import datetime, timedelta
     from uuid import UUID
@@ -906,6 +883,100 @@ async def generate_product_video(
 
 
 # =============================================================================
+# TOOL-SPECIFIC DEMO GENERATION (cache-first with on-demand fallback)
+# =============================================================================
+
+@router.post("/generate/{tool_type}")
+async def generate_demo_for_tool(
+    tool_type: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """
+    Demo generation for a specific tool type — everyone can use this.
+
+    1. Check Material DB for existing presets
+    2. If found → return cached presets
+    3. If empty → generate on-demand via AI API → cache → return
+    """
+    from app.services.material_lookup import get_material_lookup_service
+    from app.services.demo_cache_service import DemoCacheService
+    from app.api.deps import get_redis
+
+    valid_tool_types = get_all_tool_types()
+    if tool_type not in valid_tool_types:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "invalid_tool_type",
+                "message": f"Unknown tool type: {tool_type}",
+                "valid_tool_types": valid_tool_types,
+            },
+        )
+
+    lookup_service = get_material_lookup_service(db)
+    presets = await lookup_service.get_presets_for_tool(tool_type, None, 20)
+
+    # If no presets exist, generate one on-demand
+    if not presets:
+        try:
+            redis = await get_redis()
+        except Exception:
+            redis = None
+
+        cache_service = DemoCacheService(db, redis)
+        generated = await cache_service.get_or_generate(tool_type)
+
+        if generated:
+            return {
+                "success": True,
+                "tool_type": tool_type,
+                "generated_on_demand": True,
+                "presets": [
+                    {
+                        "id": generated.get("id", "temp"),
+                        "prompt": generated.get("prompt"),
+                        "prompt_zh": None,
+                        "thumbnail_url": generated.get("result_url"),
+                        "result_watermarked_url": generated.get("result_url"),
+                        "input_image_url": generated.get("input_image_url"),
+                        "result_url": generated.get("result_url"),
+                        "can_download": is_subscribed_user(current_user),
+                    }
+                ],
+                "count": 1,
+            }
+
+        return {
+            "success": True,
+            "tool_type": tool_type,
+            "message": "Generation in progress. Please try again shortly.",
+            "presets": [],
+            "count": 0,
+        }
+
+    subscribed = is_subscribed_user(current_user)
+    return {
+        "success": True,
+        "tool_type": tool_type,
+        "presets": [
+            {
+                "id": str(p.id),
+                "prompt": p.prompt,
+                "prompt_zh": p.prompt_zh,
+                "thumbnail_url": p.result_thumbnail_url or p.result_watermarked_url or p.result_image_url,
+                "result_watermarked_url": p.result_watermarked_url,
+                "input_image_url": p.input_image_url,
+                "result_url": (p.result_video_url or p.result_image_url) if subscribed else p.result_watermarked_url,
+                "can_download": subscribed,
+            }
+            for p in presets
+        ],
+        "count": len(presets),
+    }
+
+
+# =============================================================================
 # PAID TIER GENERATION (with image upload & Material DB storage)
 # =============================================================================
 
@@ -915,21 +986,13 @@ async def generate_paid_tier(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Paid tier generation with image upload support.
+    Legacy paid runtime example-generation endpoint.
 
-    Flow:
-    1. Verify user is paid tier (not demo)
-    2. If image provided: moderate and describe with Gemini
-    3. Enhance prompt with Gemini
-    4. Call generation API (PiAPI/Gemini)
-    5. Store result to Material DB with Gemini description as primary key
-    6. Result becomes example for demo users
-
-    Key differences from demo tier:
-    - Can upload custom images
-    - Always calls APIs (never reads from Material DB)
-    - Results stored as examples for others
+    Subscriber generation should use the tool-specific endpoints under /api/v1/tools
+    or /api/v1/uploads. Demo examples are developer-managed only.
     """
+    _runtime_demo_generation_disabled()
+
     from app.models.user import User
     from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
     from uuid import UUID
@@ -1407,62 +1470,12 @@ async def search_or_generate_demo(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Search for matching demo or generate new one.
+    Legacy search endpoint from the old runtime-demo system.
 
-    Flow:
-    1. Moderate prompt for safety
-    2. Normalize prompt and extract keywords
-    3. Search database for similar demos
-    4. If found: return best match
-    5. If not found and generate_if_not_found=True: generate new demo
-
-    Supports prompts in: English, Traditional Chinese, Japanese, Korean, Spanish
+    Runtime generation is disabled. Use /api/v1/demo/presets and the inspiration
+    gallery to browse pre-generated examples.
     """
-    # 1. Content moderation
-    moderation_service = get_moderation_service()
-    moderation_result = await moderation_service.moderate(request.prompt)
-
-    if not moderation_result.is_safe:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Content not allowed: {moderation_result.reason}"
-        )
-
-    # 2. Get or create demo
-    demo_service = get_demo_service()
-    result = await demo_service.get_or_create_demo(
-        db=db,
-        prompt=request.prompt,
-        preferred_style=request.style
-    )
-
-    if result.get("success"):
-        demo_data = result.get("demo", {})
-        return DemoSearchResponse(
-            success=True,
-            found_existing=result.get("found_existing", False),
-            generated_new=result.get("generated_new", False),
-            match_score=result.get("match_score"),
-            matched_keywords=result.get("matched_keywords"),
-            demo=ImageDemoResponse(
-                id=demo_data.get("id"),
-                prompt=demo_data.get("prompt_original", request.prompt),
-                prompt_normalized=demo_data.get("prompt_normalized"),
-                image_before=demo_data.get("image_before"),
-                image_after=demo_data.get("image_after"),
-                style_name=demo_data.get("style_name"),
-                style_slug=demo_data.get("style_slug"),
-                category=demo_data.get("category"),
-                match_score=result.get("match_score"),
-            )
-        )
-    else:
-        return DemoSearchResponse(
-            success=False,
-            found_existing=False,
-            error=result.get("error"),
-            suggestion=result.get("suggestion")
-        )
+    _runtime_demo_generation_disabled()
 
 
 @router.post("/generate-image", response_model=GenerateImageResponse)
@@ -1470,39 +1483,11 @@ async def generate_demo_image(
     request: GenerateImageRequest,
 ):
     """
-    Generate a demo image only (with watermark).
-    This is the "Generate Demo" feature - Step 1.
+    Legacy runtime demo-image generation endpoint.
 
-    Uses PiAPI for text-to-image generation.
-    Image includes watermark for demo purposes.
-
-    Processing time: ~30-60 seconds
+    Runtime generation is disabled. Use a pre-generated demo preset instead.
     """
-    # 1. Content moderation
-    moderation_service = get_moderation_service()
-    moderation_result = await moderation_service.moderate(request.prompt)
-
-    if not moderation_result.is_safe:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Content not allowed: {moderation_result.reason}"
-        )
-
-    # 2. Generate image only
-    demo_service = get_demo_service()
-    result = await demo_service.generate_image_only(
-        prompt=request.prompt,
-        style_slug=request.style
-    )
-
-    return GenerateImageResponse(
-        success=result.get("success", False),
-        prompt=request.prompt,
-        image_url=result.get("image_url"),
-        original_url=result.get("original_url"),  # For video generation
-        style_name=result.get("style_name"),
-        error=result.get("error")
-    )
+    _runtime_demo_generation_disabled()
 
 
 @router.post("/generate-realtime", response_model=RealtimeDemoResponse)
@@ -1510,55 +1495,11 @@ async def generate_demo_realtime(
     request: RealtimeDemoRequest,
 ):
     """
-    Generate video from an existing image.
-    This is the "See It In Action" feature - Step 2.
+    Legacy runtime demo-video generation endpoint.
 
-    If image_url is provided, uses that image directly.
-    Otherwise generates a new image first.
-
-    Uses PiAPI for image-to-video generation.
-    V2V enhancement is disabled in current version.
-
-    Processing time: ~1-3 minutes
+    Runtime generation is disabled. Use pre-generated demo video examples instead.
     """
-    # 1. Content moderation
-    moderation_service = get_moderation_service()
-    moderation_result = await moderation_service.moderate(request.prompt)
-
-    if not moderation_result.is_safe:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Content not allowed: {moderation_result.reason}"
-        )
-
-    # 2. Generate video (and image if not provided)
-    demo_service = get_demo_service()
-    result = await demo_service.generate_video_from_image(
-        prompt=request.prompt,
-        image_url=request.image_url,
-        style_slug=request.style,
-        skip_v2v=request.skip_v2v
-    )
-
-    return RealtimeDemoResponse(
-        success=result.get("success", False),
-        prompt=result.get("prompt", request.prompt),
-        style_name=result.get("style_name"),
-        style_slug=result.get("style_slug"),
-        image_url=result.get("image_url"),
-        video_url=result.get("video_url"),
-        enhanced_video_url=result.get("enhanced_video_url"),
-        steps=[
-            PipelineStep(
-                step=s.get("step", 0),
-                name=s.get("name", ""),
-                status=s.get("status", "")
-            )
-            for s in result.get("steps", [])
-        ],
-        partial=result.get("partial", False),
-        error=result.get("error")
-    )
+    _runtime_demo_generation_disabled()
 
 
 @router.get("/random", response_model=ImageDemoResponse)
@@ -2829,7 +2770,7 @@ async def get_view_more_examples(
 # ============================================================================
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), request: Request = None):
     """
     General file upload endpoint for demo tools.
     Saves file to static uploads directory and returns publicly accessible URL.
@@ -2838,20 +2779,28 @@ async def upload_file(file: UploadFile = File(...)):
         # Create uploads directory if not exists
         upload_dir = Path("/app/static/uploads")
         upload_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Generate safe filename
         ext = os.path.splitext(file.filename)[1]
         if not ext:
             ext = ".png"
-        
+
         filename = f"{uuid.uuid4()}{ext}"
         filepath = upload_dir / filename
-        
+
         # Save file
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
-        return {"url": f"/static/uploads/{filename}"}
-        
+
+        # Build public URL so external AI APIs can access the file
+        static_path = f"/static/uploads/{filename}"
+        public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+        if not public_base and request:
+            # Derive from request URL
+            public_base = str(request.base_url).rstrip("/")
+        public_url = f"{public_base}{static_path}" if public_base else static_path
+
+        return {"url": public_url, "static_path": static_path}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

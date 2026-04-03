@@ -454,11 +454,39 @@
   },
   "dashboard": {
     "welcome": "歡迎回來",
+    "subtitle": "以下是您的帳號概覽",
     "totalCredits": "總點數",
-    "usedThisWeek": "本週已用",
+    "remainingCredits": "剩餘點數",
+    "totalOf": "共 {n} 點",
+    "usedThisWeek": "本週使用",
+    "weeklyLimit": "週限額 {n} 點",
     "recentWorks": "最近作品",
-    "quickActions": "快速操作",
-    "viewAll": "查看全部"
+    "quickActions": "快速開始",
+    "viewAll": "查看全部",
+    "currentPlan": "目前方案",
+    "upgradePlan": "升級方案",
+    "manageOrUpgradePlan": "管理或升級方案",
+    "invoices": "發票記錄",
+    "referrals": "推薦獎勵",
+    "socialMedia": "社交媒體",
+    "view": "查看",
+    "noWorks": "還沒有作品",
+    "noWorksDesc": "從任意 AI 工具開始創作吧！",
+    "startCreating": "立即開始創作",
+    "tools": {
+      "shortVideo": "AI 短影片",
+      "avatar": "AI 數位人",
+      "tryOn": "虛擬試穿",
+      "productScene": "產品場景",
+      "bgRemoval": "智能去背",
+      "roomRedesign": "空間設計"
+    },
+    "time": {
+      "justNow": "剛剛",
+      "hoursAgo": "{n} 小時前",
+      "yesterday": "昨天",
+      "daysAgo": "{n} 天前"
+    }
   },
   "pricing": {
     "title": "選擇您的方案",
@@ -826,7 +854,12 @@
       "imageTranslator": { "name": "圖片翻譯", "desc": "準確翻譯圖片中的文字" },
       "aiShadows": { "name": "AI 陰影", "desc": "為任何物體添加自然陰影" },
       "roomRedesign": { "name": "空間設計", "desc": "AI 驅動的室內空間重新設計" },
-      "bgRemoval": { "name": "智能去背", "desc": "免費去除圖片背景" }
+      "bgRemoval": { "name": "智能去背", "desc": "免費去除圖片背景" },
+      "textToVideo": { "name": "文字轉影片", "desc": "根據文字描述生成影片" },
+      "hdUpscale": { "name": "高清放大", "desc": "將圖片放大至 4K 高解析度" },
+      "imageTransform": { "name": "圖片變換", "desc": "AI 驅動的圖片風格轉換" },
+      "videoTransform": { "name": "影片變換", "desc": "AI 驅動的影片風格轉換" },
+      "patternGenerate": { "name": "花紋設計", "desc": "為品牌生成無縫圖案設計" }
     },
     "categories": {
       "fashionAI": "時尚 AI",

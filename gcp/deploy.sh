@@ -72,8 +72,15 @@ WORKER_CPU=1
 # 預算告警 (USD)
 BUDGET_AMOUNT=300
 
+# Custom Domain (vidgo.co)
+CUSTOM_DOMAIN_BACKEND="api.vidgo.co"
+CUSTOM_DOMAIN_FRONTEND="vidgo.co"
+CUSTOM_DOMAIN_FRONTEND_WWW="www.vidgo.co"
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECRETS — API Keys (請替換成你的值)
+# !! WARNING: 這些金鑰以明文儲存在此腳本中。請勿將此檔案推送到公開 repo !!
+# !! 正式上線後建議改用 .env 檔案或 CI/CD secret variables !!
 # ═══════════════════════════════════════════════════════════════════════════════
 
 SECRET_KEY="9375626ad2099c8668dd80660f76cf1d5e20910664c21fdfac7c5c0dbd1cbf1d"
@@ -83,11 +90,35 @@ POLLO_API_KEY="pollo_7f6ZiszaD2B3eXSpbLjuPj7rc7Ivc3GuzYiuODroyTYX"
 A2E_API_KEY="sk_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OTViMzMwNDExNTc2MzAwNWJjZmUyOTIiLCJuYW1lIjoidmlkZ28xNjhAZ21haWwuY29tIiwicm9sZSI6ImNvaW4iLCJpYXQiOjE3NjgxMjc4MTZ9.Hg7wZwlTg-RqTCdvnWr78d0sW_EvGLbFbXUh5ICpttw"
 A2E_API_ID="695b3304115763005bcfe292"
 A2E_DEFAULT_CREATOR_ID="693bf9bd3caab0848a4cd107"
-PADDLE_API_KEY="pdl_sdbx_apikey_01kedx5qy6zp7tjpkajd3yb9t5_Fczyp1QH0hnC2FW6vfkr4G_ABz"
 SMTP_HOST="smtp.gmail.com"
 SMTP_PORT="587"
-SMTP_USER="qaz0978005418@gmail.com"
-SMTP_PASSWORD="huxi xfiu ntes qici"
+SMTP_USER="vidago168@gmail.com"
+SMTP_PASSWORD="mxff kwsh xgyn otew"
+
+# Paddle (International Payment)
+PADDLE_API_KEY="pdl_sdbx_apikey_01kedx5qy6zp7tjpkajd3yb9t5_Fczyp1QH0hnC2FW6vfkr4G_ABz"
+PADDLE_PUBLIC_KEY=""                         # <-- 你的 Paddle Public Key (webhook verification)
+PADDLE_WEBHOOK_SECRET=""                     # <-- 你的 Paddle Webhook Secret
+PADDLE_ENV="sandbox"                         # <-- 上線改 "production"
+PADDLE_PRICE_IDS=""                          # <-- JSON: '{"starter_monthly":"pri_xxx","pro_monthly":"pri_yyy"}'
+
+# ECPay Payment (Taiwan)
+ECPAY_ENV=production
+ECPAY_MERCHANT_ID=3422044
+ECPAY_HASH_KEY=fwNTpcFCaGaiOOt7
+ECPAY_HASH_IV=Xv8pXkFk8zEGqv3T            # <-- 你的 ECPay HashIV
+
+# Giveme E-Invoice
+GIVEME_IDNO=qaz0978005418
+GIVEME_PASSWORD=qaz129946858          # <-- 你的 Giveme API 密碼
+
+# Social Media OAuth (Facebook / Instagram / TikTok / YouTube)
+FACEBOOK_APP_ID=""                           # <-- https://developers.facebook.com/
+FACEBOOK_APP_SECRET=""
+TIKTOK_CLIENT_KEY=""                         # <-- https://developers.tiktok.com/
+TIKTOK_CLIENT_SECRET=""
+YOUTUBE_CLIENT_ID=""                         # <-- https://console.cloud.google.com/
+YOUTUBE_CLIENT_SECRET=""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 以下不需修改 (Do not modify below unless you know what you're doing)
@@ -217,13 +248,29 @@ if should_run 2 "vpc"; then
     --region="${REGION}" \
     2>/dev/null && log "Router created" || warn "Router already exists"
 
+  # Static IP for NAT (required for Giveme & ECPay IP whitelist)
+  gcloud compute addresses create "${APP_NAME}-nat-ip" \
+    --project="${PROJECT_ID}" \
+    --region="${REGION}" \
+    --description="VidGo NAT static IP for Giveme/ECPay whitelist" \
+    2>/dev/null && log "Static NAT IP created" || warn "Static NAT IP already exists"
+
+  NAT_IP=$(gcloud compute addresses describe "${APP_NAME}-nat-ip" \
+    --project="${PROJECT_ID}" --region="${REGION}" \
+    --format='value(address)' 2>/dev/null || echo "PENDING")
+  log "NAT Static IP: ${NAT_IP}  ← 請將此 IP 加入 Giveme 白名單 & ECPay 允許 IP"
+
+  NAT_IP_SELF_LINK=$(gcloud compute addresses describe "${APP_NAME}-nat-ip" \
+    --project="${PROJECT_ID}" --region="${REGION}" \
+    --format='value(selfLink)' 2>/dev/null)
+
   gcloud compute routers nats create "${APP_NAME}-nat" \
     --project="${PROJECT_ID}" \
     --router="${APP_NAME}-router" \
     --region="${REGION}" \
-    --auto-allocate-nat-external-ips \
+    --nat-external-ip-pool="${NAT_IP_SELF_LINK}" \
     --nat-all-subnet-ip-ranges \
-    2>/dev/null && log "NAT created" || warn "NAT already exists"
+    2>/dev/null && log "NAT created with static IP" || warn "NAT already exists"
 fi
 
 ###############################################################################
@@ -428,10 +475,23 @@ if should_run 8 "secrets"; then
   put_secret "A2E_API_ID"            "$A2E_API_ID"
   put_secret "A2E_DEFAULT_CREATOR_ID" "$A2E_DEFAULT_CREATOR_ID"
   put_secret "PADDLE_API_KEY"        "$PADDLE_API_KEY"
+  put_secret "PADDLE_PUBLIC_KEY"    "$PADDLE_PUBLIC_KEY"
+  put_secret "PADDLE_WEBHOOK_SECRET" "$PADDLE_WEBHOOK_SECRET"
   put_secret "SMTP_HOST"             "$SMTP_HOST"
   put_secret "SMTP_PORT"             "$SMTP_PORT"
   put_secret "SMTP_USER"             "$SMTP_USER"
   put_secret "SMTP_PASSWORD"         "$SMTP_PASSWORD"
+  put_secret "ECPAY_MERCHANT_ID"     "$ECPAY_MERCHANT_ID"
+  put_secret "ECPAY_HASH_KEY"        "$ECPAY_HASH_KEY"
+  put_secret "ECPAY_HASH_IV"         "$ECPAY_HASH_IV"
+  put_secret "GIVEME_IDNO"           "$GIVEME_IDNO"
+  put_secret "GIVEME_PASSWORD"       "$GIVEME_PASSWORD"
+  put_secret "FACEBOOK_APP_ID"      "$FACEBOOK_APP_ID"
+  put_secret "FACEBOOK_APP_SECRET"  "$FACEBOOK_APP_SECRET"
+  put_secret "TIKTOK_CLIENT_KEY"    "$TIKTOK_CLIENT_KEY"
+  put_secret "TIKTOK_CLIENT_SECRET" "$TIKTOK_CLIENT_SECRET"
+  put_secret "YOUTUBE_CLIENT_ID"    "$YOUTUBE_CLIENT_ID"
+  put_secret "YOUTUBE_CLIENT_SECRET" "$YOUTUBE_CLIENT_SECRET"
 
   log "All secrets stored."
   warn "DATABASE_URL = ${DATABASE_URL}"
@@ -451,12 +511,18 @@ if should_run 9 "build"; then
   # Configure docker for Artifact Registry
   gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
+  # Ensure PiAPI MCP server is cloned and built
+  if [ ! -f "mcp-servers/piapi-mcp-server/dist/index.js" ]; then
+    log "Setting up PiAPI MCP server..."
+    bash mcp-servers/setup.sh
+  fi
+
   log "Building backend image..."
   docker build \
     -t "${BACKEND_IMAGE}:${IMAGE_TAG}" \
     -t "${BACKEND_IMAGE}:latest" \
     -f backend/Dockerfile \
-    backend/
+    .
 
   log "Building frontend image..."
   docker build \
@@ -489,11 +555,18 @@ if should_run 10 "deploy"; then
   SQL_CONNECTION="${PROJECT_ID}:${REGION}:${SQL_INSTANCE}"
   CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${REGION}/connectors/${CONNECTOR_NAME}"
 
+  # Use custom domain URLs for production
+  # These must match your GoDaddy DNS → Cloud Run domain mappings (see step "domain")
+  _BACKEND_URL="https://${CUSTOM_DOMAIN_BACKEND}"
+  _FRONTEND_URL="https://${CUSTOM_DOMAIN_FRONTEND}"
+  log "BACKEND_URL  = ${_BACKEND_URL}"
+  log "FRONTEND_URL = ${_FRONTEND_URL}"
+
   # Env vars that Cloud Run needs (non-secret, safe to set directly)
-  COMMON_ENV="SKIP_PREGENERATION=true,SKIP_DEPENDENCY_CHECK=true,DEBUG=false,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=30,REFRESH_TOKEN_EXPIRE_DAYS=7"
+  COMMON_ENV="SKIP_PREGENERATION=true,SKIP_DEPENDENCY_CHECK=true,DEBUG=false,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=30,REFRESH_TOKEN_EXPIRE_DAYS=7,ECPAY_ENV=production,ECPAY_PAYMENT_URL=https://payment.ecpay.com.tw/Cashier/AioCheckOut/V2,GIVEME_ENABLED=true,GIVEME_BASE_URL=https://www.giveme.com.tw/invoice.do,GIVEME_UNCODE=96003146,FRONTEND_URL=${_FRONTEND_URL},BACKEND_URL=${_BACKEND_URL},PUBLIC_APP_URL=${_BACKEND_URL},CORS_ALLOW_ALL=true,PADDLE_ENV=${PADDLE_ENV},SMTP_FROM_EMAIL=noreply@vidgo.co,SMTP_FROM_NAME=VidGo,SMTP_TLS=true,GCS_BUCKET=${BUCKET_NAME},PIAPI_MCP_PATH=/app/mcp-servers/piapi-mcp-server/dist/index.js"
 
   # Secret env vars (reference from Secret Manager)
-  SECRET_ENV="DATABASE_URL=DATABASE_URL:latest,REDIS_URL=REDIS_URL:latest,SECRET_KEY=SECRET_KEY:latest,PIAPI_KEY=PIAPI_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,POLLO_API_KEY=POLLO_API_KEY:latest,A2E_API_KEY=A2E_API_KEY:latest,A2E_API_ID=A2E_API_ID:latest,A2E_DEFAULT_CREATOR_ID=A2E_DEFAULT_CREATOR_ID:latest,PADDLE_API_KEY=PADDLE_API_KEY:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASSWORD=SMTP_PASSWORD:latest"
+  SECRET_ENV="DATABASE_URL=DATABASE_URL:latest,REDIS_URL=REDIS_URL:latest,SECRET_KEY=SECRET_KEY:latest,PIAPI_KEY=PIAPI_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,POLLO_API_KEY=POLLO_API_KEY:latest,A2E_API_KEY=A2E_API_KEY:latest,A2E_API_ID=A2E_API_ID:latest,A2E_DEFAULT_CREATOR_ID=A2E_DEFAULT_CREATOR_ID:latest,PADDLE_API_KEY=PADDLE_API_KEY:latest,PADDLE_PUBLIC_KEY=PADDLE_PUBLIC_KEY:latest,PADDLE_WEBHOOK_SECRET=PADDLE_WEBHOOK_SECRET:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASSWORD=SMTP_PASSWORD:latest,ECPAY_MERCHANT_ID=ECPAY_MERCHANT_ID:latest,ECPAY_HASH_KEY=ECPAY_HASH_KEY:latest,ECPAY_HASH_IV=ECPAY_HASH_IV:latest,GIVEME_IDNO=GIVEME_IDNO:latest,GIVEME_PASSWORD=GIVEME_PASSWORD:latest,FACEBOOK_APP_ID=FACEBOOK_APP_ID:latest,FACEBOOK_APP_SECRET=FACEBOOK_APP_SECRET:latest,TIKTOK_CLIENT_KEY=TIKTOK_CLIENT_KEY:latest,TIKTOK_CLIENT_SECRET=TIKTOK_CLIENT_SECRET:latest,YOUTUBE_CLIENT_ID=YOUTUBE_CLIENT_ID:latest,YOUTUBE_CLIENT_SECRET=YOUTUBE_CLIENT_SECRET:latest"
 
   # ── Deploy Backend ──
   log "Deploying backend..."
@@ -513,6 +586,7 @@ if should_run 10 "deploy"; then
     --service-account="${BACKEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --set-env-vars="${COMMON_ENV}" \
     --set-secrets="${SECRET_ENV}" \
+    --startup-cpu-boost \
     --allow-unauthenticated
   log "Backend deployed"
 
@@ -571,10 +645,61 @@ if should_run 10 "deploy"; then
 fi
 
 ###############################################################################
-# STEP 11: Cloud Armor (WAF + Rate Limiting)
+# STEP 11: Custom Domain Mapping (vidgo.co)
 ###############################################################################
-if should_run 11 "armor"; then
-  step 11 "建立 Cloud Armor 安全政策"
+if should_run 11 "domain"; then
+  step 11 "設定 Custom Domain → Cloud Run"
+
+  warn "確認你已在 GoDaddy DNS 設定以下 CNAME 記錄:"
+  warn "  ${CUSTOM_DOMAIN_BACKEND}     → ghs.googlehosted.com"
+  warn "  ${CUSTOM_DOMAIN_FRONTEND}    → ghs.googlehosted.com"
+  warn "  ${CUSTOM_DOMAIN_FRONTEND_WWW} → ghs.googlehosted.com"
+
+  # Map api.vidgo.co → backend
+  gcloud beta run domain-mappings create \
+    --service="${BACKEND_SERVICE}" \
+    --domain="${CUSTOM_DOMAIN_BACKEND}" \
+    --region="${REGION}" \
+    --project="${PROJECT_ID}" \
+    2>/dev/null && log "Domain mapped: ${CUSTOM_DOMAIN_BACKEND} → ${BACKEND_SERVICE}" \
+    || warn "Domain mapping for ${CUSTOM_DOMAIN_BACKEND} already exists"
+
+  # Map vidgo.co → frontend
+  gcloud beta run domain-mappings create \
+    --service="${FRONTEND_SERVICE}" \
+    --domain="${CUSTOM_DOMAIN_FRONTEND}" \
+    --region="${REGION}" \
+    --project="${PROJECT_ID}" \
+    2>/dev/null && log "Domain mapped: ${CUSTOM_DOMAIN_FRONTEND} → ${FRONTEND_SERVICE}" \
+    || warn "Domain mapping for ${CUSTOM_DOMAIN_FRONTEND} already exists"
+
+  # Map www.vidgo.co → frontend
+  gcloud run domain-mappings create \
+    --service="${FRONTEND_SERVICE}" \
+    --domain="${CUSTOM_DOMAIN_FRONTEND_WWW}" \
+    --region="${REGION}" \
+    --project="${PROJECT_ID}" \
+    2>/dev/null && log "Domain mapped: ${CUSTOM_DOMAIN_FRONTEND_WWW} → ${FRONTEND_SERVICE}" \
+    || warn "Domain mapping for ${CUSTOM_DOMAIN_FRONTEND_WWW} already exists"
+
+  # Show required DNS records
+  echo ""
+  warn "請在 GoDaddy DNS Manager 加入以下記錄:"
+  echo "  ┌──────────┬──────────────────────┬─────────────────────────┐"
+  echo "  │ Type     │ Name                 │ Value                   │"
+  echo "  ├──────────┼──────────────────────┼─────────────────────────┤"
+  echo "  │ CNAME    │ api                  │ ghs.googlehosted.com    │"
+  echo "  │ CNAME    │ www                  │ ghs.googlehosted.com    │"
+  echo "  │ CNAME    │ @                    │ ghs.googlehosted.com    │"
+  echo "  └──────────┴──────────────────────┴─────────────────────────┘"
+  warn "SSL 憑證由 Cloud Run (Let's Encrypt) 自動簽發，等 DNS 生效後約 15-30 分鐘"
+fi
+
+###############################################################################
+# STEP 12: Cloud Armor (WAF + Rate Limiting)
+###############################################################################
+if should_run 12 "armor"; then
+  step 12 "建立 Cloud Armor 安全政策"
 
   POLICY_NAME="${APP_NAME}-security-policy"
 
@@ -650,15 +775,16 @@ if should_run 11 "armor"; then
 fi
 
 ###############################################################################
-# STEP 12: Final Summary
+# STEP 13: Final Summary
 ###############################################################################
-if should_run 12 "summary"; then
-  step 12 "部署完成總結"
+if should_run 13 "summary"; then
+  step 13 "部署完成總結"
 
   echo ""
   echo -e "${BOLD}━━━ 基礎設施 ━━━${NC}"
   echo "  Project:    ${PROJECT_ID}"
   echo "  Region:     ${REGION}"
+  echo "  Domain:     ${CUSTOM_DOMAIN_FRONTEND} / ${CUSTOM_DOMAIN_BACKEND}"
 
   # Cloud SQL
   SQL_IP=$(gcloud sql instances describe "${SQL_INSTANCE}" \
@@ -669,6 +795,12 @@ if should_run 12 "summary"; then
   REDIS_IP=$(gcloud redis instances describe "${REDIS_INSTANCE}" \
     --project="${PROJECT_ID}" --region="${REGION}" --format='value(host)' 2>/dev/null || echo "N/A")
   echo "  Redis:      ${REDIS_INSTANCE} (${REDIS_IP})"
+
+  # NAT Static IP
+  NAT_IP=$(gcloud compute addresses describe "${APP_NAME}-nat-ip" \
+    --project="${PROJECT_ID}" --region="${REGION}" \
+    --format='value(address)' 2>/dev/null || echo "N/A")
+  echo "  NAT IP:     ${NAT_IP}  (Giveme/ECPay 白名單用)"
 
   # Storage
   echo "  Bucket:     gs://${BUCKET_NAME}"
@@ -682,6 +814,17 @@ if should_run 12 "summary"; then
   done
 
   echo ""
+  echo -e "${BOLD}━━━ Custom Domain ━━━${NC}"
+  echo "  Frontend: https://${CUSTOM_DOMAIN_FRONTEND}"
+  echo "  Backend:  https://${CUSTOM_DOMAIN_BACKEND}"
+
+  echo ""
+  echo -e "${BOLD}━━━ Payment & Invoice ━━━${NC}"
+  echo "  ECPay:    production (MerchantID: ${ECPAY_MERCHANT_ID})"
+  echo "  Giveme:   enabled (統一編號: 96003146)"
+  echo "  Paddle:   ${PADDLE_ENV}"
+
+  echo ""
   echo -e "${BOLD}━━━ 預估月費 (Phase 1, 0-500 users) ━━━${NC}"
   echo "  Cloud Run:     ~\$30–50"
   echo "  Cloud SQL:     ~\$25–35"
@@ -692,11 +835,19 @@ if should_run 12 "summary"; then
   echo ""
 
   echo -e "${BOLD}━━━ 待辦事項 ━━━${NC}"
+  echo "  [ ] 確認 GoDaddy DNS 已設定 CNAME → ghs.googlehosted.com"
+  echo "  [ ] 確認 DNS 已生效: dig ${CUSTOM_DOMAIN_BACKEND} CNAME"
+  echo "  [ ] 將 NAT IP (${NAT_IP}) 加入 Giveme 白名單 (系統設定→白名單設定)"
+  echo "  [ ] 將 NAT IP (${NAT_IP}) 加入 ECPay 允許 IP (系統介接設定→允許的IP)"
+  echo "  [ ] 在 ECPay 商店後台設定回調 URL:"
+  echo "      付款通知: https://${CUSTOM_DOMAIN_BACKEND}/api/v1/payments/ecpay/callback"
+  echo "      完成返回: https://${CUSTOM_DOMAIN_FRONTEND}/subscription/ecpay-result"
+  echo "  [ ] 測試: curl https://${CUSTOM_DOMAIN_BACKEND}/health"
+  echo "  [ ] 測試: ECPay 付款流程 (小額測試)"
+  echo "  [ ] 測試: Giveme 發票開立"
   echo "  [ ] 設定 Budget Alert (\$${BUDGET_AMOUNT}): https://console.cloud.google.com/billing/budgets"
   echo "  [ ] 設定 Cloud Build Trigger (GitHub → main branch)"
-  echo "  [ ] 測試: curl \$(backend-url)/health"
-  echo "  [ ] 測試: curl \$(backend-url)/api/v1/admin/health"
-  echo "  [ ] 3 個月後購買 Committed Use Discount (Cloud SQL -37%, Redis -35%)"
+  echo "  [ ] 填入 Social Media OAuth keys (Facebook/TikTok/YouTube) 並重新部署"
   echo ""
   echo -e "${GREEN}${BOLD}Deployment complete!${NC}"
 fi

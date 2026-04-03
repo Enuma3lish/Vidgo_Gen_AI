@@ -62,15 +62,24 @@ class PiAPIProvider(BaseProvider):
             return False
 
     def _resolve_image_url(self, url: str) -> str:
-        """Convert local /static/ paths to base64 data URIs for external API calls."""
+        """Convert local /static/ paths to accessible URLs for external API calls.
+        Prefers PUBLIC_APP_URL (public URL) over base64 to avoid 'task input too large' errors."""
         if url.startswith("/static") or url.startswith("static"):
+            static_path = "/" + url.lstrip("/")  # normalize to /static/...
+            # Prefer public URL (works for all APIs including Kling try-on which rejects base64)
+            public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+            if public_base:
+                return f"{public_base}{static_path}"
+            # Fallback to base64 (works for Flux but may fail for Kling)
             import base64
             import mimetypes
             local_path = os.path.join("/app", url.lstrip("/"))
-            mime_type = mimetypes.guess_type(local_path)[0] or "image/png"
-            with open(local_path, "rb") as f:
-                b64 = base64.b64encode(f.read()).decode()
-            return f"data:{mime_type};base64,{b64}"
+            if os.path.exists(local_path):
+                mime_type = mimetypes.guess_type(local_path)[0] or "image/png"
+                with open(local_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode()
+                return f"data:{mime_type};base64,{b64}"
+            logger.warning(f"[PiAPI] Local file not found: {local_path}")
         return url
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -144,9 +153,7 @@ class PiAPIProvider(BaseProvider):
                 "image": self._resolve_image_url(params["image_url"]),
                 "prompt": params["prompt"],
                 "negative_prompt": params.get("negative_prompt", ""),
-                "strength": params.get("strength", 0.75),
-                "width": params.get("width", 1024),
-                "height": params.get("height", 768)
+                "denoise": params.get("strength", params.get("denoise", 0.75)),
             }
         }
 
@@ -401,9 +408,9 @@ class PiAPIProvider(BaseProvider):
             loop = asyncio.get_event_loop()
             output_image = await loop.run_in_executor(None, remove, input_image)
 
-            # Save to static/generated/
+            # Save to /app/static/generated/
             filename = f"rembg_{uuid.uuid4().hex}.png"
-            output_dir = os.path.join("static", "generated")
+            output_dir = "/app/static/generated"
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(output_dir, filename)
             output_image.save(output_path, "PNG")
@@ -487,6 +494,153 @@ class PiAPIProvider(BaseProvider):
         }
 
         return await self._submit_and_poll(payload)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TEXT TO SPEECH (F5-TTS via PiAPI)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def text_to_speech(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate speech audio from text using F5-TTS (zero-shot) via PiAPI.
+        Reference: https://piapi.ai/docs/tts-api/f5-tts
+
+        Args:
+            params: {
+                "text": str,           # Text to synthesize
+                "ref_audio": str,      # Reference audio URL for voice cloning
+                "ref_text": str,       # (optional) Text of the reference audio
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"audio_url": str}}
+        """
+        self._log_request("text_to_speech", params)
+
+        # Reference audio for voice cloning. If not provided, use a default sample.
+        ref_audio = params.get("ref_audio", "")
+        if not ref_audio:
+            # Default: use Kling's sample audio as reference voice
+            ref_audio = "https://v15-kling.klingai.com/bs2/upload-ylab-stunt-sgp/minimax_tts/05648231552788212e980aade977d672/audio.mp3"
+            logger.info("[PiAPI] Using default Kling sample as TTS reference voice")
+
+        payload = {
+            "model": "Qubico/tts",
+            "task_type": "zero-shot",
+            "input": {
+                "gen_text": params["text"],
+                "ref_audio": ref_audio,
+            },
+            "config": {
+                "service_mode": "public"
+            }
+        }
+
+        ref_text = params.get("ref_text")
+        if ref_text:
+            payload["input"]["ref_text"] = ref_text
+
+        return await self._submit_and_poll(payload)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # AVATAR (Kling Avatar via PiAPI — talking head video)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def generate_avatar(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate talking-head avatar video using Kling Avatar via PiAPI.
+        Reference: https://piapi.ai/docs/kling-api/kling-avatar-api
+
+        Two modes:
+        1. With audio URL (local_dubbing_url) — lip-syncs to provided audio
+        2. With text prompt only — Kling generates audio internally
+
+        Pipeline: If script text is provided without audio, we first try F5-TTS
+        to generate audio, then pass it to Kling Avatar. If TTS fails, we fall
+        back to Kling's built-in prompt-to-audio.
+
+        Args:
+            params: {
+                "image_url": str,          # Avatar image (person photo)
+                "script": str,             # Text script for the avatar to speak
+                "language": str,           # Language code (optional)
+                "voice_id": str,           # Voice reference audio URL (optional)
+                "duration": int,           # Target duration in seconds (optional)
+                "audio_url": str,          # Pre-generated audio URL (optional)
+                "mode": str,               # "std" or "pro" (optional, default "std")
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"video_url": str}}
+        """
+        self._log_request("generate_avatar", params)
+
+        image_url = self._resolve_image_url(params["image_url"])
+        script = params.get("script", "")
+        audio_url = params.get("audio_url") or params.get("local_dubbing_url")
+        mode = params.get("mode", "std")
+
+        # Step 1: Kling Avatar REQUIRES local_dubbing_url (audio file).
+        # Prompt-only mode is NOT supported. Generate audio via F5-TTS first.
+        if script and not audio_url:
+            voice_ref = params.get("voice_id", "")
+            logger.info("[PiAPI] Avatar: generating speech with F5-TTS...")
+            tts_result = await self.text_to_speech({
+                "text": script,
+                "ref_audio": voice_ref,  # Empty string uses default voice
+            })
+            if tts_result.get("success"):
+                audio_url = tts_result.get("output", {}).get("audio_url")
+                logger.info(f"[PiAPI] Avatar: TTS audio ready: {audio_url[:80] if audio_url else 'None'}")
+            else:
+                tts_error = tts_result.get("error", "TTS failed")
+                logger.error(f"[PiAPI] Avatar: TTS failed: {tts_error}")
+                return {"success": False, "error": f"Speech generation failed: {tts_error}"}
+
+        if not audio_url:
+            return {"success": False, "error": "Audio generation failed. Please provide an audio URL or script text."}
+
+        # Step 2: Build Kling Avatar request (requires local_dubbing_url)
+        input_data: Dict[str, Any] = {
+            "image_url": image_url,
+            "local_dubbing_url": audio_url,
+            "mode": mode,
+        }
+        if script:
+            input_data["prompt"] = script  # Additional context for lip-sync
+
+        payload = {
+            "model": "kling",
+            "task_type": "avatar",
+            "input": input_data,
+            "config": {
+                "service_mode": "public"
+            }
+        }
+
+        logger.info(f"[PiAPI] Avatar: sending to Kling (audio={'yes' if audio_url else 'prompt-only'}, mode={mode})")
+        result = await self._submit_and_poll(payload)
+
+        # Normalize output: Kling returns video in output
+        if result.get("success"):
+            output = result.get("output", {})
+            video_url = output.get("video_url") or output.get("works", [{}])[0].get("video", {}).get("url", "") if isinstance(output.get("works"), list) and output.get("works") else output.get("video_url", "")
+            if not video_url:
+                # Try to find video in nested output structure
+                works = output.get("works", [])
+                if works and isinstance(works, list):
+                    for w in works:
+                        if isinstance(w, dict):
+                            v = w.get("video", {})
+                            if isinstance(v, dict) and v.get("url"):
+                                video_url = v["url"]
+                                break
+                            elif isinstance(v, str):
+                                video_url = v
+                                break
+            if video_url:
+                result["output"]["video_url"] = video_url
+
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERNAL METHODS

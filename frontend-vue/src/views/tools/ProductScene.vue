@@ -36,7 +36,8 @@ const {
   loadDemoTemplates,
   demoTemplates,
   tryPrompts,
-  dbEmpty
+  dbEmpty,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -109,17 +110,17 @@ const demoSceneTypes = [
 const selectedProductId = ref<string>('product-1')
 
 
-// Pre-generated results cache: key = "product-id_scene-id", value = result URL
-const preGeneratedResults = ref<Record<string, string>>({})
+// Pre-generated preset cache: key = "product-id_scene-id", value = preset ID
+const preGeneratedTemplateIds = ref<Record<string, string>>({})
 
 // Get result key for current selection
 const currentResultKey = computed(() => {
   return `${selectedProductId.value}_${selectedScene.value}`
 })
 
-// Get pre-generated result for current combination
-const currentPreGeneratedResult = computed(() => {
-  return preGeneratedResults.value[currentResultKey.value] || null
+// Get pre-generated preset ID for current combination
+const currentPreGeneratedTemplateId = computed(() => {
+  return preGeneratedTemplateIds.value[currentResultKey.value] || null
 })
 
 // Load demo templates on mount
@@ -138,10 +139,9 @@ onMounted(async () => {
   }
 })
 
-// Load pre-generated results for ALL product×scene combinations from database
+// Load pre-generated preset IDs for ALL product×scene combinations from database
 function loadAllPreGeneratedResults() {
-  // Clear existing cache
-  preGeneratedResults.value = {}
+  preGeneratedTemplateIds.value = {}
 
   // Look for templates matching each product×scene combination
   for (const product of defaultProducts.value) {
@@ -157,8 +157,8 @@ function loadAllPreGeneratedResults() {
          t.topic === scene.id)
       )
 
-      if (template?.result_watermarked_url || template?.result_image_url) {
-        preGeneratedResults.value[resultKey] = template.result_watermarked_url || template.result_image_url || ''
+      if (template?.id) {
+        preGeneratedTemplateIds.value[resultKey] = template.id
       }
     }
   }
@@ -182,20 +182,20 @@ async function generateScenes() {
 
   isProcessing.value = true
   try {
-    // For demo users, use cached result for product×scene combination
+    // For demo users, resolve the exact product×scene preset through backend lookup
     if (isDemoUser.value) {
-      // Simulate processing delay for demo effect
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Check if we have a pre-generated result for this exact product×scene combination
-      const preGenResult = currentPreGeneratedResult.value
-      if (preGenResult) {
-        resultImages.value = [preGenResult]
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
+      const preGeneratedTemplateId = currentPreGeneratedTemplateId.value
+      if (preGeneratedTemplateId) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(preGeneratedTemplateId)
+        if (demoResultUrl) {
+          resultImages.value = [demoResultUrl]
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
+        }
       }
 
-      // Try to find a preset that matches BOTH the selected product AND scene
       const selectedProduct = defaultProducts.value.find(p => p.id === selectedProductId.value)
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
@@ -206,12 +206,14 @@ async function generateScenes() {
         return matchesProduct && matchesScene
       })
 
-      if (template?.result_watermarked_url || template?.result_image_url) {
-        resultImages.value = [template.result_watermarked_url || template.result_image_url || '']
-        // Cache this result for future use
-        preGeneratedResults.value[currentResultKey.value] = template.result_watermarked_url || template.result_image_url || ''
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
+      if (template?.id) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
+        if (demoResultUrl) {
+          resultImages.value = [demoResultUrl]
+          preGeneratedTemplateIds.value[currentResultKey.value] = template.id
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
+        }
       }
 
       // No matching pre-generated result found - show info message
@@ -219,12 +221,19 @@ async function generateScenes() {
       return
     }
 
-    const uploadResult = await toolsApi.uploadImage(
-      dataURItoBlob(uploadedImage.value) as File
-    )
+    let uploadUrl = uploadedImage.value
+    if (uploadedImage.value.startsWith('data:')) {
+      const blob = dataURItoBlob(uploadedImage.value)
+      if (!blob) {
+        uiStore.showError(isZh.value ? '圖片格式無效，請重新上傳' : 'Invalid image format. Please re-upload.')
+        return
+      }
+      const uploadResult = await toolsApi.uploadImage(blob as File)
+      uploadUrl = uploadResult.url
+    }
 
     const result = await toolsApi.productScene(
-      uploadResult.url,
+      uploadUrl,
       selectedScene.value,
       selectedScene.value === 'custom' ? prompt.value : undefined
     )
@@ -233,23 +242,27 @@ async function generateScenes() {
       resultImages.value = [result.image_url || result.result_url || '']
       creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success'))
+    } else {
+      uiStore.showError(result.message || (result as any).error || (isZh.value ? '場景生成失敗，請稍後再試' : 'Scene generation failed. Please try again.'))
     }
-  } catch (error) {
-    uiStore.showError('Generation failed')
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || ''
+    uiStore.showError(detail || (isZh.value ? '生成失敗' : 'Generation failed'))
   } finally {
     isProcessing.value = false
   }
 }
 
-function dataURItoBlob(dataURI: string): Blob {
-  const byteString = atob(dataURI.split(',')[1])
-  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
-  const ab = new ArrayBuffer(byteString.length)
-  const ia = new Uint8Array(ab)
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i)
-  }
-  return new Blob([ab], { type: mimeString })
+function dataURItoBlob(dataURI: string): Blob | null {
+  if (!dataURI || !dataURI.includes(',') || !dataURI.startsWith('data:')) return null
+  try {
+    const byteString = atob(dataURI.split(',')[1])
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
+    const ab = new ArrayBuffer(byteString.length)
+    const ia = new Uint8Array(ab)
+    for (let i = 0; i < byteString.length; i++) { ia[i] = byteString.charCodeAt(i) }
+    return new Blob([ab], { type: mimeString })
+  } catch { return null }
 }
 
 

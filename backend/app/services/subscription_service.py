@@ -117,7 +117,13 @@ class SubscriptionService:
         await self._cancel_existing_subscriptions(db, user_id)
 
         # Determine if we should use mock mode
-        use_mock = skip_payment or (self.paddle.is_mock and payment_method != 'ecpay')
+        # Also treat as mock when Paddle keys exist but no price IDs are configured
+        paddle_prices_configured = bool(settings.PADDLE_PRICE_IDS)
+        use_mock = skip_payment or (
+            self.paddle.is_mock and payment_method != 'ecpay'
+        ) or (
+            payment_method == 'paddle' and not paddle_prices_configured
+        )
 
         if use_mock:
             # Direct activation without payment
@@ -472,13 +478,26 @@ class SubscriptionService:
         db.add(order)
         await db.commit()
 
-        # Create Paddle checkout session
-        # Note: In real implementation, you'd need to configure Paddle price IDs
+        # Resolve Paddle price ID from config mapping
+        import json as _json
+        price_map = {}
+        if settings.PADDLE_PRICE_IDS:
+            try:
+                price_map = _json.loads(settings.PADDLE_PRICE_IDS)
+            except Exception:
+                logger.error("Failed to parse PADDLE_PRICE_IDS config")
+
+        price_key = f"{plan.slug or plan.name}_{billing_cycle}"
+        price_id = price_map.get(price_key)
+        if not price_id:
+            logger.warning(f"No Paddle price ID for {price_key} — falling back to direct activation")
+            return await self._activate_subscription_directly(db, user, plan, billing_cycle)
+
         paddle_result = await self.paddle.create_checkout_session(
             user_id=user.id,
             user_email=user.email,
             plan_id=str(plan.id),
-            price_id=f"pri_{plan.slug or plan.name}_{billing_cycle}",  # Would be real Paddle price ID
+            price_id=price_id,
             billing_cycle=billing_cycle,
             success_url=f"{settings.FRONTEND_URL}/subscription/success?order={order.order_number}",
             cancel_url=f"{settings.FRONTEND_URL}/subscription/cancelled"

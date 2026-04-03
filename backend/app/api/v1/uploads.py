@@ -175,6 +175,24 @@ async def _save_upload(file: UploadFile, user_id: str) -> tuple[str, int]:
 # Endpoints
 # ─────────────────────────────────────────
 
+@router.get("")
+async def uploads_overview(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Upload service overview. Requires authentication."""
+    return {
+        "service": "uploads",
+        "message": "Subscriber material upload service",
+        "user_id": str(current_user.id),
+        "endpoints": {
+            "upload_material": "POST /api/v1/uploads/material",
+            "my_uploads": "GET /api/v1/uploads/my-uploads",
+            "get_models": "GET /api/v1/uploads/models/{tool_type}",
+        },
+        "supported_tools": list(TOOL_MODELS.keys()),
+    }
+
+
 @router.get("/models/{tool_type}", response_model=ToolModelsResponse)
 async def get_tool_models(
     tool_type: str,

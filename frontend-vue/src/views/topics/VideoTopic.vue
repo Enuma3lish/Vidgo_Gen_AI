@@ -21,7 +21,8 @@ const {
   canUseCustomInputs,
   loadDemoTemplates,
   demoTemplates,
-  isLoadingTemplates
+  isLoadingTemplates,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 // Tools in this topic
@@ -121,7 +122,7 @@ const selectedDemoImageId = ref<string | null>(null)
 
 const demoImages = computed(() => {
   return demoTemplates.value
-    .filter(t => (t.group === 'image_to_video' || t.group === 'video_effect') && t.input_image_url)
+    .filter(t => t.input_image_url && (t.result_video_url || t.result_watermarked_url))
     .map(t => ({
       id: t.id,
       name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
@@ -171,14 +172,17 @@ async function generateVideo() {
   result.value = null
 
   try {
-    // For demo users with selected template, use cached result
+    // For demo users, resolve the selected preset through backend lookup
     if (isDemoUser.value && selectedDemoImageId.value) {
-      const template = demoTemplates.value.find(t => t.id === selectedDemoImageId.value)
-      if (template?.result_video_url || template?.result_watermarked_url) {
-        result.value = template.result_video_url || template.result_watermarked_url || null
+      const demoResultUrl = await resolveDemoTemplateResultUrl(selectedDemoImageId.value)
+      if (demoResultUrl) {
+        result.value = demoResultUrl
         uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
         return
       }
+
+      uiStore.showInfo(isZh.value ? '此影片範例尚未生成，請訂閱以使用完整功能' : 'This video example is not pre-generated. Subscribe for full features.')
+      return
     }
 
     if (activeTab.value === 'image') {
@@ -211,7 +215,7 @@ async function generateVideo() {
 onMounted(() => {
   loadStyles()
   loadExamples()
-  loadDemoTemplates('image_to_video')
+  loadDemoTemplates('short_video')
 })
 </script>
 

@@ -27,7 +27,8 @@ const {
   canUseCustomInputs,
   loadDemoTemplates,
   demoTemplates,
-  isLoadingTemplates
+  isLoadingTemplates,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -193,13 +194,7 @@ onMounted(async () => {
 function selectDemoImage(item: { id: string; preview?: string; video_url?: string; motion?: string }) {
   selectedDemoImageId.value = item.id
   uploadedImage.value = item.preview || item.video_url || undefined
-  // Auto-show the result video for demo items
-  const template = demoTemplates.value.find(t => t.id === item.id)
-  if (template?.result_video_url || template?.result_watermarked_url) {
-    resultVideo.value = template.result_video_url || template.result_watermarked_url || null
-  } else {
-    resultVideo.value = null
-  }
+  resultVideo.value = null
 }
 
 
@@ -212,22 +207,32 @@ async function generateVideo() {
 
   isProcessing.value = true
   try {
-    // For demo users with selected template, use cached result
+    // For demo users, resolve the selected preset through backend lookup
     if (isDemoUser.value && selectedDemoImageId.value) {
-      const template = demoTemplates.value.find(t => t.id === selectedDemoImageId.value)
-      if (template?.result_video_url || template?.result_watermarked_url) {
-        resultVideo.value = template.result_video_url || template.result_watermarked_url || null
+      const demoResultUrl = await resolveDemoTemplateResultUrl(selectedDemoImageId.value)
+      if (demoResultUrl) {
+        resultVideo.value = demoResultUrl
         uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
         return
       }
+
+      uiStore.showInfo(isZh.value ? '此影片範例尚未生成，請訂閱以使用完整功能' : 'This video example is not pre-generated. Subscribe for full features.')
+      return
     }
 
-    let imageUrl = null
+    let imageUrl: string | null = null
     if (uploadedImage.value) {
-      const uploadResult = await toolsApi.uploadImage(
-        dataURItoBlob(uploadedImage.value) as File
-      )
-      imageUrl = uploadResult.url
+      if (uploadedImage.value.startsWith('data:')) {
+        const blob = dataURItoBlob(uploadedImage.value)
+        if (!blob) {
+          uiStore.showError(isZh.value ? '圖片格式無效，請重新上傳' : 'Invalid image format. Please re-upload.')
+          return
+        }
+        const uploadResult = await toolsApi.uploadImage(blob as File)
+        imageUrl = uploadResult.url
+      } else {
+        imageUrl = uploadedImage.value
+      }
     }
 
     const result = await toolsApi.shortVideo(imageUrl!, {
@@ -239,23 +244,27 @@ async function generateVideo() {
       resultVideo.value = result.video_url || result.result_url || null
       creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success'))
+    } else {
+      uiStore.showError(result.message || (result as any).error || (isZh.value ? '影片生成失敗，請稍後再試' : 'Video generation failed. Please try again.'))
     }
-  } catch (error) {
-    uiStore.showError(isZh.value ? '生成失敗' : 'Generation failed')
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || ''
+    uiStore.showError(detail || (isZh.value ? '生成失敗' : 'Generation failed'))
   } finally {
     isProcessing.value = false
   }
 }
 
-function dataURItoBlob(dataURI: string): Blob {
-  const byteString = atob(dataURI.split(',')[1])
-  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
-  const ab = new ArrayBuffer(byteString.length)
-  const ia = new Uint8Array(ab)
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i)
-  }
-  return new Blob([ab], { type: mimeString })
+function dataURItoBlob(dataURI: string): Blob | null {
+  if (!dataURI || !dataURI.includes(',') || !dataURI.startsWith('data:')) return null
+  try {
+    const byteString = atob(dataURI.split(',')[1])
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
+    const ab = new ArrayBuffer(byteString.length)
+    const ia = new Uint8Array(ab)
+    for (let i = 0; i < byteString.length; i++) { ia[i] = byteString.charCodeAt(i) }
+    return new Blob([ab], { type: mimeString })
+  } catch { return null }
 }
 
 

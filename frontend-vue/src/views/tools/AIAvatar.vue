@@ -20,7 +20,8 @@ const isZh = computed(() => locale.value.startsWith('zh'))
 const {
   isDemoUser,
   loadDemoTemplates,
-  demoTemplates
+  demoTemplates,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -171,8 +172,8 @@ const defaultScripts = [
   }
 ]
 
-// Pre-generated results cache: key = "avatar-id_script-id_language", value = result URL
-const preGeneratedResults = ref<Record<string, string>>({})
+// Pre-generated preset cache: key = "avatar-id_script-id_language", value = preset ID
+const preGeneratedTemplateIds = ref<Record<string, string>>({})
 
 // Get result key for current selection
 const currentResultKey = computed(() => {
@@ -180,10 +181,10 @@ const currentResultKey = computed(() => {
   return `${selectedAvatarId.value}_${selectedDefaultScriptId.value}_${selectedLanguage.value}`
 })
 
-// Get pre-generated result for current avatar×script×language combination
-const currentPreGeneratedResult = computed(() => {
+// Get pre-generated preset ID for current avatar×script×language combination
+const currentPreGeneratedTemplateId = computed(() => {
   if (!currentResultKey.value) return null
-  return preGeneratedResults.value[currentResultKey.value] || null
+  return preGeneratedTemplateIds.value[currentResultKey.value] || null
 })
 
 // Selected avatar info
@@ -287,46 +288,36 @@ async function generateAvatar() {
       // Simulate processing delay for demo effect
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Look for matching pre-generated result using avatar×script×language key
-      if (currentPreGeneratedResult.value) {
-        resultVideo.value = currentPreGeneratedResult.value
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
+      const preGeneratedTemplateId = currentPreGeneratedTemplateId.value
+      if (preGeneratedTemplateId) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(preGeneratedTemplateId)
+        if (demoResultUrl) {
+          resultVideo.value = demoResultUrl
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
+        }
       }
 
-      // Try to find a template with matching parameters
       const template = demoTemplates.value.find(t => {
-        if (!t.result_watermarked_url && !t.result_video_url) return false
         const params = (t as any).input_params || {}
-        // Try exact match first
         if (params.avatar_id === selectedAvatarId.value &&
-            params.script_id === selectedDefaultScriptId.value) {
+            params.script_id === selectedDefaultScriptId.value &&
+            (!params.language || params.language === selectedLanguage.value)) {
           return true
         }
         return false
       })
 
-      if (template) {
-        resultVideo.value = template.result_watermarked_url || template.result_video_url || null
-        if (currentResultKey.value && resultVideo.value) {
-          preGeneratedResults.value[currentResultKey.value] = resultVideo.value
+      if (template?.id) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
+        if (demoResultUrl) {
+          resultVideo.value = demoResultUrl
+          if (currentResultKey.value) {
+            preGeneratedTemplateIds.value[currentResultKey.value] = template.id
+          }
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
         }
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
-      }
-
-      // Fallback: Find ANY template with a video result to show as demo
-      const anyTemplate = demoTemplates.value.find(t =>
-        t.result_watermarked_url || t.result_video_url
-      )
-
-      if (anyTemplate) {
-        resultVideo.value = anyTemplate.result_watermarked_url || anyTemplate.result_video_url || null
-        if (currentResultKey.value && resultVideo.value) {
-          preGeneratedResults.value[currentResultKey.value] = resultVideo.value
-        }
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
       }
 
       // No pre-generated results at all
@@ -370,15 +361,12 @@ onMounted(async () => {
   loadVoices()
   await loadDemoTemplates('ai_avatar')
 
-  // Populate preGeneratedResults cache from loaded templates
+  // Populate pre-generated preset cache from loaded templates
   demoTemplates.value.forEach(template => {
-    const url = template.result_watermarked_url || template.result_video_url
-    if (!url) return
-
     const params = (template as any).input_params || {}
     if (params.avatar_id && params.script_id && params.language) {
       const key = `${params.avatar_id}_${params.script_id}_${params.language}`
-      preGeneratedResults.value[key] = url
+      preGeneratedTemplateIds.value[key] = template.id
     }
   })
 
@@ -389,17 +377,6 @@ onMounted(async () => {
     }
     if (defaultScripts.length > 0) {
       selectDefaultScript(defaultScripts[0])
-    }
-
-    // If there are templates with results, pre-cache the first one for default selection
-    const firstTemplate = demoTemplates.value.find(t =>
-      t.result_watermarked_url || t.result_video_url
-    )
-    if (firstTemplate && defaultAvatars.length > 0 && defaultScripts.length > 0) {
-      const defaultKey = `${defaultAvatars[0].id}_${defaultScripts[0].id}_${selectedLanguage.value}`
-      if (!preGeneratedResults.value[defaultKey]) {
-        preGeneratedResults.value[defaultKey] = firstTemplate.result_watermarked_url || firstTemplate.result_video_url || ''
-      }
     }
   }
 })

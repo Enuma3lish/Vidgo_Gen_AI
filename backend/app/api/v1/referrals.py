@@ -91,6 +91,33 @@ async def _ensure_referral_code(user: User, db: AsyncSession) -> str:
 # Endpoints
 # ─────────────────────────────────────────
 
+@router.get("")
+async def referrals_overview(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Referral system overview: code, stats, and available actions."""
+    code = await _ensure_referral_code(current_user, db)
+    result = await db.execute(
+        select(sql_func.count(User.id)).where(User.referred_by_id == current_user.id)
+    )
+    referral_count = result.scalar() or 0
+    credits_earned = referral_count * settings.REFERRAL_BONUS_CREDITS
+    url = f"{settings.FRONTEND_URL}/auth/register?ref={code}"
+    return {
+        "referral_code": code,
+        "referral_url": url,
+        "referral_count": referral_count,
+        "credits_earned": credits_earned,
+        "endpoints": {
+            "get_code": "/api/v1/referrals/code",
+            "get_stats": "/api/v1/referrals/stats",
+            "apply_code": "/api/v1/referrals/apply",
+            "leaderboard": "/api/v1/referrals/leaderboard",
+        },
+    }
+
+
 @router.get("/code", response_model=ReferralCodeResponse)
 async def get_referral_code(
     current_user: User = Depends(get_current_active_user),

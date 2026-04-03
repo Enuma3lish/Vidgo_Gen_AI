@@ -22,18 +22,27 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ALLOW_ALL: bool = True  # Allow all origins (safe for GCP Cloud Run where URLs are dynamic)
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501", "http://localhost:4173"]
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501", "http://localhost:4173", "https://vidgo.co", "https://www.vidgo.co"]
 
-    # AI Services - Provider Configuration
-    # Primary: PiAPI (Wan API access) — T2I, I2I, I2V, T2V, V2V, Interior, Try-On, BG Removal
+    # AI Services - Provider Configuration (MCP-based)
+    # Primary video: Pollo.ai MCP — I2V, T2V (50+ models)
+    POLLO_API_KEY: str = ""
+
+    # Supplement + backup: PiAPI MCP — T2I, I2I, Try-On, Interior, Avatar, TTS, Upscale, 3D
     PIAPI_KEY: str = ""
 
-    # Secondary: Gemini — Moderation, Avatar, Backup for Image/Video
+    # PiAPI MCP server path (built from piapi-mcp-server repo)
+    PIAPI_MCP_PATH: str = "/app/mcp-servers/piapi-mcp-server/dist/index.js"
+
+    # Backup for image tasks + Moderation + Material generation
     GEMINI_API_KEY: str = ""
 
-    # Legacy (deprecated)
-    WAN_API_KEY: str = ""  # Deprecated - use PIAPI_API_KEY instead
-    RUNWAY_API_KEY: str = ""  # Not used
+    # GCS Storage (persist generated media beyond provider CDN expiry)
+    GCS_BUCKET: str = ""  # e.g. "vidgo-media-vidgo-ai"
+
+    # Legacy (deprecated — kept for fallback)
+    WAN_API_KEY: str = ""
+    RUNWAY_API_KEY: str = ""
 
     # Taiwanese TTS (台語/閩南語 TTS)
     # Option 1: Taigi TTS API (https://learn-language.tokyo/en/taiwanese-taigi-tts-api)
@@ -42,16 +51,29 @@ class Settings(BaseSettings):
     TAI5UAN5_BASE_URL: str = ""
 
     # ECPay (Taiwan) - Shared credentials for payment & e-invoice
-    ECPAY_ENV: str = "sandbox"  # "sandbox" or "production"
-    ECPAY_MERCHANT_ID: str = ""
+    ECPAY_ENV: str = "production"  # "sandbox" or "production"
+    ECPAY_MERCHANT_ID: str = "3422044"
     ECPAY_HASH_KEY: str = ""
     ECPAY_HASH_IV: str = ""
-    ECPAY_PAYMENT_URL: str = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V2"
-    ECPAY_INVOICE_URL: str = "https://einvoice-stage.ecpay.com.tw"  # Base URL, paths appended by client
+    ECPAY_PAYMENT_URL: str = "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V2"
+    ECPAY_INVOICE_URL: str = "https://einvoice.ecpay.com.tw"  # Base URL, paths appended by client
+
+    # Giveme E-Invoice (Taiwan 電子發票)
+    GIVEME_ENABLED: bool = False
+    GIVEME_BASE_URL: str = "https://www.giveme.com.tw/invoice.do"
+    GIVEME_UNCODE: str = "96003146"       # Company 統一編號 (e.g. "96003146")
+    GIVEME_IDNO: str = "qaz0978005418"         # API account (from Giveme 系統設定→員工設定)
+    GIVEME_PASSWORD: str = "qaz129946858"     # API password
 
     # Payment - Paddle (International)
     PADDLE_API_KEY: str = ""
     PADDLE_PUBLIC_KEY: str = ""
+    PADDLE_WEBHOOK_SECRET: str = ""
+    PADDLE_ENV: str = "sandbox"  # "sandbox" or "production"
+    # Map plan_name+billing_cycle to Paddle price IDs (JSON string)
+    # Example: '{"starter_monthly":"pri_abc","starter_yearly":"pri_def"}'
+    # When empty, subscription flow activates directly without Paddle checkout.
+    PADDLE_PRICE_IDS: str = ""
 
     # Storage
     S3_BUCKET: str = ""
@@ -72,7 +94,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = "noreply@vidgo.ai"
+    SMTP_FROM_EMAIL: str = "noreply@vidgo.co"
     SMTP_FROM_NAME: str = "VidGo"
     SMTP_TLS: bool = True
 

@@ -37,6 +37,21 @@ export interface DemoTemplate {
   input_params?: Record<string, any>
 }
 
+export interface DemoPresetResult {
+  success: boolean
+  preset_id: string
+  result_url?: string | null
+  result_watermarked_url?: string | null
+  result_thumbnail_url?: string | null
+  input_image_url?: string | null
+  prompt?: string | null
+  prompt_zh?: string | null
+  can_download?: boolean
+  is_subscribed?: boolean
+  message?: string
+  error?: string | null
+}
+
 export function useDemoMode() {
   const authStore = useAuthStore()
 
@@ -176,11 +191,27 @@ export function useDemoMode() {
         session_id: getSessionId()
       })
 
-      return response.data
+      return response.data as DemoPresetResult
     } catch (error) {
       console.error('Failed to use preset template:', error)
       return null
     }
+  }
+
+  function getDemoResultUrl(presetResult: DemoPresetResult | null): string | null {
+    if (!presetResult?.success) {
+      return null
+    }
+
+    return presetResult.result_url
+      || presetResult.result_watermarked_url
+      || presetResult.result_thumbnail_url
+      || null
+  }
+
+  async function resolveDemoTemplateResultUrl(templateId: string): Promise<string | null> {
+    const presetResult = await useDemoTemplate(templateId)
+    return getDemoResultUrl(presetResult)
   }
 
   /**
@@ -224,6 +255,8 @@ export function useDemoMode() {
     loadDemoTemplates,
     getRandomDemoTemplate,
     useDemoTemplate,
+    getDemoResultUrl,
+    resolveDemoTemplateResultUrl,
     getSessionId
   }
 }

@@ -81,6 +81,13 @@ async def _maybe_recycle_for_demo(
         lookup_content = f"{tool_type.value}:{prompt}:{effect_prompt or ''}:{user_gen.id}"
         lookup_hash = hashlib.sha256(lookup_content.encode()).hexdigest()[:64]
 
+        # Check if this hash already exists to avoid unique constraint violation
+        existing = await db.execute(
+            select(Material.id).where(Material.lookup_hash == lookup_hash)
+        )
+        if existing.scalar_one_or_none():
+            return
+
         material = Material(
             lookup_hash=lookup_hash,
             tool_type=tool_type,
@@ -92,14 +99,18 @@ async def _maybe_recycle_for_demo(
             result_video_url=result_video_url,
             result_watermarked_url=result_image_url or result_video_url,
             source=MaterialSource.USER,
-            status=MaterialStatus.PENDING,  # Needs admin approval
-            is_active=False,  # Not visible until approved
+            status=MaterialStatus.PENDING,
+            is_active=False,
             input_params=input_params or {},
         )
         db.add(material)
-        # Don't commit here — let the caller's commit handle it
         logger.info(f"[Recycle] Flagged user generation for demo review: {tool_type.value}/{topic}")
     except Exception as e:
+        # Rollback to clear the failed flush state so caller's commit works
+        try:
+            await db.rollback()
+        except Exception:
+            pass
         logger.debug(f"[Recycle] Skip: {e}")
 
 
@@ -109,7 +120,7 @@ async def _demo_response(
     topic: str | None = None,
     cta: str = "Subscribe for custom generation.",
 ):
-    """Get cached demo or generate one via real API on first visit."""
+    """Get demo from cache, Material DB, or generate on-demand if missing."""
     try:
         redis = await get_redis()
     except Exception:
@@ -129,6 +140,18 @@ async def _demo_response(
     )
 
 router = APIRouter()
+
+
+def _resolve_public_url(url: str) -> str:
+    """Convert /static/ paths to public URLs so external AI APIs can access them."""
+    if not url:
+        return url
+    if url.startswith("/static/") or url.startswith("/app/static/"):
+        static_path = url if url.startswith("/static/") else "/static/" + url[len("/app/static/"):]
+        public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+        if public_base:
+            return f"{public_base}{static_path}"
+    return url
 
 
 async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str):
@@ -239,26 +262,47 @@ class RemoveBackgroundBatchRequest(BaseModel):
 
 class ProductSceneRequest(BaseModel):
     """Generate product in new scene"""
-    product_image_url: str
+    product_image_url: Optional[str] = None
+    image_url: Optional[str] = None  # Alias for product_image_url
     scene_type: str = "studio"  # studio, nature, elegant, minimal, lifestyle
     custom_prompt: Optional[str] = None
+
+    def get_product_url(self) -> str:
+        url = self.product_image_url or self.image_url
+        if not url:
+            raise ValueError("product_image_url or image_url is required")
+        return _resolve_public_url(url)
 
 
 class TryOnRequest(BaseModel):
     """AI Try-On - virtual clothing try-on"""
-    garment_image_url: str
+    garment_image_url: Optional[str] = None
+    image_url: Optional[str] = None  # Alias for garment_image_url
     model_image_url: Optional[str] = None  # Use preset model if None
     model_id: Optional[str] = None  # Preset model ID
     angle: str = "front"  # front, side, back
     background: str = "white"  # white, transparent, studio
 
+    def get_garment_url(self) -> str:
+        url = self.garment_image_url or self.image_url
+        if not url:
+            raise ValueError("garment_image_url or image_url is required")
+        return _resolve_public_url(url)
+
 
 class RoomRedesignRequest(BaseModel):
     """Room Redesign - transform room style"""
-    room_image_url: str
+    room_image_url: Optional[str] = None
+    image_url: Optional[str] = None  # Alias for room_image_url
     style: str = "modern"  # modern, nordic, japanese, industrial, minimalist, luxury
     custom_prompt: Optional[str] = None
     preserve_structure: bool = True
+
+    def get_room_url(self) -> str:
+        url = self.room_image_url or self.image_url
+        if not url:
+            raise ValueError("room_image_url or image_url is required")
+        return _resolve_public_url(url)
 
 
 class ShortVideoRequest(BaseModel):
@@ -345,12 +389,12 @@ INTERIOR_STYLES = [
 
 # Preset models for Try-On (IDs match frontend: "female-1", "male-1" etc.)
 TRYON_MODELS = {
-    "female-1": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=512&fit=crop",
-    "female-2": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=512&fit=crop",
-    "female-3": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=512&fit=crop",
-    "male-1": "https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=512&fit=crop",
-    "male-2": "https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=512&fit=crop",
-    "male-3": "https://images.unsplash.com/photo-1667127752169-74c7e4d8822f?w=512&fit=crop&crop=face",
+    "female-1": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=768&fit=crop",
+    "female-2": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=768&fit=crop",
+    "female-3": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=768&fit=crop",
+    "male-1": "https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=768&fit=crop",
+    "male-2": "https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=768&fit=crop",
+    "male-3": "https://images.unsplash.com/photo-1667127752169-74c7e4d8822f?w=768&fit=crop",
 }
 
 # TTS Voices
@@ -361,6 +405,32 @@ TTS_VOICES = [
     {"id": "male_en", "name": "English Male", "name_zh": "英文男聲", "language": "en-US", "gender": "male"},
     {"id": "taigi", "name": "Taiwanese", "name_zh": "台語", "language": "nan-TW", "gender": "neutral"},
 ]
+
+
+# ============================================================================
+# Tool listing
+# ============================================================================
+
+AVAILABLE_TOOLS = [
+    {"id": "background_removal", "name": "Background Removal", "name_zh": "去背", "endpoint": "/tools/remove-bg", "method": "POST",
+     "description": "Remove background from product images with AI"},
+    {"id": "product_scene", "name": "Product Scene", "name_zh": "商品場景", "endpoint": "/tools/product-scene", "method": "POST",
+     "description": "Place products in beautiful AI-generated scenes"},
+    {"id": "try_on", "name": "AI Try-On", "name_zh": "AI 試穿", "endpoint": "/tools/try-on", "method": "POST",
+     "description": "Virtual try-on for clothing and accessories"},
+    {"id": "room_redesign", "name": "Room Redesign", "name_zh": "空間改造", "endpoint": "/tools/room-redesign", "method": "POST",
+     "description": "Redesign rooms with different interior styles"},
+    {"id": "short_video", "name": "Short Video", "name_zh": "短影片", "endpoint": "/tools/short-video", "method": "POST",
+     "description": "Generate short product videos with AI"},
+    {"id": "ai_avatar", "name": "AI Avatar", "name_zh": "AI 數位人", "endpoint": "/tools/avatar", "method": "POST",
+     "description": "Create avatar videos with lip-sync narration"},
+]
+
+
+@router.get("/list")
+async def list_tools():
+    """List all available VidGo AI tools with their endpoints and descriptions."""
+    return {"tools": AVAILABLE_TOOLS, "total": len(AVAILABLE_TOOLS)}
 
 
 # ============================================================================
@@ -397,7 +467,7 @@ async def remove_background(
         provider_router = get_provider_router()
         result = await provider_router.route(
             TaskType.BACKGROUND_REMOVAL,
-            {"image_url": str(request.image_url)}
+            {"image_url": _resolve_public_url(str(request.image_url))}
         )
 
         if result.get("success"):
@@ -559,7 +629,7 @@ async def generate_product_scene(
     
     try:
         provider_router = get_provider_router()
-        product_url = str(request.product_image_url)
+        product_url = str(request.get_product_url())
 
         # Step 1: Remove background
         logger.info("Step 1: Removing product background...")
@@ -634,7 +704,7 @@ async def generate_product_scene(
         user_gen = UserGeneration(
             user_id=current_user.id,
             tool_type=ToolType.PRODUCT_SCENE,
-            input_image_url=str(request.product_image_url),
+            input_image_url=str(request.get_product_url()),
             input_params={"scene_type": request.scene_type, "custom_prompt": request.custom_prompt},
             input_text=full_prompt,
             result_image_url=result_url,
@@ -648,7 +718,7 @@ async def generate_product_scene(
             db, user_gen, ToolType.PRODUCT_SCENE,
             topic=request.scene_type or "studio",
             prompt=full_prompt,
-            input_image_url=str(request.product_image_url),
+            input_image_url=str(request.get_product_url()),
             result_image_url=result_url,
             input_params={"scene_type": request.scene_type},
         )
@@ -774,12 +844,49 @@ async def ai_try_on(
         return ToolResponse(success=False, message=err)
 
     logger.info(f"Subscriber: Starting real-time Try-On")
-    
+
     try:
-        # Determine model image URL
+        garment_url = request.get_garment_url()
+
+        # Auto-fix garment image URL if too small (Kling AI requires >= 512px)
+        # For URLs with width param (Unsplash, CDN), request larger image
+        import re
+        w_match = re.search(r'[?&]w=(\d+)', garment_url)
+        if w_match and int(w_match.group(1)) < 512:
+            garment_url = re.sub(r'([?&])w=\d+', r'\g<1>w=768', garment_url)
+            logger.info(f"  Adjusted garment URL width to 768px")
+        elif w_match is None:
+            # For URLs without width param, check actual image dimensions
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    img_resp = await client.get(garment_url)
+                    if img_resp.status_code == 200:
+                        img = Image.open(BytesIO(img_resp.content))
+                        w, h = img.size
+                        if w < 512 or h < 512:
+                            logger.warning(f"  Garment image is {w}x{h}, Kling AI requires >= 512px. Upscaling...")
+                            scale = max(512 / w, 512 / h)
+                            new_w, new_h = int(w * scale), int(h * scale)
+                            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                            # Save temporarily and serve via public URL
+                            upscale_name = f"tryon_upscaled_{uuid.uuid4().hex[:8]}.jpg"
+                            upscale_dir = Path("/app/static/generated")
+                            upscale_dir.mkdir(parents=True, exist_ok=True)
+                            upscale_path = upscale_dir / upscale_name
+                            img.convert("RGB").save(upscale_path, "JPEG", quality=90)
+                            public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+                            if public_base:
+                                garment_url = f"{public_base}/static/generated/{upscale_name}"
+                            else:
+                                garment_url = f"/static/generated/{upscale_name}"
+                            logger.info(f"  Upscaled garment to {new_w}x{new_h}")
+            except Exception as e:
+                logger.warning(f"  Garment size check skipped: {e}")
+
+        # Determine model image URL — must be public URL (Kling rejects base64)
         model_url = None
         if request.model_image_url:
-            model_url = str(request.model_image_url)
+            model_url = _resolve_public_url(str(request.model_image_url))
         elif request.model_id:
             model_url = TRYON_MODELS.get(request.model_id)
             if not model_url:
@@ -792,7 +899,7 @@ async def ai_try_on(
         
         result = await piapi.virtual_try_on(
              model_image_url=model_url,
-             garment_image_url=str(request.garment_image_url)
+             garment_image_url=garment_url
         )
         
         if not result.get("success"):
@@ -814,7 +921,7 @@ async def ai_try_on(
         user_gen = UserGeneration(
             user_id=current_user.id,
             tool_type=ToolType.TRY_ON,
-            input_image_url=str(request.garment_image_url),
+            input_image_url=str(request.get_garment_url()),
             input_params={
                 "model_id": request.model_id,
                 "model_image_url": str(request.model_image_url) if request.model_image_url else None,
@@ -830,7 +937,7 @@ async def ai_try_on(
         await _maybe_recycle_for_demo(
             db, user_gen, ToolType.TRY_ON,
             topic="casual", prompt="User try-on",
-            input_image_url=str(request.garment_image_url),
+            input_image_url=str(request.get_garment_url()),
             result_image_url=result_url,
             input_params={"model_id": request.model_id},
         )
@@ -895,7 +1002,7 @@ async def room_redesign(
         result = await router.route(
             TaskType.INTERIOR,
             {
-                "image_url": str(request.room_image_url),
+                "image_url": str(request.get_room_url()),  # already resolved in get_room_url
                 "prompt": style_prompt,
                 "style": request.style,
                 "preserve_structure": request.preserve_structure
@@ -909,7 +1016,7 @@ async def room_redesign(
             user_gen = UserGeneration(
                 user_id=current_user.id,
                 tool_type=ToolType.ROOM_REDESIGN,
-                input_image_url=str(request.room_image_url),
+                input_image_url=str(request.get_room_url()),
                 input_params={
                     "style": request.style,
                     "custom_prompt": request.custom_prompt,
@@ -926,7 +1033,7 @@ async def room_redesign(
                 db, user_gen, ToolType.ROOM_REDESIGN,
                 topic=request.style or "modern",
                 prompt=f"Room redesign: {request.style}",
-                input_image_url=str(request.room_image_url),
+                input_image_url=str(request.get_room_url()),
                 result_image_url=output_url,
                 input_params={"style": request.style},
             )
@@ -998,7 +1105,7 @@ async def generate_short_video(
             motion_desc = "dynamic energetic camera motion, dramatic zoom and movement"
 
         task_params = {
-            "image_url": str(request.image_url),
+            "image_url": _resolve_public_url(str(request.image_url)),
             "prompt": motion_desc,
             "duration": 5
         }
@@ -1269,7 +1376,7 @@ async def upscale_image(
         result = await router_instance.route(
             TaskType.UPSCALE,
             {
-                "image_url": request.image_url,
+                "image_url": _resolve_public_url(request.image_url),
                 "scale": request.scale,
             }
         )
@@ -1366,7 +1473,7 @@ async def generate_avatar_video(
         result = await provider_router.route(
             TaskType.AVATAR,
             {
-                "image_url": str(request.image_url),
+                "image_url": _resolve_public_url(str(request.image_url)),
                 "script": request.script,
                 "language": request.language,
                 "voice_id": request.voice_id,
@@ -1375,7 +1482,8 @@ async def generate_avatar_video(
         )
 
         if result.get("success"):
-            video_url = result.get("video_url")
+            output = result.get("output", {})
+            video_url = output.get("video_url") or result.get("video_url")
 
             # Save to UserGeneration (for subscriber's personal gallery)
             user_gen = UserGeneration(
@@ -1528,7 +1636,7 @@ async def image_transform(
         result = await provider_router.route(
             TaskType.I2I,
             {
-                "image_url": str(request.image_url),
+                "image_url": _resolve_public_url(str(request.image_url)),
                 "prompt": request.prompt,
                 "strength": request.strength,
                 "negative_prompt": request.negative_prompt or "",

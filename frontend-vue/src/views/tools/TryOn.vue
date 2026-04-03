@@ -23,7 +23,8 @@ const {
   demoTemplates,
   isLoadingTemplates,
   tryPrompts,
-  dbEmpty
+  dbEmpty,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 // State
@@ -177,38 +178,24 @@ async function generateTryOn() {
 
   isProcessing.value = true
   try {
-    // For demo users, find the result matching BOTH model AND clothing
+    // For demo users, resolve the exact model+clothing preset through backend lookup
     if (isDemoUser.value && selectedClothingId.value) {
-      // Simulate processing delay for demo effect
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Find template matching the selected model AND clothing combination
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
-        const matchesClothing = params.clothing_id === selectedClothingId.value
-        const matchesModel = params.model_id === selectedModel.value
-        return matchesClothing && matchesModel && (t.result_watermarked_url || t.result_image_url)
+        return params.clothing_id === selectedClothingId.value && params.model_id === selectedModel.value
       })
 
-      if (template?.result_watermarked_url || template?.result_image_url) {
-        resultImage.value = template.result_watermarked_url || template.result_image_url || null
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
+      if (template?.id) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
+        if (demoResultUrl) {
+          resultImage.value = demoResultUrl
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
+        }
       }
 
-      // Fallback: Find any template with this clothing (different model is OK for demo)
-      const fallbackTemplate = demoTemplates.value.find(t => {
-        const params = (t as any).input_params || {}
-        return params.clothing_id === selectedClothingId.value && (t.result_watermarked_url || t.result_image_url)
-      })
-
-      if (fallbackTemplate?.result_watermarked_url || fallbackTemplate?.result_image_url) {
-        resultImage.value = fallbackTemplate.result_watermarked_url || fallbackTemplate.result_image_url || null
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
-      }
-
-      // No pre-generated result available
       if (dbEmpty.value) {
         uiStore.showInfo(isZh.value ? '預覽模式：此服裝尚未生成試穿結果，訂閱以使用完整功能' : 'Preview mode: Try-on results not yet generated. Subscribe for full features.')
       } else {
@@ -220,20 +207,30 @@ async function generateTryOn() {
     // For subscribed users or if no cached result
     let imageUrl = clothingImage.value
 
-    // Upload if custom image
-    if (clothingImage.value && !clothingImage.value.startsWith('http')) {
-      const uploadResult = await toolsApi.uploadImage(
-        dataURItoBlob(clothingImage.value) as File
-      )
+    // Upload if custom image (data URI from file picker)
+    if (clothingImage.value && clothingImage.value.startsWith('data:')) {
+      const blob = dataURItoBlob(clothingImage.value)
+      if (!blob) {
+        uiStore.showError(isZh.value ? '圖片格式無效，請重新上傳' : 'Invalid image format. Please re-upload.')
+        return
+      }
+      const uploadResult = await toolsApi.uploadImage(blob as File)
       imageUrl = uploadResult.url
     }
 
     let modelUrl = null
     if (selectedModel.value === 'custom' && modelImage.value) {
-      const modelUpload = await toolsApi.uploadImage(
-        dataURItoBlob(modelImage.value) as File
-      )
-      modelUrl = modelUpload.url
+      if (modelImage.value.startsWith('data:')) {
+        const blob = dataURItoBlob(modelImage.value)
+        if (!blob) {
+          uiStore.showError(isZh.value ? '模特圖片格式無效' : 'Invalid model image format.')
+          return
+        }
+        const modelUpload = await toolsApi.uploadImage(blob as File)
+        modelUrl = modelUpload.url
+      } else {
+        modelUrl = modelImage.value
+      }
     }
 
     const result = await toolsApi.tryOn(imageUrl!, {
@@ -247,9 +244,13 @@ async function generateTryOn() {
         creditsStore.deductCredits(result.credits_used)
       }
       uiStore.showSuccess(t('common.success'))
+    } else {
+      const errMsg = result.message || (result as any).error || (isZh.value ? '生成失敗，請稍後再試' : 'Generation failed. Please try again.')
+      uiStore.showError(errMsg)
     }
-  } catch (error) {
-    uiStore.showError(isZh.value ? '生成失敗' : 'Generation failed')
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || ''
+    uiStore.showError(detail || (isZh.value ? '生成失敗' : 'Generation failed'))
   } finally {
     isProcessing.value = false
   }
@@ -259,15 +260,22 @@ function handleBack() {
   router.back()
 }
 
-function dataURItoBlob(dataURI: string): Blob {
-  const byteString = atob(dataURI.split(',')[1])
-  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
-  const ab = new ArrayBuffer(byteString.length)
-  const ia = new Uint8Array(ab)
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i)
+function dataURItoBlob(dataURI: string): Blob | null {
+  if (!dataURI || !dataURI.includes(',') || !dataURI.startsWith('data:')) {
+    return null
   }
-  return new Blob([ab], { type: mimeString })
+  try {
+    const byteString = atob(dataURI.split(',')[1])
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
+    const ab = new ArrayBuffer(byteString.length)
+    const ia = new Uint8Array(ab)
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i)
+    }
+    return new Blob([ab], { type: mimeString })
+  } catch {
+    return null
+  }
 }
 </script>
 
@@ -311,8 +319,8 @@ function dataURItoBlob(dataURI: string): Blob {
             {{ isZh ? '選擇服裝' : 'Select Clothing' }}
           </h3>
 
-          <!-- DB Empty Info Banner (prominent preview mode notice) -->
-          <div v-if="dbEmpty" class="mb-4 p-4 bg-amber-500/15 border border-amber-500/40 rounded-lg">
+          <!-- DB Empty Info Banner (only for demo/free users, not subscribers) -->
+          <div v-if="isDemoUser && dbEmpty" class="mb-4 p-4 bg-amber-500/15 border border-amber-500/40 rounded-lg">
             <div class="flex items-start gap-3">
               <span class="text-amber-400 text-lg mt-0.5">&#x1F441;</span>
               <div>

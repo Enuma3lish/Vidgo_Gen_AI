@@ -42,23 +42,31 @@ VidGo is a comprehensive AI platform that enables e-commerce businesses to creat
          +-------------------+-------------------+
          |                   |                   |
          v                   v                   v
-+----------------+  +----------------+  +----------------+
-|   PostgreSQL   |  |     Redis      |  |  AI Services   |
-|  (Database)    |  |  (Cache/Queue) |  |  (External)    |
-|  Port: 5432    |  |  Port: 6379    |  |                |
-+----------------+  +----------------+  +----------------+
++----------------+  +----------------+  +------------------+
+|   PostgreSQL   |  |     Redis      |  |   GCS Bucket     |
+|  (Database)    |  |  (Cache/Queue) |  |  (Media Storage) |
+|  Port: 5432    |  |  Port: 6379    |  |                  |
++----------------+  +----------------+  +------------------+
                                                |
-                    +--------------------------+
-                    |          |               |
-         +-------------+  +---------------+
-         |    PiAPI     |  | Google Gemini  |
-         | ALL generation|  | - Backup for    |
-         | T2I,I2I,I2V  |  |   image tasks   |
-         | T2V,V2V,Avatar|  | - Moderation    |
-         | Try-On,BG Rem |  | - Pre-gen input |
-         | 3D, Effects   |  |   materials     |
-         | (primary)     |  +---------------+
-         +-------------+
+                    +------------ MCP Protocol -----------+
+                    |                                     |
+         +------------------+              +------------------+
+         |  Pollo.ai MCP    |              |  PiAPI MCP       |
+         |  (PRIMARY video) |              |  (SUPPLEMENT +   |
+         |  - T2V (50+ mod) |              |   VIDEO BACKUP)  |
+         |  - I2V           |              |  - T2I, I2I      |
+         |  pollo-mcp (npm) |              |  - Try-On, Avatar|
+         +------------------+              |  - Interior, 3D  |
+                                           |  - TTS, Upscale  |
+                                           |  piapi-mcp-server|
+                                           +------------------+
+                                                    |
+                                           +------------------+
+                                           | Google Gemini    |
+                                           | - Image backup   |
+                                           | - Moderation     |
+                                           | - Material gen   |
+                                           +------------------+
 ```
 
 ### Dual-Mode Architecture
@@ -262,11 +270,14 @@ Fixed admin account configured in `.env`:
 | Docker | 24+ | Containerization |
 | Docker Compose | 2.0+ | Orchestration |
 
-### AI Providers
-| Provider | Services | Details |
-|----------|----------|---------|
-| PiAPI | **Primary** for ALL generation: T2I, I2I, I2V, T2V, V2V, Avatar, Interior, BG Removal, Try-On, Effects, 3D | Flux (image); Wan (video); Kling (try-on); Trellis (3D). When PiAPI has no credits, image tasks fall back to Gemini |
-| Google Gemini | **Backup** for image tasks + Content moderation + Pre-generation | Backup for T2I, I2I, Interior, BG Removal, Upscale, Effects. Also handles content moderation and pre-generating demo materials |
+### AI Providers (MCP-based Architecture)
+| Provider | Role | Services | Details |
+|----------|------|----------|---------|
+| Pollo.ai MCP | **Primary** (video) | I2V, T2V, V2V | 50+ models (Kling, Wan, Runway, Sora, Seedance, etc.) via `pollo-mcp` npm package |
+| PiAPI MCP | **Supplement** + video backup | T2I, I2I, Try-On, Interior, Avatar, TTS, Upscale, 3D, V2V | Flux (image); Wan (video); Kling (try-on/avatar); Trellis (3D) via `piapi-mcp-server` |
+| Google Gemini | **Backup** (image) + moderation | T2I, I2I, Interior, BG Removal, Upscale | Backup when PiAPI MCP fails; content moderation; material pre-generation |
+| A2E | **Backup** (avatar) | Avatar | Digital human video backup when PiAPI MCP fails |
+| GCS | **Storage** | Media persistence | Downloads CDN URLs → persists in GCS bucket (providers have 14-day CDN expiry) |
 
 ### Payment & Billing
 | Provider | Region | Status |
@@ -325,7 +336,8 @@ Vidgo_Gen_AI/
 ### Prerequisites
 
 - Docker 24+ and Docker Compose 2.0+
-- API Keys for: PiAPI, Google Gemini
+- Node.js 16+ (for MCP servers)
+- API Keys for: Pollo.ai, PiAPI, Google Gemini
 
 ### Quick Start
 
@@ -365,28 +377,50 @@ Vidgo_Gen_AI/
 ```env
 # backend/.env
 
-# AI Providers
-PIAPI_KEY=your_piapi_key
-GEMINI_API_KEY=your_gemini_key
+# AI Providers (MCP-based)
+POLLO_API_KEY=your_pollo_key            # Primary video (pollo.ai)
+PIAPI_KEY=your_piapi_key                # Supplement + video backup (piapi.ai)
+GEMINI_API_KEY=your_gemini_key          # Image backup + moderation
 
-# Payment - Primary (International)
+# MCP Server Path (PiAPI)
+PIAPI_MCP_PATH=/app/mcp-servers/piapi-mcp-server/dist/index.js
+
+# GCS Storage (persist media beyond CDN expiry)
+GCS_BUCKET=vidgo-media-vidgo-ai
+
+# Payment - ECPay (Taiwan)
+ECPAY_ENV=production
+ECPAY_MERCHANT_ID=your_merchant_id
+ECPAY_HASH_KEY=your_hash_key
+ECPAY_HASH_IV=your_hash_iv
+
+# Payment - Paddle (International)
 PADDLE_API_KEY=
 PADDLE_PUBLIC_KEY=
 
-# Payment - Legacy (Taiwan, optional)
-# ECPAY_MERCHANT_ID=
-# ECPAY_HASH_KEY=
-# ECPAY_HASH_IV=
-
 # Security
 SECRET_KEY=your-secret-key-here
-RECAPTCHA_SECRET_KEY=your_recaptcha_v2_secret
-RECAPTCHA_SITE_KEY=your_recaptcha_v2_site_key
 
 # Email (dev uses Mailpit)
 SMTP_HOST=mailpit
 SMTP_PORT=1025
 ```
+
+### MCP Server Setup
+
+Both AI providers run as MCP (Model Context Protocol) servers:
+
+```bash
+# Install Pollo MCP server (global npm package)
+npm install -g pollo-mcp
+
+# Build PiAPI MCP server (from source)
+git clone https://github.com/PiAPI-1/piapi-mcp-server.git mcp-servers/piapi-mcp-server
+cd mcp-servers/piapi-mcp-server && npm install && npm run build
+```
+
+The backend automatically starts both MCP servers as subprocesses on startup.
+If MCP servers are unavailable, the system falls back to direct REST API calls.
 
 ### Pre-generation Control
 
@@ -508,6 +542,9 @@ See [backend architecture doc](./vidgo-backend-architecture.md) for full securit
 - **Backend Architecture**: [vidgo-backend-architecture.md](./vidgo-backend-architecture.md)
 - **Frontend Architecture**: [vidgo-frontend-architecture.md](./vidgo-frontend-architecture.md)
 - **Infrastructure**: [vidgo-infra-architecture.md](./vidgo-infra-architecture.md)
+- **MCP Provider Architecture**: [docs/mcp-provider-architecture.md](./docs/mcp-provider-architecture.md)
+- **DNS & ECPay Setup**: [docs/dns-and-ecpay-setup.md](./docs/dns-and-ecpay-setup.md)
+- **Payment & Invoice**: [docs/payment_and_infra.md](./docs/payment_and_infra.md)
 - **API Documentation**: http://localhost:8001/docs (when running)
 
 ---
@@ -541,5 +578,5 @@ The Dockerfile's `ENTRYPOINT` (the full startup sequence with migration + materi
 
 ---
 
-*Last Updated: March 23, 2026*
+*Last Updated: April 1, 2026*
 

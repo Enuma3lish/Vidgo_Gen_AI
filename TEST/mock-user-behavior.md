@@ -2,7 +2,7 @@
 
 **Purpose**: This document outlines realistic user behavior scenarios for testing the VidGo AI platform, including the new Inspiration Gallery feature. Use these scenarios to simulate real-world usage patterns.
 
-**Last Updated**: March 27, 2026
+**Last Updated**: March 28, 2026
 **Platform Version**: VidGo AI 8.0 with New Pricing Tiers & Credit System
 
 ---
@@ -76,13 +76,14 @@
 3. **Inspiration Gallery Browsing**
    - Use search bar: "fashion"
    - Apply filters: Industry → "Fashion", Tool → "Virtual Try-On"
-   - Click on 3-4 examples to see details
-   - Click "Try This Example" on one item
+   - Clear filters and confirm results reset correctly
+   - Click a gallery card or "Try This Example" overlay on one item
 
 4. **Tool Page Testing (Limited)**
    - Navigate to `/tools/background-removal`
-   - Select a preset (e.g., "drinks")
-   - Click "View Result"
+   - Select one example image
+   - Click the primary generate/remove-background action once
+   - Verify loading state appears and duplicate clicks are blocked while processing
    - Verify watermarked result appears
    - Attempt to download (should be blocked)
    - Click "Subscribe to Download" CTA
@@ -134,6 +135,37 @@
 - Clear upgrade prompts appear
 - User considers paid features
 
+### 2.3 Guest Click-to-Generate Behavior
+**User**: Comparison shopper evaluating the demo experience
+**Goal**: Validate that guest button clicks trigger the right demo flow without exposing paid functionality
+
+**Steps**:
+1. **Gallery Entry Points**
+   - Open one image example and one video example from `/gallery`
+   - Confirm each click lands on a valid tool page
+   - Note whether the user still needs to pick a preset/example after navigation
+
+2. **Primary Action Behavior**
+   - Click the main generate button once
+   - Immediately click it 2-3 more times while loading
+   - Verify only one loading state and one result are shown
+
+3. **Preset Switching**
+   - Generate a demo result from preset A
+   - Switch to preset B or another example image
+   - Verify the old result is cleared or visually separated before the next run
+
+4. **Paid Feature Gates**
+   - Try custom upload if the page exposes it
+   - Try download after a result appears
+   - Follow the upgrade CTA to pricing and then navigate back
+
+**Expected Outcomes**:
+- Gallery cards and hover CTAs always route to a valid tool page
+- Guest users only receive preset/watermarked results
+- Rapid clicking does not create duplicate requests or inconsistent UI states
+- Paid-only upload/download paths remain gated consistently
+
 ---
 
 ## 3. Free Registered User Scenarios
@@ -166,7 +198,7 @@
    - Go to `/gallery`
    - Search for "social media"
    - Click "Try This Example" on a video example
-   - Verify navigation to correct tool with preset selected
+   - Verify navigation to the correct tool page and confirm the next step is clear even if a preset is not auto-selected
 
 5. **Referral Program**
    - Check `/dashboard/referrals`
@@ -215,6 +247,37 @@
 - Clear upgrade friction points
 - Value demonstration through regular use
 - Eventual conversion consideration
+
+### 3.3 Free User Session Continuity
+**User**: Returning free user moving between auth, gallery, and tool pages
+**Goal**: Validate predictable behavior when the user signs in, hits a gate, and resumes browsing
+
+**Steps**:
+1. **Auth Redirect Flow**
+   - Log out and visit `/dashboard/my-works`
+   - Verify redirect to login
+   - Sign in and confirm redirect returns to the originally requested page
+
+2. **Gallery to Tool to Pricing Loop**
+   - Open `/gallery`
+   - Apply a tool filter and click one example
+   - Generate a demo result and follow a pricing CTA
+   - Use browser back to return to the tool page
+
+3. **State Consistency**
+   - Refresh the tool page after a demo result is shown
+   - Check whether preset selection and result state are preserved or reset clearly
+   - Switch language and verify labels, prompts, and gates remain understandable
+
+4. **Plan-State Changes**
+   - Sign in as a free user in one tab and open pricing in another tab
+   - Return to the original tool tab and verify no paid-only actions appear accidentally
+
+**Expected Outcomes**:
+- Login redirect paths work for gated pages
+- Free-user friction loops feel intentional rather than broken
+- Refresh/back behavior is consistent enough that users can recover without confusion
+- Auth or locale changes do not expose the wrong actions or stale labels
 
 ---
 
@@ -325,7 +388,7 @@
 - Access to premium services based on plan tier
 - Efficient workflow with concurrent processing
 
-### 4.2 Power User Workflow
+### 4.3 Power User Workflow
 **User**: James Lee (interior designer, heavy user)
 **Goal**: Professional client work
 
@@ -372,7 +435,7 @@
 - Social media integration with YouTube support
 - Cost-effective credit usage with model optimization
 
-### 4.3 Subscription Management
+### 4.4 Subscription Management
 **User**: Mia Rodriguez (managing subscription)
 **Goal**: Optimize subscription value
 
@@ -406,6 +469,43 @@
 - Graceful cancellation process
 - Proper retention period handling
 - Smooth payment issue resolution
+
+### 4.5 Subscriber Generation Lifecycle
+**User**: Paid subscriber validating real generation behavior end-to-end
+**Goal**: Confirm upload, async generation, result handling, and saved-work behavior
+
+**Steps**:
+1. **Upload and Start Generation**
+   - Open a subscriber flow such as `/tools/background-removal` or `/tools/short-video`
+   - Upload a valid image
+   - Click "Generate" once
+   - Verify upload/progress/loading states appear immediately
+
+2. **Async Status Handling**
+   - Watch for status changes such as uploading, processing, polling, completed, or failed
+   - Confirm the generate button does not allow duplicate submissions while work is in progress
+   - Leave the page open long enough for a normal completion
+
+3. **Result Actions**
+   - Download the completed result
+   - Use "Start Over" or generate another variation
+   - Confirm the previous result does not overwrite the new request unexpectedly
+
+4. **My Works Follow-Through**
+   - Open `/dashboard/my-works`
+   - Verify the new item appears with the correct tool type, timestamp, and credit usage
+   - Open the detail modal and verify download/share actions match the user plan
+
+5. **Failure and Recovery**
+   - Simulate a failed request or interrupted network during generation
+   - Verify loading state clears, the error is visible, and no ghost result is shown
+   - Confirm credits are refunded or not double-deducted when generation fails
+
+**Expected Outcomes**:
+- One user action creates one generation task
+- Async status transitions are visible and recover cleanly on failure
+- Successful outputs appear in My Works with usable actions
+- Failed generations do not leave stale spinners, stale results, or incorrect credit deductions
 
 ---
 
@@ -494,12 +594,13 @@
    - Page load time < 3 seconds
    - Grid layout renders correctly
    - All images load properly
+   - Gallery still renders usable content if one backend source fails and the other succeeds
    - Filter controls are responsive
 
 2. **Search Functionality**
    - Type "product photography"
    - See instant results
-   - Clear search with X button
+   - Use the clear-filters flow to reset search and filters
    - Search with special characters
 
 3. **Filter Combinations**
@@ -508,17 +609,17 @@
    - Industry: E-commerce + Tool: All
    - Clear all filters
 
-4. **Pagination**
-   - Scroll to load more
-   - Click page numbers
-   - Test items per page (12, 24, 48)
-   - Maintain filters across pages
+4. **Result State and Empty State**
+   - Combine search + industry + tool filters
+   - Verify results count updates correctly
+   - Force a zero-results state
+   - Click "View All Examples" or clear filters and confirm the full grid returns
 
 5. **Item Interaction**
-   - Hover effects
-   - Click for details
-   - "Try This Example" navigation
-   - Social sharing buttons
+   - Hover overlay appears on desktop
+   - Clicking anywhere on a card navigates to a tool page
+   - Clicking the "Try This Example" button behaves the same as clicking the card body
+   - Inspiration-only items route to a safe default tool instead of a dead-end page
 
 **Expected Outcomes**:
 - Intuitive browsing experience
@@ -560,6 +661,33 @@
 - Compelling value demonstration
 - High conversion rates
 - Positive user experience
+
+### 6.3 Gallery-to-Tool Route Mapping
+**User**: Any visitor using the gallery as the main entry point
+**Goal**: Verify that each gallery card maps to the correct tool and that the next click path is obvious
+
+**Steps**:
+1. **Category Coverage**
+   - Open at least one card for each tool type: product scene, background removal, try-on, room redesign, short video, AI avatar, effect, and pattern generate
+   - Confirm each card routes to a valid page rather than a blank state or 404
+
+2. **Next Action Clarity**
+   - After each route change, identify the main button the user is expected to click next
+   - Confirm the page makes it clear whether the user should select a preset, upload a file, or just press generate
+
+3. **Preset Gaps**
+   - Choose an example combination that has no matching pre-generated result
+   - Verify the user sees an informative message instead of a broken image, blank result panel, or silent failure
+
+4. **Return Navigation**
+   - Use browser back after opening a tool from gallery
+   - Confirm the user can continue browsing without losing the sense of where they came from
+
+**Expected Outcomes**:
+- Every gallery category maps to a real tool page
+- The post-click flow is understandable within a few seconds
+- Missing preset combinations fail gracefully with guidance
+- Returning to the gallery feels stable and predictable
 
 ---
 
@@ -614,10 +742,12 @@
 ### 8.1 User Input Errors
 **Test Cases**:
 1. **Invalid File Uploads**
-   - File too large (>20MB)
+   - File too large (>10MB on generic upload flows)
    - Wrong file type (PDF, DOC)
    - Corrupted images
    - Empty files
+   - Multiple files dropped when only one is expected
+   - HEIC/WebP or unusual mobile photo formats
 
 2. **Form Validation**
    - Invalid email formats
@@ -631,6 +761,12 @@
    - Empty searches
    - XSS attempts
 
+4. **Invalid Generation Inputs**
+   - Click Generate without selecting an example or upload
+   - Switch tabs/styles/models mid-flow and submit incomplete data
+   - Choose a product + scene combination with no cached preset
+   - Use an expired login/session during a generate action
+
 **Expected Behavior**:
 - Clear error messages
 - Graceful degradation
@@ -640,7 +776,10 @@
 ### 8.2 System Failures
 **Test Cases**:
 1. **API Failures**
+   - One gallery API succeeds while the other fails
    - AI provider downtime
+   - Upload succeeds but async polling later returns failed
+   - Demo cache/preset lookup misses and returns no result
    - Database connection lost
    - File storage full
    - Payment gateway offline
@@ -649,11 +788,15 @@
    - Credit exhaustion
    - Rate limiting
    - Concurrent user limits
+   - Concurrent generation limit reached for current plan
    - Storage quotas
+   - Media in My Works has expired and should no longer be downloadable
 
 3. **Network Issues**
    - Timeout handling
    - Retry logic
+   - Refresh page during processing/polling
+   - Navigate away and return during generation
    - Offline capabilities
    - Cache fallbacks
 
@@ -662,6 +805,34 @@
 - Recovery procedures
 - Data preservation
 - User notification
+
+### 8.3 Click and Async-State Bugs
+**High-risk user behaviors to simulate**:
+1. **Rapid Repeat Clicks**
+   - Double-click Generate
+   - Tap Generate repeatedly on mobile
+   - Click a gallery card and its hover CTA almost simultaneously
+
+2. **Navigation Interruptions**
+   - Press browser back while loading
+   - Refresh while a subscriber upload is polling
+   - Open pricing in a new tab and return to the in-progress tool page
+
+3. **State Replacement**
+   - Start from preset A, then switch to preset B before the first request finishes
+   - Upload a new file immediately after a failed generation
+   - Use "Start Over" immediately after completion
+
+4. **Auth and Plan Transitions**
+   - Upgrade subscription in another tab and return to the tool page
+   - Let auth/session expire while a dashboard or tool page is open
+   - Downgrade or cancel and verify paid buttons disappear on next refresh/navigation
+
+**Expected Behavior**:
+- No duplicate tasks, zombie spinners, or stale results overwriting newer actions
+- Buttons re-enable correctly after success or failure
+- Plan gates update cleanly after auth/subscription changes
+- Users can recover from interruptions without refreshing multiple times or losing trust
 
 ---
 
@@ -771,10 +942,12 @@
 **Quick Platform Health Check**:
 1. [ ] Home page loads
 2. [ ] Gallery page loads with examples
-3. [ ] One tool page works (e.g., background removal)
-4. [ ] User can generate a result
-5. [ ] Pricing page accessible
-6. [ ] Login/registration forms work
+3. [ ] One gallery card routes to a valid tool page
+4. [ ] One tool page works (e.g., background removal)
+5. [ ] User can generate a result with one click and see a loading state
+6. [ ] Download or upgrade CTA behaves correctly for current plan
+7. [ ] Pricing page accessible
+8. [ ] Login/registration forms work
 
 ### 11.2 Weekly Regression Tests (30 minutes)
 **Core Functionality Verification**:
@@ -783,8 +956,11 @@
 3. [ ] User registration and login
 4. [ ] Credit system functioning
 5. [ ] File upload and download
-6. [ ] Mobile responsiveness
-7. [ ] Error handling
+6. [ ] Duplicate-click prevention during generation
+7. [ ] My Works records completed generations correctly
+8. [ ] Expired or gated media actions are handled correctly
+9. [ ] Mobile responsiveness
+10. [ ] Error handling
 
 ### 11.3 Monthly Comprehensive Tests (2 hours)
 **Full Platform Audit**:
@@ -996,6 +1172,7 @@ When reporting bugs found during mock user testing:
 
 - **v1.0** (March 23, 2026): Initial creation with Inspiration Gallery integration
 - **v1.1** (March 24, 2026): Updated with model selection, 3D API, social media publishing, and provider routing scenarios
+- **v1.2** (March 28, 2026): Expanded user-behavior coverage for gallery routing, click-to-generate flows, async generation states, and failure recovery
 - **Future Updates**: Add new features, update scenarios, refine metrics
 
 ---

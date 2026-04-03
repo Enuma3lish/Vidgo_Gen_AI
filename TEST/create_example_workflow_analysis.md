@@ -1,231 +1,191 @@
-# Create Example Workflow Analysis for Each Tool
+# Example Creation and Serving Workflow Analysis
 
-**Date**: March 27, 2026
-**Environment**: GCP Production (vidgo-backend-38714015566.asia-east1.run.app)
-**Status**: Service is deployed and mostly functional
+**Date**: 2026-03-29
+**Scope**: Current codebase behavior after the demo-serving refactor
+**Status**: Backend demo/example serving now follows the pre-generated-only model
 
 ## Executive Summary
 
-The VidGo AI platform is deployed on GCP and is operational. The new pricing system is partially implemented, with service pricing available but plans endpoint returning 404. The create example workflow for each tool follows the dual-mode architecture (demo/preset vs subscriber).
+The requested target flow was:
 
-## 1. Overall Architecture Status
+1. Remove automatic example generation at user request time
+2. Let developers/admins generate examples manually from default prompts, inputs, and effects
+3. Store those examples durably and cache them without expiry
+4. When a user clicks an example, only return pre-generated content
 
-### GCP Deployment Status
-- ✅ **Backend**: https://vidgo-backend-38714015566.asia-east1.run.app
-- ✅ **Frontend**: https://vidgo-frontend-38714015566.asia-east1.run.app  
-- ✅ **Worker**: https://vidgo-worker-38714015566.asia-east1.run.app
-- ✅ **Materials**: 0/510 (0% sufficiency) - Materials need to be pre-generated
+That target is now mostly implemented in the backend:
 
-### API Health
-- ✅ **Demo topics**: Working (8 tools with topics)
-- ✅ **Tool presets**: Working (returns 1 preset per tool in test)
-- ✅ **Service pricing**: Working (22 service pricing entries)
-- ❌ **Plans endpoint**: Returns 404 (new pricing system not fully deployed)
-- ✅ **Tool endpoints**: All POST endpoints available (return 405 for GET)
+- Demo-serving paths no longer generate content on cache miss
+- Legacy public runtime demo-generation endpoints are disabled with `410`
+- Demo cache writes are non-expiring in Redis
+- Material DB remains the durable source of truth for approved demo examples
 
-## 2. Create Example Workflow for Each Tool
+The intended operating rule should be stated explicitly:
 
-Based on the API workflow documentation and test results, here's the create example workflow for each tool:
+- Developers must try each default example with the real API first
+- Only after the result is correct should that example be stored in Redis and exposed to users
+- Users should experience those default examples as cache queries only
 
-### 2.1 Background Removal (`/tools/remove-bg`)
-**Workflow**:
-1. **Demo User**: 
-   - GET `/demo/presets/background_removal` → Returns watermarked examples
-   - POST `/demo/use-preset` → Returns watermarked result (no API calls)
-   - Download blocked (403) with "Subscribe for Full Access" CTA
+The frontend demo action path now matches that contract as well:
 
-2. **Subscriber**:
-   - POST `/tools/remove-bg` with `{image_url}`
-   - Credits checked (3 credits)
-   - PiAPI called for background removal
-   - Result saved to UserGenerations
-   - Full-quality download available
+- Vue demo pages still preload preset lists with `GET /api/v1/demo/presets/{tool_type}`
+- When the user runs or applies a default example, the page now resolves that selection through `POST /api/v1/demo/use-preset`
+- This means the system now guarantees both **no request-time demo generation** and **backend cache-backed preset lookup on demo actions**
 
-**Current Status**: ✅ POST endpoint available (returns 405 for GET)
+## Verification Against the Target Flow
 
-### 2.2 Product Scene (`/tools/product-scene`)
-**Workflow**:
-1. **Demo User**:
-   - GET `/demo/presets/product_scene` → Scene examples
-   - POST `/demo/use-preset` → Watermarked composite
+| Requirement | Status | Current Behavior |
+|-------------|--------|------------------|
+| No automatic demo generation at request time | Implemented | Demo retrieval returns cached/DB content only; no lazy generation fallback |
+| Developer/admin manually generates examples | Implemented | `scripts.main_pregenerate` and `POST /api/v1/admin/generate-demo` are the intended creation paths |
+| Store examples durably | Implemented | Approved examples are stored in `Material` rows |
+| Keep demo cache non-expiring | Implemented | Redis demo cache is now warmed without TTL |
+| User click only retrieves existing example | Implemented on backend | `/demo/use-preset` and demo helpers return stored content only |
+| Every click queries backend cache | Implemented | Demo actions now resolve selected preset IDs through `/demo/use-preset` |
 
-2. **Subscriber**:
-   - POST `/tools/product-scene` with `{image_url, scene_type}`
-   - Pipeline: Remove BG → Generate scene (T2I) → Composite (PIL)
-   - Credits: 10 credits
-   - Scene types: studio, nature, luxury, minimal, lifestyle, beach, urban, garden
+## End-to-End Architecture Diagram
 
-**Current Status**: ✅ POST endpoint available (returns 405 for GET)
+```mermaid
+flowchart LR
+    subgraph Legacy[Legacy flow now disabled]
+        L1[Demo user action] --> L2[Legacy demo generate endpoint or cache miss fallback]
+        L2 --> L3[External AI provider call]
+        L3 --> L4[Temporary Redis cache with TTL]
+        L4 --> L5[Return generated demo]
+    end
 
-### 2.3 AI Try-On (`/tools/try-on`)
-**Workflow**:
-1. **Demo User**:
-   - GET `/demo/presets/try_on` → Try-on examples
-   - Preset models (male + female)
+    subgraph Target[Current backend contract]
+        A1[Developer or admin] --> A2[scripts.main_pregenerate or POST /api/v1/admin/generate-demo]
+        A2 --> A3[PiAPI / Pollo / A2E by tool]
+        A3 --> A4[Material DB approved demo rows]
+        A4 --> A5[Redis demo read cache no TTL]
 
-2. **Subscriber**:
-   - POST `/tools/try-on` with `{model_image_url | model_id, garment_image_url}`
-   - API: PiAPI (specialized try-on)
-   - Credits: 15 credits
+        U1[Demo user opens tool page] --> A6[GET /api/v1/demo/presets/{tool_type}]
+        A6 --> A4
 
-**Current Status**: ✅ POST endpoint available (returns 405 for GET)
+        U2[Demo user clicks example] --> A7[POST /api/v1/demo/use-preset]
+        A7 --> A5
+        A5 --> A4
+        A5 --> A8[Return existing watermarked result]
+    end
 
-### 2.4 Room Redesign (`/tools/room-redesign`)
-**Workflow**:
-1. **Demo User**:
-   - GET `/demo/presets/room_redesign` → Room examples
-   - Style and room type presets
-
-2. **Subscriber**:
-   - POST `/tools/room-redesign` with `{image_url, style_id, room_type}`
-   - API: PiAPI (Wan Doodle) — no fallback
-   - Credits: 20 credits
-
-**Current Status**: ✅ POST endpoint available (returns 405 for GET)
-
-### 2.5 Short Video (`/tools/short-video`)
-**Workflow**:
-1. **Demo User**:
-   - GET `/demo/presets/short_video` → Video examples
-   - Play demo videos
-
-2. **Subscriber**:
-   - POST `/tools/short-video` with `{image_url, motion_strength, style?, script?, voice_id?}`
-   - API: PiAPI I2V — no fallback
-   - Credits: 25-35 credits
-
-**Current Status**: ✅ POST endpoint available (returns 405 for GET)
-
-### 2.6 AI Avatar (`/tools/avatar`)
-**Workflow**:
-1. **Demo User**:
-   - GET `/demo/presets/ai_avatar` → Avatar examples
-   - Input params: `{avatar_id, script_id}`
-
-2. **Subscriber**:
-   - POST `/tools/avatar` with `{image_url, script, language, voice_id, aspect_ratio, resolution}`
-   - API: PiAPI
-   - Languages: en, zh-TW, ja, ko
-   - Credits: 30 credits
-
-**Current Status**: ✅ POST endpoint available (returns 405 for GET)
-
-### 2.7 Effects (`/effects/apply-style`)
-**Workflow**:
-1. **Demo User**:
-   - GET `/effects/styles` → 11 effect styles available
-   - Demo style transfer with watermarks
-
-2. **Subscriber**:
-   - POST `/effects/apply-style` → Style transfer (8 credits)
-   - POST `/effects/hd-enhance` → HD upscale (12 credits)
-   - POST `/effects/video-enhance` → Video enhance (15 credits)
-
-**Current Status**: ✅ POST endpoint available (returns 405 for GET)
-
-## 3. New Pricing System Integration
-
-### Current Implementation Status
-- ✅ **Service pricing**: 22 entries available at `/credits/pricing`
-- ❌ **Plans endpoint**: `/plans` returns 404 (not implemented)
-- ✅ **Credit packages**: Endpoint exists but not tested
-- ✅ **Model permission control**: Likely implemented but not tested
-
-### Pricing Structure (from test)
-- **22 service pricing entries** categorized by `tool_category`
-- All currently showing as `unknown` category (needs fixing)
-- Expected categories: `static`, `dynamic`, `premium`
-
-### Missing Components
-1. **Plans API**: `/plans` endpoint returns 404
-2. **Plan comparison**: `/plans/comparison` not tested
-3. **Permission checking**: `/plans/check-permission` not tested
-4. **Concurrent limits**: `/plans/check-concurrent` not tested
-
-## 4. Materials System Status
-
-### Current State
-- **Materials sufficient**: False (0%)
-- **Current/Required**: 0/510 materials
-- **Requirements checked**: 17 categories
-- **Missing materials**: All categories at 0%
-
-### Impact on Workflow
-1. **Demo mode**: Limited functionality (only 1 preset per tool in test)
-2. **User experience**: Demo users see fewer examples
-3. **Conversion**: Less compelling demo experience
-
-### Recommended Action
-Run material pre-generation:
-```bash
-# Trigger material generation
-POST /materials/generate
+    subgraph Subscriber[Subscriber runtime generation remains]
+        S1[Subscriber submits tool request] --> S2[POST /api/v1/tools/* or related endpoint]
+        S2 --> S3[External AI provider runtime generation]
+        S3 --> S4[Persist user generation and deduct credits]
+        S4 --> S5[Return full-quality result]
+    end
 ```
 
-## 5. Authentication & User Flow
+## Current Example Creation Paths
 
-### Current Status
-- **Auth endpoints**: Not tested (require authentication)
-- **Demo flow**: Working (no auth required)
-- **Subscriber flow**: POST endpoints available (return 405 for GET)
+### Required Rule For Default Examples
 
-### User Journey
-1. **Visitor**: Browse demo examples → Limited testing
-2. **Free user**: Register → Verify email → 40 welcome credits
-3. **Subscriber**: Upgrade plan → Full access with credits
+- A default example is not considered ready until a developer/admin has run the real provider call and confirmed the output is correct.
+- After validation, that finished output must be stored in Material DB and Redis before users see it.
+- The user-facing demo path is retrieval only: query cache, return existing example, never generate.
 
-## 6. Recommendations
+### 1. Mapping-Based Pregeneration Script
 
-### Immediate Actions
-1. **Fix plans endpoint**: Implement `/plans` API for new pricing tiers
-2. **Generate materials**: Run material pre-generation to improve demo experience
-3. **Fix service pricing categories**: Update `tool_category` from `unknown` to proper categories
+Primary operator path:
 
-### Short-term Improvements
-1. **Test auth flow**: Verify registration, login, and subscription
-2. **Test credit system**: Verify credit deduction and balance
-3. **Test model selection**: Verify model permission controls
+```bash
+cd backend
+python -m scripts.main_pregenerate --tool <tool_name> --limit <n>
+python -m scripts.main_pregenerate --all --limit <n>
+```
 
-### Long-term Enhancements
-1. **Implement new pricing tiers**: Basic, Pro, Premium, Enterprise
-2. **Add concurrent limits**: Implement plan-based concurrent generation limits
-3. **Enhance materials**: Generate more diverse examples for each tool
+Characteristics:
 
-## 7. Test Coverage Summary
+- Uses explicit mappings for prompts, scenes, styles, avatars, scripts, or source assets depending on tool
+- Initializes PiAPI, Pollo, and A2E clients as needed
+- Generates assets first, then stores results in `Material`
+- Designed for curated example coverage rather than user-triggered generation
 
-### Working Endpoints
-- ✅ Demo topics and presets
-- ✅ Tool POST endpoints (create example)
-- ✅ Service pricing
-- ✅ Effects styles
-- ✅ Materials status
-- ✅ Frontend integration
+Supported tool types in the current material system:
 
-### Issues Found
-1. ❌ `/health` endpoint returns 404 (should be `/api/v1/health`)
-2. ❌ `/plans` endpoint returns 404 (new pricing system)
-3. ❌ Materials insufficient (0/510)
-4. ❌ Service pricing categories show as `unknown`
+- `background_removal`
+- `product_scene`
+- `try_on`
+- `room_redesign`
+- `short_video`
+- `ai_avatar`
+- `pattern_generate`
+- `effect`
 
-### Test Scripts to Update
-1. **test_comprehensive.py**: Update health endpoint path
-2. **test_new_pricing_api.py**: Handle missing plans endpoint
-3. **mock-user-behavior.md**: Already updated with new pricing scenarios
+### 2. Admin Single-Example Generation
 
-## 8. Conclusion
+Admin-only path:
 
-The VidGo AI platform is deployed on GCP and is operational. The core create example workflow for each tool is implemented and follows the dual-mode architecture. The main issues are:
+```text
+POST /api/v1/admin/generate-demo
+```
 
-1. **New pricing system**: Partially implemented (service pricing works, plans endpoint missing)
-2. **Materials**: Need pre-generation for better demo experience
-3. **API endpoints**: Minor path issues (health endpoint)
+Characteristics:
 
-The platform is ready for user testing, but the new pricing system needs completion before launch.
+- Generates or accepts an input image
+- Runs a tool-specific transformation
+- Stores both input and result in Material DB
+- Warms Redis through `DemoCacheService.store_demo`
 
----
+This is the right path for curated one-off example creation from the dashboard or internal tooling.
 
-**Next Steps**:
-1. Fix the `/plans` endpoint
-2. Run material pre-generation
-3. Test authentication and credit system
-4. Update test scripts with correct endpoint paths
+## Tool-by-Tool Workflow
+
+| Tool | Developer/Admin Example Creation | Demo Serving Path | Subscriber Runtime Path | Notes |
+|------|----------------------------------|-------------------|-------------------------|-------|
+| `background_removal` | Generate or supply input image, then remove background | Preset list from Material DB, result served from DB/Redis | `POST /api/v1/tools/remove-bg` | Demo result is pre-generated only |
+| `product_scene` | Pregeneration script uses mapped product/scene pairs; admin path currently uses a simplified transform flow | Pre-generated scene examples only | `POST /api/v1/tools/product-scene` | Admin route is less sophisticated than the full mapping script |
+| `try_on` | Pregeneration uses mapped model and garment combinations | Pre-generated try-on examples only | `POST /api/v1/tools/try-on` | No demo-time generation |
+| `room_redesign` | Generate or supply room input, then apply mapped style prompt | Pre-generated redesign examples only | `POST /api/v1/tools/room-redesign` | Demo and subscriber flows are intentionally separated |
+| `short_video` | Generate or supply image, then transform to video | Pre-generated demo video only | `POST /api/v1/tools/short-video` | Demo videos are stored and replayed, not generated on click |
+| `ai_avatar` | Pregeneration script combines avatar, script, and language; admin route supports single example generation | Pre-generated avatar clips only | `POST /api/v1/tools/avatar` | A2E is part of the curated generation path |
+| `pattern_generate` | Single-step mapped prompt generation | Pre-generated patterns only | Tool-specific runtime path depends on subscriber flow | No separate input asset required |
+| `effect` | Apply mapped style/effect to curated source material | Pre-generated style examples only | `POST /api/v1/effects/apply-style` and related endpoints | Demo style gallery is read-only |
+
+## What Changed in the Backend Refactor
+
+### Demo Retrieval
+
+- `DemoCacheService.get_or_generate(...)` now performs retrieval only
+- On cache miss it checks Material DB and returns `None` instead of generating new content
+- Demo cache warm-up writes are now persistent in Redis rather than TTL-based
+
+### Disabled Legacy Runtime Endpoints
+
+The following legacy public endpoints now return `410` instead of generating examples:
+
+- `POST /api/v1/demo/generate`
+- `POST /api/v1/demo/generate/paid`
+- `POST /api/v1/demo/search`
+- `POST /api/v1/demo/generate-image`
+- `POST /api/v1/demo/generate-realtime`
+
+### Startup Behavior
+
+- The app no longer runs the old expiring-demo persistence loop in the FastAPI lifespan manager
+- Normal runtime does not pregenerate examples automatically
+- Pregeneration is now an explicit developer/operator action
+
+## Serving Semantics After the Refactor
+
+### Demo Users
+
+- Receive pre-generated demo content only
+- See watermarked results unless they are entitled to the full asset
+- Never trigger external provider calls through the current backend demo-serving path
+
+### Subscribers
+
+- Still use real runtime generation through `/api/v1/tools/*`, `/api/v1/effects/*`, and related endpoints
+- Continue to consume credits and receive full-quality assets
+
+## Recommended Operating Model
+
+1. Curate prompt, style, topic, and input mappings in the pregeneration pipeline.
+2. Generate examples manually through `scripts.main_pregenerate` or `POST /api/v1/admin/generate-demo`.
+3. Approve and feature those materials in the database.
+4. Serve demo users from Material DB and Redis only.
+5. Keep subscriber generation separate and real-time.
+
+This is the clean separation the platform now follows on the backend.

@@ -22,7 +22,8 @@ const {
   loadDemoTemplates,
   demoTemplates,
   tryPrompts,
-  dbEmpty
+  dbEmpty,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -125,41 +126,18 @@ async function removeBackground() {
 
   isProcessing.value = true
   try {
-    // For demo users, use cached result from database templates
+    // For demo users, resolve the selected preset through backend lookup
     if (isDemoUser.value) {
-      // Simulate processing delay for demo effect
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // First check if we have result for the selected example
-      const selectedExample = demoImages.value[selectedDemoIndex.value]
-
-      // Check if the selected example has a pre-paired result
-      if (selectedExample?.result) {
-        resultImage.value = selectedExample.result
-        uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
-        return
-      }
-
-      // Try to find matching template from loaded templates by ID first (exact match)
-      const matchingTemplate = demoTemplates.value.find(t =>
-        t.id === selectedExample?.id
-      )
-
-      if (matchingTemplate?.result_watermarked_url || matchingTemplate?.result_image_url) {
-        resultImage.value = matchingTemplate.result_watermarked_url || matchingTemplate.result_image_url || null
-        uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
-        return
-      }
-
-      // Then try to match by input_image_url (exact match only)
-      const matchByInput = demoTemplates.value.find(t =>
-        t.input_image_url === selectedExample?.input
-      )
-
-      if (matchByInput?.result_watermarked_url || matchByInput?.result_image_url) {
-        resultImage.value = matchByInput.result_watermarked_url || matchByInput.result_image_url || null
-        uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
-        return
+      const selectedTemplateId = demoImages.value[selectedDemoIndex.value]?.id
+      if (selectedTemplateId) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(selectedTemplateId)
+        if (demoResultUrl) {
+          resultImage.value = demoResultUrl
+          uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
+          return
+        }
       }
 
       // No pre-generated result available - show info message (NOT the input image as fake result)
@@ -168,9 +146,17 @@ async function removeBackground() {
     }
 
     // Upload image first
-    const uploadResult = await toolsApi.uploadImage(
-      dataURItoBlob(uploadedImage.value) as File
-    )
+    let uploadUrl = uploadedImage.value
+    if (uploadedImage.value.startsWith('data:')) {
+      const blob = dataURItoBlob(uploadedImage.value)
+      if (!blob) {
+        uiStore.showError(isZh.value ? '圖片格式無效，請重新上傳' : 'Invalid image format. Please re-upload.')
+        return
+      }
+      const uploadResult = await toolsApi.uploadImage(blob as File)
+      uploadUrl = uploadResult.url
+    }
+    const uploadResult = { url: uploadUrl }
 
     // Call tools API for background removal
     const result = await toolsApi.removeBackground(uploadResult.url, 'png')
@@ -182,22 +168,24 @@ async function removeBackground() {
     } else {
       uiStore.showError(result.message || 'Processing failed')
     }
-  } catch (error) {
-    uiStore.showError('An error occurred while processing')
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || ''
+    uiStore.showError(detail || (isZh.value ? '處理失敗，請稍後再試' : 'Processing failed. Please try again.'))
   } finally {
     isProcessing.value = false
   }
 }
 
-function dataURItoBlob(dataURI: string): Blob {
-  const byteString = atob(dataURI.split(',')[1])
-  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
-  const ab = new ArrayBuffer(byteString.length)
-  const ia = new Uint8Array(ab)
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i)
-  }
-  return new Blob([ab], { type: mimeString })
+function dataURItoBlob(dataURI: string): Blob | null {
+  if (!dataURI || !dataURI.includes(',') || !dataURI.startsWith('data:')) return null
+  try {
+    const byteString = atob(dataURI.split(',')[1])
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
+    const ab = new ArrayBuffer(byteString.length)
+    const ia = new Uint8Array(ab)
+    for (let i = 0; i < byteString.length; i++) { ia[i] = byteString.charCodeAt(i) }
+    return new Blob([ab], { type: mimeString })
+  } catch { return null }
 }
 
 

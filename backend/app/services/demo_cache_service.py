@@ -1,14 +1,22 @@
 """
-Demo Cache Service — Lazy Generation Architecture
+Demo Cache Service — Cache-First Demo Retrieval with On-Demand Generation
 
 Flow:
-  1. Visitor hits tool page → check Redis cache
-  2. Cache HIT  → return instantly
-  3. Cache MISS → call real PiAPI API with default prompt → store in Redis (7-day TTL) → return
-  4. Background task (hourly) → persist expiring Redis entries to Material DB
+    1. User requests a demo for (tool_type, topic/style)
+    2. Check Redis cache → Material DB for existing result
+    3. If found → return cached result (fast path)
+    4. If NOT found → generate on-the-fly via provider_router → cache → return
+    5. Everyone can trigger generation (not just developers)
 
-Cache key:  demo:{tool_type}:{topic}  → JSON list of demo results
+Cache key: demo:{tool_type}:{topic} -> JSON list of demo results
+
+On-Demand Generation:
+    - Uses provider_router to call appropriate AI API
+    - Results are watermarked and stored in Material DB
+    - Cached in Redis for subsequent requests
+    - No credits consumed for demo generation (limited per session)
 """
+import hashlib
 import json
 import logging
 import random
@@ -21,63 +29,39 @@ from app.models.material import Material, ToolType, MaterialSource, MaterialStat
 logger = logging.getLogger(__name__)
 
 CACHE_PREFIX = "demo"
-CACHE_TTL = 7 * 24 * 3600  # 7 days
-
-# Default prompts per tool — used when generating the first demo on cache miss
-# Taiwan SMB focus: food, drinks, daily products — NOT luxury/tech
-DEFAULT_DEMO_CONFIG: Dict[str, Dict[str, Any]] = {
-    "background_removal": {
-        "prompt": "A bubble tea cup with tapioca pearls on clean white background, product photography, studio lighting",
-        "topic": "drinks",
-    },
-    "product_scene": {
-        "prompt": "A handmade soap bar on white background, natural product photography",
-        "topic": "studio",
-        "scene_prompt": "professional studio lighting, clean background, commercial photography",
-    },
-    "try_on": {
-        "prompt": "A white casual cotton t-shirt, flat lay on clean background, fashion photography",
-        "topic": "casual",
-    },
-    "room_redesign": {
-        "prompt": "A modern living room with white sofa and wooden floor, natural light from large windows",
-        "topic": "modern_minimalist",
-        "style_id": "modern_minimalist",
-        "effect_prompt": "modern minimalist interior design, clean lines, neutral color palette, natural light",
-    },
-    "short_video": {
-        "prompt": "A steaming cup of coffee on a wooden table, warm morning light, cozy cafe atmosphere",
-        "topic": "product_showcase",
-        "effect_prompt": "smooth natural camera motion, cinematic animation",
-    },
-    "ai_avatar": {
-        "prompt": "Professional headshot of a young Asian woman smiling, studio lighting, clean background",
-        "topic": "professional",
-    },
-    "pattern_generate": {
-        "prompt": "Seamless bubble tea pattern with tapioca pearls and cups, packaging design, tileable",
-        "topic": "seamless",
-    },
-    "effect": {
-        "prompt": "A bubble tea cup with tapioca pearls, product photography, clean background",
-        "topic": "anime",
-        "effect_prompt": "anime style, vibrant colors, social media ad, Studio Ghibli inspired",
-    },
-}
-
-
 def _cache_key(tool_type: str, topic: str = "_all") -> str:
     return f"{CACHE_PREFIX}:{tool_type}:{topic}"
 
 
+# Tool type string → ToolType enum mapping
+_TOOL_TYPE_MAP = {
+    "background_removal": ToolType.BACKGROUND_REMOVAL,
+    "product_scene": ToolType.PRODUCT_SCENE,
+    "try_on": ToolType.TRY_ON,
+    "room_redesign": ToolType.ROOM_REDESIGN,
+    "short_video": ToolType.SHORT_VIDEO,
+    "ai_avatar": ToolType.AI_AVATAR,
+    "pattern_generate": ToolType.PATTERN_GENERATE,
+    "effect": ToolType.EFFECT,
+}
+
+
+def _generate_lookup_hash(tool_type: str, prompt: str, effect_prompt: str = None, input_image_url: str = None) -> str:
+    content = f"{tool_type}:{prompt}:{effect_prompt or ''}:{input_image_url or ''}"
+    return hashlib.sha256(content.encode()).hexdigest()[:64]
+
+
 class DemoCacheService:
     """
-    Lazy-generation demo service.
+    Cache-first demo service with on-demand generation.
 
     Lookup order:
-      1. Redis cache (fast, 7-day TTL)
-      2. Material DB (persistent, populated by TTL persistence job)
-      3. Generate via real API → cache → return
+        1. Redis cache (fast, non-expiring)
+        2. Material DB (persistent)
+        3. On-demand generation via provider_router (if cache miss)
+
+    Generated results are cached in both Material DB and Redis
+    so subsequent requests are served instantly.
     """
 
     def __init__(self, db: AsyncSession, redis=None):
@@ -94,7 +78,7 @@ class DemoCacheService:
         topic: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
-        Get a demo result. If none cached, generate one via real API.
+        Get a demo result — from cache if available, otherwise generate on-demand.
 
         Returns dict: {result_url, input_image_url, prompt, tool_type, topic}
         """
@@ -111,10 +95,20 @@ class DemoCacheService:
                 await self._warm_cache(tool_type, topic)
             return demo
 
-        # 3. Cache miss everywhere — generate via real API
-        logger.info(f"[DemoCache] Cache miss for {tool_type}:{topic}, generating via API...")
-        generated = await self._generate_demo(tool_type, topic)
-        return generated
+        # 3. On-demand generation
+        logger.info(
+            "[DemoCache] Cache miss for %s:%s — attempting on-demand generation.",
+            tool_type, topic,
+        )
+        generated = await self._generate_on_demand(tool_type, topic)
+        if generated:
+            return generated
+
+        logger.warning(
+            "[DemoCache] On-demand generation failed for %s:%s.",
+            tool_type, topic,
+        )
+        return None
 
     async def get_demos(
         self,
@@ -131,216 +125,14 @@ class DemoCacheService:
 
         return await self._get_many_from_db(tool_type, topic, limit)
 
-    # ------------------------------------------------------------------
-    # GENERATE — call real PiAPI API on cache miss
-    # ------------------------------------------------------------------
-
-    # Expensive tools should NOT be lazy-generated on cache miss.
-    # Only serve pre-generated content for these tools to avoid wasting API credits.
-    EXPENSIVE_TOOLS = {"try_on", "ai_avatar", "short_video"}
-
-    async def _generate_demo(
-        self,
-        tool_type: str,
-        topic: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Generate a demo via real API, store in Redis cache only.
-
-        IMPORTANT: Each tool uses the correct workflow with input image + tool transformation.
-        Expensive tools (try_on, ai_avatar, short_video) are NOT lazy-generated —
-        they must be pre-generated via main_pregenerate.py to control costs.
-        """
-        from app.providers.provider_router import get_provider_router, TaskType
-
-        # Block lazy generation for expensive tools — only serve pre-generated content
-        if tool_type in self.EXPENSIVE_TOOLS:
-            logger.info(f"[DemoCache] {tool_type} is expensive — skipping lazy generation, use main_pregenerate.py instead")
-            return None
-
-        config = DEFAULT_DEMO_CONFIG.get(tool_type)
-        if not config:
-            logger.warning(f"[DemoCache] No default config for tool_type={tool_type}")
-            return None
-
-        provider = get_provider_router()
-        prompt = config["prompt"]
-        used_topic = topic or config.get("topic", "_all")
-
-        try:
-            # Step 1: Generate input image via T2I (for tools that need one)
-            input_url = None
-            if tool_type != "pattern_generate":  # pattern is single-step
-                t2i_result = await provider.route(
-                    TaskType.T2I,
-                    {"prompt": prompt, "size": "1024*1024"}
-                )
-                if not t2i_result.get("success"):
-                    logger.error(f"[DemoCache] T2I failed for {tool_type}: {t2i_result.get('error')}")
-                    return None
-                output = t2i_result.get("output", {})
-                input_url = (
-                    output.get("image_url")
-                    or (output.get("images", [{}])[0].get("url") if output.get("images") else None)
-                )
-                if not input_url:
-                    logger.error(f"[DemoCache] T2I returned no image for {tool_type}")
-                    return None
-
-            # Step 2: Run tool-specific transformation using input image
-            result_url = None
-            video_url = None
-
-            if tool_type == "pattern_generate":
-                # Single-step: T2I result IS the pattern
-                t2i_result = await provider.route(
-                    TaskType.T2I,
-                    {"prompt": prompt, "size": "1024*1024"}
-                )
-                if t2i_result.get("success"):
-                    output = t2i_result.get("output", {})
-                    result_url = output.get("image_url") or (output.get("images", [{}])[0].get("url") if output.get("images") else None)
-
-            elif tool_type == "background_removal":
-                # Input image → Remove BG API
-                r = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": input_url})
-                if r.get("success"):
-                    result_url = r.get("output", {}).get("image_url")
-
-            elif tool_type == "product_scene":
-                # Input image → Remove BG → Generate scene → Composite
-                # Step 2a: Remove background from product
-                r = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": input_url})
-                if not r.get("success"):
-                    logger.error(f"[DemoCache] RemBG failed for product_scene")
-                    return None
-                product_no_bg = r.get("output", {}).get("image_url")
-
-                # Step 2b: Generate scene background
-                scene_prompt = config.get("scene_prompt", "professional studio lighting, clean background")
-                scene_result = await provider.route(
-                    TaskType.T2I,
-                    {"prompt": scene_prompt, "size": "1024*1024"}
-                )
-                if scene_result.get("success"):
-                    scene_output = scene_result.get("output", {})
-                    result_url = scene_output.get("image_url") or (
-                        scene_output.get("images", [{}])[0].get("url") if scene_output.get("images") else None
-                    )
-                # Note: PIL composite step is only in main_pregenerate.py,
-                # here we use the scene as result for simplicity
-
-            elif tool_type == "room_redesign":
-                # Input room image → I2I with style prompt (preserves room structure)
-                r = await provider.route(TaskType.I2I, {
-                    "image_url": input_url,
-                    "prompt": config.get("effect_prompt", "modern minimalist interior design"),
-                    "strength": 0.65,
-                })
-                if r.get("success"):
-                    result_url = r.get("output", {}).get("image_url")
-
-            elif tool_type == "effect":
-                # Input product image → I2I style transfer (same image, different style)
-                r = await provider.route(TaskType.I2I, {
-                    "image_url": input_url,
-                    "prompt": config.get("effect_prompt", "anime style"),
-                    "strength": 0.65,
-                })
-                if r.get("success"):
-                    result_url = r.get("output", {}).get("image_url")
-
-            if not result_url:
-                logger.error(f"[DemoCache] Step 2 failed for {tool_type}")
-                return None
-
-            # Store in Redis cache (DB persistence happens via background task)
-            demo_data = {
-                "tool_type": tool_type,
-                "topic": used_topic,
-                "prompt": prompt,
-                "input_image_url": input_url,
-                "result_url": result_url,
-                "result_image_url": result_url if not video_url else None,
-                "result_video_url": video_url,
-            }
-
-            if self.redis:
-                key = _cache_key(tool_type, used_topic)
-                existing_raw = await self.redis.get(key)
-                items = json.loads(existing_raw) if existing_raw else []
-                items.append(demo_data)
-                await self.redis.setex(key, CACHE_TTL, json.dumps(items))
-                logger.info(f"[DemoCache] Generated and cached: {tool_type}:{used_topic}")
-
-            return demo_data
-
-        except Exception as e:
-            logger.error(f"[DemoCache] Generation error for {tool_type}: {e}")
-            return None
-
-    # ------------------------------------------------------------------
-    # PERSIST — move expiring Redis entries to Material DB
-    # ------------------------------------------------------------------
-
     async def persist_expiring_to_db(self):
         """
-        Scan Redis for demo:* keys with TTL < 1 day.
-        Persist those entries to Material DB so they survive Redis expiry.
-        Called by a background task (hourly).
+        Deprecated no-op kept for compatibility.
+
+        Demo cache entries are now written directly to Material DB and stored in
+        Redis without TTL, so there is nothing to persist in the background.
         """
-        if not self.redis:
-            return 0
-
-        ONE_DAY = 24 * 3600
-        persisted = 0
-
-        # Scan all demo keys
-        cursor = 0
-        while True:
-            cursor, keys = await self.redis.scan(cursor, match=f"{CACHE_PREFIX}:*", count=100)
-            for key in keys:
-                ttl = await self.redis.ttl(key)
-                if 0 < ttl < ONE_DAY:
-                    raw = await self.redis.get(key)
-                    if not raw:
-                        continue
-                    items = json.loads(raw)
-                    for item in items:
-                        # Check if already in DB
-                        existing = await self.db.execute(
-                            select(Material).where(
-                                Material.tool_type == item.get("tool_type"),
-                                Material.prompt == item.get("prompt"),
-                                Material.is_active == True,
-                            ).limit(1)
-                        )
-                        if existing.scalars().first():
-                            continue
-
-                        material = Material(
-                            tool_type=item.get("tool_type"),
-                            topic=item.get("topic", "_all"),
-                            prompt=item.get("prompt", ""),
-                            input_image_url=item.get("input_image_url"),
-                            result_image_url=item.get("result_image_url"),
-                            result_video_url=item.get("result_video_url"),
-                            result_watermarked_url=item.get("result_url"),
-                            source=MaterialSource.SEED,
-                            status=MaterialStatus.APPROVED,
-                            is_active=True,
-                        )
-                        self.db.add(material)
-                        persisted += 1
-
-            if cursor == 0:
-                break
-
-        if persisted > 0:
-            await self.db.commit()
-            logger.info(f"[DemoCache] Persisted {persisted} expiring demos to Material DB")
-
-        return persisted
+        return 0
 
     # ------------------------------------------------------------------
     # WRITE — manual store (used by admin endpoint)
@@ -381,6 +173,413 @@ class DemoCacheService:
         return material
 
     # ------------------------------------------------------------------
+    # ON-DEMAND GENERATION
+    # ------------------------------------------------------------------
+
+    async def _generate_on_demand(
+        self,
+        tool_type: str,
+        topic: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate a demo example on-the-fly using provider_router.
+
+        The result is stored in Material DB and cached in Redis.
+        This allows any user to trigger generation — not just developers.
+        """
+        try:
+            from app.providers.provider_router import get_provider_router, TaskType
+        except ImportError:
+            logger.error("[DemoCache] Cannot import provider_router for on-demand generation")
+            return None
+
+        provider = get_provider_router()
+        result = None
+        input_image_url = None
+        prompt = ""
+        effect_prompt = None
+
+        try:
+            if tool_type in ("effect", ToolType.EFFECT.value if hasattr(ToolType.EFFECT, 'value') else "effect"):
+                result = await self._generate_effect(provider, TaskType, topic)
+            elif tool_type in ("background_removal", "BACKGROUND_REMOVAL"):
+                result = await self._generate_background_removal(provider, TaskType, topic)
+            elif tool_type in ("product_scene", "PRODUCT_SCENE"):
+                result = await self._generate_product_scene(provider, TaskType, topic)
+            elif tool_type in ("room_redesign", "ROOM_REDESIGN"):
+                result = await self._generate_room_redesign(provider, TaskType, topic)
+            elif tool_type in ("short_video", "SHORT_VIDEO"):
+                result = await self._generate_short_video(provider, TaskType, topic)
+            elif tool_type in ("pattern_generate", "PATTERN_GENERATE"):
+                result = await self._generate_pattern(provider, TaskType, topic)
+            else:
+                logger.info(f"[DemoCache] No on-demand generator for tool_type={tool_type}")
+                return None
+
+            if not result or not result.get("success"):
+                logger.warning(f"[DemoCache] On-demand generation failed for {tool_type}: {result}")
+                return None
+
+            # Store in Material DB
+            material_dict = await self._store_generated_result(
+                tool_type=tool_type,
+                topic=topic or result.get("topic", "_all"),
+                prompt=result.get("prompt", ""),
+                effect_prompt=result.get("effect_prompt"),
+                input_image_url=result.get("input_image_url"),
+                result_image_url=result.get("result_image_url"),
+                result_video_url=result.get("result_video_url"),
+                input_params=result.get("input_params", {}),
+            )
+
+            if material_dict:
+                # Warm cache
+                if self.redis:
+                    await self._warm_cache(tool_type, topic)
+                return material_dict
+
+        except Exception as e:
+            logger.error(f"[DemoCache] On-demand generation error for {tool_type}: {e}", exc_info=True)
+
+        return None
+
+    async def _generate_effect(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+        """Generate an effect (style transfer) example on-demand."""
+        from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
+
+        # Pick a style based on topic or random
+        style_id = topic
+        if not style_id or style_id == "_all":
+            style_ids = [s["id"] for s in VIDGO_STYLES]
+            style_id = random.choice(style_ids)
+
+        style = get_style_by_id(style_id)
+        if not style:
+            logger.warning(f"[DemoCache] Unknown style: {style_id}")
+            return None
+
+        style_prompt = get_style_prompt(style_id)
+
+        # Step 1: Generate source image (a product photo)
+        source_prompts = [
+            "A cup of bubble milk tea with tapioca pearls, appetizing food photography, studio lighting, white background",
+            "Crispy fried chicken cutlet on a plate, Taiwanese street food photography, studio lighting",
+            "Glass skincare serum bottle with dropper, clean cosmetics product photo, white background",
+            "Canvas tote bag with minimalist design, clean studio product photo, white background",
+            "Fresh roasted coffee beans in kraft paper bag, artisan coffee product photo, white background",
+        ]
+        source_prompt = random.choice(source_prompts)
+
+        logger.info(f"[DemoCache] Effect: generating source image...")
+        t2i_result = await provider.route(
+            TaskType.T2I,
+            {"prompt": source_prompt, "width": 1024, "height": 1024},
+        )
+
+        if not t2i_result.get("success"):
+            return {"success": False, "error": f"T2I failed: {t2i_result}"}
+
+        source_url = t2i_result.get("output", {}).get("image_url")
+        if not source_url:
+            return {"success": False, "error": "No image URL from T2I"}
+
+        # Step 2: Apply style via I2I
+        logger.info(f"[DemoCache] Effect: applying style {style_id}...")
+        i2i_result = await provider.route(
+            TaskType.I2I,
+            {
+                "image_url": source_url,
+                "prompt": style_prompt,
+                "strength": 0.65,
+            },
+        )
+
+        if not i2i_result.get("success"):
+            return {"success": False, "error": f"I2I failed: {i2i_result}"}
+
+        result_url = i2i_result.get("output", {}).get("image_url")
+        if not result_url:
+            return {"success": False, "error": "No image URL from I2I"}
+
+        return {
+            "success": True,
+            "topic": style_id,
+            "prompt": f"{source_prompt} | Style: {style_prompt}",
+            "effect_prompt": style_prompt,
+            "input_image_url": source_url,
+            "result_image_url": result_url,
+            "input_params": {"style_id": style_id, "source_prompt": source_prompt},
+        }
+
+    async def _generate_background_removal(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+        """Generate a background removal example on-demand."""
+        prompts_by_topic = {
+            "drinks": "A cup of bubble milk tea with tapioca pearls on white background, food photography",
+            "snacks": "Crispy fried chicken cutlet on white background, Taiwanese street food, food photography",
+            "desserts": "Mango shaved ice dessert on white background, colorful toppings, food photography",
+            "meals": "Braised pork rice bento box on white background, Taiwanese comfort food",
+            "packaging": "Eco-friendly drink cup with straw on white background, beverage packaging",
+            "equipment": "Commercial blender on white background, restaurant equipment, product shot",
+            "signage": "LED menu board display on white background, restaurant signage",
+            "ingredients": "Fresh tapioca pearls in bowl on white background, bubble tea ingredient",
+        }
+        prompt = prompts_by_topic.get(topic, random.choice(list(prompts_by_topic.values())))
+
+        # Step 1: Generate source image
+        logger.info(f"[DemoCache] BG removal: generating source image...")
+        t2i_result = await provider.route(
+            TaskType.T2I,
+            {"prompt": prompt, "width": 1024, "height": 1024},
+        )
+        if not t2i_result.get("success"):
+            return {"success": False, "error": "T2I failed"}
+
+        source_url = t2i_result.get("output", {}).get("image_url")
+        if not source_url:
+            return {"success": False, "error": "No image URL from T2I"}
+
+        # Step 2: Remove background
+        logger.info(f"[DemoCache] BG removal: removing background...")
+        rembg_result = await provider.route(
+            TaskType.BACKGROUND_REMOVAL,
+            {"image_url": source_url},
+        )
+        if not rembg_result.get("success"):
+            return {"success": False, "error": "RemBG failed"}
+
+        result_url = rembg_result.get("output", {}).get("image_url")
+        if not result_url:
+            return {"success": False, "error": "No image URL from RemBG"}
+
+        return {
+            "success": True,
+            "topic": topic or "general",
+            "prompt": prompt,
+            "input_image_url": source_url,
+            "result_image_url": result_url,
+        }
+
+    async def _generate_product_scene(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+        """Generate a product scene example on-demand."""
+        product_prompt = "Studio product photo of a clear cup of bubble milk tea with tapioca pearls, centered, clean white background, 8K"
+
+        scene_prompts = {
+            "studio": "professional studio lighting, solid color background, product photography",
+            "nature": "outdoor nature setting, sunlight, leaves, natural environment",
+            "elegant": "warm elegant background, cozy lighting, refined atmosphere",
+            "minimal": "minimalist abstract background, soft shadows, clean composition",
+            "lifestyle": "lifestyle home setting, cozy atmosphere, everyday context",
+            "urban": "urban city backdrop, modern architecture, street style",
+        }
+        scene_prompt = scene_prompts.get(topic, random.choice(list(scene_prompts.values())))
+
+        # Step 1: Generate product
+        logger.info(f"[DemoCache] Product scene: generating product...")
+        t2i_result = await provider.route(TaskType.T2I, {"prompt": product_prompt, "width": 1024, "height": 1024})
+        if not t2i_result.get("success"):
+            return {"success": False}
+
+        product_url = t2i_result.get("output", {}).get("image_url")
+        if not product_url:
+            return {"success": False}
+
+        # Step 2: Remove background
+        logger.info(f"[DemoCache] Product scene: removing background...")
+        rembg = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": product_url})
+        if not rembg.get("success"):
+            return {"success": False}
+
+        # Step 3: Generate scene (using I2I for simplicity, or just return the product in clean bg)
+        logger.info(f"[DemoCache] Product scene: generating scene...")
+        full_scene_prompt = f"{scene_prompt}, product placement, commercial photography, 8K"
+        scene_result = await provider.route(TaskType.T2I, {"prompt": full_scene_prompt, "width": 1024, "height": 1024})
+
+        result_url = scene_result.get("output", {}).get("image_url") if scene_result.get("success") else product_url
+
+        return {
+            "success": True,
+            "topic": topic or "studio",
+            "prompt": f"{product_prompt} | {scene_prompt}",
+            "input_image_url": product_url,
+            "result_image_url": result_url,
+        }
+
+    async def _generate_room_redesign(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+        """Generate a room redesign example on-demand."""
+        room_urls = {
+            "living_room": "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800",
+            "bedroom": "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800",
+            "kitchen": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800",
+            "bathroom": "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800",
+        }
+        room_type = topic if topic in room_urls else random.choice(list(room_urls.keys()))
+        room_url = room_urls[room_type]
+
+        style_prompt = "modern minimalist style, clean lines, neutral colors, photorealistic interior design, 8K"
+
+        logger.info(f"[DemoCache] Room redesign: I2I transform...")
+        result = await provider.route(
+            TaskType.I2I,
+            {"image_url": room_url, "prompt": style_prompt, "strength": 0.65},
+        )
+        if not result.get("success"):
+            return {"success": False}
+
+        result_url = result.get("output", {}).get("image_url")
+        if not result_url:
+            return {"success": False}
+
+        return {
+            "success": True,
+            "topic": room_type,
+            "prompt": style_prompt,
+            "input_image_url": room_url,
+            "result_image_url": result_url,
+        }
+
+    async def _generate_short_video(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+        """Generate a short video example on-demand."""
+        prompts = {
+            "product_showcase": "Cinematic close-up of bubble milk tea being poured, tapioca pearls swirling, 4K",
+            "brand_intro": "Cozy drink shop interior, barista preparing beverage, warm lighting, brand story",
+            "tutorial": "Step by step bubble tea preparation, adding tapioca and milk, instruction video",
+            "promo": "Buy one get one free drink promotion, two colorful beverages, festive graphics",
+        }
+        prompt = prompts.get(topic, random.choice(list(prompts.values())))
+
+        # Step 1: T2I
+        logger.info(f"[DemoCache] Short video: generating source image...")
+        t2i = await provider.route(TaskType.T2I, {"prompt": prompt, "width": 1024, "height": 1024})
+        if not t2i.get("success"):
+            return {"success": False}
+
+        source_url = t2i.get("output", {}).get("image_url")
+        if not source_url:
+            return {"success": False}
+
+        # Step 2: I2V
+        logger.info(f"[DemoCache] Short video: generating video from image...")
+        i2v = await provider.route(TaskType.I2V, {"image_url": source_url, "prompt": prompt})
+        if not i2v.get("success"):
+            return {"success": False}
+
+        video_url = i2v.get("output", {}).get("video_url")
+        if not video_url:
+            return {"success": False}
+
+        return {
+            "success": True,
+            "topic": topic or "product_showcase",
+            "prompt": prompt,
+            "input_image_url": source_url,
+            "result_video_url": video_url,
+        }
+
+    async def _generate_pattern(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+        """Generate a pattern example on-demand."""
+        prompts = {
+            "seamless": "Elegant floral pattern for packaging, rose and navy, seamless tile",
+            "floral": "Cherry blossom pattern for cafe branding, soft pink and white",
+            "geometric": "Modern geometric pattern, triangles black and gold, professional",
+            "abstract": "Marble texture pattern for cosmetics packaging, gold veins",
+            "traditional": "Chinese cloud pattern, red and gold, auspicious design",
+        }
+        prompt = prompts.get(topic, random.choice(list(prompts.values())))
+        full_prompt = f"Seamless pattern design, {prompt}, tileable, high quality, 8K"
+
+        logger.info(f"[DemoCache] Pattern: generating...")
+        t2i = await provider.route(TaskType.T2I, {"prompt": full_prompt, "width": 1024, "height": 1024})
+        if not t2i.get("success"):
+            return {"success": False}
+
+        result_url = t2i.get("output", {}).get("image_url")
+        if not result_url:
+            return {"success": False}
+
+        return {
+            "success": True,
+            "topic": topic or "seamless",
+            "prompt": prompt,
+            "result_image_url": result_url,
+        }
+
+    async def _store_generated_result(
+        self,
+        tool_type: str,
+        topic: str,
+        prompt: str,
+        effect_prompt: Optional[str] = None,
+        input_image_url: Optional[str] = None,
+        result_image_url: Optional[str] = None,
+        result_video_url: Optional[str] = None,
+        input_params: Optional[Dict] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Store an on-demand generated result into Material DB and return as dict."""
+        try:
+            # Resolve tool_type to enum
+            tt = tool_type
+            if isinstance(tool_type, str):
+                tt_lower = tool_type.lower()
+                tt = _TOOL_TYPE_MAP.get(tt_lower, tool_type)
+
+            lookup_hash = _generate_lookup_hash(
+                str(tool_type), prompt, effect_prompt, input_image_url
+            )
+
+            # Check duplicate
+            existing = await self.db.execute(
+                select(Material).where(Material.lookup_hash == lookup_hash)
+            )
+            existing_mat = existing.scalar_one_or_none()
+            if existing_mat:
+                return self._material_to_dict(existing_mat)
+
+            # Watermarked URL = result URL for now (watermarking happens at display)
+            watermarked = result_image_url or result_video_url
+
+            material = Material(
+                lookup_hash=lookup_hash,
+                tool_type=tt,
+                topic=topic,
+                prompt=prompt,
+                effect_prompt=effect_prompt,
+                input_image_url=input_image_url,
+                result_image_url=result_image_url,
+                result_video_url=result_video_url,
+                result_watermarked_url=watermarked,
+                input_params=input_params or {},
+                source=MaterialSource.SEED,
+                status=MaterialStatus.APPROVED,
+                is_active=True,
+                quality_score=0.8,
+                is_featured=False,
+            )
+            self.db.add(material)
+            await self.db.commit()
+            await self.db.refresh(material)
+
+            logger.info(f"[DemoCache] Stored on-demand result: {tool_type}/{topic}")
+            return self._material_to_dict(material)
+
+        except Exception as e:
+            logger.error(f"[DemoCache] Failed to store generated result: {e}", exc_info=True)
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
+            # Return the result even if DB storage failed
+            return {
+                "id": "temp",
+                "tool_type": str(tool_type),
+                "topic": topic,
+                "prompt": prompt,
+                "input_image_url": input_image_url,
+                "result_url": result_image_url or result_video_url,
+                "result_image_url": result_image_url,
+                "result_video_url": result_video_url,
+            }
+
+    # ------------------------------------------------------------------
     # CACHE helpers
     # ------------------------------------------------------------------
 
@@ -397,7 +596,7 @@ class DemoCacheService:
         if not items:
             return
         key = _cache_key(tool_type, topic or "_all")
-        await self.redis.setex(key, CACHE_TTL, json.dumps(items))
+        await self.redis.set(key, json.dumps(items))
 
     async def invalidate_cache(self, tool_type: str, topic: Optional[str] = None):
         if not self.redis:
@@ -409,7 +608,11 @@ class DemoCacheService:
     # ------------------------------------------------------------------
 
     async def _get_from_db(self, tool_type: str, topic: Optional[str]) -> Optional[Dict[str, Any]]:
-        query = select(Material).where(Material.tool_type == tool_type, Material.is_active == True)
+        query = select(Material).where(
+            Material.tool_type == tool_type,
+            Material.is_active == True,
+            Material.status.in_([MaterialStatus.APPROVED, MaterialStatus.FEATURED]),
+        )
         if topic:
             query = query.where(Material.topic == topic)
         query = query.order_by(func.random()).limit(1)
@@ -418,7 +621,11 @@ class DemoCacheService:
         return self._material_to_dict(m) if m else None
 
     async def _get_many_from_db(self, tool_type: str, topic: Optional[str], limit: int = 50) -> List[Dict[str, Any]]:
-        query = select(Material).where(Material.tool_type == tool_type, Material.is_active == True)
+        query = select(Material).where(
+            Material.tool_type == tool_type,
+            Material.is_active == True,
+            Material.status.in_([MaterialStatus.APPROVED, MaterialStatus.FEATURED]),
+        )
         if topic:
             query = query.where(Material.topic == topic)
         query = query.order_by(Material.created_at.desc()).limit(limit)

@@ -408,11 +408,39 @@
   },
   "dashboard": {
     "welcome": "Bienvenido de vuelta",
+    "subtitle": "Aquí está el resumen de tu cuenta",
     "totalCredits": "Créditos totales",
+    "remainingCredits": "Créditos restantes",
+    "totalOf": "Total {n} créditos",
     "usedThisWeek": "Usados esta semana",
+    "weeklyLimit": "Límite semanal {n} créditos",
     "recentWorks": "Trabajos recientes",
     "quickActions": "Acciones rápidas",
-    "viewAll": "Ver todo"
+    "viewAll": "Ver todo",
+    "currentPlan": "Plan actual",
+    "upgradePlan": "Mejorar plan",
+    "manageOrUpgradePlan": "Gestionar o mejorar plan",
+    "invoices": "Facturas",
+    "referrals": "Referidos",
+    "socialMedia": "Redes sociales",
+    "view": "Ver",
+    "noWorks": "Sin trabajos aún",
+    "noWorksDesc": "¡Empieza a crear con cualquier herramienta de IA!",
+    "startCreating": "Empezar a crear ahora",
+    "tools": {
+      "shortVideo": "Video corto IA",
+      "avatar": "Avatar IA",
+      "tryOn": "Prueba virtual",
+      "productScene": "Escena de producto",
+      "bgRemoval": "Eliminar fondo",
+      "roomRedesign": "Rediseño de espacio"
+    },
+    "time": {
+      "justNow": "Ahora mismo",
+      "hoursAgo": "Hace {n} horas",
+      "yesterday": "Ayer",
+      "daysAgo": "Hace {n} días"
+    }
   },
   "pricing": {
     "title": "Elige tu plan",
@@ -717,7 +745,12 @@
       "imageTranslator": { "name": "Traductor de Imágenes", "desc": "Traduce con precisión el texto de imágenes" },
       "aiShadows": { "name": "Sombras IA", "desc": "Añade sombras naturales a cualquier objeto" },
       "roomRedesign": { "name": "Rediseño de Habitación", "desc": "Rediseño de espacios interiores con IA" },
-      "bgRemoval": { "name": "Eliminar Fondo", "desc": "Elimina fondos de imágenes gratis" }
+      "bgRemoval": { "name": "Eliminar Fondo", "desc": "Elimina fondos de imágenes gratis" },
+      "textToVideo": { "name": "Texto a Video", "desc": "Genera videos a partir de descripciones de texto" },
+      "hdUpscale": { "name": "Mejora HD", "desc": "Mejora imágenes a resolución 4K" },
+      "imageTransform": { "name": "Transformar Imagen", "desc": "Transformación de estilo de imagen con IA" },
+      "videoTransform": { "name": "Transformar Video", "desc": "Transformación de estilo de video con IA" },
+      "patternGenerate": { "name": "Diseño de Patrones", "desc": "Genera patrones sin costuras para branding" }
     },
     "categories": {
       "fashionAI": "IA de Moda",

@@ -67,13 +67,14 @@ services:
   # FastAPI Backend
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: vidgo_backend
     entrypoint: []
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
       - ./backend:/app
+      - ./mcp-servers:/app/mcp-servers
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
       - vidgo_tryon_garments:/app/static/tryon_garments
@@ -107,13 +108,14 @@ services:
   # ARQ Worker (Background Tasks)
   worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: vidgo_worker
     entrypoint: []  # Skip entrypoint for worker
     command: arq app.worker.WorkerSettings
     volumes:
       - ./backend:/app
+      - ./mcp-servers:/app/mcp-servers
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
       - vidgo_tryon_garments:/app/static/tryon_garments
@@ -133,8 +135,8 @@ services:
   # Usage: docker compose --profile init up init-materials
   init-materials:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: vidgo_init_materials
     entrypoint: []
     command: >
@@ -153,6 +155,7 @@ services:
              echo 'Pre-generation complete!'"
     volumes:
       - ./backend:/app
+      - ./mcp-servers:/app/mcp-servers
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
       - vidgo_tryon_garments:/app/static/tryon_garments
@@ -177,13 +180,14 @@ services:
   #        docker compose --profile tools run --rm pregenerate python -m scripts.main_pregenerate --tool room_redesign --limit 40
   pregenerate:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: vidgo_pregenerate
     entrypoint: []
     command: ["python", "-m", "scripts.main_pregenerate", "--all"]
     volumes:
       - ./backend:/app
+      - ./mcp-servers:/app/mcp-servers
       - vidgo_generated:/app/static/generated
       - vidgo_materials:/app/static/materials
       - vidgo_tryon_garments:/app/static/tryon_garments

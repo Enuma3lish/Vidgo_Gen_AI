@@ -19,7 +19,8 @@ const {
   loadDemoTemplates,
   demoTemplates,
   tryPrompts,
-  dbEmpty
+  dbEmpty,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 // Tab state
@@ -92,15 +93,16 @@ async function loadStyles() {
   }
 }
 
-function dataURItoBlob(dataURI: string): Blob {
-  const byteString = atob(dataURI.split(',')[1])
-  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
-  const ab = new ArrayBuffer(byteString.length)
-  const ia = new Uint8Array(ab)
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i)
-  }
-  return new Blob([ab], { type: mimeString })
+function dataURItoBlob(dataURI: string): Blob | null {
+  if (!dataURI || !dataURI.includes(',') || !dataURI.startsWith('data:')) return null
+  try {
+    const byteString = atob(dataURI.split(',')[1])
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
+    const ab = new ArrayBuffer(byteString.length)
+    const ia = new Uint8Array(ab)
+    for (let i = 0; i < byteString.length; i++) { ia[i] = byteString.charCodeAt(i) }
+    return new Blob([ab], { type: mimeString })
+  } catch { return null }
 }
 
 async function applyStyle() {
@@ -109,18 +111,14 @@ async function applyStyle() {
   isProcessing.value = true
   try {
     if (isDemoUser.value) {
-      const selectedExample = demoImages.value[selectedDemoIndex.value]
-      if (selectedExample?.result) {
-        resultImage.value = selectedExample.result
-        uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
-        return
-      }
-
-      const matchingTemplate = demoTemplates.value.find(t => t.id === selectedExample?.id)
-      if (matchingTemplate?.result_watermarked_url || matchingTemplate?.result_image_url) {
-        resultImage.value = matchingTemplate.result_watermarked_url || matchingTemplate.result_image_url || null
-        uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
-        return
+      const selectedTemplateId = demoImages.value[selectedDemoIndex.value]?.id
+      if (selectedTemplateId) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(selectedTemplateId)
+        if (demoResultUrl) {
+          resultImage.value = demoResultUrl
+          uiStore.showSuccess(isZh.value ? '處理成功（示範）' : 'Processed successfully (Demo)')
+          return
+        }
       }
 
       uiStore.showInfo(isZh.value ? '此圖片尚未生成結果，請訂閱以使用完整功能' : 'This image is not pre-generated. Subscribe for full features.')
@@ -132,12 +130,16 @@ async function applyStyle() {
       return
     }
 
-    const uploadResult = await demoApi.uploadImage(
-      dataURItoBlob(uploadedImage.value) as File
-    )
+    let imgUrl = uploadedImage.value
+    if (uploadedImage.value.startsWith('data:')) {
+      const blob = dataURItoBlob(uploadedImage.value)
+      if (!blob) { uiStore.showError(isZh.value ? '圖片格式無效' : 'Invalid image format.'); return }
+      const uploaded = await demoApi.uploadImage(blob as File)
+      imgUrl = uploaded.url
+    }
 
     const response = await effectsApi.applyStyle({
-      image_url: uploadResult.url,
+      image_url: imgUrl,
       style_id: selectedStyle.value,
       strength: 0.8
     })
@@ -172,12 +174,16 @@ async function applyTransform() {
 
   isProcessing.value = true
   try {
-    const uploadResult = await demoApi.uploadImage(
-      dataURItoBlob(uploadedImage.value) as File
-    )
+    let transformUrl = uploadedImage.value
+    if (uploadedImage.value.startsWith('data:')) {
+      const blob = dataURItoBlob(uploadedImage.value)
+      if (!blob) { uiStore.showError(isZh.value ? '圖片格式無效' : 'Invalid image format.'); return }
+      const uploaded = await demoApi.uploadImage(blob as File)
+      transformUrl = uploaded.url
+    }
 
     const response = await effectsApi.imageTransform({
-      image_url: uploadResult.url,
+      image_url: transformUrl,
       prompt: transformPrompt.value,
       strength: transformStrength.value
     })

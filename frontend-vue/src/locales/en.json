@@ -454,13 +454,39 @@
   },
   "dashboard": {
     "welcome": "Welcome back",
+    "subtitle": "Here is your account overview",
     "totalCredits": "Total Credits",
+    "remainingCredits": "Remaining Credits",
+    "totalOf": "Total {n} credits",
     "usedThisWeek": "Used This Week",
+    "weeklyLimit": "Weekly limit {n} credits",
     "recentWorks": "Recent Works",
     "quickActions": "Quick Actions",
     "viewAll": "View All",
     "currentPlan": "Current Plan",
-    "manageOrUpgradePlan": "Manage or upgrade plan"
+    "upgradePlan": "Upgrade Plan",
+    "manageOrUpgradePlan": "Manage or upgrade plan",
+    "invoices": "Invoices",
+    "referrals": "Referrals",
+    "socialMedia": "Social Media",
+    "view": "View",
+    "noWorks": "No works yet",
+    "noWorksDesc": "Start creating with any AI tool!",
+    "startCreating": "Start Creating Now",
+    "tools": {
+      "shortVideo": "AI Short Video",
+      "avatar": "AI Avatar",
+      "tryOn": "Virtual Try-On",
+      "productScene": "Product Scene",
+      "bgRemoval": "Background Removal",
+      "roomRedesign": "Room Redesign"
+    },
+    "time": {
+      "justNow": "Just now",
+      "hoursAgo": "{n} hours ago",
+      "yesterday": "Yesterday",
+      "daysAgo": "{n} days ago"
+    }
   },
   "pricing": {
     "title": "Choose Your Plan",
@@ -840,7 +866,12 @@
       "imageTranslator": { "name": "Image Translator", "desc": "Accurately translate image text" },
       "aiShadows": { "name": "AI Shadows", "desc": "Add natural shadows to any object" },
       "roomRedesign": { "name": "Room Redesign", "desc": "AI-powered interior space redesign" },
-      "bgRemoval": { "name": "Remove Background", "desc": "Remove image backgrounds for free" }
+      "bgRemoval": { "name": "Remove Background", "desc": "Remove image backgrounds for free" },
+      "textToVideo": { "name": "Text to Video", "desc": "Generate videos from text descriptions" },
+      "hdUpscale": { "name": "HD Upscale", "desc": "Upscale images to 4K high resolution" },
+      "imageTransform": { "name": "Image Transform", "desc": "AI-powered image style transformation" },
+      "videoTransform": { "name": "Video Transform", "desc": "AI-powered video style transformation" },
+      "patternGenerate": { "name": "Pattern Design", "desc": "Generate seamless patterns for branding" }
     },
     "categories": {
       "fashionAI": "Fashion AI",

@@ -1,16 +1,25 @@
 # VidGo API Workflow
 
 > Current system architecture and API flow documentation.
-> Last Updated: 2026-03-18
+> Last Updated: 2026-03-29
 
 ---
 
 ## System Overview
 
 VidGo operates in **Dual Mode**:
-- **Demo/free users:** watermarked pre-generated results from Material DB (no runtime API calls)
+- **Demo/free users:** developer/admin pre-generated results only. Serving is read-only from Material DB and Redis cache. No public runtime demo generation.
 - **Subscribers:** real-time AI generation via external APIs, full-quality downloads
 - 14-day media retention policy with automatic cleanup
+
+### Demo Example Serving Contract
+
+- Demo examples are generated manually by developers/admins via `scripts.main_pregenerate` or `POST /api/v1/admin/generate-demo`
+- Developers must call the real provider APIs for every default example, verify the result is correct, and then place that finished example into Redis for serving
+- Material DB is the durable source of truth for examples
+- Redis is a non-expiring read cache warmed from Material DB
+- User expectation: default examples are cache-backed examples only; user clicks must never trigger real provider generation for demo content
+- Normal backend startup validates materials non-blockingly; it does not pregenerate examples automatically
 
 ### Stack
 
@@ -88,27 +97,58 @@ get_current_user_optional()     → User | None  (for tools - demo-ready)
 
 ## 2. Demo/Preset Flow (Anonymous Users)
 
-All demo endpoints: **no auth required**, results **watermarked**.
+All primary demo endpoints are **no auth required**, and the visible results are **pre-generated** and **watermarked for free users**.
 
 ```
+Developer/admin generates example
+  → Call real provider API for the default prompt/input/effect combination
+  → Verify the returned result is the intended example
+  → CLI: python -m scripts.main_pregenerate --tool <tool>
+    or Admin API: POST /api/v1/admin/generate-demo
+  → Store approved Material row in DB
+  → Put the finished example into Redis demo cache
+
 User visits tool page (e.g. /tools/effects)
-      ↓
+  ↓
 GET /api/v1/demo/presets/{tool_type}
-  → Returns pre-generated examples from Material DB
-  → Each preset has: input_image, result_image, watermarked_url
-      ↓
-User clicks "Apply" / selects a preset
-      ↓
+  → Returns pre-generated examples from Redis/Material-backed cache data
+  → Each preset includes input media, result media, topic, and metadata
+  ↓
+User clicks a preset/example
+  ↓
 POST /api/v1/demo/use-preset
-  {preset_id, params}
-      ↓
-  Lookup Material DB by tool_type + topic
-  Return watermarked result (NO external API calls)
-      ↓
-User sees watermarked result
-  → Download blocked (403)
-  → CTA: "Subscribe for Full Access"
+  {preset_id, session_id}
+  ↓
+  Lookup Material DB by preset/material ID
+  Increment use_count
+  Return watermarked URL for free users or full-quality URL for subscribers
+  ↓
+No external API generation occurs during the click flow
 ```
+
+### Demo Example Lifecycle
+
+```
+Developer/admin trigger
+  ↓
+Mapping-based generation
+  - scripts.main_pregenerate (PiAPI / Pollo / A2E clients by tool)
+  - /api/v1/admin/generate-demo (single example generation)
+  ↓
+Material DB (APPROVED / FEATURED rows)
+  ↓
+Redis demo cache (read cache, no TTL)
+  ↓
+Frontend preset listing and demo retrieval
+  ↓
+Subscriber-only download or subscriber real-time generation via /tools/*
+```
+
+### User And Developer Expectations
+
+- Developers own the correctness of every default example by generating it with the real API before release.
+- Redis must already contain the finished example before any demo user tries that default case.
+- Demo users only query existing cached examples; they do not create new demo outputs.
 
 ### Demo Endpoints
 
@@ -118,19 +158,19 @@ User sees watermarked result
 | `GET /demo/topics/{tool_type}` | Topics for specific tool |
 | `GET /demo/presets/{tool_type}` | Pre-generated examples (watermarked) |
 | `GET /demo/try-prompts/{tool_type}` | Selectable prompt options |
-| `POST /demo/use-preset` | Apply preset → watermarked result |
-| `GET /demo/download/{material_id}` | Download (subscriber-only full quality) |
+| `POST /demo/use-preset` | Lookup preset by Material ID, increment use count, return watermarked/full result |
+| `GET /demo/download/{material_id}` | Subscriber-only redirect to the full-quality preset result |
 | `GET /demo/inspiration` | Inspiration gallery |
-| `POST /demo/generate` | Demo video generation |
-| `POST /demo/generate/paid` | Paid generation |
+| `POST /demo/generate` | Legacy runtime generation endpoint, now disabled (`410`) |
+| `POST /demo/generate/paid` | Legacy runtime generation endpoint, now disabled (`410`) |
 | `GET /demo/tool-showcases/{category}` | Tool showcase examples |
 | `GET /demo/tool-showcases/{category}/{tool_id}` | Specific tool showcase |
 | `POST /demo/tool-showcases/save` | Save showcase |
 | `GET /demo/tool-categories` | Tool category list |
-| `POST /demo/search` | Search demos |
-| `POST /demo/generate-image` | Generate image |
-| `POST /demo/generate-realtime` | Realtime demo |
-| `GET /demo/random` | Random demo image |
+| `POST /demo/search` | Legacy runtime demo search/generate endpoint, now disabled (`410`) |
+| `POST /demo/generate-image` | Legacy runtime image-generation endpoint, now disabled (`410`) |
+| `POST /demo/generate-realtime` | Legacy runtime video-generation endpoint, now disabled (`410`) |
+| `GET /demo/random` | Legacy random ImageDemo suggestion endpoint |
 | `POST /demo/analyze` | Prompt analysis |
 
 ---
@@ -148,12 +188,16 @@ POST /api/v1/tools/{tool}
       ↓                    ↓
     YES (subscriber)     NO (demo user)
       ↓                    ↓
-  Check credits        Lookup Material DB
+  Check credits        Read pre-generated demo from Redis or Material DB
   Call external API    Return watermarked result
   Save to UserGen      Return {credits_used: 0}
   Deduct credits
   Return result
 ```
+
+Notes:
+- Backend demo helpers under `/tools/*`, `/effects/*`, and `/generate/*` now read pre-generated demos only.
+- Vue demo actions now resolve the selected default example through `/demo/use-preset` instead of using local result URLs.
 
 ### Tool Endpoints
 
@@ -314,9 +358,9 @@ External AI services (no failover):
 
 | Task | Provider | Backup | Note |
 |------|----------|--------|------|
-| ALL generation (T2I, I2I, I2V, T2V, V2V, Interior, Avatar, BG Removal, Effects, 3D, Try-On, Upscale) | PiAPI | NONE | If down → "service updating, please wait" |
+| Runtime subscriber generation (T2I, I2I, I2V, T2V, V2V, Interior, Avatar, BG Removal, Effects, 3D, Try-On, Upscale) | PiAPI-based provider router | NONE | If down → generation endpoints fail gracefully |
 | Content Moderation | Gemini | NONE | Detect illegal/inappropriate uploads |
-| Material Pre-generation | Gemini | NONE | Generate seed images for demo mode |
+| Developer/admin example generation | `scripts.main_pregenerate` and `/api/v1/admin/generate-demo` | NONE | Uses PiAPI, Pollo, and A2E clients depending on tool |
 
 ### TaskType Enum
 ```python
@@ -338,8 +382,10 @@ class TaskType(str, Enum):
 
 ### Provider Configuration
 - **PiAPI**: Base URL `https://api.piapi.ai/api/v1`, X-API-Key header
-- **Gemini**: Google Generative AI API for moderation and material pre-generation
-- **No failover**: If generation service is down, all endpoints return "Our service is currently being updated. Please wait a moment!"
+- **Pollo**: Used by pregeneration flows for video generation where applicable
+- **A2E**: Used by pregeneration flows for AI avatar generation
+- **Gemini**: Used for moderation and some legacy/demo support paths
+- **No failover in the demo serving path**: pre-generated demo retrieval does not call external providers at request time
 - **Provider names never exposed** to end users
 
 ---
@@ -466,9 +512,12 @@ POST /api/v1/subscriptions/subscribe
 | Endpoint | Description |
 |----------|-------------|
 | `GET /plans` | All plans |
+| `GET /plans/comparison` | Detailed plan comparison table |
 | `GET /plans/current` | Current user's subscription |
-| `GET /plans/with-subscription` | Plans with subscription info |
-| `GET /plans/{plan_id}` | Plan details |
+| `POST /plans/upgrade` | Upgrade to a higher plan |
+| `POST /plans/downgrade` | Downgrade plan |
+| `GET /plans/check-permission` | Check if a plan/user can use a service |
+| `GET /plans/check-concurrent` | Check concurrent generation limit |
 
 ---
 
@@ -734,6 +783,12 @@ Every hour:
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health` | Health check + material validation |
-| `GET /materials/status` | Material DB status |
-| `POST /materials/generate` | Trigger material generation |
+| `GET /health` | Health check + non-blocking material validation status |
+| `GET /materials/status` | Material DB coverage/status report |
+| `POST /materials/generate` | Manual material generation trigger for the legacy material-generator service |
+
+### Operational Notes
+
+- Normal backend runtime does not auto-pregenerate demo examples.
+- Developer/operator workflows may still run `scripts.main_pregenerate`, `scripts.seed_materials_if_empty`, or the `init-materials` Docker profile manually.
+- The backend Docker entrypoint script is present, but the default `docker-compose.yml` backend service currently overrides the entrypoint and starts `uvicorn` directly.

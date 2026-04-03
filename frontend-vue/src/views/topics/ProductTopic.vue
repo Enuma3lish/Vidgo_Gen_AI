@@ -24,7 +24,8 @@ const {
   canDownloadOriginal,
   loadDemoTemplates,
   demoTemplates,
-  isLoadingTemplates
+  isLoadingTemplates,
+  resolveDemoTemplateResultUrl
 } = useDemoMode()
 
 // Tools in this topic
@@ -185,30 +186,28 @@ async function generateScene() {
   result.value = null
 
   try {
-    // For demo users, find the pre-generated result matching BOTH product AND scene
+    // For demo users, resolve the exact product+scene preset through backend lookup
     if (isDemoUser.value) {
-      // Simulate processing delay for demo effect
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Get the selected product's input_image_url
       const selectedProduct = demoImages.value.find(p => p.id === selectedDemoImageId.value)
       const productInputUrl = selectedProduct?.preview || uploadedImage.value
 
-      // Find template matching the product input URL AND selected scene
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
-        // Match by product_id OR input_image_url
         const matchesProduct = params.product_id === selectedProduct?.input_params?.product_id ||
                               t.input_image_url === productInputUrl
-        // Match by scene_type OR topic
         const matchesScene = params.scene_type === selectedScene.value || t.topic === selectedScene.value
-        return matchesProduct && matchesScene && (t.result_watermarked_url || t.result_image_url)
+        return matchesProduct && matchesScene
       })
 
-      if (template?.result_watermarked_url || template?.result_image_url) {
-        result.value = template.result_watermarked_url || template.result_image_url || null
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
-        return
+      if (template?.id) {
+        const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
+        if (demoResultUrl) {
+          result.value = demoResultUrl
+          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          return
+        }
       }
 
       // No matching pre-generated result found
@@ -247,14 +246,17 @@ async function removeBackground() {
   result.value = null
 
   try {
-    // For demo users with selected template, use cached result
+    // For demo users, resolve the selected preset through backend lookup
     if (isDemoUser.value && selectedDemoImageId.value) {
-      const template = demoTemplates.value.find(t => t.id === selectedDemoImageId.value)
-      if (template?.result_watermarked_url || template?.result_image_url) {
-        result.value = template.result_watermarked_url || template.result_image_url || null
+      const demoResultUrl = await resolveDemoTemplateResultUrl(selectedDemoImageId.value)
+      if (demoResultUrl) {
+        result.value = demoResultUrl
         uiStore.showSuccess(isZh.value ? '去背成功（示範）' : 'Background removed (Demo)')
         return
       }
+
+      uiStore.showInfo(isZh.value ? '此範例尚未生成，請訂閱以使用完整功能' : 'This example is not pre-generated. Subscribe for full features.')
+      return
     }
 
     // First upload the image to get an HTTP URL

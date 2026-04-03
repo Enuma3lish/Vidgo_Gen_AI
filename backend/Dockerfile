@@ -6,15 +6,32 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# 系統依賴
+# ── System dependencies + Node.js (for MCP servers) ──
 RUN apt-get update && apt-get install -y \
-    curl postgresql-client redis-tools ffmpeg dos2unix \
+    curl postgresql-client redis-tools ffmpeg dos2unix gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# 1. 先複製 requirements
-COPY requirements.txt .
+# Verify Node.js
+RUN node --version && npm --version
 
-# 2. 核彈級清理 (Nuclear Cleanup)
+# ── 1. Install Pollo MCP server (npm global) ──
+RUN npm install -g pollo-mcp && \
+    echo "✅ pollo-mcp installed"
+
+# ── 2. Build PiAPI MCP server (from source) ──
+# Build context is project root (.), so mcp-servers/ is at the top level
+COPY mcp-servers/piapi-mcp-server /app/mcp-servers/piapi-mcp-server
+RUN cd /app/mcp-servers/piapi-mcp-server && \
+    npm install && \
+    npm run build && \
+    echo "✅ piapi-mcp-server built: $(ls dist/index.js)"
+
+# ── 3. Python dependencies ──
+# Build context is project root; requirements.txt is in backend/
+COPY backend/requirements.txt .
+
 RUN pip install --upgrade pip && \
     pip uninstall -y \
     google-genai \
@@ -24,34 +41,33 @@ RUN pip install --upgrade pip && \
     protobuf \
     || true
 
-# 3. 安裝所有依賴 (包含 requirements.txt 裡的 google-genai)
-# 因為你的 requirements.txt 已經包含 google-genai>=0.2.0，這裡直接跑這行即可
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. 第一次檢查 (確認套件安裝成功)
-RUN python -c "from google import genai; print('✅ Check 1: Packages installed successfully')"
+# Check packages
+RUN python -c "from google import genai; print('✅ google-genai OK')"
+RUN python -c "import mcp; print('✅ mcp SDK OK')"
+RUN python -c "from google.cloud import storage; print('✅ google-cloud-storage OK')"
 
-# =========================================================
-# 5. 關鍵修改：先 COPY 程式碼，再做最後檢查！
-# =========================================================
-COPY . .
+# ── 4. Copy application code ──
+# Build context is project root; copy backend/ contents into /app
+COPY backend/ .
 
-# 建立靜態目錄 (tryon_garments for cached Virtual Try-On garment images)
+# Static directories
 RUN mkdir -p /app/static/generated /app/static/materials /app/static/tryon_garments
 
-# Convert entrypoint script from Windows CRLF to Unix LF
-# The script was already copied via "COPY . ." above
-# dos2unix is installed in the apt-get step at the top
+# Convert entrypoint script CRLF → LF
 RUN dos2unix /app/scripts/docker_entrypoint.sh && \
     chmod +x /app/scripts/docker_entrypoint.sh && \
     echo "=== Verifying script (first 5 lines) ===" && \
     head -5 /app/scripts/docker_entrypoint.sh && \
-    echo "=== Verifying no CRLF (should show \\n only, not \\r) ===" && \
+    echo "=== Verifying no CRLF ===" && \
     od -c /app/scripts/docker_entrypoint.sh | head -3
 
-# 6. 最終檢查 (Final Verification)
-# 如果這裡失敗，代表你 COPY 進來的檔案裡有 "google" 資料夾或 "google.py" 蓋掉了套件
-RUN python -c "from google import genai; print('✅ Final Check: Import works with project files!')"
+# Final verification
+RUN python -c "from google import genai; print('✅ Final: google-genai import OK with project files')"
+
+# ── MCP server path environment ──
+ENV PIAPI_MCP_PATH=/app/mcp-servers/piapi-mcp-server/dist/index.js
 
 EXPOSE 8000
 ENTRYPOINT ["/bin/bash", "/app/scripts/docker_entrypoint.sh"]

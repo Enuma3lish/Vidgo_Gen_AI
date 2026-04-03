@@ -274,6 +274,7 @@ async def delete_generation(
     await db.commit()
 
 
+@router.get("/dashboard", response_model=UserStatsResponse)
 @router.get("/stats", response_model=UserStatsResponse)
 async def get_user_stats(
     current_user: User = Depends(get_current_user),

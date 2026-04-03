@@ -253,32 +253,34 @@ class PiAPIClient:
         if not self.api_key:
             return {"success": False, "error": "PiAPI key not configured"}
 
-        # Resolve model image: use public URL if available (Kling may reject base64)
+        # Kling Virtual Try-On requires images as URLs (NOT base64).
+        # See: https://piapi.ai/docs/kling-api/virtual-try-on-api
+        # Always resolve to public URLs — never send base64 for try-on.
         public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
-        static_path = None
-        if model_image_url.startswith("/static/"):
-            static_path = model_image_url
-        elif model_image_url.startswith("/app/static/"):
-            static_path = "/static/" + model_image_url[len("/app/static/"):]
-        if public_base and static_path:
-            model_input = f"{public_base}{static_path}"
-            logger.info(f"[PiAPI] Virtual Try-On: model as public URL: {model_input[:60]}...")
-        else:
-            model_input = self._resolve_image_input(model_image_url)
-            logger.info(f"[PiAPI] Virtual Try-On: model={'base64...' if model_input.startswith('data:') else model_input[:50]}...")
 
-        # Resolve garment: use public URL if local tryon_garments path and PUBLIC_APP_URL set
-        garment_static = None
-        if garment_image_url:
-            if garment_image_url.startswith("/static/tryon_garments/"):
-                garment_static = garment_image_url
-            elif garment_image_url.startswith("/app/static/tryon_garments/"):
-                garment_static = "/static/tryon_garments/" + garment_image_url[len("/app/static/tryon_garments/"):]
-        if public_base and garment_static:
-            garment_input = f"{public_base}{garment_static}"
-            logger.info(f"[PiAPI] Virtual Try-On: garment as public URL: {garment_input[:60]}...")
-        else:
-            garment_input = self._resolve_image_input(garment_image_url) if garment_image_url else None
+        def _to_public_url(img_url: str) -> str:
+            """Convert any /static/ path to public URL. Pass through http(s) URLs."""
+            if not img_url:
+                return ""
+            if img_url.startswith(("http://", "https://")):
+                return img_url
+            # Local path → public URL
+            if img_url.startswith("/app/static/"):
+                static = "/static/" + img_url[len("/app/static/"):]
+            elif img_url.startswith("/static/"):
+                static = img_url
+            else:
+                return img_url
+            if public_base:
+                return f"{public_base}{static}"
+            logger.warning(f"[PiAPI] Try-On: no PUBLIC_APP_URL set, local path {img_url} may not be accessible")
+            return img_url
+
+        model_input = _to_public_url(model_image_url)
+        logger.info(f"[PiAPI] Virtual Try-On: model={model_input[:80]}...")
+
+        garment_input = _to_public_url(garment_image_url) if garment_image_url else None
+        logger.info(f"[PiAPI] Virtual Try-On: garment={garment_input[:80] if garment_input else 'None'}...")
 
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
@@ -293,9 +295,9 @@ class PiAPIClient:
                     input_data["dress_input"] = garment_input
                 else:
                     if upper_garment_url:
-                        input_data["upper_input"] = self._resolve_image_input(upper_garment_url)
+                        input_data["upper_input"] = _to_public_url(upper_garment_url)
                     if lower_garment_url:
-                        input_data["lower_input"] = self._resolve_image_input(lower_garment_url)
+                        input_data["lower_input"] = _to_public_url(lower_garment_url)
 
                 # Create task
                 response = await client.post(

@@ -126,8 +126,9 @@ async def paddle_webhook(
         return {"success": True}
 
     except Exception as e:
-        logger.error(f"Paddle webhook error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Paddle webhook error: {e}", exc_info=True)
+        # Return 200 to prevent Paddle from retrying indefinitely on app errors
+        return {"success": False, "error": str(e)}
 
 
 async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
@@ -209,21 +210,43 @@ async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
 
 
 async def handle_subscription_created(db: AsyncSession, data: dict):
-    """Handle subscription created event."""
-    subscription_id = data.get("id")
-    logger.info(f"Subscription created: {subscription_id}")
+    """Handle subscription created event from Paddle."""
+    paddle_sub_id = data.get("id")
+    custom_data = data.get("custom_data", {})
+    user_id = custom_data.get("user_id")
+    logger.info(f"Subscription created: {paddle_sub_id} for user {user_id}")
 
 
 async def handle_subscription_updated(db: AsyncSession, data: dict):
-    """Handle subscription updated event."""
-    subscription_id = data.get("id")
-    logger.info(f"Subscription updated: {subscription_id}")
+    """Handle subscription updated event from Paddle (plan change, billing update)."""
+    paddle_sub_id = data.get("id")
+    status = data.get("status")
+    custom_data = data.get("custom_data", {})
+    user_id = custom_data.get("user_id")
+    logger.info(f"Subscription updated: {paddle_sub_id} status={status} user={user_id}")
 
 
 async def handle_subscription_canceled(db: AsyncSession, data: dict):
-    """Handle subscription cancelled event."""
-    subscription_id = data.get("id")
-    logger.info(f"Subscription canceled: {subscription_id}")
+    """Handle subscription cancelled event from Paddle."""
+    paddle_sub_id = data.get("id")
+    custom_data = data.get("custom_data", {})
+    user_id = custom_data.get("user_id")
+
+    if user_id:
+        try:
+            from app.services.subscription_service import get_subscription_service
+            subscription_service = get_subscription_service()
+            from uuid import UUID
+            result = await subscription_service.cancel_subscription(
+                db=db,
+                user_id=UUID(user_id),
+                request_refund=False
+            )
+            logger.info(f"Subscription canceled via webhook: {paddle_sub_id} user={user_id} result={result.get('success')}")
+        except Exception as e:
+            logger.error(f"Failed to cancel subscription via webhook: {e}")
+    else:
+        logger.warning(f"Subscription canceled but no user_id in custom_data: {paddle_sub_id}")
 
 
 @router.get("/paddle/customer-portal")

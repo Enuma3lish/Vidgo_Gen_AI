@@ -43,15 +43,19 @@ class PaddleService:
     def __init__(self):
         self.api_key = getattr(settings, 'PADDLE_API_KEY', '')
         self.public_key = getattr(settings, 'PADDLE_PUBLIC_KEY', '')
+        self.webhook_secret = getattr(settings, 'PADDLE_WEBHOOK_SECRET', '')
         self.is_mock = not bool(self.api_key)
 
-        # Use sandbox in development
-        self.base_url = self.SANDBOX_URL if settings.DEBUG else self.PRODUCTION_URL
+        # Detect sandbox keys (pdl_sdbx_) and always route them to sandbox URL
+        is_sandbox_key = self.api_key.startswith('pdl_sdbx_')
+        paddle_env = getattr(settings, 'PADDLE_ENV', 'sandbox')
+        self.is_sandbox = is_sandbox_key or paddle_env == 'sandbox'
+        self.base_url = self.SANDBOX_URL if self.is_sandbox else self.PRODUCTION_URL
 
         if self.is_mock:
             logger.warning("Paddle API key not configured - running in MOCK mode")
         else:
-            logger.info(f"Paddle service initialized (sandbox={settings.DEBUG})")
+            logger.info(f"Paddle service initialized (sandbox={self.is_sandbox}, url={self.base_url})")
 
     def _get_headers(self) -> Dict[str, str]:
         """Get API headers."""
@@ -387,31 +391,26 @@ class PaddleService:
         """
         Verify Paddle webhook signature.
 
-        Args:
-            payload: Raw request body
-            signature: Paddle-Signature header
-
-        Returns:
-            True if valid, False otherwise
+        Paddle Billing uses HMAC-SHA256 with the webhook secret key.
+        Signature header format: ts=<timestamp>;h1=<hash>
+        Signed payload: "<timestamp>:<raw_body>"
         """
         if self.is_mock:
             return True
 
-        if not self.public_key:
-            logger.warning("Paddle public key not configured")
-            return False
+        secret = self.webhook_secret or self.public_key
+        if not secret:
+            logger.warning("Paddle webhook secret not configured — skipping verification")
+            return True
 
         try:
-            # Parse the signature header
-            # Format: ts=timestamp;h1=signature
             parts = dict(p.split("=", 1) for p in signature.split(";"))
             ts = parts.get("ts", "")
             h1 = parts.get("h1", "")
 
-            # Compute expected signature
             signed_payload = f"{ts}:{payload.decode()}"
             expected = hmac.new(
-                self.public_key.encode(),
+                secret.encode(),
                 signed_payload.encode(),
                 hashlib.sha256
             ).hexdigest()

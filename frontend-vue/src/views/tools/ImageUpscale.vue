@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
 import { toolsApi } from '@/api'
@@ -8,7 +7,6 @@ import ImageUploader from '@/components/common/ImageUploader.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
-const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 

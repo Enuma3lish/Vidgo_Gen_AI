@@ -152,14 +152,22 @@ class MCPClientManager:
 
         pollo_key = os.getenv("POLLO_API_KEY", "")
         if pollo_key:
+            pollo_env = {
+                **os.environ,
+                "POLLO_AI_API_KEY": pollo_key,
+                "POLLO_AI_BASE_URL": os.getenv("POLLO_AI_BASE_URL", "https://pollo.ai"),
+                "POLLO_AI_HOME_DIR": os.getenv("POLLO_AI_HOME_DIR", "/tmp/pollo_videos"),
+            }
+            # Optional: restrict which models are loaded as MCP tools
+            if os.getenv("POLLO_AI_VIDEO_MODEL_TEXT"):
+                pollo_env["POLLO_AI_VIDEO_MODEL_TEXT"] = os.getenv("POLLO_AI_VIDEO_MODEL_TEXT")
+            if os.getenv("POLLO_AI_VIDEO_MODEL_IMG"):
+                pollo_env["POLLO_AI_VIDEO_MODEL_IMG"] = os.getenv("POLLO_AI_VIDEO_MODEL_IMG")
+
             servers["pollo"] = StdioServerParameters(
                 command="npx",
                 args=["-y", "mcp-server-pollo"],
-                env={
-                    **os.environ,
-                    "POLLO_AI_API_KEY": pollo_key,
-                    "POLLO_AI_BASE_URL": "https://pollo.ai",
-                },
+                env=pollo_env,
             )
 
         piapi_key = os.getenv("PIAPI_KEY", "")

@@ -16,7 +16,11 @@ import { useI18n } from 'vue-i18n'
 import apiClient from '@/api/client'
 
 const GEO_DETECTED_KEY = 'vidgo_geo_language_detected'
-const LOCALE_KEY = 'vidgo_locale'
+// Must match the key used by main.ts + stores/ui.ts (LanguageSelector).
+// Previously this file used a different key ('vidgo_locale'), which caused
+// F-005: manual language selection would survive reload via main.ts init,
+// but then initLanguage() would override it from its own separate key.
+const LOCALE_KEY = 'locale'
 
 export function useGeoLanguage() {
   const { locale } = useI18n()

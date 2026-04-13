@@ -51,6 +51,7 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
 from app.core.config import get_settings
+from app.services.gcs_storage_service import GCSStorageService
 
 # Import Topic Registry - Single Source of Truth for topics
 from app.config.topic_registry import (
@@ -1061,6 +1062,15 @@ class VidGoPreGenerator:
         self.piapi = PiAPIClient(os.getenv("PIAPI_KEY", ""))
         self.pollo = PolloClient(os.getenv("POLLO_API_KEY", ""))
         self.a2e = A2EClient(os.getenv("A2E_API_KEY", ""))
+        # GCS storage — all Material URLs must resolve through here so nothing
+        # stored in the DB depends on ephemeral Cloud Run filesystem or PiAPI
+        # temp CDN URLs (14-day expiry).
+        self.gcs = GCSStorageService()
+        if not self.gcs.enabled:
+            logger.warning(
+                "GCS_BUCKET not set — Material URLs will remain as local/temp URLs. "
+                "Set GCS_BUCKET env var before running pre-generation against production."
+            )
         # Ensure model library and try-on garments directories exist
         self.MODEL_LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
         self.TRYON_GARMENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1157,10 +1167,22 @@ class VidGoPreGenerator:
         tool_type: str,
         prompt: str,
         effect_prompt: str = None,
-        input_image_url: str = None
+        input_image_url: str = None,
+        extra_context: str = "",
     ) -> str:
-        """Generate unique lookup hash for Material."""
-        content = f"{tool_type}:{prompt}:{effect_prompt or ''}:{input_image_url or ''}"
+        """Generate unique lookup hash for Material.
+
+        `extra_context` lets callers add tool-specific disambiguators that
+        aren't captured by prompt/effect_prompt/input_image_url alone.
+        For try_on this is the model_id — without it, two rows with the
+        same clothing but different models collide on the same hash and
+        get deduped, which is why regen produced only 4 try_on rows all
+        for female-1 instead of the expected N models × M clothings.
+        """
+        content = (
+            f"{tool_type}:{prompt}:{effect_prompt or ''}:"
+            f"{input_image_url or ''}:{extra_context}"
+        )
         return hashlib.sha256(content.encode()).hexdigest()[:64]
 
     # ========================================================================
@@ -1169,13 +1191,22 @@ class VidGoPreGenerator:
 
     async def generate_ai_avatar(self, limit: int = 10):
         """
-        Generate AI Avatar videos.
+        Generate AI Avatar videos using PiAPI Kling Avatar (F-017 fix).
 
-        Uses A2E API with pre-created characters (anchors).
-        Iterates through available characters × scripts × languages.
+        Previously used A2E with pre-created characters (anchor_id), but A2E's
+        free-tier API returns HTTP 403 — characters cannot be listed without a
+        Pro/Max subscription. Switched to PiAPI's Kling Avatar via the existing
+        PiAPIProvider, which:
+          1. Generates speech from the script via F5-TTS
+          2. Sends portrait image + audio to Kling Avatar
+          3. Returns a lip-synced talking-head video
+
+        Source portraits are generated on-the-fly via PiAPI T2I (4 portraits,
+        2 female + 2 male) and uploaded to GCS so Kling can fetch them.
+        Frontend avatar_id mapping (female-1..2, male-1..2) is preserved.
         """
         logger.info("=" * 60)
-        logger.info("AI AVATAR - Using A2E Pre-created Characters")
+        logger.info("AI AVATAR - Using PiAPI Kling Avatar (F-017 fix)")
         logger.info("=" * 60)
 
         self.stats["by_tool"]["ai_avatar"] = {"success": 0, "failed": 0}
@@ -1183,54 +1214,95 @@ class VidGoPreGenerator:
         count = 0
         topic_counts: Dict[str, int] = {}
 
-        # Get available characters from A2E
-        characters = await self.a2e.get_characters()
-        if not characters:
-            logger.error("No A2E characters available! Create characters via A2E web interface first.")
+        # ─────────────────────────────────────────────────────────────────────
+        # Step 1: Generate 4 portrait avatars via T2I (2 female + 2 male).
+        # Each portrait is uploaded to GCS so PiAPI Kling Avatar can fetch it.
+        # ─────────────────────────────────────────────────────────────────────
+        PORTRAIT_PROMPTS = [
+            (
+                "female-1",
+                "female",
+                "Professional headshot portrait of a friendly young Taiwanese woman in her late 20s, "
+                "clean light studio background, warm natural smile, business casual blouse, soft "
+                "studio lighting, sharp focus, photo realistic, 85mm lens",
+            ),
+            (
+                "female-2",
+                "female",
+                "Professional headshot portrait of a young Taiwanese woman in her early 30s, "
+                "clean white background, confident friendly expression, modern smart casual top, "
+                "studio lighting, photo realistic, 85mm lens",
+            ),
+            (
+                "male-1",
+                "male",
+                "Professional headshot portrait of a friendly young Taiwanese man in his late 20s, "
+                "clean light studio background, warm natural smile, business casual shirt, soft "
+                "studio lighting, sharp focus, photo realistic, 85mm lens",
+            ),
+            (
+                "male-2",
+                "male",
+                "Professional headshot portrait of a young Taiwanese man in his early 30s, "
+                "clean white background, confident friendly expression, modern smart casual shirt, "
+                "studio lighting, photo realistic, 85mm lens",
+            ),
+        ]
+
+        portraits: List[Dict[str, str]] = []
+        for avatar_id, gender, prompt in PORTRAIT_PROMPTS:
+            logger.info(f"  Generating portrait: {avatar_id}")
+            try:
+                t2i = await self.piapi.generate_image(
+                    prompt=prompt, width=768, height=1024
+                )
+            except Exception as e:
+                logger.error(f"  Portrait T2I exception for {avatar_id}: {e}")
+                continue
+            if not t2i.get("success"):
+                logger.error(
+                    f"  Portrait T2I failed for {avatar_id}: {t2i.get('error')}"
+                )
+                continue
+            portrait_local = t2i.get("image_url")
+            if not portrait_local:
+                logger.error(f"  No image_url returned for {avatar_id}")
+                continue
+            # Upload to GCS so Kling Avatar can fetch it (same fix as F-018 try_on)
+            gcs_url = await self._local_to_gcs_for_piapi(portrait_local, "image")
+            if not gcs_url or not gcs_url.startswith("https://storage.googleapis.com/"):
+                logger.error(f"  Failed to persist portrait {avatar_id} to GCS")
+                continue
+            portraits.append({"avatar_id": avatar_id, "gender": gender, "url": gcs_url})
+            logger.info(f"  Portrait {avatar_id} ready: {gcs_url[:80]}")
+
+        if not portraits:
+            logger.error("No portraits generated — cannot proceed with ai_avatar")
             return
 
-        logger.info(f"Found {len(characters)} A2E characters")
-        for char in characters[:3]:
-            logger.info(f"  - {char.get('_id')}: {char.get('name')}")
+        male_portraits = [p for p in portraits if p["gender"] == "male"]
+        female_portraits = [p for p in portraits if p["gender"] == "female"]
+        logger.info(
+            f"  Portraits ready: {len(female_portraits)} female, {len(male_portraits)} male"
+        )
 
-        # Partition characters by gender (name must match face: male name on male face, female on female)
-        # Names must match AVATAR_MAPPING: female avatars = female names, male = male names
-        FEMALE_NAMES = [
-            "女", "female", "woman", "girl",
-            "怡君", "雅婷", "佳穎", "淑芬", "美玲", "雅琪", "怡萱", "欣怡", "雯婷", "筱涵",
-            "小美", "小雅", "小玲", "小萱", "小婷", "小芬", "小琪", "小涵", "小敏", "小慧",
-            "詩涵", "宜蓁", "心怡", "佳慧", "婉婷", "靜怡", "雅文", "思穎", "珮瑜", "曉雯",
-            "yi-jun", "ya-ting", "jia-ying", "shu-fen",
-        ]
-        MALE_NAMES = [
-            "男", "male", "man", "guy",
-            "志偉", "冠宇", "宗翰", "家豪", "承恩", "柏翰", "宇軒", "俊宏", "建宏", "明哲",
-            "建明", "俊傑", "志豪", "冠廷", "柏均", "彥廷", "育成", "嘉偉", "信宏", "政翰",
-            "小明", "小偉", "小豪", "小杰", "小軒", "小翰", "小宏", "小凱", "小龍", "小剛",
-            "zhi-wei", "guan-yu", "zong-han", "jia-hao",
-        ]
+        # ─────────────────────────────────────────────────────────────────────
+        # Step 2: Lazy import the PiAPI provider (avoids global import cost
+        # when the script is imported for other tools)
+        # ─────────────────────────────────────────────────────────────────────
+        try:
+            from app.providers.piapi_provider import PiAPIProvider
+            piapi_provider = PiAPIProvider()
+        except Exception as e:
+            logger.error(f"Failed to instantiate PiAPIProvider: {e}")
+            return
 
-        def _char_gender(char):
-            name = (char.get("name") or "").lower()
-            if any(kw in name for kw in FEMALE_NAMES):
-                return "female"
-            if any(kw in name for kw in MALE_NAMES):
-                return "male"
-            return "female" if hash(char.get("_id", "")) % 2 == 0 else "male"
-
-        male_chars = [c for c in characters if _char_gender(c) == "male"]
-        female_chars = [c for c in characters if _char_gender(c) == "female"]
-        if not male_chars:
-            male_chars = characters[: (len(characters) + 1) // 2]
-        if not female_chars:
-            female_chars = characters[len(male_chars):]
-        logger.info(f"  Male characters: {len(male_chars)}, Female: {len(female_chars)}")
-
-        # Most AI Avatars must be Chinese (zh-TW) - VidGo targets SMB/Taiwan market
-        # Language order: zh-TW first, then en
+        # ─────────────────────────────────────────────────────────────────────
+        # Step 3: Iterate scripts × languages × portraits, calling PiAPI's
+        # Kling Avatar for each combination
+        # ─────────────────────────────────────────────────────────────────────
         lang_order = ["zh-TW", "en"]
-
-        char_index_by_gender = {"male": 0, "female": 0}
+        portrait_idx_by_gender = {"male": 0, "female": 0}
 
         for topic, scripts in SCRIPT_MAPPING.items():
             if self.per_topic_limit is None and count >= limit:
@@ -1247,32 +1319,48 @@ class VidGoPreGenerator:
 
                     # Use script's preferred_gender if set (e.g. nail salon → female),
                     # otherwise alternate male/female for variety
-                    avatar_gender = script.get("preferred_gender") or ("female" if count % 2 == 0 else "male")
-                    pool = female_chars if avatar_gender == "female" else male_chars
-                    idx = char_index_by_gender[avatar_gender] % max(len(pool), 1)
-                    char = pool[idx] if pool else characters[count % len(characters)]
-                    char_index_by_gender[avatar_gender] += 1
-
-                    anchor_id = char.get("_id")
-                    input_image_url = char.get("video_cover")
+                    avatar_gender = script.get("preferred_gender") or (
+                        "female" if count % 2 == 0 else "male"
+                    )
+                    pool = female_portraits if avatar_gender == "female" else male_portraits
+                    if not pool:
+                        # If we somehow have no portraits of the requested gender,
+                        # fall back to whatever we do have
+                        pool = portraits
+                    idx = portrait_idx_by_gender[avatar_gender] % max(len(pool), 1)
+                    portrait = pool[idx]
+                    portrait_idx_by_gender[avatar_gender] += 1
 
                     script_text = script["text_zh"] if language == "zh-TW" else script["text_en"]
 
-                    logger.info(f"[{count+1}] Character: {char.get('name')} (gender={avatar_gender}) | Topic: {topic} | Script: {script['id']} | Lang: {language}")
-                    logger.info(f"  Script: {script_text[:40]}...")
+                    logger.info(
+                        f"[{count+1}] Avatar: {portrait['avatar_id']} ({avatar_gender}) | "
+                        f"Topic: {topic} | Script: {script['id']} | Lang: {language}"
+                    )
+                    logger.info(f"  Script: {script_text[:60]}...")
 
                     start_time = time.time()
 
-                    # Call A2E API with gender for voice matching
-                    result = await self.a2e.generate_avatar(
-                        script=script_text,
-                        language=language,
-                        anchor_id=anchor_id,
-                        gender=avatar_gender,  # Pass gender for TTS voice matching
-                        save_locally=True
-                    )
+                    # Call PiAPI Kling Avatar via the provider (handles F5-TTS
+                    # internally, then sends image + audio to Kling)
+                    try:
+                        result = await piapi_provider.generate_avatar(
+                            {
+                                "image_url": portrait["url"],
+                                "script": script_text,
+                                "language": language,
+                                "mode": "std",
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"  PiAPI Avatar exception: {e}")
+                        self.stats["failed"] += 1
+                        self.stats["by_tool"]["ai_avatar"]["failed"] += 1
+                        count += 1
+                        self._topic_mark_generated(topic_key, topic_counts)
+                        continue
 
-                    if not result["success"]:
+                    if not result.get("success"):
                         logger.error(f"  Failed: {result.get('error', 'Unknown')}")
                         self.stats["failed"] += 1
                         self.stats["by_tool"]["ai_avatar"]["failed"] += 1
@@ -1280,49 +1368,66 @@ class VidGoPreGenerator:
                         self._topic_mark_generated(topic_key, topic_counts)
                         continue
 
-                    # Generate frontend-compatible avatar_id — cycle through 1..4
-                    gender_count = sum(1 for e in self.local_results.get("ai_avatar", [])
-                                      if e.get("input_params", {}).get("voice_gender") == avatar_gender)
-                    frontend_avatar_id = f"{avatar_gender}-{(gender_count % 4) + 1}"  # female-1..4, male-1..4 cycling
-                    
-                    # Store locally - input_image_url matches the character used
-                    # Ensure input_image_url is not empty (5C: avatar image consistency)
-                    avatar_input_image = result.get("input_image_url") or input_image_url
-                    if not avatar_input_image:
-                        avatar_input_image = char.get("avatar") or char.get("video_cover") or ""
-                        logger.warning("  No input_image_url for avatar, using character thumbnail")
+                    output = result.get("output") or {}
+                    video_url = output.get("video_url")
+                    if not video_url:
+                        # Try nested Kling shape (works[].video.url)
+                        works = output.get("works") or []
+                        if works and isinstance(works[0], dict):
+                            v_obj = works[0].get("video") or {}
+                            if isinstance(v_obj, dict):
+                                video_url = v_obj.get("url")
+                            elif isinstance(v_obj, str):
+                                video_url = v_obj
+
+                    if not video_url:
+                        logger.error(
+                            f"  No video_url in PiAPI Avatar response: {output}"
+                        )
+                        self.stats["failed"] += 1
+                        self.stats["by_tool"]["ai_avatar"]["failed"] += 1
+                        count += 1
+                        self._topic_mark_generated(topic_key, topic_counts)
+                        continue
 
                     local_entry = {
-                        "avatar_id": anchor_id,
-                        "script_id": script["id"],
                         "topic": topic,
                         "language": language,
                         "prompt": script_text,
                         "prompt_zh": script_text if language == "zh-TW" else None,
                         "prompt_en": script_text if language == "en" else None,
-                        "input_image_url": avatar_input_image,
-                        "result_video_url": result["video_url"],
+                        "input_image_url": portrait["url"],
+                        "result_video_url": video_url,
+                        # hash_context differentiates (avatar, script, language)
+                        # combos so each one produces a unique lookup_hash row.
+                        "hash_context": (
+                            f"avatar={portrait['avatar_id']}:"
+                            f"script={script['id']}:"
+                            f"lang={language}"
+                        ),
                         "input_params": {
-                            "anchor_id": anchor_id,
-                            "character_name": char.get("name"),
+                            "avatar_id": portrait["avatar_id"],
+                            "voice_gender": portrait["gender"],
                             "script_id": script["id"],
                             "language": language,
-                            # NEW: Frontend-compatible fields
-                            "avatar_id": frontend_avatar_id,
-                            "voice_gender": avatar_gender
                         },
-                        "generation_steps": [{
-                            "step": 1,
-                            "api": "a2e",
-                            "action": "avatar_generation",
-                            "result_url": result["video_url"],
-                            "duration_ms": int((time.time() - start_time) * 1000)
-                        }],
-                        "generation_cost": 0.10
+                        "generation_steps": [
+                            {
+                                "step": 1,
+                                "api": "piapi_kling_avatar",
+                                "action": "avatar_generation",
+                                "result_url": video_url,
+                                "duration_ms": int((time.time() - start_time) * 1000),
+                            }
+                        ],
+                        "generation_cost": 0.30,
                     }
                     self.local_results["ai_avatar"].append(local_entry)
 
-                    logger.info(f"  Success: {result['video_url']} (avatar_id={frontend_avatar_id}, gender={avatar_gender})")
+                    logger.info(
+                        f"  Success: {video_url[:80]} "
+                        f"(avatar_id={portrait['avatar_id']}, gender={avatar_gender})"
+                    )
                     self.stats["success"] += 1
                     self.stats["by_tool"]["ai_avatar"]["success"] += 1
                     count += 1
@@ -1950,11 +2055,31 @@ class VidGoPreGenerator:
                     # Prefer local garment image so PiAPI can get our URL (PUBLIC_APP_URL) or base64
                     garment_url = await self._ensure_garment_local(cloth)
 
+                    # F-018 fix: upload both to GCS before calling PiAPI.
+                    # The old code relied on PUBLIC_APP_URL/static/... which is
+                    # unreachable because the Cloud Run Job's ephemeral FS is
+                    # separate from the backend service's. GCS is a single
+                    # global bucket both containers can write/read.
+                    #
+                    # F-019 fix: Kling Virtual Try-On rejects any image whose
+                    # smaller dimension is below 512px. The garment catalog
+                    # contains ~400x533 thumbnails, so we upscale them here
+                    # before upload. Models are already 1024+ but we pass the
+                    # same min_dim for defense in depth — it's a no-op when the
+                    # source is already big enough.
+                    model_url = await self._local_to_gcs_for_piapi(
+                        model_url, "image", min_dim=512
+                    )
+                    garment_url = await self._local_to_gcs_for_piapi(
+                        garment_url, "image", min_dim=512
+                    )
+
                     logger.info(f"  Model: {model_url[:60]}...")
                     logger.info(f"  Garment: {garment_url[:60]}...")
 
                     # Use REAL Virtual Try-On API (Kling AI via PiAPI)
-                    # Model/garment sent as local path -> base64 or PUBLIC_APP_URL URL
+                    # Model/garment are GCS URLs after F-018 fix — PiAPI can
+                    # download them from the public bucket.
                     tryon_result = await self.piapi.virtual_try_on(
                         model_image_url=model_url,
                         garment_image_url=garment_url
@@ -1992,6 +2117,12 @@ class VidGoPreGenerator:
                         "prompt_zh": cloth.get("name_zh", cloth["name"]),
                         "input_image_url": cloth["image_url"],  # CLOTHING preview
                         "result_image_url": result_url,   # Model wearing clothing (REAL try-on)
+                        # hash_context makes each (model_id, clothing_id) pair produce
+                        # a unique lookup_hash. Without this, all 4 combos with the same
+                        # clothing but different models would collide and get deduped
+                        # down to a single row — which is why our first try_on regen
+                        # only produced 4 rows all for female-1.
+                        "hash_context": f"model={model_id}",
                         "input_params": {
                             "model_id": model_id,
                             "model_url": model_data["url"],
@@ -2347,6 +2478,215 @@ class VidGoPreGenerator:
     # DATABASE STORAGE
     # ========================================================================
 
+    async def _to_gcs_url(
+        self,
+        url: Optional[str],
+        media_type: str = "image",
+    ) -> Optional[str]:
+        """
+        Resolve any URL to a permanent GCS public URL before writing to the DB.
+
+        Handles three cases:
+        - Already a GCS URL (`https://storage.googleapis.com/...`) → return as-is.
+        - Local `/static/...` path → read the file from `/app/static/...` on disk
+          and upload the bytes directly to GCS.
+        - External HTTP(S) URL (PiAPI temp, Pollo temp, etc.) → hand off to
+          `gcs.persist_url()` which downloads and re-uploads.
+
+        Returns None on any failure so the caller can decide whether to drop
+        the field or fail the row entirely. Never returns `/static/...` and
+        never returns a provider temp URL.
+        """
+        if not url:
+            return None
+
+        # Already persisted
+        if url.startswith("https://storage.googleapis.com/"):
+            return url
+
+        # GCS not configured — surface the failure instead of writing a dead URL
+        if not self.gcs.enabled:
+            logger.error(
+                f"  [GCS] Cannot persist {url[:80]} — GCS_BUCKET not configured"
+            )
+            return None
+
+        try:
+            # Local file → upload bytes directly
+            if url.startswith("/static/"):
+                from pathlib import Path as _P
+                local_path = _P(f"/app{url}")
+                if not local_path.exists():
+                    logger.warning(
+                        f"  [GCS] Local file missing, cannot persist: {local_path}"
+                    )
+                    return None
+                data = local_path.read_bytes()
+                ext = local_path.suffix or ".png"
+                content_type = {
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".webp": "image/webp",
+                    ".mp4": "video/mp4",
+                    ".webm": "video/webm",
+                    ".wav": "audio/wav",
+                    ".mp3": "audio/mpeg",
+                    ".glb": "model/gltf-binary",
+                }.get(ext.lower(), "application/octet-stream")
+                blob_name = f"generated/{media_type}/{local_path.stem}{ext}"
+                public_url = self.gcs.upload_public(
+                    data, blob_name, content_type=content_type
+                )
+                logger.info(f"  [GCS] Local → {blob_name}")
+                return public_url
+
+            # External URL → download + re-upload
+            if url.startswith("http://") or url.startswith("https://"):
+                public_url = await self.gcs.persist_url(
+                    source_url=url,
+                    media_type=media_type,
+                )
+                # persist_url returns the source URL unchanged on failure —
+                # treat that as a failure so we never write a temp URL to DB.
+                if public_url == url:
+                    logger.warning(
+                        f"  [GCS] persist_url returned source unchanged for {url[:80]}"
+                    )
+                    return None
+                return public_url
+
+        except Exception as e:
+            logger.error(f"  [GCS] Failed to persist {url[:80]}: {e}")
+            return None
+
+        # Unknown scheme — refuse
+        logger.warning(f"  [GCS] Unknown URL scheme, cannot persist: {url[:80]}")
+        return None
+
+    async def _local_to_gcs_for_piapi(
+        self,
+        url: str,
+        media_type: str = "image",
+        min_dim: int = 0,
+    ) -> str:
+        """
+        Upload a local /static/* or /app/static/* file to GCS and return the
+        public GCS URL, so external providers (PiAPI, Kling, Pollo) can
+        actually fetch it. Optionally upscales images below `min_dim` pixels
+        on their smaller side before upload.
+
+        Context for F-018: the pre-generation pipeline writes files to the
+        Cloud Run Job container's ephemeral /app/static/ filesystem. The
+        PiAPI client then prepends PUBLIC_APP_URL and hands the URL to the
+        Kling Try-On API. But `https://api.vidgo.co/static/...` resolves to
+        the backend service container, which has a separate ephemeral FS
+        and never saw those files. Result: PiAPI gets 404 and the try-on
+        call fails with "failed to download input image".
+
+        Context for F-019: Kling Virtual Try-On rejects images whose smaller
+        dimension is below 512 pixels with "image dimension less than 512px".
+        The garment catalog contains thumbnails at ~400x533. Pass min_dim=512
+        to upscale (LANCZOS) before upload so Kling accepts them.
+
+        Passthrough URLs (http(s) + GCS) are returned unchanged. Upload failures
+        fall back to the original URL so the caller still produces a clear
+        provider error rather than a silent hang.
+        """
+        if not url:
+            return url
+        if url.startswith("https://storage.googleapis.com/"):
+            return url
+        if url.startswith(("http://", "https://")):
+            # Already a remote URL (garment preview from a CDN, etc.) — pass through
+            return url
+        # Normalize /app/static/... → /static/... so _to_gcs_url recognizes it
+        normalized = url[len("/app"):] if url.startswith("/app/static/") else url
+        if not normalized.startswith("/static/"):
+            # Not a local path we know how to handle (e.g. base64 data URL)
+            return url
+
+        # Optional: upscale images that are too small for the provider's minimum.
+        # Always uses a unique blob name so PiAPI / Kling can never hit a stale
+        # CDN-cached version of a previous upload at the same URL (F-019 round 2).
+        if min_dim > 0 and media_type == "image" and self.gcs.enabled:
+            try:
+                from pathlib import Path as _P
+                from PIL import Image as _PImg
+                import io as _io
+                import uuid as _uuid
+
+                local_path = _P(f"/app{normalized}")
+                if local_path.exists():
+                    with open(local_path, "rb") as f:
+                        raw = f.read()
+                    img = _PImg.open(_io.BytesIO(raw))
+                    w, h = img.size
+                    if min(w, h) < min_dim:
+                        scale = min_dim / float(min(w, h))
+                        new_w = int(round(w * scale))
+                        new_h = int(round(h * scale))
+                        if img.mode not in ("RGB", "RGBA"):
+                            img = img.convert("RGB")
+                        img = img.resize((new_w, new_h), _PImg.Resampling.LANCZOS)
+                        ext = local_path.suffix.lower() or ".jpg"
+                        fmt = "JPEG" if ext in (".jpg", ".jpeg") else "PNG"
+                        if fmt == "JPEG" and img.mode == "RGBA":
+                            img = img.convert("RGB")
+                        buf = _io.BytesIO()
+                        img.save(buf, format=fmt, quality=95)
+                        data = buf.getvalue()
+                        content_type = "image/jpeg" if fmt == "JPEG" else "image/png"
+                        # Unique suffix prevents PiAPI / Kling from serving a
+                        # stale edge-cached copy of the pre-upscale version.
+                        suffix = _uuid.uuid4().hex[:8]
+                        blob_name = (
+                            f"generated/{media_type}/tryon/"
+                            f"{local_path.stem}_{suffix}{ext}"
+                        )
+                        gcs_url = self.gcs.upload_public(
+                            data, blob_name, content_type=content_type
+                        )
+                        logger.info(
+                            f"  [Try-On] Upscaled {local_path.name} {w}x{h} → "
+                            f"{new_w}x{new_h}, uploaded to {gcs_url[:80]}"
+                        )
+                        return gcs_url
+                    else:
+                        # Already big enough — still upload with a unique name to
+                        # bypass any prior cached version at the canonical URL.
+                        ext = local_path.suffix.lower() or ".jpg"
+                        content_type = (
+                            "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
+                        )
+                        suffix = _uuid.uuid4().hex[:8]
+                        blob_name = (
+                            f"generated/{media_type}/tryon/"
+                            f"{local_path.stem}_{suffix}{ext}"
+                        )
+                        gcs_url = self.gcs.upload_public(
+                            raw, blob_name, content_type=content_type
+                        )
+                        logger.info(
+                            f"  [Try-On] Re-uploaded {local_path.name} "
+                            f"({w}x{h}, already ≥ {min_dim}) to {gcs_url[:80]}"
+                        )
+                        return gcs_url
+            except Exception as e:
+                logger.warning(
+                    f"  [Try-On] Upscale check failed for {url[:60]}: {e}, falling back"
+                )
+
+        # No upscale needed (or not an image) — delegate to _to_gcs_url
+        gcs_url = await self._to_gcs_url(normalized, media_type)
+        if gcs_url:
+            logger.info(f"  [Try-On] Uploaded local asset to GCS: {url[:60]} → {gcs_url[:80]}")
+            return gcs_url
+        # Upload failed — return original so the caller can still try,
+        # and we get a clearer error from the provider instead of silent fallback
+        logger.warning(f"  [Try-On] GCS upload failed for {url[:60]}, using original URL")
+        return url
+
     async def _apply_watermark_to_local_image(self, image_path: str) -> Optional[str]:
         """
         Apply watermark to a local image file.
@@ -2419,16 +2759,28 @@ class VidGoPreGenerator:
             # Composite
             watermarked = Image.alpha_composite(image, watermark)
             watermarked_rgb = watermarked.convert("RGB")
-            
-            # Save watermarked version with _wm suffix
-            wm_path = abs_path.parent / f"{abs_path.stem}_wm{abs_path.suffix}"
-            watermarked_rgb.save(wm_path, quality=95)
-            
-            # Return the static path
-            wm_static_path = str(wm_path).replace("/app", "")
-            logger.info(f"  Watermarked: {wm_static_path}")
-            return wm_static_path
-            
+
+            # Encode to PNG bytes in-memory (no local file) and upload to GCS.
+            # Never return a /static/*.png path — production Cloud Run has
+            # no persistent filesystem for /static/generated/.
+            buf = io.BytesIO()
+            watermarked_rgb.save(buf, format="PNG", quality=95)
+            wm_bytes = buf.getvalue()
+
+            if not self.gcs.enabled:
+                logger.error(
+                    "  [Watermark] GCS_BUCKET not configured — cannot upload "
+                    "watermarked image, refusing to return a dead /static path"
+                )
+                return None
+
+            blob_name = f"generated/watermarked/{abs_path.stem}_wm.png"
+            public_url = self.gcs.upload_public(
+                wm_bytes, blob_name, content_type="image/png"
+            )
+            logger.info(f"  Watermarked → {blob_name}")
+            return public_url
+
         except Exception as e:
             logger.error(f"Failed to apply watermark: {e}")
             return None
@@ -2463,7 +2815,8 @@ class VidGoPreGenerator:
                     tool_type=tool_name,
                     prompt=entry["prompt"],
                     effect_prompt=entry.get("effect_prompt"),
-                    input_image_url=entry.get("input_image_url")
+                    input_image_url=entry.get("input_image_url"),
+                    extra_context=entry.get("hash_context", ""),
                 )
 
                 # Check if already exists
@@ -2479,19 +2832,39 @@ class VidGoPreGenerator:
                 if entry.get("metadata"):
                     input_params.update(entry["metadata"])
 
-                # Apply watermark to result images (for image-based tools)
-                result_image_url = entry.get("result_image_url")
-                result_video_url = entry.get("result_video_url")
-                result_watermarked_url = None
-                
-                # For images stored locally, apply watermark
-                if result_image_url and result_image_url.startswith("/static/"):
-                    result_watermarked_url = await self._apply_watermark_to_local_image(result_image_url)
-                
-                # For videos, use the video URL as watermarked (video watermarking is more complex)
-                # In preset-only mode, videos are displayed directly without download
+                # Apply watermark to result images (for image-based tools).
+                # This now returns a GCS URL directly — no more /static/*_wm.png.
+                raw_result_image_url = entry.get("result_image_url")
+                raw_result_video_url = entry.get("result_video_url")
+                result_watermarked_url: Optional[str] = None
+
+                if raw_result_image_url and raw_result_image_url.startswith("/static/"):
+                    result_watermarked_url = await self._apply_watermark_to_local_image(
+                        raw_result_image_url
+                    )
+
+                # Persist every URL we're about to write to the DB to GCS.
+                # _to_gcs_url handles /static/ paths, temp CDN URLs, and no-ops
+                # GCS URLs that are already persistent.
+                raw_input_image_url = entry.get("input_image_url")
+                input_image_url = await self._to_gcs_url(raw_input_image_url, "image")
+                result_image_url = await self._to_gcs_url(raw_result_image_url, "image")
+                result_video_url = await self._to_gcs_url(raw_result_video_url, "video")
+
+                # Watermarked fallback: if we didn't make a watermark but we have
+                # a persisted result image/video, fall back to that.
                 if not result_watermarked_url:
                     result_watermarked_url = result_video_url or result_image_url
+
+                # Refuse to write a row that has NO persistable result at all.
+                # Better to fail loudly in logs than publish a dead row to the DB.
+                if not result_image_url and not result_video_url:
+                    logger.error(
+                        f"  [{tool_name}] Refusing to store row {lookup_hash[:12]} "
+                        f"— no persistable result URL (raw image={raw_result_image_url}, "
+                        f"raw video={raw_result_video_url})"
+                    )
+                    continue
 
                 material = Material(
                     lookup_hash=lookup_hash,
@@ -2504,7 +2877,7 @@ class VidGoPreGenerator:
                     prompt_zh=entry.get("prompt_zh"),
                     effect_prompt=entry.get("effect_prompt"),
                     effect_prompt_zh=entry.get("effect_prompt_zh"),
-                    input_image_url=entry.get("input_image_url"),
+                    input_image_url=input_image_url,
                     input_params=input_params,
                     generation_steps=entry.get("generation_steps", []),
                     generation_cost_usd=entry.get("generation_cost", 0),

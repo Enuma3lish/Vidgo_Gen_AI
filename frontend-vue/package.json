@@ -14,7 +14,7 @@
     "vue-router": "^4.3.0",
     "pinia": "^2.1.7",
     "vue-i18n": "^9.10.2",
-    "axios": "^1.6.8",
+    "axios": "^1.7.7",
     "@vueuse/core": "^10.9.0",
     "@headlessui/vue": "^1.7.19",
     "@heroicons/vue": "^2.1.1",

@@ -14,6 +14,7 @@ VidGo is a comprehensive AI platform that enables e-commerce businesses to creat
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
+- [Accessing the Application](#accessing-the-application)
 - [Configuration](#configuration)
 - [Docker Services](#docker-services)
 - [Development](#development)
@@ -362,11 +363,86 @@ Vidgo_Gen_AI/
    docker-compose --profile init up init-materials
    ```
 
-4. **Access the application**
-   - Frontend: http://localhost:8501
-   - Backend API: http://localhost:8001
-   - API Docs: http://localhost:8001/docs
-   - Email Testing: http://localhost:8025 (Mailpit)
+4. **Access the application** — see the [Accessing the Application](#accessing-the-application) section below.
+
+---
+
+## Accessing the Application
+
+VidGo runs in two environments: your **local Docker stack** for development, and the **GCP Cloud Run** deployment in the `vidgo-ai` project for production. Use the relevant section below.
+
+### Docker environment (local)
+
+After `docker compose up -d` completes and `docker compose ps` shows every service `healthy`, open these URLs in a browser:
+
+| Surface | URL | Purpose |
+|---|---|---|
+| Frontend (Vue app) | http://localhost:8501 | The site itself — landing, pricing, tools, dashboard |
+| Backend API | http://localhost:8001 | Raw FastAPI server (for direct API calls) |
+| Swagger / OpenAPI docs | http://localhost:8001/docs | Interactive API reference |
+| ReDoc | http://localhost:8001/redoc | Alternative API reference |
+| Mailpit (inbox) | http://localhost:8025 | All outbound email — **email verification codes land here** during local signup |
+| Postgres (psql) | `localhost:5433` | DB user `postgres`, DB name `vidgo` |
+| Redis | `localhost:6380` | Cache + ARQ queue |
+
+**Internal container ports** (referenced in `docker-compose.yml`, not reachable from host):
+backend `:8000`, frontend `:5173`, postgres `:5432`, redis `:6379`.
+
+**Sign in as admin locally:**
+```
+Email:    admin@vidgo.ai
+Password: admin123
+```
+Override via `FIRST_SUPERUSER_EMAIL` / `FIRST_SUPERUSER_PASSWORD` in `backend/.env`.
+
+**Sign up a fresh user locally:** register at http://localhost:8501/auth/register, then open http://localhost:8025 (Mailpit) to read the verification code — no real inbox needed.
+
+**Common issues:**
+- `localhost:8501` hangs or 502s → frontend container not healthy yet; run `docker compose logs -f frontend`.
+- `localhost:8001/docs` returns 500 on first hit → backend is still running migrations / material pregen; watch `docker compose logs -f backend` until it prints `Uvicorn running on …`.
+- Port already in use → another service is bound to 8501/8001/5433/6380/8025; stop it or remap in `docker-compose.yml`.
+- Reset everything: `docker compose down -v` (⚠ wipes volumes including Postgres data and pre-generated materials).
+
+### GCP environment (production — Cloud Run)
+
+The production deployment lives in GCP project **`vidgo-ai`**, region **`asia-east1`** (Taiwan). Each service is an independent Cloud Run revision behind the default `*.run.app` URL.
+
+| Service | URL |
+|---|---|
+| Frontend (Vue app) | https://vidgo-frontend-38714015566.asia-east1.run.app |
+| Backend API | https://vidgo-backend-38714015566.asia-east1.run.app |
+| Worker (background jobs, no public UI) | https://vidgo-worker-38714015566.asia-east1.run.app |
+
+The `38714015566` segment is the Cloud Run service number for project `vidgo-ai`. If Cloud Run re-issues URLs or you map a custom domain, re-fetch them with:
+
+```bash
+gcloud run services list --project vidgo-ai --region asia-east1
+```
+
+**Health check without a browser:**
+```bash
+curl -I https://vidgo-frontend-38714015566.asia-east1.run.app
+curl -s https://vidgo-backend-38714015566.asia-east1.run.app/api/v1/health
+```
+
+**Swagger docs:** `/docs` on the backend URL is typically disabled in production for security. Use the local Docker stack or the staging env for interactive API exploration, not production.
+
+**Admin access on production:** the same credentials pattern applies (`FIRST_SUPERUSER_EMAIL` / `FIRST_SUPERUSER_PASSWORD`), but they are stored in Secret Manager, not `.env`. Retrieve them with:
+```bash
+gcloud secrets versions access latest --secret=FIRST_SUPERUSER_PASSWORD --project=vidgo-ai
+```
+⚠ **Production actions burn real credits and can charge real users.** Never run generation endpoints, checkout flows, or rate-limit tests against these URLs without explicit authorization.
+
+**Viewing production logs:**
+```bash
+# Tail the backend
+gcloud run services logs tail vidgo-backend --project vidgo-ai --region asia-east1
+
+# Grep recent worker errors
+gcloud run services logs read vidgo-worker --project vidgo-ai --region asia-east1 --limit 200 | grep -i error
+```
+
+**Deploying a new revision:** see [`gcp/deploy.sh`](./gcp/deploy.sh) and [`gcp/deploy-production.sh`](./gcp/deploy-production.sh). Initial infrastructure bring-up is in `deploy-production.sh`; routine rebuilds go through Cloud Build (`cloudbuild.yaml`).
 
 ---
 

@@ -2,19 +2,19 @@
 
 ## Overview
 
-VidGo uses **Model Context Protocol (MCP)** to communicate with AI generation providers. Both Pollo.ai and PiAPI run as MCP servers (Node.js subprocesses), managed by the backend's MCP Client Manager.
+VidGo uses **Model Context Protocol (MCP)** to communicate with AI generation providers. Both PiAPI and Pollo.ai run as MCP servers (Node.js subprocesses), managed by the backend's MCP Client Manager. Google Vertex AI is used directly via SDK for Gemini (image/moderation) and Veo (video backup).
 
 ```
 FastAPI Backend (Python)
 │
 ├── MCPClientManager (singleton)
-│   ├── pollo-mcp (npm)  ← stdio transport → Pollo.ai API
-│   └── piapi-mcp-server ← stdio transport → PiAPI API
+│   ├── piapi-mcp-server ← stdio transport → PiAPI API
+│   └── pollo-mcp (npm)  ← stdio transport → Pollo.ai API
 │
 ├── ProviderRouter
-│   ├── PolloMCPProvider  (primary: video)
-│   ├── PiAPIMCPProvider  (supplement + backup)
-│   ├── GeminiProvider    (image backup + moderation)
+│   ├── PiAPIMCPProvider  (primary: video + image/specialized)
+│   ├── PolloMCPProvider  (backup: video)
+│   ├── VertexAIProvider  (Gemini: image backup + moderation; Veo: 3rd video backup)
 │   ├── A2EProvider       (avatar backup)
 │   ├── PiAPIProvider     (REST fallback)
 │   └── PolloProvider     (REST fallback)
@@ -27,21 +27,21 @@ FastAPI Backend (Python)
 
 ### Task → Provider Mapping
 
-| Task | Primary | Backup | REST Fallback |
-|------|---------|--------|---------------|
-| **Text-to-Video** | Pollo MCP | PiAPI MCP | Pollo REST |
-| **Image-to-Video** | Pollo MCP | PiAPI MCP | Pollo REST |
-| **Video Style Transfer** | Pollo MCP | PiAPI MCP | Pollo REST |
-| **Text-to-Image** | PiAPI MCP | Gemini | PiAPI REST |
-| **Image-to-Image** | PiAPI MCP | Gemini | PiAPI REST |
-| **Image Effects** | PiAPI MCP | Gemini | PiAPI REST |
-| **Upscale** | PiAPI MCP | Gemini | PiAPI REST |
-| **Background Removal** | PiAPI MCP (local rembg) | Gemini | PiAPI REST |
-| **Interior Design** | PiAPI MCP | Gemini | PiAPI REST |
-| **3D Model** | PiAPI MCP | — | PiAPI REST |
-| **Avatar** | PiAPI MCP | A2E | PiAPI REST |
-| **Moderation** | Gemini | — | — |
-| **Material Generation** | Gemini | — | — |
+| Task | Primary | Backup | 3rd Backup | REST Fallback |
+|------|---------|--------|------------|---------------|
+| **Text-to-Video** | PiAPI MCP | Pollo MCP | Vertex AI Veo | PiAPI REST |
+| **Image-to-Video** | PiAPI MCP | Pollo MCP | Vertex AI Veo | PiAPI REST |
+| **Video Style Transfer** | PiAPI MCP | Pollo MCP | Vertex AI Veo | PiAPI REST |
+| **Text-to-Image** | PiAPI MCP | Vertex AI Gemini | — | PiAPI REST |
+| **Image-to-Image** | PiAPI MCP | Vertex AI Gemini | — | PiAPI REST |
+| **Image Effects** | PiAPI MCP | Vertex AI Gemini | — | PiAPI REST |
+| **Upscale** | PiAPI MCP | Vertex AI Gemini | — | PiAPI REST |
+| **Background Removal** | PiAPI MCP (local rembg) | Vertex AI Gemini | — | PiAPI REST |
+| **Interior Design** | PiAPI MCP | Vertex AI Gemini | — | PiAPI REST |
+| **3D Model** | PiAPI MCP | — | — | PiAPI REST |
+| **Avatar** | PiAPI MCP | A2E | — | PiAPI REST |
+| **Moderation** | Vertex AI Gemini | — | — | — |
+| **Material Generation** | Vertex AI Gemini | — | — | — |
 
 ### Routing Flow
 
@@ -51,10 +51,13 @@ Request → ProviderRouter.route(task_type, params)
   ├─ 1. Try PRIMARY (MCP provider)
   │     └─ Success → persist to GCS → return result
   │
-  ├─ 2. Try BACKUP (MCP or REST provider)
+  ├─ 2. Try BACKUP (MCP or Vertex AI)
   │     └─ Success → persist to GCS → return result
   │
-  └─ 3. Try FALLBACK (legacy REST provider)
+  ├─ 3. Try TERTIARY (Vertex AI Veo — video only)
+  │     └─ Success → persist to GCS → return result
+  │
+  └─ 4. Try FALLBACK (legacy REST provider)
         └─ Success → persist to GCS → return result
         └─ All failed → user-friendly error
 ```
@@ -65,7 +68,7 @@ Request → ProviderRouter.route(task_type, params)
 
 Manages MCP server subprocess lifecycle:
 
-- **Startup**: Starts both MCP servers as Node.js subprocesses via stdio transport
+- **Startup**: Starts MCP servers as Node.js subprocesses via stdio transport
 - **Connection**: Initializes MCP sessions, caches available tools
 - **Auto-reconnect**: Retries on connection failure (3 attempts with backoff)
 - **Shutdown**: Gracefully terminates subprocesses on app shutdown
@@ -74,9 +77,9 @@ Manages MCP server subprocess lifecycle:
 
 | Env Variable | Description |
 |---|---|
-| `POLLO_API_KEY` | Pollo.ai API key (enables pollo-mcp server) |
 | `PIAPI_KEY` | PiAPI API key (enables piapi-mcp-server) |
 | `PIAPI_MCP_PATH` | Path to built piapi-mcp-server `dist/index.js` |
+| `POLLO_API_KEY` | Pollo.ai API key (enables pollo-mcp server) |
 
 ### Lifecycle
 
@@ -86,59 +89,110 @@ mcp_manager = get_mcp_manager()
 await mcp_manager.startup()
 
 # Usage (in providers)
-result = await mcp_manager.call("pollo", "text2video", {"prompt": "..."})
+result = await mcp_manager.call("piapi", "generate_video_wan", {"prompt": "..."})
+result = await mcp_manager.call("pollo", "text2video_pollo-v1-6", {"prompt": "..."})
 
 # Shutdown
 await mcp_manager.shutdown()
 ```
 
-## Pollo.ai MCP Provider
-
-**File**: `backend/app/providers/pollo_mcp_provider.py`
-
-**Role**: Primary video generation (50+ models)
-
-### MCP Tools Used
-
-| Tool | VidGo Task | Description |
-|------|-----------|-------------|
-| `text2video` | T2V | Text prompt → video |
-| `img2video` | I2V | Image URL → video |
-| `getTaskStatus` | (internal) | Poll task status |
-
-### Supported Models (via Pollo)
-
-Kling (3.0, Omni, O1), Wan (2.1-2.6), Runway, Hailuo, Hunyuan, Luma, Pika, PixVerse, Seedance, Sora, Veo, Pollo native models.
-
 ## PiAPI MCP Provider
 
 **File**: `backend/app/providers/piapi_mcp_provider.py`
 
-**Role**: Supplement (tasks Pollo doesn't support) + video backup
+**Role**: Primary for all tasks (video + image + specialized)
 
 ### MCP Tools Used
 
 | Tool | VidGo Task | Description |
 |------|-----------|-------------|
-| `flux_text_to_image` | T2I | Flux text-to-image |
-| `flux_image_to_image` | I2I, Effects, Upscale | Flux img2img |
-| `wan_image_to_video` | I2V (backup) | Wan I2V |
-| `wan_text_to_video` | T2V (backup) | Wan T2V |
-| `kling_virtual_try_on` | Try-On | Kling virtual try-on |
-| `kling_video_generation` | Avatar | Kling avatar + lip sync |
-| `kling_video_effects` | V2V (backup) | Video effects |
-| `trellis_image_to_3d` | 3D Model | Image → GLB |
+| `generate_image` | T2I | Flux text-to-image |
+| `derive_image` | I2I, Effects | Flux img2img / variation |
+| `generate_video_wan` | T2V, I2V | Wan text/image-to-video |
+| `generate_video_kling` | Avatar | Kling video + lip sync |
+| `generate_video_effect_kling` | V2V | Kling video effects |
+| `generate_video_luma` | T2V (alt) | Luma video generation |
+| `generate_video_hunyuan` | T2V (alt) | Hunyuan video generation |
+| `generate_3d_model` | 3D Model | Trellis image-to-3D (GLB) |
+| `image_upscale` | Upscale | Image upscale |
+| `image_rmbg` | BG Removal | Background removal |
 | `tts_zero_shot` | TTS | F5-TTS voice synthesis |
+| `midjourney_imagine` | T2I (alt) | Midjourney generation |
 
 ### Background Removal
 
 BG removal uses **local rembg** (Python library), not MCP. It runs directly in the backend process.
 
+## Pollo.ai MCP Provider
+
+**File**: `backend/app/providers/pollo_mcp_provider.py`
+
+**Role**: Backup video generation (50+ models)
+
+### MCP Tools Used
+
+| Tool | VidGo Task | Description |
+|------|-----------|-------------|
+| `text2video_{model}` | T2V | Text prompt → video |
+| `img2video_{model}` | I2V | Image URL → video |
+| `getTaskStatus` | (internal) | Poll task status |
+
+Tool names are **dynamic** — constructed per-model at startup (e.g., `text2video_pollo-v1-6`, `text2video_kling-v2`).
+
+### Supported Models (via Pollo)
+
+Kling (3.0, Omni, O1), Wan (2.1-2.6), Runway, Hailuo, Hunyuan, Luma, Pika, PixVerse, Seedance, Sora, Veo, Pollo native models.
+
+## Vertex AI Provider
+
+**File**: `backend/app/providers/vertex_ai_provider.py`
+
+**Role**: Backup for image tasks (Gemini), 3rd backup for video (Veo), primary for moderation/embeddings/material generation.
+
+Replaces the old `GeminiProvider` that used API key auth against `generativelanguage.googleapis.com`. Now uses GCP Vertex AI with Application Default Credentials (ADC).
+
+### Gemini Capabilities (image backup + moderation)
+
+| Capability | Description |
+|---|---|
+| Content Moderation | NSFW/violence/hate detection (text + image) |
+| Image Editing | Transform images via Gemini image generation |
+| Text-to-Image | Generate images from text prompts |
+| Interior Design | Room redesign with image + text description |
+| Background Removal | Remove background via image editing |
+| Upscale | Enhance resolution via image editing |
+| Material Generation | Generate showcase materials for demos |
+
+### Veo Capabilities (3rd video backup)
+
+| Capability | Description |
+|---|---|
+| Text-to-Video | Veo text prompt → video (4/6/8s, 720p/1080p/4K) |
+| Image-to-Video | Veo image → video with optional prompt |
+
+Veo uses the Vertex AI predict API with long-running operation (LRO) polling.
+
+### Configuration
+
+| Env Variable | Description | Default |
+|---|---|---|
+| `VERTEX_AI_PROJECT` | GCP project ID (required) | — |
+| `VERTEX_AI_LOCATION` | GCP region | `us-central1` |
+| `VEO_MODEL` | Veo model name | `veo-3.0-generate-preview` |
+| `GEMINI_MODEL` | Gemini model for text tasks | `gemini-2.0-flash` |
+| `GEMINI_IMAGE_MODEL` | Gemini model for image output | `gemini-2.0-flash-exp-image-generation` |
+| `GEMINI_API_KEY` | Legacy fallback (if Vertex AI not configured) | — |
+
+### Authentication
+
+- **On GCP (Cloud Run / GKE)**: Automatic via service account ADC
+- **Local dev**: `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS`
+
 ## GCS Storage Service
 
 **File**: `backend/app/services/gcs_storage_service.py`
 
-**Purpose**: Both Pollo.ai and PiAPI return temporary CDN URLs with **14-day expiry**. GCS Storage downloads these URLs and persists them in the project's GCS bucket.
+**Purpose**: Both PiAPI and Pollo.ai return temporary CDN URLs with **14-day expiry**. GCS Storage downloads these URLs and persists them in the project's GCS bucket.
 
 ### Flow
 
@@ -196,18 +250,18 @@ COPY mcp-servers/piapi-mcp-server /app/mcp-servers/piapi-mcp-server
 RUN cd /app/mcp-servers/piapi-mcp-server && npm install && npm run build
 ```
 
-## Comparison: MCP vs Direct REST
+## Comparison: MCP vs Direct REST vs Vertex AI
 
-| Aspect | MCP | Direct REST |
-|--------|-----|-------------|
-| **Protocol** | Stdio (subprocess) | HTTP |
-| **Polling** | Handled by MCP server | Implemented in provider |
-| **Tool discovery** | Dynamic (`list_tools`) | Hardcoded endpoints |
-| **Error handling** | MCP protocol errors | HTTP status codes |
-| **Latency** | ~same (subprocess overhead negligible) | Direct |
-| **Reliability** | Auto-reconnect; REST fallback | Single point |
+| Aspect | MCP | Direct REST | Vertex AI SDK |
+|--------|-----|-------------|---------------|
+| **Protocol** | Stdio (subprocess) | HTTP | gRPC / HTTP |
+| **Polling** | Handled by MCP server | Implemented in provider | LRO polling (Veo) |
+| **Tool discovery** | Dynamic (`list_tools`) | Hardcoded endpoints | SDK methods |
+| **Auth** | API key in env | API key in header | ADC (service account) |
+| **Error handling** | MCP protocol errors | HTTP status codes | SDK exceptions |
+| **Billing** | Per-provider API key | Per-provider API key | GCP project billing |
 
-The MCP approach provides a unified interface across providers, automatic tool discovery, and the ability to swap providers without changing application code.
+The MCP approach provides a unified interface across providers, automatic tool discovery, and the ability to swap providers without changing application code. Vertex AI consolidates GCP services under a single auth and billing model.
 
 ## File Structure
 
@@ -215,16 +269,17 @@ The MCP approach provides a unified interface across providers, automatic tool d
 backend/app/
 ├── providers/
 │   ├── base.py                 # Abstract base classes
-│   ├── pollo_mcp_provider.py   # Pollo.ai via MCP (primary video)
-│   ├── piapi_mcp_provider.py   # PiAPI via MCP (supplement + backup)
+│   ├── piapi_mcp_provider.py   # PiAPI via MCP (primary: video + image)
+│   ├── pollo_mcp_provider.py   # Pollo.ai via MCP (backup: video)
+│   ├── vertex_ai_provider.py   # Vertex AI Gemini + Veo (image backup, 3rd video, moderation)
 │   ├── piapi_provider.py       # PiAPI REST (legacy fallback)
 │   ├── pollo_provider.py       # Pollo REST (legacy fallback)
-│   ├── gemini_provider.py      # Gemini (image backup + moderation)
 │   ├── a2e_provider.py         # A2E (avatar backup)
 │   └── provider_router.py      # Routes tasks → providers
 ├── services/
 │   ├── mcp_client.py           # MCP client manager (subprocess lifecycle)
+│   ├── gemini_service.py       # Gemini AI service (prompt enhancement, moderation, embeddings)
 │   └── gcs_storage_service.py  # CDN → GCS persistence
 └── core/
-    └── config.py               # POLLO_API_KEY, PIAPI_KEY, GCS_BUCKET, etc.
+    └── config.py               # PIAPI_KEY, POLLO_API_KEY, VERTEX_AI_PROJECT, GCS_BUCKET, etc.
 ```

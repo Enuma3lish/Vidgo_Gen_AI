@@ -1,0 +1,268 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - button "🇺🇸 English" [active] [ref=e20] [cursor=pointer]:
+            - generic [ref=e21]: 🇺🇸
+            - generic [ref=e22]: English
+            - img [ref=e23]
+          - generic [ref=e241]:
+            - button "🇺🇸 English" [ref=e242] [cursor=pointer]:
+              - generic [ref=e243]: 🇺🇸
+              - generic [ref=e244]: English
+              - img [ref=e245]
+            - button "🇹🇼 繁體中文" [ref=e247] [cursor=pointer]:
+              - generic [ref=e248]: 🇹🇼
+              - generic [ref=e249]: 繁體中文
+            - button "🇯🇵 日本語" [ref=e250] [cursor=pointer]:
+              - generic [ref=e251]: 🇯🇵
+              - generic [ref=e252]: 日本語
+            - button "🇰🇷 한국어" [ref=e253] [cursor=pointer]:
+              - generic [ref=e254]: 🇰🇷
+              - generic [ref=e255]: 한국어
+            - button "🇪🇸 Español" [ref=e256] [cursor=pointer]:
+              - generic [ref=e257]: 🇪🇸
+              - generic [ref=e258]: Español
+        - link "Login" [ref=e25] [cursor=pointer]:
+          - /url: /auth/login
+        - link "Start Creating Now" [ref=e26] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e27]:
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - heading "Choose Your Plan" [level=1] [ref=e31]
+        - paragraph [ref=e32]: Start free and scale as you grow
+        - generic [ref=e33]:
+          - button "Monthly" [ref=e34] [cursor=pointer]
+          - button "Yearly -20%" [ref=e35] [cursor=pointer]
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - heading "Demo" [level=3] [ref=e38]
+          - generic [ref=e39]: NT$0 /yr
+          - paragraph [ref=e40]: 0 點數/月
+          - button "Try Free" [ref=e42] [cursor=pointer]
+          - list [ref=e43]:
+            - listitem [ref=e44]:
+              - img [ref=e45]
+              - text: 0 credits/month
+            - listitem [ref=e47]:
+              - img [ref=e48]
+              - text: 720p quality
+            - listitem [ref=e50]:
+              - img [ref=e51]
+              - text: With watermark
+        - generic [ref=e53]:
+          - heading "Starter" [level=3] [ref=e54]
+          - generic [ref=e55]: NT$2990 /yr
+          - paragraph [ref=e56]: 100 點數/月
+          - button "Get Started" [ref=e58] [cursor=pointer]
+          - list [ref=e59]:
+            - listitem [ref=e60]:
+              - img [ref=e61]
+              - text: 100 credits/month
+            - listitem [ref=e63]:
+              - img [ref=e64]
+              - text: 1080p quality
+            - listitem [ref=e66]:
+              - img [ref=e67]
+              - text: No watermark
+        - generic [ref=e69]:
+          - heading "基礎進階版" [level=3] [ref=e70]
+          - generic [ref=e71]: NT$6990 /yr
+          - paragraph [ref=e72]: 7000 點數/月
+          - button "Get Started" [ref=e74] [cursor=pointer]
+          - list [ref=e75]:
+            - listitem [ref=e76]:
+              - img [ref=e77]
+              - text: 7000 credits/month
+            - listitem [ref=e79]:
+              - img [ref=e80]
+              - text: 720p quality
+            - listitem [ref=e82]:
+              - img [ref=e83]
+              - text: With watermark
+        - generic [ref=e85]:
+          - heading "Pro+" [level=3] [ref=e86]
+          - generic [ref=e87]: NT$9990 /yr
+          - paragraph [ref=e88]: 500 點數/月
+          - button "Get Started" [ref=e90] [cursor=pointer]
+          - list [ref=e91]:
+            - listitem [ref=e92]:
+              - img [ref=e93]
+              - text: 500 credits/month
+            - listitem [ref=e95]:
+              - img [ref=e96]
+              - text: 4k quality
+            - listitem [ref=e98]:
+              - img [ref=e99]
+              - text: Priority queue
+            - listitem [ref=e101]:
+              - img [ref=e102]
+              - text: No watermark
+        - generic [ref=e104]:
+          - generic [ref=e105]: Hot
+          - heading "專業版" [level=3] [ref=e106]
+          - generic [ref=e107]: NT$9990 /yr
+          - paragraph [ref=e108]: 10000 點數/月
+          - button "Get Started" [ref=e110] [cursor=pointer]
+          - list [ref=e111]:
+            - listitem [ref=e112]:
+              - img [ref=e113]
+              - text: 10000 credits/month
+            - listitem [ref=e115]:
+              - img [ref=e116]
+              - text: 1080p quality
+            - listitem [ref=e118]:
+              - img [ref=e119]
+              - text: No watermark
+        - generic [ref=e121]:
+          - heading "尊榮版" [level=3] [ref=e122]
+          - generic [ref=e123]: NT$16990 /yr
+          - paragraph [ref=e124]: 18000 點數/月
+          - button "Get Started" [ref=e126] [cursor=pointer]
+          - list [ref=e127]:
+            - listitem [ref=e128]:
+              - img [ref=e129]
+              - text: 18000 credits/month
+            - listitem [ref=e131]:
+              - img [ref=e132]
+              - text: 4k quality
+            - listitem [ref=e134]:
+              - img [ref=e135]
+              - text: Priority queue
+            - listitem [ref=e137]:
+              - img [ref=e138]
+              - text: No watermark
+        - generic [ref=e140]:
+          - heading "企業旗艦版" [level=3] [ref=e141]
+          - generic [ref=e142]: NT$150000 /yr
+          - paragraph [ref=e143]: 160000 點數/月
+          - button "Get Started" [ref=e145] [cursor=pointer]
+          - list [ref=e146]:
+            - listitem [ref=e147]:
+              - img [ref=e148]
+              - text: 160000 credits/month
+            - listitem [ref=e150]:
+              - img [ref=e151]
+              - text: 4k quality
+            - listitem [ref=e153]:
+              - img [ref=e154]
+              - text: Priority queue
+            - listitem [ref=e156]:
+              - img [ref=e157]
+              - text: No watermark
+      - generic [ref=e159]:
+        - heading "Frequently Asked Questions" [level=2] [ref=e160]
+        - generic [ref=e161]:
+          - generic [ref=e162]:
+            - heading "What are credits?" [level=3] [ref=e163]
+            - paragraph [ref=e164]: Credits are used to generate content. Different tools consume different amounts of credits based on complexity.
+          - generic [ref=e165]:
+            - heading "Do unused credits roll over?" [level=3] [ref=e166]
+            - paragraph [ref=e167]: Monthly credits reset at the end of each billing period. Purchased credit packs never expire.
+          - generic [ref=e168]:
+            - heading "Can I upgrade or downgrade?" [level=3] [ref=e169]
+            - paragraph [ref=e170]: Yes, you can change your plan at any time. Changes take effect at the next billing cycle.
+          - generic [ref=e171]:
+            - heading "What is the refund policy?" [level=3] [ref=e172]
+            - paragraph [ref=e173]: You can request a full refund within 7 days of subscribing. After 7 days, you can still cancel but will retain access until the end of your billing period.
+  - contentinfo [ref=e174]:
+    - generic [ref=e175]:
+      - generic [ref=e176]:
+        - generic [ref=e177]:
+          - link "V VidGo AI" [ref=e178] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e179]: V
+            - generic [ref=e180]: VidGo AI
+          - paragraph [ref=e181]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e182]:
+            - link [ref=e183] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e184]
+            - link [ref=e186] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e187]
+        - generic [ref=e189]:
+          - heading "Fashion AI" [level=4] [ref=e190]
+          - list [ref=e191]:
+            - listitem [ref=e192]:
+              - link "Virtual Try On" [ref=e193] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e194]:
+              - link "Fashion Reels" [ref=e195] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e196]:
+              - link "Text to Video" [ref=e197] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e198]:
+              - link "Product Avatars" [ref=e199] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e200]:
+          - heading "E-commerce AI" [level=4] [ref=e201]
+          - list [ref=e202]:
+            - listitem [ref=e203]:
+              - link "Product AnyShoot" [ref=e204] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e205]:
+              - link "Remove Background" [ref=e206] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e207]:
+              - link "HD Upscale" [ref=e208] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e209]:
+              - link "Style Clone" [ref=e210] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e211]:
+              - link "Room Redesign" [ref=e212] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e213]:
+          - heading "Company" [level=4] [ref=e214]
+          - list [ref=e215]:
+            - listitem [ref=e216]:
+              - link "About Us" [ref=e217] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e218]:
+              - link "Pricing" [ref=e219] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e220]:
+              - link "Contact Us" [ref=e221] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e222]:
+              - link "Blog" [ref=e223] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e224]:
+              - link "Affiliate Program" [ref=e225] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e226]:
+          - heading "Legal" [level=4] [ref=e227]
+          - list [ref=e228]:
+            - listitem [ref=e229]:
+              - link "Terms of Service" [ref=e230] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e231]:
+              - link "Privacy Policy" [ref=e232] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e233]:
+              - link "Cookie Policy" [ref=e234] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e235]:
+              - link "Refund Policy" [ref=e236] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e237]:
+        - paragraph [ref=e238]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e240]: Secure Payment

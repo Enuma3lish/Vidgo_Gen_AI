@@ -1,0 +1,166 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "Login" [ref=e25] [cursor=pointer]:
+          - /url: /auth/login
+        - link "Start Creating Now" [ref=e26] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e27]:
+    - generic [ref=e29]:
+      - button "Back" [ref=e30] [cursor=pointer]:
+        - img [ref=e31]
+        - text: Back
+      - generic [ref=e33]:
+        - heading "Background Removal" [level=1] [ref=e34]
+        - paragraph [ref=e35]: Automatically detect and remove backgrounds from any image with one click
+        - link "Subscribe to unlock more features" [ref=e37] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - heading "Select Example Image" [level=3] [ref=e40]
+          - generic [ref=e41]:
+            - button "> Example" [ref=e42] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e43]
+            - button "> Example" [ref=e44] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e45]
+            - button "> Example" [ref=e46] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e47]
+            - button "> Example" [ref=e48] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e49]
+            - button "> Example" [ref=e50] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e51]
+            - button "> Example" [ref=e52] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e53]
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - heading "Original Image" [level=3] [ref=e56]
+            - img "Original" [ref=e136]
+          - generic [ref=e57]:
+            - heading "Result" [level=3] [ref=e58]
+            - generic [ref=e148]:
+              - img "Result" [ref=e150]
+              - generic [ref=e151]: vidgo.ai
+              - link "Subscribe for Full Access" [ref=e152] [cursor=pointer]:
+                - /url: /pricing
+        - generic [ref=e61]:
+          - generic [ref=e62]:
+            - generic [ref=e63]: "Estimated cost:"
+            - generic [ref=e64]: 0 Credits
+          - button "✨ Remove Background" [ref=e153] [cursor=pointer]:
+            - generic [ref=e154]:
+              - generic [ref=e155]: ✨
+              - text: Remove Background
+  - contentinfo [ref=e68]:
+    - generic [ref=e69]:
+      - generic [ref=e70]:
+        - generic [ref=e71]:
+          - link "V VidGo AI" [ref=e72] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e73]: V
+            - generic [ref=e74]: VidGo AI
+          - paragraph [ref=e75]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e76]:
+            - link [ref=e77] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e78]
+            - link [ref=e80] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e81]
+        - generic [ref=e83]:
+          - heading "Fashion AI" [level=4] [ref=e84]
+          - list [ref=e85]:
+            - listitem [ref=e86]:
+              - link "Virtual Try On" [ref=e87] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e88]:
+              - link "Fashion Reels" [ref=e89] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e90]:
+              - link "Text to Video" [ref=e91] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e92]:
+              - link "Product Avatars" [ref=e93] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e94]:
+          - heading "E-commerce AI" [level=4] [ref=e95]
+          - list [ref=e96]:
+            - listitem [ref=e97]:
+              - link "Product AnyShoot" [ref=e98] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e99]:
+              - link "Remove Background" [ref=e100] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e101]:
+              - link "HD Upscale" [ref=e102] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e103]:
+              - link "Style Clone" [ref=e104] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e105]:
+              - link "Room Redesign" [ref=e106] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e107]:
+          - heading "Company" [level=4] [ref=e108]
+          - list [ref=e109]:
+            - listitem [ref=e110]:
+              - link "About Us" [ref=e111] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e112]:
+              - link "Pricing" [ref=e113] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e114]:
+              - link "Contact Us" [ref=e115] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e116]:
+              - link "Blog" [ref=e117] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e118]:
+              - link "Affiliate Program" [ref=e119] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e120]:
+          - heading "Legal" [level=4] [ref=e121]
+          - list [ref=e122]:
+            - listitem [ref=e123]:
+              - link "Terms of Service" [ref=e124] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e125]:
+              - link "Privacy Policy" [ref=e126] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e127]:
+              - link "Cookie Policy" [ref=e128] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e129]:
+              - link "Refund Policy" [ref=e130] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e131]:
+        - paragraph [ref=e132]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e134]: Secure Payment
+  - generic [ref=e157]:
+    - generic [ref=e158]: ✓
+    - generic [ref=e159]: Processed successfully (Demo)
+    - button "✕" [ref=e160] [cursor=pointer]

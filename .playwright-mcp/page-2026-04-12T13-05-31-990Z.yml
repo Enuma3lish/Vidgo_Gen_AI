@@ -1,0 +1,223 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - generic [ref=e13]:
+          - button "Tools" [ref=e14] [cursor=pointer]:
+            - text: Tools
+            - img [ref=e15]
+          - generic [ref=e18]:
+            - generic [ref=e19]:
+              - generic [ref=e20]: Fashion AI
+              - link "👗 Virtual Try On" [ref=e21] [cursor=pointer]:
+                - /url: /tools/try-on
+                - generic [ref=e22]: 👗
+                - generic [ref=e23]: Virtual Try On
+              - link "🎬 Fashion Reels" [ref=e24] [cursor=pointer]:
+                - /url: /tools/short-video
+                - generic [ref=e25]: 🎬
+                - generic [ref=e26]: Fashion Reels
+              - link "🎥 Text to Video" [ref=e27] [cursor=pointer]:
+                - /url: /tools/text-to-video
+                - generic [ref=e28]: 🎥
+                - generic [ref=e29]: Text to Video
+              - link "🎭 Product Avatars" [ref=e30] [cursor=pointer]:
+                - /url: /tools/avatar
+                - generic [ref=e31]: 🎭
+                - generic [ref=e32]: Product Avatars
+            - generic [ref=e33]:
+              - generic [ref=e34]: E-commerce AI
+              - link "📸 Product AnyShoot" [ref=e35] [cursor=pointer]:
+                - /url: /tools/product-scene
+                - generic [ref=e36]: 📸
+                - generic [ref=e37]: Product AnyShoot
+              - link "✂️ Remove Background" [ref=e38] [cursor=pointer]:
+                - /url: /tools/background-removal
+                - generic [ref=e39]: ✂️
+                - generic [ref=e40]: Remove Background
+              - link "🔍 HD Upscale" [ref=e41] [cursor=pointer]:
+                - /url: /tools/upscale
+                - generic [ref=e42]: 🔍
+                - generic [ref=e43]: HD Upscale
+              - link "🎨 Pattern Design" [ref=e44] [cursor=pointer]:
+                - /url: /tools/pattern-generate
+                - generic [ref=e45]: 🎨
+                - generic [ref=e46]: Pattern Design
+            - generic [ref=e47]:
+              - generic [ref=e48]: Design & Content AI
+              - link "🏠 Room Redesign" [ref=e49] [cursor=pointer]:
+                - /url: /tools/room-redesign
+                - generic [ref=e50]: 🏠
+                - generic [ref=e51]: Room Redesign
+              - link "🎨 Style Clone" [ref=e52] [cursor=pointer]:
+                - /url: /tools/effects
+                - generic [ref=e53]: 🎨
+                - generic [ref=e54]: Style Clone
+              - link "🔄 Image Transform" [ref=e55] [cursor=pointer]:
+                - /url: /tools/image-transform
+                - generic [ref=e56]: 🔄
+                - generic [ref=e57]: Image Transform
+              - link "🎞️ Video Style Transfer" [ref=e58] [cursor=pointer]:
+                - /url: /tools/video-transform
+                - generic [ref=e59]: 🎞️
+                - generic [ref=e60]: Video Style Transfer
+        - link "Pricing" [ref=e61] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e62]:
+        - button "🇺🇸 English" [ref=e64] [cursor=pointer]:
+          - generic [ref=e65]: 🇺🇸
+          - generic [ref=e66]: English
+          - img [ref=e67]
+        - link "Login" [ref=e69] [cursor=pointer]:
+          - /url: /auth/login
+        - link "Start Creating Now" [ref=e70] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e71]:
+    - generic [ref=e73]:
+      - button "Back" [ref=e74] [cursor=pointer]:
+        - img [ref=e75]
+        - text: Back
+      - generic [ref=e77]:
+        - heading "Background Removal" [level=1] [ref=e78]
+        - paragraph [ref=e79]: Automatically detect and remove backgrounds from any image with one click
+        - link "Subscribe to unlock more features" [ref=e81] [cursor=pointer]:
+          - /url: /pricing
+        - generic [ref=e82]:
+          - paragraph [ref=e83]: Try prompts (no pre-generated results yet)
+          - generic [ref=e84]:
+            - generic [ref=e85]: Remove background from beverage image
+            - generic [ref=e86]: Remove background from snack product
+            - generic [ref=e87]: Create transparent PNG for dessert
+            - generic [ref=e88]: Remove background from product
+            - generic [ref=e89]: Clean product cutout for e-commerce
+      - generic [ref=e90]:
+        - generic [ref=e91]:
+          - heading "Select Example Image" [level=3] [ref=e92]
+          - generic [ref=e93]:
+            - button "> Example" [ref=e94] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e95]
+            - button "> Example" [ref=e96] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e97]
+            - button "> Example" [ref=e98] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e99]
+            - button "> Example" [ref=e100] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e101]
+            - button "> Example" [ref=e102] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e103]
+            - button "> Example" [ref=e104] [cursor=pointer]:
+              - text: ">"
+              - img "Example" [ref=e105]
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - heading "Original Image" [level=3] [ref=e108]
+            - generic:
+              - img "Original"
+          - generic [ref=e109]:
+            - heading "Result" [level=3] [ref=e110]
+            - generic [ref=e112]: Click button below to remove background
+        - generic [ref=e113]:
+          - generic [ref=e114]:
+            - generic [ref=e115]: "Estimated cost:"
+            - generic [ref=e116]: 0 Credits
+          - button "✨ Remove Background" [ref=e117] [cursor=pointer]:
+            - generic [ref=e118]:
+              - generic [ref=e119]: ✨
+              - text: Remove Background
+  - contentinfo [ref=e120]:
+    - generic [ref=e121]:
+      - generic [ref=e122]:
+        - generic [ref=e123]:
+          - link "V VidGo AI" [ref=e124] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e125]: V
+            - generic [ref=e126]: VidGo AI
+          - paragraph [ref=e127]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e128]:
+            - link [ref=e129] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e130]
+            - link [ref=e132] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e133]
+        - generic [ref=e135]:
+          - heading "Fashion AI" [level=4] [ref=e136]
+          - list [ref=e137]:
+            - listitem [ref=e138]:
+              - link "Virtual Try On" [ref=e139] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e140]:
+              - link "Fashion Reels" [ref=e141] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e142]:
+              - link "Text to Video" [ref=e143] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e144]:
+              - link "Product Avatars" [ref=e145] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e146]:
+          - heading "E-commerce AI" [level=4] [ref=e147]
+          - list [ref=e148]:
+            - listitem [ref=e149]:
+              - link "Product AnyShoot" [ref=e150] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e151]:
+              - link "Remove Background" [ref=e152] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e153]:
+              - link "HD Upscale" [ref=e154] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e155]:
+              - link "Style Clone" [ref=e156] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e157]:
+              - link "Room Redesign" [ref=e158] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e159]:
+          - heading "Company" [level=4] [ref=e160]
+          - list [ref=e161]:
+            - listitem [ref=e162]:
+              - link "About Us" [ref=e163] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e164]:
+              - link "Pricing" [ref=e165] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e166]:
+              - link "Contact Us" [ref=e167] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e168]:
+              - link "Blog" [ref=e169] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e170]:
+              - link "Affiliate Program" [ref=e171] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e172]:
+          - heading "Legal" [level=4] [ref=e173]
+          - list [ref=e174]:
+            - listitem [ref=e175]:
+              - link "Terms of Service" [ref=e176] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e177]:
+              - link "Privacy Policy" [ref=e178] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e179]:
+              - link "Cookie Policy" [ref=e180] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e181]:
+              - link "Refund Policy" [ref=e182] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e183]:
+        - paragraph [ref=e184]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e186]: Secure Payment

@@ -1,0 +1,215 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "Login" [ref=e25] [cursor=pointer]:
+          - /url: /auth/login
+        - link "Start Creating Now" [ref=e26] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e27]:
+    - generic [ref=e29]:
+      - button "Back" [ref=e30] [cursor=pointer]:
+        - img [ref=e31]
+        - text: Back
+      - generic [ref=e33]:
+        - heading "Short Video" [level=1] [ref=e34]
+        - paragraph [ref=e35]: Generate captivating short videos from text descriptions or images
+        - link "Subscribe to unlock advanced settings & AI model selection" [ref=e37] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - heading "Please try our amazing examples" [level=3] [ref=e41]
+            - generic [ref=e42]:
+              - paragraph [ref=e43]: Click to see different motion effects
+              - generic [ref=e44]:
+                - button "> food Bubble tea product reel ▶️" [ref=e45] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e47]: food
+                  - paragraph [ref=e49]: Bubble tea product reel
+                  - generic:
+                    - generic: ▶️
+                - button "> fashion Fashion show reel ▶️" [ref=e50] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e52]: fashion
+                  - paragraph [ref=e54]: Fashion show reel
+                  - generic:
+                    - generic: ▶️
+                - button "> product Skincare product reveal ▶️" [ref=e55] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e57]: product
+                  - paragraph [ref=e59]: Skincare product reveal
+                  - generic:
+                    - generic: ▶️
+                - button "> lifestyle Morning coffee routine ▶️" [ref=e60] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e62]: lifestyle
+                  - paragraph [ref=e64]: Morning coffee routine
+                  - generic:
+                    - generic: ▶️
+          - generic [ref=e65]:
+            - heading "Select an Example" [level=3] [ref=e66]
+            - paragraph [ref=e68]: 👆 Select an example video above to see the result
+          - generic [ref=e69]:
+            - generic [ref=e70]:
+              - heading "Video Settings" [level=3] [ref=e71]
+              - generic [ref=e72]: Subscribers Only
+            - generic:
+              - generic: Duration
+              - generic:
+                - button "> 5s"
+                - button "> 8s"
+              - paragraph: Subscribe to customize video duration
+            - generic:
+              - generic: Motion Type
+              - generic:
+                - button "> Auto AI decides motion":
+                  - text: ">"
+                  - paragraph: Auto
+                  - paragraph: AI decides motion
+                - button "> Zoom In Gradual zoom effect":
+                  - text: ">"
+                  - paragraph: Zoom In
+                  - paragraph: Gradual zoom effect
+                - button "> Zoom Out Pull back effect":
+                  - text: ">"
+                  - paragraph: Zoom Out
+                  - paragraph: Pull back effect
+                - button "> Pan Left Horizontal movement left":
+                  - text: ">"
+                  - paragraph: Pan Left
+                  - paragraph: Horizontal movement left
+                - button "> Pan Right Horizontal movement right":
+                  - text: ">"
+                  - paragraph: Pan Right
+                  - paragraph: Horizontal movement right
+                - button "> Rotate Circular motion":
+                  - text: ">"
+                  - paragraph: Rotate
+                  - paragraph: Circular motion
+              - paragraph: Subscribe to choose motion effects
+            - generic [ref=e73]:
+              - paragraph [ref=e74]: 🔒 Upgrade to use custom settings
+              - link "View Plans →" [ref=e75] [cursor=pointer]:
+                - /url: /pricing
+            - generic [ref=e76]:
+              - generic [ref=e77]:
+                - generic [ref=e78]: "Estimated cost:"
+                - generic [ref=e79]: 0 Credits
+              - button "View Result" [disabled] [ref=e80]
+          - generic [ref=e81]:
+            - generic [ref=e82]:
+              - heading "AI Model Selection" [level=3] [ref=e83]
+              - generic [ref=e84]: Subscribers Only
+            - generic [ref=e85]:
+              - paragraph [ref=e86]: 🔒 Upgrade to choose different AI models
+              - link "View Plans →" [ref=e87] [cursor=pointer]:
+                - /url: /pricing
+        - generic [ref=e88]:
+          - heading "Generated Video" [level=3] [ref=e89]
+          - generic [ref=e91]:
+            - generic [ref=e92]: 🎬
+            - paragraph [ref=e93]: Generated video will appear here
+  - contentinfo [ref=e94]:
+    - generic [ref=e95]:
+      - generic [ref=e96]:
+        - generic [ref=e97]:
+          - link "V VidGo AI" [ref=e98] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e99]: V
+            - generic [ref=e100]: VidGo AI
+          - paragraph [ref=e101]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e102]:
+            - link [ref=e103] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e104]
+            - link [ref=e106] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e107]
+        - generic [ref=e109]:
+          - heading "Fashion AI" [level=4] [ref=e110]
+          - list [ref=e111]:
+            - listitem [ref=e112]:
+              - link "Virtual Try On" [ref=e113] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e114]:
+              - link "Fashion Reels" [ref=e115] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e116]:
+              - link "Text to Video" [ref=e117] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e118]:
+              - link "Product Avatars" [ref=e119] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e120]:
+          - heading "E-commerce AI" [level=4] [ref=e121]
+          - list [ref=e122]:
+            - listitem [ref=e123]:
+              - link "Product AnyShoot" [ref=e124] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e125]:
+              - link "Remove Background" [ref=e126] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e127]:
+              - link "HD Upscale" [ref=e128] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e129]:
+              - link "Style Clone" [ref=e130] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e131]:
+              - link "Room Redesign" [ref=e132] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e133]:
+          - heading "Company" [level=4] [ref=e134]
+          - list [ref=e135]:
+            - listitem [ref=e136]:
+              - link "About Us" [ref=e137] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e138]:
+              - link "Pricing" [ref=e139] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e140]:
+              - link "Contact Us" [ref=e141] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e142]:
+              - link "Blog" [ref=e143] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e144]:
+              - link "Affiliate Program" [ref=e145] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e146]:
+          - heading "Legal" [level=4] [ref=e147]
+          - list [ref=e148]:
+            - listitem [ref=e149]:
+              - link "Terms of Service" [ref=e150] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e151]:
+              - link "Privacy Policy" [ref=e152] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e153]:
+              - link "Cookie Policy" [ref=e154] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e155]:
+              - link "Refund Policy" [ref=e156] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e157]:
+        - paragraph [ref=e158]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e160]: Secure Payment

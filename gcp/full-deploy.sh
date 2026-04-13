@@ -23,6 +23,11 @@
 
 set -euo pipefail
 
+# ── Self-locate: cd to repo root so this script works from anywhere ──────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${REPO_ROOT}"
+
 # ── Config (matches gcp/deploy.sh) ───────────────────────────────────────────
 PROJECT_ID="${PROJECT_ID:-vidgo-ai}"
 REGION="${REGION:-asia-east1}"
@@ -91,10 +96,11 @@ preflight() {
   ensure_cmd curl
   ensure_cmd python3
 
-  # Verify we're in the repo root
+  # Sanity: the cd at the top of this script should have landed us at repo root.
   if [[ ! -f gcp/deploy.sh ]]; then
-    die "Run from repo root (gcp/deploy.sh not found)"
+    die "gcp/deploy.sh not found in ${REPO_ROOT} — is this the VidGo repo?"
   fi
+  log "repo root: ${REPO_ROOT}"
 
   # Check gcloud auth
   local active_account

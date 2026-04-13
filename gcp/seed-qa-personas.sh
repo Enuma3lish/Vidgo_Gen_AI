@@ -39,6 +39,15 @@ IMAGE_REPO="${REGION}-docker.pkg.dev/${PROJECT_ID}/vidgo-images/vidgo-backend"
 JOB_NAME="vidgo-seed-user"
 SECRETS_FILE="${REPO_ROOT}/.qa-secrets"
 
+# Infra wiring — must match gcp/deploy.sh so the Job container has the same
+# network + Cloud SQL access as the live backend service. Without these flags
+# the Job can't reach Cloud SQL and fails at startup.
+APP_NAME="${APP_NAME:-vidgo}"
+SQL_INSTANCE="${SQL_INSTANCE:-prod-db}"
+CONNECTOR_NAME="${CONNECTOR_NAME:-${APP_NAME}-connector}"
+SQL_CONNECTION="${PROJECT_ID}:${REGION}:${SQL_INSTANCE}"
+CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${REGION}/connectors/${CONNECTOR_NAME}"
+
 PRO_EMAIL="qa-pro@vidgo.local"
 PREMIUM_EMAIL="qa-premium@vidgo.local"
 
@@ -97,6 +106,8 @@ seed_persona() {
     --region="${REGION}" \
     --project="${PROJECT_ID}" \
     --service-account="${BACKEND_SA}" \
+    --vpc-connector="${CONNECTOR_PATH}" \
+    --set-cloudsql-instances="${SQL_CONNECTION}" \
     --set-secrets="DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,QA_PASSWORD=${qa_secret_name}:latest" \
     --task-timeout=300 \
     --max-retries=0 \

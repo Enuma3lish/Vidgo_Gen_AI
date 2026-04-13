@@ -173,18 +173,25 @@ else
 
   log "Building ${IMAGE_URI} (may take 5-10 min)..."
 
-  # Use an inline cloudbuild.yaml so we control the Dockerfile path + repo-root
-  # context. Avoids the gcloud builds submit default which looks for
-  # Dockerfile at the source root.
-  gcloud builds submit \
-    --project="${PROJECT_ID}" \
-    --config=- . <<EOF
+  # Write a temp cloudbuild.yaml so we control the Dockerfile path + repo-root
+  # context (gcloud builds submit --config=- + positional source dir doesn't
+  # work reliably across gcloud versions; use a real file instead).
+  CLOUDBUILD_YAML="$(mktemp -t vidgo-cloudbuild-XXXXXX.yaml)"
+  trap 'rm -f "${CLOUDBUILD_YAML}"' EXIT
+  cat > "${CLOUDBUILD_YAML}" <<EOF
 steps:
 - name: gcr.io/cloud-builders/docker
   args: ['build', '-f', 'backend/Dockerfile', '-t', '${IMAGE_URI}', '.']
 images: ['${IMAGE_URI}']
 timeout: 1500s
 EOF
+
+  gcloud builds submit . \
+    --project="${PROJECT_ID}" \
+    --config="${CLOUDBUILD_YAML}"
+
+  rm -f "${CLOUDBUILD_YAML}"
+  trap - EXIT
 
   ok "built ${IMAGE_URI}"
 fi

@@ -1,5 +1,6 @@
 {
-  "_comment": "Cloud Storage lifecycle policy for vidgo-media bucket. Apply with: gsutil lifecycle set gcp/storage-lifecycle.json gs://vidgo-media",
+  "_comment": "Cloud Storage lifecycle policy for vidgo-media bucket. Apply with: gsutil lifecycle set gcp/storage-lifecycle.json gs://vidgo-media-vidgo-ai",
+  "_note": "examples/ prefix is EXCLUDED from all rules — those are permanent public assets for example mode",
   "rule": [
     {
       "action": {

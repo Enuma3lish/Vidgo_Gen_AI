@@ -45,6 +45,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Check packages
 RUN python -c "from google import genai; print('✅ google-genai OK')"
+RUN python -c "import google.auth; print('✅ google-auth OK')"
 RUN python -c "import mcp; print('✅ mcp SDK OK')"
 RUN python -c "from google.cloud import storage; print('✅ google-cloud-storage OK')"
 
@@ -65,6 +66,7 @@ RUN dos2unix /app/scripts/docker_entrypoint.sh && \
 
 # Final verification
 RUN python -c "from google import genai; print('✅ Final: google-genai import OK with project files')"
+RUN python -c "from app.config.example_presets import EXAMPLE_PRESETS; print(f'✅ Example presets: {sum(len(v) for v in EXAMPLE_PRESETS.values())} presets across {len(EXAMPLE_PRESETS)} tools')"
 
 # ── MCP server path environment ──
 ENV PIAPI_MCP_PATH=/app/mcp-servers/piapi-mcp-server/dist/index.js

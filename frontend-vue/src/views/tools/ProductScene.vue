@@ -43,6 +43,10 @@ const {
 const uploadedImage = ref<string | undefined>(undefined)
 const resultImages = ref<string[]>([])
 const isProcessing = ref(false)
+// True when a demo user clicked Generate but the selected tile isn't backed
+// by a real Material DB preset (db_empty fallback or missing preset id).
+// Surfaces a persistent in-block message instead of a silent no-op.
+const demoEmptyState = ref(false)
 const selectedScene = ref('studio')
 const prompt = ref('')
 
@@ -169,6 +173,7 @@ function selectDefaultProduct(product: DemoProduct) {
   uploadedImage.value = product.input
   // Don't change the scene - user can select any scene independently
   resultImages.value = []
+  demoEmptyState.value = false
 }
 
 async function generateScenes() {
@@ -216,7 +221,10 @@ async function generateScenes() {
         }
       }
 
-      // No matching pre-generated result found - show info message
+      // No matching pre-generated result found — surface BOTH a toast AND a
+      // persistent in-block message. The toast alone auto-hides in 3s and
+      // users think the button is broken.
+      demoEmptyState.value = true
       uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
       return
     }
@@ -458,6 +466,15 @@ function dataURItoBlob(dataURI: string): Blob | null {
               </RouterLink>
           </div>
 
+          <div v-else-if="demoEmptyState" class="h-64 flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
+            <span class="text-2xl">🔒</span>
+            <p class="text-sm text-dark-200">
+              {{ isZh ? '此範例尚未預生成結果' : 'No pre-generated result for this example yet' }}
+            </p>
+            <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
+              {{ isZh ? '訂閱以使用完整 AI 功能' : 'Subscribe to use the real AI' }}
+            </RouterLink>
+          </div>
           <div v-else class="h-64 flex items-center justify-center text-dark-400">
             <div class="text-center">
               <span class="text-5xl block mb-4">🛍️</span>

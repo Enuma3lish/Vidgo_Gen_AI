@@ -281,9 +281,20 @@ NEW_SERVICE_PRICING_DATA = [
 
 
 async def seed_new_plans():
-    """Seed new plan data from specification."""
+    """Seed new plan data from specification.
+
+    Also deactivates any pre-existing plans that are NOT in NEW_PLAN_DATA.
+    Context for F-003: earlier seeds (seed_service_pricing.py) inserted plans
+    like 'pro_plus' and 'starter' which now collide on price with the new
+    '專業版' (pro) plan — both at NT$999 but with 500 vs 10000 credits. The
+    subscriptions API filters on `is_active == True`, so flipping the old
+    plans to `is_active=False` removes them from the Pricing page without
+    deleting historical subscription rows referencing them.
+    """
     async with AsyncSessionLocal() as session:
         print("\nSeeding new plans from specification...")
+
+        new_plan_names = {data["name"] for data in NEW_PLAN_DATA}
 
         for data in NEW_PLAN_DATA:
             # Check if already exists by name or slug
@@ -299,6 +310,8 @@ async def seed_new_plans():
                 for key, value in data.items():
                     if key != 'slug':  # Don't update slug to avoid conflicts
                         setattr(existing, key, value)
+                # Ensure it's active (in case it was deactivated by a prior run)
+                existing.is_active = True
             else:
                 print(f"  Creating plan {data['name']}...")
                 plan = Plan(**data)
@@ -310,6 +323,27 @@ async def seed_new_plans():
             except Exception as e:
                 await session.rollback()
                 print(f"  Warning: Could not save plan {data['name']}: {e}")
+
+        # Deactivate legacy plans not in NEW_PLAN_DATA (e.g. pro_plus, starter,
+        # demo, free from seed_service_pricing.py). Preserves rows so existing
+        # subscriptions still reference valid plan_ids, but removes them from
+        # the Pricing page via the is_active filter.
+        print("\nDeactivating legacy plans not in NEW_PLAN_DATA...")
+        all_result = await session.execute(select(Plan))
+        all_plans = all_result.scalars().all()
+        deactivated = 0
+        for plan in all_plans:
+            if plan.name not in new_plan_names and plan.is_active:
+                print(f"  Deactivating legacy plan: {plan.name} ({plan.display_name})")
+                plan.is_active = False
+                deactivated += 1
+        if deactivated:
+            try:
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                print(f"  Warning: Could not deactivate legacy plans: {e}")
+        print(f"  Deactivated {deactivated} legacy plan(s)")
 
         print(f"Seeded {len(NEW_PLAN_DATA)} new plans.")
 

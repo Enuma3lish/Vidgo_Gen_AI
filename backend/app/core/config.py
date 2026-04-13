@@ -25,16 +25,23 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501", "http://localhost:4173", "https://vidgo.co", "https://www.vidgo.co"]
 
     # AI Services - Provider Configuration (MCP-based)
-    # Primary video: Pollo.ai MCP — I2V, T2V (50+ models)
-    POLLO_API_KEY: str = ""
-
-    # Supplement + backup: PiAPI MCP — T2I, I2I, Try-On, Interior, Avatar, TTS, Upscale, 3D
+    # Primary video + image/specialized: PiAPI MCP
     PIAPI_KEY: str = ""
 
     # PiAPI MCP server path (built from piapi-mcp-server repo)
     PIAPI_MCP_PATH: str = "/app/mcp-servers/piapi-mcp-server/dist/index.js"
 
-    # Backup for image tasks + Moderation + Material generation
+    # Backup video: Pollo.ai MCP — I2V, T2V (50+ models)
+    POLLO_API_KEY: str = ""
+
+    # Vertex AI (GCP) — Gemini for image backup/moderation, Veo for 3rd video backup
+    VERTEX_AI_PROJECT: str = ""          # GCP project ID (required for Vertex AI)
+    VERTEX_AI_LOCATION: str = "us-central1"  # GCP region
+    VEO_MODEL: str = "veo-3.0-generate-preview"  # Veo model name
+    GEMINI_MODEL: str = "gemini-2.0-flash"  # Gemini model for Vertex AI
+    GEMINI_IMAGE_MODEL: str = "gemini-2.0-flash-exp-image-generation"
+
+    # Legacy Gemini API key (fallback if Vertex AI not configured)
     GEMINI_API_KEY: str = ""
 
     # GCS Storage (persist generated media beyond provider CDN expiry)

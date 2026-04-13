@@ -71,9 +71,10 @@ onUnmounted(() => {
             </button>
             <div
               v-show="toolsOpen"
-              class="absolute top-full left-1/2 -translate-x-1/2 mt-2 rounded-xl overflow-hidden dropdown-menu"
+              class="absolute top-full left-1/2 -translate-x-1/2 pt-2"
               style="width: 600px;"
             >
+              <div class="rounded-xl overflow-hidden dropdown-menu">
               <div class="grid grid-cols-3 gap-0 p-4">
                 <!-- Fashion & Video Column -->
                 <div>
@@ -123,6 +124,7 @@ onUnmounted(() => {
                     <span>🎞️</span><span class="font-medium" style="color: #e8e8f0;">Video Style Transfer</span>
                   </RouterLink>
                 </div>
+              </div>
               </div>
             </div>
           </div>

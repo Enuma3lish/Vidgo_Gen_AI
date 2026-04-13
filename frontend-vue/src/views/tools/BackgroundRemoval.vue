@@ -29,6 +29,10 @@ const {
 const uploadedImage = ref<string | undefined>(undefined)
 const resultImage = ref<string | null>(null)
 const isProcessing = ref(false)
+// True when a demo user clicked Generate but the selected tile isn't backed
+// by a real Material DB preset (db_empty fallback or missing preset id).
+// Surfaces a persistent in-block message instead of a silent no-op.
+const demoEmptyState = ref(false)
 const selectedBgType = ref<'transparent' | 'white' | 'custom'>('transparent')
 
 // Demo images from database only (no hardcoded fallbacks)
@@ -110,6 +114,7 @@ function selectDemoExample(index: number) {
   if (example) {
     uploadedImage.value = example.input || undefined
     resultImage.value = null
+    demoEmptyState.value = false
   }
 }
 
@@ -140,7 +145,10 @@ async function removeBackground() {
         }
       }
 
-      // No pre-generated result available - show info message (NOT the input image as fake result)
+      // No pre-generated result available — surface BOTH a toast AND a
+      // persistent in-block message. The toast alone is too easy to miss
+      // (auto-hides in 3s) and leaves users thinking the button is broken.
+      demoEmptyState.value = true
       uiStore.showInfo(isZh.value ? '此圖片尚未生成結果，請訂閱以使用完整功能' : 'This image is not pre-generated. Subscribe for full features.')
       return
     }
@@ -320,6 +328,15 @@ function dataURItoBlob(dataURI: string): Blob | null {
                 class="btn-primary w-full text-center block"
               >
                 {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+              </RouterLink>
+            </div>
+            <div v-else-if="demoEmptyState" class="h-64 flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
+              <span class="text-2xl">🔒</span>
+              <p class="text-sm text-dark-200">
+                {{ isZh ? '此範例尚未預生成結果' : 'No pre-generated result for this example yet' }}
+              </p>
+              <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
+                {{ isZh ? '訂閱以使用完整 AI 功能' : 'Subscribe to use the real AI' }}
               </RouterLink>
             </div>
             <div v-else class="h-64 flex items-center justify-center rounded-xl" style="background: #141420;">

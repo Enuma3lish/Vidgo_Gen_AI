@@ -31,6 +31,10 @@ const roomTypes = ref<RoomType[]>([])
 // State
 const activeTab = ref<'redesign' | 'generate' | 'styleTransfer' | '3dModel'>('redesign')
 const uploadedImage = ref<string | undefined>(undefined)
+// True when a demo user clicked Generate but the selected tile isn't backed
+// by a real Material DB preset (db_empty fallback or missing preset id).
+// Surfaces a persistent in-block message instead of a silent no-op.
+const demoEmptyState = ref(false)
 const uploadedFile = ref<File | null>(null)
 const resultImage = ref<string | null>(null)
 const resultDescription = ref<string>('')
@@ -259,7 +263,9 @@ async function handleRedesign() {
         }
       }
 
-      // No matching pre-generated result - show info message
+      // No matching pre-generated result — surface BOTH a toast AND a
+      // persistent in-block message. Toast alone auto-hides in 3s.
+      demoEmptyState.value = true
       uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
     } finally {
       isProcessing.value = false
@@ -382,7 +388,9 @@ async function handleStyleTransfer() {
         }
       }
 
-      // No matching pre-generated result - show info message
+      // No matching pre-generated result — surface BOTH a toast AND a
+      // persistent in-block message. Toast alone auto-hides in 3s.
+      demoEmptyState.value = true
       uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
     } finally {
       isProcessing.value = false
@@ -524,6 +532,7 @@ watch(selectedRoomType, (newType) => {
     }
     resultImage.value = null
     resultDescription.value = ''
+    demoEmptyState.value = false
   }
 })
 
@@ -896,6 +905,16 @@ watch(activeTab, (newTab) => {
                   {{ t('interior.tryAnother') }}
                 </button>
               </div>
+            </div>
+
+            <div v-else-if="demoEmptyState" class="h-80 flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
+              <span class="text-2xl">🔒</span>
+              <p class="text-sm text-dark-200">
+                {{ isZh ? '此範例尚未預生成結果' : 'No pre-generated result for this example yet' }}
+              </p>
+              <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
+                {{ isZh ? '訂閱以使用完整 AI 功能' : 'Subscribe to use the real AI' }}
+              </RouterLink>
             </div>
 
             <div v-else class="h-80 flex items-center justify-center">

@@ -187,6 +187,7 @@ if should_run 1 "apis"; then
     monitoring.googleapis.com
     logging.googleapis.com
     servicenetworking.googleapis.com
+    aiplatform.googleapis.com
   )
 
   for api in "${APIS[@]}"; do
@@ -411,7 +412,7 @@ if should_run 7 "iam"; then
   # Backend + Worker: SQL, Storage, Secrets
   for SA in "${BACKEND_SERVICE}" "${WORKER_SERVICE}"; do
     SA_EMAIL="${SA}@${PROJECT_ID}.iam.gserviceaccount.com"
-    for ROLE in roles/cloudsql.client roles/storage.objectAdmin roles/secretmanager.secretAccessor roles/run.invoker; do
+    for ROLE in roles/cloudsql.client roles/storage.objectAdmin roles/secretmanager.secretAccessor roles/run.invoker roles/aiplatform.user; do
       gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
         --member="serviceAccount:${SA_EMAIL}" \
         --role="${ROLE}" \
@@ -563,7 +564,7 @@ if should_run 10 "deploy"; then
   log "FRONTEND_URL = ${_FRONTEND_URL}"
 
   # Env vars that Cloud Run needs (non-secret, safe to set directly)
-  COMMON_ENV="SKIP_PREGENERATION=true,SKIP_DEPENDENCY_CHECK=true,DEBUG=false,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=30,REFRESH_TOKEN_EXPIRE_DAYS=7,ECPAY_ENV=production,ECPAY_PAYMENT_URL=https://payment.ecpay.com.tw/Cashier/AioCheckOut/V2,GIVEME_ENABLED=true,GIVEME_BASE_URL=https://www.giveme.com.tw/invoice.do,GIVEME_UNCODE=96003146,FRONTEND_URL=${_FRONTEND_URL},BACKEND_URL=${_BACKEND_URL},PUBLIC_APP_URL=${_BACKEND_URL},CORS_ALLOW_ALL=true,PADDLE_ENV=${PADDLE_ENV},SMTP_FROM_EMAIL=noreply@vidgo.co,SMTP_FROM_NAME=VidGo,SMTP_TLS=true,GCS_BUCKET=${BUCKET_NAME},PIAPI_MCP_PATH=/app/mcp-servers/piapi-mcp-server/dist/index.js"
+  COMMON_ENV="SKIP_PREGENERATION=true,SKIP_DEPENDENCY_CHECK=true,DEBUG=false,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=30,REFRESH_TOKEN_EXPIRE_DAYS=7,ECPAY_ENV=production,ECPAY_PAYMENT_URL=https://payment.ecpay.com.tw/Cashier/AioCheckOut/V2,GIVEME_ENABLED=true,GIVEME_BASE_URL=https://www.giveme.com.tw/invoice.do,GIVEME_UNCODE=96003146,FRONTEND_URL=${_FRONTEND_URL},BACKEND_URL=${_BACKEND_URL},PUBLIC_APP_URL=${_BACKEND_URL},CORS_ALLOW_ALL=true,PADDLE_ENV=${PADDLE_ENV},SMTP_FROM_EMAIL=noreply@vidgo.co,SMTP_FROM_NAME=VidGo,SMTP_TLS=true,GCS_BUCKET=${BUCKET_NAME},PIAPI_MCP_PATH=/app/mcp-servers/piapi-mcp-server/dist/index.js,VERTEX_AI_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=${REGION},VEO_MODEL=veo-3.0-generate-preview,GEMINI_MODEL=gemini-2.0-flash"
 
   # Secret env vars (reference from Secret Manager)
   SECRET_ENV="DATABASE_URL=DATABASE_URL:latest,REDIS_URL=REDIS_URL:latest,SECRET_KEY=SECRET_KEY:latest,PIAPI_KEY=PIAPI_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,POLLO_API_KEY=POLLO_API_KEY:latest,A2E_API_KEY=A2E_API_KEY:latest,A2E_API_ID=A2E_API_ID:latest,A2E_DEFAULT_CREATOR_ID=A2E_DEFAULT_CREATOR_ID:latest,PADDLE_API_KEY=PADDLE_API_KEY:latest,PADDLE_PUBLIC_KEY=PADDLE_PUBLIC_KEY:latest,PADDLE_WEBHOOK_SECRET=PADDLE_WEBHOOK_SECRET:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASSWORD=SMTP_PASSWORD:latest,ECPAY_MERCHANT_ID=ECPAY_MERCHANT_ID:latest,ECPAY_HASH_KEY=ECPAY_HASH_KEY:latest,ECPAY_HASH_IV=ECPAY_HASH_IV:latest,GIVEME_IDNO=GIVEME_IDNO:latest,GIVEME_PASSWORD=GIVEME_PASSWORD:latest,FACEBOOK_APP_ID=FACEBOOK_APP_ID:latest,FACEBOOK_APP_SECRET=FACEBOOK_APP_SECRET:latest,TIKTOK_CLIENT_KEY=TIKTOK_CLIENT_KEY:latest,TIKTOK_CLIENT_SECRET=TIKTOK_CLIENT_SECRET:latest,YOUTUBE_CLIENT_ID=YOUTUBE_CLIENT_ID:latest,YOUTUBE_CLIENT_SECRET=YOUTUBE_CLIENT_SECRET:latest"

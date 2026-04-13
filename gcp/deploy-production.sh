@@ -42,6 +42,7 @@ gcloud services enable \
   cloudresourcemanager.googleapis.com \
   monitoring.googleapis.com \
   logging.googleapis.com \
+  aiplatform.googleapis.com \
   --project="${PROJECT_ID}"
 
 # ──────────────────────────────────────────────────────────────────────
@@ -174,7 +175,7 @@ done
 # Grant permissions
 for SA in vidgo-backend vidgo-worker; do
   SA_EMAIL="${SA}@${PROJECT_ID}.iam.gserviceaccount.com"
-  for ROLE in roles/cloudsql.client roles/storage.objectAdmin roles/secretmanager.secretAccessor; do
+  for ROLE in roles/cloudsql.client roles/storage.objectAdmin roles/secretmanager.secretAccessor roles/aiplatform.user; do
     gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
       --member="serviceAccount:${SA_EMAIL}" \
       --role="${ROLE}" \
@@ -220,7 +221,11 @@ echo "     gcloud sql users set-password postgres --instance=vidgo-db --password
 echo ""
 echo "  2. Store secrets in Secret Manager:"
 echo "     echo -n '<value>' | gcloud secrets create DATABASE_URL --data-file=- --project=${PROJECT_ID}"
-echo "     (Repeat for: REDIS_URL, PIAPI_KEY, GEMINI_API_KEY, JWT_SECRET, etc.)"
+echo "     (Repeat for: REDIS_URL, PIAPI_KEY, POLLO_API_KEY, GEMINI_API_KEY, JWT_SECRET, etc.)"
+echo ""
+echo "  NOTE: Vertex AI uses ADC (service account), not API key."
+echo "  The backend service account already has roles/aiplatform.user."
+echo "  Set VERTEX_AI_PROJECT=${PROJECT_ID} and VERTEX_AI_LOCATION=${REGION} as env vars."
 echo ""
 echo "  3. Connect Cloud Build trigger to your repo:"
 echo "     gcloud builds triggers create github \\"

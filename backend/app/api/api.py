@@ -3,6 +3,7 @@ from app.api.v1 import (
     auth, payments, demo, plans, promotions, credits, effects, generation,
     landing, quota, tools, admin, session, interior, workflow, subscriptions,
     prompts, user_works, uploads, referrals, social_media, einvoices,
+    example,
 )
 
 api_router = APIRouter()
@@ -28,3 +29,4 @@ api_router.include_router(uploads.router, tags=["uploads"])
 api_router.include_router(referrals.router, tags=["referrals"])
 api_router.include_router(social_media.router, tags=["social"])
 api_router.include_router(einvoices.router, prefix="/einvoices", tags=["einvoices"])
+api_router.include_router(example.router, prefix="/examples", tags=["examples"])

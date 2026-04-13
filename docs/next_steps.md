@@ -59,8 +59,9 @@ curl -X POST http://localhost:8001/api/v1/generation/video \
 
 ### 1d. Test provider failover
 
-1. Set `POLLO_API_KEY=""` temporarily — video requests should fall through to PiAPI MCP (`generate_video_wan`), then to Pollo REST.
-2. Set `PIAPI_KEY=""` temporarily — image requests should fall through to Gemini.
+1. Set `PIAPI_KEY=""` temporarily — video requests should fall through to Pollo MCP, then Vertex AI Veo, then PiAPI REST.
+2. Set `PIAPI_KEY=""` temporarily — image requests should fall through to Vertex AI Gemini.
+3. Set both `PIAPI_KEY=""` and `POLLO_API_KEY=""` — video requests should fall through to Vertex AI Veo.
 
 ---
 

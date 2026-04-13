@@ -132,14 +132,14 @@ Plans can restrict tool access via feature flags:
 |  |                                                                             | |
 |  |  +-----------------------------------------------------------------------+  | |
 |  |  |                       AI Provider Layer                               |  | |
-|  |  |  +-------------------+  +-------------------+                        |  | |
-|  |  |  |   PiAPI (Wan)     |  |   Gemini API      |                        |  | |
-|  |  |  | ALL generation:   |  | - Backup for      |                        |  | |
-|  |  |  | T2I, I2I, I2V,    |  |   image tasks     |                        |  | |
-|  |  |  | T2V, V2V, Avatar, |  | - Moderation      |                        |  | |
-|  |  |  | Interior, BG Rem  |  | - Pre-gen input   |                        |  | |
-|  |  |  | 3D, Effects       |  |   materials       |                        |  | |
-|  |  |  +-------------------+  +-------------------+                        |  | |
+|  |  |  +---------------+ +---------------+ +-------------------+          |  | |
+|  |  |  | PiAPI MCP     | | Pollo.ai MCP  | | Vertex AI (GCP)   |          |  | |
+|  |  |  | PRIMARY:      | | BACKUP:       | | - Gemini: image   |          |  | |
+|  |  |  | T2I,I2I,I2V,  | | I2V, T2V, V2V | |   backup+moderat. |          |  | |
+|  |  |  | T2V,V2V,Avatar| | (50+ models)  | | - Veo: 3rd video  |          |  | |
+|  |  |  | Interior,3D,  | |               | |   backup          |          |  | |
+|  |  |  | BG Rem,Effects| |               | | - Material gen    |          |  | |
+|  |  |  +---------------+ +---------------+ +-------------------+          |  | |
 |  |  +-----------------------------------------------------------------------+  | |
 |  +-----------------------------------------------------------------------------+ |
 |                                                                                   |
@@ -215,10 +215,13 @@ backend/
 │   │
 │   ├── providers/
 │   │   ├── base.py                  # Base provider interface
-│   │   ├── gemini_provider.py       # Google Gemini provider
-│   │   ├── piapi_provider.py        # PiAPI (Wan) provider - Primary
-│   │   ├── gemini_provider.py       # Google Gemini provider
-│   │   └── provider_router.py       # Smart routing between providers
+│   │   ├── piapi_mcp_provider.py    # PiAPI via MCP (primary: video + image)
+│   │   ├── pollo_mcp_provider.py    # Pollo.ai via MCP (backup: video)
+│   │   ├── vertex_ai_provider.py    # Vertex AI Gemini + Veo (image backup, 3rd video, moderation)
+│   │   ├── piapi_provider.py        # PiAPI REST (legacy fallback)
+│   │   ├── pollo_provider.py        # Pollo REST (legacy fallback)
+│   │   ├── a2e_provider.py          # A2E (avatar backup)
+│   │   └── provider_router.py       # Routes tasks → providers
 │   │
 │   ├── schemas/
 │   │   ├── credit.py                # Credit-related schemas
@@ -231,7 +234,9 @@ backend/
 │   │   └── user.py                  # User schemas
 │   │
 │   ├── services/
-│   │   ├── gemini_service.py        # Gemini AI service (avatar, moderation)
+│   │   ├── gemini_service.py        # Gemini AI service (prompt enhancement, moderation, embeddings)
+│   │   ├── mcp_client.py           # MCP client manager (subprocess lifecycle)
+│   │   ├── gcs_storage_service.py  # CDN → GCS persistence
 │   │   ├── admin_dashboard.py       # Admin dashboard service (stats, API costs, active users)
 │   │   ├── invoice_service.py      # Taiwan e-invoice business logic
 │   │   ├── block_cache.py           # Block-level caching
@@ -438,15 +443,18 @@ class Material(Base):
 
 ### 5.1 Provider Summary
 
-| Provider | API | Purpose | Env Variable |
-|----------|-----|---------|--------------|
-| PiAPI | Wan API | **Primary** for ALL generation: T2I, I2I, I2V, T2V, V2V, Interior, Avatar, Try-On, BG Removal, Effects, 3D | `PIAPI_KEY` |
-| Gemini | Generative AI | **Backup** for image tasks + Content moderation + Pre-generation | `GEMINI_API_KEY` |
+| Provider | Interface | Purpose | Env Variable |
+|----------|-----------|---------|--------------|
+| PiAPI | MCP (stdio) | **Primary** for video + image + specialized: T2I, I2I, I2V, T2V, V2V, Interior, Avatar, BG Removal, Effects, 3D | `PIAPI_KEY` |
+| Pollo.ai | MCP (stdio) | **Backup** for video tasks (50+ models): I2V, T2V, V2V | `POLLO_API_KEY` |
+| Vertex AI | GCP SDK | **Backup** for image tasks (Gemini), **3rd backup** for video (Veo), **Primary** for moderation + material gen | `VERTEX_AI_PROJECT` |
+| A2E | REST | **Backup** for avatar generation | `A2E_API_KEY` |
 
-**Failover Strategy:** 
-- **Image tasks** (T2I, I2I, Interior, BG Removal, Upscale, Effects): Gemini serves as backup when PiAPI has no credits or fails
-- **Video tasks** (I2V, T2V, V2V, Avatar): No backup - will show appropriate error messages
-- **Moderation & Pre-generation**: Gemini only
+**Failover Strategy:**
+- **Video tasks** (I2V, T2V, V2V): PiAPI MCP → Pollo MCP → Vertex AI Veo → PiAPI REST
+- **Image tasks** (T2I, I2I, Interior, BG Removal, Upscale, Effects): PiAPI MCP → Vertex AI Gemini → PiAPI REST
+- **Avatar**: PiAPI MCP → A2E → PiAPI REST
+- **Moderation & Material generation**: Vertex AI Gemini only
 - Provider names are never exposed to end users
 
 ### 5.2 Provider Router
@@ -467,10 +475,11 @@ class TaskType(str, Enum):
     I2I = "image_to_image"
     MATERIAL_GENERATION = "material_generation"
 
-# Routing configuration with Gemini as backup for image tasks:
-# Image tasks (T2I, I2I, Interior, BG Removal, Upscale, Effects) → PiAPI primary, Gemini backup
-# Video tasks (I2V, T2V, V2V, Avatar, Interior 3D) → PiAPI only, no backup
-# Moderation & Material pre-generation → Gemini only
+# Routing configuration:
+# Video (I2V, T2V, V2V) → PiAPI MCP primary, Pollo MCP backup, Vertex AI Veo 3rd
+# Image (T2I, I2I, Interior, BG Removal, Upscale, Effects) → PiAPI MCP primary, Vertex AI Gemini backup
+# Avatar → PiAPI MCP primary, A2E backup
+# Moderation & Material pre-generation → Vertex AI Gemini only
 ```
 
 ### 5.3 PiAPI Service
@@ -552,7 +561,10 @@ class Settings(BaseSettings):
 
     # AI Providers
     PIAPI_KEY: str = ""
-    GEMINI_API_KEY: str = ""
+    POLLO_API_KEY: str = ""
+    VERTEX_AI_PROJECT: str = ""          # GCP project ID
+    VERTEX_AI_LOCATION: str = "us-central1"
+    GEMINI_API_KEY: str = ""             # Legacy fallback
 
     # YouTube (Google OAuth 2.0 for YouTube Data API v3)
     YOUTUBE_CLIENT_ID: str = ""

@@ -84,11 +84,15 @@ class PiAPIMCPProvider(BaseProvider):
     async def text_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate image from text using Flux via PiAPI MCP."""
         self._log_request("text_to_image", params)
-        result = await self._call_tool("text_to_image", {
+        arguments = {
             "prompt": params["prompt"],
             "width": int(params.get("size", "1024*1024").split("*")[0]),
             "height": int(params.get("size", "1024*1024").split("*")[1]),
-        })
+        }
+        # PiAPI generate_image supports model: "schnell" (fast) or "dev" (quality)
+        if params.get("model"):
+            arguments["model"] = params["model"]
+        result = await self._call_tool("text_to_image", arguments)
         return self._normalize_result(result, "image")
 
     async def image_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -194,10 +198,19 @@ class PiAPIMCPProvider(BaseProvider):
         """Text-to-speech via F5-TTS."""
         self._log_request("tts", params)
         # tts_zero_shot: genText (required), refAudio (required URL), refText (optional)
-        result = await self._call_tool("tts", {
+        ref_audio = params.get("voice", "")
+        if not ref_audio:
+            raise ValueError(
+                "PiAPI tts_zero_shot requires refAudio (a reference voice URL). "
+                "Pass a voice URL in params['voice']."
+            )
+        arguments = {
             "genText": params.get("text", ""),
-            "refAudio": params.get("voice", ""),
-        })
+            "refAudio": ref_audio,
+        }
+        if params.get("ref_text"):
+            arguments["refText"] = params["ref_text"]
+        result = await self._call_tool("tts", arguments)
         return self._normalize_result(result, "audio")
 
     async def trellis_3d(self, params: Dict[str, Any]) -> Dict[str, Any]:

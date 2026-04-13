@@ -352,15 +352,29 @@ class PiAPIClient:
                     if status == "completed":
                         output = status_data.get("data", {}).get("output", {})
 
-                        # Try to get image_url
+                        # Try to get image_url (flat shape — not used by Kling,
+                        # but other backends might)
                         image_url = output.get("image_url")
 
-                        # Fallback: check for images array
+                        # Fallback 1: check for images array
                         if not image_url:
                             images = output.get("images", [])
                             if images:
                                 img = images[0]
                                 image_url = img.get("url") if isinstance(img, dict) else img
+
+                        # Fallback 2 (F-020): Kling's ai_try_on response nests
+                        # the result under output.works[0].image.resource_without_watermark.
+                        # Prefer the watermark-free version since our pipeline
+                        # applies its own Vidgo watermark downstream.
+                        if not image_url:
+                            works = output.get("works", [])
+                            if works and isinstance(works[0], dict):
+                                img_obj = works[0].get("image") or {}
+                                image_url = (
+                                    img_obj.get("resource_without_watermark")
+                                    or img_obj.get("resource")
+                                )
 
                         if not image_url:
                             logger.error(f"[PiAPI] Try-On output structure: {output}")

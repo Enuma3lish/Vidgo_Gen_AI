@@ -27,6 +27,11 @@
 
 set -euo pipefail
 
+# ── Self-locate: cd to repo root so this script works from anywhere ──────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${REPO_ROOT}"
+
 PROJECT_ID="${PROJECT_ID:-vidgo-ai}"
 REGION="${REGION:-asia-east1}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-vidgo-backend}"

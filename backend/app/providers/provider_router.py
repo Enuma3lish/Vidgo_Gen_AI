@@ -1,11 +1,11 @@
 """
 Provider Router — Routes AI tasks to the correct provider.
 
-Architecture (MCP-based):
-1. Pollo.ai MCP  — PRIMARY for video tasks (I2V, T2V, V2V)
-2. PiAPI MCP     — PRIMARY for image/specialized tasks (T2I, I2I, Try-On, Interior, Avatar, TTS, Upscale, 3D)
-                 — BACKUP for video tasks when Pollo fails
-3. Gemini        — BACKUP for image tasks when PiAPI fails + Moderation + Material generation
+Architecture:
+1. PiAPI MCP     — PRIMARY for video tasks (I2V, T2V, V2V) + image/specialized tasks
+2. Pollo.ai MCP  — BACKUP for video tasks when PiAPI fails
+3. Vertex AI     — 3rd backup for video (Veo), BACKUP for image tasks (Gemini),
+                   PRIMARY for moderation/embeddings/material generation
 4. A2E           — BACKUP for avatar tasks when PiAPI fails
 5. GCS Storage   — Persists CDN URLs to Google Cloud Storage
 
@@ -21,7 +21,7 @@ import logging
 from app.providers.piapi_mcp_provider import PiAPIMCPProvider
 from app.providers.pollo_mcp_provider import PolloMCPProvider
 from app.providers.piapi_provider import PiAPIProvider
-from app.providers.gemini_provider import GeminiProvider
+from app.providers.vertex_ai_provider import VertexAIProvider
 from app.providers.pollo_provider import PolloProvider
 from app.providers.a2e_provider import A2EProvider
 from app.services.gcs_storage_service import get_gcs_storage
@@ -56,49 +56,50 @@ class ProviderRouter:
     """
     Routes AI tasks to the correct provider.
 
-    Primary routing (MCP-based):
-      - Video tasks (I2V, T2V, V2V) → Pollo MCP (primary) → PiAPI MCP (backup)
-      - Image tasks (T2I, I2I, Effects) → PiAPI MCP (primary) → Gemini (backup)
+    Routing:
+      - Video tasks (I2V, T2V, V2V) → PiAPI MCP (primary) → Pollo MCP (backup) → Vertex AI Veo (3rd)
+      - Image tasks (T2I, I2I, Effects) → PiAPI MCP (primary) → Vertex AI Gemini (backup)
       - Specialized (Try-On, Interior, Avatar, Upscale, 3D, TTS) → PiAPI MCP (primary)
-      - Moderation / Material Gen → Gemini (only)
-      - BG Removal → Local rembg (via PiAPI MCP provider)
+      - Moderation / Material Gen → Vertex AI Gemini (primary)
 
     Fallback: If MCP servers are unavailable, falls back to direct REST providers.
     """
 
     # ── Routing config ──
-    # "primary" is tried first, "backup" on failure, "fallback" if MCP is down
+    # "primary" is tried first, then "backup", "tertiary", "fallback" (REST legacy)
     ROUTING_CONFIG = {
-        # Video tasks — Pollo MCP primary, PiAPI MCP backup
-        TaskType.I2V: {"primary": "pollo_mcp", "backup": "piapi_mcp", "fallback": "pollo"},
-        TaskType.T2V: {"primary": "pollo_mcp", "backup": "piapi_mcp", "fallback": "pollo"},
-        TaskType.V2V: {"primary": "pollo_mcp", "backup": "piapi_mcp", "fallback": "pollo"},
+        # Video tasks — PiAPI MCP primary, Pollo MCP backup, Vertex AI Veo 3rd
+        TaskType.I2V: {"primary": "piapi_mcp", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": "piapi"},
+        TaskType.T2V: {"primary": "piapi_mcp", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": "piapi"},
+        TaskType.V2V: {"primary": "piapi_mcp", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": "piapi"},
 
-        # Image tasks — PiAPI MCP primary, Gemini backup
-        TaskType.T2I:                {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
-        TaskType.I2I:                {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
-        TaskType.EFFECTS:            {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
-        TaskType.UPSCALE:            {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
-        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
+        # Image tasks — PiAPI MCP primary, Vertex AI Gemini backup
+        TaskType.T2I:                {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
+        TaskType.I2I:                {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
+        TaskType.EFFECTS:            {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
+        TaskType.UPSCALE:            {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
+        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
 
-        # Specialized tasks — PiAPI MCP only (no other provider supports these)
-        TaskType.INTERIOR:    {"primary": "piapi_mcp", "backup": "gemini", "fallback": "piapi"},
-        TaskType.INTERIOR_3D: {"primary": "piapi_mcp", "backup": None,    "fallback": "piapi"},
-        TaskType.AVATAR:      {"primary": "piapi_mcp", "backup": "a2e",   "fallback": "piapi"},
+        # Specialized tasks — PiAPI MCP primary
+        TaskType.INTERIOR:    {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
+        TaskType.INTERIOR_3D: {"primary": "piapi_mcp", "backup": None,        "fallback": "piapi"},
+        TaskType.AVATAR:      {"primary": "piapi_mcp", "backup": "a2e",       "fallback": "piapi"},
 
-        # Gemini-only tasks
-        TaskType.MODERATION:          {"primary": "gemini", "backup": None, "fallback": None},
-        TaskType.MATERIAL_GENERATION: {"primary": "gemini", "backup": None, "fallback": None},
+        # Vertex AI-only tasks
+        TaskType.MODERATION:          {"primary": "vertex_ai", "backup": None, "fallback": None},
+        TaskType.MATERIAL_GENERATION: {"primary": "vertex_ai", "backup": None, "fallback": None},
     }
 
     def __init__(self):
-        # MCP providers (primary)
+        # MCP providers
         self.pollo_mcp = PolloMCPProvider()
         self.piapi_mcp = PiAPIMCPProvider()
 
+        # Vertex AI (replaces old GeminiProvider)
+        self.vertex_ai = VertexAIProvider()
+
         # Legacy REST providers (fallback)
         self.piapi = PiAPIProvider()
-        self.gemini = GeminiProvider()
         self.pollo = PolloProvider()
         self.a2e = A2EProvider()
 
@@ -119,7 +120,7 @@ class ProviderRouter:
     ) -> Dict[str, Any]:
         """
         Route request to the appropriate provider.
-        Tries: primary (MCP) → backup → fallback (REST).
+        Tries: primary → backup → tertiary → fallback (REST).
         Optionally persists result to GCS.
         """
         config = self.ROUTING_CONFIG.get(task_type)
@@ -127,7 +128,7 @@ class ProviderRouter:
             raise ValueError(f"Unknown task type: {task_type}")
 
         providers_to_try = []
-        for key in ("primary", "backup", "fallback"):
+        for key in ("primary", "backup", "tertiary", "fallback"):
             p = config.get(key)
             if p and p not in providers_to_try:
                 providers_to_try.append(p)
@@ -138,6 +139,14 @@ class ProviderRouter:
                 result = await self._execute_on_provider(
                     provider_name, task_type, params
                 )
+
+                # A provider returning {"success": false, ...} is a soft failure;
+                # do NOT record success and do NOT return — raise so the loop
+                # falls through to the next provider in the chain.
+                if isinstance(result, dict) and result.get("success") is False:
+                    err_msg = result.get("error") or result.get("message") or "provider returned success=false"
+                    raise Exception(f"{provider_name} soft-failed: {err_msg}")
+
                 self._record_success(provider_name)
 
                 # Persist to GCS if enabled
@@ -261,15 +270,16 @@ class ProviderRouter:
     ) -> Dict[str, Any]:
         """Execute task on specific provider."""
         # MCP providers
-        if provider == "pollo_mcp":
-            return await self._execute_pollo_mcp(task_type, params)
-        elif provider == "piapi_mcp":
+        if provider == "piapi_mcp":
             return await self._execute_piapi_mcp(task_type, params)
+        elif provider == "pollo_mcp":
+            return await self._execute_pollo_mcp(task_type, params)
+        # Vertex AI (Gemini + Veo)
+        elif provider == "vertex_ai":
+            return await self._execute_vertex_ai(task_type, params)
         # Legacy REST providers
         elif provider == "piapi":
             return await self._execute_piapi(task_type, params)
-        elif provider == "gemini":
-            return await self._execute_gemini(task_type, params)
         elif provider == "pollo":
             return await self._execute_pollo(task_type, params)
         elif provider == "a2e":
@@ -279,23 +289,10 @@ class ProviderRouter:
 
     # ── MCP Providers ──
 
-    async def _execute_pollo_mcp(
-        self, task_type: TaskType, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Execute on Pollo MCP — primary for video."""
-        if task_type == TaskType.I2V:
-            return await self.pollo_mcp.image_to_video(params)
-        elif task_type == TaskType.T2V:
-            return await self.pollo_mcp.text_to_video(params)
-        elif task_type == TaskType.V2V:
-            return await self.pollo_mcp.video_style_transfer(params)
-        else:
-            raise ValueError(f"Pollo MCP doesn't support: {task_type}")
-
     async def _execute_piapi_mcp(
         self, task_type: TaskType, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute on PiAPI MCP — primary for image/specialized, backup for video."""
+        """Execute on PiAPI MCP — primary for video + image/specialized."""
         if task_type == TaskType.T2I:
             return await self.piapi_mcp.text_to_image(params)
         elif task_type == TaskType.I2I:
@@ -320,6 +317,52 @@ class ProviderRouter:
             return await self.piapi_mcp.generate_avatar(params)
         else:
             raise ValueError(f"PiAPI MCP doesn't support: {task_type}")
+
+    async def _execute_pollo_mcp(
+        self, task_type: TaskType, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Execute on Pollo MCP — backup for video."""
+        if task_type == TaskType.I2V:
+            return await self.pollo_mcp.image_to_video(params)
+        elif task_type == TaskType.T2V:
+            return await self.pollo_mcp.text_to_video(params)
+        elif task_type == TaskType.V2V:
+            return await self.pollo_mcp.video_style_transfer(params)
+        else:
+            raise ValueError(f"Pollo MCP doesn't support: {task_type}")
+
+    # ── Vertex AI (Gemini + Veo) ──
+
+    async def _execute_vertex_ai(
+        self, task_type: TaskType, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Execute on Vertex AI — Gemini for image/moderation, Veo for video."""
+        if task_type == TaskType.MODERATION:
+            return await self.vertex_ai.moderate_content(params)
+        elif task_type == TaskType.MATERIAL_GENERATION:
+            return await self.vertex_ai.generate_material(params)
+        elif task_type == TaskType.T2I:
+            return await self.vertex_ai.text_to_image(params)
+        elif task_type == TaskType.I2I:
+            return await self.vertex_ai.image_to_image(params)
+        elif task_type == TaskType.INTERIOR:
+            return await self.vertex_ai.doodle_interior(params)
+        elif task_type == TaskType.BACKGROUND_REMOVAL:
+            return await self.vertex_ai.background_removal(params)
+        elif task_type == TaskType.UPSCALE:
+            return await self.vertex_ai.upscale(params)
+        elif task_type == TaskType.EFFECTS:
+            return await self.vertex_ai.image_to_image(params)
+        elif task_type == TaskType.I2V:
+            return await self.vertex_ai.image_to_video(params)
+        elif task_type == TaskType.T2V:
+            return await self.vertex_ai.text_to_video(params)
+        elif task_type == TaskType.V2V:
+            return await self.vertex_ai.video_style_transfer(params)
+        elif task_type == TaskType.AVATAR:
+            return await self.vertex_ai.generate_avatar(params)
+        else:
+            raise ValueError(f"Vertex AI doesn't support: {task_type}")
 
     # ── Legacy REST Providers ──
 
@@ -351,37 +394,6 @@ class ProviderRouter:
             return await self.piapi.generate_avatar(params)
         else:
             raise ValueError(f"PiAPI doesn't support: {task_type}")
-
-    async def _execute_gemini(
-        self, task_type: TaskType, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Execute on Gemini (backup for image tasks)."""
-        if task_type == TaskType.MODERATION:
-            return await self.gemini.moderate_content(params)
-        elif task_type == TaskType.MATERIAL_GENERATION:
-            return await self.gemini.generate_material(params)
-        elif task_type == TaskType.T2I:
-            return await self.gemini.text_to_image(params)
-        elif task_type == TaskType.I2I:
-            return await self.gemini.image_to_image(params)
-        elif task_type == TaskType.INTERIOR:
-            return await self.gemini.doodle_interior(params)
-        elif task_type == TaskType.BACKGROUND_REMOVAL:
-            return await self.gemini.background_removal(params)
-        elif task_type == TaskType.UPSCALE:
-            return await self.gemini.upscale(params)
-        elif task_type == TaskType.EFFECTS:
-            return await self.gemini.image_to_image(params)
-        elif task_type == TaskType.I2V:
-            return await self.gemini.image_to_video(params)
-        elif task_type == TaskType.T2V:
-            return await self.gemini.text_to_video(params)
-        elif task_type == TaskType.V2V:
-            return await self.gemini.video_style_transfer(params)
-        elif task_type == TaskType.AVATAR:
-            return await self.gemini.generate_avatar(params)
-        else:
-            raise ValueError(f"Gemini doesn't support: {task_type}")
 
     async def _execute_pollo(
         self, task_type: TaskType, params: Dict[str, Any]
@@ -447,8 +459,8 @@ class ProviderRouter:
         providers = {
             "pollo_mcp": self.pollo_mcp,
             "piapi_mcp": self.piapi_mcp,
+            "vertex_ai": self.vertex_ai,
             "piapi": self.piapi,
-            "gemini": self.gemini,
             "pollo": self.pollo,
             "a2e": self.a2e,
         }
@@ -503,7 +515,7 @@ class ProviderRouter:
 
     async def get_all_status(self) -> Dict[str, Any]:
         status = {}
-        for provider in ["pollo_mcp", "piapi_mcp", "piapi", "gemini", "pollo", "a2e"]:
+        for provider in ["piapi_mcp", "pollo_mcp", "vertex_ai", "piapi", "pollo", "a2e"]:
             await self._check_provider_health(provider)
             cached = self._status_cache.get(provider, {})
             status[provider] = {
@@ -520,10 +532,10 @@ class ProviderRouter:
     async def check_service_status(self) -> Dict[str, Any]:
         status = {}
         all_providers = [
-            ("pollo_mcp", self.pollo_mcp),
             ("piapi_mcp", self.piapi_mcp),
+            ("pollo_mcp", self.pollo_mcp),
+            ("vertex_ai", self.vertex_ai),
             ("piapi", self.piapi),
-            ("gemini", self.gemini),
             ("pollo", self.pollo),
             ("a2e", self.a2e),
         ]
@@ -541,7 +553,7 @@ class ProviderRouter:
     async def close(self):
         await asyncio.gather(
             self.piapi.close(),
-            self.gemini.close(),
+            self.vertex_ai.close(),
             self.pollo.close(),
             self.a2e.close(),
         )

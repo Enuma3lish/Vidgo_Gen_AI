@@ -86,6 +86,11 @@ export function useDemoMode() {
   })
 
   /**
+   * Paid user: not a demo user. Alias for clarity in tool pages.
+   */
+  const isPaid = computed(() => !isDemoUser.value)
+
+  /**
    * PRESET-ONLY MODE: Custom inputs are DISABLED for demo users
    * But ENABLED for subscribers.
    */
@@ -247,6 +252,7 @@ export function useDemoMode() {
     dbEmpty,
 
     // Computed
+    isPaid,
     canUseCustomInputs,
     canDownloadOriginal,
 

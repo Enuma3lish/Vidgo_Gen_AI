@@ -132,6 +132,20 @@ const revenueChartData = computed(() => ({
   }],
 }))
 
+const revenueDailyChartData = computed(() => ({
+  labels: adminStore.revenueDailyChart.map(p => p.date || ''),
+  datasets: [{
+    label: 'Daily Revenue (USD)',
+    data: adminStore.revenueDailyChart.map(p => p.revenue ?? 0),
+    borderColor: '#22d3ee',
+    backgroundColor: 'rgba(34, 211, 238, 0.12)',
+    fill: true,
+    tension: 0.35,
+    pointRadius: 3,
+    borderWidth: 2,
+  }],
+}))
+
 const userGrowthChartData = computed(() => ({
   labels: adminStore.userGrowthChart.map(p => p.date || p.month || ''),
   datasets: [{
@@ -277,6 +291,21 @@ function exportToolUsage() {
         <div class="stat-change positive" v-if="stats?.users?.new_today">+{{ stats.users.new_today }} today</div>
       </div>
 
+      <div class="stat-card paid-ratio" v-if="stats?.paid_stats">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value">{{ stats.paid_stats.paid_percent }}%</span>
+          <span class="stat-label">
+            Paid · {{ formatNumber(stats.paid_stats.paid) }} / {{ formatNumber(stats.paid_stats.total) }}
+          </span>
+        </div>
+        <div class="stat-change" :class="stats.paid_stats.paid_percent >= 20 ? 'positive' : 'neutral'">
+          Free {{ stats.paid_stats.free_percent }}%
+        </div>
+      </div>
+
       <div class="stat-card generations">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -331,6 +360,12 @@ function exportToolUsage() {
           <span class="earnings-amount">{{ formatCurrency(adminStore.earnings.month) }}</span>
         </div>
       </div>
+      <!-- Daily revenue line chart -->
+      <div class="mt-4" v-if="adminStore.revenueDailyChart.length">
+        <h3>Daily Revenue (Last 30 Days)</h3>
+        <LineChart :chart-data="revenueDailyChartData" :height="220" />
+      </div>
+
       <!-- Monthly breakdown as bar chart -->
       <div class="mt-4" v-if="adminStore.earnings.monthly_breakdown?.length">
         <h3>Monthly Revenue (Last 6 Months)</h3>
@@ -560,6 +595,8 @@ function exportToolUsage() {
 .stat-card.users .stat-icon { background: rgba(123,31,162,0.15); color: #7b1fa2; }
 .stat-card.generations .stat-icon { background: rgba(16,185,129,0.15); color: #388e3c; }
 .stat-card.revenue .stat-icon { background: rgba(245,158,11,0.15); color: #f57c00; }
+.stat-card.paid-ratio .stat-icon { background: rgba(34,211,238,0.15); color: #22d3ee; }
+.stat-card .stat-change.neutral { color: #9494b0; }
 .stat-content { display: flex; flex-direction: column; }
 .stat-value { font-size: 1.75rem; font-weight: 700; color: #f5f5fa; }
 .stat-label { font-size: 0.875rem; color: #9494b0; }

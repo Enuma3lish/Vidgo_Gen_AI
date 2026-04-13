@@ -63,6 +63,9 @@ class AdminDashboardService:
         # Users by plan
         users_by_plan = await self._get_users_by_plan()
 
+        # Paid vs free split
+        paid_stats = await self.get_paid_user_stats()
+
         # New users today
         new_today = await self.db.scalar(
             select(func.count(User.id)).where(
@@ -87,6 +90,7 @@ class AdminDashboardService:
                 "new_today": new_today or 0,
                 "by_plan": users_by_plan
             },
+            "paid_stats": paid_stats,
             "generations": {
                 "today": generations_today or 0
             },
@@ -105,6 +109,39 @@ class AdminDashboardService:
             .group_by(Plan.name)
         )
         return {(row[0] or "demo"): row[1] for row in result.all()}
+
+    async def get_paid_user_stats(self) -> Dict[str, Any]:
+        """
+        Split registered users into paid vs. free/demo.
+
+        Paid = has a current_plan_id whose Plan.price_usd > 0
+               (OR price_twd > 0, to catch TWD-only plans).
+        Free = everyone else (no plan, demo/free plan, or plan with zero price).
+        """
+        total = await self.db.scalar(select(func.count(User.id))) or 0
+
+        paid = await self.db.scalar(
+            select(func.count(User.id))
+            .join(Plan, User.current_plan_id == Plan.id)
+            .where(
+                or_(
+                    Plan.price_usd > 0,
+                    Plan.price_twd > 0,
+                )
+            )
+        ) or 0
+
+        free = max(total - paid, 0)
+        paid_percent = round((paid / total) * 100, 1) if total > 0 else 0.0
+        free_percent = round(100.0 - paid_percent, 1) if total > 0 else 0.0
+
+        return {
+            "total": total,
+            "paid": paid,
+            "free": free,
+            "paid_percent": paid_percent,
+            "free_percent": free_percent,
+        }
 
     async def _get_revenue_for_period(
         self,
@@ -169,6 +206,30 @@ class AdminDashboardService:
 
         return [
             {"month": str(row.month)[:7], "revenue": float(row.revenue or 0)}
+            for row in result.all()
+        ]
+
+    async def get_revenue_daily_trend(self, days: int = 30) -> List[Dict[str, Any]]:
+        """Get daily revenue for the past N days."""
+        end_date = datetime.utcnow().date()
+        start_date = end_date - timedelta(days=days)
+
+        result = await self.db.execute(
+            select(
+                func.date(Order.created_at).label('date'),
+                func.sum(Order.amount).label('revenue'),
+            ).where(
+                and_(
+                    Order.status == "completed",
+                    Order.created_at >= start_date,
+                )
+            ).group_by(
+                func.date(Order.created_at)
+            ).order_by('date')
+        )
+
+        return [
+            {"date": str(row.date), "revenue": float(row.revenue or 0)}
             for row in result.all()
         ]
 

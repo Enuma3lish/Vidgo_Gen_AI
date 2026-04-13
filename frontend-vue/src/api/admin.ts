@@ -11,6 +11,14 @@ export interface OnlineStats {
   timestamp: string
 }
 
+export interface PaidUserStats {
+  total: number
+  paid: number
+  free: number
+  paid_percent: number
+  free_percent: number
+}
+
 export interface DashboardStats {
   online: OnlineStats
   users: {
@@ -18,6 +26,7 @@ export interface DashboardStats {
     new_today: number
     by_plan: Record<string, number>
   }
+  paid_stats?: PaidUserStats
   generations: {
     today: number
   }
@@ -208,6 +217,13 @@ export const adminApi = {
   async getRevenueChart(months: number = 12): Promise<ChartDataPoint[]> {
     const response = await apiClient.get('/api/v1/admin/charts/revenue', {
       params: { months }
+    })
+    return response.data
+  },
+
+  async getRevenueDailyChart(days: number = 30): Promise<ChartDataPoint[]> {
+    const response = await apiClient.get('/api/v1/admin/charts/revenue-daily', {
+      params: { days }
     })
     return response.data
   },

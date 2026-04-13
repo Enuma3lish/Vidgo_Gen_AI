@@ -119,6 +119,17 @@ async def get_revenue_chart(
     return await service.get_revenue_trend(months)
 
 
+@router.get("/charts/revenue-daily")
+async def get_revenue_daily_chart(
+    days: int = Query(default=30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Get daily revenue for the past N days"""
+    service = AdminDashboardService(db)
+    return await service.get_revenue_daily_trend(days)
+
+
 @router.get("/charts/users-growth")
 async def get_user_growth_chart(
     days: int = Query(default=30, ge=1, le=365),

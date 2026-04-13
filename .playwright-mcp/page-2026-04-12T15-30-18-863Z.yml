@@ -1,0 +1,241 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "首頁" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "靈感作品庫" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "工具" [ref=e14] [cursor=pointer]:
+          - text: 工具
+          - img [ref=e15]
+        - link "定價" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇹🇼 繁體中文" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇹🇼
+          - generic [ref=e22]: 繁體中文
+          - img [ref=e23]
+        - link "登入" [ref=e25] [cursor=pointer]:
+          - /url: /auth/login
+        - link "立即開始創作" [ref=e26] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e27]:
+    - generic [ref=e28]:
+      - generic [ref=e31]:
+        - generic [ref=e32]: 🎨
+        - heading "圖案設計" [level=1] [ref=e33]
+        - paragraph [ref=e34]: 運用 AI 技術快速生成獨特圖案，支援無縫圖案、花卉、幾何等多種風格
+        - link "訂閱以解鎖更多功能" [ref=e36] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e38]:
+        - heading "可用工具" [level=2] [ref=e39]
+        - generic [ref=e40]:
+          - generic [ref=e41] [cursor=pointer]:
+            - generic [ref=e42]:
+              - generic [ref=e43]: 🎨
+              - generic [ref=e44]:
+                - heading "圖案生成" [level=3] [ref=e45]
+                - generic [ref=e46]:
+                  - generic [ref=e47]: "預估消耗:"
+                  - generic [ref=e48]: 5 點數
+                  - generic [ref=e49]: (Insufficient)
+            - paragraph [ref=e50]: 從文字描述生成獨特圖案
+            - generic [ref=e51]:
+              - paragraph [ref=e52]: "範例提示詞:"
+              - generic [ref=e53]:
+                - generic [ref=e54]: 禮品包裝與品牌用花卉圖案，玫瑰...
+                - generic [ref=e55]: 菜單與餐飲品牌用日式波浪紋...
+                - generic [ref=e56]: 咖啡廳與烘焙用水彩櫻花圖案...
+          - generic [ref=e57] [cursor=pointer]:
+            - generic [ref=e58]:
+              - generic [ref=e59]: 🖼️
+              - generic [ref=e60]:
+                - heading "圖案轉印" [level=3] [ref=e61]
+                - generic [ref=e62]:
+                  - generic [ref=e63]: "預估消耗:"
+                  - generic [ref=e64]: 8 點數
+                  - generic [ref=e65]: (Insufficient)
+            - paragraph [ref=e66]: 將圖案套用到產品上
+            - generic [ref=e67]:
+              - paragraph [ref=e68]: "範例提示詞:"
+              - generic [ref=e69]:
+                - generic [ref=e70]: 將大理石紋理用於高級包裝感...
+                - generic [ref=e71]: 轉換為刺繡風格，織品業用...
+                - generic [ref=e72]: 水彩風格，菜單與傳單設計...
+          - generic [ref=e73] [cursor=pointer]:
+            - generic [ref=e74]:
+              - generic [ref=e75]: 🔄
+              - generic [ref=e76]:
+                - heading "無縫圖案" [level=3] [ref=e77]
+                - generic [ref=e78]:
+                  - generic [ref=e79]: "預估消耗:"
+                  - generic [ref=e80]: 5 點數
+                  - generic [ref=e81]: (Insufficient)
+            - paragraph [ref=e82]: 生成可無縫拼接的圖案
+            - generic [ref=e83]:
+              - paragraph [ref=e84]: "範例提示詞:"
+              - generic [ref=e85]:
+                - generic [ref=e86]: 包裝與壁紙用無縫磁磚...
+                - generic [ref=e87]: 織物與印刷用可重複圖案...
+                - generic [ref=e88]: 社群用品牌無縫設計...
+      - generic [ref=e90]:
+        - heading "快速生成" [level=2] [ref=e91]
+        - generic [ref=e93]:
+          - button "🎨 圖案生成" [ref=e94] [cursor=pointer]
+          - button "🖼️ 圖案轉印" [ref=e95] [cursor=pointer]
+          - button "🔄 無縫圖案" [ref=e96] [cursor=pointer]
+        - generic [ref=e97]:
+          - generic [ref=e98]: 選擇風格
+          - generic [ref=e99]:
+            - button "🔄 無縫圖案" [ref=e100] [cursor=pointer]:
+              - generic [ref=e101]: 🔄
+              - generic [ref=e102]: 無縫圖案
+            - button "🌸 花卉風格" [ref=e103] [cursor=pointer]:
+              - generic [ref=e104]: 🌸
+              - generic [ref=e105]: 花卉風格
+            - button "📐 幾何圖形" [ref=e106] [cursor=pointer]:
+              - generic [ref=e107]: 📐
+              - generic [ref=e108]: 幾何圖形
+            - button "🎭 抽象藝術" [ref=e109] [cursor=pointer]:
+              - generic [ref=e110]: 🎭
+              - generic [ref=e111]: 抽象藝術
+            - button "🏮 傳統紋樣" [ref=e112] [cursor=pointer]:
+              - generic [ref=e113]: 🏮
+              - generic [ref=e114]: 傳統紋樣
+            - button "🎲 3D設計" [ref=e115] [cursor=pointer]:
+              - generic [ref=e116]: 🎲
+              - generic [ref=e117]: 3D設計
+            - button "🏠 室內設計" [ref=e118] [cursor=pointer]:
+              - generic [ref=e119]: 🏠
+              - generic [ref=e120]: 室內設計
+            - button "📦 產品展示" [ref=e121] [cursor=pointer]:
+              - generic [ref=e122]: 📦
+              - generic [ref=e123]: 產品展示
+        - generic [ref=e124]:
+          - generic [ref=e125]: 選擇範例提示詞
+          - generic [ref=e126]:
+            - button "禮品包裝與品牌用花卉圖案，玫瑰與深藍" [ref=e127] [cursor=pointer]
+            - button "菜單與餐飲品牌用日式波浪紋" [ref=e128] [cursor=pointer]
+            - button "咖啡廳與烘焙用水彩櫻花圖案" [ref=e129] [cursor=pointer]
+            - button "飲料與夏季促銷用熱帶棕櫚圖案" [ref=e130] [cursor=pointer]
+            - button "科技與零售品牌用現代幾何圖案" [ref=e131] [cursor=pointer]
+            - button "美妝包裝用大理石紋理圖案" [ref=e132] [cursor=pointer]
+        - generic [ref=e133]:
+          - generic [ref=e134]: 輸入描述
+          - paragraph [ref=e136]: 請從上方選擇範例提示詞，或訂閱以自訂提示詞
+          - generic [ref=e137]:
+            - textbox "從文字描述生成獨特圖案" [disabled] [ref=e138]
+            - button "生成" [disabled] [ref=e139]:
+              - generic [ref=e140]: 生成
+        - generic [ref=e142]:
+          - generic [ref=e143]: "預估消耗:"
+          - generic [ref=e144]: 5 點數
+          - generic [ref=e145]: (Insufficient)
+      - generic [ref=e147]:
+        - heading "精選案例" [level=2] [ref=e148]
+        - generic [ref=e149]:
+          - generic [ref=e150]:
+            - heading "花卉圖案生成" [level=4] [ref=e151]
+            - generic:
+              - img "花卉圖案生成"
+            - paragraph [ref=e152]: "\"Elegant floral pattern with roses and peonies\""
+          - generic [ref=e153]:
+            - heading "幾何圖案設計" [level=4] [ref=e154]
+            - generic:
+              - img "幾何圖案設計"
+            - paragraph [ref=e155]: "\"Modern geometric pattern, gold and navy\""
+      - generic [ref=e157]:
+        - heading "準備開始了嗎？" [level=2] [ref=e158]
+        - paragraph [ref=e159]: 免費體驗 AI 工具，創造無限可能
+        - link "立即訂閱" [ref=e160] [cursor=pointer]:
+          - /url: /pricing
+  - contentinfo [ref=e161]:
+    - generic [ref=e162]:
+      - generic [ref=e163]:
+        - generic [ref=e164]:
+          - link "V VidGo AI" [ref=e165] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e166]: V
+            - generic [ref=e167]: VidGo AI
+          - paragraph [ref=e168]: VidGo AI — 讓影片與視覺創作變得簡單、高效、有創意。
+          - generic [ref=e169]:
+            - link [ref=e170] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e171]
+            - link [ref=e173] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e174]
+        - generic [ref=e176]:
+          - heading "時尚 AI" [level=4] [ref=e177]
+          - list [ref=e178]:
+            - listitem [ref=e179]:
+              - link "虛擬試穿" [ref=e180] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e181]:
+              - link "時尚短影片" [ref=e182] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e183]:
+              - link "Text to Video" [ref=e184] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e185]:
+              - link "產品代言人" [ref=e186] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e187]:
+          - heading "電商 AI" [level=4] [ref=e188]
+          - list [ref=e189]:
+            - listitem [ref=e190]:
+              - link "產品全景拍" [ref=e191] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e192]:
+              - link "智能去背" [ref=e193] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e194]:
+              - link "HD Upscale" [ref=e195] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e196]:
+              - link "風格克隆" [ref=e197] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e198]:
+              - link "空間設計" [ref=e199] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e200]:
+          - heading "公司" [level=4] [ref=e201]
+          - list [ref=e202]:
+            - listitem [ref=e203]:
+              - link "關於我們" [ref=e204] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e205]:
+              - link "定價方案" [ref=e206] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e207]:
+              - link "聯絡我們" [ref=e208] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e209]:
+              - link "Blog" [ref=e210] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e211]:
+              - link "聯盟計畫" [ref=e212] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e213]:
+          - heading "法律" [level=4] [ref=e214]
+          - list [ref=e215]:
+            - listitem [ref=e216]:
+              - link "服務條款" [ref=e217] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e218]:
+              - link "隱私政策" [ref=e219] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e220]:
+              - link "Cookie 政策" [ref=e221] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e222]:
+              - link "退款政策" [ref=e223] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e224]:
+        - paragraph [ref=e225]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e227]: 安全支付

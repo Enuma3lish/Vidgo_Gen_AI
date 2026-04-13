@@ -1,0 +1,563 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - generic [ref=e13]:
+          - button "Tools" [ref=e14] [cursor=pointer]:
+            - text: Tools
+            - img [ref=e15]
+          - generic [ref=e502]:
+            - generic [ref=e503]:
+              - generic [ref=e504]: Fashion AI
+              - link "👗 Virtual Try On" [ref=e505] [cursor=pointer]:
+                - /url: /tools/try-on
+                - generic [ref=e506]: 👗
+                - generic [ref=e507]: Virtual Try On
+              - link "🎬 Fashion Reels" [ref=e508] [cursor=pointer]:
+                - /url: /tools/short-video
+                - generic [ref=e509]: 🎬
+                - generic [ref=e510]: Fashion Reels
+              - link "🎥 Text to Video" [ref=e511] [cursor=pointer]:
+                - /url: /tools/text-to-video
+                - generic [ref=e512]: 🎥
+                - generic [ref=e513]: Text to Video
+              - link "🎭 Product Avatars" [ref=e514] [cursor=pointer]:
+                - /url: /tools/avatar
+                - generic [ref=e515]: 🎭
+                - generic [ref=e516]: Product Avatars
+            - generic [ref=e517]:
+              - generic [ref=e518]: E-commerce AI
+              - link "📸 Product AnyShoot" [ref=e519] [cursor=pointer]:
+                - /url: /tools/product-scene
+                - generic [ref=e520]: 📸
+                - generic [ref=e521]: Product AnyShoot
+              - link "✂️ Remove Background" [ref=e522] [cursor=pointer]:
+                - /url: /tools/background-removal
+                - generic [ref=e523]: ✂️
+                - generic [ref=e524]: Remove Background
+              - link "🔍 HD Upscale" [ref=e525] [cursor=pointer]:
+                - /url: /tools/upscale
+                - generic [ref=e526]: 🔍
+                - generic [ref=e527]: HD Upscale
+              - link "🎨 Pattern Design" [ref=e528] [cursor=pointer]:
+                - /url: /tools/pattern-generate
+                - generic [ref=e529]: 🎨
+                - generic [ref=e530]: Pattern Design
+            - generic [ref=e531]:
+              - generic [ref=e532]: Design & Content AI
+              - link "🏠 Room Redesign" [ref=e533] [cursor=pointer]:
+                - /url: /tools/room-redesign
+                - generic [ref=e534]: 🏠
+                - generic [ref=e535]: Room Redesign
+              - link "🎨 Style Clone" [ref=e536] [cursor=pointer]:
+                - /url: /tools/effects
+                - generic [ref=e537]: 🎨
+                - generic [ref=e538]: Style Clone
+              - link "🔄 Image Transform" [ref=e539] [cursor=pointer]:
+                - /url: /tools/image-transform
+                - generic [ref=e540]: 🔄
+                - generic [ref=e541]: Image Transform
+              - link "🎞️ Video Style Transfer" [ref=e542] [cursor=pointer]:
+                - /url: /tools/video-transform
+                - generic [ref=e543]: 🎞️
+                - generic [ref=e544]: Video Style Transfer
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "Login" [ref=e25] [cursor=pointer]:
+          - /url: /auth/login
+        - link "Start Creating Now" [ref=e26] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e27]:
+    - generic [ref=e28]:
+      - generic [ref=e33]:
+        - generic [ref=e34]: 14+ AI Tools, Trusted by 1M+ Brands
+        - heading "VidGo AI Top AI E-commerce Designer" [level=1] [ref=e36]:
+          - text: VidGo AI
+          - text: Top AI E-commerce Designer
+        - paragraph [ref=e37]: Create pictures that sell your products with VidGo AI.
+        - paragraph [ref=e38]: Proven to boost click-through rates by 54.7%!
+        - generic [ref=e39]:
+          - button "Start Creating Now" [ref=e40] [cursor=pointer]
+          - link "View Pricing" [ref=e41] [cursor=pointer]:
+            - /url: /pricing
+        - generic [ref=e42]:
+          - generic [ref=e43]:
+            - generic [ref=e44]: ✓
+            - text: Start with 40 free credits
+          - generic [ref=e45]:
+            - generic [ref=e46]: ✓
+            - text: No credit card required
+          - generic [ref=e47]:
+            - generic [ref=e48]: ✓
+            - text: Cancel anytime
+      - generic [ref=e50]:
+        - paragraph [ref=e51]: Trusted by 1,000,000+ Fashion and E-Commerce Brands
+        - generic [ref=e53]:
+          - generic [ref=e54]: WooCommerce
+          - generic [ref=e55]: Amazon
+          - generic [ref=e56]: Instagram
+          - generic [ref=e57]: TikTok
+          - generic [ref=e58]: Etsy
+          - generic [ref=e59]: Walmart
+          - generic [ref=e60]: Shopify
+          - generic [ref=e61]: eBay
+          - generic [ref=e62]: WooCommerce
+          - generic [ref=e63]: Amazon
+          - generic [ref=e64]: Instagram
+          - generic [ref=e65]: TikTok
+          - generic [ref=e66]: Etsy
+          - generic [ref=e67]: Walmart
+          - generic [ref=e68]: Shopify
+          - generic [ref=e69]: eBay
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - heading "Explore All AI Creation Tools" [level=2] [ref=e73]
+          - paragraph [ref=e74]: Experience the full range of AI tools that power your product visuals and creative workflows.
+        - generic [ref=e75]:
+          - link "Hot 👗 Virtual Try On Showcase apparel with AI fashion models" [ref=e76] [cursor=pointer]:
+            - /url: /tools/try-on
+            - generic [ref=e78]: Hot
+            - generic [ref=e79]: 👗
+            - generic [ref=e80]: Virtual Try On
+            - generic [ref=e81]: Showcase apparel with AI fashion models
+          - link "Hot 🎬 Fashion Reels AI fashion model outfit videos & shorts maker" [ref=e82] [cursor=pointer]:
+            - /url: /tools/short-video
+            - generic [ref=e84]: Hot
+            - generic [ref=e85]: 🎬
+            - generic [ref=e86]: Fashion Reels
+            - generic [ref=e87]: AI fashion model outfit videos & shorts maker
+          - link "🎭 Product Avatars Create talking product spokesperson videos" [ref=e88] [cursor=pointer]:
+            - /url: /tools/avatar
+            - generic [ref=e89]: 🎭
+            - generic [ref=e90]: Product Avatars
+            - generic [ref=e91]: Create talking product spokesperson videos
+          - link "📸 Product AnyShoot Product photos in any scene with AI" [ref=e92] [cursor=pointer]:
+            - /url: /tools/product-scene
+            - generic [ref=e93]: 📸
+            - generic [ref=e94]: Product AnyShoot
+            - generic [ref=e95]: Product photos in any scene with AI
+          - link "Free ✂️ Remove Background Remove image backgrounds for free" [ref=e96] [cursor=pointer]:
+            - /url: /tools/background-removal
+            - generic [ref=e98]: Free
+            - generic [ref=e99]: ✂️
+            - generic [ref=e100]: Remove Background
+            - generic [ref=e101]: Remove image backgrounds for free
+          - link "🎨 Style Clone Clone target image background style easily" [ref=e102] [cursor=pointer]:
+            - /url: /tools/effects
+            - generic [ref=e103]: 🎨
+            - generic [ref=e104]: Style Clone
+            - generic [ref=e105]: Clone target image background style easily
+          - link "🏠 Room Redesign AI-powered interior space redesign" [ref=e106] [cursor=pointer]:
+            - /url: /tools/room-redesign
+            - generic [ref=e107]: 🏠
+            - generic [ref=e108]: Room Redesign
+            - generic [ref=e109]: AI-powered interior space redesign
+          - link "New 🎥 Text to Video Generate videos from text descriptions" [ref=e110] [cursor=pointer]:
+            - /url: /tools/text-to-video
+            - generic [ref=e112]: New
+            - generic [ref=e113]: 🎥
+            - generic [ref=e114]: Text to Video
+            - generic [ref=e115]: Generate videos from text descriptions
+          - link "New 🔍 HD Upscale Upscale images to 4K high resolution" [ref=e116] [cursor=pointer]:
+            - /url: /tools/upscale
+            - generic [ref=e118]: New
+            - generic [ref=e119]: 🔍
+            - generic [ref=e120]: HD Upscale
+            - generic [ref=e121]: Upscale images to 4K high resolution
+          - link "🔄 Image Transform AI-powered image style transformation" [ref=e122] [cursor=pointer]:
+            - /url: /tools/image-transform
+            - generic [ref=e123]: 🔄
+            - generic [ref=e124]: Image Transform
+            - generic [ref=e125]: AI-powered image style transformation
+          - link "🎞️ Video Transform AI-powered video style transformation" [ref=e126] [cursor=pointer]:
+            - /url: /tools/video-transform
+            - generic [ref=e127]: 🎞️
+            - generic [ref=e128]: Video Transform
+            - generic [ref=e129]: AI-powered video style transformation
+          - link "🎨 Pattern Design Generate seamless patterns for branding" [ref=e130] [cursor=pointer]:
+            - /url: /tools/pattern-generate
+            - generic [ref=e131]: 🎨
+            - generic [ref=e132]: Pattern Design
+            - generic [ref=e133]: Generate seamless patterns for branding
+      - generic [ref=e135]:
+        - generic [ref=e136]:
+          - heading "Generate Endless Possibilities with One Click" [level=2] [ref=e137]
+          - paragraph [ref=e138]: Through seamlessly integrated AI capabilities, we empower businesses to significantly enhance design efficiency, creativity, and market competitiveness.
+        - generic [ref=e139]:
+          - generic [ref=e140]:
+            - generic [ref=e141]:
+              - img "Fashion AI" [ref=e142]
+              - generic [ref=e144]: Fashion AI
+            - generic [ref=e145]:
+              - paragraph [ref=e146]: Virtual try-on, fashion reels, and AI model showcase — the complete solution for fashion e-commerce visual content.
+              - generic [ref=e147]:
+                - link "👗 Virtual Try On" [ref=e148] [cursor=pointer]:
+                  - /url: /tools/try-on
+                  - generic [ref=e149]: 👗
+                  - text: Virtual Try On
+                  - img [ref=e150]
+                - link "🎬 Fashion Reels" [ref=e152] [cursor=pointer]:
+                  - /url: /tools/short-video
+                  - generic [ref=e153]: 🎬
+                  - text: Fashion Reels
+                  - img [ref=e154]
+                - link "🎭 Product Avatars" [ref=e156] [cursor=pointer]:
+                  - /url: /tools/avatar
+                  - generic [ref=e157]: 🎭
+                  - text: Product Avatars
+                  - img [ref=e158]
+          - generic [ref=e160]:
+            - generic [ref=e161]:
+              - img "E-commerce AI" [ref=e162]
+              - generic [ref=e164]: E-commerce AI
+            - generic [ref=e165]:
+              - paragraph [ref=e166]: Product scene generation, background removal, and AI shadows — make your products stand out on every platform.
+              - generic [ref=e167]:
+                - link "📸 Product AnyShoot" [ref=e168] [cursor=pointer]:
+                  - /url: /tools/product-scene
+                  - generic [ref=e169]: 📸
+                  - text: Product AnyShoot
+                  - img [ref=e170]
+                - link "✂️ Remove Background" [ref=e172] [cursor=pointer]:
+                  - /url: /tools/background-removal
+                  - generic [ref=e173]: ✂️
+                  - text: Remove Background
+                  - img [ref=e174]
+                - link "🌑 AI Shadows" [ref=e176] [cursor=pointer]:
+                  - /url: /tools/effects
+                  - generic [ref=e177]: 🌑
+                  - text: AI Shadows
+                  - img [ref=e178]
+          - generic [ref=e180]:
+            - generic [ref=e181]:
+              - img "Design AI" [ref=e182]
+              - generic [ref=e184]: Design & Content AI
+            - generic [ref=e185]:
+              - paragraph [ref=e186]: Room redesign, style cloning, and image translation — powerful tools for creative design workflows.
+              - generic [ref=e187]:
+                - link "🏠 Room Redesign" [ref=e188] [cursor=pointer]:
+                  - /url: /tools/room-redesign
+                  - generic [ref=e189]: 🏠
+                  - text: Room Redesign
+                  - img [ref=e190]
+                - link "🎨 Style Clone" [ref=e192] [cursor=pointer]:
+                  - /url: /tools/effects
+                  - generic [ref=e193]: 🎨
+                  - text: Style Clone
+                  - img [ref=e194]
+                - link "🌐 Image Translator" [ref=e196] [cursor=pointer]:
+                  - /url: /tools/image-translator
+                  - generic [ref=e197]: 🌐
+                  - text: Image Translator
+                  - img [ref=e198]
+      - generic [ref=e201]:
+        - generic [ref=e202]:
+          - heading "The First AI That Truly Understands Marketing" [level=2] [ref=e203]
+          - paragraph [ref=e204]: Generating product pictures for any scenario and occasion.
+        - generic [ref=e205]:
+          - button "Spring Sale" [ref=e206] [cursor=pointer]
+          - button "Valentine's Day" [ref=e207] [cursor=pointer]
+          - button "Black Friday" [ref=e208] [cursor=pointer]
+          - button "Christmas" [ref=e209] [cursor=pointer]
+          - button "New Year" [ref=e210] [cursor=pointer]
+        - generic [ref=e211]:
+          - generic [ref=e212] [cursor=pointer]:
+            - img "Season showcase 1" [ref=e213]
+            - generic [ref=e215]: AI Generated
+          - generic [ref=e216] [cursor=pointer]:
+            - img "Season showcase 2" [ref=e217]
+            - generic [ref=e219]: AI Generated
+          - generic [ref=e220] [cursor=pointer]:
+            - img "Season showcase 3" [ref=e221]
+            - generic [ref=e223]: AI Generated
+          - generic [ref=e224] [cursor=pointer]:
+            - img "Season showcase 4" [ref=e225]
+            - generic [ref=e227]: AI Generated
+      - generic [ref=e229]:
+        - generic [ref=e230]:
+          - generic [ref=e232]:
+            - generic [ref=e233]:
+              - img "Clothing Product Photo" [ref=e234]
+              - generic [ref=e235]: Before
+            - generic [ref=e236]:
+              - img "AI Model Wearing Result" [ref=e237]
+              - generic [ref=e238]: After
+          - generic [ref=e239]:
+            - generic [ref=e240]: AI Powered
+            - heading "Virtual Try-On" [level=3] [ref=e241]
+            - paragraph [ref=e242]: Upload clothing images to generate studio-quality model showcase photos in seconds, at a fraction of traditional photoshoot cost. Dramatically simplify your e-commerce workflow.
+            - link "Try Now" [ref=e243] [cursor=pointer]:
+              - /url: /tools/try-on
+              - text: Try Now
+              - img [ref=e244]
+        - generic [ref=e246]:
+          - generic [ref=e248]:
+            - generic [ref=e249]:
+              - img "Original Image (with background)" [ref=e250]
+              - generic [ref=e251]: Before
+            - generic [ref=e252]:
+              - img "Transparent PNG" [ref=e253]
+              - generic [ref=e254]: After
+          - generic [ref=e255]:
+            - generic [ref=e256]: AI Powered
+            - heading "One-Click Smart Background Removal" [level=3] [ref=e257]
+            - paragraph [ref=e258]: Easily remove cluttered backgrounds online. Using state-of-the-art AI algorithms, one-click batch processing that perfects every detail.
+            - link "Try Now" [ref=e259] [cursor=pointer]:
+              - /url: /tools/background-removal
+              - text: Try Now
+              - img [ref=e260]
+        - generic [ref=e262]:
+          - generic [ref=e264]:
+            - generic [ref=e265]:
+              - img "Original Room Photo" [ref=e266]
+              - generic [ref=e267]: Before
+            - generic [ref=e268]:
+              - img "AI Nordic Style Redesign" [ref=e269]
+              - generic [ref=e270]: After
+          - generic [ref=e271]:
+            - generic [ref=e272]: AI Powered
+            - heading "Room Redesign" [level=3] [ref=e273]
+            - paragraph [ref=e274]: Upload an interior photo. AI intelligently redesigns into multiple styles. Modern, Nordic, Japanese, Industrial — one-click design proposals that improve client pitching efficiency 5x.
+            - link "Try Now" [ref=e275] [cursor=pointer]:
+              - /url: /tools/room-redesign
+              - text: Try Now
+              - img [ref=e276]
+      - generic [ref=e280]:
+        - generic [ref=e281]:
+          - generic [ref=e282]: 🌐
+          - heading "Image Translation" [level=3] [ref=e283]
+          - paragraph [ref=e284]: Expand your global reach with VidGo AI's Image Translation feature. Instantly translate text within images into multiple languages, overcoming language barriers and connecting with a wider global customer base.
+          - link "Try Now" [ref=e285] [cursor=pointer]:
+            - /url: /tools/image-translator
+        - generic [ref=e286]:
+          - generic [ref=e287]: 📺
+          - heading "Video Translation & Dubbing" [level=3] [ref=e288]
+          - paragraph [ref=e289]: Empower your content for a global audience with powerful AI that automatically translates and redubs your videos. Ensure your content resonates across different cultures, enhancing engagement and conversion rates worldwide.
+          - link "Try Now" [ref=e290] [cursor=pointer]:
+            - /url: /tools/short-video
+      - generic [ref=e292]:
+        - generic [ref=e293]:
+          - heading "They Are All Using VidGo AI" [level=2] [ref=e294]
+          - paragraph [ref=e295]: The secret to high sales for over 1,030,000 merchants
+        - generic [ref=e296]:
+          - generic [ref=e297]:
+            - generic [ref=e298]:
+              - generic [ref=e299]: ★
+              - generic [ref=e300]: ★
+              - generic [ref=e301]: ★
+              - generic [ref=e302]: ★
+              - generic [ref=e303]: ★
+            - paragraph [ref=e304]: “Since using VidGo AI's video and marketing image tools, our ad CTR increased 50%, ROAS improved 40%, material production went from 3 days to 10 minutes, and costs dropped 90%.”
+            - generic [ref=e306]:
+              - generic [ref=e307]: R
+              - generic [ref=e308]:
+                - generic [ref=e309]: Ryan Chen
+                - generic [ref=e310]: E-bike Brand Founder
+          - generic [ref=e311]:
+            - generic [ref=e312]:
+              - generic [ref=e313]: ★
+              - generic [ref=e314]: ★
+              - generic [ref=e315]: ★
+              - generic [ref=e316]: ★
+              - generic [ref=e317]: ★
+            - paragraph [ref=e318]: “VidGo AI has been a game-changer for my store. Just upload a flat image of the clothing, and it instantly gives me a realistic model try-on photo. This makes listings much more appealing.”
+            - generic [ref=e320]:
+              - generic [ref=e321]: L
+              - generic [ref=e322]:
+                - generic [ref=e323]: Lisa Wang
+                - generic [ref=e324]: Fashion Retailer
+          - generic [ref=e325]:
+            - generic [ref=e326]:
+              - generic [ref=e327]: ★
+              - generic [ref=e328]: ★
+              - generic [ref=e329]: ★
+              - generic [ref=e330]: ★
+              - generic [ref=e331]: ★
+            - paragraph [ref=e332]: “AI Dubbing from VidGo AI has transformed how we create content. The video translation features are seamless, offering a natural and engaging experience for our international customers.”
+            - generic [ref=e334]:
+              - generic [ref=e335]: M
+              - generic [ref=e336]:
+                - generic [ref=e337]: Mark Thompson
+                - generic [ref=e338]: Video Producer
+          - generic [ref=e339]:
+            - generic [ref=e340]:
+              - generic [ref=e341]: ★
+              - generic [ref=e342]: ★
+              - generic [ref=e343]: ★
+              - generic [ref=e344]: ★
+              - generic [ref=e345]: ★
+            - paragraph [ref=e346]: “Image Translation by VidGo AI is a masterpiece for global e-commerce. It effortlessly translates text within images, making our products accessible to a worldwide audience.”
+            - generic [ref=e348]:
+              - generic [ref=e349]: S
+              - generic [ref=e350]:
+                - generic [ref=e351]: Sarah Kim
+                - generic [ref=e352]: Content Creator
+      - generic [ref=e354]:
+        - generic [ref=e355]:
+          - heading "Become Our Next Success Story" [level=2] [ref=e356]
+          - paragraph [ref=e357]: See what our customers say about the products
+        - generic [ref=e358]:
+          - generic [ref=e360]:
+            - generic [ref=e361]:
+              - generic [ref=e362]: 👗
+              - generic [ref=e363]:
+                - generic [ref=e364]: Fashion Brand
+                - generic [ref=e365]: Fashion Brand Entrepreneur
+            - 'heading "From Campus Startup to Global Entrepreneur: Virtual Try-On Helps a Brand Rise" [level=4] [ref=e366]'
+            - paragraph [ref=e367]: After using VidGo AI's virtual try-on, I can generate realistic model photos in seconds, cutting costs and saving time. My click-through rate increased by 50%, and conversions rose by over 40%.
+            - button "Read Story" [ref=e368] [cursor=pointer]:
+              - text: Read Story
+              - img [ref=e369]
+          - generic [ref=e372]:
+            - generic [ref=e373]:
+              - generic [ref=e374]: 🛋️
+              - generic [ref=e375]:
+                - generic [ref=e376]: Furniture Brand
+                - generic [ref=e377]: Head of Marketing
+            - 'heading "Multilingual Content Marketing: Easily Meet Global Market Demands" [level=4] [ref=e378]'
+            - paragraph [ref=e379]: With VidGo AI's image translation, we turned a time-consuming multilingual design process into an effortless workflow. Translation accuracy improved dramatically, and design productivity increased fivefold.
+            - button "Read Story" [ref=e380] [cursor=pointer]:
+              - text: Read Story
+              - img [ref=e381]
+          - generic [ref=e384]:
+            - generic [ref=e385]:
+              - generic [ref=e386]: 💻
+              - generic [ref=e387]:
+                - generic [ref=e388]: ZEUSLAP
+                - generic [ref=e389]: Co-founder
+            - 'heading "From Zero to No.1: How a Tablet Brand Achieved Breakthrough Growth" [level=4] [ref=e390]'
+            - paragraph [ref=e391]: With VidGo AI's marketing visuals and templates, we cut our visual production cycle from days to seconds. Design efficiency increased by 80%, and costs dropped by 90%.
+            - button "Read Story" [ref=e392] [cursor=pointer]:
+              - text: Read Story
+              - img [ref=e393]
+          - generic [ref=e396]:
+            - generic [ref=e397]:
+              - generic [ref=e398]: 🚲
+              - generic [ref=e399]:
+                - generic [ref=e400]: E-Bike Startup
+                - generic [ref=e401]: Brand Founder
+            - 'heading "From High Costs to Efficient Growth: Marketing Breakthroughs" [level=4] [ref=e402]'
+            - paragraph [ref=e403]: Since using VidGo AI's Templates feature, our ad CTR increased by 50%, ROAS improved by 40%, and what took 3 days now takes 10 minutes, cutting costs by 90%.
+            - button "Read Story" [ref=e404] [cursor=pointer]:
+              - text: Read Story
+              - img [ref=e405]
+      - generic [ref=e410]:
+        - generic [ref=e411]:
+          - heading "Why Choose VidGo AI" [level=2] [ref=e412]
+          - paragraph [ref=e413]: We simplify ecommerce design, cut costs, and boost sales — effortlessly!
+        - generic [ref=e414]:
+          - generic [ref=e415]:
+            - generic [ref=e416]: 54.7%
+            - generic [ref=e417]: Click-Through Rate Boost
+          - generic [ref=e418]:
+            - generic [ref=e419]: 79%
+            - generic [ref=e420]: Marketing Design Cost Saved
+          - generic [ref=e421]:
+            - generic [ref=e422]: 57%
+            - generic [ref=e423]: Purchase Conversion Boost
+          - generic [ref=e424]:
+            - generic [ref=e425]: 90%
+            - generic [ref=e426]: Time Cost Saved
+      - generic [ref=e429]:
+        - heading "Start Creating for Free Today" [level=2] [ref=e430]
+        - paragraph [ref=e431]: Join over 1 million brands and creators — let AI extend your creativity without limits
+        - button "Start Creating Now" [ref=e432] [cursor=pointer]
+        - paragraph [ref=e433]: No credit card · Ready immediately · Cancel anytime
+  - contentinfo [ref=e434]:
+    - generic [ref=e435]:
+      - generic [ref=e436]:
+        - generic [ref=e437]:
+          - link "V VidGo AI" [ref=e438] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e439]: V
+            - generic [ref=e440]: VidGo AI
+          - paragraph [ref=e441]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e442]:
+            - link [ref=e443] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e444]
+            - link [ref=e446] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e447]
+        - generic [ref=e449]:
+          - heading "Fashion AI" [level=4] [ref=e450]
+          - list [ref=e451]:
+            - listitem [ref=e452]:
+              - link "Virtual Try On" [ref=e453] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e454]:
+              - link "Fashion Reels" [ref=e455] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e456]:
+              - link "Text to Video" [ref=e457] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e458]:
+              - link "Product Avatars" [ref=e459] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e460]:
+          - heading "E-commerce AI" [level=4] [ref=e461]
+          - list [ref=e462]:
+            - listitem [ref=e463]:
+              - link "Product AnyShoot" [ref=e464] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e465]:
+              - link "Remove Background" [ref=e466] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e467]:
+              - link "HD Upscale" [ref=e468] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e469]:
+              - link "Style Clone" [ref=e470] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e471]:
+              - link "Room Redesign" [ref=e472] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e473]:
+          - heading "Company" [level=4] [ref=e474]
+          - list [ref=e475]:
+            - listitem [ref=e476]:
+              - link "About Us" [ref=e477] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e478]:
+              - link "Pricing" [ref=e479] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e480]:
+              - link "Contact Us" [ref=e481] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e482]:
+              - link "Blog" [ref=e483] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e484]:
+              - link "Affiliate Program" [ref=e485] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e486]:
+          - heading "Legal" [level=4] [ref=e487]
+          - list [ref=e488]:
+            - listitem [ref=e489]:
+              - link "Terms of Service" [ref=e490] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e491]:
+              - link "Privacy Policy" [ref=e492] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e493]:
+              - link "Cookie Policy" [ref=e494] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e495]:
+              - link "Refund Policy" [ref=e496] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e497]:
+        - paragraph [ref=e498]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e500]: Secure Payment

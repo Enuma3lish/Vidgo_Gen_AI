@@ -33,6 +33,10 @@ const selectedClothingId = ref<string | null>(null)
 const modelImage = ref<string | undefined>(undefined)
 const resultImage = ref<string | null>(null)
 const isProcessing = ref(false)
+// True when a demo user clicked Generate but the selected tile isn't backed
+// by a real Material DB preset (db_empty fallback or missing preset id).
+// Surfaces a persistent in-block message instead of a silent no-op.
+const demoEmptyState = ref(false)
 const selectedModel = ref('female-1')
 
 // Default model options (6 models matching backend generate_model_library() naming)
@@ -163,6 +167,7 @@ function selectDemoClothing(item: { id: string; preview?: string; watermarked_re
   selectedClothingId.value = item.id
   clothingImage.value = item.preview || undefined
   resultImage.value = null
+  demoEmptyState.value = false
 }
 
 async function generateTryOn() {
@@ -196,6 +201,9 @@ async function generateTryOn() {
         }
       }
 
+      // No pre-generated result available — surface BOTH a toast AND a
+      // persistent in-block message. Toast alone auto-hides in 3s.
+      demoEmptyState.value = true
       if (dbEmpty.value) {
         uiStore.showInfo(isZh.value ? '預覽模式：此服裝尚未生成試穿結果，訂閱以使用完整功能' : 'Preview mode: Try-on results not yet generated. Subscribe for full features.')
       } else {
@@ -319,28 +327,11 @@ function dataURItoBlob(dataURI: string): Blob | null {
             {{ isZh ? '選擇服裝' : 'Select Clothing' }}
           </h3>
 
-          <!-- DB Empty Info Banner (only for demo/free users, not subscribers) -->
-          <div v-if="isDemoUser && dbEmpty" class="mb-4 p-4 bg-amber-500/15 border border-amber-500/40 rounded-lg">
-            <div class="flex items-start gap-3">
-              <span class="text-amber-400 text-lg mt-0.5">&#x1F441;</span>
-              <div>
-                <p class="text-sm font-medium text-amber-300 mb-1">
-                  {{ isZh ? '預覽模式' : 'Preview Mode' }}
-                </p>
-                <p class="text-xs text-amber-400/80 mb-2">
-                  {{ isZh ? '目前僅供瀏覽服裝款式，訂閱後即可使用完整虛擬試穿功能' : 'Currently for browsing only. Subscribe to unlock full virtual try-on.' }}
-                </p>
-                <RouterLink to="/pricing" class="inline-flex items-center gap-1 text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors">
-                  {{ isZh ? '立即訂閱' : 'Subscribe Now' }}
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                  </svg>
-                </RouterLink>
-              </div>
-            </div>
-          </div>
-
           <!-- Demo Clothing Items -->
+          <!-- The old "Preview Mode — Currently for browsing only" banner
+               was removed as part of the Phase 2 cache-through design:
+               visitors can always generate results on-demand, so there's
+               no "read-only" state to warn about. -->
           <div v-if="isDemoUser || displayClothingItems.length > 0" class="mb-4">
             <p class="text-sm text-dark-300 mb-3">
               {{ isZh ? '預設服裝（示範）' : 'Preset Clothing (Demo)' }}
@@ -455,15 +446,12 @@ function dataURItoBlob(dataURI: string): Blob | null {
 
             <button
               @click="generateTryOn"
-              :disabled="(!clothingImage && !selectedClothingId) || isProcessing || !isValidCombination || (isDemoUser && dbEmpty)"
+              :disabled="(!clothingImage && !selectedClothingId) || isProcessing || !isValidCombination"
               class="btn-primary w-full mt-4"
-              :class="{ 'opacity-50 cursor-not-allowed': !isValidCombination || (isDemoUser && dbEmpty) }"
+              :class="{ 'opacity-50 cursor-not-allowed': !isValidCombination }"
             >
-              {{ (isDemoUser && dbEmpty) ? (isZh ? '預覽模式' : 'Preview Mode') : t('common.generate') }}
+              {{ t('common.generate') }}
             </button>
-            <p v-if="isDemoUser && dbEmpty" class="text-xs text-dark-400 text-center mt-2">
-              {{ isZh ? '訂閱後即可生成試穿結果' : 'Subscribe to generate try-on results' }}
-            </p>
           </div>
         </div>
 
@@ -494,6 +482,16 @@ function dataURItoBlob(dataURI: string): Blob | null {
                  {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
                </RouterLink>
             </div>
+          </div>
+
+          <div v-else-if="demoEmptyState" class="h-64 flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
+            <span class="text-2xl">🔒</span>
+            <p class="text-sm text-dark-200">
+              {{ isZh ? '此範例尚未預生成結果' : 'No pre-generated result for this example yet' }}
+            </p>
+            <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
+              {{ isZh ? '訂閱以使用完整 AI 功能' : 'Subscribe to use the real AI' }}
+            </RouterLink>
           </div>
 
           <div v-else class="h-64 flex items-center justify-center text-dark-400">

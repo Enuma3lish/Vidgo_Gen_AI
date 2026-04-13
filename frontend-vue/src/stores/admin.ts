@@ -17,6 +17,7 @@ export const useAdminStore = defineStore('admin', () => {
   const aiServices = ref<AIServicesResponse | null>(null)
   const generationChart = ref<ChartDataPoint[]>([])
   const revenueChart = ref<ChartDataPoint[]>([])
+  const revenueDailyChart = ref<ChartDataPoint[]>([])
   const userGrowthChart = ref<ChartDataPoint[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -175,13 +176,15 @@ export const useAdminStore = defineStore('admin', () => {
     isLoading.value = true
     error.value = null
     try {
-      const [genData, revData, growthData] = await Promise.all([
+      const [genData, revData, revDailyData, growthData] = await Promise.all([
         adminApi.getGenerationChart(days),
         adminApi.getRevenueChart(months),
+        adminApi.getRevenueDailyChart(days),
         adminApi.getUserGrowthChart(days)
       ])
       generationChart.value = genData
       revenueChart.value = revData
+      revenueDailyChart.value = revDailyData
       userGrowthChart.value = growthData
     } catch (e: any) {
       error.value = e.message || 'Failed to fetch charts'
@@ -275,6 +278,7 @@ export const useAdminStore = defineStore('admin', () => {
     aiServices,
     generationChart,
     revenueChart,
+    revenueDailyChart,
     userGrowthChart,
     toolUsage,
     earnings,

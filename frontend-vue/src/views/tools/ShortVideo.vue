@@ -34,6 +34,10 @@ const {
 const uploadedImage = ref<string | undefined>(undefined)
 const resultVideo = ref<string | null>(null)
 const isProcessing = ref(false)
+// True when a demo user clicked Generate but the selected tile isn't backed
+// by a real Material DB preset (db_empty fallback or missing preset id).
+// Surfaces a persistent in-block message instead of a silent no-op.
+const demoEmptyState = ref(false)
 // Settings - only for subscribed users
 const selectedDuration = ref(5)
 const selectedMotion = ref('auto')
@@ -195,6 +199,7 @@ function selectDemoImage(item: { id: string; preview?: string; video_url?: strin
   selectedDemoImageId.value = item.id
   uploadedImage.value = item.preview || item.video_url || undefined
   resultVideo.value = null
+  demoEmptyState.value = false
 }
 
 
@@ -216,6 +221,9 @@ async function generateVideo() {
         return
       }
 
+      // No pre-generated result available — surface BOTH a toast AND a
+      // persistent in-block message. Toast alone auto-hides in 3s.
+      demoEmptyState.value = true
       uiStore.showInfo(isZh.value ? '此影片範例尚未生成，請訂閱以使用完整功能' : 'This video example is not pre-generated. Subscribe for full features.')
       return
     }
@@ -510,7 +518,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
               </span>
             </div>
 
-            <div :class="{ 'opacity-50 pointer-events-none': !isSubscribed }">
+            <div v-if="isSubscribed">
               <p class="text-sm text-dark-300 mb-3">
                 {{ isZh ? '選擇不同的 AI 模型以獲得不同的生成效果' : 'Choose different AI models for different generation effects' }}
               </p>
@@ -518,7 +526,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
                 <button
                   v-for="model in aiModelOptions"
                   :key="model.id"
-                  @click="isSubscribed && (selectedModel = model.id)"
+                  @click="selectedModel = model.id"
                   class="w-full p-3 rounded-xl border-2 transition-all text-left flex items-center justify-between"
                   :class="selectedModel === model.id
                     ? 'border-primary-500 bg-primary-500/10'
@@ -584,6 +592,16 @@ function dataURItoBlob(dataURI: string): Blob | null {
                  {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
                </RouterLink>
             </div>
+          </div>
+
+          <div v-else-if="demoEmptyState" class="aspect-video flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
+            <span class="text-2xl">🔒</span>
+            <p class="text-sm text-dark-200">
+              {{ isZh ? '此範例尚未預生成結果' : 'No pre-generated result for this example yet' }}
+            </p>
+            <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
+              {{ isZh ? '訂閱以使用完整 AI 功能' : 'Subscribe to use the real AI' }}
+            </RouterLink>
           </div>
 
           <div v-else class="aspect-video flex items-center justify-center rounded-xl text-dark-400" style="background: #141420;">

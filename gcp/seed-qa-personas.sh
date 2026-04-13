@@ -48,8 +48,11 @@ CONNECTOR_NAME="${CONNECTOR_NAME:-${APP_NAME}-connector}"
 SQL_CONNECTION="${PROJECT_ID}:${REGION}:${SQL_INSTANCE}"
 CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${REGION}/connectors/${CONNECTOR_NAME}"
 
-PRO_EMAIL="qa-pro@vidgo.local"
-PREMIUM_EMAIL="qa-premium@vidgo.local"
+# Note: .local is rejected by pydantic's email-validator as a reserved TLD.
+# Use a fictional but syntactically valid public-TLD domain so the /auth/login
+# Pydantic EmailStr validator accepts the address at login time.
+PRO_EMAIL="qa-pro@vidgoqa.com"
+PREMIUM_EMAIL="qa-premium@vidgoqa.com"
 
 # ── Flags ────────────────────────────────────────────────────────────────────
 SKIP_BUILD=false

@@ -21,7 +21,8 @@ const {
   isDemoUser,
   loadDemoTemplates,
   demoTemplates,
-  resolveDemoTemplateResultUrl
+  resolveDemoTemplateResultUrl,
+  generateOnDemand
 } = useDemoMode()
 
 // Data
@@ -263,10 +264,17 @@ async function handleRedesign() {
         }
       }
 
-      // No matching pre-generated result — surface BOTH a toast AND a
-      // persistent in-block message. Toast alone auto-hides in 3s.
-      demoEmptyState.value = true
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      // VG-BUG-010 fix: cache-through on demand.
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
+      const onDemandUrl = await generateOnDemand('room_redesign', selectedStyle.value || undefined)
+      if (onDemandUrl) {
+        resultImage.value = onDemandUrl
+        resultDescription.value = ''
+        uiStore.showSuccess(isZh.value ? '生成成功' : 'Generated successfully')
+      } else {
+        demoEmptyState.value = true
+        uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
+      }
     } finally {
       isProcessing.value = false
     }
@@ -388,10 +396,17 @@ async function handleStyleTransfer() {
         }
       }
 
-      // No matching pre-generated result — surface BOTH a toast AND a
-      // persistent in-block message. Toast alone auto-hides in 3s.
-      demoEmptyState.value = true
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      // VG-BUG-010 fix: cache-through on demand for the style transfer path.
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
+      const onDemandUrl = await generateOnDemand('room_redesign', selectedStyle.value || undefined)
+      if (onDemandUrl) {
+        resultImage.value = onDemandUrl
+        resultDescription.value = ''
+        uiStore.showSuccess(isZh.value ? '風格轉換成功' : 'Style applied successfully')
+      } else {
+        demoEmptyState.value = true
+        uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
+      }
     } finally {
       isProcessing.value = false
     }

@@ -581,7 +581,7 @@ if should_run 10 "deploy"; then
     --memory="${BACKEND_MEMORY}" \
     --cpu="${BACKEND_CPU}" \
     --port=8000 \
-    --timeout=300 \
+    --timeout=900 \
     --vpc-connector="${CONNECTOR_PATH}" \
     --add-cloudsql-instances="${SQL_CONNECTION}" \
     --service-account="${BACKEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com" \

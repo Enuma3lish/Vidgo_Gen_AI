@@ -23,7 +23,8 @@ const {
   demoTemplates,
   tryPrompts,
   dbEmpty,
-  resolveDemoTemplateResultUrl
+  resolveDemoTemplateResultUrl,
+  generateOnDemand
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -145,11 +146,16 @@ async function removeBackground() {
         }
       }
 
-      // No pre-generated result available — surface BOTH a toast AND a
-      // persistent in-block message. The toast alone is too easy to miss
-      // (auto-hides in 3s) and leaves users thinking the button is broken.
+      // VG-BUG-010 fix: no cached result — call cache-through endpoint.
+      uiStore.showInfo(isZh.value ? '此圖片尚未生成結果，正在為您即時處理...' : 'Generating in real-time...')
+      const onDemandUrl = await generateOnDemand('background_removal')
+      if (onDemandUrl) {
+        resultImage.value = onDemandUrl
+        uiStore.showSuccess(isZh.value ? '處理成功' : 'Processed successfully')
+        return
+      }
       demoEmptyState.value = true
-      uiStore.showInfo(isZh.value ? '此圖片尚未生成結果，請訂閱以使用完整功能' : 'This image is not pre-generated. Subscribe for full features.')
+      uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
       return
     }
 

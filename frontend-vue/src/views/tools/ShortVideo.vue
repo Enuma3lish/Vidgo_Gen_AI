@@ -28,7 +28,8 @@ const {
   loadDemoTemplates,
   demoTemplates,
   isLoadingTemplates,
-  resolveDemoTemplateResultUrl
+  resolveDemoTemplateResultUrl,
+  generateOnDemand
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -221,10 +222,18 @@ async function generateVideo() {
         return
       }
 
-      // No pre-generated result available — surface BOTH a toast AND a
-      // persistent in-block message. Toast alone auto-hides in 3s.
+      // VG-BUG-010 fix: cache-through on demand (Pollo MCP video generation
+      // takes 2-5 min — the longer client-side timeout in generateOnDemand
+      // accommodates this).
+      uiStore.showInfo(isZh.value ? '此影片尚未生成，正在為您即時生成（約 2-5 分鐘）...' : 'Generating in real-time (2-5 min)...')
+      const onDemandUrl = await generateOnDemand('short_video')
+      if (onDemandUrl) {
+        resultVideo.value = onDemandUrl
+        uiStore.showSuccess(isZh.value ? '生成成功' : 'Generated successfully')
+        return
+      }
       demoEmptyState.value = true
-      uiStore.showInfo(isZh.value ? '此影片範例尚未生成，請訂閱以使用完整功能' : 'This video example is not pre-generated. Subscribe for full features.')
+      uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
       return
     }
 

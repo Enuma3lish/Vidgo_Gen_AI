@@ -21,7 +21,8 @@ const {
   isDemoUser,
   loadDemoTemplates,
   demoTemplates,
-  resolveDemoTemplateResultUrl
+  resolveDemoTemplateResultUrl,
+  generateOnDemand
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -326,10 +327,17 @@ async function generateAvatar() {
         }
       }
 
-      // No pre-generated results at all — surface BOTH a toast AND a
-      // persistent in-block message. Toast alone auto-hides in 3s.
-      demoEmptyState.value = true
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱使用完整功能' : 'This combination is not pre-generated. Subscribe for full features')
+      // VG-BUG-010 fix: cache-through on demand. Avatar uses provider_router
+      // TaskType.AVATAR via piapi_mcp generate_video_kling. Takes 3-5 min.
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成（約 3-5 分鐘）...' : 'Generating in real-time (3-5 min)...')
+      const onDemandUrl = await generateOnDemand('ai_avatar')
+      if (onDemandUrl) {
+        resultVideo.value = onDemandUrl
+        uiStore.showSuccess(isZh.value ? '頭像生成成功' : 'Avatar generated successfully')
+      } else {
+        demoEmptyState.value = true
+        uiStore.showError(isZh.value ? '頭像服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Avatar service temporarily unavailable. Please try again later or subscribe.')
+      }
     } finally {
       isProcessing.value = false
     }

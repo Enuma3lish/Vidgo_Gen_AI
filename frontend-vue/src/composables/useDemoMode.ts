@@ -220,6 +220,47 @@ export function useDemoMode() {
   }
 
   /**
+   * On-demand cache-through generation.
+   *
+   * When a visitor clicks a preset that has no cached result yet, call this
+   * to ask the backend to generate one for real (via DemoCacheService.get_or_generate
+   * which routes through provider_router → real PiAPI/Pollo/Vertex). The
+   * generated result is persisted to Material DB so the next click hits the
+   * cache.
+   *
+   * Returns a usable result URL on success, null on failure (in which case
+   * the caller should fall back to a "Subscribe" lock CTA — only as last
+   * resort, e.g. for tools the backend cache-through doesn't yet support
+   * like try_on / ai_avatar).
+   */
+  async function generateOnDemand(toolType: string, topic?: string): Promise<string | null> {
+    try {
+      const response = await apiClient.post(`/api/v1/demo/generate/${toolType}`, null, {
+        params: topic ? { topic } : undefined,
+        // Generation can take 20-60s for images, longer for video. Use a long
+        // client-side timeout so we don't abort while the backend is still
+        // working through provider_router.
+        timeout: 600000,
+      })
+      const data = response.data
+      if (!data?.success) return null
+      // The endpoint returns { presets: [{ result_watermarked_url, result_url, ... }] }
+      // OR a generated_on_demand=true response with the same shape
+      const preset = Array.isArray(data?.presets) && data.presets.length > 0
+        ? data.presets[0]
+        : null
+      if (!preset) return null
+      return preset.result_watermarked_url
+        || preset.result_url
+        || preset.thumbnail_url
+        || null
+    } catch (error) {
+      console.error(`[generateOnDemand] failed for ${toolType}:`, error)
+      return null
+    }
+  }
+
+  /**
    * Get or create session ID for demo users
    */
   function getSessionId(): string {
@@ -263,6 +304,7 @@ export function useDemoMode() {
     useDemoTemplate,
     getDemoResultUrl,
     resolveDemoTemplateResultUrl,
+    generateOnDemand,
     getSessionId
   }
 }

@@ -212,6 +212,10 @@ class DemoCacheService:
                 result = await self._generate_short_video(provider, TaskType, topic)
             elif tool_type in ("pattern_generate", "PATTERN_GENERATE"):
                 result = await self._generate_pattern(provider, TaskType, topic)
+            elif tool_type in ("try_on", "TRY_ON"):
+                result = await self._generate_try_on(provider, TaskType, topic)
+            elif tool_type in ("ai_avatar", "AI_AVATAR"):
+                result = await self._generate_ai_avatar(provider, TaskType, topic)
             else:
                 logger.info(f"[DemoCache] No on-demand generator for tool_type={tool_type}")
                 return None
@@ -501,6 +505,139 @@ class DemoCacheService:
             "topic": topic or "seamless",
             "prompt": prompt,
             "result_image_url": result_url,
+        }
+
+    async def _generate_try_on(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+        """
+        Generate a virtual try-on example on-demand.
+
+        Try-on has NO MCP path (neither piapi_mcp nor pollo_mcp implements it).
+        We call PiAPI's REST `kling ai_try_on` directly via the same client the
+        live tools.py:/try-on endpoint uses, with a fixed apparel garment +
+        female-1 model. Result is persisted to Material DB so the next visitor
+        click on this preset hits the cache.
+        """
+        from scripts.services.piapi_client import PiAPIClient
+        import os
+
+        # Hardcoded demo seed inputs that have proven Kling-acceptable
+        # (>=512px on both sides, real apparel images on a public CDN).
+        DEMO_SEEDS = [
+            {
+                "topic": "tshirt",
+                "prompt": "white cotton t-shirt try-on",
+                "model_url": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=768&fit=crop",
+                "garment_url": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=768&fit=crop",
+            },
+            {
+                "topic": "dress",
+                "prompt": "floral summer dress try-on",
+                "model_url": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=768&fit=crop",
+                "garment_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=768&fit=crop",
+            },
+            {
+                "topic": "blouse",
+                "prompt": "white blouse try-on",
+                "model_url": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=768&fit=crop",
+                "garment_url": "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=768&fit=crop",
+            },
+        ]
+        seed = next((s for s in DEMO_SEEDS if s["topic"] == topic), None) or random.choice(DEMO_SEEDS)
+
+        logger.info(f"[DemoCache] Try-On: generating model={seed['model_url'][:60]}... garment={seed['garment_url'][:60]}...")
+
+        piapi = PiAPIClient(api_key=os.getenv("PIAPI_KEY", ""))
+        result = await piapi.virtual_try_on(
+            model_image_url=seed["model_url"],
+            garment_image_url=seed["garment_url"],
+            save_locally=False,
+        )
+
+        if not result or not result.get("success"):
+            err = result.get("error") if result else "unknown"
+            logger.warning(f"[DemoCache] Try-On generation failed: {err}")
+            return {"success": False, "error": err}
+
+        result_url = result.get("image_url")
+        if not result_url:
+            return {"success": False, "error": "No image URL from PiAPI try-on"}
+
+        return {
+            "success": True,
+            "topic": seed["topic"],
+            "prompt": seed["prompt"],
+            "input_image_url": seed["garment_url"],
+            "result_image_url": result_url,
+            "input_params": {
+                "model_url": seed["model_url"],
+                "garment_url": seed["garment_url"],
+            },
+        }
+
+    async def _generate_ai_avatar(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+        """
+        Generate an AI avatar example on-demand.
+
+        Routes through provider_router with TaskType.AVATAR — primary is
+        piapi_mcp's `generate_video_kling`, fallback is REST piapi. Uses a
+        hardcoded portrait + short script seed per topic.
+        """
+        DEMO_SCRIPTS = [
+            {
+                "topic": "presenter",
+                "language": "en",
+                "image_url": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=768&fit=crop",
+                "script": "Welcome to VidGo AI. Let me show you what we can do.",
+            },
+            {
+                "topic": "teacher",
+                "language": "en",
+                "image_url": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=768&fit=crop",
+                "script": "Today we'll learn how to create amazing visuals with AI.",
+            },
+            {
+                "topic": "spokesperson",
+                "language": "zh-TW",
+                "image_url": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=768&fit=crop",
+                "script": "歡迎使用 VidGo AI，讓我們一起創造精彩的視覺內容。",
+            },
+        ]
+        seed = next((s for s in DEMO_SCRIPTS if s["topic"] == topic), None) or random.choice(DEMO_SCRIPTS)
+
+        logger.info(f"[DemoCache] AI Avatar: generating script={seed['script'][:40]}... lang={seed['language']}")
+
+        result = await provider.route(
+            TaskType.AVATAR,
+            {
+                "image_url": seed["image_url"],
+                "script": seed["script"],
+                "language": seed["language"],
+                "duration": 10,
+                "resolution": "720p",
+                "aspect_ratio": "9:16",
+            },
+        )
+
+        if not result or not result.get("success"):
+            err = result.get("error") if result else "unknown"
+            logger.warning(f"[DemoCache] AI Avatar generation failed: {err}")
+            return {"success": False, "error": err}
+
+        output = result.get("output", {})
+        video_url = output.get("video_url") or output.get("url")
+        if not video_url:
+            return {"success": False, "error": "No video URL from avatar provider"}
+
+        return {
+            "success": True,
+            "topic": seed["topic"],
+            "prompt": seed["script"][:100],
+            "input_image_url": seed["image_url"],
+            "result_video_url": video_url,
+            "input_params": {
+                "language": seed["language"],
+                "script": seed["script"],
+            },
         }
 
     async def _store_generated_result(

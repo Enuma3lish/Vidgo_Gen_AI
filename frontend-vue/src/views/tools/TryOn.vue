@@ -24,7 +24,8 @@ const {
   isLoadingTemplates,
   tryPrompts,
   dbEmpty,
-  resolveDemoTemplateResultUrl
+  resolveDemoTemplateResultUrl,
+  generateOnDemand
 } = useDemoMode()
 
 // State
@@ -201,14 +202,17 @@ async function generateTryOn() {
         }
       }
 
-      // No pre-generated result available — surface BOTH a toast AND a
-      // persistent in-block message. Toast alone auto-hides in 3s.
-      demoEmptyState.value = true
-      if (dbEmpty.value) {
-        uiStore.showInfo(isZh.value ? '預覽模式：此服裝尚未生成試穿結果，訂閱以使用完整功能' : 'Preview mode: Try-on results not yet generated. Subscribe for full features.')
-      } else {
-        uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      // VG-BUG-010 fix: cache-through on demand. Try-on uses PiAPI REST
+      // (no MCP path exists). Generation can take 30-60s.
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成（約 30-60 秒）...' : 'Generating in real-time (30-60s)...')
+      const onDemandUrl = await generateOnDemand('try_on')
+      if (onDemandUrl) {
+        resultImage.value = onDemandUrl
+        uiStore.showSuccess(isZh.value ? '試穿成功' : 'Try-on successful')
+        return
       }
+      demoEmptyState.value = true
+      uiStore.showError(isZh.value ? '試穿服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Try-on service temporarily unavailable. Please try again later or subscribe.')
       return
     }
 

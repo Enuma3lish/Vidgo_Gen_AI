@@ -37,7 +37,8 @@ const {
   demoTemplates,
   tryPrompts,
   dbEmpty,
-  resolveDemoTemplateResultUrl
+  resolveDemoTemplateResultUrl,
+  generateOnDemand
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -221,11 +222,22 @@ async function generateScenes() {
         }
       }
 
-      // No matching pre-generated result found — surface BOTH a toast AND a
-      // persistent in-block message. The toast alone auto-hides in 3s and
-      // users think the button is broken.
+      // VG-BUG-010 fix: no cached preset for this combo — call the backend
+      // cache-through endpoint to generate one on demand via real provider.
+      // The result is persisted to Material DB so the next click hits cache.
+      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
+      const onDemandUrl = await generateOnDemand('product_scene', selectedScene.value)
+      if (onDemandUrl) {
+        resultImages.value = [onDemandUrl]
+        uiStore.showSuccess(isZh.value ? '生成成功' : 'Generated successfully')
+        return
+      }
+
+      // True last-resort fallback if even the on-demand path fails (e.g.,
+      // backend cache-through doesn't support this tool yet, or all
+      // providers are down).
       demoEmptyState.value = true
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
       return
     }
 

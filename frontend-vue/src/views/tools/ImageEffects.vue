@@ -20,7 +20,8 @@ const {
   demoTemplates,
   tryPrompts,
   dbEmpty,
-  resolveDemoTemplateResultUrl
+  resolveDemoTemplateResultUrl,
+  generateOnDemand
 } = useDemoMode()
 
 // Tab state
@@ -126,10 +127,16 @@ async function applyStyle() {
         }
       }
 
-      // No pre-generated result available — surface BOTH a toast AND a
-      // persistent in-block message. Toast alone auto-hides in 3s.
+      // VG-BUG-010 fix: cache-through on demand.
+      uiStore.showInfo(isZh.value ? '此風格尚未生成，正在為您即時生成...' : 'Generating in real-time...')
+      const onDemandUrl = await generateOnDemand('effect', selectedStyle.value || undefined)
+      if (onDemandUrl) {
+        resultImage.value = onDemandUrl
+        uiStore.showSuccess(isZh.value ? '生成成功' : 'Generated successfully')
+        return
+      }
       demoEmptyState.value = true
-      uiStore.showInfo(isZh.value ? '此圖片尚未生成結果，請訂閱以使用完整功能' : 'This image is not pre-generated. Subscribe for full features.')
+      uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
       return
     }
 

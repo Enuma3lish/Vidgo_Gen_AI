@@ -29,6 +29,15 @@ export const useAuthStore = defineStore('auth', () => {
         ?? (response as { refresh_token?: string }).refresh_token
       if (access && refresh) setTokens(access, refresh)
       user.value = response.user
+      // VG-BUG-003 fix: hydrate the credits store immediately after login so
+      // the header badge + any "Insufficient" gates render the real balance
+      // instead of the initial 0. Dynamic import avoids a circular dep.
+      try {
+        const { useCreditsStore } = await import('./credits')
+        await useCreditsStore().fetchBalance()
+      } catch (e) {
+        console.warn('[auth.login] credits fetch failed (non-fatal):', e)
+      }
       return response
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } }
@@ -126,6 +135,17 @@ export const useAuthStore = defineStore('auth', () => {
   async function init() {
     if (accessToken.value) {
       await fetchUser()
+      // VG-BUG-003 fix: on page reload with an existing token, also hydrate
+      // the credits store so the header badge shows the real balance
+      // instead of the default 0.
+      if (user.value) {
+        try {
+          const { useCreditsStore } = await import('./credits')
+          await useCreditsStore().fetchBalance()
+        } catch (e) {
+          console.warn('[auth.init] credits fetch failed (non-fatal):', e)
+        }
+      }
     }
   }
 

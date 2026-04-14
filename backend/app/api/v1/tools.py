@@ -691,14 +691,30 @@ async def generate_product_scene(
         s_img.paste(p_resized, (x_off, y_off), p_resized)
         final_img = s_img.convert("RGB")
 
-        # Save final result
-        output_dir = Path("/app/static/user_generated")
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # VG-BUG-005 fix: persist to GCS (not /app/static/user_generated/, which
+        # is ephemeral Cloud Run FS and 404s after instance recycles). Upload
+        # directly from the in-memory buffer to the shared media bucket.
+        from app.services.gcs_storage_service import get_gcs_storage
+        gcs = get_gcs_storage()
         filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
-        final_path = output_dir / filename
-        final_img.save(final_path, "PNG", quality=95)
-
-        result_url = f"/static/user_generated/{filename}"
+        if gcs.enabled:
+            buf = BytesIO()
+            final_img.save(buf, "PNG", quality=95)
+            buf.seek(0)
+            result_url = gcs.upload_public(
+                data=buf.getvalue(),
+                blob_name=f"generated/image/{filename}",
+                content_type="image/png",
+            )
+        else:
+            # Fallback for local dev without GCS wiring — keep the old
+            # ephemeral path so the endpoint still returns something.
+            logger.warning("[product-scene] GCS not configured, using ephemeral /static path")
+            output_dir = Path("/app/static/user_generated")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            final_path = output_dir / filename
+            final_img.save(final_path, "PNG", quality=95)
+            result_url = f"/static/user_generated/{filename}"
 
         # Save to UserGeneration
         user_gen = UserGeneration(
@@ -868,18 +884,31 @@ async def ai_try_on(
                             scale = max(512 / w, 512 / h)
                             new_w, new_h = int(w * scale), int(h * scale)
                             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-                            # Save temporarily and serve via public URL
+                            # VG-BUG-007 fix: upload to GCS (not ephemeral
+                            # /app/static/generated/) so PiAPI can fetch it
+                            # reliably even when a different Cloud Run instance
+                            # handles its subsequent GET.
+                            from app.services.gcs_storage_service import get_gcs_storage
+                            gcs = get_gcs_storage()
                             upscale_name = f"tryon_upscaled_{uuid.uuid4().hex[:8]}.jpg"
-                            upscale_dir = Path("/app/static/generated")
-                            upscale_dir.mkdir(parents=True, exist_ok=True)
-                            upscale_path = upscale_dir / upscale_name
-                            img.convert("RGB").save(upscale_path, "JPEG", quality=90)
-                            public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
-                            if public_base:
-                                garment_url = f"{public_base}/static/generated/{upscale_name}"
+                            if gcs.enabled:
+                                buf = BytesIO()
+                                img.convert("RGB").save(buf, "JPEG", quality=90)
+                                buf.seek(0)
+                                garment_url = gcs.upload_public(
+                                    data=buf.getvalue(),
+                                    blob_name=f"generated/image/{upscale_name}",
+                                    content_type="image/jpeg",
+                                )
+                                logger.info(f"  Upscaled garment to {new_w}x{new_h}, uploaded to GCS: {garment_url[:80]}")
                             else:
-                                garment_url = f"/static/generated/{upscale_name}"
-                            logger.info(f"  Upscaled garment to {new_w}x{new_h}")
+                                upscale_dir = Path("/app/static/generated")
+                                upscale_dir.mkdir(parents=True, exist_ok=True)
+                                upscale_path = upscale_dir / upscale_name
+                                img.convert("RGB").save(upscale_path, "JPEG", quality=90)
+                                public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+                                garment_url = f"{public_base}/static/generated/{upscale_name}" if public_base else f"/static/generated/{upscale_name}"
+                                logger.info(f"  Upscaled garment to {new_w}x{new_h} (ephemeral path, GCS disabled)")
             except Exception as e:
                 logger.warning(f"  Garment size check skipped: {e}")
 

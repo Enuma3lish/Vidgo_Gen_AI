@@ -1,6 +1,30 @@
 # VidGo — Next Steps
 
-Last updated: 2026-04-03
+Last updated: 2026-04-15
+
+---
+
+## 0. Recently Shipped (2026-04-14 / 2026-04-15)
+
+**Demo-mode rewrite: every preset tool now uses frozen GCS inputs instead of random T2I.**
+
+| Area | What changed | Impact |
+|------|--------------|--------|
+| Product Scene | Replaced T2I-product step with 8 curated product photos (`gs://vidgo-media-vidgo-ai/static/products/`). `_generate_product_scene` and `main_pregenerate` both read the fixed URLs. Pregen populated 63 combos into the Material DB. | Product picker now shows the same product every visit; scene T2I is the only non-deterministic step. |
+| Virtual Try-On | 6 curated full-body models (`static/tryon/models/`) + 6 garments (`static/tryon/garments/`). Backend `_generate_try_on` respects `product_id` (model_id) and `topic` (garment). 30 combos pregenerated (3F × 6 + 3M × 4 gender-filtered). Added permanent amber warning banner explaining Kling is garment-only. | Male avatar picks no longer return female; garment catalog is clean. |
+| Image Effects | Reuses the 8 curated product photos as style-transfer source images. 88 combos (8 × 11 styles) pregenerated. AI Transform tab hidden from visitors. | Consistent source input per style; no more "random product under random style". |
+| AI Avatar | Separate 6 curated head-and-shoulders portraits (`static/avatars/`). Backend accepts `language` query param + `product_id` (avatar_id); script text in frontend follows the voice language, not UI locale. Full-body try-on models don't work here — Kling Avatar needs a big, centered face (`failed to freeze point` otherwise). | Male selection is honored; English mode stays English end-to-end. |
+| Short Video / Room Redesign | Subscriber-only chrome hidden from visitors. Short Video hides Video Settings + AI Model cards; Room Redesign hides Generate and 3D Model tabs entirely via `visibleTabs` computed. | Visitors see a clean "pick preset → View Result" flow on every tool. |
+| Demo cache service | `get_or_generate` + `_get_from_db` accept `(topic, product_id, language)` composite filters; `_demo_response` in `tools.py` passes `product_id` through. Material DB query filters on `input_params->>'product_id'` and `Material.language`. | No more random fallbacks for uncached combos. |
+| Pregen script | `--clean` flag deletes existing rows before generating (`DELETE FROM materials WHERE tool_type=...`). `gcp/pregen-materials.sh` now sets `--vpc-connector` and `--set-cloudsql-instances` so the job can reach Cloud SQL. | Clean reruns work; no more stale rows mixed with new ones. |
+| Admin dashboard | `AdminMaterials.vue` tool filter now lists all 8 tools (was 5). Admin WebSocket `/ws/realtime` validates JWT + superuser flag from `?token=` query param before accepting the socket. Frontend `createAdminWebSocket` appends the stored access token. | No unauthorized WebSocket subscribers; admin can filter all tool types. |
+| Docs | This file + [example-mode-cache-system.md](./example-mode-cache-system.md) rewritten to reflect the Material-DB-backed `DemoCacheService`. `README.md` tools table deduplicated; tool count corrected from 10 → 8. | |
+
+**Known follow-ups from this sweep:**
+
+- AI Avatar pregen still needs a clean run after the Kling face-detection fix (full-body → head-and-shoulders curated assets). Run `bash gcp/pregen-materials.sh --tool ai_avatar --limit 24 --clean --yes` once the new backend image is live.
+- The frontend still has 12 default avatar scripts; only ~2 per category get pregenerated, so some combos will hit on-demand (~3–5 min first click).
+- Pregen script currently re-deploys the `vidgo-pregen` Job on every run, so two parallel pregen batches would race. Not a problem in normal use but worth knowing.
 
 ---
 

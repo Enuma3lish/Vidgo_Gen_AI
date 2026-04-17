@@ -109,6 +109,21 @@ class ECPayClient:
         Returns:
             Dict containing payment form data
         """
+        # ECPay error 10200031: MerchantTradeNo must be letters/digits only
+        # (no hyphens, underscores, or other punctuation) and <= 20 chars.
+        # Fail loudly here so misconfigured order numbers don't silently hit
+        # ECPay and produce cryptic end-user errors.
+        if not merchant_trade_no or not merchant_trade_no.isalnum():
+            raise ValueError(
+                f"ECPay MerchantTradeNo must be alphanumeric only, got "
+                f"{merchant_trade_no!r}"
+            )
+        if len(merchant_trade_no) > 20:
+            raise ValueError(
+                f"ECPay MerchantTradeNo must be <= 20 chars, got "
+                f"{len(merchant_trade_no)} ({merchant_trade_no!r})"
+            )
+
         params = {
             'MerchantID': self.merchant_id,
             'MerchantTradeNo': merchant_trade_no,

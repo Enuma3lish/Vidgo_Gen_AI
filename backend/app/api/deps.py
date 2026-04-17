@@ -150,17 +150,20 @@ async def get_current_superuser(
 
 def is_subscribed_user(user: Optional[User]) -> bool:
     """
-    Check if user has an active subscription plan.
+    Check if user has an active subscription plan OR is an admin.
 
     Returns True if:
-    - User exists AND
-    - User has current_plan_id set AND
-    - User's plan hasn't expired
+    - User is a superuser (admins always have full access), OR
+    - User has current_plan_id set AND plan hasn't expired
 
-    Demo users (no subscription) return False.
+    Demo users (no subscription, not admin) return False.
     """
     if not user:
         return False
+
+    # Admins always have full tool access regardless of subscription
+    if user.is_superuser:
+        return True
 
     if not user.current_plan_id:
         return False

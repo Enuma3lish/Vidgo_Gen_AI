@@ -12,6 +12,7 @@ Provides:
 from fastapi import APIRouter, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 
@@ -523,16 +524,47 @@ async def get_recent_generations(
 @router.websocket("/ws/realtime")
 async def admin_realtime_websocket(
     websocket: WebSocket,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     WebSocket endpoint for real-time admin dashboard updates.
     Sends stats every 5 seconds.
+
+    Requires a valid admin JWT via the ?token=... query param. The frontend
+    attaches the same access token it uses for REST calls.
     """
+    # Validate admin token BEFORE accepting the socket so unauthorized clients
+    # are rejected without a handshake (1008 = Policy Violation).
+    from jose import jwt, JWTError
+    from app.core.config import settings
+
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type", "access") != "access":
+            await websocket.close(code=1008)
+            return
+        user_id = payload.get("sub")
+        if not user_id:
+            await websocket.close(code=1008)
+            return
+    except JWTError:
+        await websocket.close(code=1008)
+        return
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user or not user.is_superuser:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
 
     try:
-        # Note: In production, verify admin token from query params
         service = AdminDashboardService(db)
 
         while True:

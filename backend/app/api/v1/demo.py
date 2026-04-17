@@ -516,7 +516,8 @@ async def get_tool_topics(tool_type: str):
 async def get_presets(
     tool_type: str,
     topic: Optional[str] = Query(None, description="Topic filter"),
-    limit: int = Query(20, ge=1, le=50, description="Maximum number of presets"),
+    product_id: Optional[str] = Query(None, description="Product ID filter (input_params.product_id)"),
+    limit: int = Query(100, ge=1, le=200, description="Maximum number of presets"),
     language: str = Query("en", description="Language for try_prompts when db_empty"),
     db: AsyncSession = Depends(get_db)
 ):
@@ -555,7 +556,7 @@ async def get_presets(
         )
 
     lookup_service = get_material_lookup_service(db)
-    presets = await lookup_service.get_presets_for_tool(tool_type, topic, limit)
+    presets = await lookup_service.get_presets_for_tool(tool_type, topic, limit, product_id=product_id)
 
     payload = {
         "success": True,
@@ -889,14 +890,17 @@ async def generate_product_video(
 @router.post("/generate/{tool_type}")
 async def generate_demo_for_tool(
     tool_type: str,
+    topic: Optional[str] = Query(None, description="Topic / scene / style filter"),
+    product_id: Optional[str] = Query(None, description="Product/avatar/model ID filter"),
+    language: Optional[str] = Query(None, description="Language for avatar script (zh-TW, en)"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional),
 ):
     """
     Demo generation for a specific tool type — everyone can use this.
 
-    1. Check Material DB for existing presets
-    2. If found → return cached presets
+    1. Check Material DB for an existing preset matching (topic, product_id)
+    2. If found → return that preset
     3. If empty → generate on-demand via AI API → cache → return
     """
     from app.services.material_lookup import get_material_lookup_service
@@ -915,9 +919,11 @@ async def generate_demo_for_tool(
         )
 
     lookup_service = get_material_lookup_service(db)
-    presets = await lookup_service.get_presets_for_tool(tool_type, None, 20)
+    presets = await lookup_service.get_presets_for_tool(
+        tool_type, topic, limit=20, product_id=product_id
+    )
 
-    # If no presets exist, generate one on-demand
+    # If no presets match the requested (topic, product_id), generate one on-demand
     if not presets:
         try:
             redis = await get_redis()
@@ -925,7 +931,9 @@ async def generate_demo_for_tool(
             redis = None
 
         cache_service = DemoCacheService(db, redis)
-        generated = await cache_service.get_or_generate(tool_type)
+        generated = await cache_service.get_or_generate(
+            tool_type, topic, product_id=product_id, language=language
+        )
 
         if generated:
             return {

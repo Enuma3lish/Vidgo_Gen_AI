@@ -1,0 +1,112 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "首頁" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "靈感作品庫" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "工具" [ref=e14] [cursor=pointer]:
+          - text: 工具
+          - img [ref=e15]
+        - link "定價" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇹🇼 繁體中文" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇹🇼
+          - generic [ref=e22]: 繁體中文
+          - img [ref=e23]
+        - link "登入" [ref=e25] [cursor=pointer]:
+          - /url: /auth/login
+        - link "立即開始創作" [ref=e26] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e27]
+  - contentinfo [ref=e28]:
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - link "V VidGo AI" [ref=e32] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e33]: V
+            - generic [ref=e34]: VidGo AI
+          - paragraph [ref=e35]: VidGo AI — 讓影片與視覺創作變得簡單、高效、有創意。
+          - generic [ref=e36]:
+            - link [ref=e37] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e38]
+            - link [ref=e40] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e41]
+        - generic [ref=e43]:
+          - heading "時尚 AI" [level=4] [ref=e44]
+          - list [ref=e45]:
+            - listitem [ref=e46]:
+              - link "虛擬試穿" [ref=e47] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e48]:
+              - link "時尚短影片" [ref=e49] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e50]:
+              - link "Text to Video" [ref=e51] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e52]:
+              - link "產品代言人" [ref=e53] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e54]:
+          - heading "電商 AI" [level=4] [ref=e55]
+          - list [ref=e56]:
+            - listitem [ref=e57]:
+              - link "產品全景拍" [ref=e58] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e59]:
+              - link "智能去背" [ref=e60] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e61]:
+              - link "HD Upscale" [ref=e62] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e63]:
+              - link "風格克隆" [ref=e64] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e65]:
+              - link "空間設計" [ref=e66] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e67]:
+          - heading "公司" [level=4] [ref=e68]
+          - list [ref=e69]:
+            - listitem [ref=e70]:
+              - link "關於我們" [ref=e71] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e72]:
+              - link "定價方案" [ref=e73] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e74]:
+              - link "聯絡我們" [ref=e75] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e76]:
+              - link "Blog" [ref=e77] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e78]:
+              - link "聯盟計畫" [ref=e79] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e80]:
+          - heading "法律" [level=4] [ref=e81]
+          - list [ref=e82]:
+            - listitem [ref=e83]:
+              - link "服務條款" [ref=e84] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e85]:
+              - link "隱私政策" [ref=e86] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e87]:
+              - link "Cookie 政策" [ref=e88] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e89]:
+              - link "退款政策" [ref=e90] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e91]:
+        - paragraph [ref=e92]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e94]: 安全支付

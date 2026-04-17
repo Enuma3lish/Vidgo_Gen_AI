@@ -40,14 +40,26 @@ const isProcessing = ref(false)
 const demoEmptyState = ref(false)
 const selectedModel = ref('female-1')
 
+// Style templates for try-on scene/background
+interface StyleTemplateItem {
+  id: string
+  category: string
+  name_en: string
+  name_zh: string
+  preview_image_url?: string
+  is_featured: boolean
+}
+const styleTemplates = ref<StyleTemplateItem[]>([])
+const selectedTemplateId = ref<string | null>(null)
+
 // Default model options (6 models matching backend generate_model_library() naming)
 const modelOptions = ref([
-  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&h=200&fit=crop&crop=face' },
-  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=200&h=200&fit=crop&crop=face' },
-  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=200&h=200&fit=crop&crop=face' },
-  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: 'https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=200&h=200&fit=crop&crop=face' },
-  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: 'https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=200&h=200&fit=crop&crop=face' },
-  { id: 'male-3', name: 'Male Model 3', name_zh: '男模特 3', preview: 'https://images.unsplash.com/photo-1667127752169-74c7e4d8822f?w=200&h=200&fit=crop&crop=face' }
+  { id: 'female-1', name: 'Female Model 1', name_zh: '女模特 1', preview: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-1.png' },
+  { id: 'female-2', name: 'Female Model 2', name_zh: '女模特 2', preview: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-2.png' },
+  { id: 'female-3', name: 'Female Model 3', name_zh: '女模特 3', preview: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-3.png' },
+  { id: 'male-1', name: 'Male Model 1', name_zh: '男模特 1', preview: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-1.png' },
+  { id: 'male-2', name: 'Male Model 2', name_zh: '男模特 2', preview: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-2.png' },
+  { id: 'male-3', name: 'Male Model 3', name_zh: '男模特 3', preview: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-3.png' }
 ])
 
 // Clothing types that are restricted for male models
@@ -162,13 +174,46 @@ const STATIC_CLOTHING = [
 // Load demo presets on mount
 onMounted(async () => {
   await loadDemoTemplates('try_on')
+
+  // Load curated style templates for try-on scenes
+  try {
+    const { templates } = await toolsApi.getStyleTemplates('try_on')
+    styleTemplates.value = templates
+  } catch (e) {
+    console.warn('Failed to load try-on style templates:', e)
+  }
 })
 
-function selectDemoClothing(item: { id: string; preview?: string; watermarked_result?: string }) {
+// Kling AI is trained on garments. If an accessory slips into the catalog we
+// still let the user click it, but surface a clear toast up-front so the
+// unexpected result is explained before they hit Generate.
+const ACCESSORY_KEYWORDS = [
+  'hat', 'cap', 'beanie', 'sunglass', 'glasses', 'watch', 'scarf',
+  'earring', 'necklace', 'bracelet', 'ring', 'bag', 'shoe', 'boot',
+  '帽', '眼鏡', '太陽眼鏡', '手錶', '圍巾', '絲巾', '耳環', '項鍊',
+  '手鍊', '戒指', '包', '鞋', '靴',
+]
+
+function isAccessoryItem(name: string, clothingType?: string): boolean {
+  if (clothingType && clothingType !== 'general' && clothingType !== 'dress') {
+    // Non-general/dress types from the backend are explicit hints
+    const nonGarment = ['hat', 'glasses', 'watch', 'scarf', 'jewelry', 'bag', 'shoes', 'accessory']
+    if (nonGarment.includes(clothingType)) return true
+  }
+  const lower = (name || '').toLowerCase()
+  return ACCESSORY_KEYWORDS.some(k => lower.includes(k))
+}
+
+function selectDemoClothing(item: { id: string; name?: string; clothingType?: string; preview?: string; watermarked_result?: string }) {
   selectedClothingId.value = item.id
   clothingImage.value = item.preview || undefined
   resultImage.value = null
   demoEmptyState.value = false
+  if (isAccessoryItem(item.name || '', item.clothingType)) {
+    uiStore.showInfo(isZh.value
+      ? '此項為配件，AI 試穿不一定能正確呈現，結果僅供參考'
+      : 'This is an accessory. Virtual try-on may not render it correctly — results are indicative only.')
+  }
 }
 
 async function generateTryOn() {
@@ -182,11 +227,15 @@ async function generateTryOn() {
     return
   }
 
+  // Clear stale result so the loading overlay is the only thing visible
+  // until the new try-on finishes.
+  resultImage.value = null
+  demoEmptyState.value = false
   isProcessing.value = true
   try {
     // For demo users, resolve the exact model+clothing preset through backend lookup
     if (isDemoUser.value && selectedClothingId.value) {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
@@ -202,10 +251,14 @@ async function generateTryOn() {
         }
       }
 
-      // VG-BUG-010 fix: cache-through on demand. Try-on uses PiAPI REST
-      // (no MCP path exists). Generation can take 30-60s.
+      // Cache-through on demand. Try-on uses PiAPI REST (no MCP path).
+      // Pass model_id via product_id (API only exposes one extra param) and
+      // the garment category via topic so the backend picks the right pair.
+      const garmentTopic = (demoTemplates.value.find(t => (t as any).input_params?.clothing_id === selectedClothingId.value) as any)?.topic
       uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成（約 30-60 秒）...' : 'Generating in real-time (30-60s)...')
-      const onDemandUrl = await generateOnDemand('try_on')
+      const onDemandUrl = await generateOnDemand('try_on', garmentTopic, {
+        product_id: selectedModel.value,
+      })
       if (onDemandUrl) {
         resultImage.value = onDemandUrl
         uiStore.showSuccess(isZh.value ? '試穿成功' : 'Try-on successful')
@@ -248,6 +301,7 @@ async function generateTryOn() {
     const result = await toolsApi.tryOn(imageUrl!, {
       modelImageUrl: modelUrl ?? undefined,
       modelId: selectedModel.value !== 'custom' ? selectedModel.value : undefined,
+      templateId: selectedTemplateId.value || undefined,
     })
 
     if (result.success && (result.image_url || result.result_url)) {
@@ -331,11 +385,21 @@ function dataURItoBlob(dataURI: string): Blob | null {
             {{ isZh ? '選擇服裝' : 'Select Clothing' }}
           </h3>
 
+          <!-- Kling AI limitation notice — try-on is trained on torso/body
+               garments only. Accessories (hats, sunglasses, watches, scarves,
+               jewelry, shoes) don't render correctly regardless of provider. -->
+          <div class="mb-4 p-3 rounded-lg" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.24);">
+            <p class="text-xs text-amber-400 leading-relaxed">
+              <span class="font-semibold">
+                {{ isZh ? '⚠️ 提示：' : '⚠️ Note: ' }}
+              </span>
+              {{ isZh
+                ? 'AI 試穿適用於完整服裝（上衣、裙裝、外套等）。配件類如帽子、眼鏡、手錶、絲巾、珠寶、鞋子可能無法正確呈現。'
+                : 'Virtual try-on works best with full garments (tops, dresses, coats, etc.). Accessories like hats, sunglasses, watches, scarves, jewelry, or shoes may not render correctly.' }}
+            </p>
+          </div>
+
           <!-- Demo Clothing Items -->
-          <!-- The old "Preview Mode — Currently for browsing only" banner
-               was removed as part of the Phase 2 cache-through design:
-               visitors can always generate results on-demand, so there's
-               no "read-only" state to warn about. -->
           <div v-if="isDemoUser || displayClothingItems.length > 0" class="mb-4">
             <p class="text-sm text-dark-300 mb-3">
               {{ isZh ? '預設服裝（示範）' : 'Preset Clothing (Demo)' }}
@@ -435,6 +499,50 @@ function dataURItoBlob(dataURI: string): Blob | null {
                  />
                </div>
              </div>
+          </div>
+
+          <!-- Style Templates (scene/background for try-on — subscribers only) -->
+          <div v-if="!isDemoUser && styleTemplates.length > 0" class="mt-6">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-sm font-semibold text-dark-200">
+                {{ isZh ? '拍攝場景模版' : 'Scene Templates' }}
+              </h4>
+              <button
+                v-if="selectedTemplateId"
+                @click="selectedTemplateId = null"
+                class="text-xs text-primary-400 hover:text-primary-300"
+              >
+                {{ isZh ? '清除' : 'Clear' }}
+              </button>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                v-for="tmpl in styleTemplates"
+                :key="tmpl.id"
+                @click="selectedTemplateId = selectedTemplateId === tmpl.id ? null : tmpl.id"
+                class="relative rounded-xl border-2 p-2 transition-all text-center"
+                :class="selectedTemplateId === tmpl.id
+                  ? 'border-primary-500 bg-primary-500/10'
+                  : 'border-transparent hover:border-dark-500'"
+                style="background: #1a1a2e;"
+              >
+                <img
+                  v-if="tmpl.preview_image_url"
+                  :src="tmpl.preview_image_url"
+                  :alt="isZh ? tmpl.name_zh : tmpl.name_en"
+                  class="w-full h-16 object-cover rounded-lg mb-1"
+                />
+                <div v-else class="w-full h-16 rounded-lg mb-1 flex items-center justify-center" style="background: #141420;">
+                  <span class="text-xl">🎨</span>
+                </div>
+                <p class="text-[10px] font-medium text-dark-50 truncate">
+                  {{ isZh ? tmpl.name_zh : tmpl.name_en }}
+                </p>
+              </button>
+            </div>
+            <p class="text-xs text-dark-400 mt-2">
+              {{ isZh ? '選擇場景模版，AI 將在指定背景中展示穿搭效果' : 'Select a scene for the model background' }}
+            </p>
           </div>
 
           <!-- Credit Cost & Generate -->

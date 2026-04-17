@@ -35,7 +35,6 @@ const { t } = useI18n()
           <ul class="space-y-2.5">
             <li><RouterLink to="/tools/try-on" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.tryOn.name') }}</RouterLink></li>
             <li><RouterLink to="/tools/short-video" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.fashionReels.name') }}</RouterLink></li>
-            <li><RouterLink to="/tools/text-to-video" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">Text to Video</RouterLink></li>
             <li><RouterLink to="/tools/avatar" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.productAvatars.name') }}</RouterLink></li>
           </ul>
         </div>
@@ -46,8 +45,7 @@ const { t } = useI18n()
           <ul class="space-y-2.5">
             <li><RouterLink to="/tools/product-scene" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.productAnyshoot.name') }}</RouterLink></li>
             <li><RouterLink to="/tools/background-removal" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.bgRemoval.name') }}</RouterLink></li>
-            <li><RouterLink to="/tools/upscale" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">HD Upscale</RouterLink></li>
-            <li><RouterLink to="/tools/effects" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.styleClone.name') }}</RouterLink></li>
+            <li><RouterLink to="/tools/upscale" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.hdUpscale.name') }}</RouterLink></li>
             <li><RouterLink to="/tools/room-redesign" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.roomRedesign.name') }}</RouterLink></li>
           </ul>
         </div>

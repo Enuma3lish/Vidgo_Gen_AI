@@ -12,7 +12,10 @@ const toolTypes = [
   { value: 'product_scene', label: 'Product Scene' },
   { value: 'try_on', label: 'AI Try-On' },
   { value: 'room_redesign', label: 'Room Redesign' },
-  { value: 'short_video', label: 'Short Video' }
+  { value: 'short_video', label: 'Short Video' },
+  { value: 'ai_avatar', label: 'AI Avatar' },
+  { value: 'pattern_generate', label: 'Pattern Generate' },
+  { value: 'effect', label: 'Image Effects' }
 ]
 
 const statuses = [

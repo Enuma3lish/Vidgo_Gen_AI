@@ -111,7 +111,8 @@ class MaterialLookupService:
         self,
         tool_type: str,
         topic: Optional[str] = None,
-        limit: int = 20
+        limit: int = 20,
+        product_id: Optional[str] = None,
     ) -> List[Material]:
         """
         Get available presets for a tool.
@@ -120,6 +121,7 @@ class MaterialLookupService:
             tool_type: Tool type to get presets for
             topic: Optional topic filter
             limit: Maximum number of presets to return
+            product_id: Optional product_id filter (matches input_params->>'product_id')
 
         Returns:
             List of Material presets with results (watermarked preferred, fallback to original)
@@ -147,6 +149,9 @@ class MaterialLookupService:
 
         if topic:
             conditions.append(Material.topic == topic)
+
+        if product_id:
+            conditions.append(Material.input_params["product_id"].astext == product_id)
 
         result = await self.db.execute(
             select(Material)

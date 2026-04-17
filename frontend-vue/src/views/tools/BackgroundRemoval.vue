@@ -130,6 +130,8 @@ async function removeBackground() {
     return
   }
 
+  // Clear stale result so loading overlay is the only thing visible.
+  resultImage.value = null
   isProcessing.value = true
   try {
     // For demo users, resolve the selected preset through backend lookup
@@ -260,7 +262,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
             <span class="text-3xl block mb-2">📷</span>
             <p class="text-sm">{{ isZh ? '範例圖片準備中，請稍後再試' : 'Example images loading, please try again later' }}</p>
           </div>
-          <div v-else class="grid grid-cols-5 gap-3">
+          <div v-else class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
             <button
               v-for="(example, idx) in effectiveDemoImages"
               :key="example.id || idx"

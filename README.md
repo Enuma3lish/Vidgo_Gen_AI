@@ -104,20 +104,25 @@ Subscribers receive real-time AI generation with:
 
 ## Core Features
 
-### 10 Core AI Tools
+### 8 Core AI Tools
 
-| Tool | Description | Engine |
-|------|-------------|--------|
-| **Background Removal** | Remove backgrounds from product images | AI Engine |
-| **Product Scene** | Product Photography Inspiration Gallery | AI Image Engine |
-| **Virtual Try-On** | Fashion Model Showcase | AI Try-On Engine |
-| **Room Redesign** | Interior Design Example Gallery | AI Image Engine |
-| **Short Video** | Image-to-video, Text-to-video | AI Video Engine |
-| **AI Avatar** | Talking avatar with lip-sync TTS | AI Avatar Engine |
-| **Image Effects** | Artistic style transfer | AI Style Engine |
-| **Pattern Design** | Seamless pattern generation | AI Image Engine |
-| **I2I Transform** | Image-to-image style transfer | AI Style Engine |
-| **Room 3D Model** | Generate 3D models from room images | AI 3D Engine |
+| Tool | Description | Engine / Backend |
+|------|-------------|------------------|
+| **Background Removal** | Remove backgrounds from product images | PiAPI rembg |
+| **Product Scene** | Composite frozen product photos into AI-generated scenes (rembg → scene T2I → PIL composite) | PiAPI Flux + rembg |
+| **Virtual Try-On** | Place curated garments on curated full-body models | PiAPI Kling virtual try-on |
+| **Room Redesign** | AI interior design with 10 styles + iterative editing | PiAPI Flux interior |
+| **Short Video** | Image-to-video, Text-to-video | Pollo MCP (primary) / PiAPI (backup) |
+| **AI Avatar** | Talking head with lip-sync TTS (curated head-and-shoulders portraits) | PiAPI Kling Avatar |
+| **Image Effects** | Artistic style transfer on frozen product photos | PiAPI I2I |
+| **Pattern Generate** | Seamless pattern generation | PiAPI Flux |
+
+All tools share a **cache-through demo flow**:
+1. Visitor picks a preset combo (e.g. product × scene, model × garment).
+2. Backend looks up a pre-generated row in the Material DB keyed by the exact combo.
+3. On cache miss, the on-demand path runs the pipeline using frozen GCS inputs (never random T2I-generated assets) and persists the result for the next visitor.
+
+See [docs/example-mode-cache-system.md](./docs/example-mode-cache-system.md) for the full demo pipeline and curated asset catalog.
 
 ### Inspiration Gallery
 
@@ -209,9 +214,11 @@ Invite friends and earn credits:
 | Social media publishing | ❌ | ✅ (FB, IG, TikTok, YouTube) |
 
 ## Admin Features
-Fixed admin account configured in `.env`:
-- `FIRST_SUPERUSER_EMAIL=admin@vidgo.ai`
-- `FIRST_SUPERUSER_PASSWORD=admin123`
+Default admin account (seeded by `backend/scripts/seed_demo_data.py`):
+- Email: `admin@vidgo.ai`
+- Password: `Admin1234!`
+
+Override locally via `.env`; in production these are seeded once into the database, not via env vars. Change the password after first login.
 
 **Admin capabilities:**
 - View API cost breakdown
@@ -221,25 +228,6 @@ Fixed admin account configured in `.env`:
 - Send credits to specific users
 - Create special promotion codes for targeted users
 - Ban/unban users
-
-## Core Features
-
-### 10 Core AI Tools
-
-| Tool | Description | Engine |
-|------|-------------|--------|
-| **Background Removal** | Remove backgrounds from product images | AI Engine |
-| **Product Scene** | Composite products into professional scenes (3-step I2I) | AI Image Engine |
-| **Virtual Try-On** | Place garments on AI models | AI Try-On Engine |
-| **Room Redesign** | AI interior design with 10 styles + iterative editing | AI Image Engine |
-| **3D Model Generation** | Convert 2D designs to interactive GLB models | AI 3D Engine |
-| **Short Video** | Image-to-video, Text-to-video | AI Video Engine |
-| **AI Avatar** | Talking avatar with lip-sync TTS | AI Avatar Engine |
-| **Image Effects** | Style transfer (anime, ghibli, 3D, etc.) + HD upscale | AI Style Engine |
-| **I2I Transform** | Image-to-image transformation with prompt control | AI Style Engine |
-| **Pattern Design** | Seamless pattern generation | AI Image Engine |
-
----
 
 ## Technology Stack
 
@@ -654,5 +642,5 @@ The Dockerfile's `ENTRYPOINT` (the full startup sequence with migration + materi
 
 ---
 
-*Last Updated: April 1, 2026*
+*Last Updated: April 15, 2026*
 

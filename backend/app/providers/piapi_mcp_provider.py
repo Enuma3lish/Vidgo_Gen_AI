@@ -36,7 +36,10 @@ NOTE: Virtual Try-On (kling_virtual_try_on) does NOT exist on the PiAPI MCP
 server. The provider raises NotImplementedError so ProviderRouter falls through
 to the REST fallback.
 """
+import base64
 import logging
+import mimetypes
+import os
 from typing import Any, Dict
 
 from app.providers.base import BaseProvider
@@ -77,6 +80,34 @@ class PiAPIMCPProvider(BaseProvider):
     async def close(self):
         pass  # Lifecycle managed by MCPClientManager
 
+    def _resolve_image_url(self, url: str) -> str:
+        """Convert local /static/ paths to publicly accessible URLs.
+
+        MCP tools run as external Node.js processes — they cannot access
+        the Python backend's filesystem.  We must convert relative paths
+        (e.g. ``/static/uploads/abc.jpg``) to a full public URL so the
+        MCP server can fetch the image over HTTP.
+
+        Falls back to base64 data-URI when no ``PUBLIC_APP_URL`` is set
+        (works for Flux but may exceed payload limits for video APIs).
+        """
+        if not url:
+            return url
+        if url.startswith("/static") or url.startswith("static"):
+            static_path = "/" + url.lstrip("/")
+            public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+            if public_base:
+                return f"{public_base}{static_path}"
+            # Fallback: read local file and encode as base64 data URI
+            local_path = os.path.join("/app", url.lstrip("/"))
+            if os.path.exists(local_path):
+                mime_type = mimetypes.guess_type(local_path)[0] or "image/png"
+                with open(local_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode()
+                return f"data:{mime_type};base64,{b64}"
+            logger.warning(f"[PiAPI MCP] Local file not found: {local_path}")
+        return url
+
     # ─────────────────────────────────────────────────────────────────────────
     # IMAGE GENERATION
     # ─────────────────────────────────────────────────────────────────────────
@@ -98,11 +129,9 @@ class PiAPIMCPProvider(BaseProvider):
     async def image_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Image-to-image variation via Flux derive_image."""
         self._log_request("image_to_image", params)
-        # derive_image uses: prompt, referenceImage, width, height
-        # NOTE: no "strength" param exists on MCP — derive_image always does variation
         result = await self._call_tool("image_to_image", {
             "prompt": params.get("prompt", ""),
-            "referenceImage": params["image_url"],
+            "referenceImage": self._resolve_image_url(params["image_url"]),
         })
         return self._normalize_result(result, "image")
 
@@ -111,7 +140,7 @@ class PiAPIMCPProvider(BaseProvider):
         self._log_request("kontext_image", params)
         result = await self._call_tool("text_to_image", {
             "prompt": params.get("prompt", ""),
-            "referenceImage": params.get("image_url", ""),
+            "referenceImage": self._resolve_image_url(params.get("image_url", "")),
         })
         return self._normalize_result(result, "image")
 
@@ -125,7 +154,7 @@ class PiAPIMCPProvider(BaseProvider):
         # generate_video_wan: prompt, referenceImage, aspectRatio, model
         result = await self._call_tool("image_to_video", {
             "prompt": params.get("prompt", ""),
-            "referenceImage": params["image_url"],
+            "referenceImage": self._resolve_image_url(params["image_url"]),
         })
         return self._normalize_result(result, "video")
 
@@ -144,7 +173,7 @@ class PiAPIMCPProvider(BaseProvider):
         image_url = params.get("image_url") or params.get("video_url", "")
         result = await self._call_tool("video_style_transfer", {
             "prompt": params.get("prompt", "stylized video"),
-            "referenceImage": image_url,
+            "referenceImage": self._resolve_image_url(image_url),
         })
         return self._normalize_result(result, "video")
 
@@ -167,7 +196,7 @@ class PiAPIMCPProvider(BaseProvider):
         self._log_request("interior_design", params)
         result = await self._call_tool("interior_design", {
             "prompt": params.get("prompt", ""),
-            "referenceImage": params.get("image_url", ""),
+            "referenceImage": self._resolve_image_url(params.get("image_url", "")),
         })
         return self._normalize_result(result, "image")
 
@@ -180,7 +209,7 @@ class PiAPIMCPProvider(BaseProvider):
             "prompt": params.get("text", params.get("prompt", "")),
         }
         if params.get("image_url"):
-            arguments["referenceImage"] = params["image_url"]
+            arguments["referenceImage"] = self._resolve_image_url(params["image_url"])
         result = await self._call_tool("avatar", arguments)
         return self._normalize_result(result, "video")
 
@@ -189,7 +218,7 @@ class PiAPIMCPProvider(BaseProvider):
         self._log_request("upscale", params)
         # image_upscale: image (URL), scale (2-10), faceEnhance (bool)
         result = await self._call_tool("upscale", {
-            "image": params["image_url"],
+            "image": self._resolve_image_url(params["image_url"]),
             "scale": params.get("scale", 2),
         })
         return self._normalize_result(result, "image")
@@ -218,7 +247,7 @@ class PiAPIMCPProvider(BaseProvider):
         self._log_request("image_to_3d", params)
         # generate_3d_model: image (URL)
         result = await self._call_tool("image_to_3d", {
-            "image": params["image_url"],
+            "image": self._resolve_image_url(params["image_url"]),
         })
         return self._normalize_result(result, "model")
 
@@ -229,7 +258,7 @@ class PiAPIMCPProvider(BaseProvider):
         try:
             self._log_request("background_removal_mcp", params)
             result = await self._call_tool("background_removal_mcp", {
-                "image": params["image_url"],
+                "image": self._resolve_image_url(params["image_url"]),
             })
             return self._normalize_result(result, "image")
         except Exception as e:

@@ -31,70 +31,70 @@ DESIGN_STYLES = {
         "name": "Modern Minimalist",
         "name_zh": "現代極簡",
         "description": "Clean lines, neutral colors, minimal furniture, open spaces",
-        "prompt_suffix": "modern minimalist style, clean lines, neutral color palette, minimal furniture, open space, natural light, contemporary design"
+        "prompt_suffix": "modern minimalist interior, clean geometric lines, neutral white and warm grey palette, low-profile furniture with hidden storage, polished concrete or light oak flooring, floor-to-ceiling windows with sheer linen curtains, recessed LED strip lighting, single statement art piece, architectural visualization quality"
     },
     "scandinavian": {
         "id": "scandinavian",
         "name": "Scandinavian",
         "name_zh": "北歐風格",
         "description": "Light wood, white walls, cozy textiles, functional design",
-        "prompt_suffix": "scandinavian nordic style, light wood furniture, white walls, cozy textiles, hygge atmosphere, functional design, natural materials"
+        "prompt_suffix": "Scandinavian hygge interior, pale birch wood furniture with rounded edges, matte white walls, chunky knit wool throw on light grey sofa, sheepskin rug on pale oak herringbone floor, brass pendant lamp, potted monstera in ceramic planter, soft north-facing window light, warm cozy functional living"
     },
     "japanese": {
         "id": "japanese",
         "name": "Japanese Zen",
         "name_zh": "日式禪風",
         "description": "Tatami, shoji screens, natural materials, zen simplicity",
-        "prompt_suffix": "japanese zen style, tatami mats, shoji screens, natural wood, bamboo elements, zen simplicity, peaceful atmosphere, minimalist"
+        "prompt_suffix": "Japanese wabi-sabi zen interior, tatami mat flooring with shoji paper sliding screens, low natural cypress wood platform furniture, ikebana arrangement, tokonoma alcove, diffused paper lantern lighting, muted earth tones with charcoal and cream, bamboo accent wall, serene meditative atmosphere"
     },
     "industrial": {
         "id": "industrial",
         "name": "Industrial",
         "name_zh": "工業風",
         "description": "Exposed brick, metal accents, raw textures, urban loft",
-        "prompt_suffix": "industrial style, exposed brick walls, metal accents, raw textures, urban loft, concrete floors, vintage factory elements"
+        "prompt_suffix": "industrial loft interior, exposed red brick walls with original mortar, black steel I-beam ceiling with exposed ductwork, polished concrete floor, oversized factory windows with black metal mullions, Edison bulb pendant cluster, worn leather tufted sofa, reclaimed wood and steel pipe shelving, warehouse conversion aesthetic"
     },
     "bohemian": {
         "id": "bohemian",
         "name": "Bohemian",
         "name_zh": "波西米亞",
         "description": "Eclectic patterns, rich colors, layered textiles, artistic",
-        "prompt_suffix": "bohemian boho style, eclectic patterns, rich vibrant colors, layered textiles, macrame, plants, artistic free-spirited decor"
+        "prompt_suffix": "bohemian eclectic interior, layered Moroccan kilim rugs on terracotta tile, macrame wall hanging, rattan peacock chair with colorful cushions, trailing pothos and fiddle leaf fig plants, woven basket pendant lamps, amber string lights, rich emerald and burnt orange jewel tones, artistic maximalist lived-in atmosphere"
     },
     "mediterranean": {
         "id": "mediterranean",
         "name": "Mediterranean",
         "name_zh": "地中海風格",
         "description": "Terracotta, blue accents, arched doorways, rustic charm",
-        "prompt_suffix": "mediterranean style, terracotta tiles, blue and white accents, arched doorways, rustic charm, natural stone, warm sunlit atmosphere"
+        "prompt_suffix": "Mediterranean coastal interior, hand-laid terracotta hexagonal floor tiles, whitewashed lime plaster walls with arched doorways, cerulean blue window shutters, wrought iron fixtures with candle-style bulbs, solid wood dining table with linen runner, ceramic hand-painted accent tiles, warm golden afternoon sunlight, relaxed coastal elegance"
     },
     "art_deco": {
         "id": "art_deco",
         "name": "Art Deco",
         "name_zh": "裝飾藝術",
-        "description": "Geometric patterns, gold accents, luxurious materials, glamour",
-        "prompt_suffix": "art deco style, geometric patterns, gold and black accents, luxurious materials, velvet, mirrors, glamorous sophisticated design"
+        "description": "Geometric patterns, metallic accents, refined materials, sophistication",
+        "prompt_suffix": "Art Deco style interior, geometric chevron patterned stone floor in black and white, deep green tufted sofa with metallic nailhead trim, sunburst decorative mirror, fluted column details, lacquered black console with brass inlay, glass display cabinet, dramatic uplighting on fluted wall panels, 1920s inspired geometric sophistication"
     },
     "mid_century_modern": {
         "id": "mid_century_modern",
         "name": "Mid-Century Modern",
         "name_zh": "中世紀現代",
         "description": "Organic curves, retro furniture, bold colors, iconic design",
-        "prompt_suffix": "mid-century modern style, organic curved furniture, retro 1950s 1960s design, bold accent colors, teak wood, iconic furniture pieces"
+        "prompt_suffix": "mid-century modern interior circa 1960, classic molded plywood lounge chair with leather cushion, teak credenza with tapered legs, starburst metal chandelier, sunburst wall clock, bold mustard yellow accent wall, geometric patterned area rug, large picture window with greenery view, retro atomic age style"
     },
     "coastal": {
         "id": "coastal",
         "name": "Coastal",
         "name_zh": "海岸風格",
         "description": "Blue tones, white furniture, nautical elements, beachy",
-        "prompt_suffix": "coastal beach style, blue and white color palette, nautical elements, light airy atmosphere, rattan furniture, seaside decor"
+        "prompt_suffix": "coastal Hampton interior, whitewashed shiplap walls, bleached driftwood-finish wide plank flooring, soft navy and crisp white linen upholstery, natural seagrass baskets and rattan pendant lights, large sliding glass doors open to ocean view, weathered rope detail accents, bright airy natural daylight, relaxed seaside living"
     },
     "farmhouse": {
         "id": "farmhouse",
         "name": "Farmhouse",
         "name_zh": "農舍風格",
         "description": "Rustic wood, vintage accents, cozy warmth, country charm",
-        "prompt_suffix": "farmhouse country style, rustic reclaimed wood, vintage accents, shiplap walls, cozy warmth, antique furniture, country charm"
+        "prompt_suffix": "modern farmhouse interior, reclaimed barn wood accent wall with original nail holes, white subway tile backsplash with dark grout, apron-front farmhouse sink, open shelving with mason jars and stoneware, black matte hardware on cream Shaker cabinets, wrought iron chandelier with Edison bulbs, wide plank pine floor, warm morning light"
     }
 }
 
@@ -105,43 +105,43 @@ ROOM_TYPES = {
         "id": "living_room",
         "name": "Living Room",
         "name_zh": "客廳",
-        "context": "living room with seating area, coffee table, and entertainment space"
+        "context": "residential living room approximately 20-30 square meters, featuring a main seating area with sofa, coffee table, TV console or entertainment wall, area rug, and ambient plus accent lighting"
     },
     "bedroom": {
         "id": "bedroom",
         "name": "Bedroom",
         "name_zh": "臥室",
-        "context": "bedroom with bed, nightstands, and wardrobe"
+        "context": "residential bedroom approximately 12-20 square meters, featuring a queen or king bed with headboard, matching nightstands with table lamps, wardrobe or closet area, and soft warm ambient lighting"
     },
     "kitchen": {
         "id": "kitchen",
         "name": "Kitchen",
         "name_zh": "廚房",
-        "context": "kitchen with cabinets, countertops, and appliances"
+        "context": "residential kitchen approximately 8-15 square meters, featuring upper and lower cabinetry, countertop workspace, built-in appliances including oven and cooktop, task lighting under cabinets, and a backsplash area"
     },
     "bathroom": {
         "id": "bathroom",
         "name": "Bathroom",
         "name_zh": "浴室",
-        "context": "bathroom with vanity, shower or bathtub, and fixtures"
+        "context": "residential bathroom approximately 4-8 square meters, featuring a vanity with mirror and basin, walk-in shower or freestanding bathtub, wall and floor tiling, and recessed waterproof lighting"
     },
     "dining_room": {
         "id": "dining_room",
         "name": "Dining Room",
         "name_zh": "餐廳",
-        "context": "dining room with dining table and chairs"
+        "context": "residential dining area approximately 10-18 square meters, featuring a dining table seating 4-6 with chairs, overhead pendant or chandelier lighting, and a sideboard or buffet cabinet"
     },
     "home_office": {
         "id": "home_office",
         "name": "Home Office",
         "name_zh": "書房",
-        "context": "home office with desk, chair, and bookshelves"
+        "context": "residential home office approximately 8-12 square meters, featuring a work desk with ergonomic chair, bookshelves or wall-mounted shelving, task desk lamp, and organized cable management"
     },
     "balcony": {
         "id": "balcony",
         "name": "Balcony",
         "name_zh": "陽台",
-        "context": "balcony or terrace with outdoor furniture"
+        "context": "residential enclosed or open balcony approximately 4-10 square meters, featuring outdoor-rated seating with weather-resistant cushions, potted plants, and string lights or lantern lighting"
     }
 }
 
@@ -248,11 +248,17 @@ class InteriorDesignService:
         if room_image_base64.startswith("iVBOR"):
             mime_type = "image/png"
 
-        # Build the prompt
-        full_prompt = "Redesign this room. "
+        # Build the prompt — photorealistic architectural visualization quality
+        full_prompt = (
+            "Redesign this room into a photorealistic interior design rendering. "
+            "Output must look like a professional architectural visualization photograph "
+            "with correct perspective, realistic material textures, and natural lighting. "
+            "The room must be empty with no people, no person, no human figure, no silhouette. "
+            "Do not include any luxury branded items. "
+        )
 
         if keep_layout:
-            full_prompt += "Keep the existing window layout and door positions. "
+            full_prompt += "Preserve the existing window positions, door locations, and room geometry exactly. "
 
         if room_type and room_type in ROOM_TYPES:
             room_context = ROOM_TYPES[room_type]["context"]
@@ -334,18 +340,22 @@ class InteriorDesignService:
             }
 
         # Build the full prompt
-        full_prompt = "Generate a photorealistic interior design image. "
+        full_prompt = (
+            "Generate a photorealistic interior design architectural visualization image. "
+            "The room must be empty with no people, no person, no human figure. "
+            "Do not include any luxury branded items. "
+        )
 
         if room_type and room_type in ROOM_TYPES:
             room_context = ROOM_TYPES[room_type]["context"]
-            full_prompt += f"Create a beautiful {room_context}. "
+            full_prompt += f"Create a {room_context}. "
 
         if style_id and style_id in DESIGN_STYLES:
             style_suffix = DESIGN_STYLES[style_id]["prompt_suffix"]
             full_prompt += f"Use {style_suffix}. "
 
         full_prompt += prompt
-        full_prompt += " Professional interior photography, high quality, detailed, well-lit."
+        full_prompt += " Professional interior architectural photography, correct perspective, realistic material textures, natural lighting."
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -634,7 +644,7 @@ Generate a photorealistic result."""
             }
 
         style = DESIGN_STYLES[style_id]
-        prompt = f"Transform this room to {style['name']} style. {style['description']}. {style['prompt_suffix']}. Keep the room layout and window positions unchanged."
+        prompt = f"Transform this room to {style['name']} style. {style['description']}. {style['prompt_suffix']}. Keep the room layout and window positions unchanged. The room must be empty with no people, no person, no human figure. Do not include any luxury branded items."
 
         return await self.redesign_room(
             room_image_base64=room_image_base64,

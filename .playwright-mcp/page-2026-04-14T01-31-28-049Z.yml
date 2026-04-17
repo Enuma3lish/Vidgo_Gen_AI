@@ -1,0 +1,160 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "0 Credits" [ref=e25] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e26]
+          - text: 0 Credits
+        - link "Dashboard" [ref=e28] [cursor=pointer]:
+          - /url: /dashboard
+        - button "Logout" [ref=e29] [cursor=pointer]
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - heading "Text to Video" [level=1] [ref=e34]
+        - paragraph [ref=e35]: Generate videos from text descriptions using AI
+        - generic [ref=e36]:
+          - generic [ref=e37]: "Estimated cost:"
+          - generic [ref=e38]: 30 Credits
+          - generic [ref=e39]: (Insufficient)
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - generic [ref=e43]: Prompt
+            - textbox "Describe the video you want to create..." [ref=e44]
+          - generic [ref=e45]:
+            - generic [ref=e46]: Quick Prompts
+            - generic [ref=e47]:
+              - button "Ocean Waves" [ref=e48] [cursor=pointer]
+              - button "City Night" [ref=e49] [cursor=pointer]
+              - button "Nature" [ref=e50] [cursor=pointer]
+              - button "Product Showcase" [ref=e51] [cursor=pointer]
+              - button "Food" [ref=e52] [cursor=pointer]
+              - button "Fashion" [ref=e53] [cursor=pointer]
+          - generic [ref=e54]:
+            - generic [ref=e55]:
+              - generic [ref=e56]: Duration
+              - combobox [ref=e57]:
+                - option "5 seconds" [selected]
+                - option "10 seconds"
+                - option "15 seconds"
+            - generic [ref=e58]:
+              - generic [ref=e59]:
+                - generic [ref=e60]: Resolution
+                - combobox [ref=e61]:
+                  - option "720P"
+                  - option "1080P" [selected]
+              - generic [ref=e62]:
+                - generic [ref=e63]: Aspect Ratio
+                - combobox [ref=e64]:
+                  - option "16:9 Landscape" [selected]
+                  - option "9:16 Portrait"
+                  - option "1:1 Square"
+          - button "Generate Video" [disabled] [ref=e65]
+        - generic [ref=e67]:
+          - img [ref=e68]
+          - paragraph [ref=e70]: Enter a prompt and click Generate
+  - contentinfo [ref=e71]:
+    - generic [ref=e72]:
+      - generic [ref=e73]:
+        - generic [ref=e74]:
+          - link "V VidGo AI" [ref=e75] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e76]: V
+            - generic [ref=e77]: VidGo AI
+          - paragraph [ref=e78]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e79]:
+            - link [ref=e80] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e81]
+            - link [ref=e83] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e84]
+        - generic [ref=e86]:
+          - heading "Fashion AI" [level=4] [ref=e87]
+          - list [ref=e88]:
+            - listitem [ref=e89]:
+              - link "Virtual Try On" [ref=e90] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e91]:
+              - link "Fashion Reels" [ref=e92] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e93]:
+              - link "Text to Video" [ref=e94] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e95]:
+              - link "Product Avatars" [ref=e96] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e97]:
+          - heading "E-commerce AI" [level=4] [ref=e98]
+          - list [ref=e99]:
+            - listitem [ref=e100]:
+              - link "Product AnyShoot" [ref=e101] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e102]:
+              - link "Remove Background" [ref=e103] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e104]:
+              - link "HD Upscale" [ref=e105] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e106]:
+              - link "Style Clone" [ref=e107] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e108]:
+              - link "Room Redesign" [ref=e109] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e110]:
+          - heading "Company" [level=4] [ref=e111]
+          - list [ref=e112]:
+            - listitem [ref=e113]:
+              - link "About Us" [ref=e114] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e115]:
+              - link "Pricing" [ref=e116] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e117]:
+              - link "Contact Us" [ref=e118] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e119]:
+              - link "Blog" [ref=e120] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e121]:
+              - link "Affiliate Program" [ref=e122] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e123]:
+          - heading "Legal" [level=4] [ref=e124]
+          - list [ref=e125]:
+            - listitem [ref=e126]:
+              - link "Terms of Service" [ref=e127] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e128]:
+              - link "Privacy Policy" [ref=e129] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e130]:
+              - link "Cookie Policy" [ref=e131] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e132]:
+              - link "Refund Policy" [ref=e133] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e134]:
+        - paragraph [ref=e135]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e137]: Secure Payment

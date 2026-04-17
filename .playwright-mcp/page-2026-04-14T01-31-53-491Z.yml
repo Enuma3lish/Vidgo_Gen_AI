@@ -1,0 +1,253 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "0 Credits" [ref=e25] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e26]
+          - text: 0 Credits
+        - link "Dashboard" [ref=e28] [cursor=pointer]:
+          - /url: /dashboard
+        - button "Logout" [ref=e29] [cursor=pointer]
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - button "Back" [ref=e33] [cursor=pointer]:
+        - img [ref=e34]
+        - text: Back
+      - generic [ref=e36]:
+        - heading "AI Avatar" [level=1] [ref=e37]
+        - paragraph [ref=e38]: Transform photos into talking avatar videos with natural lip sync
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - heading "Choose Language & Script" [level=3] [ref=e42]
+            - generic [ref=e43]:
+              - generic [ref=e44]: Language
+              - generic [ref=e45]:
+                - button "> 🇹🇼 繁體中文" [ref=e46] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e47]: 🇹🇼
+                  - generic [ref=e48]: 繁體中文
+                - button "> 🇺🇸 English" [ref=e49] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e50]: 🇺🇸
+                  - generic [ref=e51]: English
+            - generic [ref=e52]:
+              - generic [ref=e53]: Script
+              - paragraph [ref=e54]: Select Script
+              - generic [ref=e55]:
+                - button "> spokesperson My father was an ironworker. He carried a cheap thermos ever..." [ref=e56] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e57]: spokesperson
+                  - paragraph [ref=e58]: My father was an ironworker. He carried a cheap thermos ever...
+                - button "> spokesperson My grandmother used to wash her hair with natural herbs from..." [ref=e59] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e60]: spokesperson
+                  - paragraph [ref=e61]: My grandmother used to wash her hair with natural herbs from...
+                - button "> spokesperson My family has been growing tea in Alishan for three generati..." [ref=e62] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e63]: spokesperson
+                  - paragraph [ref=e64]: My family has been growing tea in Alishan for three generati...
+                - button "> product_intro Check this out—I just put in rice, water, and pressed one bu..." [ref=e65] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e66]: product_intro
+                  - paragraph [ref=e67]: Check this out—I just put in rice, water, and pressed one bu...
+                - button "> product_intro I used to brush for 30 seconds and call it done. Then my den..." [ref=e68] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e69]: product_intro
+                  - paragraph [ref=e70]: I used to brush for 30 seconds and call it done. Then my den...
+                - button "> product_intro I compared 20 desk lamps before choosing this one. Zero flic..." [ref=e71] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e72]: product_intro
+                  - paragraph [ref=e73]: I compared 20 desk lamps before choosing this one. Zero flic...
+                - button "> customer_service Worried about buying a charging cable online? I understand. ..." [ref=e74] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e75]: customer_service
+                  - paragraph [ref=e76]: Worried about buying a charging cable online? I understand. ...
+                - 'button "> customer_service A lot of moms ask me: is this laundry detergent really safe ..." [ref=e77] [cursor=pointer]':
+                  - text: ">"
+                  - generic [ref=e78]: customer_service
+                  - paragraph [ref=e79]: "A lot of moms ask me: is this laundry detergent really safe ..."
+                - button "> customer_service New parents, I know you have questions about our baby bottle..." [ref=e80] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e81]: customer_service
+                  - paragraph [ref=e82]: New parents, I know you have questions about our baby bottle...
+                - button "> social_media Save this video right now! This is our best-selling hydratin..." [ref=e83] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e84]: social_media
+                  - paragraph [ref=e85]: Save this video right now! This is our best-selling hydratin...
+                - button "> social_media Stop scrolling—you need to hear this. These wireless earbuds..." [ref=e86] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e87]: social_media
+                  - paragraph [ref=e88]: Stop scrolling—you need to hear this. These wireless earbuds...
+                - button "> social_media I gave this dried mango to 10 coworkers without telling them..." [ref=e89] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e90]: social_media
+                  - paragraph [ref=e91]: I gave this dried mango to 10 coworkers without telling them...
+            - paragraph [ref=e92]: Max 120 seconds of speech
+          - generic [ref=e93]:
+            - heading "Avatar Photo" [level=3] [ref=e94]
+            - generic [ref=e95]:
+              - paragraph [ref=e96]: Female Avatars
+              - generic [ref=e97]:
+                - button "> Yi-Jun Yi-Jun" [ref=e98] [cursor=pointer]:
+                  - text: ">"
+                  - img "Yi-Jun" [ref=e99]
+                  - paragraph [ref=e101]: Yi-Jun
+                - button "> Ya-Ting Ya-Ting" [ref=e102] [cursor=pointer]:
+                  - text: ">"
+                  - img "Ya-Ting" [ref=e103]
+                  - paragraph [ref=e105]: Ya-Ting
+                - button "> Jia-Ying Jia-Ying" [ref=e106] [cursor=pointer]:
+                  - text: ">"
+                  - img "Jia-Ying" [ref=e107]
+                  - paragraph [ref=e109]: Jia-Ying
+                - button "> Shu-Fen Shu-Fen" [ref=e110] [cursor=pointer]:
+                  - text: ">"
+                  - img "Shu-Fen" [ref=e111]
+                  - paragraph [ref=e113]: Shu-Fen
+            - generic [ref=e114]:
+              - paragraph [ref=e115]: Male Avatars
+              - generic [ref=e116]:
+                - button "> Zhi-Wei Zhi-Wei" [ref=e117] [cursor=pointer]:
+                  - text: ">"
+                  - img "Zhi-Wei" [ref=e118]
+                  - paragraph [ref=e120]: Zhi-Wei
+                - button "> Guan-Yu Guan-Yu" [ref=e121] [cursor=pointer]:
+                  - text: ">"
+                  - img "Guan-Yu" [ref=e122]
+                  - paragraph [ref=e124]: Guan-Yu
+                - button "> Zong-Han Zong-Han" [ref=e125] [cursor=pointer]:
+                  - text: ">"
+                  - img "Zong-Han" [ref=e126]
+                  - paragraph [ref=e128]: Zong-Han
+                - button "> Jia-Hao Jia-Hao" [ref=e129] [cursor=pointer]:
+                  - text: ">"
+                  - img "Jia-Hao" [ref=e130]
+                  - paragraph [ref=e132]: Jia-Hao
+            - generic [ref=e133]:
+              - heading "Upload Portrait (Front-facing)" [level=4] [ref=e134]
+              - generic [ref=e136] [cursor=pointer]:
+                - img [ref=e138]
+                - paragraph [ref=e140]: Drop portrait photo here
+                - paragraph [ref=e141]: PNG, JPG up to 10MB
+          - generic [ref=e142]:
+            - generic [ref=e143]: Custom Script
+            - textbox [ref=e144]
+            - generic [ref=e145]: 0 / 500
+          - generic [ref=e146]:
+            - heading "Generate" [level=3] [ref=e147]
+            - paragraph [ref=e148]: Each avatar has a fixed voice. Just pick an avatar and a script.
+            - generic [ref=e149]:
+              - generic [ref=e150]:
+                - generic [ref=e151]: "Estimated cost:"
+                - generic [ref=e152]: 0 Credits
+              - button "Generate" [disabled] [ref=e153]
+        - generic [ref=e154]:
+          - heading "Generated Avatar Video" [level=3] [ref=e155]
+          - generic [ref=e157]:
+            - generic [ref=e158]: 🎭
+            - paragraph [ref=e159]: Avatar video will appear here
+  - contentinfo [ref=e160]:
+    - generic [ref=e161]:
+      - generic [ref=e162]:
+        - generic [ref=e163]:
+          - link "V VidGo AI" [ref=e164] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e165]: V
+            - generic [ref=e166]: VidGo AI
+          - paragraph [ref=e167]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e168]:
+            - link [ref=e169] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e170]
+            - link [ref=e172] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e173]
+        - generic [ref=e175]:
+          - heading "Fashion AI" [level=4] [ref=e176]
+          - list [ref=e177]:
+            - listitem [ref=e178]:
+              - link "Virtual Try On" [ref=e179] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e180]:
+              - link "Fashion Reels" [ref=e181] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e182]:
+              - link "Text to Video" [ref=e183] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e184]:
+              - link "Product Avatars" [ref=e185] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e186]:
+          - heading "E-commerce AI" [level=4] [ref=e187]
+          - list [ref=e188]:
+            - listitem [ref=e189]:
+              - link "Product AnyShoot" [ref=e190] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e191]:
+              - link "Remove Background" [ref=e192] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e193]:
+              - link "HD Upscale" [ref=e194] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e195]:
+              - link "Style Clone" [ref=e196] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e197]:
+              - link "Room Redesign" [ref=e198] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e199]:
+          - heading "Company" [level=4] [ref=e200]
+          - list [ref=e201]:
+            - listitem [ref=e202]:
+              - link "About Us" [ref=e203] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e204]:
+              - link "Pricing" [ref=e205] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e206]:
+              - link "Contact Us" [ref=e207] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e208]:
+              - link "Blog" [ref=e209] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e210]:
+              - link "Affiliate Program" [ref=e211] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e212]:
+          - heading "Legal" [level=4] [ref=e213]
+          - list [ref=e214]:
+            - listitem [ref=e215]:
+              - link "Terms of Service" [ref=e216] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e217]:
+              - link "Privacy Policy" [ref=e218] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e219]:
+              - link "Cookie Policy" [ref=e220] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e221]:
+              - link "Refund Policy" [ref=e222] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e223]:
+        - paragraph [ref=e224]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e226]: Secure Payment

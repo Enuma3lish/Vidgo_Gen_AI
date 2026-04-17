@@ -51,6 +51,22 @@ const demoEmptyState = ref(false)
 const selectedScene = ref('studio')
 const prompt = ref('')
 
+// Style templates (curated prompts hidden from user)
+interface StyleTemplateItem {
+  id: string
+  category: string
+  name_en: string
+  name_zh: string
+  name_ja?: string
+  name_ko?: string
+  name_es?: string
+  preview_image_url?: string
+  is_featured: boolean
+}
+const styleTemplates = ref<StyleTemplateItem[]>([])
+const selectedTemplateId = ref<string | null>(null)
+const useTemplateMode = ref(false)
+
 const sceneTemplates = computed(() => [
   { id: 'studio', icon: '📷', name: t('tools.scenes.studio.name'), desc: t('tools.scenes.studio.desc') },
   { id: 'nature', icon: '🌿', name: t('tools.scenes.nature.name'), desc: t('tools.scenes.nature.desc') },
@@ -132,6 +148,14 @@ const currentPreGeneratedTemplateId = computed(() => {
 onMounted(async () => {
   await loadDemoTemplates('product_scene', undefined, locale.value)
 
+  // Load curated style templates for subscribers
+  try {
+    const { templates } = await toolsApi.getStyleTemplates('product_scene')
+    styleTemplates.value = templates
+  } catch (e) {
+    console.warn('Failed to load style templates:', e)
+  }
+
   // For demo users, auto-select first default product
   if (isDemoUser.value && defaultProducts.value.length > 0) {
     const firstProduct = defaultProducts.value[0]
@@ -186,11 +210,15 @@ async function generateScenes() {
     return
   }
 
+  // Clear stale result so the loading overlay is the only thing visible
+  // until the new generation finishes.
+  resultImages.value = []
+  demoEmptyState.value = false
   isProcessing.value = true
   try {
     // For demo users, resolve the exact product×scene preset through backend lookup
     if (isDemoUser.value) {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       const preGeneratedTemplateId = currentPreGeneratedTemplateId.value
       if (preGeneratedTemplateId) {
@@ -226,7 +254,9 @@ async function generateScenes() {
       // cache-through endpoint to generate one on demand via real provider.
       // The result is persisted to Material DB so the next click hits cache.
       uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
-      const onDemandUrl = await generateOnDemand('product_scene', selectedScene.value)
+      const onDemandUrl = await generateOnDemand('product_scene', selectedScene.value, {
+        product_id: selectedProductId.value,
+      })
       if (onDemandUrl) {
         resultImages.value = [onDemandUrl]
         uiStore.showSuccess(isZh.value ? '生成成功' : 'Generated successfully')
@@ -255,7 +285,9 @@ async function generateScenes() {
     const result = await toolsApi.productScene(
       uploadUrl,
       selectedScene.value,
-      selectedScene.value === 'custom' ? prompt.value : undefined
+      selectedScene.value === 'custom' ? prompt.value : undefined,
+      selectedProductId.value || undefined,
+      selectedTemplateId.value || undefined,
     )
 
     if (result.success && (result.image_url || result.result_url)) {
@@ -419,8 +451,53 @@ function dataURItoBlob(dataURI: string): Blob | null {
             </button>
           </div>
 
+          <!-- Style Templates (curated prompts — subscribers only) -->
+          <div v-if="!isDemoUser && styleTemplates.length > 0" class="mt-6">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-sm font-semibold text-dark-200">
+                {{ isZh ? '精選風格模版' : 'Curated Style Templates' }}
+              </h4>
+              <button
+                v-if="selectedTemplateId"
+                @click="selectedTemplateId = null"
+                class="text-xs text-primary-400 hover:text-primary-300"
+              >
+                {{ isZh ? '清除選擇' : 'Clear' }}
+              </button>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button
+                v-for="tmpl in styleTemplates"
+                :key="tmpl.id"
+                @click="selectedTemplateId = tmpl.id; selectedScene = 'custom'"
+                class="relative rounded-xl border-2 p-3 transition-all text-left"
+                :class="selectedTemplateId === tmpl.id
+                  ? 'border-primary-500 bg-primary-500/10'
+                  : 'border-transparent hover:border-dark-500'"
+                style="background: #1a1a2e;"
+              >
+                <img
+                  v-if="tmpl.preview_image_url"
+                  :src="tmpl.preview_image_url"
+                  :alt="isZh ? tmpl.name_zh : tmpl.name_en"
+                  class="w-full h-20 object-cover rounded-lg mb-2"
+                />
+                <div v-else class="w-full h-20 rounded-lg mb-2 flex items-center justify-center" style="background: #141420;">
+                  <span class="text-2xl">🎨</span>
+                </div>
+                <p class="text-xs font-medium text-dark-50 truncate">
+                  {{ isZh ? tmpl.name_zh : tmpl.name_en }}
+                </p>
+                <span v-if="tmpl.is_featured" class="absolute top-1 right-1 text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full">★</span>
+              </button>
+            </div>
+            <p class="text-xs text-dark-400 mt-2">
+              {{ isZh ? '選擇模版後，AI 將自動套用專業攝影參數（光影、焦距、材質）' : 'Templates apply professional photography parameters automatically' }}
+            </p>
+          </div>
+
            <!-- Custom Prompt Input (Pro Only) -->
-           <div v-if="selectedScene === 'custom'" class="mt-4">
+           <div v-if="selectedScene === 'custom' && !selectedTemplateId" class="mt-4">
              <label class="block text-sm font-medium text-dark-300 mb-2">
                {{ isZh ? '自訂場景描述' : 'Custom Scene Prompt' }}
              </label>

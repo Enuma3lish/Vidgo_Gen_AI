@@ -194,6 +194,7 @@ seed_admin() {
   if [[ -f backend/.env ]]; then
     admin_account="$(grep -E '^ADMIN_ACCOUNT=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
     admin_password="$(grep -E '^ADMIN_PASSWORD=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
+    admin_extra="$(grep -E '^ADMIN_EXTRA_ACCOUNTS=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
     if [[ -n "${admin_account}" && -n "${admin_password}" ]]; then
       ok "found ADMIN_ACCOUNT + ADMIN_PASSWORD in backend/.env"
     fi
@@ -240,6 +241,10 @@ seed_admin() {
   log "Pushing ADMIN_ACCOUNT + ADMIN_PASSWORD to Secret Manager..."
   push_secret "ADMIN_ACCOUNT"  "${admin_account}"
   push_secret "ADMIN_PASSWORD" "${admin_password}"
+  if [[ -n "${admin_extra:-}" ]]; then
+    push_secret "ADMIN_EXTRA_ACCOUNTS" "${admin_extra}"
+    log "  + pushed ADMIN_EXTRA_ACCOUNTS secret"
+  fi
 
   # 4. Deploy / update the one-shot Job
   log "Deploying one-shot Job: ${job_name}"
@@ -248,7 +253,7 @@ seed_admin() {
     --region="${REGION}" \
     --project="${PROJECT_ID}" \
     --service-account="${BACKEND_SA}" \
-    --set-secrets="DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,ADMIN_ACCOUNT=ADMIN_ACCOUNT:latest,ADMIN_PASSWORD=ADMIN_PASSWORD:latest" \
+    --set-secrets="DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,ADMIN_ACCOUNT=ADMIN_ACCOUNT:latest,ADMIN_PASSWORD=ADMIN_PASSWORD:latest,ADMIN_EXTRA_ACCOUNTS=ADMIN_EXTRA_ACCOUNTS:latest" \
     --task-timeout=300 \
     --max-retries=0 \
     --command="/bin/bash" \

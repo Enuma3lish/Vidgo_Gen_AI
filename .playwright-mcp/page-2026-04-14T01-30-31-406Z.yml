@@ -1,0 +1,257 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "0 Credits" [ref=e25] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e26]
+          - text: 0 Credits
+        - link "Dashboard" [ref=e28] [cursor=pointer]:
+          - /url: /dashboard
+        - button "Logout" [ref=e29] [cursor=pointer]
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - button "Back" [ref=e33] [cursor=pointer]:
+        - img [ref=e34]
+        - text: Back
+      - generic [ref=e36]:
+        - heading "Short Video" [level=1] [ref=e37]
+        - paragraph [ref=e38]: Generate captivating short videos from text descriptions or images
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - heading "Please try our amazing examples" [level=3] [ref=e42]
+            - generic [ref=e43]:
+              - heading "Upload Image (.jpg, .png)" [level=4] [ref=e44]
+              - generic [ref=e46] [cursor=pointer]:
+                - img [ref=e48]
+                - paragraph [ref=e50]: Drop starting image here
+                - paragraph [ref=e51]: PNG, JPG up to 10MB
+            - generic [ref=e52]:
+              - paragraph [ref=e53]: Click to see different motion effects
+              - generic [ref=e54]:
+                - button "> product_showcase Cinematic close-up of bubble milk tea being poured, tapioca pearls swirling, appetizing, 4K quality ▶️" [ref=e55] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e57]: product_showcase
+                  - paragraph [ref=e59]: Cinematic close-up of bubble milk tea being poured, tapioca pearls swirling, appetizing, 4K quality
+                  - generic:
+                    - generic: ▶️
+                - button "> product_showcase Fresh fried chicken cutlet being sliced open, steam rising, crispy golden crust, food commercial ▶️" [ref=e60] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e62]: product_showcase
+                  - paragraph [ref=e64]: Fresh fried chicken cutlet being sliced open, steam rising, crispy golden crust, food commercial
+                  - generic:
+                    - generic: ▶️
+                - button "> product_showcase Colorful fruit tea with ice cubes and fresh fruits, condensation drops on cup, refreshing drink ad ▶️" [ref=e65] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e67]: product_showcase
+                  - paragraph [ref=e69]: Colorful fruit tea with ice cubes and fresh fruits, condensation drops on cup, refreshing drink ad
+                  - generic:
+                    - generic: ▶️
+                - button "> product_showcase Smartphone rotating on a clean pedestal, studio lighting, tech product showcase ▶️" [ref=e70] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e72]: product_showcase
+                  - paragraph [ref=e74]: Smartphone rotating on a clean pedestal, studio lighting, tech product showcase
+                  - generic:
+                    - generic: ▶️
+                - button "> product_showcase Running sneakers on clean studio floor, dynamic spotlight, sporty product commercial ▶️" [ref=e75] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e77]: product_showcase
+                  - paragraph [ref=e79]: Running sneakers on clean studio floor, dynamic spotlight, sporty product commercial
+                  - generic:
+                    - generic: ▶️
+                - button "> product_showcase Step by step bubble tea preparation, adding tapioca and milk, instruction video ▶️" [ref=e80] [cursor=pointer]:
+                  - text: ">"
+                  - generic [ref=e82]: product_showcase
+                  - paragraph [ref=e84]: Step by step bubble tea preparation, adding tapioca and milk, instruction video
+                  - generic:
+                    - generic: ▶️
+          - generic [ref=e85]:
+            - heading "Select an Example" [level=3] [ref=e86]
+            - paragraph [ref=e88]: 👆 Select an example video above to see the result
+          - generic [ref=e89]:
+            - heading "Video Settings" [level=3] [ref=e91]
+            - generic [ref=e92]:
+              - generic [ref=e93]: Duration
+              - generic [ref=e94]:
+                - button "> 5s" [ref=e95] [cursor=pointer]
+                - button "> 8s" [ref=e96] [cursor=pointer]
+            - generic [ref=e97]:
+              - generic [ref=e98]: Motion Type
+              - generic [ref=e99]:
+                - button "> Auto AI decides motion" [ref=e100] [cursor=pointer]:
+                  - text: ">"
+                  - paragraph [ref=e101]: Auto
+                  - paragraph [ref=e102]: AI decides motion
+                - button "> Zoom In Gradual zoom effect" [ref=e103] [cursor=pointer]:
+                  - text: ">"
+                  - paragraph [ref=e104]: Zoom In
+                  - paragraph [ref=e105]: Gradual zoom effect
+                - button "> Zoom Out Pull back effect" [ref=e106] [cursor=pointer]:
+                  - text: ">"
+                  - paragraph [ref=e107]: Zoom Out
+                  - paragraph [ref=e108]: Pull back effect
+                - button "> Pan Left Horizontal movement left" [ref=e109] [cursor=pointer]:
+                  - text: ">"
+                  - paragraph [ref=e110]: Pan Left
+                  - paragraph [ref=e111]: Horizontal movement left
+                - button "> Pan Right Horizontal movement right" [ref=e112] [cursor=pointer]:
+                  - text: ">"
+                  - paragraph [ref=e113]: Pan Right
+                  - paragraph [ref=e114]: Horizontal movement right
+                - button "> Rotate Circular motion" [ref=e115] [cursor=pointer]:
+                  - text: ">"
+                  - paragraph [ref=e116]: Rotate
+                  - paragraph [ref=e117]: Circular motion
+            - generic [ref=e118]:
+              - generic [ref=e119]:
+                - generic [ref=e120]: "Estimated cost:"
+                - generic [ref=e121]: 0 Credits
+              - button "View Result" [disabled] [ref=e122]
+          - generic [ref=e123]:
+            - heading "AI Model Selection" [level=3] [ref=e125]
+            - generic [ref=e126]:
+              - paragraph [ref=e127]: Choose different AI models for different generation effects
+              - generic [ref=e128]:
+                - 'button "> Pixverse 4.5 Fast & Affordable - Good quality Lengths: 5s, 8s Default" [ref=e129] [cursor=pointer]':
+                  - text: ">"
+                  - generic [ref=e130]:
+                    - paragraph [ref=e131]: Pixverse 4.5
+                    - paragraph [ref=e132]: Fast & Affordable - Good quality
+                    - paragraph [ref=e133]: "Lengths: 5s, 8s"
+                  - generic [ref=e134]: Default
+                - 'button "> Pixverse 5.0 Creative animations Lengths: 5s, 8s New" [ref=e135] [cursor=pointer]':
+                  - text: ">"
+                  - generic [ref=e136]:
+                    - paragraph [ref=e137]: Pixverse 5.0
+                    - paragraph [ref=e138]: Creative animations
+                    - paragraph [ref=e139]: "Lengths: 5s, 8s"
+                  - generic [ref=e140]: New
+                - 'button "> Kling AI 2.0 High quality, lifelike movements Lengths: 5s, 10s Pro" [ref=e141] [cursor=pointer]':
+                  - text: ">"
+                  - generic [ref=e142]:
+                    - paragraph [ref=e143]: Kling AI 2.0
+                    - paragraph [ref=e144]: High quality, lifelike movements
+                    - paragraph [ref=e145]: "Lengths: 5s, 10s"
+                  - generic [ref=e146]: Pro
+                - 'button "> Kling AI 1.5 Fast generation, good quality Lengths: 5s, 10s" [ref=e147] [cursor=pointer]':
+                  - text: ">"
+                  - generic [ref=e148]:
+                    - paragraph [ref=e149]: Kling AI 1.5
+                    - paragraph [ref=e150]: Fast generation, good quality
+                    - paragraph [ref=e151]: "Lengths: 5s, 10s"
+                - 'button "> Luma Ray 2.0 Cinematic quality Lengths: 5s, 10s Premium" [ref=e152] [cursor=pointer]':
+                  - text: ">"
+                  - generic [ref=e153]:
+                    - paragraph [ref=e154]: Luma Ray 2.0
+                    - paragraph [ref=e155]: Cinematic quality
+                    - paragraph [ref=e156]: "Lengths: 5s, 10s"
+                  - generic [ref=e157]: Premium
+        - generic [ref=e158]:
+          - heading "Generated Video" [level=3] [ref=e159]
+          - generic [ref=e161]:
+            - generic [ref=e162]: 🎬
+            - paragraph [ref=e163]: Generated video will appear here
+  - contentinfo [ref=e164]:
+    - generic [ref=e165]:
+      - generic [ref=e166]:
+        - generic [ref=e167]:
+          - link "V VidGo AI" [ref=e168] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e169]: V
+            - generic [ref=e170]: VidGo AI
+          - paragraph [ref=e171]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e172]:
+            - link [ref=e173] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e174]
+            - link [ref=e176] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e177]
+        - generic [ref=e179]:
+          - heading "Fashion AI" [level=4] [ref=e180]
+          - list [ref=e181]:
+            - listitem [ref=e182]:
+              - link "Virtual Try On" [ref=e183] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e184]:
+              - link "Fashion Reels" [ref=e185] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e186]:
+              - link "Text to Video" [ref=e187] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e188]:
+              - link "Product Avatars" [ref=e189] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e190]:
+          - heading "E-commerce AI" [level=4] [ref=e191]
+          - list [ref=e192]:
+            - listitem [ref=e193]:
+              - link "Product AnyShoot" [ref=e194] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e195]:
+              - link "Remove Background" [ref=e196] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e197]:
+              - link "HD Upscale" [ref=e198] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e199]:
+              - link "Style Clone" [ref=e200] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e201]:
+              - link "Room Redesign" [ref=e202] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e203]:
+          - heading "Company" [level=4] [ref=e204]
+          - list [ref=e205]:
+            - listitem [ref=e206]:
+              - link "About Us" [ref=e207] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e208]:
+              - link "Pricing" [ref=e209] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e210]:
+              - link "Contact Us" [ref=e211] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e212]:
+              - link "Blog" [ref=e213] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e214]:
+              - link "Affiliate Program" [ref=e215] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e216]:
+          - heading "Legal" [level=4] [ref=e217]
+          - list [ref=e218]:
+            - listitem [ref=e219]:
+              - link "Terms of Service" [ref=e220] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e221]:
+              - link "Privacy Policy" [ref=e222] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e223]:
+              - link "Cookie Policy" [ref=e224] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e225]:
+              - link "Refund Policy" [ref=e226] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e227]:
+        - paragraph [ref=e228]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e230]: Secure Payment

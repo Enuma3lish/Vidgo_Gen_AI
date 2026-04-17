@@ -1,0 +1,203 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "9,797 Credits" [ref=e25] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e26]
+          - text: 9,797 Credits
+        - link "Dashboard" [ref=e28] [cursor=pointer]:
+          - /url: /dashboard
+        - button "Logout" [ref=e29] [cursor=pointer]
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - heading "Welcome back, qa-pro!" [level=1] [ref=e34]
+        - paragraph [ref=e35]: Here is your account overview
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - generic [ref=e39]: Remaining Credits
+            - img [ref=e41]
+          - paragraph [ref=e43]: "9797"
+          - paragraph [ref=e44]: Total 9797 credits
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - generic [ref=e49]: Used This Week
+            - img [ref=e51]
+          - paragraph [ref=e53]: "0"
+          - paragraph [ref=e54]: Weekly limit 0 credits
+        - generic [ref=e55]:
+          - generic [ref=e56]:
+            - generic [ref=e57]: Current Plan
+            - img [ref=e59]
+          - paragraph [ref=e61]: pro
+          - link "Upgrade Plan →" [ref=e62] [cursor=pointer]:
+            - /url: /pricing
+      - generic [ref=e63]:
+        - heading "Quick Actions" [level=2] [ref=e64]
+        - generic [ref=e65]:
+          - link "🎬 AI Short Video" [ref=e66] [cursor=pointer]:
+            - /url: /tools/short-video
+            - generic [ref=e67]: 🎬
+            - text: AI Short Video
+          - link "🎭 AI Avatar" [ref=e68] [cursor=pointer]:
+            - /url: /tools/avatar
+            - generic [ref=e69]: 🎭
+            - text: AI Avatar
+          - link "👗 Virtual Try-On" [ref=e70] [cursor=pointer]:
+            - /url: /tools/try-on
+            - generic [ref=e71]: 👗
+            - text: Virtual Try-On
+          - link "📸 Product Scene" [ref=e72] [cursor=pointer]:
+            - /url: /tools/product-scene
+            - generic [ref=e73]: 📸
+            - text: Product Scene
+          - link "✂️ Background Removal" [ref=e74] [cursor=pointer]:
+            - /url: /tools/background-removal
+            - generic [ref=e75]: ✂️
+            - text: Background Removal
+          - link "🏠 Room Redesign" [ref=e76] [cursor=pointer]:
+            - /url: /tools/room-redesign
+            - generic [ref=e77]: 🏠
+            - text: Room Redesign
+      - generic [ref=e78]:
+        - generic [ref=e79]:
+          - heading "Recent Works" [level=2] [ref=e80]
+          - generic [ref=e81]:
+            - link "View All →" [ref=e82] [cursor=pointer]:
+              - /url: /dashboard/my-works
+            - link "Invoices" [ref=e83] [cursor=pointer]:
+              - /url: /dashboard/invoices
+            - link "🎁 Referrals" [ref=e84] [cursor=pointer]:
+              - /url: /dashboard/referrals
+            - link "📡 Social Media" [ref=e85] [cursor=pointer]:
+              - /url: /dashboard/social-accounts
+        - generic [ref=e86]:
+          - generic [ref=e87] [cursor=pointer]:
+            - generic [ref=e88]:
+              - img "short_video" [ref=e89]
+              - link "View" [ref=e91]:
+                - /url: /dashboard/my-works
+            - generic [ref=e92]:
+              - paragraph [ref=e93]: short video
+              - paragraph [ref=e94]: Just now
+          - generic [ref=e95] [cursor=pointer]:
+            - generic [ref=e96]:
+              - img "short_video" [ref=e97]
+              - link "View" [ref=e99]:
+                - /url: /dashboard/my-works
+            - generic [ref=e100]:
+              - paragraph [ref=e101]: short video
+              - paragraph [ref=e102]: Just now
+          - generic [ref=e103] [cursor=pointer]:
+            - generic [ref=e104]:
+              - img "short_video" [ref=e105]
+              - link "View" [ref=e107]:
+                - /url: /dashboard/my-works
+            - generic [ref=e108]:
+              - paragraph [ref=e109]: short video
+              - paragraph [ref=e110]: Just now
+  - contentinfo [ref=e111]:
+    - generic [ref=e112]:
+      - generic [ref=e113]:
+        - generic [ref=e114]:
+          - link "V VidGo AI" [ref=e115] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e116]: V
+            - generic [ref=e117]: VidGo AI
+          - paragraph [ref=e118]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e119]:
+            - link [ref=e120] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e121]
+            - link [ref=e123] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e124]
+        - generic [ref=e126]:
+          - heading "Fashion AI" [level=4] [ref=e127]
+          - list [ref=e128]:
+            - listitem [ref=e129]:
+              - link "Virtual Try On" [ref=e130] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e131]:
+              - link "Fashion Reels" [ref=e132] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e133]:
+              - link "Text to Video" [ref=e134] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e135]:
+              - link "Product Avatars" [ref=e136] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e137]:
+          - heading "E-commerce AI" [level=4] [ref=e138]
+          - list [ref=e139]:
+            - listitem [ref=e140]:
+              - link "Product AnyShoot" [ref=e141] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e142]:
+              - link "Remove Background" [ref=e143] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e144]:
+              - link "HD Upscale" [ref=e145] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e146]:
+              - link "Style Clone" [ref=e147] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e148]:
+              - link "Room Redesign" [ref=e149] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e150]:
+          - heading "Company" [level=4] [ref=e151]
+          - list [ref=e152]:
+            - listitem [ref=e153]:
+              - link "About Us" [ref=e154] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e155]:
+              - link "Pricing" [ref=e156] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e157]:
+              - link "Contact Us" [ref=e158] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e159]:
+              - link "Blog" [ref=e160] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e161]:
+              - link "Affiliate Program" [ref=e162] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e163]:
+          - heading "Legal" [level=4] [ref=e164]
+          - list [ref=e165]:
+            - listitem [ref=e166]:
+              - link "Terms of Service" [ref=e167] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e168]:
+              - link "Privacy Policy" [ref=e169] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e170]:
+              - link "Cookie Policy" [ref=e171] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e172]:
+              - link "Refund Policy" [ref=e173] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e174]:
+        - paragraph [ref=e175]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e177]: Secure Payment

@@ -32,10 +32,12 @@ const refundDaysRemaining = computed(() => subscriptionStatus.value?.refund_days
 const planDisplayNames: Record<string, string> = {
   free: 'demo',
   starter: 'starter',
+  standard: 'standard',
   pro: 'pro',
   enterprise: 'proPlus',
   '免費體驗': 'demo',
   'Starter': 'starter',
+  'Standard': 'standard',
   'Pro': 'pro',
   'Enterprise': 'proPlus'
 }
@@ -68,6 +70,16 @@ async function fetchPlans() {
         price_yearly: 79,
         monthly_credits: 100,
         features: { max_video_length: 30, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: false, custom_styles: false }
+      },
+      {
+        id: 'standard',
+        name: 'standard',
+        display_name: 'Standard',
+        description: '適合成長中的中小型企業',
+        price_monthly: 399,
+        price_yearly: 319,
+        monthly_credits: 150,
+        features: { max_video_length: 60, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: true, custom_styles: false }
       },
       {
         id: 'pro',
@@ -334,7 +346,7 @@ onMounted(async () => {
       </div>
 
       <!-- Plans Grid -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         <div
           v-for="plan in plans"
           :key="plan.id"

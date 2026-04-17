@@ -44,32 +44,21 @@ const languageOptions = [
   { id: 'en', name: 'English', flag: '🇺🇸' }
 ]
 
-// Female AI Avatars - Confirmed Asian/Taiwanese women (Unsplash free); v=4
-const FEMALE_AVATAR_URLS = [
-  'https://images.unsplash.com/photo-1615262239828-a4d49e6503ea?w=512&fit=crop&crop=faces',  // 怡君 - Asian woman, white top
-  'https://images.unsplash.com/photo-1615262239126-1931bdb03182?w=512&fit=crop&crop=faces',  // 雅婷 - Asian woman, red background
-  'https://images.unsplash.com/photo-1566589430181-a51c280be4b1?w=512&fit=crop&crop=faces',  // 佳穎 - Asian woman, blue jacket
-  'https://images.unsplash.com/photo-1614387256720-5b994a2bb8e5?w=512&fit=crop&crop=faces'   // 淑芬 - Asian woman, orange top
-]
+// Frozen curated head-and-shoulders avatar portraits — Kling Avatar needs a
+// big, centered face (full-body photos are rejected). Stored in a dedicated
+// GCS path, separate from the full-body try-on models.
+const _AVATARS_BASE = 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/avatars'
+
 const femaleAvatars = [
-  { id: 'female-1', gender: 'female' as const, name_zh: '怡君', name_en: 'Yi-Jun', url: FEMALE_AVATAR_URLS[0] },
-  { id: 'female-2', gender: 'female' as const, name_zh: '雅婷', name_en: 'Ya-Ting', url: FEMALE_AVATAR_URLS[1] },
-  { id: 'female-3', gender: 'female' as const, name_zh: '佳穎', name_en: 'Jia-Ying', url: FEMALE_AVATAR_URLS[2] },
-  { id: 'female-4', gender: 'female' as const, name_zh: '淑芬', name_en: 'Shu-Fen', url: FEMALE_AVATAR_URLS[3] }
+  { id: 'female-1', gender: 'female' as const, name_zh: '怡君', name_en: 'Yi-Jun',   url: `${_AVATARS_BASE}/female-1.png` },
+  { id: 'female-2', gender: 'female' as const, name_zh: '雅婷', name_en: 'Ya-Ting',  url: `${_AVATARS_BASE}/female-2.png` },
+  { id: 'female-3', gender: 'female' as const, name_zh: '佳穎', name_en: 'Jia-Ying', url: `${_AVATARS_BASE}/female-3.png` },
 ]
 
-// Male AI Avatars - Confirmed Chinese/Taiwanese men (Unsplash free); v=5
-const MALE_AVATAR_URLS = [
-  'https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=512&fit=crop&crop=faces',  // 志偉 - Chinese man, white T-shirt, yellow bg (by Anky Lau, tagged 'chinese')
-  'https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=512&fit=crop&crop=faces',  // 冠宇 - East Asian man, blue formal shirt (by phyo min)
-  'https://images.unsplash.com/photo-1633177188754-980c2a6b6266?w=512&fit=crop&crop=faces',  // 宗翰 - Asian man, green top
-  'https://images.unsplash.com/photo-1727605507453-dfe1e74abfbc?w=512&fit=crop&crop=faces'   // 家豪 - Asian man, glasses, black suit
-]
 const maleAvatars = [
-  { id: 'male-1', gender: 'male' as const, name_zh: '志偉', name_en: 'Zhi-Wei', url: MALE_AVATAR_URLS[0] },
-  { id: 'male-2', gender: 'male' as const, name_zh: '冠宇', name_en: 'Guan-Yu', url: MALE_AVATAR_URLS[1] },
-  { id: 'male-3', gender: 'male' as const, name_zh: '宗翰', name_en: 'Zong-Han', url: MALE_AVATAR_URLS[2] },
-  { id: 'male-4', gender: 'male' as const, name_zh: '家豪', name_en: 'Jia-Hao', url: MALE_AVATAR_URLS[3] }
+  { id: 'male-1', gender: 'male' as const, name_zh: '志偉', name_en: 'Zhi-Wei',  url: `${_AVATARS_BASE}/male-1.png` },
+  { id: 'male-2', gender: 'male' as const, name_zh: '冠宇', name_en: 'Guan-Yu',  url: `${_AVATARS_BASE}/male-2.png` },
+  { id: 'male-3', gender: 'male' as const, name_zh: '宗翰', name_en: 'Zong-Han', url: `${_AVATARS_BASE}/male-3.png` },
 ]
 
 // Combined list (order: females first, then males) for voice index
@@ -260,7 +249,10 @@ function selectAvatar(avatar: typeof defaultAvatars[0]) {
 
 function selectDefaultScript(scriptItem: typeof defaultScripts[0]) {
   selectedDefaultScriptId.value = scriptItem.id
-  script.value = isZh.value ? scriptItem.text_zh : scriptItem.text_en
+  // Script text follows the selected VOICE language (selectedLanguage), not
+  // the UI locale (isZh). Visitor browsing in Chinese UI can still pick an
+  // English-speaking avatar and see the English script preview.
+  script.value = selectedLanguage.value === 'zh-TW' ? scriptItem.text_zh : scriptItem.text_en
   resultVideo.value = null
   demoEmptyState.value = false
 }
@@ -290,6 +282,8 @@ async function generateAvatar() {
       return
     }
 
+    // Clear stale result so loading overlay is the only thing visible.
+    resultVideo.value = null
     isProcessing.value = true
     try {
       // Simulate processing delay for demo effect
@@ -327,10 +321,15 @@ async function generateAvatar() {
         }
       }
 
-      // VG-BUG-010 fix: cache-through on demand. Avatar uses provider_router
-      // TaskType.AVATAR via piapi_mcp generate_video_kling. Takes 3-5 min.
+      // Cache-through on demand. Pass avatar_id + language + script category
+      // so the backend honors the visitor's choices instead of falling back
+      // to a random hardcoded seed.
+      const scriptCategory = defaultScripts.find(s => s.id === selectedDefaultScriptId.value)?.category
       uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成（約 3-5 分鐘）...' : 'Generating in real-time (3-5 min)...')
-      const onDemandUrl = await generateOnDemand('ai_avatar')
+      const onDemandUrl = await generateOnDemand('ai_avatar', scriptCategory, {
+        product_id: selectedAvatarId.value || undefined,
+        language: selectedLanguage.value,
+      })
       if (onDemandUrl) {
         resultVideo.value = onDemandUrl
         uiStore.showSuccess(isZh.value ? '頭像生成成功' : 'Avatar generated successfully')
@@ -399,11 +398,11 @@ onMounted(async () => {
 
 watch(selectedLanguage, () => {
   loadVoices()
-  // Update script text if default script selected
+  // Update script text to match the new voice language.
   if (selectedDefaultScriptId.value) {
     const scriptItem = defaultScripts.find(s => s.id === selectedDefaultScriptId.value)
     if (scriptItem) {
-      script.value = isZh.value ? scriptItem.text_zh : scriptItem.text_en
+      script.value = selectedLanguage.value === 'zh-TW' ? scriptItem.text_zh : scriptItem.text_en
     }
   }
 })
@@ -489,7 +488,7 @@ watch(selectedAvatarId, () => {
                     {{ isZh ? scriptItem.category_zh : scriptItem.category }}
                   </span>
                   <p class="text-dark-200">
-                    {{ (isZh ? scriptItem.text_zh : scriptItem.text_en).slice(0, 60) }}...
+                    {{ (selectedLanguage === 'zh-TW' ? scriptItem.text_zh : scriptItem.text_en).slice(0, 60) }}...
                   </p>
                 </button>
               </div>

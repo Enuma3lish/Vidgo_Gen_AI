@@ -1,0 +1,140 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "0 Credits" [ref=e25] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e26]
+          - text: 0 Credits
+        - link "Dashboard" [ref=e28] [cursor=pointer]:
+          - /url: /dashboard
+        - button "Logout" [ref=e29] [cursor=pointer]
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - heading "HD Image Upscale" [level=1] [ref=e34]
+        - paragraph [ref=e35]: Upscale images to 2x or 4x resolution with AI
+        - generic [ref=e36]:
+          - generic [ref=e37]: "Estimated cost:"
+          - generic [ref=e38]: 10 Credits
+          - generic [ref=e39]: (Insufficient)
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - generic [ref=e43]: Upload Image
+            - generic [ref=e45] [cursor=pointer]:
+              - img [ref=e47]
+              - paragraph [ref=e49]: Click or drop image here
+              - paragraph [ref=e50]: PNG, JPG up to 10MB
+          - generic [ref=e51]:
+            - generic [ref=e52]: Upscale Factor
+            - generic [ref=e53]:
+              - button "2x" [ref=e54] [cursor=pointer]
+              - button "4x" [ref=e55] [cursor=pointer]
+          - button "Upscale 2x" [disabled] [ref=e56]
+        - generic [ref=e58]:
+          - img [ref=e59]
+          - paragraph [ref=e61]: Upload an image to upscale
+  - contentinfo [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e65]:
+          - link "V VidGo AI" [ref=e66] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e67]: V
+            - generic [ref=e68]: VidGo AI
+          - paragraph [ref=e69]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e70]:
+            - link [ref=e71] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e72]
+            - link [ref=e74] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e75]
+        - generic [ref=e77]:
+          - heading "Fashion AI" [level=4] [ref=e78]
+          - list [ref=e79]:
+            - listitem [ref=e80]:
+              - link "Virtual Try On" [ref=e81] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e82]:
+              - link "Fashion Reels" [ref=e83] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e84]:
+              - link "Text to Video" [ref=e85] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e86]:
+              - link "Product Avatars" [ref=e87] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e88]:
+          - heading "E-commerce AI" [level=4] [ref=e89]
+          - list [ref=e90]:
+            - listitem [ref=e91]:
+              - link "Product AnyShoot" [ref=e92] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e93]:
+              - link "Remove Background" [ref=e94] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e95]:
+              - link "HD Upscale" [ref=e96] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e97]:
+              - link "Style Clone" [ref=e98] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e99]:
+              - link "Room Redesign" [ref=e100] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e101]:
+          - heading "Company" [level=4] [ref=e102]
+          - list [ref=e103]:
+            - listitem [ref=e104]:
+              - link "About Us" [ref=e105] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e106]:
+              - link "Pricing" [ref=e107] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e108]:
+              - link "Contact Us" [ref=e109] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e110]:
+              - link "Blog" [ref=e111] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e112]:
+              - link "Affiliate Program" [ref=e113] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e114]:
+          - heading "Legal" [level=4] [ref=e115]
+          - list [ref=e116]:
+            - listitem [ref=e117]:
+              - link "Terms of Service" [ref=e118] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e119]:
+              - link "Privacy Policy" [ref=e120] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e121]:
+              - link "Cookie Policy" [ref=e122] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e123]:
+              - link "Refund Policy" [ref=e124] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e125]:
+        - paragraph [ref=e126]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e128]: Secure Payment

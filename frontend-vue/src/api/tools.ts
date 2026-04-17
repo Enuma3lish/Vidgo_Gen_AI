@@ -19,21 +19,30 @@ export const toolsApi = {
     return response.data
   },
 
-  async productScene(productImageUrl: string, sceneType = 'studio', customPrompt?: string): Promise<ToolResponse> {
+  async productScene(
+    productImageUrl: string,
+    sceneType = 'studio',
+    customPrompt?: string,
+    productId?: string,
+    templateId?: string,
+  ): Promise<ToolResponse> {
     const response = await apiClient.post('/api/v1/tools/product-scene', {
       product_image_url: productImageUrl,
       scene_type: sceneType,
       custom_prompt: customPrompt,
+      product_id: productId,
+      template_id: templateId,
     })
     return response.data
   },
 
-  async tryOn(garmentImageUrl: string, opts?: { modelImageUrl?: string; modelId?: string; angle?: string }): Promise<ToolResponse> {
+  async tryOn(garmentImageUrl: string, opts?: { modelImageUrl?: string; modelId?: string; angle?: string; templateId?: string }): Promise<ToolResponse> {
     const response = await apiClient.post('/api/v1/tools/try-on', {
       garment_image_url: garmentImageUrl,
       model_image_url: opts?.modelImageUrl,
       model_id: opts?.modelId,
       angle: opts?.angle ?? 'front',
+      template_id: opts?.templateId,
     })
     return response.data
   },
@@ -64,16 +73,6 @@ export const toolsApi = {
     return response.data
   },
 
-  async textToVideo(prompt: string, opts?: { duration?: number; resolution?: string; aspectRatio?: string }): Promise<ToolResponse> {
-    const response = await apiClient.post('/api/v1/tools/text-to-video', {
-      prompt,
-      duration: opts?.duration ?? 5,
-      resolution: opts?.resolution ?? '1080P',
-      aspect_ratio: opts?.aspectRatio ?? '16:9',
-    })
-    return response.data
-  },
-
   async videoTransform(videoUrl: string, prompt: string, style?: string): Promise<ToolResponse> {
     const response = await apiClient.post('/api/v1/tools/video-transform', {
       video_url: videoUrl,
@@ -97,6 +96,14 @@ export const toolsApi = {
     const response = await apiClient.post('/api/v1/demo/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
+    return response.data
+  },
+
+  async getStyleTemplates(toolType = 'product_scene', opts?: { category?: string; featuredOnly?: boolean }): Promise<{ templates: any[]; total: number }> {
+    const params: Record<string, any> = { tool_type: toolType }
+    if (opts?.category) params.category = opts.category
+    if (opts?.featuredOnly) params.featured_only = true
+    const response = await apiClient.get('/api/v1/tools/templates/style-templates', { params })
     return response.data
   },
 }

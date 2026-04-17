@@ -18,21 +18,9 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
-  // Style Effects — PiAPI I2I (Flux)
-  {
-    path: '/tools/effects',
-    name: 'effects',
-    component: () => import('@/views/tools/ImageEffects.vue'),
-    meta: { requiresAuth: false }
-  },
-
-  // Image Transform — PiAPI I2I (Flux), auto-selects transform tab
-  {
-    path: '/tools/image-transform',
-    name: 'image-transform',
-    component: () => import('@/views/tools/ImageEffects.vue'),
-    meta: { requiresAuth: false }
-  },
+  // Style Effects & Image Transform removed — merged into Room Redesign
+  { path: '/tools/effects', redirect: '/tools/room-redesign' },
+  { path: '/tools/image-transform', redirect: '/tools/room-redesign' },
 
   // Product Scene — T2I + rembg + PIL composite
   {
@@ -80,13 +68,8 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
-  // Text-to-Video — PiAPI Wan 2.6 T2V (NEW)
-  {
-    path: '/tools/text-to-video',
-    name: 'text-to-video',
-    component: () => import('@/views/tools/TextToVideo.vue'),
-    meta: { requiresAuth: false }
-  },
+  // Text-to-Video removed — redirect to Image-to-Video
+  { path: '/tools/text-to-video', redirect: '/tools/short-video' },
 
   // Image Upscale — PiAPI image-toolkit (NEW)
   {

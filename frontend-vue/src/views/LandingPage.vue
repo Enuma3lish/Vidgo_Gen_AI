@@ -66,11 +66,8 @@ const allTools = [
   { id: 'productAvatars',  route: '/tools/avatar',             emoji: '🎭', color: '#531dab', tag: '' },
   { id: 'productAnyshoot', route: '/tools/product-scene',      emoji: '📸', color: '#fa8c16', tag: '' },
   { id: 'bgRemoval',       route: '/tools/background-removal', emoji: '✂️', color: '#08979c', tag: 'Free' },
-  { id: 'styleClone',      route: '/tools/effects',            emoji: '🎨', color: '#9254de', tag: '' },
   { id: 'roomRedesign',    route: '/tools/room-redesign',      emoji: '🏠', color: '#52c41a', tag: '' },
-  { id: 'textToVideo',     route: '/tools/text-to-video',      emoji: '🎥', color: '#722ed1', tag: 'New' },
   { id: 'hdUpscale',       route: '/tools/upscale',            emoji: '🔍', color: '#13c2c2', tag: 'New' },
-  { id: 'imageTransform',  route: '/tools/image-transform',    emoji: '🔄', color: '#597ef7', tag: '' },
   { id: 'videoTransform',  route: '/tools/video-transform',    emoji: '🎞️', color: '#434343', tag: '' },
   { id: 'patternGenerate', route: '/tools/pattern-generate',   emoji: '🎨', color: '#f5222d', tag: '' },
 ]

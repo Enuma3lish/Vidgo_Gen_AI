@@ -1,215 +1,177 @@
-# Example Mode — Cache-Through System
+# Demo Mode — Cache-Through System
 
-## Overview
+> **April 2026 rewrite.** This doc replaces the earlier "Example Mode" writeup
+> that described a Redis-only `ExampleCacheService`. The live system is
+> `DemoCacheService`, which persists results to the Material DB (Postgres) and
+> uses Redis only as a warm-cache layer. Curated inputs live in a public GCS
+> bucket and never change between pregen runs.
 
-Example mode provides a preset-only experience. Users cannot type prompts — they pick from our provided inputs and effects, then click generate. Results are cached in Redis forever, so only the first request per preset hits the AI provider.
+## Goals
+
+1. **Visitors click presets, get real AI results, never pay real money for retries.** Every unique combo a visitor picks is generated exactly once (by the first visitor to try it) and cached forever for everyone else.
+2. **Results are reproducible.** The input to every pipeline step is a frozen, human-reviewed asset in GCS — never a T2I-generated image — so running pregen again produces outputs aligned with the same product IDs.
+3. **No subscription required to test.** Preset flows on every tool page are fully usable by visitors; only "upload your own" and "custom prompt" features remain subscriber-only.
 
 ## Architecture
 
-```
-User clicks preset
+```text
+Visitor clicks preset combo (e.g. product-4 + urban)
   │
   ▼
-POST /api/v1/examples/{tool_type}/generate
-  { "preset_id": "fx-bubbletea-anime" }
+POST /api/v1/demo/generate/{tool_type}
+    ?topic=urban&product_id=product-4&language=en
   │
   ▼
-ExampleCacheService.generate_or_cache()
+DemoCacheService.get_or_generate(tool_type, topic, product_id, language)
   │
-  ├─ Redis GET "example:effect:fx-bubbletea-anime"
-  │   ├─ HIT  → return cached result (instant)
-  │   └─ MISS → continue ▼
+  ├─ 1. Material DB lookup
+  │    SELECT * FROM materials
+  │     WHERE tool_type = :tool_type
+  │       AND topic     = :topic
+  │       AND input_params->>'product_id' = :product_id
+  │       AND language  = :language
+  │     ORDER BY random() LIMIT 1
   │
-  ├─ Build params from preset config
-  │   (prompt, image_url, duration, etc.)
+  │    HIT → return the frozen row, done (~50 ms).
   │
-  ├─ ProviderRouter.route(TaskType.I2I, params)
-  │   PiAPI MCP → Pollo MCP → Vertex AI → PiAPI REST
+  ├─ 2. Redis fallback (only when product_id + language are null)
+  │    Warm cache built from DB rows; skipped for composite filters.
   │
-  ├─ Persist result to GCS (permanent URL)
-  │
-  ├─ Redis SET "example:effect:fx-bubbletea-anime" (no TTL)
-  │
-  └─ Return result
+  └─ 3. On-demand generation
+       │
+       ├─ Resolve frozen inputs from curated GCS paths
+       │  (see "Curated asset catalog" below)
+       │
+       ├─ Call provider_router for the tool's pipeline:
+       │    product_scene → rembg → scene T2I → PIL composite
+       │    effect        → I2I style transfer
+       │    try_on        → PiAPI Kling virtual try-on
+       │    ai_avatar     → PiAPI Kling Avatar (TTS + lip sync)
+       │
+       ├─ Upload result to gs://vidgo-media-vidgo-ai/generated/...
+       │
+       ├─ INSERT into materials with input_params = {product_id, ...}
+       │  and language = :language so the next visitor gets the cache hit.
+       │
+       └─ Return the freshly generated row.
 ```
 
-## Components
+## Curated asset catalog
 
-### 1. Preset Config (`backend/app/config/example_presets.py`)
+All frozen inputs live in the public GCS bucket `vidgo-media-vidgo-ai`. Files are named to match the frontend IDs exactly, so the frontend preview URL and the backend input URL are the same string.
 
-Complete, self-contained preset records for each tool. Each preset contains:
+| Path | Contents | Used by |
+|------|----------|---------|
+| `static/products/product-{1..8}.png` | 8 curated studio product photos (bubble tea, canvas tote, jewelry, skincare, coffee, espresso machine, candle, gift box) | Product Scene pregen, Image Effects source inputs |
+| `static/tryon/models/{female,male}-{1..3}.png` | 6 full-body fashion-photography models, 3F + 3M | Virtual Try-On model catalog |
+| `static/tryon/garments/garment-{tshirt,dress,jacket,blouse,sweater,coat}.png` | 6 curated garments on ghost mannequin | Virtual Try-On garment catalog |
+| `static/avatars/{female,male}-{1..3}.png` | 6 head-and-shoulders portraits, 3F + 3M | AI Avatar (Kling Avatar needs a big face — full-body models are rejected with `failed to freeze point`) |
 
-| Field | Purpose |
-|-------|---------|
-| `id` | Unique identifier, used as part of Redis cache key |
-| `name` | Display name (en + zh) |
-| `image_url` | GCS public URL for the input image |
-| `params` | All parameters needed to call the AI provider |
-| `gemini_prompt` | Prompt used to generate the input image (used by seed script) |
+### Why the avatar assets are separate from the try-on models
 
-**7 tools with 4-6 presets each = ~37 total presets.**
+Kling Virtual Try-On works on full-body photos (head-to-toe). Kling Avatar works on head-and-shoulders portraits (face fills the frame). Reusing the full-body try-on photos for avatar input causes Kling's face detector to reject the input with `create avatar task: failed to freeze point`. The two tools therefore have two separate curated sets even though both use 3F + 3M.
 
-All presets target small business / personal users:
-- Products: bubble tea, fried chicken, bento, soap, cake, coffee, skincare, backpack
-- No luxury brands, no high-end items
-- Bilingual: English + Traditional Chinese
+### How the assets were made
 
-### 2. Cache Service (`backend/app/services/example_cache_service.py`)
-
-Single service with the cache-through pattern:
-
-```python
-service = ExampleCacheService(redis_client)
-
-# List presets for frontend display
-presets = service.list_presets("effect")
-
-# Generate or return cached
-result = await service.generate_or_cache("effect", "fx-bubbletea-anime")
-# → { "success": True, "from_cache": True/False, "image_url": "..." }
-
-# Check cache warm-up status
-status = await service.get_cache_status()
-# → { "effect": { "total": 5, "cached": 3 }, ... }
-
-# Invalidate (for re-generation)
-await service.invalidate("effect", "fx-bubbletea-anime")
-```
-
-**Redis key format:** `example:{tool_type}:{preset_id}`
-
-**Redis value:** JSON with result URLs, no TTL (stored forever)
-
-### 3. API Endpoints (`backend/app/api/v1/example.py`)
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/api/v1/examples/{tool_type}` | List available presets (id, name, thumbnail) |
-| POST | `/api/v1/examples/{tool_type}/generate` | Generate or return cached result |
-| GET | `/api/v1/examples/status/cache` | Cache warm-up status per tool |
-
-### 4. Input Image Generation (`backend/scripts/generate_example_inputs.py`)
-
-One-time script that generates input images using Gemini and uploads to GCS:
+All frozen assets were generated by the candidate-generator scripts in `backend/scripts/`, reviewed by a human in Finder, then uploaded to GCS with per-object `AllUsers:READER` ACLs:
 
 ```bash
-# Dry run — see what would be generated
-cd backend
-python -m scripts.generate_example_inputs --dry-run
+# Products (8 images)
+export PIAPI_KEY=$(gcloud secrets versions access latest --secret=PIAPI_KEY --project=vidgo-ai)
+python backend/scripts/generate_product_candidates.py
+# → review /tmp/vidgo-product-candidates/, upload to static/products/
 
-# Generate all
-python -m scripts.generate_example_inputs
+# Try-on models + garments (6 + 6)
+python backend/scripts/generate_tryon_candidates.py
+# → review /tmp/vidgo-tryon-candidates/, upload to static/tryon/{models,garments}/
 
-# Generate only one tool
-python -m scripts.generate_example_inputs --tool effect
+# Avatar portraits (6)
+python backend/scripts/generate_avatar_candidates.py
+# → review /tmp/vidgo-avatar-candidates/, upload to static/avatars/
 ```
 
-Requires: `VERTEX_AI_PROJECT` (or `GEMINI_API_KEY`), `GCS_BUCKET`
+All three scripts use PiAPI Flux T2I with strict prompts ("head and shoulders", "head to toe visible", "plain studio backdrop") and save 1024×1024 or 768×1152 PNGs locally. Human review is the quality gate — AI is probabilistic, so only approved candidates reach production.
 
-### 5. GCS Public Upload (`backend/app/services/gcs_storage_service.py`)
+## Pregen pipeline
 
-New method `upload_public(data, blob_name)`:
-- Uploads bytes to GCS bucket
-- Calls `blob.make_public()` — URL never expires
-- Returns permanent public URL: `https://storage.googleapis.com/{bucket}/{path}`
-
-## Setup Steps
-
-### 1. Generate input images
+`backend/scripts/main_pregenerate.py` runs as a Cloud Run Job to bulk-generate the Material DB. It reads the curated asset catalog from the module-level `TRYON_MAPPING`, `EFFECT_MAPPING`, and `PRODUCT_SCENE_MAPPING` dicts and iterates over the combo matrix.
 
 ```bash
-cd backend
+# All 64 product × scene combos (3–5 min runtime, ~$2 PiAPI)
+bash gcp/pregen-materials.sh --tool product_scene --limit 64 --clean --yes
 
-# Set env vars
-export VERTEX_AI_PROJECT=vidgo-ai
-export GCS_BUCKET=vidgo-media-vidgo-ai
+# All 88 source × style combos (~40 min runtime, ~$1 PiAPI)
+bash gcp/pregen-materials.sh --tool effect --limit 88 --clean --yes
 
-# Generate all input images
-python -m scripts.generate_example_inputs
+# Try-on: 30 combos (3F × 6 garments + 3M × 4 garments, gender-restricted items filtered)
+bash gcp/pregen-materials.sh --tool try_on --limit 36 --clean --yes
+
+# AI avatar: 24 combos (6 avatars × 2 languages × 2 scripts, ~60 min, slow Kling Avatar)
+bash gcp/pregen-materials.sh --tool ai_avatar --limit 24 --clean --yes
 ```
 
-This creates images at:
-```
-gs://vidgo-media-vidgo-ai/examples/
-  bg/bubbletea.png, fried-chicken.png, ...
-  ps/bubbletea.png, fried-chicken.png, ...
-  fx/bubbletea.png, fried-chicken.png, ...
-  room/living-room.png, bedroom.png, ...
-  vid/bubbletea.png, fried-chicken.png, ...
-  avatar/yijun.png, zhiwei.png, ...
-```
+Key flags:
 
-### 2. Deploy and warm cache (lazy)
+- `--clean` — deletes all existing Material DB rows for the target tool before generating, so you get a fresh set instead of stale rows mixed with new ones.
+- `--limit N` — caps the number of combos per run.
+- `--yes` — non-interactive; skips the "burns real credits" prompt.
 
-Cache warms lazily — first user click per preset triggers generation. After that, it's instant.
+The job reuses the live `vidgo-backend:latest` image and needs the backend's VPC connector + Cloud SQL wiring (the pregen-materials.sh script now sets these explicitly — an earlier revision omitted them and the job couldn't reach Postgres).
 
-To check warm-up progress:
+## Backend components
+
+| File | Role |
+|------|------|
+| `backend/app/services/demo_cache_service.py` | `DemoCacheService.get_or_generate(tool_type, topic, product_id, language)`. Material DB lookup → Redis fallback → on-demand generation via the curated asset paths. |
+| `backend/app/services/material_lookup.py` | `get_presets_for_tool(tool_type, topic, limit, product_id)` — filters Material rows by composite keys (topic + `input_params.product_id`). |
+| `backend/app/api/v1/demo.py` | REST endpoints: `GET /api/v1/demo/presets/{tool_type}` (list), `POST /api/v1/demo/generate/{tool_type}?topic=...&product_id=...&language=...` (get-or-generate). |
+| `backend/app/api/v1/tools.py` | Live tool endpoints for subscribers. When a non-subscriber hits `/tools/product-scene`, the handler delegates to `DemoCacheService` via `_demo_response()` with the same composite filters. |
+| `backend/scripts/main_pregenerate.py` | `VidGoPreGenerator.generate_{product_scene, effect, try_on, ai_avatar}` bulk pregen methods. `--clean` flag deletes existing rows of the target tool before inserting. |
+
+## Frontend components
+
+| File | Role |
+|------|------|
+| `frontend-vue/src/composables/useDemoMode.ts` | `generateOnDemand(toolType, topic, extraParams)` — the on-demand cache-through call. `extraParams` can carry `product_id`, `language`, or any future filter. |
+| `frontend-vue/src/views/tools/*.vue` | Every tool page clears the stale result image at the start of each generate (`resultImage.value = null` / `resultVideo.value = null`) so the loading overlay is the only thing visible until the new generation finishes. |
+| `frontend-vue/src/views/tools/ProductScene.vue` | Passes `selectedProductId` + `selectedScene` to `generateOnDemand`. |
+| `frontend-vue/src/views/tools/TryOn.vue` | Passes `selectedModel` (as `product_id`) + garment `topic` to `generateOnDemand`. Contains a permanent amber warning banner explaining Kling's garment-only constraint. |
+| `frontend-vue/src/views/tools/ImageEffects.vue` | Passes the current source `product_id` + `selectedStyle` to `generateOnDemand`. The AI Transform tab is hidden for visitors entirely. |
+| `frontend-vue/src/views/tools/AIAvatar.vue` | Passes `selectedAvatarId` (as `product_id`) + `selectedLanguage` + script category. Script preview text follows `selectedLanguage`, not the UI locale — a visitor browsing in Chinese can still pick an English-speaking avatar and see the English script. |
+
+## Subscriber gating — what's hidden from visitors
+
+The "no subscription to test" policy is enforced in the frontend:
+
+- **Room Redesign**: the Generate and 3D Model tabs are filtered out of the tab bar for visitors (computed `visibleTabs`). They never see locked chrome or error toasts.
+- **Image Effects**: the AI Transform tab is filtered out similarly (`visibleEffectTabs`).
+- **Short Video**: the Video Settings and AI Model Selection cards are hidden entirely for visitors (`v-if="isSubscribed"`), so visitors see a clean "pick a preset → View Result" flow.
+- **Try-On / Product Scene / Background Removal**: preset flows are fully available; only "upload your own image" stays subscriber-only.
+
+## Cache management
+
+Redis keys follow the legacy pattern `demo:{tool_type}:{topic_or_all}` and are only used when `product_id` and `language` are both null. For filtered lookups we go straight to Postgres, which is fast enough (<50 ms) that a Redis layer would add complexity without winning anything.
+
 ```bash
-curl https://api.vidgo.co/api/v1/examples/status/cache
+# Inspect Material DB via the public presets endpoint
+curl -sS "https://api.vidgo.co/api/v1/demo/presets/product_scene?limit=200" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('count'))"
+
+# Drop all rows for a tool and re-pregen (destructive — visitors see loading
+# spinners until the new rows land)
+bash gcp/pregen-materials.sh --tool effect --clean --limit 88 --yes
 ```
 
-### 3. (Optional) Pre-warm cache
+## Adding a new preset combo
 
-If you want all presets cached before any user visits, hit each preset once:
+1. Add the new product/style/garment to the relevant `*_MAPPING` dict in `backend/scripts/main_pregenerate.py`. Include a frozen `url` field pointing at a GCS asset you've uploaded.
+2. Add the matching entry to the frontend catalog (`ProductScene.vue defaultProducts`, `TryOn.vue demoClothingItems`, etc.) so visitors can pick it.
+3. Run the pregen job without `--clean` to add only the new rows without wiping the existing ones.
+4. Verify via `GET /api/v1/demo/presets/{tool_type}` that the new combo appears in the response.
 
-```bash
-for tool in background_removal product_scene effect room_redesign short_video ai_avatar pattern_generate; do
-  curl -s "https://api.vidgo.co/api/v1/examples/$tool" | \
-    python3 -c "import sys,json; [print(p['id']) for p in json.load(sys.stdin)['presets']]" | \
-    while read id; do
-      curl -s -X POST "https://api.vidgo.co/api/v1/examples/$tool/generate" \
-        -H "Content-Type: application/json" \
-        -d "{\"preset_id\": \"$id\"}"
-      echo " → $tool/$id"
-    done
-done
-```
+## Known limitations
 
-## Adding New Presets
-
-1. Add a new entry to the appropriate list in `example_presets.py`
-2. Include a `gemini_prompt` for input image generation
-3. Run `python -m scripts.generate_example_inputs --tool <tool_type>`
-4. The new preset is immediately available via the API
-5. First user click will generate and cache the result
-
-## Cache Management
-
-**View cached data:**
-```bash
-redis-cli KEYS "example:*"
-redis-cli GET "example:effect:fx-bubbletea-anime"
-```
-
-**Invalidate one preset:**
-```bash
-redis-cli DEL "example:effect:fx-bubbletea-anime"
-```
-
-**Invalidate all presets for a tool:**
-```bash
-redis-cli KEYS "example:effect:*" | xargs redis-cli DEL
-```
-
-## Tool → TaskType Mapping
-
-| Tool Type | TaskType (ProviderRouter) | Primary Provider |
-|-----------|--------------------------|-----------------|
-| background_removal | BACKGROUND_REMOVAL | PiAPI MCP |
-| product_scene | T2I | PiAPI MCP |
-| effect | I2I | PiAPI MCP |
-| room_redesign | INTERIOR | PiAPI MCP |
-| short_video | I2V | PiAPI MCP |
-| ai_avatar | AVATAR | PiAPI MCP |
-| pattern_generate | T2I | PiAPI MCP |
-
-## File Reference
-
-| File | Purpose |
-|------|---------|
-| `backend/app/config/example_presets.py` | Preset definitions (inputs + params) |
-| `backend/app/services/example_cache_service.py` | Cache-through logic |
-| `backend/app/api/v1/example.py` | REST endpoints |
-| `backend/scripts/generate_example_inputs.py` | Gemini → GCS image generator |
-| `backend/app/services/gcs_storage_service.py` | `upload_public()` for permanent URLs |
-| `backend/app/api/api.py` | Router registration |
+- **Kling Avatar can only consume head-and-shoulders portraits.** Full-body photos fail with `failed to freeze point`. Avatar curation must go through `generate_avatar_candidates.py`, not `generate_tryon_candidates.py`.
+- **Kling Virtual Try-On does not support accessories** (hats, sunglasses, watches, jewelry, shoes, scarves). The current curated catalog is garment-only and the frontend carries a permanent amber warning banner. See [TryOn.vue](../frontend-vue/src/views/tools/TryOn.vue) for the banner copy.
+- **Pregen costs real money.** A full rerun of `product_scene + effect + try_on + ai_avatar` is roughly \$10–\$15 in PiAPI credits and \~2 hours of wall-clock time.
+- **Image quality is not automatically verified.** The pregen scripts catch API-level failures but don't measure semantic correctness — human review of the curated input assets is the only quality gate. Run `GET /api/v1/demo/presets/{tool_type}` and spot-check a handful of results after every pregen.

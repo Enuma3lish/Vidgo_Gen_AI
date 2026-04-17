@@ -24,7 +24,7 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 from app.models.user import User
-from app.models.billing import Plan, Subscription, Order, CreditTransaction
+from app.models.billing import Plan, Subscription, Order, CreditTransaction, Invoice
 from app.services.paddle_service import get_paddle_service
 from app.services.ecpay.client import ECPayClient
 from app.core.config import get_settings
@@ -141,7 +141,7 @@ class SubscriptionService:
                 db, user, plan, billing_cycle
             )
 
-    PLAN_LEVEL = {"demo": 0, "starter": 1, "pro": 2, "pro_plus": 3}
+    PLAN_LEVEL = {"demo": 0, "starter": 1, "standard": 2, "pro": 3, "pro_plus": 4}
 
     async def _detect_plan_change(
         self, db: AsyncSession, user: User, new_plan: Plan
@@ -368,8 +368,10 @@ class SubscriptionService:
         db.add(subscription)
         await db.flush()
 
-        # Create order record
-        order_number = f"EC-{uuid.uuid4().hex[:8].upper()}"
+        # Create order record. ECPay MerchantTradeNo only accepts letters and
+        # digits (no hyphens or underscores) — see error 10200031. Keep the
+        # prefix inline so the format stays readable but ECPay-compatible.
+        order_number = f"EC{uuid.uuid4().hex[:12].upper()}"
         order = Order(
             order_number=order_number,
             user_id=user.id,
@@ -460,10 +462,11 @@ class SubscriptionService:
         db.add(subscription)
         await db.flush()
 
-        # Create order record
+        # Create order record. Alphanumeric-only (no hyphens) so the same
+        # order_number is safe to pass to ECPay as MerchantTradeNo later.
         import uuid
         order = Order(
-            order_number=f"SUB-{uuid.uuid4().hex[:8].upper()}",
+            order_number=f"SUB{uuid.uuid4().hex[:12].upper()}",
             user_id=user.id,
             subscription_id=subscription.id,
             amount=price,
@@ -674,8 +677,63 @@ class SubscriptionService:
             refund_result = await self._process_refund(db, user, subscription, order)
 
             if refund_result.get("success"):
-                # Revoke subscription credits on refund
+                # Revoke ALL credits on refund — subscription, purchased,
+                # and bonus credits are all forfeited when the user gets
+                # their money back.
                 await self._revoke_subscription_credits(db, user)
+
+                if user.purchased_credits > 0:
+                    revoked_purchased = user.purchased_credits
+                    db.add(CreditTransaction(
+                        user_id=user.id,
+                        amount=-revoked_purchased,
+                        balance_after=user.total_credits - revoked_purchased,
+                        transaction_type="refund",
+                        description="Purchased credits revoked due to subscription refund",
+                    ))
+                    user.purchased_credits = 0
+                    logger.info(f"Revoked {revoked_purchased} purchased credits from user {user.id}")
+
+                if user.bonus_credits > 0:
+                    revoked_bonus = user.bonus_credits
+                    db.add(CreditTransaction(
+                        user_id=user.id,
+                        amount=-revoked_bonus,
+                        balance_after=user.total_credits - revoked_bonus,
+                        transaction_type="refund",
+                        description="Bonus credits revoked due to subscription refund",
+                    ))
+                    user.bonus_credits = 0
+                    logger.info(f"Revoked {revoked_bonus} bonus credits from user {user.id}")
+
+                # Void the e-invoice associated with this order (if any).
+                # Must be within the current bimonthly tax period; if not,
+                # log a warning for admin to handle manually.
+                if order:
+                    try:
+                        from app.services.invoice_service import void_invoice
+                        inv_result = await db.execute(
+                            select(Invoice).where(
+                                Invoice.order_id == str(order.id),
+                                Invoice.status.in_(["issued", "uploaded"]),
+                            )
+                        )
+                        invoice_to_void = inv_result.scalars().first()
+                        if invoice_to_void:
+                            void_result = await void_invoice(
+                                db=db,
+                                user_id=str(user.id),
+                                invoice_id=str(invoice_to_void.id),
+                                reason=f"Subscription refund — order {order.order_number}",
+                            )
+                            if not void_result.get("success"):
+                                logger.warning(
+                                    f"Could not void invoice {invoice_to_void.id} "
+                                    f"for refund order {order.order_number}: "
+                                    f"{void_result.get('error')} — manual voiding required"
+                                )
+                    except Exception as e:
+                        logger.error(f"Invoice voiding failed for order {order.order_number}: {e}")
 
                 # Cancel immediately
                 subscription.status = "cancelled"
@@ -707,6 +765,21 @@ class SubscriptionService:
 
         subscription.auto_renew = False
         await db.commit()
+
+        # Send refund notification email (fire-and-forget — never block the response)
+        if refund_result and refund_result.get("success"):
+            try:
+                from app.services.email_service import email_service
+                await email_service.send_refund_notification(
+                    to_email=user.email,
+                    order_number=order.order_number if order else "N/A",
+                    refund_amount=refund_result.get("amount", 0),
+                    currency="TWD" if (order and order.payment_method == "ecpay") else "USD",
+                    requires_manual=refund_result.get("requires_manual", False),
+                    username=user.username,
+                )
+            except Exception as e:
+                logger.error(f"Failed to send refund notification email: {e}")
 
         return {
             "success": True,
@@ -941,6 +1014,35 @@ class SubscriptionService:
                             db.add(transaction)
 
         await db.commit()
+
+        # Taiwan e-invoice: auto-issue (or create pending_issue record) right
+        # after payment so we stay within the tax period. Runs when Giveme
+        # is enabled OR the payment was made via ECPay (Taiwan local
+        # payments). International Paddle payments skip this branch.
+        # Failures here MUST NOT roll back the payment — log and continue.
+        from app.core.config import settings
+        is_taiwan_payment = (
+            settings.GIVEME_ENABLED
+            or (order.payment_method or "") == "ecpay"
+        )
+        if is_taiwan_payment:
+            try:
+                from app.services.invoice_service import auto_issue_invoice
+                invoice_result = await auto_issue_invoice(
+                    db=db,
+                    user_id=str(order.user_id),
+                    order_id=str(order.id),
+                )
+                if not invoice_result.get("success"):
+                    logger.warning(
+                        f"Auto-issue invoice failed for order {order_number}: "
+                        f"{invoice_result.get('error')}"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Auto-issue invoice raised for order {order_number}: {e}",
+                    exc_info=True,
+                )
 
         logger.info(f"Payment success processed: {order_number}")
         return {"success": True, "order_number": order_number}

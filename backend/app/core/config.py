@@ -57,20 +57,24 @@ class Settings(BaseSettings):
     # Option 2: Self-hosted tai5-uan5 (https://github.com/i3thuan5/tai5-uan5_gian5-gi2_hok8-bu7)
     TAI5UAN5_BASE_URL: str = ""
 
-    # ECPay (Taiwan) - Shared credentials for payment & e-invoice
+    # ECPay (Taiwan) - Shared credentials for payment & e-invoice.
+    # All credentials must be set via Secret Manager in production; defaults
+    # are blank to make a misconfigured deploy fail loudly instead of silently
+    # hitting a test merchant.
     ECPAY_ENV: str = "production"  # "sandbox" or "production"
-    ECPAY_MERCHANT_ID: str = "3422044"
+    ECPAY_MERCHANT_ID: str = ""
     ECPAY_HASH_KEY: str = ""
     ECPAY_HASH_IV: str = ""
     ECPAY_PAYMENT_URL: str = "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V2"
     ECPAY_INVOICE_URL: str = "https://einvoice.ecpay.com.tw"  # Base URL, paths appended by client
 
-    # Giveme E-Invoice (Taiwan 電子發票)
+    # Giveme E-Invoice (Taiwan 電子發票). Credentials must come from Secret
+    # Manager; defaults are blank so an unconfigured deploy fails fast.
     GIVEME_ENABLED: bool = False
     GIVEME_BASE_URL: str = "https://www.giveme.com.tw/invoice.do"
-    GIVEME_UNCODE: str = "96003146"       # Company 統一編號 (e.g. "96003146")
-    GIVEME_IDNO: str = "qaz0978005418"         # API account (from Giveme 系統設定→員工設定)
-    GIVEME_PASSWORD: str = "qaz129946858"     # API password
+    GIVEME_UNCODE: str = ""       # Company 統一編號
+    GIVEME_IDNO: str = ""         # API account (from Giveme 系統設定→員工設定)
+    GIVEME_PASSWORD: str = ""     # API password
 
     # Payment - Paddle (International)
     PADDLE_API_KEY: str = ""

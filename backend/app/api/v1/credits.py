@@ -194,9 +194,10 @@ async def purchase_credits(
         amount = package.price_usd or package.price
         currency = "USD"
 
-    # Create order
+    # Create order. Alphanumeric-only (no hyphens) so ECPay accepts it as
+    # MerchantTradeNo when the credit purchase uses the ECPay gateway.
     order = Order(
-        order_number=f"CR-{uuid.uuid4().hex[:8].upper()}",
+        order_number=f"CR{uuid.uuid4().hex[:12].upper()}",
         user_id=current_user.id,
         amount=amount,
         status="pending",

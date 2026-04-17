@@ -211,6 +211,9 @@ async function generateVideo() {
     return
   }
 
+  // Clear stale result so loading overlay is the only thing visible.
+  resultVideo.value = null
+  demoEmptyState.value = false
   isProcessing.value = true
   try {
     // For demo users, resolve the selected preset through backend lookup
@@ -425,6 +428,16 @@ function dataURItoBlob(dataURI: string): Blob | null {
                 {{ demoImages.find(d => d.id === selectedDemoImageId)?.name }}
               </p>
             </div>
+            <!-- Visitor/demo user: direct "View Result" button, no gated settings noise -->
+            <div v-if="!isSubscribed" class="mt-4">
+              <button
+                @click="generateVideo"
+                :disabled="isProcessing"
+                class="btn-primary w-full"
+              >
+                {{ isZh ? '查看結果' : 'View Result' }}
+              </button>
+            </div>
           </div>
 
           <!-- Prompt to select - shows when nothing selected -->
@@ -439,15 +452,12 @@ function dataURItoBlob(dataURI: string): Blob | null {
             </div>
           </div>
 
-          <!-- Video Settings - Subscriber Only -->
-          <div class="card">
+          <!-- Video Settings - Subscriber Only (hidden entirely for visitors) -->
+          <div v-if="isSubscribed" class="card">
             <div class="flex items-center justify-between mb-4">
               <h3 class="text-lg font-semibold text-dark-50">
                 {{ isZh ? '影片設定' : 'Video Settings' }}
               </h3>
-              <span v-if="!isSubscribed" class="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded">
-                {{ isZh ? '訂閱專屬' : 'Subscribers Only' }}
-              </span>
             </div>
 
             <!-- Duration - Subscriber only -->
@@ -516,15 +526,12 @@ function dataURItoBlob(dataURI: string): Blob | null {
             </div>
           </div>
 
-          <!-- AI Model Selection - Subscriber Only -->
-          <div class="card">
+          <!-- AI Model Selection - Subscriber Only (hidden entirely for visitors) -->
+          <div v-if="isSubscribed" class="card">
             <div class="flex items-center justify-between mb-4">
               <h3 class="text-lg font-semibold text-dark-50">
                 {{ isZh ? 'AI 模型選擇' : 'AI Model Selection' }}
               </h3>
-              <span v-if="!isSubscribed" class="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded">
-                {{ isZh ? '訂閱專屬' : 'Subscribers Only' }}
-              </span>
             </div>
 
             <div v-if="isSubscribed">

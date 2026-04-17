@@ -722,22 +722,28 @@ async def auto_issue_invoice(
             items=items,
         )
 
-    # No saved preferences - create pending_issue record
-    invoice = Invoice(
-        id=uuid4(),
-        order_id=order_id,
-        user_id=user_id,
-        invoice_type="b2c",
-        amount=order.amount,
-        status="pending_issue",
-        invoice_period=get_current_tax_period(),
+    # No saved preferences — default to email carrier so the invoice is
+    # actually issued rather than stuck in pending_issue forever.
+    items = [{
+        "item_name": f"VidGo Service - Order {order.order_number}",
+        "item_count": 1,
+        "item_unit": "式",
+        "item_price": float(order.amount),
+        "item_amount": float(order.amount),
+    }]
+    result = await create_b2c_invoice(
+        db=db,
+        user_id=str(user_id),
+        order_id=str(order_id),
+        buyer_email=user.email,
+        tax_type="taxable",
+        carrier_type="email",
+        carrier_number=user.email,
+        is_donation=False,
+        love_code=None,
+        items=items,
     )
-    db.add(invoice)
-    await db.commit()
-
-    return {
-        "success": True,
-        "invoice_id": str(invoice.id),
-        "status": "pending_issue",
-        "message": "Invoice pending - user needs to set carrier/donation preferences",
-    }
+    if result.get("success"):
+        result["fallback_carrier"] = True
+        result["message"] = "Invoice issued with email carrier (no saved preferences)"
+    return result

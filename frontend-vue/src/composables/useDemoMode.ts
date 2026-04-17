@@ -233,10 +233,21 @@ export function useDemoMode() {
    * resort, e.g. for tools the backend cache-through doesn't yet support
    * like try_on / ai_avatar).
    */
-  async function generateOnDemand(toolType: string, topic?: string): Promise<string | null> {
+  async function generateOnDemand(
+    toolType: string,
+    topic?: string,
+    extraParams?: Record<string, string | undefined>,
+  ): Promise<string | null> {
     try {
+      const params: Record<string, string> = {}
+      if (topic) params.topic = topic
+      if (extraParams) {
+        for (const [k, v] of Object.entries(extraParams)) {
+          if (v !== undefined && v !== null && v !== '') params[k] = v
+        }
+      }
       const response = await apiClient.post(`/api/v1/demo/generate/${toolType}`, null, {
-        params: topic ? { topic } : undefined,
+        params: Object.keys(params).length > 0 ? params : undefined,
         // Generation can take 20-60s for images, longer for video. Use a long
         // client-side timeout so we don't abort while the backend is still
         // working through provider_router.

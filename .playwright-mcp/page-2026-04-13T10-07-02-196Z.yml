@@ -1,0 +1,226 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "Login" [ref=e25] [cursor=pointer]:
+          - /url: /auth/login
+        - link "Start Creating Now" [ref=e26] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e27]:
+    - generic [ref=e29]:
+      - button "Back" [ref=e30] [cursor=pointer]:
+        - img [ref=e31]
+        - text: Back
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - generic [ref=e35]: 🏠
+          - generic [ref=e36]: Interior Design Gallery
+        - heading "Interior Design Inspiration" [level=1] [ref=e37]
+        - paragraph [ref=e38]: Browse AI-generated interior design examples. Free users can view curated examples. Subscribe to upload your own room photos for custom designs.
+        - link "Subscribe to unlock more features" [ref=e40] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e42]:
+        - button "🔄 Browse Examples" [ref=e43] [cursor=pointer]
+        - button "✨ Generate Design (Requires Subscription) (Pro)" [ref=e44]
+        - button "🎨 Style Transfer (Requires Subscription)" [ref=e45] [cursor=pointer]
+        - button "🧊 3D Model (Pro)" [ref=e46]
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e49]:
+            - heading "🏠 Space Type" [level=3] [ref=e50]:
+              - generic [ref=e51]: 🏠
+              - text: Space Type
+            - generic [ref=e52]:
+              - button "> 🛋️ Living Room" [ref=e53] [cursor=pointer]:
+                - text: ">"
+                - generic [ref=e54]: 🛋️
+                - paragraph [ref=e55]: Living Room
+              - button "> 🛏️ Bedroom" [ref=e56] [cursor=pointer]:
+                - text: ">"
+                - generic [ref=e57]: 🛏️
+                - paragraph [ref=e58]: Bedroom
+              - button "> 🍳 Kitchen" [ref=e59] [cursor=pointer]:
+                - text: ">"
+                - generic [ref=e60]: 🍳
+                - paragraph [ref=e61]: Kitchen
+              - button "> 🚿 Bathroom" [ref=e62] [cursor=pointer]:
+                - text: ">"
+                - generic [ref=e63]: 🚿
+                - paragraph [ref=e64]: Bathroom
+              - button "> 🍽️ Dining Room" [ref=e65] [cursor=pointer]:
+                - text: ">"
+                - generic [ref=e66]: 🍽️
+                - paragraph [ref=e67]: Dining Room
+              - button "> 💻 Home Office" [ref=e68] [cursor=pointer]:
+                - text: ">"
+                - generic [ref=e69]: 💻
+                - paragraph [ref=e70]: Home Office
+              - button "> 🌿 Balcony" [ref=e71] [cursor=pointer]:
+                - text: ">"
+                - generic [ref=e72]: 🌿
+                - paragraph [ref=e73]: Balcony
+          - generic [ref=e74]:
+            - heading "📷 Room Image" [level=3] [ref=e75]:
+              - generic [ref=e76]: 📷
+              - text: Room Image
+            - generic [ref=e78]:
+              - img "Room" [ref=e79]
+              - generic [ref=e80]: Living Room
+          - generic [ref=e81]:
+            - heading "🎨 Design Style" [level=3] [ref=e82]:
+              - generic [ref=e83]: 🎨
+              - text: Design Style
+            - generic [ref=e84]:
+              - button "> 🏢 Modern Minimalist Clean lines, neutral colors, minimal furniture, open spaces" [ref=e85] [cursor=pointer]:
+                - text: "> 🏢"
+                - paragraph [ref=e86]: Modern Minimalist
+                - paragraph [ref=e87]: Clean lines, neutral colors, minimal furniture, open spaces
+              - button "> 🌲 Scandinavian Light wood, white walls, cozy textiles, functional design" [ref=e88] [cursor=pointer]:
+                - text: "> 🌲"
+                - paragraph [ref=e89]: Scandinavian
+                - paragraph [ref=e90]: Light wood, white walls, cozy textiles, functional design
+              - button "> 🎋 Japanese Zen Tatami, shoji screens, natural materials, zen simplicity" [ref=e91] [cursor=pointer]:
+                - text: "> 🎋"
+                - paragraph [ref=e92]: Japanese Zen
+                - paragraph [ref=e93]: Tatami, shoji screens, natural materials, zen simplicity
+              - button "> 🏭 Industrial Exposed brick, metal accents, raw textures, urban loft" [ref=e94] [cursor=pointer]:
+                - text: "> 🏭"
+                - paragraph [ref=e95]: Industrial
+                - paragraph [ref=e96]: Exposed brick, metal accents, raw textures, urban loft
+              - button "> 🪑 Mid-Century Modern Organic curves, retro furniture, bold colors, iconic design" [ref=e97] [cursor=pointer]:
+                - text: "> 🪑"
+                - paragraph [ref=e98]: Mid-Century Modern
+                - paragraph [ref=e99]: Organic curves, retro furniture, bold colors, iconic design
+          - button "✨ View Example" [ref=e101] [cursor=pointer]:
+            - generic [ref=e102]:
+              - generic [ref=e103]: ✨
+              - text: View Example
+        - generic [ref=e104]:
+          - generic [ref=e105]:
+            - heading "🖼️ Example Result" [level=3] [ref=e106]:
+              - generic [ref=e107]: 🖼️
+              - text: Example Result
+            - generic [ref=e109]:
+              - generic [ref=e110]: 🏠
+              - paragraph [ref=e111]: Design example will appear here
+              - paragraph [ref=e112]: Select a design style to view AI-generated examples, or subscribe to upload your room photo
+          - generic [ref=e113]:
+            - heading "💡 Powered by Gemini AI" [level=4] [ref=e114]:
+              - generic [ref=e115]: 💡
+              - text: Powered by Gemini AI
+            - list [ref=e116]:
+              - listitem [ref=e117]:
+                - generic [ref=e118]: ✓
+                - text: "Image + Text: Upload room photo with description"
+              - listitem [ref=e119]:
+                - generic [ref=e120]: ✓
+                - text: "Text Only: Generate design from description"
+              - listitem [ref=e121]:
+                - generic [ref=e122]: ✓
+                - text: "10 design styles: Modern, Nordic, Japanese, and more"
+              - listitem [ref=e123]:
+                - generic [ref=e124]: ✓
+                - text: Preserves room layout and window positions
+  - contentinfo [ref=e125]:
+    - generic [ref=e126]:
+      - generic [ref=e127]:
+        - generic [ref=e128]:
+          - link "V VidGo AI" [ref=e129] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e130]: V
+            - generic [ref=e131]: VidGo AI
+          - paragraph [ref=e132]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e133]:
+            - link [ref=e134] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e135]
+            - link [ref=e137] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e138]
+        - generic [ref=e140]:
+          - heading "Fashion AI" [level=4] [ref=e141]
+          - list [ref=e142]:
+            - listitem [ref=e143]:
+              - link "Virtual Try On" [ref=e144] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e145]:
+              - link "Fashion Reels" [ref=e146] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e147]:
+              - link "Text to Video" [ref=e148] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e149]:
+              - link "Product Avatars" [ref=e150] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e151]:
+          - heading "E-commerce AI" [level=4] [ref=e152]
+          - list [ref=e153]:
+            - listitem [ref=e154]:
+              - link "Product AnyShoot" [ref=e155] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e156]:
+              - link "Remove Background" [ref=e157] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e158]:
+              - link "HD Upscale" [ref=e159] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e160]:
+              - link "Style Clone" [ref=e161] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e162]:
+              - link "Room Redesign" [ref=e163] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e164]:
+          - heading "Company" [level=4] [ref=e165]
+          - list [ref=e166]:
+            - listitem [ref=e167]:
+              - link "About Us" [ref=e168] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e169]:
+              - link "Pricing" [ref=e170] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e171]:
+              - link "Contact Us" [ref=e172] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e173]:
+              - link "Blog" [ref=e174] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e175]:
+              - link "Affiliate Program" [ref=e176] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e177]:
+          - heading "Legal" [level=4] [ref=e178]
+          - list [ref=e179]:
+            - listitem [ref=e180]:
+              - link "Terms of Service" [ref=e181] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e182]:
+              - link "Privacy Policy" [ref=e183] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e184]:
+              - link "Cookie Policy" [ref=e185] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e186]:
+              - link "Refund Policy" [ref=e187] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e188]:
+        - paragraph [ref=e189]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e191]: Secure Payment

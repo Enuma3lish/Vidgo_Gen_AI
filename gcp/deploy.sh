@@ -587,7 +587,7 @@ if should_run 10 "deploy"; then
     --service-account="${BACKEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --set-env-vars="${COMMON_ENV}" \
     --set-secrets="${SECRET_ENV}" \
-    --startup-cpu-boost \
+    --cpu-boost \
     --allow-unauthenticated
   log "Backend deployed"
 

@@ -119,13 +119,14 @@ async def _demo_response(
     tool_type: str,
     topic: str | None = None,
     cta: str = "Subscribe for custom generation.",
+    product_id: str | None = None,
 ):
     """Get demo from cache, Material DB, or generate on-demand if missing."""
     try:
         redis = await get_redis()
     except Exception:
         redis = None
-    demo = await DemoCacheService(db, redis).get_or_generate(tool_type, topic)
+    demo = await DemoCacheService(db, redis).get_or_generate(tool_type, topic, product_id=product_id)
     if not demo:
         raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable. Please try again.")
     return ToolResponse(
@@ -176,7 +177,13 @@ async def _check_plan_feature(
     feature_label: str = ""
 ) -> tuple:
     """Check if user's plan allows a specific feature.
-    Returns (allowed: bool, error_msg: str | None, plan_features: dict | None)"""
+    Returns (allowed: bool, error_msg: str | None, plan_features: dict | None)
+
+    Admin (superuser) accounts bypass plan feature checks.
+    """
+    if getattr(user, "is_superuser", False):
+        return True, None, {"plan_name": "admin", feature: True}
+
     plan_features = await get_user_plan_features(user, db)
     if not plan_features:
         return False, "Subscription required", None
@@ -193,7 +200,13 @@ async def _check_plan_resolution(
     requested_resolution: str
 ) -> tuple:
     """Check if user's plan allows the requested resolution.
-    Returns (allowed: bool, error_msg: str | None)"""
+    Returns (allowed: bool, error_msg: str | None)
+
+    Admin (superuser) accounts bypass resolution checks.
+    """
+    if getattr(user, "is_superuser", False):
+        return True, None
+
     plan_features = await get_user_plan_features(user, db)
     if not plan_features:
         return False, "Subscription required"
@@ -224,7 +237,16 @@ async def _check_and_deduct_credits(
     redis_client=None
 ) -> tuple:
     """Check concurrent limit, check credits, and deduct.
-    Returns (ok: bool, error_msg: str | None)"""
+    Returns (ok: bool, error_msg: str | None)
+
+    Admin (superuser) accounts bypass credit checks — they can use all
+    tools without needing credits.  A zero-cost transaction is still
+    recorded for auditing.
+    """
+    # Admins bypass credit checks entirely
+    if getattr(user, "is_superuser", False):
+        return True, None
+
     # Check concurrent generation limit first
     ok, err = await _check_concurrent_limit(db, user)
     if not ok:
@@ -264,8 +286,10 @@ class ProductSceneRequest(BaseModel):
     """Generate product in new scene"""
     product_image_url: Optional[str] = None
     image_url: Optional[str] = None  # Alias for product_image_url
+    product_id: Optional[str] = None  # Demo product ID for matching cached presets
     scene_type: str = "studio"  # studio, nature, elegant, minimal, lifestyle
     custom_prompt: Optional[str] = None
+    template_id: Optional[str] = None  # Style template ID — overrides scene_type/custom_prompt
 
     def get_product_url(self) -> str:
         url = self.product_image_url or self.image_url
@@ -282,6 +306,7 @@ class TryOnRequest(BaseModel):
     model_id: Optional[str] = None  # Preset model ID
     angle: str = "front"  # front, side, back
     background: str = "white"  # white, transparent, studio
+    template_id: Optional[str] = None  # Style template ID — sets scene/background for the try-on
 
     def get_garment_url(self) -> str:
         url = self.garment_image_url or self.image_url
@@ -345,56 +370,56 @@ class ToolResponse(BaseModel):
 
 SCENE_TEMPLATES = [
     {"id": "studio", "name": "Studio", "name_zh": "攝影棚", "preview_url": "/static/scenes/studio.jpg",
-     "prompt": "professional studio lighting, white background, soft shadows, commercial photography"},
+     "prompt": "product on infinite white cyclorama, three-point studio lighting with 5600K key light at 45 degrees left, fill light at 30 percent, subtle rim light from behind, f/8 aperture 100mm macro lens, sharp focus, soft gradient shadow beneath product, clean commercial e-commerce catalog photography, no people no person no human"},
     {"id": "nature", "name": "Nature", "name_zh": "自然風景", "preview_url": "/static/scenes/nature.jpg",
-     "prompt": "natural outdoor setting, soft sunlight, greenery, organic environment"},
+     "prompt": "product placed on weathered natural stone surface, lush green garden background with soft bokeh, warm golden hour sunlight filtering through leaves, f/2.8 aperture 85mm lens, shallow depth of field, dappled light patterns, organic earthy tones, lifestyle product photography, no people no person no human"},
     {"id": "elegant", "name": "Elegant", "name_zh": "質感場景", "preview_url": "/static/scenes/elegant.jpg",
-     "prompt": "warm elegant background, cozy lighting, refined atmosphere"},
+     "prompt": "product on polished dark stone surface with subtle veining, warm tungsten accent lighting from above, dark moody background with soft amber glow, f/4 aperture 90mm lens, rich deep shadows, hints of brushed brass accents nearby, refined editorial product photography aesthetic, no people no person no human"},
     {"id": "minimal", "name": "Minimal", "name_zh": "極簡風格", "preview_url": "/static/scenes/minimal.jpg",
-     "prompt": "clean minimal white backdrop, simple composition, modern aesthetic"},
+     "prompt": "product on flat matte white surface, single large softbox overhead creating even diffused light, very subtle shadow, f/11 aperture 50mm lens, perfectly clean negative space, Scandinavian minimalist composition, neutral off-white tones, modern e-commerce flatlay photography, no people no person no human"},
     {"id": "lifestyle", "name": "Lifestyle", "name_zh": "生活情境", "preview_url": "/static/scenes/lifestyle.jpg",
-     "prompt": "cozy home environment, lifestyle context, warm lighting, lived-in feel"},
-    {"id": "beach", "name": "Beach", "name_zh": "海灘", "preview_url": "/static/scenes/beach.jpg",
-     "prompt": "beach seaside setting, ocean waves, sandy shore, summer vibes"},
+     "prompt": "product casually placed on light oak wooden table in a cozy living room, soft natural window light from the right, linen cloth and ceramic mug as props, shallow depth of field f/2.8 85mm lens, warm neutral color palette, inviting lived-in atmosphere, Instagram lifestyle flat lay photography, no people no person no human"},
     {"id": "urban", "name": "Urban", "name_zh": "都市街景", "preview_url": "/static/scenes/urban.jpg",
-     "prompt": "urban city street, modern architecture, stylish metropolitan backdrop"},
-    {"id": "garden", "name": "Garden", "name_zh": "花園", "preview_url": "/static/scenes/garden.jpg",
-     "prompt": "beautiful garden setting, flowers blooming, natural green environment"},
+     "prompt": "product placed on raw concrete ledge, modern glass and steel architecture blurred in background, overcast even city light, f/4 aperture 50mm lens, desaturated cool grey-blue tones with subtle teal accent, contemporary urban street style product photography, editorial magazine quality, no people no person no human"},
+    {"id": "seasonal", "name": "Seasonal", "name_zh": "季節", "preview_url": "/static/scenes/seasonal.jpg",
+     "prompt": "product on rustic wooden surface surrounded by scattered autumn maple leaves in amber and crimson, warm low-angle golden afternoon sun, f/3.5 aperture 85mm lens, soft bokeh with warm particles in air, rich warm color grading, seasonal harvest mood, editorial product photography, no people no person no human"},
+    {"id": "holiday", "name": "Holiday", "name_zh": "節日", "preview_url": "/static/scenes/holiday.jpg",
+     "prompt": "product placed among wrapped gift boxes with satin ribbons, twinkling warm white fairy lights bokeh in background, pine branches and red ornaments as props, warm candlelight tone mixed with soft studio fill, f/2.8 aperture 85mm lens, festive holiday campaign photography aesthetic, no people no person no human"},
 ]
 
 # Interior design styles for Room Redesign
 # IDs must match DESIGN_STYLES keys in interior_design_service.py so demo Material DB lookup works
 INTERIOR_STYLES = [
     {"id": "modern_minimalist", "name": "Modern Minimalist", "name_zh": "現代極簡", "preview_url": "/static/interior/modern_minimalist.jpg",
-     "prompt": "modern minimalist style, clean lines, neutral color palette, minimal furniture, open space, natural light, contemporary design"},
+     "prompt": "modern minimalist interior design, clean geometric lines, neutral white and warm grey palette, low-profile furniture with hidden storage, polished concrete or light oak flooring, floor-to-ceiling windows with sheer linen curtains, recessed LED strip lighting, single statement art piece on wall, f/16 architectural lens, photorealistic 3D rendering quality, empty room no people no person no human"},
     {"id": "scandinavian", "name": "Scandinavian", "name_zh": "北歐風格", "preview_url": "/static/interior/scandinavian.jpg",
-     "prompt": "scandinavian nordic style, light wood furniture, white walls, cozy textiles, hygge atmosphere, functional design, natural materials"},
+     "prompt": "Scandinavian hygge interior, pale birch wood furniture with rounded edges, matte white walls, chunky knit wool throw on light grey sofa, woven rug on pale oak herringbone floor, pendant lamp with matte metal detail, potted monstera plant in ceramic planter, soft north-facing window light, warm 3200K accent lighting, cozy functional living, photorealistic interior render, empty room no people no person no human"},
     {"id": "japanese", "name": "Japanese Zen", "name_zh": "日式禪風", "preview_url": "/static/interior/japanese.jpg",
-     "prompt": "japanese zen style, tatami mats, shoji screens, natural wood, bamboo elements, zen simplicity, peaceful atmosphere, minimalist"},
+     "prompt": "Japanese wabi-sabi zen interior, tatami mat flooring with shoji paper sliding screens, low natural cypress wood platform furniture, ikebana flower arrangement, tokonoma alcove with hanging scroll, diffused paper lantern lighting, muted earth tones with charcoal and cream, bamboo accent wall, zen rock garden visible through window, serene meditative atmosphere, photorealistic architectural visualization, empty room no people no person no human"},
     {"id": "industrial", "name": "Industrial", "name_zh": "工業風", "preview_url": "/static/interior/industrial.jpg",
-     "prompt": "industrial style, exposed brick walls, metal accents, raw textures, urban loft, concrete floors, vintage factory elements"},
+     "prompt": "industrial loft interior, exposed red brick walls with original mortar joints, black steel I-beam ceiling with exposed ductwork, polished concrete floor, oversized factory-frame windows with black metal mullions, Edison bulb pendant cluster on twisted cloth cord, worn leather tufted sofa, reclaimed wood and steel pipe shelving, warm tungsten mixed with cool daylight, urban warehouse conversion aesthetic, photorealistic render, empty room no people no person no human"},
     {"id": "bohemian", "name": "Bohemian", "name_zh": "波西米亞", "preview_url": "/static/interior/bohemian.jpg",
-     "prompt": "bohemian boho style, eclectic patterns, rich vibrant colors, layered textiles, macrame, plants, artistic free-spirited decor"},
+     "prompt": "bohemian eclectic interior, layered kilim rugs on terracotta tile floor, macrame wall hanging next to gallery wall of mixed frames, rattan chair with colorful cushions, trailing pothos and fiddle leaf fig plants, woven basket pendant lamps, warm amber string lights draped across ceiling, rich tones of emerald and burnt orange against white walls, artistic maximalist lived-in atmosphere, photorealistic interior photography, empty room no people no person no human"},
     {"id": "mediterranean", "name": "Mediterranean", "name_zh": "地中海風格", "preview_url": "/static/interior/mediterranean.jpg",
-     "prompt": "mediterranean style, terracotta tiles, blue and white accents, arched doorways, rustic charm, natural stone, warm sunlit atmosphere"},
+     "prompt": "Mediterranean coastal interior, hand-laid terracotta hexagonal floor tiles, whitewashed lime plaster walls with arched doorways, cerulean blue window shutters, wrought iron light fixtures with warm candle-style bulbs, solid wood dining table with linen runner, ceramic hand-painted accent tiles, bougainvillea visible through open window, warm golden afternoon sunlight streaming in, relaxed coastal elegance, photorealistic architectural render, empty room no people no person no human"},
     {"id": "mid_century_modern", "name": "Mid-Century Modern", "name_zh": "中世紀現代", "preview_url": "/static/interior/mid_century_modern.jpg",
-     "prompt": "mid-century modern style, organic curved furniture, retro 1950s 1960s design, bold accent colors, teak wood, iconic furniture pieces"},
+     "prompt": "mid-century modern interior circa 1960, classic molded plywood lounge chair with leather cushion, teak credenza with tapered legs, starburst metal chandelier, sunburst wall clock, bold mustard yellow accent wall against warm white, geometric patterned area rug, large picture window with view of greenery, warm afternoon light casting long shadows, retro atomic age style, photorealistic interior photography, empty room no people no person no human"},
     {"id": "coastal", "name": "Coastal", "name_zh": "海岸風格", "preview_url": "/static/interior/coastal.jpg",
-     "prompt": "coastal beach style, blue and white color palette, nautical elements, light airy atmosphere, rattan furniture, seaside decor"},
+     "prompt": "coastal interior, whitewashed shiplap walls, bleached driftwood-finish wide plank flooring, soft navy and crisp white linen upholstery, natural woven seagrass baskets and rattan pendant lights, large sliding glass doors open to ocean view, weathered rope detail accents, shells and sea glass decor on floating shelves, bright airy natural daylight, relaxed seaside living, photorealistic interior render, empty room no people no person no human"},
     {"id": "farmhouse", "name": "Farmhouse", "name_zh": "農舍風格", "preview_url": "/static/interior/farmhouse.jpg",
-     "prompt": "farmhouse country style, rustic reclaimed wood, vintage accents, shiplap walls, cozy warmth, antique furniture, country charm"},
+     "prompt": "modern farmhouse interior, reclaimed barn wood accent wall with original nail holes, white subway tile kitchen backsplash with dark grout, apron-front farmhouse sink, open shelving with mason jars and stoneware, black matte hardware on cream Shaker cabinets, wrought iron chandelier with warm Edison bulbs, woven runner on wide plank pine floor, warm morning light through multi-pane windows, cozy country charm, photorealistic interior photography, empty room no people no person no human"},
     {"id": "art_deco", "name": "Art Deco", "name_zh": "裝飾藝術", "preview_url": "/static/interior/art_deco.jpg",
-     "prompt": "art deco style, geometric patterns, gold and black accents, luxurious materials, velvet, mirrors, glamorous sophisticated design"},
+     "prompt": "Art Deco style interior, geometric chevron patterned stone floor in black and white, deep green tufted sofa with metallic nailhead trim, sunburst mirror with decorative frame, fluted column details, lacquered black console table with brass inlay, glass display cabinet with vintage decanters, dramatic uplighting on fluted wall panels, rich jewel tones with mirror accents, 1920s inspired geometric sophistication, photorealistic architectural visualization, empty room no people no person no human"},
 ]
 
 # Preset models for Try-On (IDs match frontend: "female-1", "male-1" etc.)
 TRYON_MODELS = {
-    "female-1": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=768&fit=crop",
-    "female-2": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=768&fit=crop",
-    "female-3": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=768&fit=crop",
-    "male-1": "https://images.unsplash.com/photo-1681097561932-36d0df02b379?w=768&fit=crop",
-    "male-2": "https://images.unsplash.com/photo-1608908271310-57a24a9447db?w=768&fit=crop",
-    "male-3": "https://images.unsplash.com/photo-1667127752169-74c7e4d8822f?w=768&fit=crop",
+    "female-1": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-1.png",
+    "female-2": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-2.png",
+    "female-3": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-3.png",
+    "male-1": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-1.png",
+    "male-2": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-2.png",
+    "male-3": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-3.png",
 }
 
 # TTS Voices
@@ -412,16 +437,18 @@ TTS_VOICES = [
 # ============================================================================
 
 AVAILABLE_TOOLS = [
-    {"id": "background_removal", "name": "Background Removal", "name_zh": "去背", "endpoint": "/tools/remove-bg", "method": "POST",
+    {"id": "background_removal", "name": "Smart Background Removal", "name_zh": "智能去背", "endpoint": "/tools/remove-bg", "method": "POST",
      "description": "Remove background from product images with AI"},
-    {"id": "product_scene", "name": "Product Scene", "name_zh": "商品場景", "endpoint": "/tools/product-scene", "method": "POST",
-     "description": "Place products in beautiful AI-generated scenes"},
-    {"id": "try_on", "name": "AI Try-On", "name_zh": "AI 試穿", "endpoint": "/tools/try-on", "method": "POST",
-     "description": "Virtual try-on for clothing and accessories"},
-    {"id": "room_redesign", "name": "Room Redesign", "name_zh": "空間改造", "endpoint": "/tools/room-redesign", "method": "POST",
-     "description": "Redesign rooms with different interior styles"},
-    {"id": "short_video", "name": "Short Video", "name_zh": "短影片", "endpoint": "/tools/short-video", "method": "POST",
-     "description": "Generate short product videos with AI"},
+    {"id": "product_scene", "name": "AI Product Scene Studio", "name_zh": "AI 商品情境攝影棚", "endpoint": "/tools/product-scene", "method": "POST",
+     "description": "Place products in professional AI-generated scenes with cinematic lighting"},
+    {"id": "try_on", "name": "AI Model Try-On", "name_zh": "AI 模特換裝", "endpoint": "/tools/try-on", "method": "POST",
+     "description": "Virtual try-on with AI models for clothing showcases"},
+    {"id": "room_redesign", "name": "Raw Space / Sketch Instant Render", "name_zh": "毛胚屋/線稿秒渲染", "endpoint": "/tools/room-redesign", "method": "POST",
+     "description": "Transform raw spaces or sketches into photorealistic interior renders"},
+    {"id": "short_video", "name": "Product Dynamic Video (I2V)", "name_zh": "商品動態短影音（圖生影片）", "endpoint": "/tools/short-video", "method": "POST",
+     "description": "Turn product images into dynamic short videos for ads"},
+    {"id": "hd_upscale", "name": "Commercial HD Upscale", "name_zh": "商用無損放大", "endpoint": "/tools/upscale", "method": "POST",
+     "description": "Upscale images to 4K for e-commerce and print"},
     {"id": "ai_avatar", "name": "AI Avatar", "name_zh": "AI 數位人", "endpoint": "/tools/avatar", "method": "POST",
      "description": "Create avatar videos with lip-sync narration"},
 ]
@@ -605,19 +632,36 @@ async def generate_product_scene(
     2. Generate scene background (T2I)
     3. Composite product onto scene (PIL)
 
-    Scene types: studio, nature, elegant, minimal, lifestyle, beach, urban, garden
+    Scene types: studio, nature, elegant, minimal, lifestyle, urban, seasonal, holiday
     Credits: 10 per generation
     """
-    # Get scene prompt from templates
-    scene = next((s for s in SCENE_TEMPLATES if s["id"] == request.scene_type), None)
-    if not scene:
-        scene = SCENE_TEMPLATES[0]  # Default to studio
+    # Resolve scene prompt — template_id takes priority, then custom_prompt, then scene_type
+    scene_prompt: Optional[str] = None
+    if request.template_id:
+        from app.services.template_prompt_service import resolve_template_prompt
+        scene_prompt = await resolve_template_prompt(db, request.template_id)
+        if not scene_prompt:
+            raise HTTPException(status_code=400, detail="Template not found or inactive.")
 
-    scene_prompt = request.custom_prompt or scene["prompt"]
+    if not scene_prompt:
+        scene = next((s for s in SCENE_TEMPLATES if s["id"] == request.scene_type), None)
+        if not scene and not request.custom_prompt:
+            valid_ids = ", ".join(s["id"] for s in SCENE_TEMPLATES)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown scene_type '{request.scene_type}'. Valid options: {valid_ids}, or provide custom_prompt.",
+            )
+        scene_prompt = request.custom_prompt or scene["prompt"]
     
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.PRODUCT_SCENE, topic=request.scene_type, cta="Subscribe to generate custom scenes.")
+        return await _demo_response(
+            db,
+            ToolType.PRODUCT_SCENE,
+            topic=request.scene_type,
+            product_id=request.product_id,
+            cta="Subscribe to generate custom scenes.",
+        )
 
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
     CREDIT_COST = 10
@@ -644,7 +688,7 @@ async def generate_product_scene(
 
         # Step 2: Generate scene background
         logger.info("Step 2: Generating scene background...")
-        full_prompt = f"{scene_prompt}, empty background for product placement, professional studio lighting, high-end commercial photography, 8K quality"
+        full_prompt = f"{scene_prompt}, scene background only with clear open area for product compositing, no product or object in center, photorealistic high-resolution commercial photography"
         
         t2i_result = await provider_router.route(
             TaskType.T2I,
@@ -1127,11 +1171,29 @@ async def generate_short_video(
         provider_router = get_provider_router()
         strength = request.motion_strength or 5
         if strength <= 3:
-            motion_desc = "subtle gentle camera motion, slow smooth pan"
+            motion_desc = (
+                "slow cinematic dolly forward, barely perceptible parallax drift, "
+                "ambient environmental micro-motion such as soft fabric sway or gentle light flicker, "
+                "steady locked exposure, smooth 24fps film cadence, no abrupt movement"
+            )
+        elif strength <= 5:
+            motion_desc = (
+                "gentle cinematic orbit revealing product depth, natural environmental motion "
+                "like leaves rustling or curtains breathing in breeze, subtle light shift as if "
+                "clouds passing, smooth stabilized camera, elegant slow-motion feel"
+            )
         elif strength <= 7:
-            motion_desc = "natural camera motion, smooth animation"
+            motion_desc = (
+                "confident cinematic tracking shot, moderate parallax with foreground-background separation, "
+                "natural physics-based motion on fabrics and hair, dynamic lighting transition "
+                "from shadow to highlight, smooth crane-like vertical reveal, professional commercial quality"
+            )
         else:
-            motion_desc = "dynamic energetic camera motion, dramatic zoom and movement"
+            motion_desc = (
+                "dramatic cinematic push-in with rack focus, bold sweeping camera arc, energetic subject motion "
+                "with flowing fabrics and dramatic wind effect, dynamic lighting with lens flare accents, "
+                "high-energy fashion commercial or product launch campaign feel, 60fps smooth slow-motion"
+            )
 
         task_params = {
             "image_url": _resolve_public_url(str(request.image_url)),
@@ -1222,79 +1284,8 @@ async def generate_short_video(
         )
 
 
-# ============================================================================
-# Text-to-Video — PiAPI Wan 2.6 T2V
-# ============================================================================
-
-class TextToVideoRequest(BaseModel):
-    """Generate video from text prompt"""
-    prompt: str
-    duration: int = 5  # 5, 10, or 15 seconds
-    resolution: str = "1080P"  # 720P or 1080P
-    aspect_ratio: str = "16:9"  # 16:9, 9:16, 1:1
-
-
-@router.post("/text-to-video", response_model=ToolResponse)
-async def text_to_video(
-    request: TextToVideoRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user_optional)
-):
-    """
-    Generate video from text description.
-
-    Uses PiAPI Wan 2.6 text-to-video.
-    Credits: 30 per generation
-    """
-    if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.SHORT_VIDEO, cta="Subscribe to generate custom videos.")
-
-    CREDIT_COST = 30
-    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "text_to_video")
-    if not ok:
-        return ToolResponse(success=False, message=err)
-
-    try:
-        router_instance = get_provider_router()
-        result = await router_instance.route(
-            TaskType.T2V,
-            {
-                "prompt": request.prompt,
-                "duration": request.duration,
-                "resolution": request.resolution,
-                "aspect_ratio": request.aspect_ratio,
-            }
-        )
-
-        if result.get("success"):
-            output = result.get("output", {})
-            video_url = output.get("video_url")
-
-            generation = UserGeneration(
-                user_id=current_user.id,
-                tool_type=ToolType.SHORT_VIDEO,
-                input_text=request.prompt,
-                input_params={"duration": request.duration, "resolution": request.resolution, "aspect_ratio": request.aspect_ratio},
-                result_video_url=video_url,
-                credits_used=CREDIT_COST,
-            )
-            generation.set_expiry()
-            db.add(generation)
-            await db.commit()
-
-            return ToolResponse(
-                success=True,
-                result_url=video_url,
-                credits_used=CREDIT_COST,
-                message="Video generated successfully"
-            )
-        else:
-            await _refund_credits(db, current_user, CREDIT_COST, "text_to_video")
-            return ToolResponse(success=False, message=result.get("error", "Video generation failed"))
-    except Exception as e:
-        logger.error(f"Text-to-video error: {e}")
-        await _refund_credits(db, current_user, CREDIT_COST, "text_to_video")
-        return ToolResponse(success=False, message=f"Generation failed: {str(e)}")
+## Text-to-Video endpoint removed — too expensive with low ROI.
+## E-commerce users need their real products animated (I2V), not AI-generated videos from text.
 
 
 # ============================================================================
@@ -1732,6 +1723,22 @@ async def get_scene_templates():
 async def get_interior_styles():
     """Get available interior styles for Room Redesign tool"""
     return INTERIOR_STYLES
+
+
+@router.get("/templates/style-templates")
+async def get_style_templates(
+    tool_type: str = "product_scene",
+    category: Optional[str] = None,
+    featured_only: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get curated style templates for Product Scene or Try-On tools.
+    Returns localized names + preview thumbnails. Prompts are never exposed.
+    """
+    from app.services.template_prompt_service import get_templates
+    templates = await get_templates(db, tool_type, category, featured_only)
+    return {"templates": templates, "total": len(templates)}
 
 
 @router.get("/models/list")

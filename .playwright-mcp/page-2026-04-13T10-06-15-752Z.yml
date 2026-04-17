@@ -1,0 +1,200 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "Login" [ref=e25] [cursor=pointer]:
+          - /url: /auth/login
+        - link "Start Creating Now" [ref=e26] [cursor=pointer]:
+          - /url: /auth/register
+  - main [ref=e27]:
+    - generic [ref=e29]:
+      - button "Back" [ref=e30] [cursor=pointer]:
+        - img [ref=e31]
+        - text: Back
+      - generic [ref=e33]:
+        - heading "Fashion Model Showcase" [level=1] [ref=e34]
+        - paragraph [ref=e35]: View AI-generated fashion model styling inspiration. Subscribe to use virtual try-on with your own photos.
+        - link "Subscribe to unlock more features" [ref=e37] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - heading "Select Clothing" [level=3] [ref=e40]
+          - generic [ref=e41]:
+            - paragraph [ref=e42]: Preset Clothing (Demo)
+            - generic [ref=e43]:
+              - button "> Casual Tank Top" [ref=e44] [cursor=pointer]:
+                - text: ">"
+                - img "Casual Tank Top" [ref=e45]
+              - button "> Denim Jacket" [ref=e46] [cursor=pointer]:
+                - text: ">"
+                - img "Denim Jacket" [ref=e47]
+              - button "> Silk Scarf" [ref=e48] [cursor=pointer]:
+                - text: ">"
+                - img "Silk Scarf" [ref=e49]
+              - button "> Athletic Jacket" [ref=e50] [cursor=pointer]:
+                - text: ">"
+                - img "Athletic Jacket" [ref=e51]
+              - button "> Sun Hat" [ref=e52] [cursor=pointer]:
+                - text: ">"
+                - img "Sun Hat" [ref=e53]
+              - button "> Trench Coat" [ref=e54] [cursor=pointer]:
+                - text: ">"
+                - img "Trench Coat" [ref=e55]
+              - button "> Puffer Jacket" [ref=e56] [cursor=pointer]:
+                - text: ">"
+                - img "Puffer Jacket" [ref=e57]
+              - button "> Sunglasses" [ref=e58] [cursor=pointer]:
+                - text: ">"
+                - img "Sunglasses" [ref=e59]
+              - button "> Watch" [ref=e60] [cursor=pointer]:
+                - text: ">"
+                - img "Watch" [ref=e61]
+              - button "> Summer Dress" [ref=e62] [cursor=pointer]:
+                - text: ">"
+                - img "Summer Dress" [ref=e63]
+              - button "> Elegant Blouse" [ref=e64] [cursor=pointer]:
+                - text: ">"
+                - img "Elegant Blouse" [ref=e65]
+          - img "Clothing" [ref=e178]
+        - generic [ref=e66]:
+          - heading "Select Model" [level=3] [ref=e67]
+          - generic [ref=e68]:
+            - button "> Female Model 1 Female Model 1" [ref=e69] [cursor=pointer]:
+              - text: ">"
+              - img "Female Model 1" [ref=e71]
+              - paragraph [ref=e72]: Female Model 1
+            - button "> Female Model 2 Female Model 2" [ref=e73] [cursor=pointer]:
+              - text: ">"
+              - img "Female Model 2" [ref=e75]
+              - paragraph [ref=e76]: Female Model 2
+            - button "> Female Model 3 Female Model 3" [ref=e77] [cursor=pointer]:
+              - text: ">"
+              - img "Female Model 3" [ref=e79]
+              - paragraph [ref=e80]: Female Model 3
+            - button "> Male Model 1 Male Model 1" [ref=e81] [cursor=pointer]:
+              - text: ">"
+              - img "Male Model 1" [ref=e83]
+              - paragraph [ref=e84]: Male Model 1
+            - button "> Male Model 2 Male Model 2" [ref=e85] [cursor=pointer]:
+              - text: ">"
+              - img "Male Model 2" [ref=e87]
+              - paragraph [ref=e88]: Male Model 2
+            - button "> Male Model 3 Male Model 3" [ref=e89] [cursor=pointer]:
+              - text: ">"
+              - img "Male Model 3" [ref=e91]
+              - paragraph [ref=e92]: Male Model 3
+          - generic [ref=e93]:
+            - generic [ref=e94]:
+              - generic [ref=e95]: "Estimated cost:"
+              - generic [ref=e96]: 0 Credits
+            - button "Generate" [ref=e97] [cursor=pointer]
+        - generic [ref=e98]:
+          - heading "Try-On Result" [level=3] [ref=e99]
+          - generic [ref=e179]:
+            - img "Result" [ref=e180]
+            - generic [ref=e181]: vidgo.ai
+            - link "Subscribe for Full Access" [ref=e183] [cursor=pointer]:
+              - /url: /pricing
+  - contentinfo [ref=e104]:
+    - generic [ref=e105]:
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - link "V VidGo AI" [ref=e108] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e109]: V
+            - generic [ref=e110]: VidGo AI
+          - paragraph [ref=e111]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e112]:
+            - link [ref=e113] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e114]
+            - link [ref=e116] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e117]
+        - generic [ref=e119]:
+          - heading "Fashion AI" [level=4] [ref=e120]
+          - list [ref=e121]:
+            - listitem [ref=e122]:
+              - link "Virtual Try On" [ref=e123] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e124]:
+              - link "Fashion Reels" [ref=e125] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e126]:
+              - link "Text to Video" [ref=e127] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e128]:
+              - link "Product Avatars" [ref=e129] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e130]:
+          - heading "E-commerce AI" [level=4] [ref=e131]
+          - list [ref=e132]:
+            - listitem [ref=e133]:
+              - link "Product AnyShoot" [ref=e134] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e135]:
+              - link "Remove Background" [ref=e136] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e137]:
+              - link "HD Upscale" [ref=e138] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e139]:
+              - link "Style Clone" [ref=e140] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e141]:
+              - link "Room Redesign" [ref=e142] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e143]:
+          - heading "Company" [level=4] [ref=e144]
+          - list [ref=e145]:
+            - listitem [ref=e146]:
+              - link "About Us" [ref=e147] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e148]:
+              - link "Pricing" [ref=e149] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e150]:
+              - link "Contact Us" [ref=e151] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e152]:
+              - link "Blog" [ref=e153] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e154]:
+              - link "Affiliate Program" [ref=e155] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e156]:
+          - heading "Legal" [level=4] [ref=e157]
+          - list [ref=e158]:
+            - listitem [ref=e159]:
+              - link "Terms of Service" [ref=e160] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e161]:
+              - link "Privacy Policy" [ref=e162] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e163]:
+              - link "Cookie Policy" [ref=e164] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e165]:
+              - link "Refund Policy" [ref=e166] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e167]:
+        - paragraph [ref=e168]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e170]: Secure Payment

@@ -55,8 +55,26 @@ ADMIN_EMAIL = (
     or "admin@example.invalid"
 )
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+# Additional admin accounts: comma-separated "email:password" pairs
+ADMIN_EXTRA_ACCOUNTS = os.environ.get("ADMIN_EXTRA_ACCOUNTS", "")
 ALLOW_DEFAULT = os.environ.get("ALLOW_DEFAULT_ADMIN_PASSWORD", "").lower() == "true"
 DEFAULT_DEV_PASSWORD = "ChangeMe_local_dev_only!"
+
+
+def _parse_extra_admins() -> list[tuple[str, str]]:
+    """Parse ADMIN_EXTRA_ACCOUNTS env var into list of (email, password) tuples."""
+    if not ADMIN_EXTRA_ACCOUNTS:
+        return []
+    pairs = []
+    for entry in ADMIN_EXTRA_ACCOUNTS.split(","):
+        entry = entry.strip()
+        if ":" not in entry:
+            continue
+        email, password = entry.split(":", 1)
+        email, password = email.strip(), password.strip()
+        if email and password:
+            pairs.append((email, password))
+    return pairs
 
 VALID_PLAN_TYPES = {"basic", "pro", "premium", "enterprise"}
 
@@ -99,8 +117,16 @@ async def _seed_default_users() -> int:
                 return 2
 
         r = await db.execute(select(User).where(User.email == ADMIN_EMAIL))
-        if r.scalar_one_or_none():
-            print(f"Admin user already exists: {ADMIN_EMAIL}")
+        existing_admin = r.scalar_one_or_none()
+        if existing_admin:
+            # Ensure is_superuser is set (may have been cleared)
+            if not existing_admin.is_superuser:
+                existing_admin.is_superuser = True
+                existing_admin.is_active = True
+                existing_admin.email_verified = True
+                print(f"Admin user updated (is_superuser=True): {ADMIN_EMAIL}")
+            else:
+                print(f"Admin user already exists: {ADMIN_EMAIL}")
         else:
             admin = User(
                 email=ADMIN_EMAIL,
@@ -114,12 +140,41 @@ async def _seed_default_users() -> int:
             db.add(admin)
             print(f"Created admin user: {ADMIN_EMAIL}")
 
+        # Extra admin accounts (from ADMIN_EXTRA_ACCOUNTS env var)
+        extra_admins = _parse_extra_admins()
+        for idx, (extra_email, extra_password) in enumerate(extra_admins, start=2):
+            r = await db.execute(select(User).where(User.email == extra_email))
+            existing = r.scalar_one_or_none()
+            if existing:
+                if not existing.is_superuser:
+                    existing.is_superuser = True
+                    existing.is_active = True
+                    existing.email_verified = True
+                    existing.hashed_password = security.get_password_hash(extra_password)
+                    print(f"Extra admin updated (is_superuser=True): {extra_email}")
+                else:
+                    print(f"Extra admin already exists: {extra_email}")
+            else:
+                extra_admin = User(
+                    email=extra_email,
+                    username=f"admin-{idx}",
+                    full_name=f"Admin {idx}",
+                    hashed_password=security.get_password_hash(extra_password),
+                    is_active=True,
+                    is_superuser=True,
+                    email_verified=True,
+                )
+                db.add(extra_admin)
+                print(f"Created extra admin user: {extra_email}")
+
         await db.commit()
 
     print()
     print("Test accounts:")
     print(f"  User:  {TEST_EMAIL} / {TEST_PASSWORD}")
     print(f"  Admin: {ADMIN_EMAIL} / <password from env>")
+    for extra_email, _ in extra_admins:
+        print(f"  Admin: {extra_email} / <password from env>")
     return 0
 
 

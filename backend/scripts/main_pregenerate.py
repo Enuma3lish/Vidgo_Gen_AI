@@ -382,48 +382,56 @@ PRODUCT_SCENE_MAPPING = {
         "product-1": {
             "name": "Bubble Tea",
             "name_zh": "珍珠奶茶",
+            "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-1.png",
             "prompt": "Studio product photo of a clear cup of bubble milk tea with tapioca pearls, centered, clean white background, soft shadows, commercial photography, 8K",
             "prompt_zh": "棚拍產品照：透明杯珍珠奶茶與黑色珍珠，置中構圖，乾淨白底，柔和陰影，商業攝影，8K"
         },
         "product-2": {
             "name": "Canvas Tote Bag",
             "name_zh": "帆布托特包",
+            "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-2.png",
             "prompt": "Studio product photo of a natural canvas tote bag with minimalist design, standing upright, clean white background, soft shadows, commercial photography, 8K",
             "prompt_zh": "棚拍產品照：自然色帆布托特包，簡約設計，直立擺放，乾淨白底，柔和陰影，商業攝影，8K"
         },
         "product-3": {
             "name": "Handmade Jewelry",
             "name_zh": "手工飾品",
+            "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-3.png",
             "prompt": "Studio product photo of handmade silver earrings and bracelet set on velvet display, centered, clean white background, jewelry photography, 8K",
             "prompt_zh": "棚拍產品照：手工銀耳環與手鍊組合，絨布展示台，置中構圖，乾淨白底，飾品攝影，8K"
         },
         "product-4": {
             "name": "Skincare Serum",
             "name_zh": "保養精華液",
+            "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-4.png",
             "prompt": "Studio product photo of a glass skincare serum bottle with dropper, clean cosmetics product style, white background, soft glow, 8K",
             "prompt_zh": "棚拍產品照：玻璃滴管保養精華液瓶，清新保養品風格，乾淨白底，柔光氛圍，8K"
         },
         "product-5": {
             "name": "Coffee Beans",
             "name_zh": "咖啡豆",
+            "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-5.png",
             "prompt": "Studio product photo of a kraft paper bag of roasted coffee beans with some beans scattered around, centered, clean white background, food product photography, 8K",
             "prompt_zh": "棚拍產品照：牛皮紙袋裝烘焙咖啡豆，周圍散落數顆咖啡豆，置中構圖，乾淨白底，食品攝影，8K"
         },
         "product-6": {
             "name": "Espresso Machine",
             "name_zh": "義式咖啡機",
+            "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-6.png",
             "prompt": "Studio product photo of a compact stainless steel espresso machine, front angle, clean white background, professional appliance advertising, 8K",
             "prompt_zh": "棚拍產品照：小型不鏽鋼義式咖啡機，正面角度，乾淨白底，家電廣告風格，8K"
         },
         "product-7": {
             "name": "Handmade Candle",
             "name_zh": "手工蠟燭",
+            "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-7.png",
             "prompt": "Studio product photo of a handmade soy wax candle in glass jar, centered, clean white background, cozy product advertising, 8K",
             "prompt_zh": "棚拍產品照：玻璃罐手工大豆蠟燭，置中構圖，乾淨白底，溫馨產品廣告風格，8K"
         },
         "product-8": {
             "name": "Gift Box Set",
             "name_zh": "禮盒組合",
+            "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-8.png",
             "prompt": "Studio product photo of an elegant gift box set with ribbon bow, assorted small items inside, centered, clean white background, gift product advertising, 8K",
             "prompt_zh": "棚拍產品照：精美禮盒組合附蝴蝶結緞帶，內含多樣小物，置中構圖，乾淨白底，禮品廣告風格，8K"
         }
@@ -686,131 +694,88 @@ TRYON_FALLBACK_MODELS = {
     }
 }
 
+_GCS_TRYON = "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon"
+
 TRYON_MAPPING = {
-    # Models will be populated dynamically from GENERATED_MODEL_LIBRARY or fallback
-    "models": {},
+    # Six frozen, human-reviewed full-body model photos (3 female + 3 male).
+    # These URLs are stable — kept in sync with
+    # backend/app/api/v1/tools.py TRYON_MODELS and the frontend preview list.
+    "models": {
+        "female-1": {"gender": "female", "url": f"{_GCS_TRYON}/models/female-1.png"},
+        "female-2": {"gender": "female", "url": f"{_GCS_TRYON}/models/female-2.png"},
+        "female-3": {"gender": "female", "url": f"{_GCS_TRYON}/models/female-3.png"},
+        "male-1":   {"gender": "male",   "url": f"{_GCS_TRYON}/models/male-1.png"},
+        "male-2":   {"gender": "male",   "url": f"{_GCS_TRYON}/models/male-2.png"},
+        "male-3":   {"gender": "male",   "url": f"{_GCS_TRYON}/models/male-3.png"},
+    },
     "clothing": {
-        "casual": [
+        "tshirt": [
             {
-                "id": "casual-1",
-                "name": "Casual Tank Top",
-                "name_zh": "休閒背心套裝",
-                "prompt": "black casual tank top with shorts, athletic style",
+                "id": "garment-tshirt",
+                "name": "Plain White T-Shirt",
+                "name_zh": "素色白T恤",
+                "prompt": "plain white cotton crew neck t-shirt",
                 "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400",
-                "gender_restriction": None
+                "image_url": f"{_GCS_TRYON}/garments/garment-tshirt.png",
+                "gender_restriction": None,
             },
+        ],
+        "dress": [
             {
-                "id": "casual-2",
+                "id": "garment-dress",
+                "name": "Floral Midi Dress",
+                "name_zh": "花卉洋裝",
+                "prompt": "floral summer midi dress",
+                "clothing_type": "dress",
+                "image_url": f"{_GCS_TRYON}/garments/garment-dress.png",
+                "gender_restriction": "female",
+            },
+        ],
+        "jacket": [
+            {
+                "id": "garment-jacket",
                 "name": "Denim Jacket",
-                "name_zh": "牛仔外套",
-                "prompt": "blue denim jacket, casual style",
+                "name_zh": "丹寧外套",
+                "prompt": "blue denim casual jacket",
                 "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=400",
-                "gender_restriction": None
-            }
-        ],
-        "formal": [
-            {
-                "id": "formal-1",
-                "name": "Winter Coat",
-                "name_zh": "冬季大衣",
-                "prompt": "elegant beige winter coat, professional style",
-                "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1539533018447-63fcce2678e4?w=400",
-                "gender_restriction": None
+                "image_url": f"{_GCS_TRYON}/garments/garment-jacket.png",
+                "gender_restriction": None,
             },
-            {
-                "id": "formal-2",
-                "name": "Silk Scarf",
-                "name_zh": "絲巾",
-                "prompt": "elegant silk scarf, fashion accessory",
-                "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1584030373081-f37b7bb4fa8e?w=400",
-                "gender_restriction": "female"  # Female-only item
-            }
         ],
-        "sportswear": [
+        "blouse": [
             {
-                "id": "sportswear-1",
-                "name": "Athletic Jacket",
-                "name_zh": "運動夾克",
-                "prompt": "green athletic jacket, outdoor sportswear",
+                "id": "garment-blouse",
+                "name": "Silk Blouse",
+                "name_zh": "絲質襯衫",
+                "prompt": "soft pink silk button-up blouse",
                 "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400",
-                "gender_restriction": None
+                "image_url": f"{_GCS_TRYON}/garments/garment-blouse.png",
+                "gender_restriction": "female",
             },
-            {
-                "id": "sportswear-2",
-                "name": "Sun Hat",
-                "name_zh": "遮陽帽",
-                "prompt": "stylish sun hat, summer accessory",
-                "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1521369909029-2afed882baee?w=400",
-                "gender_restriction": None
-            }
         ],
-        "outerwear": [
+        "sweater": [
             {
-                "id": "outerwear-1",
+                "id": "garment-sweater",
+                "name": "Knit Sweater",
+                "name_zh": "針織毛衣",
+                "prompt": "beige knit crew neck sweater",
+                "clothing_type": "general",
+                "image_url": f"{_GCS_TRYON}/garments/garment-sweater.png",
+                "gender_restriction": None,
+            },
+        ],
+        "coat": [
+            {
+                "id": "garment-coat",
                 "name": "Trench Coat",
                 "name_zh": "風衣外套",
-                "prompt": "classic beige trench coat, timeless style",
+                "prompt": "classic camel wool trench coat",
                 "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400",
-                "gender_restriction": None
+                "image_url": f"{_GCS_TRYON}/garments/garment-coat.png",
+                "gender_restriction": None,
             },
-            {
-                "id": "outerwear-2",
-                "name": "Puffer Jacket",
-                "name_zh": "羽絨外套",
-                "prompt": "warm puffer jacket, winter style",
-                "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=400",
-                "gender_restriction": None
-            }
         ],
-        "accessories": [
-            {
-                "id": "accessories-1",
-                "name": "Sunglasses",
-                "name_zh": "太陽眼鏡",
-                "prompt": "fashionable sunglasses, summer style",
-                "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400",
-                "gender_restriction": None
-            },
-            {
-                "id": "accessories-2",
-                "name": "Watch",
-                "name_zh": "手錶",
-                "prompt": "classic wristwatch, everyday accessory",
-                "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400",
-                "gender_restriction": None
-            }
-        ],
-        "dresses": [
-            {
-                "id": "dresses-1",
-                "name": "Summer Dress",
-                "name_zh": "夏季洋裝",
-                "prompt": "red floral summer dress, feminine style",
-                "clothing_type": "dress",
-                "image_url": "https://images.unsplash.com/photo-1572804013427-4d7ca7268217?w=400",
-                "gender_restriction": "female"  # Only female models
-            },
-            {
-                "id": "dresses-2",
-                "name": "Elegant Blouse",
-                "name_zh": "優雅襯衫",
-                "prompt": "elegant blouse, casual chic style",
-                "clothing_type": "general",
-                "image_url": "https://images.unsplash.com/photo-1564257631407-4deb1f99d992?w=400",
-                "gender_restriction": "female"  # Female-only item
-            }
-        ]
-    }
+    },
 }
 
 
@@ -947,89 +912,35 @@ PATTERN_GENERATE_MAPPING = {
 # The example IS the transformation of the SAME image—input and output are
 # linked by the same source. Style prompts describe ONLY art style, NOT products.
 #
+_GCS_PRODUCTS = "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products"
+
 EFFECT_MAPPING = {
+    # Source images reuse the 8 frozen curated product photos so every effect
+    # pregen run starts from the same input — only the style I2I is random.
     "source_images": [
-        {
-            "name": "Bubble Tea",
-            "name_zh": "珍珠奶茶",
-            "prompt": "A cup of bubble milk tea with tapioca pearls, appetizing food photography, studio lighting, white background",
-            "topic": "drinks"
-        },
-        {
-            "name": "Fried Chicken",
-            "name_zh": "炸雞排",
-            "prompt": "Crispy fried chicken cutlet on a plate, Taiwanese street food photography, studio lighting",
-            "topic": "snacks"
-        },
-        {
-            "name": "Fruit Tea",
-            "name_zh": "水果茶",
-            "prompt": "Colorful fresh fruit tea in clear cup with ice, refreshing drink photography, studio lighting",
-            "topic": "drinks"
-        },
-        {
-            "name": "Handmade Candle",
-            "name_zh": "手工蠟燭",
-            "prompt": "Artisan handmade soy candle in glass jar, clean studio product photo, white background, soft shadow",
-            "topic": "handmade"
-        },
-        {
-            "name": "Canvas Tote Bag",
-            "name_zh": "帆布托特包",
-            "prompt": "Canvas tote bag with minimalist design, clean studio product photo, white background, soft shadow",
-            "topic": "accessories"
-        },
-        {
-            "name": "Skincare Serum",
-            "name_zh": "保養精華液",
-            "prompt": "Glass skincare serum bottle with dropper, clean cosmetics product photo, white background",
-            "topic": "cosmetics"
-        },
-        {
-            "name": "Coffee Beans",
-            "name_zh": "咖啡豆",
-            "prompt": "Fresh roasted coffee beans in kraft paper bag, artisan coffee product photo, white background",
-            "topic": "food"
-        },
-        {
-            "name": "Gift Box Set",
-            "name_zh": "禮盒組合",
-            "prompt": "Elegant gift box set with ribbon bow, boutique packaging product photo, white background",
-            "topic": "gifts"
-        }
+        {"product_id": "product-1", "name": "Bubble Tea",       "name_zh": "珍珠奶茶",  "url": f"{_GCS_PRODUCTS}/product-1.png", "topic": "drinks"},
+        {"product_id": "product-2", "name": "Canvas Tote Bag",  "name_zh": "帆布托特包","url": f"{_GCS_PRODUCTS}/product-2.png", "topic": "accessories"},
+        {"product_id": "product-3", "name": "Handmade Jewelry", "name_zh": "手工飾品",  "url": f"{_GCS_PRODUCTS}/product-3.png", "topic": "handmade"},
+        {"product_id": "product-4", "name": "Skincare Serum",   "name_zh": "保養精華液","url": f"{_GCS_PRODUCTS}/product-4.png", "topic": "cosmetics"},
+        {"product_id": "product-5", "name": "Coffee Beans",     "name_zh": "咖啡豆",    "url": f"{_GCS_PRODUCTS}/product-5.png", "topic": "food"},
+        {"product_id": "product-6", "name": "Espresso Machine", "name_zh": "義式咖啡機","url": f"{_GCS_PRODUCTS}/product-6.png", "topic": "equipment"},
+        {"product_id": "product-7", "name": "Handmade Candle",  "name_zh": "手工蠟燭",  "url": f"{_GCS_PRODUCTS}/product-7.png", "topic": "handmade"},
+        {"product_id": "product-8", "name": "Gift Box Set",     "name_zh": "禮盒組合",  "url": f"{_GCS_PRODUCTS}/product-8.png", "topic": "gifts"},
     ],
+    # Style IDs must match backend/app/services/effects_service.py VIDGO_STYLES
     "styles": {
-        "anime": {
-            "name": "Anime",
-            "name_zh": "動漫風格",
-            "prompt": "anime style illustration for social media and ads, eye-catching for small business",
-            "strength": 0.65
-        },
-        "ghibli": {
-            "name": "Ghibli",
-            "name_zh": "吉卜力風格",
-            "prompt": "studio ghibli anime style for menu and cafe branding, hayao miyazaki",
-            "strength": 0.65
-        },
-        "cartoon": {
-            "name": "Cartoon",
-            "name_zh": "卡通風格",
-            "prompt": "cartoon pixar 3d style for product ads and flyers, family-friendly business",
-            "strength": 0.60
-        },
-        "oil_painting": {
-            "name": "Oil Painting",
-            "name_zh": "油畫風格",
-            "prompt": "oil painting artistic style for brand and restaurant marketing",
-            "strength": 0.70
-        },
-        "watercolor": {
-            "name": "Watercolor",
-            "name_zh": "水彩風格",
-            "prompt": "watercolor soft style for menu design and boutique branding",
-            "strength": 0.65
-        }
-    }
+        "anime":         {"name": "Anime",          "name_zh": "動漫風格", "prompt": "anime style illustration for social media and ads",                            "strength": 0.65},
+        "ghibli":        {"name": "Ghibli",         "name_zh": "吉卜力風格", "prompt": "studio ghibli anime style for menu and cafe branding, hayao miyazaki",       "strength": 0.65},
+        "cartoon":       {"name": "Cartoon",        "name_zh": "卡通風格", "prompt": "cartoon pixar 3d style for product ads and flyers",                           "strength": 0.60},
+        "clay":          {"name": "Clay",           "name_zh": "黏土動畫", "prompt": "claymation stop motion clay style for product and food ads",                  "strength": 0.65},
+        "cute_anime":    {"name": "Cute Anime",     "name_zh": "可愛動漫", "prompt": "cute kawaii anime style for social media and shop ads",                        "strength": 0.65},
+        "oil_painting":  {"name": "Oil Painting",   "name_zh": "油畫風格", "prompt": "oil painting artistic style for brand and restaurant marketing",               "strength": 0.70},
+        "watercolor":    {"name": "Watercolor",     "name_zh": "水彩風格", "prompt": "watercolor soft style for menu design and boutique branding",                  "strength": 0.65},
+        "cyberpunk":     {"name": "Cyberpunk",      "name_zh": "賽博朋克", "prompt": "cyberpunk neon futuristic style for tech product ads",                         "strength": 0.65},
+        "realistic":     {"name": "Realistic",      "name_zh": "寫實風格", "prompt": "realistic photorealistic style for product and food ads",                      "strength": 0.55},
+        "cinematic":     {"name": "Cinematic",      "name_zh": "電影質感", "prompt": "cinematic movie style for brand and product video ads",                        "strength": 0.60},
+        "anime_classic": {"name": "Anime Classic",  "name_zh": "經典動漫", "prompt": "classic anime style for menu and product marketing",                           "strength": 0.65},
+    },
 }
 
 
@@ -1122,37 +1033,15 @@ class VidGoPreGenerator:
         return str(local_path)
 
     def _load_model_library(self):
-        """Load existing model photos from disk into GENERATED_MODEL_LIBRARY."""
-        global GENERATED_MODEL_LIBRARY, TRYON_MAPPING
-
-        GENERATED_MODEL_LIBRARY.clear()
-        model_dir = self.MODEL_LIBRARY_DIR
-
-        if not model_dir.exists():
-            logger.info("Model library directory does not exist, will use fallback models")
-            TRYON_MAPPING["models"] = TRYON_FALLBACK_MODELS.copy()
-            return
-
-        # Scan for existing model images
-        for gender in ["female", "male"]:
-            gender_dir = model_dir / gender
-            if gender_dir.exists():
-                for img_file in gender_dir.glob("*.png"):
-                    model_id = img_file.stem  # e.g., "female-fullbody-1"
-                    GENERATED_MODEL_LIBRARY[model_id] = {
-                        "gender": gender,
-                        "url": f"/static/models/{gender}/{img_file.name}",
-                        "local_path": str(img_file)
-                    }
-                    logger.debug(f"Loaded model: {model_id}")
-
-        if GENERATED_MODEL_LIBRARY:
-            logger.info(f"Loaded {len(GENERATED_MODEL_LIBRARY)} models from library")
-            # Update TRYON_MAPPING with generated models
-            TRYON_MAPPING["models"] = GENERATED_MODEL_LIBRARY.copy()
-        else:
-            logger.info("No generated models found, using fallback models")
-            TRYON_MAPPING["models"] = TRYON_FALLBACK_MODELS.copy()
+        """No-op: TRYON_MAPPING["models"] already contains the frozen curated
+        GCS URLs (see module-level TRYON_MAPPING). We no longer scan /static/
+        or fall back to TRYON_FALLBACK_MODELS — that was the source of drift
+        between pregen runs.
+        """
+        logger.info(
+            "Using %d frozen curated try-on models from TRYON_MAPPING",
+            len(TRYON_MAPPING.get("models", {})),
+        )
 
     async def check_apis(self) -> Dict[str, bool]:
         """Check which APIs are configured."""
@@ -1215,66 +1104,25 @@ class VidGoPreGenerator:
         topic_counts: Dict[str, int] = {}
 
         # ─────────────────────────────────────────────────────────────────────
-        # Step 1: Generate 4 portrait avatars via T2I (2 female + 2 male).
-        # Each portrait is uploaded to GCS so PiAPI Kling Avatar can fetch it.
+        # Step 1: Use dedicated head-and-shoulders avatar portraits from GCS.
+        # These are separate from the full-body try-on models because Kling
+        # Avatar's face detector rejects full-body input with "failed to
+        # freeze point" — it needs a big, centered face.
         # ─────────────────────────────────────────────────────────────────────
-        PORTRAIT_PROMPTS = [
-            (
-                "female-1",
-                "female",
-                "Professional headshot portrait of a friendly young Taiwanese woman in her late 20s, "
-                "clean light studio background, warm natural smile, business casual blouse, soft "
-                "studio lighting, sharp focus, photo realistic, 85mm lens",
-            ),
-            (
-                "female-2",
-                "female",
-                "Professional headshot portrait of a young Taiwanese woman in her early 30s, "
-                "clean white background, confident friendly expression, modern smart casual top, "
-                "studio lighting, photo realistic, 85mm lens",
-            ),
-            (
-                "male-1",
-                "male",
-                "Professional headshot portrait of a friendly young Taiwanese man in his late 20s, "
-                "clean light studio background, warm natural smile, business casual shirt, soft "
-                "studio lighting, sharp focus, photo realistic, 85mm lens",
-            ),
-            (
-                "male-2",
-                "male",
-                "Professional headshot portrait of a young Taiwanese man in his early 30s, "
-                "clean white background, confident friendly expression, modern smart casual shirt, "
-                "studio lighting, photo realistic, 85mm lens",
-            ),
+        _GCS_AVATARS = "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/avatars"
+        CURATED_AVATARS = [
+            ("female-1", "female", f"{_GCS_AVATARS}/female-1.png"),
+            ("female-2", "female", f"{_GCS_AVATARS}/female-2.png"),
+            ("female-3", "female", f"{_GCS_AVATARS}/female-3.png"),
+            ("male-1",   "male",   f"{_GCS_AVATARS}/male-1.png"),
+            ("male-2",   "male",   f"{_GCS_AVATARS}/male-2.png"),
+            ("male-3",   "male",   f"{_GCS_AVATARS}/male-3.png"),
         ]
-
-        portraits: List[Dict[str, str]] = []
-        for avatar_id, gender, prompt in PORTRAIT_PROMPTS:
-            logger.info(f"  Generating portrait: {avatar_id}")
-            try:
-                t2i = await self.piapi.generate_image(
-                    prompt=prompt, width=768, height=1024
-                )
-            except Exception as e:
-                logger.error(f"  Portrait T2I exception for {avatar_id}: {e}")
-                continue
-            if not t2i.get("success"):
-                logger.error(
-                    f"  Portrait T2I failed for {avatar_id}: {t2i.get('error')}"
-                )
-                continue
-            portrait_local = t2i.get("image_url")
-            if not portrait_local:
-                logger.error(f"  No image_url returned for {avatar_id}")
-                continue
-            # Upload to GCS so Kling Avatar can fetch it (same fix as F-018 try_on)
-            gcs_url = await self._local_to_gcs_for_piapi(portrait_local, "image")
-            if not gcs_url or not gcs_url.startswith("https://storage.googleapis.com/"):
-                logger.error(f"  Failed to persist portrait {avatar_id} to GCS")
-                continue
-            portraits.append({"avatar_id": avatar_id, "gender": gender, "url": gcs_url})
-            logger.info(f"  Portrait {avatar_id} ready: {gcs_url[:80]}")
+        portraits: List[Dict[str, str]] = [
+            {"avatar_id": aid, "gender": gender, "url": url}
+            for aid, gender, url in CURATED_AVATARS
+        ]
+        logger.info(f"  Using {len(portraits)} curated avatar portraits from GCS")
 
         if not portraits:
             logger.error("No portraits generated — cannot proceed with ai_avatar")
@@ -1768,21 +1616,26 @@ class VidGoPreGenerator:
             product_prompt = prod_data.get("prompt")
             product_prompt_zh = prod_data.get("prompt_zh")
 
-            # Generate product image from prompt once per product
-            if product_prompt and prod_id not in product_image_cache:
-                logger.info(f"  Generating product image from prompt: {prod_data['name']}")
+            # Use the frozen curated product image (no T2I step — deterministic input).
+            # These PNGs were generated once, reviewed by a human, and uploaded to GCS
+            # so every pregen run produces the same product.
+            fixed_url = prod_data.get("url")
+            if fixed_url:
+                product_image_cache[prod_id] = fixed_url
+            elif product_prompt and prod_id not in product_image_cache:
+                logger.warning(
+                    f"  No fixed URL for {prod_data['name']}, falling back to T2I (non-deterministic)"
+                )
                 t2i_product = await self.piapi.generate_image(
                     prompt=product_prompt,
                     width=1024,
                     height=1024
                 )
-
                 if not t2i_product.get("success"):
                     logger.warning(f"  Product T2I failed: {t2i_product.get('error')}, skipping product...")
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["product_scene"]["failed"] += 1
                     continue
-
                 product_image_cache[prod_id] = t2i_product.get("image_url")
 
             for scene_id, scene_data in scenes.items():
@@ -2256,24 +2109,28 @@ class VidGoPreGenerator:
                     logger.info("All style topics reached per-topic limit, stopping effect generation.")
                     break
 
-            # Step 1: Generate source image with T2I
+            # Step 1: Resolve source image. If the entry has a frozen `url`
+            # (curated GCS asset), use it directly — no T2I. Otherwise fall
+            # back to T2I from prompt (legacy path, kept for safety).
             logger.info(f"[{count+1}] Source: {source['name']} ({source['name_zh']})")
-            logger.info(f"  Generating source image...")
-
-            t2i = await self.piapi.generate_image(
-                prompt=source["prompt"],
-                width=1024,
-                height=1024
-            )
-
-            if not t2i["success"]:
-                logger.error(f"  T2I Failed: {t2i.get('error')}")
-                self.stats["failed"] += 1
-                self.stats["by_tool"]["effect"]["failed"] += 1
-                continue
-
-            source_image_url = t2i["image_url"]
-            logger.info(f"  Source image: {source_image_url}")
+            fixed_url = source.get("url")
+            if fixed_url:
+                source_image_url = fixed_url
+                logger.info(f"  Using frozen source: {source_image_url}")
+            else:
+                logger.info(f"  Generating source image via T2I (no fixed url)...")
+                t2i = await self.piapi.generate_image(
+                    prompt=source.get("prompt", ""),
+                    width=1024,
+                    height=1024,
+                )
+                if not t2i["success"]:
+                    logger.error(f"  T2I Failed: {t2i.get('error')}")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["effect"]["failed"] += 1
+                    continue
+                source_image_url = t2i["image_url"]
+                logger.info(f"  Source image: {source_image_url}")
 
             # Step 2: Apply each style via I2I
             for style_id, style_data in styles.items():
@@ -2313,16 +2170,18 @@ class VidGoPreGenerator:
 
                 local_entry = {
                     "topic": style_id,
-                    "prompt": f"{source['prompt']} | Style: {style_data['prompt']}",
+                    "prompt": f"{source['name']} | Style: {style_data['prompt']}",
                     "prompt_zh": f"{source['name_zh']} | 風格: {style_data['name_zh']}",
                     "effect_prompt": style_data["prompt"],
-                    "input_image_url": source_image_url,  # Original product photo
-                    "result_image_url": result_url,  # Styled version (same product)
+                    "input_image_url": source_image_url,  # Frozen product photo
+                    "result_image_url": result_url,  # Styled version
+                    "hash_context": f"product={source.get('product_id', source['name'])}",
                     "input_params": {
+                        "product_id": source.get("product_id"),
                         "source_name": source["name"],
                         "style_id": style_id,
                         "style_name": style_data["name"],
-                        "strength": style_data.get("strength", 0.65)
+                        "strength": style_data.get("strength", 0.65),
                     },
                     "generation_steps": [
                         {"step": 1, "api": "piapi", "action": "t2i", "result_url": source_image_url},
@@ -3049,8 +2908,36 @@ Workflow for Virtual Try-On:
         action="store_true",
         help="Generate all tools"
     )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Delete existing Material rows for the target tool before generating (clean slate)"
+    )
 
     args = parser.parse_args()
+
+    if args.clean and args.tool and not args.dry_run:
+        tool_type_map = {
+            "ai_avatar": ToolType.AI_AVATAR,
+            "background_removal": ToolType.BACKGROUND_REMOVAL,
+            "room_redesign": ToolType.ROOM_REDESIGN,
+            "short_video": ToolType.SHORT_VIDEO,
+            "product_scene": ToolType.PRODUCT_SCENE,
+            "try_on": ToolType.TRY_ON,
+            "pattern_generate": ToolType.PATTERN_GENERATE,
+            "effect": ToolType.EFFECT,
+        }
+        target = tool_type_map.get(args.tool)
+        if target is None:
+            logger.error(f"--clean: unknown tool '{args.tool}'")
+        else:
+            async with AsyncSessionLocal() as session:
+                from sqlalchemy import delete as sa_delete
+                res = await session.execute(
+                    sa_delete(Material).where(Material.tool_type == target)
+                )
+                await session.commit()
+                logger.info(f"--clean: deleted {res.rowcount} existing {args.tool} rows")
 
     generator = VidGoPreGenerator()
     await generator.run(

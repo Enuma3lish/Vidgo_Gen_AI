@@ -13,4 +13,5 @@ from app.models.prompt_template import (
     GROUP_DISPLAY_NAMES, SUB_TOPIC_DISPLAY_NAMES
 )
 from app.models.social_account import SocialAccount
+from app.models.style_template import StyleTemplate
 from app.core.database import Base

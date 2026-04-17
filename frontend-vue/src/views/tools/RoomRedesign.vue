@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore } from '@/stores'
 import { useDemoMode } from '@/composables'
-import { interiorApi } from '@/api'
+import { interiorApi, effectsApi, demoApi } from '@/api'
 import type { DesignStyle, RoomType } from '@/api'
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
 import ThreeViewer from '@/components/tools/ThreeViewer.vue'
@@ -30,7 +30,19 @@ const styles = ref<DesignStyle[]>([])
 const roomTypes = ref<RoomType[]>([])
 
 // State
-const activeTab = ref<'redesign' | 'generate' | 'styleTransfer' | '3dModel'>('redesign')
+const activeTab = ref<'redesign' | 'generate' | 'styleTransfer' | '3dModel' | 'transform'>('redesign')
+// Tab list: subscriber-only tabs (generate, 3dModel, transform) are hidden for visitors
+// so they never see locked chrome or error toasts.
+const visibleTabs = computed(() => {
+  const all = [
+    { id: 'redesign' as const,      icon: '🔄', label: t('interior.tabs.redesign'),      subOnly: false },
+    { id: 'generate' as const,      icon: '✨', label: t('interior.tabs.generate'),      subOnly: true },
+    { id: 'styleTransfer' as const, icon: '🎨', label: t('interior.tabs.styleTransfer'), subOnly: false },
+    { id: 'transform' as const,     icon: '🪄', label: isZh.value ? 'AI 自由變換' : 'AI Transform', subOnly: true },
+    { id: '3dModel' as const,       icon: '🧊', label: isZh.value ? '3D 模型' : '3D Model', subOnly: true },
+  ]
+  return all.filter(tab => !(tab.subOnly && isDemoUser.value))
+})
 const uploadedImage = ref<string | undefined>(undefined)
 // True when a demo user clicked Generate but the selected tile isn't backed
 // by a real Material DB preset (db_empty fallback or missing preset id).
@@ -53,6 +65,10 @@ const modelUrl = ref<string | null>(null)
 const is3DProcessing = ref(false)
 const textureSize = ref(1024)
 const meshSimplify = ref(0.95)
+
+// AI Transform state (merged from ImageEffects)
+const transformPrompt = ref('')
+const transformStrength = ref(0.75)
 
 // Style icons mapping
 const styleIcons: Record<string, string> = {
@@ -495,6 +511,54 @@ async function handle3DGenerate() {
   }
 }
 
+async function handleTransform() {
+  if (isDemoUser.value) {
+    uiStore.showError(isZh.value ? '請訂閱以使用 AI 自由變換' : 'Please subscribe to use AI Transform')
+    return
+  }
+  if (!uploadedImage.value) {
+    uiStore.showError(isZh.value ? '請先上傳圖片' : 'Please upload an image first')
+    return
+  }
+  if (!transformPrompt.value.trim()) {
+    uiStore.showError(isZh.value ? '請輸入變換描述' : 'Please enter a transform description')
+    return
+  }
+
+  isProcessing.value = true
+  try {
+    let transformUrl = uploadedImage.value
+    if (uploadedImage.value.startsWith('data:')) {
+      const blob = await fetch(uploadedImage.value).then(r => r.blob())
+      const uploaded = await demoApi.uploadImage(blob as File)
+      transformUrl = uploaded.url
+    }
+
+    const response = await effectsApi.imageTransform({
+      image_url: transformUrl,
+      prompt: transformPrompt.value,
+      strength: transformStrength.value
+    })
+
+    if (response.success && response.result_url) {
+      resultImage.value = response.result_url
+      uiStore.showSuccess(isZh.value ? '變換成功' : 'Transform applied successfully')
+    } else {
+      uiStore.showError(isZh.value ? '變換失敗' : 'Transform failed')
+    }
+  } catch (error: any) {
+    console.error('Image transform failed:', error)
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'object' && detail?.error === 'insufficient_credits') {
+      uiStore.showError(isZh.value ? '點數不足，請儲值' : 'Insufficient credits')
+    } else {
+      uiStore.showError(isZh.value ? '處理過程中發生錯誤' : 'An error occurred while processing')
+    }
+  } finally {
+    isProcessing.value = false
+  }
+}
+
 function handleSubmit() {
   switch (activeTab.value) {
     case 'redesign':
@@ -505,6 +569,9 @@ function handleSubmit() {
       break
     case 'styleTransfer':
       handleStyleTransfer()
+      break
+    case 'transform':
+      handleTransform()
       break
     case '3dModel':
       handle3DGenerate()
@@ -551,16 +618,8 @@ watch(selectedRoomType, (newType) => {
   }
 })
 
-// Watch tab changes for demo users
-watch(activeTab, (newTab) => {
-  if (isDemoUser.value && (newTab === 'generate' || newTab === '3dModel')) {
-    const msg = newTab === '3dModel'
-      ? (isZh.value ? '請訂閱以使用 3D 模型生成' : 'Subscribe to use 3D model generation')
-      : (isZh.value ? '請訂閱以使用文字生成功能' : 'Please subscribe to use text generation')
-    uiStore.showInfo(msg)
-    activeTab.value = 'redesign'
-  }
-})
+// Demo-user tab guarding is now handled by `visibleTabs` above — locked
+// tabs are hidden entirely, so there's no need for a watch + error toast.
 </script>
 
 <template>
@@ -600,29 +659,20 @@ watch(activeTab, (newTab) => {
         </div>
       </div>
 
-      <!-- Tab Selection -->
+      <!-- Tab Selection (subscriber-only tabs are hidden for visitors) -->
       <div class="flex justify-center mb-8">
         <div class="inline-flex rounded-xl p-1" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
           <button
-            v-for="tab in [
-              { id: 'redesign', icon: '🔄', label: t('interior.tabs.redesign') },
-              { id: 'generate', icon: '✨', label: t('interior.tabs.generate'), disabled: isDemoUser },
-              { id: 'styleTransfer', icon: '🎨', label: t('interior.tabs.styleTransfer') },
-              { id: '3dModel', icon: '🧊', label: isZh ? '3D 模型' : '3D Model', disabled: isDemoUser }
-            ]"
+            v-for="tab in visibleTabs"
             :key="tab.id"
-            @click="!tab.disabled && (activeTab = tab.id as any)"
+            @click="activeTab = tab.id"
             class="px-6 py-3 rounded-lg font-medium transition-all"
-            :class="[
-              activeTab === tab.id
-                ? 'bg-primary-500 text-dark-50'
-                : 'text-dark-300 hover:text-dark-50',
-              tab.disabled ? 'opacity-50 cursor-not-allowed' : ''
-            ]"
+            :class="activeTab === tab.id
+              ? 'bg-primary-500 text-dark-50'
+              : 'text-dark-300 hover:text-dark-50'"
           >
             <span class="mr-2">{{ tab.icon }}</span>
             {{ tab.label }}
-            <span v-if="tab.disabled" class="ml-1 text-xs">({{ isZh ? '訂閱' : 'Pro' }})</span>
           </button>
         </div>
       </div>
@@ -636,7 +686,7 @@ watch(activeTab, (newTab) => {
               <span>🏠</span>
               {{ t('interior.roomType') }}
             </h3>
-            <div class="grid grid-cols-4 gap-2">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 v-for="room in roomTypes"
                 :key="room.id"
@@ -784,6 +834,50 @@ watch(activeTab, (newTab) => {
             </div>
           </div>
 
+          <!-- AI Transform Settings (merged from ImageEffects) -->
+          <div v-if="activeTab === 'transform' && !isDemoUser" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
+              <span>🪄</span>
+              {{ isZh ? 'AI 自由變換設定' : 'AI Transform Settings' }}
+            </h3>
+            <div class="space-y-4">
+              <div>
+                <label class="text-sm font-medium text-dark-200 mb-1 block">
+                  {{ isZh ? '變換描述' : 'Transform Description' }}
+                </label>
+                <textarea
+                  v-model="transformPrompt"
+                  rows="3"
+                  class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500"
+                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
+                  :placeholder="isZh ? '描述您想要的變換效果，例如：改為北歐風格、添加暖色調燈光...' : 'Describe the transformation, e.g.: change to Scandinavian style, add warm lighting...'"
+                ></textarea>
+              </div>
+
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <label class="text-sm font-medium text-dark-200">
+                    {{ isZh ? '變換強度' : 'Transform Strength' }}
+                  </label>
+                  <span class="text-xs text-dark-300">{{ Math.round(transformStrength * 100) }}%</span>
+                </div>
+                <input
+                  v-model.number="transformStrength"
+                  type="range"
+                  min="0.1"
+                  max="1"
+                  step="0.05"
+                  class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                  style="background: #1e1e32;"
+                />
+                <div class="flex justify-between text-xs text-dark-400 mt-1">
+                  <span>{{ isZh ? '微調' : 'Subtle' }}</span>
+                  <span>{{ isZh ? '大幅變換' : 'Strong' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Generate Button -->
           <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <button
@@ -803,6 +897,7 @@ watch(activeTab, (newTab) => {
                 {{ activeTab === 'redesign' ? t('interior.actions.redesign') :
                    activeTab === 'generate' ? t('interior.actions.generate') :
                    activeTab === '3dModel' ? (isZh ? '生成 3D 模型' : 'Generate 3D Model') :
+                   activeTab === 'transform' ? (isZh ? 'AI 變換' : 'AI Transform') :
                    t('interior.actions.applyStyle') }}
               </span>
             </button>

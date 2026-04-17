@@ -439,6 +439,90 @@ Note: This download link expires in 1 hour.
 
         return await self.send_email(to_email, subject, html_content, text_content)
 
+    async def send_refund_notification(
+        self,
+        to_email: str,
+        order_number: str,
+        refund_amount: float,
+        currency: str = "TWD",
+        requires_manual: bool = False,
+        username: Optional[str] = None,
+    ) -> bool:
+        """Send refund notification email."""
+        subject = f"VidGo Refund Confirmation — Order {order_number}"
+
+        greeting = f"Hi {username}," if username else "Hi,"
+
+        if requires_manual:
+            processing_note = "Your refund is being processed manually and will be completed within <strong>3-5 business days</strong>."
+        else:
+            processing_note = "Your refund has been processed and should appear in your account within <strong>5-10 business days</strong>."
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }}
+                .refund-box {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; }}
+                .refund-row {{ display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }}
+                .refund-amount {{ font-size: 24px; font-weight: bold; color: #10b981; }}
+                .footer {{ text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Refund Confirmation</h1>
+                </div>
+                <div class="content">
+                    <p>{greeting}</p>
+                    <p>Your subscription refund has been confirmed.</p>
+
+                    <div class="refund-box">
+                        <div class="refund-row">
+                            <span>Order Number</span>
+                            <span><strong>{order_number}</strong></span>
+                        </div>
+                        <div class="refund-row">
+                            <span>Refund Amount</span>
+                            <span class="refund-amount">{currency} {refund_amount:,.0f}</span>
+                        </div>
+                    </div>
+
+                    <p>{processing_note}</p>
+                    <p>Your subscription has been cancelled and all associated credits have been removed from your account.</p>
+                    <p>If you have any questions, please contact our support team.</p>
+                </div>
+                <div class="footer">
+                    <p>&copy; 2024 VidGo. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""{greeting}
+
+Your subscription refund has been confirmed.
+
+Order Number: {order_number}
+Refund Amount: {currency} {refund_amount:,.0f}
+
+{"Your refund is being processed manually and will be completed within 3-5 business days." if requires_manual else "Your refund has been processed and should appear in your account within 5-10 business days."}
+
+Your subscription has been cancelled and all associated credits have been removed from your account.
+
+If you have any questions, please contact our support team.
+
+© 2024 VidGo. All rights reserved.
+        """
+
+        return await self.send_email(to_email, subject, html_content, text_content)
+
 
 # Singleton instance
 email_service = EmailService()

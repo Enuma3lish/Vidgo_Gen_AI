@@ -34,7 +34,7 @@ VIDGO_STYLES = [
         "name_zh": "動漫風格",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2022/08/09/16/19/anime-7375400_640.jpg",
-        "prompt": "anime style for social media and product ads"
+        "prompt": "modern Japanese anime illustration style, clean bold outlines, cel-shaded flat color blocks with gradient shading, large expressive eyes, vibrant saturated color palette, sharp linework, anime screencap aesthetic, maintain original subject composition and proportions"
     },
     {
         "id": "ghibli",
@@ -42,7 +42,7 @@ VIDGO_STYLES = [
         "name_zh": "吉卜力風格",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2020/06/14/03/55/anime-5296573_640.jpg",
-        "prompt": "studio ghibli anime style for menu and cafe branding, hayao miyazaki"
+        "prompt": "Studio Ghibli hand-painted watercolor animation style, soft pastel color palette with warm undertones, detailed lush background scenery, gentle diffused sunlight, whimsical atmospheric clouds, painterly texture with visible brushstrokes, Hayao Miyazaki film aesthetic, dreamy nostalgic mood, maintain original subject and layout"
     },
     {
         "id": "cartoon",
@@ -50,7 +50,7 @@ VIDGO_STYLES = [
         "name_zh": "卡通風格",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2017/07/03/20/17/colorful-2468874_640.jpg",
-        "prompt": "cartoon pixar 3d style for product ads and flyers"
+        "prompt": "Pixar-Disney 3D cartoon render style, smooth subsurface scattering on skin, round exaggerated proportions with appealing character design, bright cheerful studio lighting, soft ambient occlusion shadows, candy-colored saturated palette, plastic-like material sheen, playful family-friendly aesthetic, maintain original composition"
     },
     {
         "id": "clay",
@@ -58,7 +58,7 @@ VIDGO_STYLES = [
         "name_zh": "黏土動畫",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2018/03/07/17/36/clay-3206587_640.jpg",
-        "prompt": "claymation stop motion clay style for product and food ads"
+        "prompt": "claymation stop-motion style, handcrafted polymer clay texture with visible fingerprints and tool marks, matte unglazed surface, miniature set with tilt-shift shallow depth of field, soft diffused top lighting casting gentle shadows, slightly imperfect charming handmade quality, warm earthy clay tones, maintain original subject and scene"
     },
     {
         "id": "cute_anime",
@@ -66,7 +66,7 @@ VIDGO_STYLES = [
         "name_zh": "可愛動漫",
         "category": "artistic",
         "preview_url": "https://cdn.pixabay.com/photo/2022/12/01/15/38/ai-generated-7629380_640.jpg",
-        "prompt": "cute kawaii anime style for social media and shop ads"
+        "prompt": "kawaii chibi anime style, super-deformed adorable proportions with oversized head, sparkly large round eyes with star highlights, pastel pink and lavender color palette, soft gradient shading, small decorative hearts and stars scattered, cute sticker-like aesthetic, maintain original subject identity"
     },
     {
         "id": "oil_painting",
@@ -74,7 +74,7 @@ VIDGO_STYLES = [
         "name_zh": "油畫風格",
         "category": "artistic",
         "preview_url": "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=300&fit=crop",
-        "prompt": "oil painting artistic style for restaurant and food marketing"
+        "prompt": "classical oil painting on canvas, visible impasto brushstrokes with thick textured paint, rich warm chiaroscuro lighting reminiscent of Rembrandt, deep saturated pigment colors, subtle craquelure canvas texture, dramatic light-to-shadow transition, gallery-worthy fine art aesthetic, maintain original subject and composition"
     },
     {
         "id": "watercolor",
@@ -82,7 +82,7 @@ VIDGO_STYLES = [
         "name_zh": "水彩風格",
         "category": "artistic",
         "preview_url": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=400&h=300&fit=crop",
-        "prompt": "watercolor soft style for menu design and product ads"
+        "prompt": "transparent watercolor painting on cold-press textured paper, visible wet-on-wet color bleeds and soft diffusion edges, white paper showing through as highlights, delicate layered washes with granulation in pigment, subtle splatter and drip accents, pastel and muted tones, elegant botanical illustration quality, maintain original subject"
     },
     # === Modern styles ===
     {
@@ -91,7 +91,7 @@ VIDGO_STYLES = [
         "name_zh": "賽博朋克",
         "category": "modern",
         "preview_url": "https://images.unsplash.com/photo-1515705576963-95cad62945b6?w=400&h=300&fit=crop",
-        "prompt": "cyberpunk neon futuristic style for tech product ads"
+        "prompt": "cyberpunk neon noir aesthetic, rain-slicked surfaces with vivid pink and cyan neon reflections, holographic glitch overlay effects, dark moody atmosphere with high contrast, chromatic aberration on edges, futuristic tech UI elements faintly visible, Blade Runner inspired night city mood, maintain original subject and composition"
     },
     {
         "id": "realistic",
@@ -99,7 +99,7 @@ VIDGO_STYLES = [
         "name_zh": "寫實風格",
         "category": "modern",
         "preview_url": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=300&fit=crop",
-        "prompt": "realistic photorealistic style for product and food ads"
+        "prompt": "ultra photorealistic enhanced photography, razor-sharp micro detail on textures and surfaces, professional color grading with lifted shadows and rolled-off highlights, subtle film grain, natural skin texture preservation, studio-quality dynamic range, shot on Hasselblad medium format with 80mm lens, commercial advertising quality, maintain exact original composition"
     },
     # === Professional styles ===
     {
@@ -108,7 +108,7 @@ VIDGO_STYLES = [
         "name_zh": "電影質感",
         "category": "professional",
         "preview_url": "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=300&fit=crop",
-        "prompt": "cinematic movie style for brand and product video ads"
+        "prompt": "cinematic film still aesthetic, anamorphic 2.39:1 widescreen framing with horizontal lens flare streaks, teal and orange color grading, shallow depth of field with creamy oval bokeh, dramatic volumetric light rays, subtle film grain and halation on highlights, shot on Arri Alexa with Cooke anamorphic lens, Hollywood blockbuster visual language, maintain original subject"
     },
     {
         "id": "anime_classic",
@@ -116,7 +116,7 @@ VIDGO_STYLES = [
         "name_zh": "經典動漫",
         "category": "professional",
         "preview_url": "https://images.unsplash.com/photo-1613376023733-0a73315d9b06?w=400&h=300&fit=crop",
-        "prompt": "classic anime style for menu and product marketing"
+        "prompt": "1990s classic anime cel animation style, hand-drawn ink outlines with slight line weight variation, retro limited color palette with muted warm tones, visible cel-paint texture, subtle VHS scanline artifact overlay, nostalgic Sailor Moon and Dragon Ball era aesthetic, warm sunset color grading, maintain original subject and composition"
     },
 ]
 

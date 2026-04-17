@@ -1,0 +1,171 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Inspiration Gallery" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "0 Credits" [ref=e25] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e26]
+          - text: 0 Credits
+        - link "Dashboard" [ref=e28] [cursor=pointer]:
+          - /url: /dashboard
+        - button "Logout" [ref=e29] [cursor=pointer]
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - heading "Image Style Effects" [level=1] [ref=e34]
+        - paragraph [ref=e35]: Transform photos into artistic styles or use AI to freely describe transformations.
+      - generic [ref=e36]:
+        - button "Style Presets" [ref=e37] [cursor=pointer]
+        - button "AI Transform" [ref=e38] [cursor=pointer]
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - heading "Select Image" [level=3] [ref=e41]
+          - generic [ref=e44] [cursor=pointer]:
+            - img "Preview" [ref=e45]
+            - generic [ref=e47]: Change Image
+          - img "Input" [ref=e49]
+        - generic [ref=e50]:
+          - heading "Choose Style" [level=3] [ref=e51]
+          - generic [ref=e52]:
+            - button "VidGo Anime VidGo Anime" [ref=e53] [cursor=pointer]:
+              - img "VidGo Anime" [ref=e54]
+              - paragraph [ref=e56]: VidGo Anime
+            - button "VidGo Ghibli VidGo Ghibli" [ref=e57] [cursor=pointer]:
+              - img "VidGo Ghibli" [ref=e58]
+              - paragraph [ref=e60]: VidGo Ghibli
+            - button "VidGo Cartoon VidGo Cartoon" [ref=e61] [cursor=pointer]:
+              - img "VidGo Cartoon" [ref=e62]
+              - paragraph [ref=e64]: VidGo Cartoon
+            - button "VidGo Clay VidGo Clay" [ref=e65] [cursor=pointer]:
+              - img "VidGo Clay" [ref=e66]
+              - paragraph [ref=e68]: VidGo Clay
+            - button "VidGo Cute Anime VidGo Cute Anime" [ref=e69] [cursor=pointer]:
+              - img "VidGo Cute Anime" [ref=e70]
+              - paragraph [ref=e72]: VidGo Cute Anime
+            - button "VidGo Oil Painting VidGo Oil Painting" [ref=e73] [cursor=pointer]:
+              - img "VidGo Oil Painting" [ref=e74]
+              - paragraph [ref=e76]: VidGo Oil Painting
+            - button "VidGo Watercolor VidGo Watercolor" [ref=e77] [cursor=pointer]:
+              - img "VidGo Watercolor" [ref=e78]
+              - paragraph [ref=e80]: VidGo Watercolor
+            - button "VidGo Cyberpunk VidGo Cyberpunk" [ref=e81] [cursor=pointer]:
+              - img "VidGo Cyberpunk" [ref=e82]
+              - paragraph [ref=e84]: VidGo Cyberpunk
+            - button "VidGo Realistic VidGo Realistic" [ref=e85] [cursor=pointer]:
+              - img "VidGo Realistic" [ref=e86]
+              - paragraph [ref=e88]: VidGo Realistic
+            - button "VidGo Cinematic VidGo Cinematic" [ref=e89] [cursor=pointer]:
+              - img "VidGo Cinematic" [ref=e90]
+              - paragraph [ref=e92]: VidGo Cinematic
+            - button "VidGo Anime Classic VidGo Anime Classic" [ref=e93] [cursor=pointer]:
+              - img "VidGo Anime Classic" [ref=e94]
+              - paragraph [ref=e96]: VidGo Anime Classic
+          - generic [ref=e97]:
+            - button "Apply Style" [ref=e98] [cursor=pointer]
+            - paragraph [ref=e99]: Demo mode uses pre-generated results
+        - generic [ref=e100]:
+          - heading "Result" [level=3] [ref=e101]
+          - generic [ref=e102]: Your result will appear here
+  - contentinfo [ref=e103]:
+    - generic [ref=e104]:
+      - generic [ref=e105]:
+        - generic [ref=e106]:
+          - link "V VidGo AI" [ref=e107] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e108]: V
+            - generic [ref=e109]: VidGo AI
+          - paragraph [ref=e110]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e111]:
+            - link [ref=e112] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e113]
+            - link [ref=e115] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e116]
+        - generic [ref=e118]:
+          - heading "Fashion AI" [level=4] [ref=e119]
+          - list [ref=e120]:
+            - listitem [ref=e121]:
+              - link "Virtual Try On" [ref=e122] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e123]:
+              - link "Fashion Reels" [ref=e124] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e125]:
+              - link "Text to Video" [ref=e126] [cursor=pointer]:
+                - /url: /tools/text-to-video
+            - listitem [ref=e127]:
+              - link "Product Avatars" [ref=e128] [cursor=pointer]:
+                - /url: /tools/avatar
+        - generic [ref=e129]:
+          - heading "E-commerce AI" [level=4] [ref=e130]
+          - list [ref=e131]:
+            - listitem [ref=e132]:
+              - link "Product AnyShoot" [ref=e133] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e134]:
+              - link "Remove Background" [ref=e135] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e136]:
+              - link "HD Upscale" [ref=e137] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e138]:
+              - link "Style Clone" [ref=e139] [cursor=pointer]:
+                - /url: /tools/effects
+            - listitem [ref=e140]:
+              - link "Room Redesign" [ref=e141] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e142]:
+          - heading "Company" [level=4] [ref=e143]
+          - list [ref=e144]:
+            - listitem [ref=e145]:
+              - link "About Us" [ref=e146] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e147]:
+              - link "Pricing" [ref=e148] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e149]:
+              - link "Contact Us" [ref=e150] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e151]:
+              - link "Blog" [ref=e152] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e153]:
+              - link "Affiliate Program" [ref=e154] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e155]:
+          - heading "Legal" [level=4] [ref=e156]
+          - list [ref=e157]:
+            - listitem [ref=e158]:
+              - link "Terms of Service" [ref=e159] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e160]:
+              - link "Privacy Policy" [ref=e161] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e162]:
+              - link "Cookie Policy" [ref=e163] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e164]:
+              - link "Refund Policy" [ref=e165] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e166]:
+        - paragraph [ref=e167]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e169]: Secure Payment

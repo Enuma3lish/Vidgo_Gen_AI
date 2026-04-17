@@ -338,7 +338,10 @@ export const adminApi = {
 export function createAdminWebSocket(onMessage: (data: any) => void): WebSocket {
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsHost = import.meta.env.VITE_API_URL?.replace(/^https?:\/\//, '') || window.location.host
-  const ws = new WebSocket(`${wsProtocol}//${wsHost}/api/v1/admin/ws/realtime`)
+  // Backend validates this token + superuser flag before accepting the socket.
+  const token = localStorage.getItem('access_token') || ''
+  const url = `${wsProtocol}//${wsHost}/api/v1/admin/ws/realtime?token=${encodeURIComponent(token)}`
+  const ws = new WebSocket(url)
 
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data)

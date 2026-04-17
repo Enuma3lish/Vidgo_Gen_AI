@@ -40,6 +40,11 @@ CUSTOM_DOMAIN_BACKEND="${CUSTOM_DOMAIN_BACKEND:-api.vidgo.co}"
 BACKEND_SA="${BACKEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/vidgo-images/vidgo-backend:latest"
 JOB_NAME="vidgo-pregen"
+APP_NAME="${APP_NAME:-vidgo}"
+SQL_INSTANCE="${SQL_INSTANCE:-prod-db}"
+CONNECTOR_NAME="${CONNECTOR_NAME:-${APP_NAME}-connector}"
+SQL_CONNECTION="${PROJECT_ID}:${REGION}:${SQL_INSTANCE}"
+CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${REGION}/connectors/${CONNECTOR_NAME}"
 
 # Canonical tool names accepted by main_pregenerate.py --tool <name>
 ALL_TOOLS=(
@@ -74,6 +79,7 @@ resolve_tool_alias() {
 TOOLS_TO_RUN=()
 AUTO_YES=false
 LIMIT=""
+CLEAN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -88,6 +94,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --yes|-y)  AUTO_YES=true; shift ;;
     --limit)   LIMIT="$2"; shift 2 ;;
+    --clean)   CLEAN=true; shift ;;
     --list)
       echo "Canonical tool names:"
       printf '  %s\n' "${ALL_TOOLS[@]}"
@@ -181,6 +188,8 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --region="${REGION}" \
   --project="${PROJECT_ID}" \
   --service-account="${BACKEND_SA}" \
+  --vpc-connector="${CONNECTOR_PATH}" \
+  --set-cloudsql-instances="${SQL_CONNECTION}" \
   --set-secrets="${SECRETS}" \
   --set-env-vars="${ENV_VARS}" \
   --task-timeout=3600 \
@@ -201,6 +210,7 @@ for tool in "${TOOLS_TO_RUN[@]}"; do
 
   cmd_args="python -m scripts.main_pregenerate --tool ${tool}"
   [[ -n "${LIMIT}" ]] && cmd_args="${cmd_args} --limit ${LIMIT}"
+  [[ "${CLEAN}" == "true" ]] && cmd_args="${cmd_args} --clean"
 
   if gcloud run jobs execute "${JOB_NAME}" \
         --region="${REGION}" \

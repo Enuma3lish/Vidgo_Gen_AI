@@ -76,37 +76,47 @@ class DemoCacheService:
         self,
         tool_type: str,
         topic: Optional[str] = None,
+        product_id: Optional[str] = None,
+        language: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Get a demo result — from cache if available, otherwise generate on-demand.
 
+        For product_scene, `product_id` narrows lookup to a specific product.
+        For ai_avatar, `product_id` = avatar_id and `language` picks the script
+        language (zh-TW or en).
+
         Returns dict: {result_url, input_image_url, prompt, tool_type, topic}
         """
-        # 1. Redis cache
-        if self.redis:
+        # 1. Material DB (filtered by product_id if provided). Skip Redis cache when
+        # product_id is set, since the cache key only includes topic.
+        demo = await self._get_from_db(
+            tool_type, topic, product_id=product_id, language=language
+        )
+        if demo:
+            if self.redis and not product_id:
+                await self._warm_cache(tool_type, topic)
+            return demo
+
+        if self.redis and not product_id and not language:
             cached = await self._get_from_cache(tool_type, topic)
             if cached:
                 return cached
 
-        # 2. Material DB
-        demo = await self._get_from_db(tool_type, topic)
-        if demo:
-            if self.redis:
-                await self._warm_cache(tool_type, topic)
-            return demo
-
         # 3. On-demand generation
         logger.info(
-            "[DemoCache] Cache miss for %s:%s — attempting on-demand generation.",
-            tool_type, topic,
+            "[DemoCache] Cache miss for %s:%s product=%s lang=%s — on-demand gen.",
+            tool_type, topic, product_id, language,
         )
-        generated = await self._generate_on_demand(tool_type, topic)
+        generated = await self._generate_on_demand(
+            tool_type, topic, product_id=product_id, language=language
+        )
         if generated:
             return generated
 
         logger.warning(
-            "[DemoCache] On-demand generation failed for %s:%s.",
-            tool_type, topic,
+            "[DemoCache] On-demand generation failed for %s:%s product=%s.",
+            tool_type, topic, product_id,
         )
         return None
 
@@ -180,6 +190,8 @@ class DemoCacheService:
         self,
         tool_type: str,
         topic: Optional[str] = None,
+        product_id: Optional[str] = None,
+        language: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Generate a demo example on-the-fly using provider_router.
@@ -201,11 +213,11 @@ class DemoCacheService:
 
         try:
             if tool_type in ("effect", ToolType.EFFECT.value if hasattr(ToolType.EFFECT, 'value') else "effect"):
-                result = await self._generate_effect(provider, TaskType, topic)
+                result = await self._generate_effect(provider, TaskType, topic, product_id)
             elif tool_type in ("background_removal", "BACKGROUND_REMOVAL"):
                 result = await self._generate_background_removal(provider, TaskType, topic)
             elif tool_type in ("product_scene", "PRODUCT_SCENE"):
-                result = await self._generate_product_scene(provider, TaskType, topic)
+                result = await self._generate_product_scene(provider, TaskType, topic, product_id)
             elif tool_type in ("room_redesign", "ROOM_REDESIGN"):
                 result = await self._generate_room_redesign(provider, TaskType, topic)
             elif tool_type in ("short_video", "SHORT_VIDEO"):
@@ -213,9 +225,11 @@ class DemoCacheService:
             elif tool_type in ("pattern_generate", "PATTERN_GENERATE"):
                 result = await self._generate_pattern(provider, TaskType, topic)
             elif tool_type in ("try_on", "TRY_ON"):
-                result = await self._generate_try_on(provider, TaskType, topic)
+                result = await self._generate_try_on(provider, TaskType, topic, product_id)
             elif tool_type in ("ai_avatar", "AI_AVATAR"):
-                result = await self._generate_ai_avatar(provider, TaskType, topic)
+                result = await self._generate_ai_avatar(
+                    provider, TaskType, topic, product_id, language
+                )
             else:
                 logger.info(f"[DemoCache] No on-demand generator for tool_type={tool_type}")
                 return None
@@ -247,48 +261,46 @@ class DemoCacheService:
 
         return None
 
-    async def _generate_effect(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
-        """Generate an effect (style transfer) example on-demand."""
+    async def _generate_effect(
+        self,
+        provider,
+        TaskType,
+        topic: Optional[str],
+        product_id: Optional[str] = None,
+    ) -> Optional[Dict]:
+        """Generate an effect (style transfer) example on-demand.
+
+        Source images are the 8 frozen product photos (gs://.../static/products/)
+        — no more T2I-generated source each run. Only the I2I style application
+        is non-deterministic. `topic` = style_id, `product_id` = source product.
+        """
         from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 
-        # Pick a style based on topic or random
+        # Resolve style
         style_id = topic
         if not style_id or style_id == "_all":
-            style_ids = [s["id"] for s in VIDGO_STYLES]
-            style_id = random.choice(style_ids)
-
+            style_id = random.choice([s["id"] for s in VIDGO_STYLES])
         style = get_style_by_id(style_id)
         if not style:
             logger.warning(f"[DemoCache] Unknown style: {style_id}")
             return None
-
         style_prompt = get_style_prompt(style_id)
 
-        # Step 1: Generate source image (a product photo)
-        source_prompts = [
-            "A cup of bubble milk tea with tapioca pearls, appetizing food photography, studio lighting, white background",
-            "Crispy fried chicken cutlet on a plate, Taiwanese street food photography, studio lighting",
-            "Glass skincare serum bottle with dropper, clean cosmetics product photo, white background",
-            "Canvas tote bag with minimalist design, clean studio product photo, white background",
-            "Fresh roasted coffee beans in kraft paper bag, artisan coffee product photo, white background",
-        ]
-        source_prompt = random.choice(source_prompts)
+        # Frozen source photos (reuse the curated product library)
+        source_urls = {
+            "product-1": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-1.png",
+            "product-2": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-2.png",
+            "product-3": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-3.png",
+            "product-4": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-4.png",
+            "product-5": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-5.png",
+            "product-6": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-6.png",
+            "product-7": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-7.png",
+            "product-8": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-8.png",
+        }
+        resolved_pid = product_id if product_id in source_urls else random.choice(list(source_urls.keys()))
+        source_url = source_urls[resolved_pid]
 
-        logger.info(f"[DemoCache] Effect: generating source image...")
-        t2i_result = await provider.route(
-            TaskType.T2I,
-            {"prompt": source_prompt, "width": 1024, "height": 1024},
-        )
-
-        if not t2i_result.get("success"):
-            return {"success": False, "error": f"T2I failed: {t2i_result}"}
-
-        source_url = t2i_result.get("output", {}).get("image_url")
-        if not source_url:
-            return {"success": False, "error": "No image URL from T2I"}
-
-        # Step 2: Apply style via I2I
-        logger.info(f"[DemoCache] Effect: applying style {style_id}...")
+        logger.info(f"[DemoCache] Effect: {resolved_pid} -> style={style_id}")
         i2i_result = await provider.route(
             TaskType.I2I,
             {
@@ -308,11 +320,14 @@ class DemoCacheService:
         return {
             "success": True,
             "topic": style_id,
-            "prompt": f"{source_prompt} | Style: {style_prompt}",
+            "prompt": f"{resolved_pid} | Style: {style_prompt}",
             "effect_prompt": style_prompt,
             "input_image_url": source_url,
             "result_image_url": result_url,
-            "input_params": {"style_id": style_id, "source_prompt": source_prompt},
+            "input_params": {
+                "style_id": style_id,
+                "product_id": resolved_pid,
+            },
         }
 
     async def _generate_background_removal(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
@@ -363,9 +378,44 @@ class DemoCacheService:
             "result_image_url": result_url,
         }
 
-    async def _generate_product_scene(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
-        """Generate a product scene example on-demand."""
-        product_prompt = "Studio product photo of a clear cup of bubble milk tea with tapioca pearls, centered, clean white background, 8K"
+    async def _generate_product_scene(
+        self,
+        provider,
+        TaskType,
+        topic: Optional[str],
+        product_id: Optional[str] = None,
+    ) -> Optional[Dict]:
+        """Generate a product scene example on-demand for the given (product_id, scene).
+
+        Uses frozen, human-reviewed product photos as inputs (no T2I product step)
+        so every on-demand run produces the same product image for the same id.
+        """
+        # Fixed curated product URLs — must stay in sync with
+        # scripts/main_pregenerate.py PRODUCT_SCENE_MAPPING and the GCS assets at
+        # gs://vidgo-media-vidgo-ai/static/products/.
+        product_urls = {
+            "product-1": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-1.png",
+            "product-2": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-2.png",
+            "product-3": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-3.png",
+            "product-4": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-4.png",
+            "product-5": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-5.png",
+            "product-6": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-6.png",
+            "product-7": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-7.png",
+            "product-8": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-8.png",
+        }
+        product_labels = {
+            "product-1": "bubble milk tea",
+            "product-2": "canvas tote bag",
+            "product-3": "handmade silver jewelry set",
+            "product-4": "skincare serum glass bottle",
+            "product-5": "roasted coffee beans in kraft bag",
+            "product-6": "stainless steel espresso machine",
+            "product-7": "handmade soy candle in glass jar",
+            "product-8": "premium retail gift box set",
+        }
+        resolved_pid = product_id if product_id in product_urls else random.choice(list(product_urls.keys()))
+        product_url = product_urls[resolved_pid]
+        product_label = product_labels[resolved_pid]
 
         scene_prompts = {
             "studio": "professional studio lighting, solid color background, product photography",
@@ -374,38 +424,45 @@ class DemoCacheService:
             "minimal": "minimalist abstract background, soft shadows, clean composition",
             "lifestyle": "lifestyle home setting, cozy atmosphere, everyday context",
             "urban": "urban city backdrop, modern architecture, street style",
+            "seasonal": "seasonal autumn leaves background, warm golden colors, cozy seasonal mood",
+            "holiday": "festive holiday decoration background, warm holiday lights, celebration",
         }
-        scene_prompt = scene_prompts.get(topic, random.choice(list(scene_prompts.values())))
+        scene_prompt = scene_prompts.get(topic, scene_prompts["studio"])
 
-        # Step 1: Generate product
-        logger.info(f"[DemoCache] Product scene: generating product...")
-        t2i_result = await provider.route(TaskType.T2I, {"prompt": product_prompt, "width": 1024, "height": 1024})
-        if not t2i_result.get("success"):
-            return {"success": False}
-
-        product_url = t2i_result.get("output", {}).get("image_url")
-        if not product_url:
-            return {"success": False}
-
-        # Step 2: Remove background
-        logger.info(f"[DemoCache] Product scene: removing background...")
+        # Step 1: Remove background from the frozen product image
+        logger.info(f"[DemoCache] Product scene: removing background from {resolved_pid}...")
         rembg = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": product_url})
         if not rembg.get("success"):
+            logger.warning(f"[DemoCache] rembg failed: {rembg}")
             return {"success": False}
 
-        # Step 3: Generate scene (using I2I for simplicity, or just return the product in clean bg)
-        logger.info(f"[DemoCache] Product scene: generating scene...")
-        full_scene_prompt = f"{scene_prompt}, product placement, commercial photography, 8K"
-        scene_result = await provider.route(TaskType.T2I, {"prompt": full_scene_prompt, "width": 1024, "height": 1024})
+        # Step 2: Generate scene background via T2I (only non-deterministic step)
+        logger.info(f"[DemoCache] Product scene: generating {topic} scene...")
+        full_scene_prompt = f"{scene_prompt}, empty background for product placement, commercial photography, 8K"
+        scene_result = await provider.route(
+            TaskType.T2I, {"prompt": full_scene_prompt, "width": 1024, "height": 1024}
+        )
+        if not scene_result.get("success"):
+            logger.warning(f"[DemoCache] scene T2I failed: {scene_result}")
+            return {"success": False}
 
-        result_url = scene_result.get("output", {}).get("image_url") if scene_result.get("success") else product_url
+        # Compositing is handled by the live /tools/product-scene endpoint via PIL.
+        # Here we return the generated scene; tools.py or the pregen script will
+        # composite when writing to the Material DB.
+        result_url = scene_result.get("output", {}).get("image_url")
+        if not result_url:
+            return {"success": False}
 
         return {
             "success": True,
             "topic": topic or "studio",
-            "prompt": f"{product_prompt} | {scene_prompt}",
+            "prompt": f"{product_label} | {scene_prompt}",
             "input_image_url": product_url,
             "result_image_url": result_url,
+            "input_params": {
+                "product_id": resolved_pid,
+                "scene_type": topic or "studio",
+            },
         }
 
     async def _generate_room_redesign(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
@@ -507,49 +564,72 @@ class DemoCacheService:
             "result_image_url": result_url,
         }
 
-    async def _generate_try_on(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+    async def _generate_try_on(
+        self,
+        provider,
+        TaskType,
+        topic: Optional[str],
+        product_id: Optional[str] = None,
+    ) -> Optional[Dict]:
         """
-        Generate a virtual try-on example on-demand.
+        Generate a virtual try-on example on-demand using the frozen curated
+        model + garment photos from GCS. `topic` is the clothing category
+        (tshirt/dress/jacket/blouse/sweater/coat). `product_id` carries the
+        model_id (female-1..3 / male-1..3) — we overload the name since the
+        on-demand endpoint only exposes one extra param.
 
-        Try-on has NO MCP path (neither piapi_mcp nor pollo_mcp implements it).
-        We call PiAPI's REST `kling ai_try_on` directly via the same client the
-        live tools.py:/try-on endpoint uses, with a fixed apparel garment +
-        female-1 model. Result is persisted to Material DB so the next visitor
-        click on this preset hits the cache.
+        Try-on has NO MCP path — we call PiAPI's REST `kling ai_try_on`
+        directly via the same client the live /tools/try-on endpoint uses.
+        Result is persisted to Material DB so the next visitor click hits cache.
         """
         from scripts.services.piapi_client import PiAPIClient
         import os
 
-        # Hardcoded demo seed inputs that have proven Kling-acceptable
-        # (>=512px on both sides, real apparel images on a public CDN).
-        DEMO_SEEDS = [
-            {
-                "topic": "tshirt",
-                "prompt": "white cotton t-shirt try-on",
-                "model_url": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=768&fit=crop",
-                "garment_url": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=768&fit=crop",
-            },
-            {
-                "topic": "dress",
-                "prompt": "floral summer dress try-on",
-                "model_url": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=768&fit=crop",
-                "garment_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=768&fit=crop",
-            },
-            {
-                "topic": "blouse",
-                "prompt": "white blouse try-on",
-                "model_url": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=768&fit=crop",
-                "garment_url": "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=768&fit=crop",
-            },
-        ]
-        seed = next((s for s in DEMO_SEEDS if s["topic"] == topic), None) or random.choice(DEMO_SEEDS)
+        _GCS_TRYON = "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon"
 
-        logger.info(f"[DemoCache] Try-On: generating model={seed['model_url'][:60]}... garment={seed['garment_url'][:60]}...")
+        MODELS = {
+            "female-1": {"gender": "female", "url": f"{_GCS_TRYON}/models/female-1.png"},
+            "female-2": {"gender": "female", "url": f"{_GCS_TRYON}/models/female-2.png"},
+            "female-3": {"gender": "female", "url": f"{_GCS_TRYON}/models/female-3.png"},
+            "male-1":   {"gender": "male",   "url": f"{_GCS_TRYON}/models/male-1.png"},
+            "male-2":   {"gender": "male",   "url": f"{_GCS_TRYON}/models/male-2.png"},
+            "male-3":   {"gender": "male",   "url": f"{_GCS_TRYON}/models/male-3.png"},
+        }
+
+        GARMENTS = {
+            "tshirt": {"name": "plain white t-shirt", "url": f"{_GCS_TRYON}/garments/garment-tshirt.png", "female_only": False},
+            "dress":  {"name": "floral midi dress",   "url": f"{_GCS_TRYON}/garments/garment-dress.png",  "female_only": True},
+            "jacket": {"name": "denim jacket",        "url": f"{_GCS_TRYON}/garments/garment-jacket.png", "female_only": False},
+            "blouse": {"name": "silk blouse",         "url": f"{_GCS_TRYON}/garments/garment-blouse.png", "female_only": True},
+            "sweater":{"name": "knit sweater",        "url": f"{_GCS_TRYON}/garments/garment-sweater.png","female_only": False},
+            "coat":   {"name": "trench coat",         "url": f"{_GCS_TRYON}/garments/garment-coat.png",   "female_only": False},
+        }
+
+        # Resolve model_id (passed via product_id for API reuse)
+        model_id = product_id if product_id in MODELS else "female-1"
+        model = MODELS[model_id]
+
+        # Resolve garment from topic; fall back to tshirt if unknown
+        garment_key = topic if topic in GARMENTS else "tshirt"
+        garment = GARMENTS[garment_key]
+
+        # Enforce gender restriction
+        if garment["female_only"] and model["gender"] == "male":
+            logger.info(
+                f"[DemoCache] Try-On: {garment_key} is female-only, "
+                f"model={model_id} is male — falling back to tshirt"
+            )
+            garment_key = "tshirt"
+            garment = GARMENTS["tshirt"]
+
+        logger.info(
+            f"[DemoCache] Try-On: model={model_id} garment={garment_key}"
+        )
 
         piapi = PiAPIClient(api_key=os.getenv("PIAPI_KEY", ""))
         result = await piapi.virtual_try_on(
-            model_image_url=seed["model_url"],
-            garment_image_url=seed["garment_url"],
+            model_image_url=model["url"],
+            garment_image_url=garment["url"],
             save_locally=False,
         )
 
@@ -564,54 +644,80 @@ class DemoCacheService:
 
         return {
             "success": True,
-            "topic": seed["topic"],
-            "prompt": seed["prompt"],
-            "input_image_url": seed["garment_url"],
+            "topic": garment_key,
+            "prompt": f"{model['gender']} model trying on {garment['name']}",
+            "input_image_url": garment["url"],
             "result_image_url": result_url,
             "input_params": {
-                "model_url": seed["model_url"],
-                "garment_url": seed["garment_url"],
+                "model_id": model_id,
+                "model_url": model["url"],
+                "clothing_id": f"garment-{garment_key}",
+                "garment_url": garment["url"],
             },
         }
 
-    async def _generate_ai_avatar(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+    async def _generate_ai_avatar(
+        self,
+        provider,
+        TaskType,
+        topic: Optional[str],
+        product_id: Optional[str] = None,
+        language: Optional[str] = None,
+    ) -> Optional[Dict]:
         """
         Generate an AI avatar example on-demand.
 
-        Routes through provider_router with TaskType.AVATAR — primary is
-        piapi_mcp's `generate_video_kling`, fallback is REST piapi. Uses a
-        hardcoded portrait + short script seed per topic.
+        `product_id` → avatar_id (female-1..3 / male-1..3). Picks the correct
+        frozen portrait so the gender the visitor chose is honored.
+        `language`   → zh-TW or en. Picks the right script + TTS language.
+        `topic`      → script category (spokesperson / product_intro / etc.),
+                       optional — defaults to spokesperson.
         """
-        DEMO_SCRIPTS = [
-            {
-                "topic": "presenter",
-                "language": "en",
-                "image_url": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=768&fit=crop",
-                "script": "Welcome to VidGo AI. Let me show you what we can do.",
-            },
-            {
-                "topic": "teacher",
-                "language": "en",
-                "image_url": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=768&fit=crop",
-                "script": "Today we'll learn how to create amazing visuals with AI.",
-            },
-            {
-                "topic": "spokesperson",
-                "language": "zh-TW",
-                "image_url": "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=768&fit=crop",
-                "script": "歡迎使用 VidGo AI，讓我們一起創造精彩的視覺內容。",
-            },
-        ]
-        seed = next((s for s in DEMO_SCRIPTS if s["topic"] == topic), None) or random.choice(DEMO_SCRIPTS)
+        # Dedicated head-and-shoulders portraits for Kling Avatar (full-body
+        # try-on models don't pass Kling's face detector — "failed to freeze
+        # point"). These are frozen curated assets in a separate GCS path.
+        _GCS_AVATARS = "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/avatars"
 
-        logger.info(f"[DemoCache] AI Avatar: generating script={seed['script'][:40]}... lang={seed['language']}")
+        AVATAR_URLS = {
+            "female-1": f"{_GCS_AVATARS}/female-1.png",
+            "female-2": f"{_GCS_AVATARS}/female-2.png",
+            "female-3": f"{_GCS_AVATARS}/female-3.png",
+            "male-1":   f"{_GCS_AVATARS}/male-1.png",
+            "male-2":   f"{_GCS_AVATARS}/male-2.png",
+            "male-3":   f"{_GCS_AVATARS}/male-3.png",
+        }
+        # One short script per (category, language). Kept brief so the
+        # talking-head video stays ~10s. Longer scripts live in Material DB
+        # via pregen; this is only the on-demand fallback.
+        SCRIPTS = {
+            ("spokesperson", "zh-TW"): "歡迎認識我們的品牌故事，我們用心做好每一件產品。",
+            ("spokesperson", "en"):    "Welcome to our brand story. Every product is made with care.",
+            ("product_intro", "zh-TW"): "讓我介紹這款產品，品質優良、價格實惠，限時特惠中。",
+            ("product_intro", "en"):    "Let me introduce this product. Great quality, great price, on sale now.",
+            ("customer_service", "zh-TW"): "有任何問題都可以聯絡我們，我們會在兩小時內回覆您。",
+            ("customer_service", "en"):    "Contact us anytime with questions. We reply within two hours.",
+            ("social_media", "zh-TW"): "記得按讚訂閱追蹤，更多精彩內容即將推出，不要錯過！",
+            ("social_media", "en"):    "Like, subscribe, and follow for more. You do not want to miss this!",
+        }
+
+        resolved_avatar_id = product_id if product_id in AVATAR_URLS else "female-1"
+        image_url = AVATAR_URLS[resolved_avatar_id]
+
+        resolved_language = language if language in ("zh-TW", "en") else "zh-TW"
+        resolved_topic = topic if (topic, resolved_language) in SCRIPTS else "spokesperson"
+        script = SCRIPTS[(resolved_topic, resolved_language)]
+
+        logger.info(
+            f"[DemoCache] AI Avatar: avatar={resolved_avatar_id} lang={resolved_language} "
+            f"topic={resolved_topic}"
+        )
 
         result = await provider.route(
             TaskType.AVATAR,
             {
-                "image_url": seed["image_url"],
-                "script": seed["script"],
-                "language": seed["language"],
+                "image_url": image_url,
+                "script": script,
+                "language": resolved_language,
                 "duration": 10,
                 "resolution": "720p",
                 "aspect_ratio": "9:16",
@@ -630,13 +736,15 @@ class DemoCacheService:
 
         return {
             "success": True,
-            "topic": seed["topic"],
-            "prompt": seed["script"][:100],
-            "input_image_url": seed["image_url"],
+            "topic": resolved_topic,
+            "language": resolved_language,
+            "prompt": script[:100],
+            "input_image_url": image_url,
             "result_video_url": video_url,
             "input_params": {
-                "language": seed["language"],
-                "script": seed["script"],
+                "avatar_id": resolved_avatar_id,
+                "language": resolved_language,
+                "script": script,
             },
         }
 
@@ -744,7 +852,13 @@ class DemoCacheService:
     # DB helpers
     # ------------------------------------------------------------------
 
-    async def _get_from_db(self, tool_type: str, topic: Optional[str]) -> Optional[Dict[str, Any]]:
+    async def _get_from_db(
+        self,
+        tool_type: str,
+        topic: Optional[str],
+        product_id: Optional[str] = None,
+        language: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         query = select(Material).where(
             Material.tool_type == tool_type,
             Material.is_active == True,
@@ -752,6 +866,16 @@ class DemoCacheService:
         )
         if topic:
             query = query.where(Material.topic == topic)
+        if product_id:
+            # For ai_avatar the input_params key is avatar_id; for other tools it's product_id.
+            is_avatar = (
+                tool_type == "ai_avatar"
+                or (hasattr(tool_type, "value") and tool_type.value == "ai_avatar")
+            )
+            key = "avatar_id" if is_avatar else "product_id"
+            query = query.where(Material.input_params[key].astext == product_id)
+        if language:
+            query = query.where(Material.language == language)
         query = query.order_by(func.random()).limit(1)
         result = await self.db.execute(query)
         m = result.scalars().first()

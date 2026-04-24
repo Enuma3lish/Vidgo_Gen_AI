@@ -13,6 +13,24 @@ const adminStore = useAdminStore()
 const stats = computed(() => adminStore.dashboardStats)
 const lastRefreshed = ref<Date | null>(null)
 const refreshing = ref(false)
+const topCostApiMonth = computed(() => {
+  const services = adminStore.apiCosts?.by_service || []
+  if (!services.length) return null
+  return services.reduce((max, item) => (item.month_cost > max.month_cost ? item : max), services[0])
+})
+const topCostApiWeek = computed(() => {
+  const services = adminStore.apiCosts?.by_service || []
+  if (!services.length) return null
+  return services.reduce((max, item) => (item.week_cost > max.week_cost ? item : max), services[0])
+})
+const topCostMonthTrendRatio = computed(() => {
+  if (!topCostApiMonth.value) return 1
+  return trendRatio(topCostApiMonth.value.month_cost, topCostApiMonth.value.prev_month_cost)
+})
+const topCostWeekTrendRatio = computed(() => {
+  if (!topCostApiWeek.value) return 1
+  return trendRatio(topCostApiWeek.value.week_cost, topCostApiWeek.value.prev_week_cost)
+})
 
 const TOOL_LABELS: Record<string, string> = {
   background_removal: 'Background Removal',
@@ -101,6 +119,41 @@ function formatTimeAgo(isoStr: string | null): string {
 function formatLastRefreshed(): string {
   if (!lastRefreshed.value) return ''
   return lastRefreshed.value.toLocaleTimeString()
+}
+
+function trendRatio(current: number, previous: number): number {
+  if (previous <= 0) return current > 0 ? 2 : 1
+  return current / previous
+}
+
+function trendDirection(ratio: number): 'up' | 'down' | 'flat' {
+  if (ratio >= 1.1) return 'up'
+  if (ratio <= 0.9) return 'down'
+  return 'flat'
+}
+
+function trendArrow(ratio: number): string {
+  const direction = trendDirection(ratio)
+  if (direction === 'up') return '↑'
+  if (direction === 'down') return '↓'
+  return '→'
+}
+
+function trendLabel(ratio: number, period: 'week' | 'month'): string {
+  const direction = trendDirection(ratio)
+  const baseline = period === 'week' ? 'last week' : 'last month'
+  if (direction === 'up') return `Up vs ${baseline}`
+  if (direction === 'down') return `Down vs ${baseline}`
+  return `Flat vs ${baseline}`
+}
+
+function trendDeltaText(current: number, previous: number): string {
+  if (previous <= 0) {
+    return current > 0 ? '(new)' : '(0.0%)'
+  }
+  const deltaPercent = ((current - previous) / previous) * 100
+  const sign = deltaPercent > 0 ? '+' : ''
+  return `(${sign}${deltaPercent.toFixed(1)}%)`
 }
 
 // ── Chart Data (computed from store) ─────────────────────────────────────
@@ -323,6 +376,38 @@ function exportToolUsage() {
         <div class="stat-content">
           <span class="stat-value">{{ formatCurrency(adminStore.monthRevenue) }}</span>
           <span class="stat-label">Revenue This Month</span>
+        </div>
+      </div>
+
+      <div class="stat-card top-cost" v-if="topCostApiMonth">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M7 8.5C7 6.6 8.6 5 10.5 5h3C15.4 5 17 6.6 17 8.5S15.4 12 13.5 12h-3C8.6 12 7 13.6 7 15.5S8.6 19 10.5 19h3C15.4 19 17 17.4 17 15.5"/></svg>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value">{{ formatCurrency(topCostApiMonth.month_cost) }}</span>
+          <span class="stat-label">Top Cost API (Month)</span>
+          <span class="stat-subvalue">{{ topCostApiMonth.display_name }} · {{ formatNumber(topCostApiMonth.month_calls) }} calls</span>
+          <span class="stat-trend" :class="trendDirection(topCostMonthTrendRatio)">
+            {{ trendArrow(topCostMonthTrendRatio) }}
+            {{ trendLabel(topCostMonthTrendRatio, 'month') }}
+            {{ trendDeltaText(topCostApiMonth.month_cost, topCostApiMonth.prev_month_cost) }}
+          </span>
+        </div>
+      </div>
+
+      <div class="stat-card top-cost-week" v-if="topCostApiWeek">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M7 8.5C7 6.6 8.6 5 10.5 5h3C15.4 5 17 6.6 17 8.5S15.4 12 13.5 12h-3C8.6 12 7 13.6 7 15.5S8.6 19 10.5 19h3C15.4 19 17 17.4 17 15.5"/></svg>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value">{{ formatCurrency(topCostApiWeek.week_cost) }}</span>
+          <span class="stat-label">Top Cost API (Week)</span>
+          <span class="stat-subvalue">{{ topCostApiWeek.display_name }} · {{ formatNumber(topCostApiWeek.week_calls) }} calls</span>
+          <span class="stat-trend" :class="trendDirection(topCostWeekTrendRatio)">
+            {{ trendArrow(topCostWeekTrendRatio) }}
+            {{ trendLabel(topCostWeekTrendRatio, 'week') }}
+            {{ trendDeltaText(topCostApiWeek.week_cost, topCostApiWeek.prev_week_cost) }}
+          </span>
         </div>
       </div>
     </div>
@@ -596,10 +681,17 @@ function exportToolUsage() {
 .stat-card.generations .stat-icon { background: rgba(16,185,129,0.15); color: #388e3c; }
 .stat-card.revenue .stat-icon { background: rgba(245,158,11,0.15); color: #f57c00; }
 .stat-card.paid-ratio .stat-icon { background: rgba(34,211,238,0.15); color: #22d3ee; }
+.stat-card.top-cost .stat-icon { background: rgba(239,68,68,0.15); color: #ef4444; }
+.stat-card.top-cost-week .stat-icon { background: rgba(251,146,60,0.15); color: #fb923c; }
 .stat-card .stat-change.neutral { color: #9494b0; }
 .stat-content { display: flex; flex-direction: column; }
 .stat-value { font-size: 1.75rem; font-weight: 700; color: #f5f5fa; }
 .stat-label { font-size: 0.875rem; color: #9494b0; }
+.stat-subvalue { font-size: 0.75rem; color: #6b6b8a; margin-top: 0.2rem; }
+.stat-trend { font-size: 0.72rem; margin-top: 0.45rem; font-weight: 600; }
+.stat-trend.up { color: #fb7185; }
+.stat-trend.down { color: #34d399; }
+.stat-trend.flat { color: #9ca3af; }
 .stat-badge { position: absolute; top: 1rem; right: 1rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
 .stat-badge.live { background: #ff5252; color: white; animation: pulse 2s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }

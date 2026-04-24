@@ -38,20 +38,20 @@ async function handleUpscale() {
   isProcessing.value = true
   resultImage.value = undefined
 
-  if (isDemoUser.value) {
-    await new Promise(r => setTimeout(r, 1200))
-    resultImage.value = uploadedImage.value
-    uiStore.showSuccess(`Preview ready. Subscribe to download the real ${scale.value}x HD version.`)
-    isProcessing.value = false
-    return
-  }
-
   try {
+    // Always call the backend. For unsubscribed visitors the API returns a
+    // cached demo result (a distinct preset image), not the input echoed back
+    // — this avoids the earlier "result image identical to source" bug where
+    // demo users couldn't tell if upscaling had actually happened.
     const result = await toolsApi.upscale(uploadedImage.value, scale.value)
     if (result.success && result.result_url) {
       resultImage.value = result.result_url
-      creditsStore.fetchBalance()
-      uiStore.showSuccess(`Image upscaled ${scale.value}x successfully!`)
+      if (isDemoUser.value) {
+        uiStore.showSuccess(`Demo preview ready. Subscribe to upscale your own images at ${scale.value}x HD.`)
+      } else {
+        creditsStore.fetchBalance()
+        uiStore.showSuccess(`Image upscaled ${scale.value}x successfully!`)
+      }
     } else {
       uiStore.showError(result.message || 'Upscale failed')
     }
@@ -63,10 +63,6 @@ async function handleUpscale() {
   }
 }
 
-function onImageUploaded(url: string) {
-  uploadedImage.value = url
-  resultImage.value = undefined
-}
 </script>
 
 <template>
@@ -105,7 +101,7 @@ function onImageUploaded(url: string) {
           <!-- Paid: upload zone -->
           <div v-else class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-3" style="color: #e8e8f0;">Upload Image</label>
-            <ImageUploader @uploaded="onImageUploaded" />
+            <ImageUploader v-model="uploadedImage" />
           </div>
 
           <div v-if="uploadedImage" class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">

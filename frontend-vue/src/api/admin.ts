@@ -158,12 +158,18 @@ export interface ApiCostItem {
   week_cost: number
   month_calls: number
   month_cost: number
+  prev_week_calls: number
+  prev_week_cost: number
+  prev_month_calls: number
+  prev_month_cost: number
 }
 
 export interface ApiCostStats {
   by_service: ApiCostItem[]
   week_total: number
   month_total: number
+  prev_week_total: number
+  prev_month_total: number
 }
 
 export interface ActiveGeneration {

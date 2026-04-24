@@ -35,7 +35,7 @@ const { t } = useI18n()
           <ul class="space-y-2.5">
             <li><RouterLink to="/tools/try-on" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.tryOn.name') }}</RouterLink></li>
             <li><RouterLink to="/tools/short-video" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.fashionReels.name') }}</RouterLink></li>
-            <li><RouterLink to="/tools/avatar" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('lp.allTools.productAvatars.name') }}</RouterLink></li>
+            <li><RouterLink to="/gallery" class="text-sm transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">{{ t('gallery.title') }}</RouterLink></li>
           </ul>
         </div>
 

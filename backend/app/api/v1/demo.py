@@ -36,6 +36,7 @@ from app.services.prompt_matching import get_prompt_matching_service
 from app.services.moderation import get_moderation_service
 from app.services.block_cache import get_block_cache
 from app.services.gemini_service import get_gemini_service
+from app.services.gcs_storage_service import get_gcs_storage
 from app.services.similarity import get_similarity_service
 from app.services.rescue_service import get_rescue_service
 from app.core.config import get_settings
@@ -512,6 +513,222 @@ async def get_tool_topics(tool_type: str):
     }
 
 
+@router.get("/inputs/{tool_type}")
+async def get_input_library(
+    tool_type: str,
+    topic: Optional[str] = Query(None, description="Topic filter"),
+    limit: int = Query(48, ge=1, le=200, description="Maximum number of inputs"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return the pregenerated INPUT library for a tool.
+
+    These are the assets the visitor picks from as their "input" — images
+    from Vertex Imagen (T2I) or videos from Vertex Veo (T2V), all uploaded
+    to GCS. Rows are written by scripts/pregenerate_inputs.py and tagged
+    with `input_params.is_input_library = true` and have NULL result URLs.
+
+    The runtime path then combines the picked input with a user-chosen
+    effect_prompt and either serves a cached result or calls the real
+    provider API on miss (see DemoCacheService.get_or_generate).
+    """
+    from app.models.material import Material, MaterialStatus
+
+    valid_tool_types = get_all_tool_types()
+    if tool_type not in valid_tool_types:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "invalid_tool_type",
+                "message": f"Unknown tool type: {tool_type}",
+                "valid_tool_types": valid_tool_types,
+            },
+        )
+
+    query = select(Material).where(
+        Material.tool_type == tool_type,
+        Material.is_active == True,
+        Material.status.in_([MaterialStatus.APPROVED, MaterialStatus.FEATURED]),
+        Material.input_params["is_input_library"].astext == "true",
+    )
+    if topic:
+        query = query.where(Material.topic == topic)
+    query = query.order_by(Material.created_at.desc()).limit(limit)
+
+    result = await db.execute(query)
+    rows = result.scalars().all()
+
+    return {
+        "success": True,
+        "tool_type": tool_type,
+        "topic": topic,
+        "inputs": [
+            {
+                "id": str(r.id),
+                "topic": r.topic,
+                "prompt": r.prompt,
+                "input_image_url": r.input_image_url,
+                "input_video_url": r.input_video_url,
+                "input_params": r.input_params or {},
+            }
+            for r in rows
+        ],
+        "count": len(rows),
+    }
+
+
+@router.get("/effects/{tool_type}")
+async def get_effect_catalog(
+    tool_type: str,
+    language: str = Query("en", description="Language code (en, zh-TW)"),
+):
+    """
+    Return the per-tool effect-prompt catalog the user chooses from.
+
+    Pairs with /inputs/{tool_type} to form the two halves of every demo
+    request: (picked input) × (picked effect). Sent through to the
+    runtime cache-through endpoint, which keys on that exact pair.
+
+    Each entry: { id, name, name_zh, prompt } — the `prompt` is what
+    ultimately flows into `effect_prompt` on the tool request.
+    """
+    valid_tool_types = get_all_tool_types()
+    if tool_type not in valid_tool_types:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "invalid_tool_type",
+                "valid_tool_types": valid_tool_types,
+            },
+        )
+
+    effects: List[Dict[str, Any]] = []
+
+    if tool_type == "effect":
+        from app.services.effects_service import VIDGO_STYLES, get_style_prompt
+        for s in VIDGO_STYLES:
+            effects.append({
+                "id": s["id"],
+                "name": s["name"],
+                "name_zh": s.get("name_zh"),
+                "prompt": get_style_prompt(s["id"]),
+                "category": s.get("category"),
+            })
+
+    elif tool_type == "product_scene":
+        from app.api.v1.tools import SCENE_TEMPLATES
+        for s in SCENE_TEMPLATES:
+            effects.append({
+                "id": s["id"],
+                "name": s["name"],
+                "name_zh": s.get("name_zh"),
+                "prompt": s["prompt"],
+            })
+
+    elif tool_type == "room_redesign":
+        from app.api.v1.tools import INTERIOR_STYLES
+        for s in INTERIOR_STYLES:
+            effects.append({
+                "id": s["id"],
+                "name": s["name"],
+                "name_zh": s.get("name_zh"),
+                "prompt": s["prompt"],
+            })
+
+    elif tool_type == "short_video":
+        # Motion prompts — user picks the camera/motion flavor; the cache
+        # key differentiates between them so they don't collide.
+        motions = [
+            ("subtle", "Subtle Motion", "細微動態",
+             "subtle cinematic motion, barely-perceptible parallax drift, steady locked exposure"),
+            ("gentle", "Gentle Motion", "輕柔動態",
+             "gentle cinematic orbit, smooth stabilized camera, elegant slow-motion feel"),
+            ("dynamic", "Dynamic Motion", "動感動態",
+             "confident cinematic tracking shot, moderate parallax, dynamic lighting transition"),
+            ("dramatic", "Dramatic Motion", "戲劇動態",
+             "dramatic cinematic push-in with rack focus, bold sweeping camera arc, high-energy commercial feel"),
+        ]
+        for mid, en, zh, prompt in motions:
+            effects.append({"id": mid, "name": en, "name_zh": zh, "prompt": prompt})
+
+    elif tool_type == "try_on":
+        # For try-on the "effect" is which garment category to render.
+        # Garment url comes from the input library (input_params.garment_id).
+        for topic in get_topics_for_tool(tool_type):
+            effects.append({
+                "id": topic["id"],
+                "name": topic.get("name_en", topic["id"]),
+                "name_zh": topic.get("name_zh"),
+                "prompt": topic["id"],  # topic doubles as the cache key for try-on
+            })
+
+    elif tool_type == "ai_avatar":
+        # Scripts per category; language-aware default is chosen by the
+        # runtime when the user doesn't write a custom line.
+        base_scripts = {
+            "spokesperson": {
+                "zh-TW": "歡迎認識我們的品牌故事，我們用心做好每一件產品。",
+                "en":    "Welcome to our brand story. Every product is made with care.",
+            },
+            "product_intro": {
+                "zh-TW": "讓我介紹這款產品，品質優良、價格實惠，限時特惠中。",
+                "en":    "Let me introduce this product. Great quality, great price, on sale now.",
+            },
+            "customer_service": {
+                "zh-TW": "有任何問題都可以聯絡我們，我們會在兩小時內回覆您。",
+                "en":    "Contact us anytime with questions. We reply within two hours.",
+            },
+            "social_media": {
+                "zh-TW": "記得按讚訂閱追蹤，更多精彩內容即將推出，不要錯過！",
+                "en":    "Like, subscribe, and follow for more. You do not want to miss this!",
+            },
+        }
+        lang_key = "zh-TW" if language.startswith("zh") else "en"
+        for topic_id, by_lang in base_scripts.items():
+            effects.append({
+                "id": topic_id,
+                "name": topic_id.replace("_", " ").title(),
+                "name_zh": topic_id,
+                "prompt": by_lang[lang_key],
+            })
+
+    elif tool_type == "pattern_generate":
+        # Pattern tool is T2I-only — each "topic" IS the effect prompt.
+        seeds = {
+            "seamless": "elegant floral pattern for packaging, rose and navy, seamless tile",
+            "floral": "cherry blossom pattern for cafe branding, soft pink and white",
+            "geometric": "modern geometric pattern, triangles black and gold, professional",
+            "abstract": "marble texture pattern for cosmetics packaging, gold veins",
+            "traditional": "Chinese cloud pattern, red and gold, auspicious design",
+        }
+        for topic in get_topics_for_tool(tool_type):
+            prompt = seeds.get(topic["id"], topic.get("name_en", topic["id"]))
+            effects.append({
+                "id": topic["id"],
+                "name": topic.get("name_en", topic["id"]),
+                "name_zh": topic.get("name_zh"),
+                "prompt": prompt,
+            })
+
+    elif tool_type == "background_removal":
+        # Background removal has no user-facing effect choice — the output
+        # format is a single canonical operation. Return one entry so the
+        # frontend still gets a stable shape.
+        effects.append({
+            "id": "transparent_png",
+            "name": "Remove Background",
+            "name_zh": "去除背景",
+            "prompt": None,
+        })
+
+    return {
+        "success": True,
+        "tool_type": tool_type,
+        "effects": effects,
+        "count": len(effects),
+    }
+
+
 @router.get("/presets/{tool_type}")
 async def get_presets(
     tool_type: str,
@@ -893,15 +1110,20 @@ async def generate_demo_for_tool(
     topic: Optional[str] = Query(None, description="Topic / scene / style filter"),
     product_id: Optional[str] = Query(None, description="Product/avatar/model ID filter"),
     language: Optional[str] = Query(None, description="Language for avatar script (zh-TW, en)"),
+    input_image_url: Optional[str] = Query(None, description="Pregenerated input image URL the user picked"),
+    input_video_url: Optional[str] = Query(None, description="Pregenerated input video URL the user picked"),
+    effect_prompt: Optional[str] = Query(None, description="Effect/style/motion prompt the user picked"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional),
 ):
     """
     Demo generation for a specific tool type — everyone can use this.
 
-    1. Check Material DB for an existing preset matching (topic, product_id)
-    2. If found → return that preset
-    3. If empty → generate on-demand via AI API → cache → return
+    1. Check Material DB by lookup_hash(tool, effect_or_topic, input_url) for
+       an exact-pair cache hit when the user picked a specific input + effect.
+    2. Otherwise check by (topic, product_id) for back-compat.
+    3. On cache miss → generate on-demand via real AI API using the user's
+       chosen input + effect → persist under the same lookup_hash → return.
     """
     from app.services.material_lookup import get_material_lookup_service
     from app.services.demo_cache_service import DemoCacheService
@@ -918,10 +1140,18 @@ async def generate_demo_for_tool(
             },
         )
 
-    lookup_service = get_material_lookup_service(db)
-    presets = await lookup_service.get_presets_for_tool(
-        tool_type, topic, limit=20, product_id=product_id
-    )
+    # When the caller provided a specific (input_url, effect_prompt), skip the
+    # generic preset list and route straight through the cache service so the
+    # lookup_hash path runs first.
+    skip_generic_presets = bool(input_image_url or input_video_url or effect_prompt)
+
+    if skip_generic_presets:
+        presets = []
+    else:
+        lookup_service = get_material_lookup_service(db)
+        presets = await lookup_service.get_presets_for_tool(
+            tool_type, topic, limit=20, product_id=product_id
+        )
 
     # If no presets match the requested (topic, product_id), generate one on-demand
     if not presets:
@@ -932,7 +1162,13 @@ async def generate_demo_for_tool(
 
         cache_service = DemoCacheService(db, redis)
         generated = await cache_service.get_or_generate(
-            tool_type, topic, product_id=product_id, language=language
+            tool_type,
+            topic,
+            product_id=product_id,
+            language=language,
+            input_image_url=input_image_url,
+            input_video_url=input_video_url,
+            effect_prompt=effect_prompt,
         )
 
         if generated:
@@ -2781,32 +3017,41 @@ async def get_view_more_examples(
 async def upload_file(file: UploadFile = File(...), request: Request = None):
     """
     General file upload endpoint for demo tools.
-    Saves file to static uploads directory and returns publicly accessible URL.
+    Saves file to durable public storage when available and returns a
+    publicly accessible URL.
     """
     try:
-        # Create uploads directory if not exists
-        upload_dir = Path("/app/static/uploads")
-        upload_dir.mkdir(parents=True, exist_ok=True)
-
         # Generate safe filename
         ext = os.path.splitext(file.filename)[1]
         if not ext:
             ext = ".png"
 
         filename = f"{uuid.uuid4()}{ext}"
-        filepath = upload_dir / filename
+        content = await file.read()
+        content_type = file.content_type or "application/octet-stream"
 
-        # Save file
-        with open(filepath, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        # Build public URL so external AI APIs can access the file
         static_path = f"/static/uploads/{filename}"
-        public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
-        if not public_base and request:
-            # Derive from request URL
-            public_base = str(request.base_url).rstrip("/")
-        public_url = f"{public_base}{static_path}" if public_base else static_path
+        public_url = static_path
+
+        gcs = get_gcs_storage()
+        if gcs.enabled:
+            public_url = gcs.upload_public(
+                data=content,
+                blob_name=f"uploads/demo/{filename}",
+                content_type=content_type,
+            )
+        else:
+            # Local dev fallback when GCS is not wired.
+            upload_dir = Path("/app/static/uploads")
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            filepath = upload_dir / filename
+            with open(filepath, "wb") as buffer:
+                buffer.write(content)
+
+            public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+            if not public_base and request:
+                public_base = str(request.base_url).rstrip("/")
+            public_url = f"{public_base}{static_path}" if public_base else static_path
 
         return {"url": public_url, "static_path": static_path}
 

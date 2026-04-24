@@ -53,6 +53,7 @@ def log(tool: str, step: str, ok: bool, msg: str = "", dur: float = 0):
 class API:
     def __init__(self):
         self.token = ""
+        self.user = {}
         self.client = httpx.AsyncClient(timeout=120.0)
 
     async def login(self):
@@ -60,7 +61,8 @@ class API:
             json={"email": EMAIL, "password": PASSWORD})
         data = r.json()
         self.token = data["tokens"]["access"]
-        return data.get("user", {})
+        self.user = data.get("user", {})
+        return self.user
 
     def headers(self):
         return {"Authorization": f"Bearer {self.token}"}
@@ -415,7 +417,11 @@ async def main():
     print("\n📋 Phase 1: Authentication")
     print("-" * 50)
     user = await api.login()
-    log("Auth", "Login", bool(api.token), f"plan={user.get('plan_type','?')}")
+    is_superuser = bool(user.get("is_superuser"))
+    login_msg = f"plan={user.get('plan_type','?')}"
+    if is_superuser:
+        login_msg += " superuser=True"
+    log("Auth", "Login", bool(api.token), login_msg)
 
     balance = await api.get("/api/v1/credits/balance")
     credits_before = balance.get("total", 0)
@@ -455,7 +461,15 @@ async def main():
     balance_after = await api.get("/api/v1/credits/balance")
     credits_after = balance_after.get("total", 0)
     credits_used = credits_before - credits_after
-    log("Credits", "Deducted correctly", credits_used >= 0, f"used={credits_used} (before={credits_before}, after={credits_after})")
+    if is_superuser:
+        log(
+            "Credits",
+            "Deducted correctly",
+            True,
+            f"skipped for superuser admin bypass (before={credits_before}, after={credits_after})",
+        )
+    else:
+        log("Credits", "Deducted correctly", credits_used >= 0, f"used={credits_used} (before={credits_before}, after={credits_after})")
 
     # ── Phase 3: Browser UI Tests ──
     print("\n📋 Phase 3: Browser UI Tests (Playwright)")

@@ -1,0 +1,318 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - link "V VidGo AI" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e8]: V
+        - generic [ref=e9]: VidGo AI
+      - navigation [ref=e10]:
+        - link "Home" [ref=e11] [cursor=pointer]:
+          - /url: /
+        - link "Product Photography Inspiration Library" [ref=e12] [cursor=pointer]:
+          - /url: /gallery
+        - button "Tools" [ref=e14] [cursor=pointer]:
+          - text: Tools
+          - img [ref=e15]
+        - link "Pricing" [ref=e17] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=e18]:
+        - button "🇺🇸 English" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 🇺🇸
+          - generic [ref=e22]: English
+          - img [ref=e23]
+        - link "10,000 Credits" [ref=e25] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e26]
+          - text: 10,000 Credits
+        - link "Dashboard" [ref=e28] [cursor=pointer]:
+          - /url: /dashboard
+        - button "Logout" [ref=e29] [cursor=pointer]
+  - main [ref=e30]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - heading "我的作品庫" [level=1] [ref=e35]
+          - paragraph [ref=e36]: 瀏覽並管理您的 AI 創作內容 · 媒體檔案保存 14 天
+        - generic [ref=e37]:
+          - generic [ref=e38] [cursor=pointer]:
+            - checkbox "顯示歷史記錄" [checked] [ref=e39]
+            - generic [ref=e40]: 顯示歷史記錄
+          - link "📡 社交媒體帳號" [ref=e41] [cursor=pointer]:
+            - /url: /dashboard/social-accounts
+      - generic [ref=e42]:
+        - generic [ref=e43]: 💾
+        - generic [ref=e44]:
+          - paragraph [ref=e45]: 媒體保存政策
+          - paragraph [ref=e46]:
+            - text: AI 生成的媒體檔案（圖片/影片）保存
+            - strong [ref=e47]: 14 天
+            - text: ，超過後將自動清除媒體 URL，但
+            - strong [ref=e48]: 生成記錄永久保留
+            - text: （包含工具類型、參數設定、使用點數等）。 請在期限內下載您的作品。
+      - generic [ref=e49]:
+        - button "全部" [ref=e50] [cursor=pointer]
+        - button "智能去背（基礎）" [ref=e51] [cursor=pointer]
+        - button "AI 商品情境攝影棚" [ref=e52] [cursor=pointer]
+        - button "AI 模特換裝" [ref=e53] [cursor=pointer]
+        - button "毛胚屋/線稿秒渲染" [ref=e54] [cursor=pointer]
+        - button "商品動態短影音（圖生影片）" [ref=e55] [cursor=pointer]
+        - button "AI 頭像" [ref=e56] [cursor=pointer]
+        - button "圖案設計" [ref=e57] [cursor=pointer]
+        - button "風格特效" [ref=e58] [cursor=pointer]
+      - generic [ref=e60]:
+        - generic [ref=e61] [cursor=pointer]:
+          - generic [ref=e62]:
+            - img "background_removal" [ref=e63]
+            - button "查看" [ref=e65]
+          - generic [ref=e66]:
+            - paragraph [ref=e67]: 智能去背（基礎）
+            - generic [ref=e68]:
+              - generic [ref=e69]: 2026/4/20
+              - generic [ref=e70]: 3 點
+            - generic [ref=e71]:
+              - generic [ref=e72]: ⏳
+              - generic [ref=e73]: 13 天後過期
+            - generic [ref=e74]:
+              - button "查看" [ref=e75]
+              - button "📡 發布" [ref=e76]
+        - generic [ref=e77] [cursor=pointer]:
+          - generic [ref=e79]:
+            - generic [ref=e80]: 📋
+            - generic [ref=e81]: 媒體已過期
+            - generic [ref=e82]: 記錄已保留
+          - generic [ref=e83]:
+            - paragraph [ref=e84]: 智能去背（基礎）
+            - generic [ref=e85]:
+              - generic [ref=e86]: 2026/3/29
+              - generic [ref=e87]: 3 點
+            - generic [ref=e88]:
+              - generic [ref=e89]: 🗂
+              - generic [ref=e90]: 已過期
+            - button "📋 記錄" [ref=e92]
+        - generic [ref=e93] [cursor=pointer]:
+          - generic [ref=e95]:
+            - generic [ref=e96]: 📋
+            - generic [ref=e97]: 媒體已過期
+            - generic [ref=e98]: 記錄已保留
+          - generic [ref=e99]:
+            - paragraph [ref=e100]: 風格特效
+            - generic [ref=e101]:
+              - generic [ref=e102]: 2026/3/29
+              - generic [ref=e103]: 20 點
+            - generic [ref=e104]:
+              - generic [ref=e105]: 🗂
+              - generic [ref=e106]: 已過期
+            - button "📋 記錄" [ref=e108]
+        - generic [ref=e109] [cursor=pointer]:
+          - generic [ref=e110]:
+            - img "effect" [ref=e111]
+            - button "查看" [ref=e113]
+          - generic [ref=e114]:
+            - paragraph [ref=e115]: 風格特效
+            - generic [ref=e116]:
+              - generic [ref=e117]: 2026/3/29
+              - generic [ref=e118]: 8 點
+            - generic [ref=e119]:
+              - button "查看" [ref=e120]
+              - button "📡 發布" [ref=e121]
+        - generic [ref=e122] [cursor=pointer]:
+          - generic [ref=e124]:
+            - generic [ref=e125]: 📋
+            - generic [ref=e126]: 媒體已過期
+            - generic [ref=e127]: 記錄已保留
+          - generic [ref=e128]:
+            - paragraph [ref=e129]: 商品動態短影音（圖生影片）
+            - generic [ref=e130]:
+              - generic [ref=e131]: 2026/3/29
+              - generic [ref=e132]: 25 點
+            - generic [ref=e133]:
+              - generic [ref=e134]: 🗂
+              - generic [ref=e135]: 已過期
+            - button "📋 記錄" [ref=e137]
+        - generic [ref=e138] [cursor=pointer]:
+          - generic [ref=e140]:
+            - generic [ref=e141]: 📋
+            - generic [ref=e142]: 媒體已過期
+            - generic [ref=e143]: 記錄已保留
+          - generic [ref=e144]:
+            - paragraph [ref=e145]: 風格特效
+            - generic [ref=e146]:
+              - generic [ref=e147]: 2026/3/29
+              - generic [ref=e148]: 20 點
+            - generic [ref=e149]:
+              - generic [ref=e150]: 🗂
+              - generic [ref=e151]: 已過期
+            - button "📋 記錄" [ref=e153]
+        - generic [ref=e154] [cursor=pointer]:
+          - generic [ref=e155]:
+            - img "effect" [ref=e156]
+            - button "查看" [ref=e158]
+          - generic [ref=e159]:
+            - paragraph [ref=e160]: 風格特效
+            - generic [ref=e161]:
+              - generic [ref=e162]: 2026/3/29
+              - generic [ref=e163]: 8 點
+            - generic [ref=e164]:
+              - button "查看" [ref=e165]
+              - button "📡 發布" [ref=e166]
+        - generic [ref=e167] [cursor=pointer]:
+          - generic [ref=e169]:
+            - generic [ref=e170]: 📋
+            - generic [ref=e171]: 媒體已過期
+            - generic [ref=e172]: 記錄已保留
+          - generic [ref=e173]:
+            - paragraph [ref=e174]: 毛胚屋/線稿秒渲染
+            - generic [ref=e175]:
+              - generic [ref=e176]: 2026/3/29
+              - generic [ref=e177]: 20 點
+            - generic [ref=e178]:
+              - generic [ref=e179]: 🗂
+              - generic [ref=e180]: 已過期
+            - button "📋 記錄" [ref=e182]
+        - generic [ref=e183] [cursor=pointer]:
+          - generic [ref=e185]:
+            - generic [ref=e186]: 📋
+            - generic [ref=e187]: 媒體已過期
+            - generic [ref=e188]: 記錄已保留
+          - generic [ref=e189]:
+            - paragraph [ref=e190]: 毛胚屋/線稿秒渲染
+            - generic [ref=e191]:
+              - generic [ref=e192]: 2026/3/29
+              - generic [ref=e193]: 20 點
+            - generic [ref=e194]:
+              - generic [ref=e195]: 🗂
+              - generic [ref=e196]: 已過期
+            - button "📋 記錄" [ref=e198]
+        - generic [ref=e199] [cursor=pointer]:
+          - generic [ref=e201]:
+            - generic [ref=e202]: 📋
+            - generic [ref=e203]: 媒體已過期
+            - generic [ref=e204]: 記錄已保留
+          - generic [ref=e205]:
+            - paragraph [ref=e206]: 毛胚屋/線稿秒渲染
+            - generic [ref=e207]:
+              - generic [ref=e208]: 2026/3/29
+              - generic [ref=e209]: 20 點
+            - generic [ref=e210]:
+              - generic [ref=e211]: 🗂
+              - generic [ref=e212]: 已過期
+            - button "📋 記錄" [ref=e214]
+        - generic [ref=e215] [cursor=pointer]:
+          - generic [ref=e217]:
+            - generic [ref=e218]: 📋
+            - generic [ref=e219]: 媒體已過期
+            - generic [ref=e220]: 記錄已保留
+          - generic [ref=e221]:
+            - paragraph [ref=e222]: 風格特效
+            - generic [ref=e223]:
+              - generic [ref=e224]: 2026/3/29
+              - generic [ref=e225]: 20 點
+            - generic [ref=e226]:
+              - generic [ref=e227]: 🗂
+              - generic [ref=e228]: 已過期
+            - button "📋 記錄" [ref=e230]
+        - generic [ref=e231] [cursor=pointer]:
+          - generic [ref=e232]:
+            - img "effect" [ref=e233]
+            - button "查看" [ref=e235]
+          - generic [ref=e236]:
+            - paragraph [ref=e237]: 風格特效
+            - generic [ref=e238]:
+              - generic [ref=e239]: 2026/3/29
+              - generic [ref=e240]: 8 點
+            - generic [ref=e241]:
+              - button "查看" [ref=e242]
+              - button "📡 發布" [ref=e243]
+        - generic [ref=e244] [cursor=pointer]:
+          - generic [ref=e246]:
+            - generic [ref=e247]: 📋
+            - generic [ref=e248]: 媒體已過期
+            - generic [ref=e249]: 記錄已保留
+          - generic [ref=e250]:
+            - paragraph [ref=e251]: 智能去背（基礎）
+            - generic [ref=e252]:
+              - generic [ref=e253]: 2026/3/29
+              - generic [ref=e254]: 3 點
+            - generic [ref=e255]:
+              - generic [ref=e256]: 🗂
+              - generic [ref=e257]: 已過期
+            - button "📋 記錄" [ref=e259]
+  - contentinfo [ref=e260]:
+    - generic [ref=e261]:
+      - generic [ref=e262]:
+        - generic [ref=e263]:
+          - link "V VidGo AI" [ref=e264] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e265]: V
+            - generic [ref=e266]: VidGo AI
+          - paragraph [ref=e267]: VidGo AI — Making visual content creation simple, efficient, and creative.
+          - generic [ref=e268]:
+            - link [ref=e269] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e270]
+            - link [ref=e272] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e273]
+        - generic [ref=e275]:
+          - heading "Fashion AI" [level=4] [ref=e276]
+          - list [ref=e277]:
+            - listitem [ref=e278]:
+              - link "AI Model Try-On" [ref=e279] [cursor=pointer]:
+                - /url: /tools/try-on
+            - listitem [ref=e280]:
+              - link "Product Dynamic Video" [ref=e281] [cursor=pointer]:
+                - /url: /tools/short-video
+            - listitem [ref=e282]:
+              - link "Product Photography Inspiration Library" [ref=e283] [cursor=pointer]:
+                - /url: /gallery
+        - generic [ref=e284]:
+          - heading "E-commerce AI" [level=4] [ref=e285]
+          - list [ref=e286]:
+            - listitem [ref=e287]:
+              - link "AI Product Scene Studio" [ref=e288] [cursor=pointer]:
+                - /url: /tools/product-scene
+            - listitem [ref=e289]:
+              - link "Smart Background Removal (Base)" [ref=e290] [cursor=pointer]:
+                - /url: /tools/background-removal
+            - listitem [ref=e291]:
+              - link "Commercial HD Upscale" [ref=e292] [cursor=pointer]:
+                - /url: /tools/upscale
+            - listitem [ref=e293]:
+              - link "Sketch Instant Render" [ref=e294] [cursor=pointer]:
+                - /url: /tools/room-redesign
+        - generic [ref=e295]:
+          - heading "Company" [level=4] [ref=e296]
+          - list [ref=e297]:
+            - listitem [ref=e298]:
+              - link "About Us" [ref=e299] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e300]:
+              - link "Pricing" [ref=e301] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=e302]:
+              - link "Contact Us" [ref=e303] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e304]:
+              - link "Blog" [ref=e305] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e306]:
+              - link "Affiliate Program" [ref=e307] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e308]:
+          - heading "Legal" [level=4] [ref=e309]
+          - list [ref=e310]:
+            - listitem [ref=e311]:
+              - link "Terms of Service" [ref=e312] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e313]:
+              - link "Privacy Policy" [ref=e314] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e315]:
+              - link "Cookie Policy" [ref=e316] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e317]:
+              - link "Refund Policy" [ref=e318] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e319]:
+        - paragraph [ref=e320]: © 2025 VidGo AI. All rights reserved.
+        - generic [ref=e322]: Secure Payment

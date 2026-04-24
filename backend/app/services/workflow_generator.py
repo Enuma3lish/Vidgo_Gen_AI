@@ -6,11 +6,11 @@ Implements the Prompt Chaining Design workflow:
 ┌─────────────────────────────────────────────────────────────────┐
 │  Step 1: Topic Definition                                       │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │  id: "luxury_watch"                                       │  │
+│  │  id: "bubble_tea_showcase"                                │  │
 │  │  category: "product_video"                                │  │
 │  │  output_type: "video"  ← Determines final output type     │  │
-│  │  subject: "luxury wristwatch"                             │  │
-│  │  mood: "elegant, sophisticated, premium"                  │  │
+│  │  subject: "bubble tea takeaway cup with tapioca pearls"   │  │
+│  │  mood: "fresh, friendly, shop-ready"                      │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                           │                                     │
 │                           ▼                                     │

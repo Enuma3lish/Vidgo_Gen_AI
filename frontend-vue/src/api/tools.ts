@@ -1,5 +1,7 @@
 import apiClient from './client'
 
+const GENERATION_TIMEOUT_MS = 15 * 60 * 1000
+
 export interface ToolResponse {
   success: boolean
   result_url?: string
@@ -26,67 +28,94 @@ export const toolsApi = {
     productId?: string,
     templateId?: string,
   ): Promise<ToolResponse> {
-    const response = await apiClient.post('/api/v1/tools/product-scene', {
-      product_image_url: productImageUrl,
-      scene_type: sceneType,
-      custom_prompt: customPrompt,
-      product_id: productId,
-      template_id: templateId,
-    })
+    const response = await apiClient.post(
+      '/api/v1/tools/product-scene',
+      {
+        product_image_url: productImageUrl,
+        scene_type: sceneType,
+        custom_prompt: customPrompt,
+        product_id: productId,
+        template_id: templateId,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
     return response.data
   },
 
   async tryOn(garmentImageUrl: string, opts?: { modelImageUrl?: string; modelId?: string; angle?: string; templateId?: string }): Promise<ToolResponse> {
-    const response = await apiClient.post('/api/v1/tools/try-on', {
-      garment_image_url: garmentImageUrl,
-      model_image_url: opts?.modelImageUrl,
-      model_id: opts?.modelId,
-      angle: opts?.angle ?? 'front',
-      template_id: opts?.templateId,
-    })
+    const response = await apiClient.post(
+      '/api/v1/tools/try-on',
+      {
+        garment_image_url: garmentImageUrl,
+        model_image_url: opts?.modelImageUrl,
+        model_id: opts?.modelId,
+        angle: opts?.angle ?? 'front',
+        template_id: opts?.templateId,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
     return response.data
   },
 
   async roomRedesign(roomImageUrl: string, style = 'modern', customPrompt?: string): Promise<ToolResponse> {
-    const response = await apiClient.post('/api/v1/tools/room-redesign', {
-      room_image_url: roomImageUrl,
-      style,
-      custom_prompt: customPrompt,
-      preserve_structure: true,
-    })
+    const response = await apiClient.post(
+      '/api/v1/tools/room-redesign',
+      {
+        room_image_url: roomImageUrl,
+        style,
+        custom_prompt: customPrompt,
+        preserve_structure: true,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
     return response.data
   },
 
-  async shortVideo(imageUrl: string, opts?: { motionStrength?: number; style?: string; script?: string; voiceId?: string }): Promise<ToolResponse> {
-    const response = await apiClient.post('/api/v1/tools/short-video', {
-      image_url: imageUrl,
-      motion_strength: opts?.motionStrength ?? 5,
-      style: opts?.style,
-      script: opts?.script,
-      voice_id: opts?.voiceId,
-    })
+  async shortVideo(imageUrl: string, opts?: { motionStrength?: number; modelId?: string; style?: string; script?: string; voiceId?: string }): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/short-video',
+      {
+        image_url: imageUrl,
+        motion_strength: opts?.motionStrength ?? 5,
+        model_id: opts?.modelId,
+        style: opts?.style,
+        script: opts?.script,
+        voice_id: opts?.voiceId,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
     return response.data
   },
 
   async avatar(params: { image_url: string; script: string; voice_id?: string; language?: string }): Promise<ToolResponse> {
-    const response = await apiClient.post('/api/v1/tools/avatar', params)
+    const response = await apiClient.post('/api/v1/tools/avatar', params, {
+      timeout: GENERATION_TIMEOUT_MS,
+    })
     return response.data
   },
 
   async videoTransform(videoUrl: string, prompt: string, style?: string): Promise<ToolResponse> {
-    const response = await apiClient.post('/api/v1/tools/video-transform', {
-      video_url: videoUrl,
-      prompt,
-      style,
-    })
+    const response = await apiClient.post(
+      '/api/v1/tools/video-transform',
+      {
+        video_url: videoUrl,
+        prompt,
+        style,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
     return response.data
   },
 
   async upscale(imageUrl: string, scale = 2): Promise<ToolResponse> {
-    const response = await apiClient.post('/api/v1/tools/upscale', {
-      image_url: imageUrl,
-      scale,
-    })
+    const response = await apiClient.post(
+      '/api/v1/tools/upscale',
+      {
+        image_url: imageUrl,
+        scale,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
     return response.data
   },
 

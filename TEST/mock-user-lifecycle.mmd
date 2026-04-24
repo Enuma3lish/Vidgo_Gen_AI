@@ -1,0 +1,143 @@
+%%{init: {'theme':'neutral'}}%%
+stateDiagram-v2
+  %% ===================================================================
+  %% VidGo — User / Subscription Lifecycle State Machine
+  %% Every transition is annotated with the endpoint (or cron) that
+  %% triggers it, and — where relevant — the side-effect on credits
+  %% or downstream state.
+  %% ===================================================================
+
+  [*] --> Visitor
+
+  state Visitor {
+    [*] --> Anonymous
+    Anonymous --> Anonymous : GET /plans /pricing /demo · tool → is_demo=true
+    Anonymous --> PasswordProbe : POST /login wrong pw → 401
+    PasswordProbe --> Anonymous
+  }
+
+  Visitor --> Unverified : POST /auth/register
+  note right of Unverified
+    email_verified=false
+    is_active=false
+    bonus_credits granted
+    (pending verify)
+  end note
+
+  state Unverified {
+    [*] --> CodePending
+    CodePending --> CodePending : POST /auth/resend-code (≤3/h)
+    CodePending --> CodeExpired : 15 min elapsed
+    CodeExpired --> CodePending : POST /auth/resend-code
+    CodePending --> LoginBlocked : POST /auth/login → 403 "6-digit code"
+    LoginBlocked --> CodePending
+  }
+
+  Unverified --> FreeMember : POST /auth/verify-code (correct)
+  note right of FreeMember
+    email_verified=true
+    is_active=true
+    current_plan_id=null
+    plan_type=null
+    bonus_credits retained
+  end note
+
+  state FreeMember {
+    [*] --> Browsing
+    Browsing --> Browsing : GET /auth/me, /credits/balance
+    Browsing --> DemoTool : POST /tools/* → is_demo=true (no deduct)
+    DemoTool --> Browsing
+    Browsing --> GatedTool : POST /effects/hd-enhance → 403 subscribers-only
+    GatedTool --> Browsing
+    Browsing --> CheckoutPending : POST /subscriptions/subscribe
+  }
+
+  state CheckoutPending {
+    [*] --> WhichProvider
+    WhichProvider --> PaddleCheckout : payment_method=paddle (keys set)
+    WhichProvider --> ECPayForm     : payment_method=ecpay (TW keys set)
+    WhichProvider --> MockActivate  : neither configured OR superuser
+    PaddleCheckout --> WebhookPaid : webhook transaction.completed
+    ECPayForm      --> CallbackPaid : ECPay /callback verified mac
+    MockActivate   --> DirectActivate : Order.status=complimentary
+  }
+
+  CheckoutPending --> Subscriber : Order paid / activated
+  Subscriber : <b>current_plan_id</b> set\nSubscription.status=active\nauto_renew=true\nsubscription_credits=plan.monthly_credits
+
+  state Subscriber {
+    [*] --> Basic
+    Basic    : 699  TWD · 7000 cr · 720p · watermark
+    Pro      : 999  TWD · 10000 cr · 1080p · effects
+    Premium  : 1699 TWD · 18000 cr · 4k · priority_queue
+    Enterprise : 15000 TWD · 160000 cr · 4k · all features
+
+    %% Upgrades (price rank strictly higher) activate immediately
+    Basic   --> Pro      : /subscribe (pro) · price↑ · UPGRADE
+    Pro     --> Premium  : /subscribe (premium) · price↑ · UPGRADE
+    Premium --> Enterprise : /subscribe (enterprise) · price↑ · UPGRADE
+    Basic   --> Enterprise : /subscribe (enterprise) · price↑ · UPGRADE
+
+    %% Downgrades schedule at end_date
+    Enterprise --> DowngradeScheduledPremium : /subscribe (premium) · price↓
+    Premium   --> DowngradeScheduledPro     : /subscribe (pro)     · price↓
+    Pro       --> DowngradeScheduledBasic   : /subscribe (basic)   · price↓
+    Basic     --> Basic : /subscribe (basic) → 400 'Already subscribed to this plan'
+    DowngradeScheduledPremium : pending_downgrade row · activates at end_date
+    DowngradeScheduledPro     : pending_downgrade row · activates at end_date
+    DowngradeScheduledBasic   : pending_downgrade row · activates at end_date
+
+    DowngradeScheduledPremium --> Premium : cron at end_date
+    DowngradeScheduledPro     --> Pro     : cron at end_date
+    DowngradeScheduledBasic   --> Basic   : cron at end_date
+
+    %% Admin refresh (superuser + action='refresh')
+    Basic    --> Basic    : action='refresh' · credits re-granted
+    Pro      --> Pro      : action='refresh' · credits re-granted
+    Premium  --> Premium  : action='refresh' · credits re-granted
+    Enterprise --> Enterprise : action='refresh' · credits re-granted
+  }
+
+  Subscriber --> ToolUsage : POST /tools/* · /effects/*
+  state ToolUsage {
+    [*] --> CheckPlan
+    CheckPlan --> ResolutionBlocked : beyond plan cap (400)
+    CheckPlan --> DeductCredits : within cap
+    ResolutionBlocked --> [*]
+    DeductCredits --> ProviderCall : credits ok
+    DeductCredits --> InsufficientCredits : credits<cost (400)
+    InsufficientCredits --> [*]
+    ProviderCall --> Succeeded : result_url returned
+    ProviderCall --> Failed    : provider/error
+    Succeeded --> [*] : UserGeneration written · GCS URL\nCreditTransaction type=generation
+    Failed    --> Refunded    : _refund_credits
+    Refunded  --> [*] : CreditTransaction type='refund' (VG-FIX-E)
+  }
+  ToolUsage --> Subscriber
+
+  %% Cancellation paths
+  Subscriber --> CancelledActive : POST /cancel request_refund=false
+  Subscriber --> Refunded7d      : POST /cancel request_refund=true (≤7d)
+  Subscriber --> RefundExpired   : POST /cancel request_refund=true (>7d) · 400
+
+  CancelledActive : subscription.status=cancelled\nauto_renew=false\nend_date preserved\n<b>credits retained</b>\nwork_retention_until = end_date + 7d
+  Refunded7d : refund_processed=true\nALL credits revoked (sub+purch+bonus)\nInvoice voided (if in tax period)\ncurrent_plan_id=null\nwork_retention_until = now + 7d
+
+  RefundExpired --> Subscriber : (stays subscribed)
+
+  CancelledActive --> Expired : cron at end_date
+  Refunded7d      --> Expired : immediate
+  Expired : plan_type=null\ncredits=0 (or bonus only)\nworks readable for 7d
+
+  Expired --> FreeMember : work_retention_until passed · works purged
+  Expired --> Subscriber : POST /subscribe (reactivate)
+
+  %% Banned state (admin path)
+  Subscriber --> Banned : POST /admin/users/:id/ban
+  FreeMember --> Banned : POST /admin/users/:id/ban
+  Banned --> Subscriber : POST /admin/users/:id/unban
+  Banned --> FreeMember : POST /admin/users/:id/unban
+
+  %% Superuser side-channel
+  [*] --> Superuser : is_superuser=true
+  Superuser : Bypasses credit deduction\nBypasses plan gating\nCan subscribe with skip_payment=True\nCan refresh credits via action='refresh'

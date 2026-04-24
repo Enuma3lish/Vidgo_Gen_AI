@@ -57,16 +57,18 @@ ADMIN_EMAIL = (
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 # Additional admin accounts: comma-separated "email:password" pairs
 ADMIN_EXTRA_ACCOUNTS = os.environ.get("ADMIN_EXTRA_ACCOUNTS", "")
+# Additional test accounts: comma-separated "email:password" pairs
+TEST_ACCOUNTS = os.environ.get("TEST_ACCOUNTS", "")
 ALLOW_DEFAULT = os.environ.get("ALLOW_DEFAULT_ADMIN_PASSWORD", "").lower() == "true"
 DEFAULT_DEV_PASSWORD = "ChangeMe_local_dev_only!"
 
 
-def _parse_extra_admins() -> list[tuple[str, str]]:
-    """Parse ADMIN_EXTRA_ACCOUNTS env var into list of (email, password) tuples."""
-    if not ADMIN_EXTRA_ACCOUNTS:
+def _parse_colon_pairs(raw: str) -> list[tuple[str, str]]:
+    """Parse comma-separated 'email:password' pairs."""
+    if not raw:
         return []
     pairs = []
-    for entry in ADMIN_EXTRA_ACCOUNTS.split(","):
+    for entry in raw.split(","):
         entry = entry.strip()
         if ":" not in entry:
             continue
@@ -75,6 +77,16 @@ def _parse_extra_admins() -> list[tuple[str, str]]:
         if email and password:
             pairs.append((email, password))
     return pairs
+
+
+def _parse_extra_admins() -> list[tuple[str, str]]:
+    """Parse ADMIN_EXTRA_ACCOUNTS env var into list of (email, password) tuples."""
+    return _parse_colon_pairs(ADMIN_EXTRA_ACCOUNTS)
+
+
+def _parse_test_accounts() -> list[tuple[str, str]]:
+    """Parse TEST_ACCOUNTS env var into list of (email, password) tuples."""
+    return _parse_colon_pairs(TEST_ACCOUNTS)
 
 VALID_PLAN_TYPES = {"basic", "pro", "premium", "enterprise"}
 
@@ -167,6 +179,26 @@ async def _seed_default_users() -> int:
                 db.add(extra_admin)
                 print(f"Created extra admin user: {extra_email}")
 
+        # Extra test accounts (from TEST_ACCOUNTS env var)
+        test_accounts = _parse_test_accounts()
+        for idx, (test_email, test_password) in enumerate(test_accounts, start=1):
+            r = await db.execute(select(User).where(User.email == test_email))
+            existing = r.scalar_one_or_none()
+            if existing:
+                print(f"Test account already exists: {test_email}")
+            else:
+                test_user = User(
+                    email=test_email,
+                    username=f"test-{idx}",
+                    full_name=f"Test User {idx}",
+                    hashed_password=security.get_password_hash(test_password),
+                    is_active=True,
+                    is_superuser=False,
+                    email_verified=True,
+                )
+                db.add(test_user)
+                print(f"Created test account: {test_email}")
+
         await db.commit()
 
     print()
@@ -175,6 +207,8 @@ async def _seed_default_users() -> int:
     print(f"  Admin: {ADMIN_EMAIL} / <password from env>")
     for extra_email, _ in extra_admins:
         print(f"  Admin: {extra_email} / <password from env>")
+    for test_email, _ in test_accounts:
+        print(f"  Test:  {test_email} / <password from env>")
     return 0
 
 

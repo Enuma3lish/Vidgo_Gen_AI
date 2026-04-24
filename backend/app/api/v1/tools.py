@@ -11,14 +11,14 @@ Tools:
 6. AI Avatar - /tools/avatar (NEW: Photo-to-Avatar with lip sync)
 """
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
 import uuid
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 import httpx
 from io import BytesIO
 
@@ -40,6 +40,8 @@ import os
 import hashlib
 
 logger = logging.getLogger(__name__)
+
+PRODUCT_SCENE_MAX_DIMENSION = 1536
 
 
 async def _maybe_recycle_for_demo(
@@ -120,13 +122,29 @@ async def _demo_response(
     topic: str | None = None,
     cta: str = "Subscribe for custom generation.",
     product_id: str | None = None,
+    input_image_url: str | None = None,
+    input_video_url: str | None = None,
+    effect_prompt: str | None = None,
 ):
-    """Get demo from cache, Material DB, or generate on-demand if missing."""
+    """Resolve a demo result honoring the user's chosen input + effect.
+
+    Flow: check the DB for an existing (tool, effect_or_topic, input_url)
+    row via lookup_hash → fall back to generic topic match → otherwise run
+    on-demand generation against the user's chosen input + effect, cache the
+    result, and return it.
+    """
     try:
         redis = await get_redis()
     except Exception:
         redis = None
-    demo = await DemoCacheService(db, redis).get_or_generate(tool_type, topic, product_id=product_id)
+    demo = await DemoCacheService(db, redis).get_or_generate(
+        tool_type,
+        topic,
+        product_id=product_id,
+        input_image_url=input_image_url,
+        input_video_url=input_video_url,
+        effect_prompt=effect_prompt,
+    )
     if not demo:
         raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable. Please try again.")
     return ToolResponse(
@@ -158,11 +176,19 @@ def _resolve_public_url(url: str) -> str:
 async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str):
     """Refund credits on operation failure."""
     try:
+        if getattr(user, "is_superuser", False):
+            logger.info(
+                "Skipping refund for superuser %s on failed %s; no credits were deducted",
+                user.id,
+                service_type,
+            )
+            return
         credit_svc = CreditService(db)
         await credit_svc.add_credits(
             user_id=str(user.id),
             amount=amount,
             credit_type="subscription",
+            transaction_type="refund",
             description=f"Refund: {service_type} failed",
         )
         logger.info(f"Refunded {amount} credits to user {user.id} for failed {service_type}")
@@ -272,24 +298,33 @@ async def _check_and_deduct_credits(
 
 class RemoveBackgroundRequest(BaseModel):
     """Remove background from image"""
-    image_url: str
-    output_format: str = "png"  # png (transparent) or white
+    image_url: str = Field(..., description="Publicly reachable image URL to process.")
+    output_format: str = Field("png", description="Output background mode: 'png' for transparent output or 'white' for a white backdrop.")
 
 
 class RemoveBackgroundBatchRequest(BaseModel):
     """Batch remove background"""
-    image_urls: List[str]
-    output_format: str = "png"
+    image_urls: List[str] = Field(..., description="List of publicly reachable image URLs to process. Maximum 10 per request.")
+    output_format: str = Field("png", description="Output background mode for every image in the batch.")
 
 
 class ProductSceneRequest(BaseModel):
     """Generate product in new scene"""
-    product_image_url: Optional[str] = None
-    image_url: Optional[str] = None  # Alias for product_image_url
-    product_id: Optional[str] = None  # Demo product ID for matching cached presets
-    scene_type: str = "studio"  # studio, nature, elegant, minimal, lifestyle
-    custom_prompt: Optional[str] = None
-    template_id: Optional[str] = None  # Style template ID — overrides scene_type/custom_prompt
+    product_image_url: Optional[str] = Field(None, description="Primary product image URL. Use this or image_url.")
+    image_url: Optional[str] = Field(None, description="Alias for product_image_url for client compatibility.")
+    product_id: Optional[str] = Field(None, description="Optional preset product identifier used to match a cached demo example.")
+    scene_type: str = Field(
+        "studio",
+        description="Named preset scene. Valid values: studio, nature, elegant, minimal, lifestyle, urban, seasonal, holiday, spring, valentines, black_friday, christmas, new_year.",
+    )
+    custom_prompt: Optional[str] = Field(
+        None,
+        description="Optional full natural-language scene prompt. When provided, it overrides scene_type unless template_id is also set.",
+    )
+    template_id: Optional[str] = Field(
+        None,
+        description="Optional template identifier. Highest priority override for scene generation; takes precedence over both custom_prompt and scene_type.",
+    )
 
     def get_product_url(self) -> str:
         url = self.product_image_url or self.image_url
@@ -300,13 +335,13 @@ class ProductSceneRequest(BaseModel):
 
 class TryOnRequest(BaseModel):
     """AI Try-On - virtual clothing try-on"""
-    garment_image_url: Optional[str] = None
-    image_url: Optional[str] = None  # Alias for garment_image_url
-    model_image_url: Optional[str] = None  # Use preset model if None
-    model_id: Optional[str] = None  # Preset model ID
-    angle: str = "front"  # front, side, back
-    background: str = "white"  # white, transparent, studio
-    template_id: Optional[str] = None  # Style template ID — sets scene/background for the try-on
+    garment_image_url: Optional[str] = Field(None, description="Garment image URL to place on the model. Use this or image_url.")
+    image_url: Optional[str] = Field(None, description="Alias for garment_image_url for client compatibility.")
+    model_image_url: Optional[str] = Field(None, description="Optional explicit model image URL. If omitted, the API falls back to model_id or a preset model.")
+    model_id: Optional[str] = Field(None, description="Optional preset model identifier such as female-1 or male-1.")
+    angle: str = Field("front", description="Target garment view angle: front, side, or back.")
+    background: str = Field("white", description="Requested background for the try-on result: white, transparent, or studio.")
+    template_id: Optional[str] = Field(None, description="Optional style template that controls the try-on scene or background.")
 
     def get_garment_url(self) -> str:
         url = self.garment_image_url or self.image_url
@@ -317,11 +352,11 @@ class TryOnRequest(BaseModel):
 
 class RoomRedesignRequest(BaseModel):
     """Room Redesign - transform room style"""
-    room_image_url: Optional[str] = None
-    image_url: Optional[str] = None  # Alias for room_image_url
-    style: str = "modern"  # modern, nordic, japanese, industrial, minimalist, luxury
-    custom_prompt: Optional[str] = None
-    preserve_structure: bool = True
+    room_image_url: Optional[str] = Field(None, description="Source room image URL. Use this or image_url.")
+    image_url: Optional[str] = Field(None, description="Alias for room_image_url for client compatibility.")
+    style: str = Field("modern", description="Preset redesign style. Common values include modern, nordic, japanese, industrial, minimalist, and luxury.")
+    custom_prompt: Optional[str] = Field(None, description="Optional detailed redesign instruction that supplements or overrides the preset style description.")
+    preserve_structure: bool = Field(True, description="Keep the original room layout and architectural structure while changing the design style.")
 
     def get_room_url(self) -> str:
         url = self.room_image_url or self.image_url
@@ -332,22 +367,23 @@ class RoomRedesignRequest(BaseModel):
 
 class ShortVideoRequest(BaseModel):
     """Short Video - image to video with optional TTS"""
-    image_url: str
-    motion_strength: int = 5  # 1-10
-    style: Optional[str] = None  # Optional style transformation
-    script: Optional[str] = None  # Optional TTS script
-    voice_id: Optional[str] = None  # TTS voice ID
+    image_url: str = Field(..., description="Input image URL used as the starting frame for video generation.")
+    motion_strength: int = Field(5, ge=1, le=10, description="Motion intensity from 1 to 10. Higher values produce more camera or object movement.")
+    model_id: Optional[str] = Field(None, description="Optional image-to-video model identifier such as pixverse_v4.5, pixverse_v5, kling_v2, kling_v1.5, or luma_ray2.")
+    style: Optional[str] = Field(None, description="Optional visual style or effect hint to steer the motion result.")
+    script: Optional[str] = Field(None, description="Optional narration script for text-to-speech voice-over.")
+    voice_id: Optional[str] = Field(None, description="Optional voice identifier for TTS narration.")
 
 
 class AvatarRequest(BaseModel):
     """AI Avatar - Photo-to-Avatar with lip sync"""
-    image_url: str  # Clear headshot photo
-    script: str  # Text for the avatar to speak
-    language: str = "en"  # Language code: 'en' or 'zh-TW'
-    voice_id: Optional[str] = None  # Voice ID (defaults to first voice for language)
-    duration: int = 30  # Target duration in seconds (max 120)
-    aspect_ratio: str = "9:16"  # Video aspect ratio: '9:16', '16:9', '1:1'
-    resolution: str = "720p"  # Resolution: '720p' or '1080p'
+    image_url: str = Field(..., description="Clear frontal headshot URL used to generate the speaking avatar.")
+    script: str = Field(..., description="Exact speech content for the avatar to say. Write complete spoken sentences.")
+    language: str = Field("en", description="Speech language code, for example 'en' or 'zh-TW'.")
+    voice_id: Optional[str] = Field(None, description="Optional voice identifier. If omitted, the first supported voice for the selected language is used.")
+    duration: int = Field(30, ge=1, le=120, description="Target video duration in seconds.")
+    aspect_ratio: str = Field("9:16", description="Target video aspect ratio: 9:16, 16:9, or 1:1.")
+    resolution: str = Field("720p", description="Output resolution: 720p or 1080p.")
 
 
 class ToolResponse(BaseModel):
@@ -385,6 +421,16 @@ SCENE_TEMPLATES = [
      "prompt": "product on rustic wooden surface surrounded by scattered autumn maple leaves in amber and crimson, warm low-angle golden afternoon sun, f/3.5 aperture 85mm lens, soft bokeh with warm particles in air, rich warm color grading, seasonal harvest mood, editorial product photography, no people no person no human"},
     {"id": "holiday", "name": "Holiday", "name_zh": "節日", "preview_url": "/static/scenes/holiday.jpg",
      "prompt": "product placed among wrapped gift boxes with satin ribbons, twinkling warm white fairy lights bokeh in background, pine branches and red ornaments as props, warm candlelight tone mixed with soft studio fill, f/2.8 aperture 85mm lens, festive holiday campaign photography aesthetic, no people no person no human"},
+    {"id": "spring", "name": "Spring Sale", "name_zh": "春季特賣", "preview_url": "/static/scenes/spring.jpg",
+     "prompt": "product on light wooden table surrounded by fresh cherry blossom petals in soft pink, bright spring morning sunlight streaming through window, pastel green and pink color palette, gentle breeze atmosphere, scattered flower buds and new leaves, f/2.8 aperture 85mm lens, fresh spring campaign photography aesthetic, no people no person no human"},
+    {"id": "valentines", "name": "Valentine's Day", "name_zh": "情人節", "preview_url": "/static/scenes/valentines.jpg",
+     "prompt": "product placed on rose-petal-covered marble surface, romantic red and pink roses surrounding, soft warm candlelight bokeh, heart-shaped decorations and satin ribbons as props, intimate warm lighting with pink hue, f/2.8 aperture 85mm lens, romantic Valentine campaign photography, no people no person no human"},
+    {"id": "black_friday", "name": "Black Friday", "name_zh": "黑色星期五", "preview_url": "/static/scenes/black_friday.jpg",
+     "prompt": "product on sleek glossy black surface, dramatic spotlight from above, bold neon sale tags and shopping bags in background, high contrast black and gold color scheme, modern retail campaign look, metallic accent reflections, f/4 aperture 50mm lens, premium Black Friday promotional photography, no people no person no human"},
+    {"id": "christmas", "name": "Christmas", "name_zh": "聖誕節", "preview_url": "/static/scenes/christmas.jpg",
+     "prompt": "product nestled among christmas pine branches with red berries, warm golden fairy lights twinkling in background, red and green gift ribbons, snow frost effect on edges, traditional red and gold christmas ornaments as props, cozy warm white lighting, f/2.8 aperture 85mm lens, magical christmas campaign photography, no people no person no human"},
+    {"id": "new_year", "name": "New Year", "name_zh": "新年", "preview_url": "/static/scenes/new_year.jpg",
+     "prompt": "product on elegant reflective gold surface, sparkling confetti and streamers in background, champagne glass and clock showing midnight as props, luxurious black and gold color scheme, celebratory firework bokeh lights, festive new year countdown atmosphere, f/2.8 aperture 85mm lens, glamorous New Year campaign photography, no people no person no human"},
 ]
 
 # Interior design styles for Room Redesign
@@ -482,7 +528,12 @@ async def remove_background(
     """
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.BACKGROUND_REMOVAL, cta="Subscribe to process your own images.")
+        return await _demo_response(
+            db,
+            ToolType.BACKGROUND_REMOVAL,
+            cta="Subscribe to process your own images.",
+            input_image_url=_resolve_public_url(str(request.image_url)) if request.image_url else None,
+        )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 3
@@ -632,7 +683,8 @@ async def generate_product_scene(
     2. Generate scene background (T2I)
     3. Composite product onto scene (PIL)
 
-    Scene types: studio, nature, elegant, minimal, lifestyle, urban, seasonal, holiday
+    Scene type priority: template_id > custom_prompt > scene_type
+    Scene types: studio, nature, elegant, minimal, lifestyle, urban, seasonal, holiday, spring, valentines, black_friday, christmas, new_year
     Credits: 10 per generation
     """
     # Resolve scene prompt — template_id takes priority, then custom_prompt, then scene_type
@@ -655,12 +707,19 @@ async def generate_product_scene(
     
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
+        user_product_url = None
+        try:
+            user_product_url = str(request.get_product_url())
+        except ValueError:
+            user_product_url = None
         return await _demo_response(
             db,
             ToolType.PRODUCT_SCENE,
             topic=request.scene_type,
             product_id=request.product_id,
             cta="Subscribe to generate custom scenes.",
+            input_image_url=user_product_url,
+            effect_prompt=scene_prompt,
         )
 
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
@@ -699,66 +758,14 @@ async def generate_product_scene(
             
         scene_url = t2i_result["output"]["image_url"]
         
-        # Step 3: Composite (Local PIL processing)
+        # Step 3: Composite with bounded memory usage so large provider outputs
+        # do not OOM the Cloud Run instance.
         logger.info("Step 3: Compositing...")
+        composite_result = await _composite_product_scene(product_no_bg_url, scene_url)
+        if not composite_result.get("success"):
+            raise Exception(f"Product compositing failed: {composite_result.get('error')}")
 
-        async def _load_image(url: str) -> Image.Image:
-            """Load image from local path or remote URL."""
-            if url.startswith("/static") or url.startswith("static"):
-                local_path = Path("/app") / url.lstrip("/")
-                return Image.open(local_path)
-            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as c:
-                resp = await c.get(url)
-                resp.raise_for_status()
-                return Image.open(BytesIO(resp.content))
-
-        p_img = (await _load_image(product_no_bg_url)).convert("RGBA")
-        s_img = (await _load_image(scene_url)).convert("RGBA")
-
-        # Smart Placement Logic
-        scene_w, scene_h = s_img.size
-        target_w = int(scene_w * 0.6)
-        prod_w, prod_h = p_img.size
-        scale = target_w / prod_w
-        new_w = target_w
-        new_h = int(prod_h * scale)
-
-        if new_h > scene_h * 0.8:
-            scale = (scene_h * 0.8) / prod_h
-            new_h = int(prod_h * scale)
-            new_w = int(prod_w * scale)
-
-        p_resized = p_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        x_off = (scene_w - new_w) // 2
-        y_off = (scene_h - new_h) // 2
-
-        s_img.paste(p_resized, (x_off, y_off), p_resized)
-        final_img = s_img.convert("RGB")
-
-        # VG-BUG-005 fix: persist to GCS (not /app/static/user_generated/, which
-        # is ephemeral Cloud Run FS and 404s after instance recycles). Upload
-        # directly from the in-memory buffer to the shared media bucket.
-        from app.services.gcs_storage_service import get_gcs_storage
-        gcs = get_gcs_storage()
-        filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
-        if gcs.enabled:
-            buf = BytesIO()
-            final_img.save(buf, "PNG", quality=95)
-            buf.seek(0)
-            result_url = gcs.upload_public(
-                data=buf.getvalue(),
-                blob_name=f"generated/image/{filename}",
-                content_type="image/png",
-            )
-        else:
-            # Fallback for local dev without GCS wiring — keep the old
-            # ephemeral path so the endpoint still returns something.
-            logger.warning("[product-scene] GCS not configured, using ephemeral /static path")
-            output_dir = Path("/app/static/user_generated")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            final_path = output_dir / filename
-            final_img.save(final_path, "PNG", quality=95)
-            result_url = f"/static/user_generated/{filename}"
+        result_url = composite_result["image_url"]
 
         # Save to UserGeneration
         user_gen = UserGeneration(
@@ -813,23 +820,31 @@ async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> di
         {"success": True, "image_url": str} or {"success": False, "error": str}
     """
     try:
-        # Load product image (with transparent background)
-        if product_no_bg_url.startswith("/static"):
-            product_path = f"/app{product_no_bg_url}"
-            product_img = Image.open(product_path).convert("RGBA")
-        else:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(product_no_bg_url)
-                product_img = Image.open(BytesIO(response.content)).convert("RGBA")
-        
-        # Load scene background
-        if scene_url.startswith("/static"):
-            scene_path = f"/app{scene_url}"
-            scene_img = Image.open(scene_path).convert("RGBA")
-        else:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(scene_url)
-                scene_img = Image.open(BytesIO(response.content)).convert("RGBA")
+        def _prepare_image(source: Image.Image, mode: str) -> Image.Image:
+            prepared = ImageOps.exif_transpose(source)
+            if max(prepared.size) > PRODUCT_SCENE_MAX_DIMENSION:
+                prepared.thumbnail(
+                    (PRODUCT_SCENE_MAX_DIMENSION, PRODUCT_SCENE_MAX_DIMENSION),
+                    Image.Resampling.LANCZOS,
+                )
+            return prepared.convert(mode)
+
+        async def _load_image(url: str, mode: str) -> Image.Image:
+            if url.startswith("/static") or url.startswith("static"):
+                local_path = Path("/app") / url.lstrip("/")
+                with Image.open(local_path) as source:
+                    return _prepare_image(source, mode)
+
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            with Image.open(BytesIO(response.content)) as source:
+                return _prepare_image(source, mode)
+
+        product_img = await _load_image(product_no_bg_url, "RGBA")
+        scene_img = await _load_image(scene_url, "RGB")
+        product_resized: Image.Image | None = None
+        upload_buffer: BytesIO | None = None
         
         # Resize product to fit nicely in scene (60% of scene width, centered)
         scene_w, scene_h = scene_img.size
@@ -852,26 +867,43 @@ async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> di
         x_offset = (scene_w - new_w) // 2
         y_offset = (scene_h - new_h) // 2
         
-        # Composite: paste product onto scene using alpha channel
+        # Composite onto the RGB scene using the product alpha channel.
         scene_img.paste(product_resized, (x_offset, y_offset), product_resized)
         
-        # Convert back to RGB for saving as PNG (no alpha)
-        final_img = scene_img.convert("RGB")
-        
-        # Save result
-        output_dir = Path("/app/static/generated")
-        output_dir.mkdir(parents=True, exist_ok=True)
         filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
-        output_path = output_dir / filename
-        final_img.save(output_path, "PNG", quality=95)
-        
-        result_url = f"/static/generated/{filename}"
+        from app.services.gcs_storage_service import get_gcs_storage
+        gcs = get_gcs_storage()
+        if gcs.enabled:
+            upload_buffer = BytesIO()
+            scene_img.save(upload_buffer, "PNG", optimize=True)
+            upload_buffer.seek(0)
+            result_url = gcs.upload_public(
+                data=upload_buffer.getvalue(),
+                blob_name=f"generated/image/{filename}",
+                content_type="image/png",
+            )
+        else:
+            output_dir = Path("/app/static/generated")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / filename
+            scene_img.save(output_path, "PNG", optimize=True)
+            result_url = f"/static/generated/{filename}"
+
         logger.info(f"[Composite] Saved: {result_url}")
         return {"success": True, "image_url": result_url}
         
     except Exception as e:
         logger.error(f"[Composite] Error: {e}")
         return {"success": False, "error": str(e)}
+    finally:
+        if upload_buffer is not None:
+            upload_buffer.close()
+        if product_resized is not None:
+            product_resized.close()
+        if 'product_img' in locals():
+            product_img.close()
+        if 'scene_img' in locals():
+            scene_img.close()
 
 
 # ============================================================================
@@ -895,7 +927,17 @@ async def ai_try_on(
     """
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.TRY_ON, cta="Subscribe to try on your own garments.")
+        try:
+            user_garment = str(request.get_garment_url())
+        except ValueError:
+            user_garment = None
+        return await _demo_response(
+            db,
+            ToolType.TRY_ON,
+            cta="Subscribe to try on your own garments.",
+            product_id=request.model_id,
+            input_image_url=user_garment,
+        )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 15
@@ -1056,7 +1098,20 @@ async def room_redesign(
     """
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.ROOM_REDESIGN, topic=request.style, cta="Subscribe to redesign your own rooms.")
+        try:
+            user_room = str(request.get_room_url())
+        except ValueError:
+            user_room = None
+        interior_match = next((s for s in INTERIOR_STYLES if s["id"] == request.style), None)
+        room_effect_prompt = request.custom_prompt or (interior_match["prompt"] if interior_match else None)
+        return await _demo_response(
+            db,
+            ToolType.ROOM_REDESIGN,
+            topic=request.style,
+            cta="Subscribe to redesign your own rooms.",
+            input_image_url=user_room,
+            effect_prompt=room_effect_prompt,
+        )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 20
@@ -1155,7 +1210,22 @@ async def generate_short_video(
     """
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.SHORT_VIDEO, cta="Subscribe to create your own videos.")
+        user_frame_url = _resolve_public_url(str(request.image_url)) if request.image_url else None
+        # Motion prompt — prefer an explicit style hint from the client; otherwise
+        # derive a terse motion description from motion_strength so the cache key
+        # differentiates between "gentle" and "dramatic" selections.
+        demo_effect_prompt = request.style or (
+            "dramatic cinematic motion" if (request.motion_strength or 5) >= 7
+            else "gentle cinematic motion" if (request.motion_strength or 5) >= 4
+            else "subtle cinematic motion"
+        )
+        return await _demo_response(
+            db,
+            ToolType.SHORT_VIDEO,
+            cta="Subscribe to create your own videos.",
+            input_image_url=user_frame_url,
+            effect_prompt=demo_effect_prompt,
+        )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 25
@@ -1201,6 +1271,9 @@ async def generate_short_video(
             "duration": 5
         }
 
+        if request.model_id:
+            task_params["model"] = request.model_id
+
         result = await provider_router.route(
             TaskType.I2V,
             task_params
@@ -1245,7 +1318,7 @@ async def generate_short_video(
                 user_id=current_user.id,
                 tool_type=ToolType.SHORT_VIDEO,
                 input_image_url=str(request.image_url),
-                input_params={"motion_strength": request.motion_strength, "style": request.style},
+                input_params={"motion_strength": request.motion_strength, "style": request.style, "model_id": request.model_id},
                 result_video_url=video_url,
                 credits_used=credits_used,
             )
@@ -1312,7 +1385,13 @@ async def video_transform(
     Credits: 35 per generation
     """
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.SHORT_VIDEO, cta="Subscribe for video style transfer.")
+        return await _demo_response(
+            db,
+            ToolType.SHORT_VIDEO,
+            cta="Subscribe for video style transfer.",
+            input_video_url=request.video_url,
+            effect_prompt=request.prompt,
+        )
 
     CREDIT_COST = 35
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "video_transform")
@@ -1384,7 +1463,19 @@ async def upscale_image(
     Credits: 10 per generation
     """
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.EFFECT, cta="Subscribe for HD upscale.")
+        return await _demo_response(
+            db,
+            ToolType.EFFECT,
+            cta="Subscribe for HD upscale.",
+            input_image_url=_resolve_public_url(str(request.image_url)) if request.image_url else None,
+            effect_prompt=f"upscale_{request.scale}x",
+        )
+
+    # Plan-gate high-scale upscale: 2x ≈ 1080p, 4x ≈ 4K
+    requested_resolution = "4k" if request.scale >= 4 else "1080p"
+    res_ok, res_err = await _check_plan_resolution(db, current_user, requested_resolution)
+    if not res_ok:
+        return ToolResponse(success=False, message=res_err)
 
     CREDIT_COST = 10
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "upscale")
@@ -1456,7 +1547,14 @@ async def generate_avatar_video(
 
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.AI_AVATAR, cta="Subscribe to create your own avatars.")
+        user_headshot = _resolve_public_url(str(request.image_url)) if request.image_url else None
+        return await _demo_response(
+            db,
+            ToolType.AI_AVATAR,
+            cta="Subscribe to create your own avatars.",
+            input_image_url=user_headshot,
+            effect_prompt=request.script,
+        )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
     # Check plan-level resolution limit
@@ -1634,7 +1732,13 @@ async def image_transform(
     """
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
-        return await _demo_response(db, ToolType.EFFECT, cta="Subscribe for custom I2I transformations.")
+        return await _demo_response(
+            db,
+            ToolType.EFFECT,
+            cta="Subscribe for custom I2I transformations.",
+            input_image_url=_resolve_public_url(str(request.image_url)) if request.image_url else None,
+            effect_prompt=request.prompt,
+        )
 
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
     # Check plan-level effects permission

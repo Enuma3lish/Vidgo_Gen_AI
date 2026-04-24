@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     DEBUG: bool = True
 
+    # Admin notifications
+    ADMIN_ACCOUNT: str = ""
+    ADMIN_EXTRA_ACCOUNTS: str = ""
+    PROVIDER_ALERT_COOLDOWN_MINUTES: int = 15
+
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/vidgo"
 
@@ -108,6 +113,8 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@vidgo.co"
     SMTP_FROM_NAME: str = "VidGo"
     SMTP_TLS: bool = True
+    SMTP_SSL: bool = False
+    SMTP_TIMEOUT_SECONDS: int = 15
 
     # Email Verification
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
@@ -140,7 +147,7 @@ class Settings(BaseSettings):
 
     # Upload settings (subscriber material upload)
     MAX_UPLOAD_SIZE_MB: int = 20           # Max file size for subscriber uploads
-    UPLOAD_ALLOWED_TYPES: str = "image/jpeg,image/png,image/webp,image/gif"
+    UPLOAD_ALLOWED_TYPES: str = "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
 
     # Model credit multipliers (model_id → credit cost per generation)
     # Base cost is defined in ServicePricing; these are multipliers

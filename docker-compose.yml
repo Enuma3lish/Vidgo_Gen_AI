@@ -91,6 +91,7 @@ services:
       - REDIS_HOST=redis
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8501}
       - CLEAN_MATERIALS=${CLEAN_MATERIALS:-}
+      - PREGEN_FESTIVALS=${PREGEN_FESTIVALS:-false}
     depends_on:
       postgres:
         condition: service_healthy

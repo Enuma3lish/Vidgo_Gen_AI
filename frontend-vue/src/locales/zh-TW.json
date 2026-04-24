@@ -40,12 +40,12 @@
     "video": {
       "name": "AI影片",
       "desc": "靜態圖片變動態影片",
-      "longDesc": "圖片轉影片、風格轉換，多種藝術風格任您選擇",
+      "longDesc": "專注圖生影片（Image-to-Video）：上傳商品圖，生成高穩定動態短影音",
       "imageToVideo": "圖轉影片",
-      "styleTransform": "風格轉換",
-      "stylesDesc": "多種藝術風格，讓影片更具特色",
+      "styleTransform": "圖生影片",
+      "stylesDesc": "上傳單張圖片，快速生成可投放 IG/TikTok 的動態素材",
       "ctaTitle": "讓您的圖片動起來",
-      "ctaDesc": "一鍵生成影片，多種風格任選"
+      "ctaDesc": "僅需一張圖，穩定生成商品動態短影音"
     },
     "avatar": {
       "name": "AI數位人",
@@ -98,9 +98,9 @@
       "desc": "一鍵移除圖片背景"
     },
     "productScene": {
-      "name": "產品攝影靈感庫",
-      "desc": "瀏覽專業產品攝影範例",
-      "longDesc": "探索 AI 生成的產品攝影概念。訂閱後可上傳自己的產品進行自定義場景生成。"
+      "name": "AI 商品情境攝影棚",
+      "desc": "上傳商品圖並套用高質感風格模版，一鍵生成商業級場景",
+      "longDesc": "內建高質感場景模版（如地中海夕陽、極簡侘寂客廳、巴黎街頭）。您只需上傳商品圖並點擊模版，系統會自動套用專業光影、焦距與材質設定。"
     },
     "productEnhance": {
       "name": "商品增強",
@@ -123,24 +123,24 @@
       "longDesc": "自動生成動態產品展示影片"
     },
     "backgroundRemoval": {
-      "name": "智能去背",
-      "desc": "一鍵移除圖片背景",
-      "longDesc": "自動檢測並一鍵移除任何圖片的背景"
+      "name": "智能去背（基礎）",
+      "desc": "最低成本的 API 呼叫，一鍵去背作為後續合成基礎",
+      "longDesc": "自動檢測並移除背景，專為電商主圖前處理設計。"
     },
     "tryOn": {
-      "name": "時尚穿搭展示",
-      "desc": "瀏覽時尚模特穿搭範例",
-      "longDesc": "查看 AI 生成的時尚模特穿搭靈感。訂閱後可使用自己的照片進行虛擬試穿。"
+      "name": "AI 模特換裝",
+      "desc": "上傳服飾圖，快速生成寫實模特穿搭成果",
+      "longDesc": "內建多款模特與拍攝場景模版，主打高轉換率的服飾電商展示。"
     },
     "roomRedesign": {
-      "name": "室內設計範例庫",
-      "desc": "瀏覽室內設計靈感",
-      "longDesc": "探索 AI 生成的室內設計範例。訂閱後可上傳自己的房間照片進行自定義設計。"
+      "name": "毛胚屋/線稿秒渲染",
+      "desc": "上傳空屋照或線稿，一鍵生成高畫質寫實設計圖",
+      "longDesc": "將空間照片、毛胚屋或設計線稿快速渲染成北歐風、工業風等風格實景圖；Image Transform 能力已整合於此流程。"
     },
     "shortVideo": {
-      "name": "短視頻",
-      "desc": "創建引人入勝的短視頻",
-      "longDesc": "從文字描述或圖片生成精彩短視頻",
+      "name": "商品動態短影音（圖生影片）",
+      "desc": "僅支援上傳圖片生成動態影片，穩定、省點數、轉換率高",
+      "longDesc": "以 Image-to-Video 為核心：上傳商品圖後生成自然動態（如海浪、布料飄動），不開放純文字生影片。",
       "tryExamples": "請試試我們精彩的範例",
       "clickToSee": "點擊查看不同動態效果",
       "selectExample": "選擇一個範例",
@@ -321,11 +321,11 @@
       "videoStyleTransfer": "視頻風格轉換",
       "aiAvatar": "AI數位人",
       "productVideo": "產品視頻",
-      "productScene": "產品場景",
-      "backgroundRemoval": "背景移除",
+      "productScene": "AI 商品情境攝影棚",
+      "backgroundRemoval": "智能去背（基礎）",
       "productEnhancement": "產品增強",
-      "virtualTryOn": "虛擬試穿",
-      "roomRedesign": "房間重新設計",
+      "virtualTryOn": "AI 模特換裝",
+      "roomRedesign": "毛胚屋/線稿秒渲染",
       "interiorStyle": "室內風格轉換",
       "archVisualization": "建築可視化",
       "furniturePlacement": "家具擺放",
@@ -474,12 +474,12 @@
     "noWorksDesc": "從任意 AI 工具開始創作吧！",
     "startCreating": "立即開始創作",
     "tools": {
-      "shortVideo": "AI 短影片",
+      "shortVideo": "商品動態短影音（圖生影片）",
       "avatar": "AI 數位人",
-      "tryOn": "虛擬試穿",
-      "productScene": "產品場景",
-      "bgRemoval": "智能去背",
-      "roomRedesign": "空間設計"
+      "tryOn": "AI 模特換裝",
+      "productScene": "AI 商品情境攝影棚",
+      "bgRemoval": "智能去背（基礎）",
+      "roomRedesign": "毛胚屋/線稿秒渲染"
     },
     "time": {
       "justNow": "剛剛",
@@ -493,6 +493,10 @@
     "subtitle": "免費開始，隨需擴展",
     "monthly": "月付",
     "yearly": "年付",
+    "perMonthShort": "月",
+    "billedAnnually": "年繳總額",
+    "saveVsMonthly": "比月付省 {pct}%",
+    "yearlyDiscountLabel": "省 17%",
     "demo": "體驗版",
     "starter": "入門版",
     "standard": "標準版",
@@ -513,11 +517,11 @@
     "subscribeSuccess": "訂閱成功！",
     "redirectingToPayment": "正在跳轉至付款頁面...",
     "subscribeFailed": "訂閱失敗，請重試。",
-    "refundProcessed": "退款已處理。您的訂閱已取消。",
-    "subscriptionCancelled": "訂閱已取消。您可以繼續使用點數直到計費週期結束。",
+    "refundProcessed": "退款流程已送出並已通知您。訂閱立即取消，方案點數將歸零，電子發票將回收作廢。",
+    "subscriptionCancelled": "訂閱已取消。若您選擇退款，點數將歸零且發票會回收作廢；未退款則可使用到計費週期結束。",
     "cancelFailed": "取消訂閱失敗，請重試。",
     "confirmRefundTitle": "確定要取消並申請退款？",
-    "confirmRefundMessage": "您將獲得全額退款，訂閱會立即結束，方案點數將被收回，此操作無法復原。",
+    "confirmRefundMessage": "您將申請全額退款，訂閱會立即結束，方案點數歸零，並發送退款通知與電子發票回收作廢流程。此操作無法復原。",
     "confirmRefund": "確定取消並退款",
     "confirmCancelTitle": "確定要取消訂閱？",
     "confirmCancelMessage": "訂閱將在目前計費週期結束前保持有效，之後不會再扣款，您可隨時重新訂閱。",
@@ -854,19 +858,19 @@
       "imageTranslator": { "name": "圖片翻譯", "desc": "準確翻譯圖片中的文字" },
       "aiShadows": { "name": "AI 陰影", "desc": "為任何物體添加自然陰影" },
       "roomRedesign": { "name": "毛胚屋/線稿秒渲染", "desc": "上傳空屋照或線稿，一鍵生成寫實室內設計圖" },
-      "bgRemoval": { "name": "智能去背", "desc": "免費去除圖片背景" },
+      "bgRemoval": { "name": "智能去背（基礎）", "desc": "最低成本 API，快速完成商品去背" },
       "hdUpscale": { "name": "商用無損放大", "desc": "將圖片無損放大至 4K，適用於電商上架與印刷" },
-      "imageTransform": { "name": "圖片變換", "desc": "AI 驅動的圖片風格轉換" },
+      "imageTransform": { "name": "空間風格轉換（已整合）", "desc": "已整合至「毛胚屋/線稿秒渲染」流程" },
       "videoTransform": { "name": "影片變換", "desc": "AI 驅動的影片風格轉換" },
       "patternGenerate": { "name": "花紋設計", "desc": "為品牌生成無縫圖案設計" }
     },
     "categories": {
       "fashionAI": "時尚 AI",
-      "fashionAIDesc": "虛擬試穿、時尚短影片和 AI 模特展示——時尚電商視覺內容的完整解決方案。",
+      "fashionAIDesc": "主打 AI 模特換裝與商品動態短影音（圖生影片），專為服飾電商提升轉換。",
       "ecommerceAI": "電商 AI",
-      "ecommerceAIDesc": "產品場景生成、背景去除和 AI 陰影——讓您的產品在每個平台上脫穎而出。",
+      "ecommerceAIDesc": "智能去背（基礎）＋ AI 商品情境攝影棚 ＋ 商用無損放大，打造上架即用素材。",
       "designAI": "設計與內容 AI",
-      "designAIDesc": "空間設計、風格克隆和圖片翻譯——為創意設計工作流程提供強大工具。"
+      "designAIDesc": "毛胚屋/線稿秒渲染：把空屋照與線稿快速轉成高畫質寫實設計圖。"
     },
     "seasons": {
       "spring": "春季特賣",
@@ -959,8 +963,8 @@
     ]
   },
   "gallery": {
-    "title": "靈感作品庫",
-    "subtitle": "瀏覽真實企業的 AI 生成案例。免費用戶可查看並試用範例，訂閱後可上傳自己的素材。",
+    "title": "產品攝影靈感庫",
+    "subtitle": "探索 AI 生成的產品攝影概念。免費用戶可瀏覽精選範例，訂閱後可上傳自己的產品進行自定義場景生成。",
     "searchPlaceholder": "搜尋範例：關鍵字、風格、行業...",
     "filterByIndustry": "按行業篩選",
     "filterByTool": "按工具篩選",
@@ -977,11 +981,11 @@
     "ctaButtonSecondary": "查看方案",
     "categories": {
       "all": "全部範例",
-      "product_scene": "產品場景",
-      "background_removal": "智能去背",
-      "try_on": "虛擬試穿",
-      "room_redesign": "空間設計",
-      "short_video": "短視頻",
+      "product_scene": "AI 商品情境攝影棚",
+      "background_removal": "智能去背（基礎）",
+      "try_on": "AI 模特換裝",
+      "room_redesign": "毛胚屋/線稿秒渲染",
+      "short_video": "商品動態短影音（圖生影片）",
       "ai_avatar": "AI數位人",
       "effect": "圖片特效",
       "pattern_generate": "圖案生成"

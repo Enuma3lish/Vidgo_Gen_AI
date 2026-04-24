@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
@@ -63,29 +63,88 @@ async function loadDemos() {
 const allTools = [
   { id: 'tryOn',           route: '/tools/try-on',             emoji: '👗', color: '#eb2f96', tag: 'Hot' },
   { id: 'fashionReels',    route: '/tools/short-video',        emoji: '🎬', color: '#1677ff', tag: 'Hot' },
-  { id: 'productAvatars',  route: '/tools/avatar',             emoji: '🎭', color: '#531dab', tag: '' },
   { id: 'productAnyshoot', route: '/tools/product-scene',      emoji: '📸', color: '#fa8c16', tag: '' },
   { id: 'bgRemoval',       route: '/tools/background-removal', emoji: '✂️', color: '#08979c', tag: 'Free' },
   { id: 'roomRedesign',    route: '/tools/room-redesign',      emoji: '🏠', color: '#52c41a', tag: '' },
   { id: 'hdUpscale',       route: '/tools/upscale',            emoji: '🔍', color: '#13c2c2', tag: 'New' },
-  { id: 'videoTransform',  route: '/tools/video-transform',    emoji: '🎞️', color: '#434343', tag: '' },
-  { id: 'patternGenerate', route: '/tools/pattern-generate',   emoji: '🎨', color: '#f5222d', tag: '' },
 ]
 
 // ── Seasonal marketing scenarios ──
 const seasons = ref([
-  { id: 'spring', active: false },
-  { id: 'valentines', active: false },
-  { id: 'blackFriday', active: false },
-  { id: 'christmas', active: false },
-  { id: 'newYear', active: true },
+  { id: 'spring', topic: 'spring', active: false },
+  { id: 'valentines', topic: 'valentines', active: false },
+  { id: 'blackFriday', topic: 'black_friday', active: false },
+  { id: 'christmas', topic: 'christmas', active: false },
+  { id: 'newYear', topic: 'new_year', active: true },
 ])
 const activeSeason = ref('newYear')
+
+// Pre-generated season showcase data from API
+interface SeasonItem { url: string; input_url: string; label: string }
+const seasonData = ref<Record<string, SeasonItem[]>>({})
+
+// Fallback images per festival (shown until pregen data loads)
+const SEASON_FALLBACK: Record<string, SeasonItem[]> = {
+  spring: [
+    { url: 'https://images.unsplash.com/photo-1490750967868-88aa4f44baee?w=600&q=80', input_url: '', label: '🌸 Spring Floral' },
+    { url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&q=80', input_url: '', label: '🌿 Fresh Green Tea' },
+    { url: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&q=80', input_url: '', label: '💐 Pastel Cosmetics' },
+    { url: 'https://images.unsplash.com/photo-1525904097878-94fb15835963?w=600&q=80', input_url: '', label: '🌷 Spring Fragrance' },
+  ],
+  valentines: [
+    { url: 'https://images.unsplash.com/photo-1549488344-1f9b8d2bd1f3?w=600&q=80', input_url: '', label: '💝 Valentine Gift Box' },
+    { url: 'https://images.unsplash.com/photo-1519864600265-abb23847ef2c?w=600&q=80', input_url: '', label: '🕯️ Scented Candle' },
+    { url: 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=600&q=80', input_url: '', label: '🍪 Cookie Gift Tin' },
+    { url: 'https://images.unsplash.com/photo-1481391032119-d89fee407e44?w=600&q=80', input_url: '', label: '🍫 Chocolate Collection' },
+  ],
+  blackFriday: [
+    { url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&q=80', input_url: '', label: '🏷️ Flash Deal' },
+    { url: 'https://images.unsplash.com/photo-1517705008128-361805f42e86?w=600&q=80', input_url: '', label: '🎒 Backpack Deal' },
+    { url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80', input_url: '', label: '🎧 Audio Gear Sale' },
+    { url: 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=80', input_url: '', label: '👟 Sneaker Drop' },
+  ],
+  christmas: [
+    { url: 'https://images.unsplash.com/photo-1512909006721-3d6018887383?w=600&q=80', input_url: '', label: '🎄 Holiday Gift Set' },
+    { url: 'https://images.unsplash.com/photo-1543934638-bd2e138430c4?w=600&q=80', input_url: '', label: '🎁 Christmas Candle' },
+    { url: 'https://images.unsplash.com/photo-1482330454287-8cd42b24e80e?w=600&q=80', input_url: '', label: '⛄ Winter Skincare' },
+    { url: 'https://images.unsplash.com/photo-1513885535751-8b9238bd345a?w=600&q=80', input_url: '', label: '🧣 Cozy Accessories' },
+  ],
+  newYear: [
+    { url: 'https://images.unsplash.com/photo-1546189612-f5ec73e91ecf?w=600&q=80', input_url: '', label: '🎆 New Year Champagne' },
+    { url: 'https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&q=80', input_url: '', label: '✨ Gold Cosmetics' },
+    { url: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=600&q=80', input_url: '', label: '🥂 Celebration Set' },
+    { url: 'https://images.unsplash.com/photo-1617897903246-719242758050?w=600&q=80', input_url: '', label: '🎊 Party Collection' },
+  ],
+}
+
+async function loadSeasonPresets(seasonId: string) {
+  const season = seasons.value.find(s => s.id === seasonId)
+  if (!season || seasonData.value[seasonId]?.length) return
+  try {
+    const client = (await import('@/api/client')).default
+    const res = await client.get(`/api/v1/demo/presets/product_scene?topic=${season.topic}&limit=4`)
+    const presets = res.data?.presets || []
+    if (presets.length > 0) {
+      seasonData.value[seasonId] = presets.map((p: any) => ({
+        url: p.result_image_url || p.thumbnail_url || '',
+        input_url: p.input_image_url || '',
+        label: p.input_params?.product_name || p.prompt_zh || p.prompt || t('lp.seasonShowcase'),
+      }))
+    }
+  } catch { /* fallback images will be used */ }
+}
 
 function setActiveSeason(id: string) {
   activeSeason.value = id
   seasons.value.forEach(s => s.active = s.id === id)
+  loadSeasonPresets(id)
 }
+
+const activeSeasonItems = computed(() => {
+  const live = seasonData.value[activeSeason.value]
+  if (live && live.length > 0) return live
+  return SEASON_FALLBACK[activeSeason.value] || SEASON_FALLBACK.newYear
+})
 
 // ── Before/After deep dives ──
 const deepDiveDefs = [
@@ -109,7 +168,11 @@ function handleStartCreating() {
   router.push(authStore.isAuthenticated ? '/tools/try-on' : '/auth/register')
 }
 
-onMounted(() => { loadDemos() })
+onMounted(() => {
+  loadDemos()
+  // Load all festival presets in parallel
+  seasons.value.forEach(s => loadSeasonPresets(s.id))
+})
 onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } })
 </script>
 
@@ -239,8 +302,8 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
                   <span>🎬</span> {{ t('lp.allTools.fashionReels.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/tools/avatar" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
-                  <span>🎭</span> {{ t('lp.allTools.productAvatars.name') }}
+                <RouterLink to="/tools/upscale" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                  <span>🔍</span> {{ t('lp.allTools.hdUpscale.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
               </div>
@@ -266,8 +329,8 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
                   <span>✂️</span> {{ t('lp.allTools.bgRemoval.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/tools/effects" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
-                  <span>🌑</span> {{ t('lp.allTools.aiShadows.name') }}
+                <RouterLink to="/tools/upscale" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                  <span>🔍</span> {{ t('lp.allTools.hdUpscale.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
               </div>
@@ -289,12 +352,8 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
                   <span>🏠</span> {{ t('lp.allTools.roomRedesign.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/tools/effects" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
-                  <span>🎨</span> {{ t('lp.allTools.styleClone.name') }}
-                  <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                </RouterLink>
-                <RouterLink to="/tools/image-translator" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
-                  <span>🌐</span> {{ t('lp.allTools.imageTranslator.name') }}
+                <RouterLink to="/gallery" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                  <span>🖼️</span> {{ t('gallery.title') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
               </div>
@@ -326,16 +385,16 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
         </div>
         <!-- Season showcase grid -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div v-for="i in 4" :key="i"
+          <div v-for="(item, idx) in activeSeasonItems" :key="activeSeason + '-' + idx"
             class="rounded-xl overflow-hidden relative group cursor-pointer transition-all duration-300 hover:-translate-y-1"
             style="aspect-ratio: 3/4; background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <img :src="demo('product_scene', 'after') || FALLBACK.product_scene.after"
-              :alt="'Season showcase ' + i"
+            <img :src="item.url"
+              :alt="item.label"
               class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
             <div class="absolute inset-0" style="background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 50%);"></div>
             <div class="absolute bottom-3 left-3 right-3">
               <span class="text-white text-xs font-medium px-2.5 py-1 rounded-md" style="background: rgba(255,255,255,0.1); backdrop-filter: blur(8px);">
-                {{ t('lp.seasonShowcase') }}
+                {{ item.label }}
               </span>
             </div>
           </div>

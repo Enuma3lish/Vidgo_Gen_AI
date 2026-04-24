@@ -58,6 +58,10 @@ if [ -n "${VERTEX_AI_PROJECT:-}" ] || [ -n "${GEMINI_API_KEY:-}" ]; then
     if ! timeout 900 python -m scripts.generate_example_inputs; then
         fail "Example input image generation failed — refusing to start on broken data"
     fi
+    log "Verifying example input images exist in GCS..."
+    if ! timeout 300 python -m scripts.generate_example_inputs --verify; then
+        fail "Example input image verification failed — refusing to start on broken example inputs"
+    fi
     log "Example input images OK"
 else
     log "WARN: VERTEX_AI_PROJECT and GEMINI_API_KEY both unset — cannot generate example inputs"
@@ -81,6 +85,22 @@ if ! python -m scripts.backfill_material_urls --verify; then
         fail "Material DB has unpersisted URLs — refusing to start uvicorn. Set STRICT_MATERIAL_CHECK=false to override (dev only)."
     else
         log "WARN: verify failed but STRICT_MATERIAL_CHECK=false — starting anyway"
+    fi
+fi
+
+# ── Phase 6: Festival scene pre-generation (optional, idempotent) ────────────
+# Generates product_scene materials for festival topics (spring, valentines,
+# black_friday, christmas, new_year) if PREGEN_FESTIVALS=true.
+# Runs per-topic with limit 2 (~5-10 min, ~$2-4 USD). Safe to re-run.
+if [ "${PREGEN_FESTIVALS:-false}" = "true" ]; then
+    log "PREGEN_FESTIVALS=true — generating festival product scenes..."
+    if timeout 900 python -m scripts.main_pregenerate \
+        --tool product_scene \
+        --topics spring,valentines,black_friday,christmas,new_year \
+        --per-topic-limit 2; then
+        log "Festival scene pre-generation complete"
+    else
+        log "WARN: festival pre-generation had errors (non-fatal, continuing)"
     fi
 fi
 

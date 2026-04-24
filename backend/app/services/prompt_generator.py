@@ -39,11 +39,11 @@ logger = logging.getLogger(__name__)
 # High-quality stock images from Unsplash for demo purposes
 DEMO_IMAGES = {
     "product": [
-        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800",  # Watch
+        "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800",  # Coffee bag
         "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800",  # Headphones
         "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800",    # Sneaker
         "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800",  # Camera
-        "https://images.unsplash.com/photo-1541643600914-78b084683601?w=800",  # Perfume
+        "https://images.unsplash.com/photo-1607006483225-50cf5d3a88f5?w=800",  # Handmade soap
     ],
     "fashion": [
         "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=800",  # Dress
@@ -114,36 +114,36 @@ DEFAULT_PROMPTS = {
     PromptGroup.BACKGROUND_CHANGE: {
         "prompts": [
             {
-                "prompt_en": "Place this product on a professional studio background with soft lighting",
-                "prompt_zh": "將此產品放在專業攝影棚背景上，柔和燈光",
+                "prompt_en": "Place the product in a professional studio scene with soft, even commercial lighting while keeping the product shape and details unchanged.",
+                "prompt_zh": "將產品放入專業攝影棚場景，使用柔和均勻的商業燈光，並保持產品外形與細節不變。",
                 "sub_topic": PromptSubTopic.STUDIO_BACKGROUND,
                 "keywords": ["studio", "professional", "lighting", "product"],
                 "input_image_url": DEMO_IMAGES["product"][0],
             },
             {
-                "prompt_en": "Create outdoor nature scene with this product on wooden table",
-                "prompt_zh": "為此產品創建戶外自然場景，放在木桌上",
+                "prompt_en": "Place the product on a wooden table in a natural outdoor scene with soft daylight, while preserving the original product appearance.",
+                "prompt_zh": "將產品放在戶外自然場景的木桌上，使用柔和日光，並保留原始產品外觀。",
                 "sub_topic": PromptSubTopic.NATURE_BACKGROUND,
                 "keywords": ["nature", "outdoor", "wooden", "table"],
                 "input_image_url": DEMO_IMAGES["product"][1],
             },
             {
-                "prompt_en": "Place product on luxury marble surface with elegant lighting",
-                "prompt_zh": "將產品放在奢華大理石表面上，優雅燈光",
+                "prompt_en": "Place the product on a clean countertop display with polished editorial lighting, keeping the product identity and proportions consistent.",
+                "prompt_zh": "將產品放在乾淨的櫃台展示場景中，搭配俐落的商業燈光，並維持產品識別特徵與比例一致。",
                 "sub_topic": PromptSubTopic.LUXURY_BACKGROUND,
-                "keywords": ["marble", "luxury", "elegant", "lighting"],
+                "keywords": ["countertop", "retail", "editorial", "lighting"],
                 "input_image_url": DEMO_IMAGES["product"][2],
             },
             {
-                "prompt_en": "Create minimalist white background with subtle shadows",
-                "prompt_zh": "創建極簡白色背景，微妙陰影",
+                "prompt_en": "Create a clean minimalist white background with subtle shadows and strong negative space, without changing the product itself.",
+                "prompt_zh": "建立乾淨的極簡白色背景與細微陰影，保留大量留白，且不要改變產品本身。",
                 "sub_topic": PromptSubTopic.WHITE_BACKGROUND,
                 "keywords": ["minimalist", "white", "shadows", "clean"],
                 "input_image_url": DEMO_IMAGES["product"][3],
             },
             {
-                "prompt_en": "Place product in modern lifestyle setting with plants",
-                "prompt_zh": "將產品放在現代生活場景中，搭配綠植",
+                "prompt_en": "Place the product in a modern lifestyle setting with tasteful plants and home props, while keeping the product as the clear focal point.",
+                "prompt_zh": "將產品放入現代生活風場景，搭配適量綠植與家居道具，同時讓產品保持清晰的視覺焦點。",
                 "sub_topic": PromptSubTopic.NATURE_BACKGROUND,
                 "keywords": ["lifestyle", "modern", "plants", "setting"],
                 "input_image_url": DEMO_IMAGES["product"][4],
@@ -155,36 +155,36 @@ DEFAULT_PROMPTS = {
     PromptGroup.PRODUCT_EFFECT: {
         "prompts": [
             {
-                "prompt_en": "Change the color of this product to elegant rose gold",
-                "prompt_zh": "將此產品的顏色更改為優雅的玫瑰金",
+                "prompt_en": "Change the product color to a warm coral tone while preserving its material texture, shape, branding, and lighting.",
+                "prompt_zh": "將產品顏色改為溫暖珊瑚色，同時保留材質紋理、外形、品牌識別與光線表現。",
                 "sub_topic": PromptSubTopic.COLOR_CHANGE,
-                "keywords": ["color", "change", "rose gold", "elegant"],
+                "keywords": ["color", "change", "coral", "friendly"],
                 "input_image_url": DEMO_IMAGES["product"][0],
             },
             {
-                "prompt_en": "Apply matte black finish to this product",
-                "prompt_zh": "為此產品應用啞光黑色效果",
+                "prompt_en": "Apply a matte black finish to the product while keeping the original silhouette, proportions, and surface detail intact.",
+                "prompt_zh": "為產品套用啞光黑色質感，同時保持原本輪廓、比例與表面細節完整。",
                 "sub_topic": PromptSubTopic.MATERIAL_CHANGE,
                 "keywords": ["matte", "black", "finish", "product"],
                 "input_image_url": DEMO_IMAGES["product"][1],
             },
             {
-                "prompt_en": "Add chrome metallic effect with reflections",
-                "prompt_zh": "添加鉻金屬效果與反射",
+                "prompt_en": "Apply a polished chrome metallic finish with realistic reflections, without altering the product structure or branding.",
+                "prompt_zh": "套用拋光鉻金屬質感與真實反射，且不要改變產品結構或品牌識別。",
                 "sub_topic": PromptSubTopic.MATERIAL_CHANGE,
                 "keywords": ["chrome", "metallic", "reflections", "effect"],
                 "input_image_url": DEMO_IMAGES["product"][2],
             },
             {
-                "prompt_en": "Create dramatic studio lighting with sharp shadows",
-                "prompt_zh": "創建戲劇性攝影棚燈光與銳利陰影",
+                "prompt_en": "Add dramatic studio lighting with sharp, intentional shadows while leaving the product design unchanged.",
+                "prompt_zh": "加入戲劇化攝影棚燈光與明確陰影，同時保持產品設計不變。",
                 "sub_topic": PromptSubTopic.LIGHTING_CHANGE,
                 "keywords": ["dramatic", "lighting", "shadows", "studio"],
                 "input_image_url": DEMO_IMAGES["product"][3],
             },
             {
-                "prompt_en": "Add holographic rainbow effect to product surface",
-                "prompt_zh": "為產品表面添加全息彩虹效果",
+                "prompt_en": "Add a holographic rainbow surface effect to the product while preserving the original form, edges, and key details.",
+                "prompt_zh": "為產品表面加入全息彩虹效果，同時保留原始外形、邊緣與關鍵細節。",
                 "sub_topic": PromptSubTopic.MATERIAL_CHANGE,
                 "keywords": ["holographic", "rainbow", "effect", "surface"],
                 "input_image_url": DEMO_IMAGES["product"][4],
@@ -224,10 +224,10 @@ DEFAULT_PROMPTS = {
                 "input_image_url": DEMO_IMAGES["interior"][3],
             },
             {
-                "prompt_en": "Transform into luxury contemporary style with elegant furniture",
-                "prompt_zh": "轉變為奢華當代風格，優雅家具",
+                "prompt_en": "Transform into cozy contemporary style with practical furniture for a welcoming home",
+                "prompt_zh": "轉變為溫馨當代風格，搭配實用家具，營造友善居家感",
                 "sub_topic": PromptSubTopic.MODERN_STYLE,
-                "keywords": ["luxury", "contemporary", "elegant", "furniture"],
+                "keywords": ["cozy", "contemporary", "practical", "furniture"],
                 "input_image_url": DEMO_IMAGES["interior"][4],
             },
         ],
@@ -237,36 +237,36 @@ DEFAULT_PROMPTS = {
     PromptGroup.IMAGE_TO_VIDEO: {
         "prompts": [
             {
-                "prompt_en": "Create smooth zoom in animation focusing on the product",
-                "prompt_zh": "創建流暢的放大動畫，聚焦於產品",
+                "prompt_en": "Create a smooth zoom-in animation that keeps the product centered, stable, and sharply in focus throughout the shot.",
+                "prompt_zh": "建立流暢的推進放大動畫，讓產品在整段鏡頭中保持置中、穩定且清晰對焦。",
                 "sub_topic": PromptSubTopic.ZOOM_IN,
                 "keywords": ["zoom", "smooth", "focus", "animation"],
                 "input_image_url": DEMO_IMAGES["product"][0],
             },
             {
-                "prompt_en": "Add cinematic slow motion with dramatic lighting effects",
-                "prompt_zh": "添加電影級慢動作與戲劇性燈光效果",
+                "prompt_en": "Animate the product with cinematic slow motion and dramatic lighting changes while keeping the subject clear and commercial-ready.",
+                "prompt_zh": "以電影感慢動作與戲劇化光影變化呈現產品，同時讓主體保持清楚且適合商業宣傳。",
                 "sub_topic": PromptSubTopic.CINEMATIC,
                 "keywords": ["cinematic", "slow motion", "dramatic", "lighting"],
                 "input_image_url": DEMO_IMAGES["product"][1],
             },
             {
-                "prompt_en": "Create 360 degree rotation animation of the product",
-                "prompt_zh": "創建產品360度旋轉動畫",
+                "prompt_en": "Create a clean 360-degree product rotation animation with consistent lighting and no distortion of the product shape.",
+                "prompt_zh": "建立乾淨的產品 360 度旋轉動畫，維持一致光線且避免產品外形變形。",
                 "sub_topic": PromptSubTopic.ROTATE,
                 "keywords": ["rotation", "360", "product", "animation"],
                 "input_image_url": DEMO_IMAGES["product"][2],
             },
             {
-                "prompt_en": "Add gentle floating motion with particle effects",
-                "prompt_zh": "添加輕柔漂浮動作與粒子效果",
+                "prompt_en": "Add gentle floating motion with subtle particle effects, keeping the product readable and visually dominant.",
+                "prompt_zh": "加入輕柔漂浮動態與細緻粒子效果，同時保持產品易於辨識且為主要視覺焦點。",
                 "sub_topic": PromptSubTopic.CINEMATIC,
                 "keywords": ["floating", "particles", "gentle", "motion"],
                 "input_image_url": DEMO_IMAGES["product"][3],
             },
             {
-                "prompt_en": "Create dynamic camera movement around the scene",
-                "prompt_zh": "創建場景周圍的動態相機運動",
+                "prompt_en": "Create dynamic camera movement around the scene while keeping the product consistently visible, attractive, and undistorted.",
+                "prompt_zh": "建立環繞場景的動態鏡頭運動，同時讓產品持續清楚可見、具有吸引力且不失真。",
                 "sub_topic": PromptSubTopic.CINEMATIC,
                 "keywords": ["camera", "dynamic", "movement", "scene"],
                 "input_image_url": DEMO_IMAGES["product"][4],
@@ -278,36 +278,36 @@ DEFAULT_PROMPTS = {
     PromptGroup.STYLE_TRANSFER: {
         "prompts": [
             {
-                "prompt_en": "Transform this video into anime style with vibrant colors",
-                "prompt_zh": "將此視頻轉換為動漫風格，鮮豔色彩",
+                "prompt_en": "Transform the video into a polished anime style with vibrant colors while preserving the main action, framing, and subject clarity.",
+                "prompt_zh": "將影片轉換為精緻的動漫風格與鮮明色彩，同時保留主要動作、構圖與主體清晰度。",
                 "sub_topic": PromptSubTopic.DEFAULT,
                 "keywords": ["anime", "vibrant", "colors", "transform"],
                 "input_video_url": None,  # User provides video
             },
             {
-                "prompt_en": "Apply Studio Ghibli animation style to this video",
-                "prompt_zh": "將吉卜力工作室動畫風格應用於此視頻",
+                "prompt_en": "Apply a warm hand-crafted animated storybook look with soft color transitions and gentle environmental detail while preserving the original scene flow.",
+                "prompt_zh": "套用溫暖手作感的動畫故事書風格，加入柔和色彩過渡與細膩環境細節，同時保留原始場景節奏。",
                 "sub_topic": PromptSubTopic.DEFAULT,
                 "keywords": ["ghibli", "animation", "studio", "style"],
                 "input_video_url": None,
             },
             {
-                "prompt_en": "Convert to watercolor painting artistic style",
-                "prompt_zh": "轉換為水彩畫藝術風格",
+                "prompt_en": "Convert the video into a watercolor painting style with soft edges and layered pigment textures while keeping the subject recognizable.",
+                "prompt_zh": "將影片轉換為水彩畫風格，帶有柔和邊緣與層次顏料紋理，同時保持主體可辨識。",
                 "sub_topic": PromptSubTopic.DEFAULT,
                 "keywords": ["watercolor", "artistic", "painting", "style"],
                 "input_video_url": None,
             },
             {
-                "prompt_en": "Apply cyberpunk neon style with glowing effects",
-                "prompt_zh": "應用賽博朋克霓虹風格與發光效果",
+                "prompt_en": "Apply a cyberpunk neon style with glowing accents and high-contrast night colors while preserving the scene composition and motion.",
+                "prompt_zh": "套用賽博朋克霓虹風格與發光點綴，加入高反差夜色，同時保留場景構圖與動態。",
                 "sub_topic": PromptSubTopic.DEFAULT,
                 "keywords": ["cyberpunk", "neon", "glowing", "effects"],
                 "input_video_url": None,
             },
             {
-                "prompt_en": "Transform into oil painting masterpiece style",
-                "prompt_zh": "轉換為油畫傑作風格",
+                "prompt_en": "Transform the video into an oil-painting look with rich brush texture and museum-style color depth while keeping the subject readable.",
+                "prompt_zh": "將影片轉換為油畫質感，加入豐富筆觸與博物館級色彩深度，同時維持主體清晰可讀。",
                 "sub_topic": PromptSubTopic.DEFAULT,
                 "keywords": ["oil painting", "masterpiece", "artistic", "style"],
                 "input_video_url": None,

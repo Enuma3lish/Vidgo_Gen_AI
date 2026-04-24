@@ -1,0 +1,211 @@
+%%{init: {'theme':'neutral','flowchart':{'htmlLabels':true,'curve':'basis'}}}%%
+flowchart TD
+  %% =====================================================================
+  %% VidGo AI — Mock User Behaviour Map
+  %% Each subgraph is a persona. Arrows are API calls + expected response.
+  %% Edges annotated with HTTP method, path, body, and end state.
+  %% Legend:
+  %%   green  = behaves correctly
+  %%   orange = plan-gated (demo / watermark / scheduled downgrade)
+  %%   red    = rejected (401 / 403 / 400 / 409 / 422)
+  %%   blue   = tested in TEST/verify_billing_fixes.py
+  %% =====================================================================
+
+  classDef green   fill:#d4edda,stroke:#28a745,color:#0f5132;
+  classDef orange  fill:#fff3cd,stroke:#fd7e14,color:#664d03;
+  classDef red     fill:#f8d7da,stroke:#dc3545,color:#842029;
+  classDef blue    fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+  classDef grey    fill:#e9ecef,stroke:#6c757d,color:#343a40;
+
+  START((User session)):::grey
+
+  %% --------------------------------------------------------------------
+  subgraph V["🔎 VISITOR &nbsp;(no token)"]
+    direction TB
+    V0[Open vidgo.co] --> V1["GET /subscriptions/plans<br/>→ 4 plans: basic 699 / pro 999 /<br/>premium 1699 / enterprise 15000 TWD"]:::green
+    V0 --> V2["GET /credits/pricing<br/>→ 29 service rows"]:::green
+    V0 --> V3["GET /auth/geo-language<br/>→ locale hint"]:::green
+    V0 --> V4["GET /tools/list<br/>→ available tool catalog"]:::green
+    V0 --> V5["POST /tools/remove-bg<br/>{image_url}"]:::orange
+    V5 --> V5r["200 · success=true<br/><b>is_demo=true</b><br/>msg: 'Subscribe to process your own'"]:::orange
+    V0 --> V6["GET /credits/balance<br/>(no token)"]:::red
+    V6 --> V6r[401 Unauthorized]:::red
+    V0 --> V7["GET /auth/me (no token)"]:::red
+    V7 --> V7r[401 Unauthorized]:::red
+    V0 --> V8["POST /auth/login<br/>{wrong password}"]:::red
+    V8 --> V8r[401 Incorrect credentials]:::red
+    V0 --> V9["POST /auth/register<br/>{bad body}"]:::red
+    V9 --> V9r[422 validation error]:::red
+    V0 --> V10["POST /auth/register<br/>{valid body}"]:::green
+    V10 --> VREGOK["200 · 'Check your inbox for the<br/>6-digit verification code'"]:::green
+  end
+
+  START --> V0
+
+  %% --------------------------------------------------------------------
+  subgraph UV["📧 REGISTERED · UNVERIFIED"]
+    direction TB
+    UV0[Has email_verified=false<br/>is_active=false] --> UV1["POST /auth/login<br/>{valid pw}"]:::red
+    UV1 --> UV1r["403 · 'Please verify your email<br/>before logging in. Check your<br/>inbox for the 6-digit code' (VG-FIX-G)"]:::red
+    UV0 --> UV2["POST /auth/verify-code<br/>{email, code}"]:::green
+    UV2 --> UV2r["200 · email_verified=true<br/>is_active=true · tokens"]:::green
+    UV0 --> UV3["POST /auth/resend-code"]:::green
+    UV3 --> UV3r["200 · new 6-digit code<br/>(rate-limited, 2 min)"]:::orange
+    UV0 --> UV4["POST /auth/register<br/>{same email}"]:::red
+    UV4 --> UV4r["409 · 'Account with this<br/>email already exists'"]:::red
+    UV0 --> UV5["POST /auth/forgot-password"]:::green
+    UV5 --> UV5r["200 · reset token email (1 h ttl)"]:::green
+  end
+
+  VREGOK -.-> UV0
+
+  %% --------------------------------------------------------------------
+  subgraph FM["🆓 FREE MEMBER &nbsp;(verified, no plan)"]
+    direction TB
+    FM0[current_plan_id = null<br/>bonus_credits = REGISTRATION_BONUS] --> FM1["GET /auth/me<br/>→ plan_type=null,<br/>current_plan_id=null"]:::green
+    FM0 --> FM2["GET /credits/balance<br/>→ total = bonus_credits"]:::green
+    FM0 --> FM3["POST /tools/remove-bg"]:::orange
+    FM3 --> FM3r["200 · <b>is_demo=true</b><br/>cached demo returned<br/>no credits deducted"]:::orange
+    FM0 --> FM4["POST /effects/apply-style"]:::orange
+    FM4 --> FM4r["200 · is_demo=true (preview)"]:::orange
+    FM0 --> FM5["POST /effects/hd-enhance<br/>(subscribers-only)"]:::red
+    FM5 --> FM5r["403 'Active subscription required'"]:::red
+    FM0 --> FM6["POST /subscriptions/subscribe<br/>{plan_id=pro}"]:::green
+    FM6 --> FM6r["200 · checkout_url (Paddle)<br/>OR ecpay_form<br/>OR is_mock=true (dev)"]:::green
+  end
+
+  UV2r -.-> FM0
+
+  %% --------------------------------------------------------------------
+  subgraph SUB["💳 SUBSCRIBER &nbsp;(active, by tier)"]
+    direction TB
+    S0[current_plan_id set<br/>Subscription.status=active<br/>auto_renew=true]
+    S0 --> SBASIC["basic 699 TWD · 7000 cr<br/>720p · watermark · no effects"]:::orange
+    S0 --> SPRO["pro 999 TWD · 10000 cr<br/>1080p · effects · no batch"]:::green
+    S0 --> SPREM["premium 1699 TWD · 18000 cr<br/>4k · priority_queue · effects"]:::green
+    S0 --> SENT["enterprise 15000 TWD · 160000 cr<br/>4k · all features"]:::green
+
+    %% Tool access per tier
+    SBASIC --> SB1["POST /tools/upscale scale=4<br/>→ 400 'plan blocks 4k'"]:::red
+    SBASIC --> SB2["POST /effects/apply-style<br/>→ 403 'can_use_effects=false'"]:::red
+    SBASIC --> SB3["POST /tools/remove-bg<br/>→ 200 (watermarked output)"]:::orange
+
+    SPRO --> SP1["POST /tools/upscale scale=2<br/>→ 200 real image, -10 cr"]:::green
+    SPRO --> SP2["POST /tools/upscale scale=4<br/>→ 400 '4k requires premium+'"]:::red
+    SPRO --> SP3["POST /effects/hd-enhance target=2k<br/>→ 200 upscaled, -10 cr"]:::green
+    SPRO --> SP4["POST /tools/remove-bg<br/>→ 200 real PNG (alpha)"]:::green
+
+    SPREM --> SM1["POST /effects/hd-enhance target=4k<br/>→ 200 · 3072×2232 PNG (VG-FIX-2)"]:::blue
+    SPREM --> SM2["POST /tools/try-on<br/>→ 200 · GCS absolute URL (VG-FIX-1)"]:::blue
+    SPREM --> SM3["POST /tools/short-video<br/>→ 200 · MP4 ISO-BMFF"]:::green
+
+    SENT --> SE1["POST /tools/avatar<br/>→ 200 · talking-head MP4"]:::green
+    SENT --> SE2["POST /tools/video-transform<br/>→ 200 · styled MP4"]:::green
+    SENT --> SE3["POST /tools/upscale scale=4<br/>→ 200 · 4k output"]:::green
+  end
+
+  FM6r -- "checkout paid / is_mock" --> S0
+
+  %% --------------------------------------------------------------------
+  subgraph BILL["🧾 BILLING VIEW"]
+    direction TB
+    S0 --> B1["GET /subscriptions/status<br/>→ plan, status, active_until,<br/>refund_eligible, credits breakdown"]:::green
+    S0 --> B2["GET /subscriptions/current<br/>→ alias → /status (VG-FIX-H)"]:::blue
+    S0 --> B3["GET /subscriptions/invoices<br/>→ paid + complimentary orders<br/>(VG-FIX-D includes DIRECT-* rows)"]:::blue
+    S0 --> B4["GET /credits/transactions<br/>→ subscription / generation /<br/>refund / bonus / expiry"]:::green
+    S0 --> B5["GET /subscriptions/refund-eligibility<br/>→ eligible if ≤7 d since start"]:::green
+    S0 --> B6["GET /subscriptions/plan-features?plan_id=<br/>→ preview any plan (VG-FIX-F)"]:::blue
+  end
+
+  %% --------------------------------------------------------------------
+  subgraph FLOW["🔁 PLAN CHANGE &nbsp;(price-ranked VG-FIX-A)"]
+    direction TB
+    S0 --> PC1{"target plan rank vs current"}
+    PC1 -- "higher price" --> PC1U["_activate_subscription_directly<br/>status=active immediately<br/>credits = new plan.monthly_credits<br/>NEW Order DIRECT-… audit row"]:::blue
+    PC1 -- "lower price" --> PC1D["_schedule_downgrade<br/>status=pending_downgrade<br/>effective = end_date of current sub<br/>auto_renew=false"]:::green
+    PC1 -- "SAME plan" --> PC1S{"action='refresh'?"}
+    PC1S -- "no (default)" --> PC1Sr["400 · 'Already subscribed to this plan'<br/>(VG-FIX-B blocks free-credit exploit)"]:::blue
+    PC1S -- "yes + superuser" --> PC1Sy["200 · credits re-granted<br/>audit DIRECT-… order created"]:::blue
+  end
+
+  %% --------------------------------------------------------------------
+  subgraph TOOL["🛠 TOOL-CALL LIFECYCLE"]
+    direction TB
+    S0 --> T1["POST /tools/X<br/>Check plan + credits"]
+    T1 --> T2{Resolution gate<br/>_check_plan_resolution}
+    T2 -- "over plan cap" --> T2r["400 · 'Your plan doesn't support 4k'"]:::red
+    T2 -- "within cap" --> T3[_check_and_deduct_credits]
+    T3 -- "insufficient" --> T3r["400 · 'Not enough credits'"]:::red
+    T3 -- "ok" --> T4[Provider.route]
+    T4 -- "success" --> T4g["200 · result_url (GCS public)<br/>credits_used = N<br/>UserGeneration row<br/>(Try-On/BG/Flux all via GCS VG-FIX-1)"]:::blue
+    T4 -- "fail" --> T4r["200 · success=false · refund_credits<br/>CreditTransaction type='refund'<br/>(VG-FIX-E no longer mislabelled)"]:::blue
+  end
+
+  %% --------------------------------------------------------------------
+  subgraph CAN["🛑 CANCELLATION"]
+    direction TB
+    S0 --> C0["POST /subscriptions/cancel<br/>{request_refund}"]
+    C0 --> C1{request_refund?}
+    C1 -- "false (default)" --> C2["200 · status=cancelled<br/>active_until = end_date<br/>auto_renew=false<br/><b>credits retained</b><br/>work_retention_until = end_date + 7d"]:::green
+    C1 -- "true, within 7d" --> C3["200 · refund_processed=true<br/>Paddle/ECPay refund<br/>ALL credits revoked (sub + purchased + bonus)<br/>Invoice voided (if in tax period)<br/>work_retention_until = now + 7d"]:::orange
+    C1 -- "true, after 7d" --> C4["400 · 'Refund period expired'<br/>(days_since_start > 7)"]:::red
+    C2 -. "after active_until" .-> CX["State=expired<br/>plan_type→free,<br/>credits_reset, works retained<br/>until work_retention_until"]:::grey
+    CX -. "retention passed" .-> CY["works purged<br/>back to FREE MEMBER"]:::grey
+    C3 -. "same 7-day retention" .-> CX
+  end
+
+  %% --------------------------------------------------------------------
+  subgraph ADMIN["👑 SUPERUSER · ADMIN PATHS"]
+    direction TB
+    A0[is_superuser=true] --> A1["POST /subscriptions/subscribe<br/>force_skip=True (no payment)<br/>action='refresh' allowed"]:::blue
+    A0 --> A2["GET /admin/users<br/>list/search users"]:::green
+    A0 --> A3["POST /admin/users/id/credits<br/>adjust balance"]:::green
+    A0 --> A4["POST /admin/users/id/ban"]:::green
+    A0 --> A5["GET /admin/stats/dashboard"]:::green
+    A0 --> A6["Effects/tools bypass credit deduct<br/>(effects_service._is_superuser)"]:::orange
+    A0 --> A7["/auth/me → is_superuser=true<br/>current_plan_id exposed (VG-FIX-C)"]:::blue
+  end
+
+  %% --------------------------------------------------------------------
+  subgraph PAY["💸 PAYMENT PROVIDERS"]
+    direction TB
+    P0[Checkout initiated] --> P1{payment_method}
+    P1 -- "paddle" --> PP["POST /payments/paddle/webhook<br/>transaction.completed<br/>subscription.created/updated/cancelled"]:::green
+    P1 -- "ecpay" --> PE["POST /payments/ecpay/callback<br/>form-urlencoded · CheckMacValue<br/>Unsigned → 0|SignatureError<br/>(VG-VERIFIED correct today)"]:::blue
+    PP --> POK[Order.status=paid · Invoice issued]
+    PE --> POK
+    P1 -- "neither configured" --> PM["force_skip=True<br/>_activate_subscription_directly<br/>Order.status=complimentary · audit only"]:::blue
+  end
+
+  FM6r -.-> P0
+
+  %% --------------------------------------------------------------------
+  subgraph EDGE["⚠️ EDGE CASES TESTED"]
+    direction TB
+    E1["Duplicate register → 409"]:::red
+    E2["Password mismatch → 422"]:::red
+    E3["Password too short → 422"]:::red
+    E4["verify-code for unknown email → 422"]:::red
+    E5["Login wrong pw → 401"]:::red
+    E6["Invalid plan UUID → 400"]:::red
+    E7["Subscribe same plan without action → 400 (VG-FIX-B)"]:::blue
+    E8["Cancel no active sub → 400"]:::red
+    E9["Cancel bad body → 422"]:::red
+    E10["Rapid concurrent subscribe<br/>(uuid6 suffix on order_number prevents collision)"]:::blue
+    E11["ECPay unsigned callback → 0|SignatureError"]:::blue
+    E12["Refund > 7d → 400 'Refund period expired'"]:::red
+    E13["HD enhance bug path<br/>result.output.image_url<br/>(VG-FIX-2 no longer returns 'HD enhancement failed')"]:::blue
+    E14["Try-On relative URL bug<br/>/static/generated/… (VG-FIX-1 uses GCS)"]:::blue
+  end
+
+  %% --------------------------------------------------------------------
+  %% Cross-links (informational — non-directional hints)
+  V -. "registers" .- UV
+  UV -. "verifies" .- FM
+  FM -. "subscribes" .- SUB
+  SUB -. "change plan" .- FLOW
+  SUB -. "use tool" .- TOOL
+  SUB -. "view billing" .- BILL
+  SUB -. "cancel" .- CAN
+  FM -. "admin upgrade" .- ADMIN
+  FM -. "checkout" .- PAY

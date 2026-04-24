@@ -230,9 +230,19 @@ class CreditService:
         payment_id: Optional[str] = None,
         description: Optional[str] = None,
         expiry: Optional[datetime] = None,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        transaction_type: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Add credits to user account."""
+        """Add credits to user account.
+
+        Args:
+            credit_type: which bucket to credit (subscription/purchased/bonus)
+            transaction_type: override for the ledger row's `transaction_type`.
+                Defaults to `credit_type` when omitted. Callers that are
+                restoring credits after a failed operation should pass
+                `transaction_type="refund"` so analytics distinguishes a
+                bonafide subscription grant from a refund-in-kind (VG-BUG-E).
+        """
         result = await self.db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
 
@@ -257,7 +267,7 @@ class CreditService:
             user_id=user_id,
             amount=amount,
             balance_after=new_balance["total"],
-            transaction_type=credit_type,
+            transaction_type=transaction_type or credit_type,
             package_id=UUID(package_id) if package_id else None,
             payment_id=payment_id,
             description=description or f"Added {amount} {credit_type} credits",

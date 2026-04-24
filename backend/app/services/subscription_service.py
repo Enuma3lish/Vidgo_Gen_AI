@@ -12,6 +12,7 @@ Supports both:
 2. Mock mode for development/testing (when keys not configured)
 """
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -65,14 +66,17 @@ class SubscriptionService:
         plan_id: UUID,
         billing_cycle: str = "monthly",
         payment_method: str = "paddle",
-        skip_payment: bool = False
+        skip_payment: bool = False,
+        action: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Subscribe user to a plan with upgrade/downgrade detection.
 
         Upgrade (higher plan): Activate immediately, allocate new credits.
         Downgrade (lower plan): Schedule change at end of current billing period.
-        Same plan: Reject.
+        Same plan: Reject unless `action="refresh"` is explicitly passed by an
+            admin — this prevents accidentally re-granting monthly credits
+            on duplicate POSTs (VG-BUG-B).
         New subscription (no current plan): Activate normally.
 
         Args:
@@ -82,6 +86,8 @@ class SubscriptionService:
             billing_cycle: 'monthly' or 'yearly'
             payment_method: 'paddle' or 'ecpay'
             skip_payment: Skip payment and activate directly (for dev/testing)
+            action: Optional admin action flag. Set to "refresh" to explicitly
+                re-grant monthly credits on an already-subscribed plan.
 
         Returns:
             Dict with subscription info and checkout URL (if payment required)
@@ -96,8 +102,14 @@ class SubscriptionService:
         if not plan:
             return {"success": False, "error": "Plan not found"}
 
-        # Check if already subscribed to same plan
-        if user.current_plan_id == plan_id:
+        # Check if already subscribed to same plan. Reject every duplicate
+        # unless the caller is an admin path (skip_payment=True) AND has
+        # explicitly asked for a credit refresh (action="refresh"). This
+        # prevents the previous behaviour where any superuser-driven
+        # duplicate subscribe call minted another `plan.monthly_credits`
+        # with no audit trail.
+        is_admin_refresh = skip_payment and action == "refresh"
+        if user.current_plan_id == plan_id and not is_admin_refresh:
             current_sub = await self._get_active_subscription(db, user_id)
             if current_sub and current_sub.status == "active":
                 return {
@@ -141,13 +153,43 @@ class SubscriptionService:
                 db, user, plan, billing_cycle
             )
 
-    PLAN_LEVEL = {"demo": 0, "starter": 1, "standard": 2, "pro": 3, "pro_plus": 4}
+    # Named-plan fallback rank. Used only when two plans have equal price
+    # (e.g. promotional plans) and we need a tiebreaker. The authoritative
+    # comparison is `plan.price_monthly` — this dict no longer gates
+    # upgrade detection, so stale entries do not cause upgrade-→-downgrade
+    # misclassification (VG-BUG-A).
+    PLAN_LEVEL = {
+        "demo": 0, "free": 0,
+        "starter": 1, "basic": 1,
+        "standard": 2, "pro": 2,
+        "pro_plus": 3, "premium": 3,
+        "enterprise": 4,
+    }
+
+    @classmethod
+    def _plan_rank(cls, plan: Plan) -> float:
+        """Return a comparable rank for a plan. Higher = more expensive tier.
+
+        Primary signal is `price_monthly`; falls back to monthly_credits, then
+        to the named-plan table, then 0. Using price keeps upgrade detection
+        correct when plan names are rebranded (basic/pro/premium/enterprise,
+        starter/standard/pro/pro_plus, …).
+        """
+        price = getattr(plan, "price_monthly", None) or 0
+        if price:
+            return float(price)
+        credits = getattr(plan, "monthly_credits", None) or getattr(plan, "credits_per_month", None) or 0
+        if credits:
+            # Scale credits into the same rough magnitude as price so they
+            # tiebreak-only against a price-less plan.
+            return float(credits) / 1000.0
+        return float(cls.PLAN_LEVEL.get((plan.name or "").lower(), 0))
 
     async def _detect_plan_change(
         self, db: AsyncSession, user: User, new_plan: Plan
     ) -> str:
         """Detect if this is an upgrade, downgrade, or new subscription.
-        Returns: 'upgrade', 'downgrade', or 'new'"""
+        Returns: 'upgrade', 'downgrade', 'same', or 'new'"""
         if not user.current_plan_id:
             return "new"
 
@@ -160,14 +202,20 @@ class SubscriptionService:
         if not current_plan:
             return "new"
 
-        current_level = self.PLAN_LEVEL.get(current_plan.name, 0)
-        new_level = self.PLAN_LEVEL.get(new_plan.name, 0)
+        if current_plan.id == new_plan.id:
+            return "same"
+
+        current_level = self._plan_rank(current_plan)
+        new_level = self._plan_rank(new_plan)
 
         if new_level > current_level:
             return "upgrade"
-        elif new_level < current_level:
+        if new_level < current_level:
             return "downgrade"
-        return "new"  # Same level but different plan somehow
+        # Equal rank, different plan id — treat as a lateral switch, which we
+        # handle like a new activation (no special prorate). Previously this
+        # path returned "new" silently.
+        return "new"
 
     async def _schedule_downgrade(
         self,
@@ -260,6 +308,28 @@ class SubscriptionService:
             auto_renew=True
         )
         db.add(subscription)
+        await db.flush()  # make subscription.id available for the audit Order
+
+        # Audit Order row — every subscription activation leaves a trail, even
+        # when the payment step is skipped (mock, superuser refresh). Without
+        # this, the cancel flow can't find an order to reference and /invoices
+        # stays empty forever (VG-BUG-D).
+        order_amount = plan.price_yearly if billing_cycle == "yearly" else plan.price_monthly
+        order = Order(
+            user_id=user.id,
+            subscription_id=subscription.id,
+            order_number=f"DIRECT-{now.strftime('%Y%m%d%H%M%S')}-{str(user.id)[:8]}-{uuid.uuid4().hex[:6]}",
+            amount=order_amount or 0,
+            status="complimentary",
+            payment_method="direct",
+            payment_data={
+                "source": "direct_activation",
+                "billing_cycle": billing_cycle,
+                "is_upgrade": is_upgrade,
+            },
+            paid_at=now,
+        )
+        db.add(order)
 
         # Update user's plan reference
         user.current_plan_id = plan.id
@@ -301,6 +371,7 @@ class SubscriptionService:
 
         await db.commit()
         await db.refresh(subscription)
+        await db.refresh(order)
         await db.refresh(user)
 
         logger.info(f"Subscription activated: {subscription.id}")
@@ -665,6 +736,8 @@ class SubscriptionService:
 
         # Process refund if requested and eligible
         refund_result = None
+        invoice_voided = None
+        invoice_void_required_manual = False
         if request_refund:
             if not refund_eligible:
                 return {
@@ -675,6 +748,12 @@ class SubscriptionService:
 
             # Process refund
             refund_result = await self._process_refund(db, user, subscription, order)
+
+            if not refund_result.get("success"):
+                return {
+                    "success": False,
+                    "error": refund_result.get("error") or "Refund processing failed"
+                }
 
             if refund_result.get("success"):
                 # Revoke ALL credits on refund — subscription, purchased,
@@ -714,7 +793,7 @@ class SubscriptionService:
                         from app.services.invoice_service import void_invoice
                         inv_result = await db.execute(
                             select(Invoice).where(
-                                Invoice.order_id == str(order.id),
+                                Invoice.order_id == order.id,
                                 Invoice.status.in_(["issued", "uploaded"]),
                             )
                         )
@@ -726,14 +805,34 @@ class SubscriptionService:
                                 invoice_id=str(invoice_to_void.id),
                                 reason=f"Subscription refund — order {order.order_number}",
                             )
-                            if not void_result.get("success"):
+                            if void_result.get("success"):
+                                invoice_voided = True
+                            else:
+                                invoice_voided = False
+                                invoice_void_required_manual = True
                                 logger.warning(
                                     f"Could not void invoice {invoice_to_void.id} "
                                     f"for refund order {order.order_number}: "
                                     f"{void_result.get('error')} — manual voiding required"
                                 )
+                        else:
+                            invoice_voided = None
                     except Exception as e:
+                        invoice_voided = False
+                        invoice_void_required_manual = True
                         logger.error(f"Invoice voiding failed for order {order.order_number}: {e}")
+
+                    # Persist manual action flags into order.payment_data so
+                    # admin dashboards can query unresolved finance tasks.
+                    if not isinstance(order.payment_data, dict):
+                        order.payment_data = {}
+                    refund_meta = order.payment_data.get("refund", {}) or {}
+                    refund_meta.update({
+                        "invoice_voided": invoice_voided,
+                        "invoice_void_required_manual": invoice_void_required_manual,
+                        "invoice_void_checked_at": utc_now().isoformat(),
+                    })
+                    order.payment_data["refund"] = refund_meta
 
                 # Cancel immediately
                 subscription.status = "cancelled"
@@ -781,17 +880,101 @@ class SubscriptionService:
             except Exception as e:
                 logger.error(f"Failed to send refund notification email: {e}")
 
+        if request_refund and refund_result:
+            if refund_result.get("requires_manual"):
+                message = (
+                    "Refund requested and subscription cancelled. "
+                    "Refund requires manual processing (3-5 business days)."
+                )
+            elif invoice_void_required_manual:
+                message = (
+                    "Refund processed and subscription cancelled. "
+                    "Invoice void requires manual follow-up."
+                )
+            else:
+                message = "Refund processed and subscription cancelled immediately."
+        else:
+            message = (
+                "Subscription cancelled. Current plan remains active until the end of the billing period."
+            )
+
         return {
             "success": True,
             "subscription_id": str(subscription.id),
             "status": subscription.status,
             "refund_processed": refund_result.get("success") if refund_result else False,
             "refund_amount": refund_result.get("amount") if refund_result else None,
+            "refund_requires_manual": refund_result.get("requires_manual", False) if refund_result else False,
+            "invoice_voided": invoice_voided,
+            "invoice_void_required_manual": invoice_void_required_manual,
             "active_until": subscription.end_date.isoformat() if subscription.end_date else None,
             "work_retention_until": user.work_retention_until.isoformat() if user.work_retention_until else None,
-            "message": "Subscription cancelled successfully" + (
-                " with refund" if refund_result and refund_result.get("success") else ""
+            "message": message,
+        }
+
+    async def get_manual_action_queue(
+        self,
+        db: AsyncSession,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """List refund/invoice cases that still require manual finance action."""
+        result = await db.execute(
+            select(Order)
+            .where(Order.status.in_(["refund_pending", "refunded"]))
+            .order_by(Order.created_at.desc())
+            .limit(limit)
+        )
+        orders = result.scalars().all()
+
+        items: List[Dict[str, Any]] = []
+        for order in orders:
+            payment_data = order.payment_data or {}
+            refund_meta = payment_data.get("refund", {}) or {}
+
+            refund_status = refund_meta.get("status")
+            needs_refund_manual = refund_status == "pending_manual"
+            needs_invoice_void_manual = bool(refund_meta.get("invoice_void_required_manual"))
+
+            if not needs_refund_manual and not needs_invoice_void_manual:
+                continue
+
+            user = await db.get(User, order.user_id)
+            inv_result = await db.execute(
+                select(Invoice)
+                .where(Invoice.order_id == order.id)
+                .order_by(Invoice.issued_at.desc())
             )
+            invoice = inv_result.scalars().first()
+
+            items.append({
+                "order_id": str(order.id),
+                "order_number": order.order_number,
+                "user_id": str(order.user_id),
+                "user_email": user.email if user else None,
+                "amount": float(order.amount) if order.amount is not None else 0.0,
+                "payment_method": order.payment_method,
+                "order_status": order.status,
+                "refund_status": refund_status,
+                "needs_refund_manual": needs_refund_manual,
+                "needs_invoice_void_manual": needs_invoice_void_manual,
+                "invoice_id": str(invoice.id) if invoice else None,
+                "invoice_number": invoice.invoice_number if invoice else None,
+                "invoice_status": invoice.status if invoice else None,
+                "invoice_period": invoice.invoice_period if invoice else None,
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "updated_at": order.paid_at.isoformat() if order.paid_at else None,
+                "actions_required": [
+                    action for action, needed in [
+                        ("process_refund", needs_refund_manual),
+                        ("void_invoice", needs_invoice_void_manual),
+                    ] if needed
+                ],
+            })
+
+        return {
+            "success": True,
+            "count": len(items),
+            "items": items,
         }
 
     async def _process_refund(
@@ -1056,18 +1239,30 @@ class SubscriptionService:
         db: AsyncSession,
         user_id: UUID
     ) -> Optional[Subscription]:
-        """Get user's active subscription (most recent active or pending)."""
+        """Get user's current effective subscription.
+
+        Includes:
+        - active / pending subscriptions
+        - cancelled subscriptions that are still within end_date (cancel-at-period-end)
+        """
         result = await db.execute(
             select(Subscription)
             .where(
                 and_(
                     Subscription.user_id == user_id,
-                    Subscription.status.in_(["active", "pending"])
+                    Subscription.status.in_(["active", "pending", "cancelled"])
                 )
             )
             .order_by(Subscription.created_at.desc())
         )
-        return result.scalars().first()
+        subscriptions = result.scalars().all()
+        now = utc_now()
+        for sub in subscriptions:
+            if sub.status in ("active", "pending"):
+                return sub
+            if sub.status == "cancelled" and sub.end_date and sub.end_date > now:
+                return sub
+        return None
 
     async def _get_subscription_order(
         self,

@@ -21,6 +21,7 @@ from app.models.user import User
 from app.providers.provider_router import get_provider_router, TaskType
 from app.services.admin_dashboard import AdminDashboardService
 from app.services.session_tracker import session_tracker
+from app.services.subscription_service import get_subscription_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -164,6 +165,17 @@ async def get_earnings_stats(
     """Get weekly and monthly earnings from orders"""
     service = AdminDashboardService(db)
     return await service.get_earnings_stats()
+
+
+@router.get("/finance/manual-actions")
+async def get_finance_manual_actions(
+    limit: int = Query(default=50, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """List refund/invoice cases that still require manual finance action."""
+    subscription_service = get_subscription_service()
+    return await subscription_service.get_manual_action_queue(db=db, limit=limit)
 
 
 @router.get("/stats/api-costs")

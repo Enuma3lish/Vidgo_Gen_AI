@@ -845,15 +845,58 @@ class PiAPIClient:
         return await self._download_as(client, url, ext=".png")
 
     async def _download_as(self, client: httpx.AsyncClient, url: str, ext: str = ".png") -> Optional[str]:
-        """Download a file and save locally with the specified extension."""
+        """
+        Download provider output and persist it somewhere a client can reach.
+
+        VG-BUG-010 / VG-BUG-007 follow-up: previously this wrote to
+        /app/static/generated (Cloud Run ephemeral disk) and returned a
+        relative path. That path is per-instance and has no host prefix,
+        so callers reliably 404 on a multi-instance deployment. Upload to
+        GCS instead so the URL is absolute, stable, and shared across
+        instances. Fall back to local disk only when GCS is disabled
+        (local dev).
+        """
         try:
-            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             response = await client.get(url, follow_redirects=True)
-            if response.status_code == 200:
-                filename = f"piapi_{uuid.uuid4().hex[:8]}{ext}"
-                filepath = OUTPUT_DIR / filename
-                filepath.write_bytes(response.content)
-                return f"/static/generated/{filename}"
+            if response.status_code != 200:
+                return None
+            content = response.content
+
+            content_type = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".webp": "image/webp",
+                ".mp4": "video/mp4",
+                ".webm": "video/webm",
+            }.get(ext.lower(), "application/octet-stream")
+            media_kind = "video" if content_type.startswith("video/") else "image"
+            filename = f"piapi_{uuid.uuid4().hex[:8]}{ext}"
+
+            try:
+                from app.services.gcs_storage_service import get_gcs_storage
+                gcs = get_gcs_storage()
+            except Exception as e:
+                logger.debug(f"[PiAPI] GCS not importable ({e}); will use local disk")
+                gcs = None
+
+            if gcs is not None and gcs.enabled:
+                try:
+                    return gcs.upload_public(
+                        data=content,
+                        blob_name=f"generated/{media_kind}/{filename}",
+                        content_type=content_type,
+                    )
+                except Exception as e:
+                    logger.warning(f"[PiAPI] GCS upload failed, falling back to local: {e}")
+
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            filepath = OUTPUT_DIR / filename
+            filepath.write_bytes(content)
+            public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+            if public_base:
+                return f"{public_base}/static/generated/{filename}"
+            return f"/static/generated/{filename}"
         except Exception as e:
             logger.warning(f"[PiAPI] Download failed: {e}")
         return None

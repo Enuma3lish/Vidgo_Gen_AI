@@ -1,15 +1,35 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useAdminStore } from '@/stores/admin'
 
 const adminStore = useAdminStore()
 
 const selectedPeriod = ref<'7d' | '30d' | '90d' | '1y'>('30d')
+const periodOptions: Array<'7d' | '30d' | '90d' | '1y'> = ['7d', '30d', '90d', '1y']
+const topCostApiMonth = computed(() => {
+  const services = adminStore.apiCosts?.by_service || []
+  if (!services.length) return null
+  return services.reduce((max, item) => (item.month_cost > max.month_cost ? item : max), services[0])
+})
+const topCostApiWeek = computed(() => {
+  const services = adminStore.apiCosts?.by_service || []
+  if (!services.length) return null
+  return services.reduce((max, item) => (item.week_cost > max.week_cost ? item : max), services[0])
+})
+const topCostMonthTrendRatio = computed(() => {
+  if (!topCostApiMonth.value) return 1
+  return trendRatio(topCostApiMonth.value.month_cost, topCostApiMonth.value.prev_month_cost)
+})
+const topCostWeekTrendRatio = computed(() => {
+  if (!topCostApiWeek.value) return 1
+  return trendRatio(topCostApiWeek.value.week_cost, topCostApiWeek.value.prev_week_cost)
+})
 
 onMounted(async () => {
   await Promise.all([
     adminStore.fetchDashboardStats(),
-    adminStore.fetchCharts(30, 12)
+    adminStore.fetchCharts(30, 12),
+    adminStore.fetchApiCosts()
   ])
 })
 
@@ -39,6 +59,47 @@ function getBarHeight(revenue: number): string {
   const max = getMaxRevenue()
   return `${(revenue / max) * 100}%`
 }
+
+function formatNumber(num: number): string {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+  return num.toString()
+}
+
+function trendRatio(current: number, previous: number): number {
+  if (previous <= 0) return current > 0 ? 2 : 1
+  return current / previous
+}
+
+function trendDirection(ratio: number): 'up' | 'down' | 'flat' {
+  if (ratio >= 1.1) return 'up'
+  if (ratio <= 0.9) return 'down'
+  return 'flat'
+}
+
+function trendArrow(ratio: number): string {
+  const direction = trendDirection(ratio)
+  if (direction === 'up') return '↑'
+  if (direction === 'down') return '↓'
+  return '→'
+}
+
+function trendLabel(ratio: number, period: 'week' | 'month'): string {
+  const direction = trendDirection(ratio)
+  const baseline = period === 'week' ? 'last week' : 'last month'
+  if (direction === 'up') return `Up vs ${baseline}`
+  if (direction === 'down') return `Down vs ${baseline}`
+  return `Flat vs ${baseline}`
+}
+
+function trendDeltaText(current: number, previous: number): string {
+  if (previous <= 0) {
+    return current > 0 ? '(new)' : '(0.0%)'
+  }
+  const deltaPercent = ((current - previous) / previous) * 100
+  const sign = deltaPercent > 0 ? '+' : ''
+  return `(${sign}${deltaPercent.toFixed(1)}%)`
+}
 </script>
 
 <template>
@@ -51,9 +112,9 @@ function getBarHeight(revenue: number): string {
     <!-- Period Selector -->
     <div class="period-selector">
       <button
-        v-for="period in ['7d', '30d', '90d', '1y']"
+        v-for="period in periodOptions"
         :key="period"
-        @click="changePeriod(period as any)"
+        @click="changePeriod(period)"
         :class="{ active: selectedPeriod === period }"
         class="period-btn"
       >
@@ -81,6 +142,26 @@ function getBarHeight(revenue: number): string {
               ? adminStore.revenueChart.reduce((sum, d) => sum + (d.revenue || 0), 0) / adminStore.revenueChart.length
               : 0
           ) }}
+        </span>
+      </div>
+      <div class="summary-card top-cost-month" v-if="topCostApiMonth">
+        <span class="summary-label">Top Cost API (Month)</span>
+        <span class="summary-value">{{ formatCurrency(topCostApiMonth.month_cost) }}</span>
+        <span class="summary-subvalue">{{ topCostApiMonth.display_name }} · {{ formatNumber(topCostApiMonth.month_calls) }} calls</span>
+        <span class="summary-trend" :class="trendDirection(topCostMonthTrendRatio)">
+          {{ trendArrow(topCostMonthTrendRatio) }}
+          {{ trendLabel(topCostMonthTrendRatio, 'month') }}
+          {{ trendDeltaText(topCostApiMonth.month_cost, topCostApiMonth.prev_month_cost) }}
+        </span>
+      </div>
+      <div class="summary-card top-cost-week" v-if="topCostApiWeek">
+        <span class="summary-label">Top Cost API (Week)</span>
+        <span class="summary-value">{{ formatCurrency(topCostApiWeek.week_cost) }}</span>
+        <span class="summary-subvalue">{{ topCostApiWeek.display_name }} · {{ formatNumber(topCostApiWeek.week_calls) }} calls</span>
+        <span class="summary-trend" :class="trendDirection(topCostWeekTrendRatio)">
+          {{ trendArrow(topCostWeekTrendRatio) }}
+          {{ trendLabel(topCostWeekTrendRatio, 'week') }}
+          {{ trendDeltaText(topCostApiWeek.week_cost, topCostApiWeek.prev_week_cost) }}
         </span>
       </div>
     </div>
@@ -221,6 +302,16 @@ function getBarHeight(revenue: number): string {
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
+.summary-card.top-cost-month {
+  border: 1px solid rgba(239,68,68,0.35);
+  background: linear-gradient(140deg, rgba(239,68,68,0.14), rgba(20,20,32,0.92));
+}
+
+.summary-card.top-cost-week {
+  border: 1px solid rgba(251,146,60,0.35);
+  background: linear-gradient(140deg, rgba(251,146,60,0.14), rgba(20,20,32,0.92));
+}
+
 .summary-label {
   display: block;
   font-size: 0.875rem;
@@ -234,6 +325,24 @@ function getBarHeight(revenue: number): string {
   font-weight: 700;
   color: #f5f5fa;
 }
+
+.summary-subvalue {
+  display: block;
+  font-size: 0.8rem;
+  margin-top: 0.45rem;
+  color: #c8cad8;
+}
+
+.summary-trend {
+  display: inline-block;
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.summary-trend.up { color: #fb7185; }
+.summary-trend.down { color: #34d399; }
+.summary-trend.flat { color: #9ca3af; }
 
 .chart-section {
   background: #141420;

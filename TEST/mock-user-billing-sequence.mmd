@@ -1,0 +1,193 @@
+%%{init: {'theme':'neutral','themeVariables':{'fontSize':'14px'}}}%%
+sequenceDiagram
+  %% ===================================================================
+  %% VidGo — End-to-end billing lifecycle sequence
+  %% Demonstrates register → verify → subscribe → use → upgrade →
+  %% refresh (admin) → downgrade → cancel → refund → reactivate.
+  %% ===================================================================
+
+  autonumber
+
+  actor U as User
+  participant FE as Frontend (Vue)
+  participant API as Backend API
+  participant DB as Postgres
+  participant REDIS as Redis
+  participant MAIL as Email (SES)
+  participant PAY as Paddle / ECPay
+  participant PROV as Provider Router<br/>(PiAPI / Vertex)
+  participant GCS as GCS storage
+
+  %% ---------- Registration + Verification ----------
+  rect rgb(230,245,255)
+  Note over U,MAIL: 1) REGISTRATION &nbsp;+&nbsp; EMAIL VERIFICATION
+  U->>FE: fill register form
+  FE->>API: POST /auth/register {email, pw}
+  API->>DB: INSERT users (is_active=false,<br/>email_verified=false)
+  API->>REDIS: SET email_verify:{email} = sha256(code)<br/>TTL 15m
+  API->>MAIL: send 6-digit code
+  API-->>FE: 200 "Check inbox"
+  U->>MAIL: read 6-digit code
+  U->>FE: enter code
+  FE->>API: POST /auth/verify-code {email, code}
+  API->>REDIS: GET email_verify:{email}<br/>compare hash
+  API->>DB: UPDATE users SET email_verified=true, is_active=true
+  API-->>FE: 200 + access/refresh tokens
+  end
+
+  %% ---------- Free-tier tool use (demo) ----------
+  rect rgb(255,248,230)
+  Note over U,PROV: 2) FREE MEMBER &nbsp;·&nbsp; DEMO TOOL CALL
+  U->>FE: click "Remove BG"
+  FE->>API: POST /tools/remove-bg (token=free)
+  API->>API: is_subscribed_user(user) == false
+  API->>API: _demo_response(TOOL=BG_REMOVAL)
+  API-->>FE: 200 · is_demo=true<br/>preset result_url · CTA "Subscribe"
+  end
+
+  %% ---------- Subscribe → Paddle checkout ----------
+  rect rgb(230,255,235)
+  Note over U,PAY: 3) SUBSCRIBE &nbsp;·&nbsp; PADDLE CHECKOUT
+  U->>FE: pick "pro" plan
+  FE->>API: POST /subscriptions/subscribe<br/>{plan_id=pro, payment_method=paddle}
+  API->>DB: SELECT User, Plan, active sub?
+  alt Paddle configured
+    API->>PAY: create checkout session
+    PAY-->>API: checkout_url
+    API-->>FE: 200 · checkout_url · is_mock=false
+    U->>PAY: pay with card
+    PAY->>API: POST /payments/paddle/webhook (transaction.completed)
+    API->>DB: INSERT Order status=paid<br/>INSERT Invoice
+    API->>DB: INSERT Subscription status=active<br/>UPDATE users.current_plan_id
+    API->>DB: INSERT CreditTransaction type=subscription<br/>+plan.monthly_credits (10000)
+  else No payment provider (mock)
+    API->>DB: _activate_subscription_directly<br/>INSERT Subscription · Order (complimentary)<br/>CreditTransaction subscription
+    API-->>FE: 200 · is_mock=true · status=active · credits_allocated=10000
+  end
+  end
+
+  %% ---------- Real tool use ----------
+  rect rgb(240,240,255)
+  Note over U,GCS: 4) SUBSCRIBER TOOL CALL &nbsp;·&nbsp; CREDIT DEDUCTION &nbsp;·&nbsp; GCS
+  U->>FE: upload image, click "Try-On"
+  FE->>API: POST /tools/try-on
+  API->>API: is_subscribed_user ✓
+  API->>API: _check_plan_resolution (ok)
+  API->>API: _check_and_deduct_credits(-15)
+  API->>DB: UPDATE users.subscription_credits -= 15<br/>INSERT CreditTransaction type=generation
+  API->>PROV: PiAPI virtual_try_on
+  PROV-->>API: CDN image URL
+  API->>GCS: persist_url → public GCS URL (VG-FIX-1)
+  API->>DB: INSERT UserGeneration result_image_url=gcs://…
+  API-->>FE: 200 · result_url=https://storage.googleapis.com/…/piapi_xxx.png<br/>credits_used=15
+  end
+
+  %% ---------- Tool failure → refund ----------
+  rect rgb(255,235,235)
+  Note over U,PROV: 4b) TOOL FAILURE &nbsp;→&nbsp; CREDIT REFUND (VG-FIX-E)
+  U->>FE: click "Short Video"
+  FE->>API: POST /tools/short-video
+  API->>API: deduct 25 cr
+  API->>PROV: PiAPI image_to_video
+  PROV-->>API: error / timeout
+  API->>API: _refund_credits(25, "short_video")
+  API->>DB: CreditTransaction type='refund'<br/>(was type='subscription' before fix)
+  API-->>FE: 200 · success=false · "Short Video failed"
+  end
+
+  %% ---------- Preview + Upgrade ----------
+  rect rgb(225,255,235)
+  Note over U,API: 5) PREVIEW ANOTHER PLAN &nbsp;·&nbsp; UPGRADE (VG-FIX-A &amp; F)
+  FE->>API: GET /subscriptions/plan-features?plan_id=premium
+  API-->>FE: 200 · preview=true · max_res=4k · price 1699 · credits 18000
+  U->>FE: click "Upgrade to premium"
+  FE->>API: POST /subscriptions/subscribe {plan_id=premium}
+  API->>API: _plan_rank(premium 1699) > _plan_rank(pro 999) → UPGRADE
+  API->>DB: cancel current sub · INSERT new sub · INSERT Order (DIRECT-*-uuid)<br/>subscription_credits = 18000
+  API-->>FE: 200 · status=active · credits_allocated=18000<br/>(BEFORE VG-FIX-A this returned status=pending_downgrade)
+  end
+
+  %% ---------- Admin refresh ----------
+  rect rgb(245,230,255)
+  Note over U,API: 6) SUPERUSER CREDIT REFRESH (VG-FIX-B)
+  U->>FE: admin "refresh credits"
+  FE->>API: POST /subscriptions/subscribe<br/>{plan_id=current, action="refresh"}
+  alt same plan, no action → 400
+    API-->>FE: 400 "Already subscribed to this plan"
+  else same plan + action="refresh" + superuser
+    API->>DB: cancel old sub · new sub · DIRECT order · credits re-granted
+    API-->>FE: 200 · credits_allocated=18000 (refresh recorded in audit trail)
+  end
+  end
+
+  %% ---------- Downgrade ----------
+  rect rgb(255,245,230)
+  Note over U,API: 7) DOWNGRADE &nbsp;·&nbsp; SCHEDULED AT END_DATE
+  U->>FE: change to "pro"
+  FE->>API: POST /subscriptions/subscribe {plan_id=pro}
+  API->>API: _plan_rank(pro 999) < _plan_rank(premium 1699) → DOWNGRADE
+  API->>DB: INSERT pending_downgrade subscription<br/>UPDATE current sub auto_renew=false
+  API-->>FE: 200 · status=pending_downgrade · effective_date=<current end_date>
+  Note over API: cron at end_date<br/>activates the pending_downgrade<br/>→ user on pro, sub credits reset
+  end
+
+  %% ---------- Invoice listing ----------
+  rect rgb(230,255,255)
+  Note over U,DB: 8) INVOICE &nbsp;&amp;&nbsp; TRANSACTION VIEW
+  FE->>API: GET /subscriptions/invoices
+  API->>DB: SELECT Order WHERE status IN (paid, complimentary) (VG-FIX-D)
+  API-->>FE: 200 · list incl. DIRECT-YYYYMMDD-userid-uuid6 rows
+  FE->>API: GET /credits/transactions
+  API-->>FE: 200 · types: subscription / generation / refund / bonus / expiry
+  end
+
+  %% ---------- Cancel without refund ----------
+  rect rgb(255,230,235)
+  Note over U,PAY: 9a) CANCEL &nbsp;·&nbsp; NO REFUND
+  U->>FE: cancel
+  FE->>API: POST /subscriptions/cancel {request_refund=false}
+  API->>DB: UPDATE sub status=cancelled · auto_renew=false<br/>users.work_retention_until = end_date + 7d
+  opt Paddle order
+    API->>PAY: cancel_subscription(effective_from=next_billing_period)
+  end
+  API-->>FE: 200 · active_until=end_date · work_retention_until<br/><b>credits retained</b>
+  end
+
+  %% ---------- Cancel with refund ----------
+  rect rgb(255,220,220)
+  Note over U,PAY: 9b) CANCEL &nbsp;·&nbsp; REQUEST REFUND (within 7 d)
+  U->>FE: "refund me"
+  FE->>API: POST /subscriptions/cancel {request_refund=true}
+  API->>API: REFUND_ELIGIBILITY_DAYS = 7<br/>days_since_start ≤ 7 ✓
+  API->>PAY: refund(order)
+  PAY-->>API: refund receipt
+  API->>DB: REVOKE subscription + purchased + bonus credits<br/>CreditTransaction type='refund' (3 rows)<br/>current_plan_id=null · sub status=cancelled<br/>work_retention_until = now + 7d
+  opt Invoice within current tax period
+    API->>API: void_invoice(invoice_id)
+  end
+  API->>MAIL: send refund notification email
+  API-->>FE: 200 · refund_processed=true · refund_amount · invoice_voided
+  end
+
+  %% ---------- Reactivate ----------
+  rect rgb(235,245,230)
+  Note over U,API: 10) REACTIVATE (after cancel)
+  U->>FE: subscribe again
+  FE->>API: POST /subscriptions/subscribe {plan_id=pro}
+  API->>API: user.current_plan_id is null → NEW
+  API->>DB: _activate_subscription_directly<br/>fresh subscription · new Order · credits reset
+  API-->>FE: 200 · status=active · credits_allocated=10000
+  end
+
+  %% ---------- ECPay signed callback ----------
+  rect rgb(245,245,255)
+  Note over PAY,API: 11) ECPay SIGNED CALLBACK (Taiwan)
+  PAY->>API: POST /payments/ecpay/callback (form)<br/>MerchantTradeNo, CheckMacValue, RtnCode
+  API->>API: verify CheckMacValue
+  alt valid
+    API->>DB: Order.status=paid<br/>Invoice issued
+    API-->>PAY: 1|OK
+  else bad signature
+    API-->>PAY: 0|SignatureError
+  end
+  end

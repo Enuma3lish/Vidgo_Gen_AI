@@ -1,11 +1,13 @@
 """
 Email Service for sending verification and notification emails.
 """
+import html
 import smtplib
 import logging
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -23,6 +25,8 @@ class EmailService:
         self.from_email = settings.SMTP_FROM_EMAIL
         self.from_name = settings.SMTP_FROM_NAME
         self.use_tls = settings.SMTP_TLS
+        self.use_ssl = settings.SMTP_SSL
+        self.smtp_timeout = settings.SMTP_TIMEOUT_SECONDS
         self.frontend_url = settings.FRONTEND_URL
 
     def _is_configured(self) -> bool:
@@ -73,19 +77,44 @@ class EmailService:
         try:
             message = self._create_message(to_email, subject, html_content, text_content)
 
-            if self.use_tls:
-                server = smtplib.SMTP(self.smtp_host, self.smtp_port)
-                server.starttls()
+            if self.smtp_host.lower() == "smtp.gmail.com" and self.smtp_user:
+                if self.from_email.lower() != self.smtp_user.lower():
+                    logger.warning(
+                        "Gmail SMTP usually expects SMTP_FROM_EMAIL to match SMTP_USER "
+                        "or a verified Gmail alias. Current from=%s smtp_user=%s",
+                        self.from_email,
+                        self.smtp_user,
+                    )
+
+            ssl_context = ssl.create_default_context()
+
+            if self.use_ssl:
+                with smtplib.SMTP_SSL(
+                    self.smtp_host,
+                    self.smtp_port,
+                    timeout=self.smtp_timeout,
+                    context=ssl_context,
+                ) as server:
+                    if self.smtp_user and self.smtp_password:
+                        server.login(self.smtp_user, self.smtp_password)
+
+                    server.sendmail(self.from_email, to_email, message.as_string())
             else:
-                # For local development (Mailpit) or SSL
-                server = smtplib.SMTP(self.smtp_host, self.smtp_port)
+                with smtplib.SMTP(
+                    self.smtp_host,
+                    self.smtp_port,
+                    timeout=self.smtp_timeout,
+                ) as server:
+                    server.ehlo()
+                    if self.use_tls:
+                        server.starttls(context=ssl_context)
+                        server.ehlo()
 
-            # Only login if credentials are provided
-            if self.smtp_user and self.smtp_password:
-                server.login(self.smtp_user, self.smtp_password)
+                    # Only login if credentials are provided
+                    if self.smtp_user and self.smtp_password:
+                        server.login(self.smtp_user, self.smtp_password)
 
-            server.sendmail(self.from_email, to_email, message.as_string())
-            server.quit()
+                    server.sendmail(self.from_email, to_email, message.as_string())
 
             logger.info(f"Email sent successfully to {to_email}")
             return True
@@ -93,6 +122,115 @@ class EmailService:
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {str(e)}")
             return False
+
+    def get_admin_recipients(self) -> List[str]:
+        """Return configured administrator email recipients."""
+        recipients: List[str] = []
+
+        primary_admin = (settings.ADMIN_ACCOUNT or "").strip()
+        if primary_admin:
+            recipients.append(primary_admin)
+
+        for account in (settings.ADMIN_EXTRA_ACCOUNTS or "").split(","):
+            account = account.strip()
+            if not account:
+                continue
+
+            email = account.split(":", 1)[0].strip()
+            if email and email not in recipients:
+                recipients.append(email)
+
+        return recipients
+
+    async def send_provider_failure_alert(
+        self,
+        provider_name: str,
+        task_type: str,
+        error: str,
+        fallback_provider: Optional[str] = None,
+        request_params: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Notify administrators that a provider failed, went unhealthy, or ran out of credits."""
+        recipients = self.get_admin_recipients()
+        if not recipients:
+            logger.warning("No admin recipients configured for provider failure alerts.")
+            return False
+
+        request_params = request_params or {}
+        task_label = task_type.replace("_", " ").title()
+        model_name = str(request_params.get("model") or "").strip() or "n/a"
+        prompt_preview = str(
+            request_params.get("prompt")
+            or request_params.get("script")
+            or request_params.get("text")
+            or ""
+        ).strip()[:240]
+        fallback_label = fallback_provider or "none available"
+        issue_summary = (
+            "VidGo detected a provider issue and switched to the next fallback provider."
+            if fallback_provider
+            else "VidGo detected a provider issue during health monitoring or without an available fallback."
+        )
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 640px; margin: 0 auto; padding: 24px; }}
+                .header {{ background: #111827; color: white; padding: 20px 24px; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #f9fafb; padding: 24px; border-radius: 0 0 10px 10px; }}
+                .meta {{ background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 16px 0; }}
+                .error {{ color: #b91c1c; white-space: pre-wrap; word-break: break-word; }}
+                .muted {{ color: #6b7280; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>Provider Failure Alert</h2>
+                </div>
+                <div class="content">
+                    <p>{html.escape(issue_summary)}</p>
+                    <div class="meta">
+                        <p><strong>Provider:</strong> {html.escape(provider_name)}</p>
+                        <p><strong>Task:</strong> {html.escape(task_label)}</p>
+                        <p><strong>Fallback:</strong> {html.escape(fallback_label)}</p>
+                        <p><strong>Model:</strong> {html.escape(model_name)}</p>
+                        <p><strong>Error:</strong></p>
+                        <div class="error">{html.escape(error)}</div>
+                    </div>
+                    <p><strong>Prompt preview:</strong> {html.escape(prompt_preview or 'n/a')}</p>
+                    <p class="muted">This alert is rate-limited to avoid duplicate emails during an outage.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = (
+            f"Provider failure alert\n\n"
+            f"Provider: {provider_name}\n"
+            f"Task: {task_label}\n"
+            f"Fallback: {fallback_label}\n"
+            f"Model: {model_name}\n"
+            f"Error: {error}\n"
+            f"Prompt preview: {prompt_preview or 'n/a'}\n"
+        )
+
+        sent = False
+        subject = f"[VidGo] Provider issue: {provider_name} ({task_label})"
+        for recipient in recipients:
+            delivered = await self.send_email(
+                recipient,
+                subject,
+                html_content,
+                text_content,
+            )
+            sent = sent or delivered
+
+        return sent
 
     async def send_verification_email(self, to_email: str, token: str, username: Optional[str] = None) -> bool:
         """Send email verification link."""

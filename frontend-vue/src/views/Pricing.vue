@@ -49,16 +49,18 @@ async function fetchPlans() {
     plans.value = await subscriptionApi.getPlans()
   } catch (err) {
     console.error('Failed to fetch plans:', err)
-    // Fallback to default plans if API fails
+    // Fallback when /api/v1/subscriptions/plans is unreachable.
+    // Values MUST match backend DEFAULT_VIDGO_PLANS (TWD per month / per year
+    // TOTAL) so the UI never disagrees with what the backend would charge.
     plans.value = [
       {
-        id: 'free',
-        name: 'free',
-        display_name: '免費體驗',
+        id: 'demo',
+        name: 'demo',
+        display_name: 'Demo',
         description: '新用戶專屬，立即體驗 AI 生成',
         price_monthly: 0,
         price_yearly: 0,
-        monthly_credits: 40,
+        monthly_credits: 0,
         features: { max_video_length: 5, max_resolution: '720p', has_watermark: true, priority_queue: false, api_access: false, can_use_effects: false, batch_processing: false, custom_styles: false }
       },
       {
@@ -66,8 +68,8 @@ async function fetchPlans() {
         name: 'starter',
         display_name: 'Starter',
         description: '適合個人創作者與小型電商',
-        price_monthly: 99,
-        price_yearly: 79,
+        price_monthly: 299,
+        price_yearly: 2990,
         monthly_credits: 100,
         features: { max_video_length: 30, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: false, custom_styles: false }
       },
@@ -77,7 +79,7 @@ async function fetchPlans() {
         display_name: 'Standard',
         description: '適合成長中的中小型企業',
         price_monthly: 399,
-        price_yearly: 319,
+        price_yearly: 3990,
         monthly_credits: 150,
         features: { max_video_length: 60, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: true, custom_styles: false }
       },
@@ -86,20 +88,20 @@ async function fetchPlans() {
         name: 'pro',
         display_name: 'Pro',
         description: '專業團隊首選，最高畫質輸出',
-        price_monthly: 649,
-        price_yearly: 519,
-        monthly_credits: -1,
-        features: { max_video_length: null, max_resolution: '4K', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
+        price_monthly: 599,
+        price_yearly: 5990,
+        monthly_credits: 250,
+        features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
       },
       {
-        id: 'enterprise',
-        name: 'enterprise',
-        display_name: 'Enterprise',
+        id: 'pro_plus',
+        name: 'pro_plus',
+        display_name: 'Pro+',
         description: '大型企業專屬，客製化服務',
-        price_monthly: 0,
-        price_yearly: 0,
-        monthly_credits: -1,
-        features: { max_video_length: null, max_resolution: '4K', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
+        price_monthly: 999,
+        price_yearly: 9990,
+        monthly_credits: 500,
+        features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
       }
     ]
   } finally {
@@ -230,9 +232,32 @@ function isPlanPopular(name: string): boolean {
   return name === 'pro' || name === 'Pro'
 }
 
-// Get price based on billing period
+// Price shown in the big headline. Backend returns price_yearly as the TOTAL
+// annual amount (e.g. 2990 for Starter). Displaying "NT$2990/yr" next to
+// "NT$299/mo" trips users up — they cannot compare the monthly commitment.
+// Show the per-month-billed-annually rate instead, with the real annual total
+// surfaced underneath via `getAnnualTotal()`.
 function getPrice(plan: PlanInfo): number {
-  return billingPeriod.value === 'monthly' ? plan.price_monthly : plan.price_yearly
+  if (billingPeriod.value === 'monthly') {
+    return plan.price_monthly
+  }
+  if (!plan.price_yearly) return 0
+  // Divide annual total by 12 and round to whole NT$ to match how SaaS
+  // comparison tables are written.
+  return Math.round(plan.price_yearly / 12)
+}
+
+// Real annual total the customer is charged up-front when choosing yearly.
+function getAnnualTotal(plan: PlanInfo): number {
+  return Math.round(plan.price_yearly || 0)
+}
+
+// Yearly discount percentage vs 12 × monthly. Non-fatal: 0 when data missing.
+function getYearlySavingsPct(plan: PlanInfo): number {
+  const monthlyTotal = (plan.price_monthly || 0) * 12
+  const yearlyTotal = plan.price_yearly || 0
+  if (monthlyTotal <= 0 || yearlyTotal <= 0 || yearlyTotal >= monthlyTotal) return 0
+  return Math.round((1 - yearlyTotal / monthlyTotal) * 100)
 }
 
 // Check if this is the current plan
@@ -271,7 +296,9 @@ onMounted(async () => {
             :style="billingPeriod === 'yearly' ? 'background: #1677ff; color: white;' : 'color: #9494b0;'"
           >
             {{ t('pricing.yearly') }}
-            <span class="ml-1" style="color: #10b981;">-20%</span>
+            <!-- Label reflects the actual average yearly discount across paid
+                 plans (backend uses ~17% = 2 months free for yearly). -->
+            <span class="ml-1" style="color: #10b981;">{{ t('pricing.yearlyDiscountLabel', '-17%') }}</span>
           </button>
         </div>
       </div>
@@ -386,8 +413,24 @@ onMounted(async () => {
               NT${{ getPrice(plan) }}
             </span>
             <span style="color: #6b6b8a;">
-              /{{ billingPeriod === 'monthly' ? 'mo' : 'yr' }}
+              /{{ t('pricing.perMonthShort', 'mo') }}
             </span>
+            <!-- When the user is viewing yearly pricing, also surface the real
+                 annual total + savings so they understand the full commitment. -->
+            <div
+              v-if="billingPeriod === 'yearly' && plan.price_monthly > 0"
+              class="mt-2 text-xs"
+              style="color: #6b6b8a;"
+            >
+              <span>{{ t('pricing.billedAnnually') }}: NT${{ getAnnualTotal(plan) }}</span>
+              <span
+                v-if="getYearlySavingsPct(plan) > 0"
+                class="ml-2"
+                style="color: #10b981;"
+              >
+                {{ t('pricing.saveVsMonthly', { pct: getYearlySavingsPct(plan) }) }}
+              </span>
+            </div>
           </div>
 
           <!-- Credits -->

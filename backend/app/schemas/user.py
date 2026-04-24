@@ -53,6 +53,7 @@ class UserWithDetails(User):
     """User with more details (for profile page); includes referral fields from User."""
     is_superuser: bool = False
     plan_type: Optional[str] = None
+    current_plan_id: Optional[UUID] = None
     updated_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
     cancellation_notice: Optional[dict] = None

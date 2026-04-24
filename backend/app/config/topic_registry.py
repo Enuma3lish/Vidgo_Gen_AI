@@ -61,6 +61,11 @@ TOOL_TOPICS: Dict[str, List[TopicInfo]] = {
         {"id": "urban", "name_en": "Urban", "name_zh": "都市風格"},
         {"id": "seasonal", "name_en": "Seasonal", "name_zh": "季節性"},
         {"id": "holiday", "name_en": "Holiday", "name_zh": "節日"},
+        {"id": "spring", "name_en": "Spring Sale", "name_zh": "春季特賣"},
+        {"id": "valentines", "name_en": "Valentine's Day", "name_zh": "情人節"},
+        {"id": "black_friday", "name_en": "Black Friday", "name_zh": "黑色星期五"},
+        {"id": "christmas", "name_en": "Christmas", "name_zh": "聖誕節"},
+        {"id": "new_year", "name_en": "New Year", "name_zh": "新年"},
     ],
     
     # -------------------------------------------------------------------------

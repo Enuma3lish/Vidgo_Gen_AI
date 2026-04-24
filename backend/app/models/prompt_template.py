@@ -341,7 +341,7 @@ SUB_TOPIC_DISPLAY_NAMES = {
     PromptSubTopic.WHITE_BACKGROUND: {"en": "White Background", "zh": "白色背景"},
     PromptSubTopic.STUDIO_BACKGROUND: {"en": "Studio Background", "zh": "攝影棚背景"},
     PromptSubTopic.NATURE_BACKGROUND: {"en": "Nature Background", "zh": "自然背景"},
-    PromptSubTopic.LUXURY_BACKGROUND: {"en": "Luxury Background", "zh": "奢華背景"},
+    PromptSubTopic.LUXURY_BACKGROUND: {"en": "Styled Countertop", "zh": "質感櫃台背景"},
     PromptSubTopic.MODERN_STYLE: {"en": "Modern Style", "zh": "現代風格"},
     PromptSubTopic.NORDIC_STYLE: {"en": "Nordic Style", "zh": "北歐風格"},
     PromptSubTopic.JAPANESE_STYLE: {"en": "Japanese Style", "zh": "日式風格"},

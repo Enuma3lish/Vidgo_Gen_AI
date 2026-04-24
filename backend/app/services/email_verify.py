@@ -56,7 +56,9 @@ class EmailVerificationService:
             # Fallback without Redis - generate code without rate limiting
             code = self._generate_code()
             if self.email_service:
-                await self.email_service.send_verification_email(email, code)
+                delivered = await self.email_service.send_verification_code_email(email, code)
+                if not delivered:
+                    return False, "Failed to send verification code email"
             return True, "Verification code sent"
 
         # Check resend limit
@@ -99,7 +101,9 @@ class EmailVerificationService:
 
         # Send email with 6-digit code
         if self.email_service:
-            await self.email_service.send_verification_code_email(email, code)
+            delivered = await self.email_service.send_verification_code_email(email, code)
+            if not delivered:
+                return False, "Failed to send verification code email"
 
         return True, "Verification code sent"
 

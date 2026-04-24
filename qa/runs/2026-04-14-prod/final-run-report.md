@@ -247,3 +247,52 @@ Across the ~12 paid generations on Pro + Premium:
 - `backend/app/services/admin_dashboard.py` — Paid % + Daily Revenue methods
 - `frontend-vue/src/views/admin/AdminDashboard.vue` — Paid % KPI card + Daily Revenue line chart
 - `frontend-vue/src/composables/useDemoMode.ts:74-86` — tier gate (still correct)
+
+---
+
+## 2026-04-20 Browser-Only GCP Sweep Addendum
+
+**Mode:** Live production browser pass on `https://vidgo.co` using `browser-use`
+**Goal:** Fast UI verification of all current tool routes and visible functions without waiting for every generation job to finish end-to-end.
+
+### Account state used
+
+- Fresh signup was re-tested on prod:
+	- `vidgoqa20260420e2e@yopmail.com`
+	- `vidgoqa20260420mail@maildrop.cc`
+- Both registrations successfully reached the **Verify Email** screen, so account creation UI/API still works through code-entry step.
+- Disposable inbox providers did **not** receive the 6-digit verification email during this pass, so full public-mailbox verification could not be completed from browser-only testing.
+- For the remainder of the sweep, the existing prod user `test@example.com` / `TestPass123!` was used.
+- That account logged in successfully with **100 credits** and `Current Plan: basic`, then was upgraded in-browser to **專業版 / Pro** via the live mock-checkout path.
+
+### Current live tool routes verified in browser
+
+| Route | Browser Result | Key UI / Function Observed |
+|---|---|---|
+| `/tools/background-removal` | ✅ PASS | H1 `Smart Background Removal (Base)`; 1 file input; result pane present; action button `Remove Background` visible |
+| `/tools/product-scene` | ✅ PASS | H1 `AI Product Scene Studio`; 1 file input; scene selector visible; generated-scenes area present |
+| `/tools/try-on` | ✅ PASS | H1 `AI Model Outfit Swap`; 1 file input; clothing grid + model grid visible; `Upload Custom Model` + `Generate` present |
+| `/tools/room-redesign` | ✅ PASS | H1 `Interior Design Inspiration`; 1 file input; 1 textarea; tabs for `Browse Examples`, `Generate Design`, `Style Transfer`, `AI Transform`, `3D Model` visible |
+| `/tools/short-video` | ✅ PASS | H1 `Product Dynamic Shorts (Image-to-Video)`; 1 file input; duration controls, motion controls, AI model picker visible |
+| `/tools/image-to-video` | ✅ PASS | Same live surface as `/tools/short-video`; route resolves correctly |
+| `/tools/video-transform` | ✅ PASS | H1 `Video Style Transform`; 1 file input; 1 textarea; style options visible |
+| `/tools/upscale` | ✅ PASS | H1 `HD Image Upscale`; 1 file input; `2x` and `4x` controls visible |
+| `/tools/avatar` | ✅ PASS | H1 `AI Avatar`; 1 file input; 1 textarea; language/script selectors visible; generated-video area present |
+| `/tools/pattern-generate` | ✅ PASS | H1 `Pattern Design`; tool-mode buttons for `Pattern Generate`, `Pattern Transfer`, `Seamless Pattern`; featured examples rendered |
+| `/tools/text-to-video` | ✅ PASS (alias) | Redirects to `/tools/short-video`; no standalone live page anymore |
+| `/tools/effects` | ✅ PASS (alias) | Redirects to `/tools/room-redesign`; no standalone live page anymore |
+
+### Browser findings from this fast pass
+
+- The browser-only sweep is materially faster than full generation verification because it validates route health, gating, visible controls, and upgrade flow without waiting on upstream AI runtimes.
+- On current prod, the `basic` account is **not treated as anonymous demo** in the authenticated dashboard experience; it logs in with credits and can enter the pricing upgrade flow normally.
+- The Pro upgrade path in browser completed successfully and immediately updated the pricing page to show `Current Plan: 專業版` and an upgrade-success banner.
+- All current live tool pages loaded without browser crashes or blank states in this pass.
+- Upload controls are visible on the paid session for the routes that should support uploads.
+- `text-to-video` and `effects` should be considered **aliases/redirects**, not separate current tool implementations, when counting live tool surfaces.
+
+### Scope note
+
+- This addendum is a **browser surface and flow verification**, not a replacement for long-running provider-backed generation checks.
+- Use this pass for fast release confidence on UI routing, gating, upgrade flow, and visible tool functions.
+- Use the earlier end-to-end sections in this report for slower provider/runtime validation.

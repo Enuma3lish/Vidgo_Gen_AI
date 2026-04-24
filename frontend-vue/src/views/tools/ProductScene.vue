@@ -38,7 +38,11 @@ const {
   tryPrompts,
   dbEmpty,
   resolveDemoTemplateResultUrl,
-  generateOnDemand
+  generateOnDemand,
+  loadInputLibrary,
+  inputLibrary,
+  loadEffectCatalog,
+  effectCatalog,
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -65,7 +69,6 @@ interface StyleTemplateItem {
 }
 const styleTemplates = ref<StyleTemplateItem[]>([])
 const selectedTemplateId = ref<string | null>(null)
-const useTemplateMode = ref(false)
 
 const sceneTemplates = computed(() => [
   { id: 'studio', icon: '📷', name: t('tools.scenes.studio.name'), desc: t('tools.scenes.studio.desc') },
@@ -103,14 +106,24 @@ const defaultProducts = computed<DemoProduct[]>(() => {
   ]
 
   return productDefs.map(p => {
-    // Find input image from pre-generated templates
-    const template = demoTemplates.value.find(t => {
-      const params = (t as any).input_params || {}
+    // Prefer pregenerated input-library URL (Vertex Imagen → GCS) when
+    // available; fall back to the finished-example input; finally to the
+    // static Unsplash placeholder.
+    const libInput = inputLibrary.value.find((item) => {
+      const params = item.input_params || {}
+      return params.product_id === p.id || item.topic === p.id
+    })
+    const template = demoTemplates.value.find((t: any) => {
+      const params = t.input_params || {}
       return params.product_id === p.id
     })
     return {
       ...p,
-      input: template?.input_image_url || STATIC_PRODUCT_IMAGES[p.id] || ''
+      input:
+        libInput?.input_image_url
+        || template?.input_image_url
+        || STATIC_PRODUCT_IMAGES[p.id]
+        || ''
     }
   })
 })
@@ -146,7 +159,15 @@ const currentPreGeneratedTemplateId = computed(() => {
 
 // Load demo templates on mount
 onMounted(async () => {
-  await loadDemoTemplates('product_scene', undefined, locale.value)
+  await Promise.all([
+    loadDemoTemplates('product_scene', undefined, locale.value),
+    // Pregenerated Vertex AI inputs (image library the user picks from).
+    loadInputLibrary('product_scene'),
+    // Scene prompt catalog — every entry's `prompt` is the effect_prompt the
+    // backend keys its cache on, so the picker stays consistent with the
+    // runtime cache key.
+    loadEffectCatalog('product_scene', locale.value),
+  ])
 
   // Load curated style templates for subscribers
   try {
@@ -254,8 +275,15 @@ async function generateScenes() {
       // cache-through endpoint to generate one on demand via real provider.
       // The result is persisted to Material DB so the next click hits cache.
       uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
+      const selectedProductForGen = defaultProducts.value.find(p => p.id === selectedProductId.value)
+      // Match the cache key the /tools/product-scene endpoint uses: pin the
+      // effect_prompt to the full scene template prompt so both entry points
+      // resolve to the same lookup_hash in Material DB.
+      const scenePrompt = effectCatalog.value.find(e => e.id === selectedScene.value)?.prompt || undefined
       const onDemandUrl = await generateOnDemand('product_scene', selectedScene.value, {
         product_id: selectedProductId.value,
+        input_image_url: selectedProductForGen?.input || uploadedImage.value,
+        effect_prompt: scenePrompt,
       })
       if (onDemandUrl) {
         resultImages.value = [onDemandUrl]

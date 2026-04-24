@@ -3,8 +3,154 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
+
+type GalleryItem = {
+  id: string
+  // Display strings — either bilingual pair (set by curated fallbacks) or a
+  // single string (set by /demo/inspiration API, which is already localized).
+  // The template picks by locale at render time.
+  title: string
+  prompt: string
+  title_zh?: string
+  prompt_zh?: string
+  image_url?: string
+  video_url?: string
+  thumbnail_url?: string
+  tool_type: string
+  topic?: string
+  tags: string[]
+  type: 'image' | 'video'
+}
+
+const isZh = computed(() => locale.value.startsWith('zh'))
+function displayTitle(item: GalleryItem): string {
+  if (isZh.value && item.title_zh) return item.title_zh
+  return item.title
+}
+function displayPrompt(item: GalleryItem): string {
+  if (isZh.value && item.prompt_zh) return item.prompt_zh
+  return item.prompt
+}
+
+type SettledResult<T> = {
+  ok: boolean
+  value?: T
+}
+
+// Bilingual fallback rows — the EN string is primary (used when
+// locale !== zh), and `title_zh`/`prompt_zh` surface only on the zh-TW page.
+const CURATED_FALLBACK_ITEMS: GalleryItem[] = [
+  {
+    id: 'fallback-product-1',
+    title: 'Handmade soap brand hero shot',
+    title_zh: '手工皂品牌展示圖',
+    prompt: 'Handmade soap with kraft paper packaging on a wooden table, soft daylight — ideal for boutique e-commerce.',
+    prompt_zh: '手工皂與牛皮紙包裝置於木質桌面，柔和日光，適合小品牌電商展示。',
+    image_url: 'https://images.unsplash.com/photo-1607006483225-50cf5d3a88f5?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'product_scene',
+    topic: 'product_scene',
+    tags: ['product', 'ecommerce', 'small_business'],
+    type: 'image',
+  },
+  {
+    id: 'fallback-product-2',
+    title: 'Coffee packaging e-commerce hero',
+    title_zh: '咖啡包裝電商主圖',
+    prompt: 'Bag of coffee beans on a wooden table, warm ambient light — suited for an e-commerce hero banner.',
+    prompt_zh: '咖啡豆包裝在木質桌面，暖光氛圍，適合電商首頁展示。',
+    image_url: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'product_scene',
+    topic: 'product_scene',
+    tags: ['food', 'beverage', 'product'],
+    type: 'image',
+  },
+  {
+    id: 'fallback-bg-1',
+    title: 'Clean background removal',
+    title_zh: '透明背景商品去背',
+    prompt: 'Preserve product edge detail while cutting the background to a clean white backdrop.',
+    prompt_zh: '保留商品邊緣細節，自動去除背景並輸出乾淨白底圖。',
+    image_url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'background_removal',
+    topic: 'background_removal',
+    tags: ['ecommerce', 'catalog', 'clean'],
+    type: 'image',
+  },
+  {
+    id: 'fallback-tryon-1',
+    title: 'AI model try-on: sport jacket',
+    title_zh: '運動外套 AI 模特試穿',
+    prompt: 'Apply a flat-laid jacket to a natural standing model while keeping fabric texture and fit intact.',
+    prompt_zh: '將平拍外套套用到自然站姿模特，保留布料質感與版型。',
+    image_url: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'try_on',
+    topic: 'try_on',
+    tags: ['fashion', 'clothing', 'model'],
+    type: 'image',
+  },
+  {
+    id: 'fallback-room-1',
+    title: 'Scandinavian living-room redesign',
+    title_zh: '北歐風客廳改造',
+    prompt: 'Redesign the room in Nordic style with wooden furniture, natural light, and a crisp warm palette.',
+    prompt_zh: '將空間改為北歐風，木質家具與自然採光，清爽暖色調。',
+    image_url: 'https://images.unsplash.com/photo-1484101403633-562f891dc89a?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'room_redesign',
+    topic: 'room_redesign',
+    tags: ['interior', 'living_room', 'design'],
+    type: 'image',
+  },
+  {
+    id: 'fallback-video-1',
+    title: 'Product rotation short video',
+    title_zh: '產品旋轉短影音',
+    prompt: 'Turn a single product image into an 8-second smooth rotation clip — tuned for social ads.',
+    prompt_zh: '單張商品主圖生成 8 秒平滑旋轉展示影片，適合社群廣告。',
+    image_url: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'short_video',
+    topic: 'short_video',
+    tags: ['marketing', 'social', 'video'],
+    type: 'video',
+  },
+  {
+    id: 'fallback-avatar-1',
+    title: 'Beauty brand AI presenter',
+    title_zh: '美妝品牌 AI 導購',
+    prompt: 'AI digital presenter introduces a new product — fluent delivery and tight pacing.',
+    prompt_zh: 'AI 數位人介紹新品賣點，口播流暢、節奏精準。',
+    image_url: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'ai_avatar',
+    topic: 'ai_avatar',
+    tags: ['marketing', 'brand', 'presenter'],
+    type: 'video',
+  },
+  {
+    id: 'fallback-effect-1',
+    title: 'Comic-style product visual',
+    title_zh: '漫畫風商品視覺',
+    prompt: 'Convert the product shot into a comic-book style visual while keeping the subject recognizable and bumping contrast.',
+    prompt_zh: '商品圖轉換為漫畫風視覺，保留主體辨識度並強化色彩對比。',
+    image_url: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'effect',
+    topic: 'effect',
+    tags: ['style', 'creative', 'ad'],
+    type: 'image',
+  },
+  {
+    id: 'fallback-pattern-1',
+    title: 'Geometric packaging pattern',
+    title_zh: '包裝用幾何圖案',
+    prompt: 'Generate a tileable geometric pattern usable for brand packaging and e-commerce backdrops.',
+    prompt_zh: '生成可平鋪幾何圖案，適用於品牌包裝與電商背景素材。',
+    image_url: 'https://images.unsplash.com/photo-1456324504439-367cee3b3c32?auto=format&fit=crop&w=900&q=80',
+    tool_type: 'pattern_generate',
+    topic: 'pattern_generate',
+    tags: ['pattern', 'design', 'branding'],
+    type: 'image',
+  },
+]
 
 // Gallery categories (matching piapi.ai style)
 const categories = ref([
@@ -31,7 +177,7 @@ const industries = ref([
 ])
 
 // Gallery items
-const galleryItems = ref<any[]>([])
+const galleryItems = ref<GalleryItem[]>([])
 const isLoading = ref(true)
 const selectedCategory = ref('all')
 const selectedIndustry = ref('all')
@@ -84,19 +230,64 @@ const filteredItems = computed(() => {
 })
 
 // Load gallery data
+function inferToolTypeFromExample(source: {
+  topic?: string
+  title?: string
+  prompt?: string
+  style_tags?: string[]
+}): string {
+  const text = `${source.topic || ''} ${source.title || ''} ${source.prompt || ''} ${(source.style_tags || []).join(' ')}`.toLowerCase()
+
+  if (text.includes('avatar') || text.includes('digital human') || text.includes('數位人')) return 'ai_avatar'
+  if (text.includes('video') || text.includes('影片') || text.includes('短影音')) return 'short_video'
+  if (text.includes('try on') || text.includes('試穿') || text.includes('model')) return 'try_on'
+  if (text.includes('room') || text.includes('interior') || text.includes('室內') || text.includes('空間')) return 'room_redesign'
+  if (text.includes('remove background') || text.includes('去背') || text.includes('白底')) return 'background_removal'
+  if (text.includes('pattern') || text.includes('圖案')) return 'pattern_generate'
+  if (text.includes('effect') || text.includes('style') || text.includes('風格')) return 'effect'
+
+  return 'product_scene'
+}
+
+function withFallbackItems(items: GalleryItem[]): GalleryItem[] {
+  if (items.length >= 18) return items
+
+  const existingIds = new Set(items.map(i => i.id))
+  const nextItems = [...items]
+
+  CURATED_FALLBACK_ITEMS.forEach((fallback) => {
+    if (!existingIds.has(fallback.id)) {
+      nextItems.push(fallback)
+    }
+  })
+
+  return nextItems
+}
+
 async function loadGalleryData() {
   isLoading.value = true
   try {
-    const [inspirationRes, worksRes] = await Promise.allSettled([
-      fetch('/api/v1/demo/inspiration?count=50').then(r => r.json()),
-      fetch('/api/v1/demo/landing/works?limit=50').then(r => r.json())
+    const safeJson = async <T>(url: string): Promise<SettledResult<T>> => {
+      try {
+        const response = await fetch(url)
+        const value = await response.json()
+        return { ok: true, value }
+      } catch {
+        return { ok: false }
+      }
+    }
+
+    const [inspirationRes, worksRes] = await Promise.all([
+      safeJson<any>('/api/v1/demo/inspiration?count=50'),
+      safeJson<any>('/api/v1/demo/landing/works?limit=50')
     ])
 
-    const items: any[] = []
+    const items: GalleryItem[] = []
 
-    if (inspirationRes.status === 'fulfilled' && inspirationRes.value.success) {
+    if (inspirationRes.ok && inspirationRes.value?.success) {
       const examples = inspirationRes.value.examples || []
       examples.forEach((ex: any) => {
+        const inferredToolType = inferToolTypeFromExample(ex)
         items.push({
           id: ex.id,
           title: ex.title || ex.topic_display,
@@ -104,15 +295,15 @@ async function loadGalleryData() {
           image_url: ex.image_url,
           video_url: ex.video_url,
           thumbnail_url: ex.thumbnail_url,
-          tool_type: 'inspiration',
+          tool_type: inferredToolType,
           topic: ex.topic,
-          tags: ex.style_tags || [],
+          tags: ex.style_tags || [inferredToolType],
           type: ex.video_url ? 'video' : 'image'
         })
       })
     }
 
-    if (worksRes.status === 'fulfilled' && worksRes.value.success) {
+    if (worksRes.ok && worksRes.value?.success) {
       const works = worksRes.value.items || []
       works.forEach((work: any) => {
         items.push({
@@ -129,13 +320,13 @@ async function loadGalleryData() {
       })
     }
 
-    galleryItems.value = items
+    galleryItems.value = withFallbackItems(items)
 
     categories.value.forEach((cat: { id: string; count: number }) => {
       if (cat.id === 'all') {
-        cat.count = items.length
+        cat.count = galleryItems.value.length
       } else {
-        cat.count = items.filter(item => item.tool_type === cat.id).length
+        cat.count = galleryItems.value.filter(item => item.tool_type === cat.id).length
       }
     })
 
@@ -144,6 +335,35 @@ async function loadGalleryData() {
   } finally {
     isLoading.value = false
   }
+}
+
+function categoryLabelByTool(toolType: string): string {
+  const category = categories.value.find(c => c.id === toolType)
+  return category?.name || toolType
+}
+
+function setInputFocusStyle(event: FocusEvent) {
+  const target = event.target as HTMLInputElement | null
+  if (target) target.style.borderColor = '#1677ff'
+}
+
+function setInputBlurStyle(event: FocusEvent) {
+  const target = event.target as HTMLInputElement | null
+  if (target) target.style.borderColor = 'rgba(255,255,255,0.08)'
+}
+
+function setCardHoverStyle(event: MouseEvent) {
+  const target = event.currentTarget as HTMLElement | null
+  if (!target) return
+  target.style.borderColor = 'rgba(22,119,255,0.3)'
+  target.style.boxShadow = '0 12px 40px rgba(0,0,0,0.5)'
+}
+
+function resetCardHoverStyle(event: MouseEvent) {
+  const target = event.currentTarget as HTMLElement | null
+  if (!target) return
+  target.style.borderColor = 'rgba(255,255,255,0.06)'
+  target.style.boxShadow = 'none'
 }
 
 function tryExample(item: any) {
@@ -190,8 +410,8 @@ onMounted(() => {
                 :placeholder="t('gallery.searchPlaceholder')"
                 class="w-full px-6 py-4 pl-12 text-lg rounded-xl transition-all"
                 style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa; outline: none;"
-                @focus="($event.target as HTMLInputElement).style.borderColor = '#1677ff'"
-                @blur="($event.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.08)'"
+                @focus="setInputFocusStyle"
+                @blur="setInputBlurStyle"
               />
               <div class="absolute left-4 top-1/2 transform -translate-y-1/2" style="color: #6b6b8a;">
                 🔍
@@ -291,8 +511,8 @@ onMounted(() => {
             class="group rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1 cursor-pointer"
             style="background: #141420; border: 1px solid rgba(255,255,255,0.06);"
             @click="tryExample(item)"
-            @mouseenter="($event.currentTarget as HTMLElement).style.borderColor = 'rgba(22,119,255,0.3)'; ($event.currentTarget as HTMLElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.5)'"
-            @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'; ($event.currentTarget as HTMLElement).style.boxShadow = 'none'"
+            @mouseenter="setCardHoverStyle"
+            @mouseleave="resetCardHoverStyle"
           >
             <!-- Media Container -->
             <div class="relative aspect-square overflow-hidden" style="background: #0f0f17;">
@@ -307,7 +527,7 @@ onMounted(() => {
               <!-- Tool Type Badge -->
               <div class="absolute top-3 left-3 z-10">
                 <span class="px-2 py-1 text-xs font-medium rounded-full" style="background: rgba(255,255,255,0.1); color: #c4c4d8; backdrop-filter: blur(4px);">
-                  {{ categories.find((c: any) => c.id === item.tool_type)?.name || item.tool_type }}
+                  {{ categoryLabelByTool(item.tool_type) }}
                 </span>
               </div>
 
@@ -315,7 +535,7 @@ onMounted(() => {
               <img
                 v-if="item.type === 'image'"
                 :src="item.image_url || item.thumbnail_url"
-                :alt="item.title"
+                :alt="displayTitle(item)"
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
 
@@ -323,7 +543,7 @@ onMounted(() => {
               <div v-else-if="item.type === 'video'" class="relative w-full h-full">
                 <img
                   :src="item.image_url || item.thumbnail_url"
-                  :alt="item.title"
+                  :alt="displayTitle(item)"
                   class="w-full h-full object-cover"
                 />
                 <div class="absolute inset-0 flex items-center justify-center" style="background: rgba(0,0,0,0.2);">
@@ -345,8 +565,8 @@ onMounted(() => {
 
             <!-- Content -->
             <div class="p-4">
-              <h3 class="font-semibold mb-2 line-clamp-1" style="color: #e8e8f0;">{{ item.title }}</h3>
-              <p class="text-sm mb-3 line-clamp-2" style="color: #6b6b8a;">{{ item.prompt }}</p>
+              <h3 class="font-semibold mb-2 line-clamp-1" style="color: #e8e8f0;">{{ displayTitle(item) }}</h3>
+              <p class="text-sm mb-3 line-clamp-2" style="color: #6b6b8a;">{{ displayPrompt(item) }}</p>
 
               <!-- Tags -->
               <div class="flex flex-wrap gap-1">

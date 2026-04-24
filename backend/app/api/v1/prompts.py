@@ -35,10 +35,10 @@ router = APIRouter()
 
 class PromptGenerateRequest(BaseModel):
     """Request model for prompt generation."""
-    group: str = Field(..., description="Prompt group (e.g., background_removal, product_effect)")
-    sub_topic: Optional[str] = Field(None, description="Sub-topic within the group")
-    language: str = Field("en", description="Language code (en, zh-TW, ja, ko, es)")
-    context: Optional[dict] = Field(None, description="Additional context for prompt generation")
+    group: str = Field(..., description="Prompt group to generate from, for example background_removal, background_change, product_effect, room_redesign, image_to_video, style_transfer, or ai_avatar.")
+    sub_topic: Optional[str] = Field(None, description="Optional sub-topic within the selected group, such as transparent, studio_background, cinematic, or color_change.")
+    language: str = Field("en", description="Response language code, for example en, zh-TW, ja, ko, or es.")
+    context: Optional[dict] = Field(None, description="Optional structured context used to make the prompt more specific, such as product category, campaign theme, target mood, or brand constraints.")
 
 
 class PromptTemplateResponse(BaseModel):
@@ -71,21 +71,21 @@ class PromptGenerateResponse(BaseModel):
 class CacheResultRequest(BaseModel):
     """Request model for caching a result."""
     template_id: str
-    input_data: dict = Field(..., description="Input/before data")
-    result_data: dict = Field(..., description="Generated result data")
+    input_data: dict = Field(..., description="Original input payload or before-state metadata used to generate the result.")
+    result_data: dict = Field(..., description="Generated output payload, including URLs and any provider metadata that should be cached.")
     generation_time_ms: int = 0
     cost_usd: float = 0.0
 
 
 class CreateTemplateRequest(BaseModel):
     """Request model for creating a template."""
-    prompt: str
-    group: str
-    sub_topic: str = "default"
-    prompt_translations: Optional[dict] = None
-    input_data: Optional[dict] = None
-    result_data: Optional[dict] = None
-    api_info: Optional[dict] = None
+    prompt: str = Field(..., description="Canonical English prompt or base prompt instruction stored for this template.")
+    group: str = Field(..., description="Prompt group this template belongs to.")
+    sub_topic: str = Field("default", description="Sub-topic label used to classify this template within the group.")
+    prompt_translations: Optional[dict] = Field(None, description="Optional localized prompt variants keyed by language code.")
+    input_data: Optional[dict] = Field(None, description="Optional example input payload, such as input image URLs or scene parameters.")
+    result_data: Optional[dict] = Field(None, description="Optional cached output payload associated with the template.")
+    api_info: Optional[dict] = Field(None, description="Optional provider metadata, endpoint mapping, or generation settings for this template.")
     is_default: bool = True
     keywords: List[str] = []
     tags: List[str] = []

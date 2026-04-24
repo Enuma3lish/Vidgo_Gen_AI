@@ -15,6 +15,7 @@ import logging
 import os
 
 from app.providers.base import BaseProvider
+from app.services.gcs_storage_service import get_gcs_storage
 
 logger = logging.getLogger(__name__)
 
@@ -369,63 +370,20 @@ class PiAPIProvider(BaseProvider):
     # ─────────────────────────────────────────────────────────────────────────
 
     async def background_removal(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Remove background from image using local rembg library.
-
-        Args:
-            params: {
-                "image_url": str,
-            }
-
-        Returns:
-            {"success": True, "task_id": str, "output": {"image_url": str}}
-        """
+        # Calls PiAPI image-toolkit background-remove — higher quality on
+        # complex subjects (hair, fine edges) than local rembg. Router falls
+        # through to Vertex's rembg fallback on 500.
         self._log_request("background_removal", params)
 
-        try:
-            import httpx as _httpx
-            from rembg import remove
-            from PIL import Image
-            from io import BytesIO
-            import base64
-            import uuid
-            import os
+        payload = {
+            "model": "Qubico/image-toolkit",
+            "task_type": "background-remove",
+            "input": {
+                "image_url": self._resolve_image_url(params["image_url"]),
+            },
+        }
 
-            # Load the image (local path or remote URL)
-            image_url = params["image_url"]
-            if image_url.startswith("/static") or image_url.startswith("static"):
-                local_path = os.path.join("/app", image_url.lstrip("/"))
-                with open(local_path, "rb") as f:
-                    image_data = f.read()
-            else:
-                async with _httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": "VidGo/1.0"}) as dl_client:
-                    resp = await dl_client.get(image_url)
-                    resp.raise_for_status()
-                    image_data = resp.content
-
-            # Remove background using rembg (runs in thread to avoid blocking)
-            input_image = Image.open(BytesIO(image_data))
-            loop = asyncio.get_event_loop()
-            output_image = await loop.run_in_executor(None, remove, input_image)
-
-            # Save to /app/static/generated/
-            filename = f"rembg_{uuid.uuid4().hex}.png"
-            output_dir = "/app/static/generated"
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join(output_dir, filename)
-            output_image.save(output_path, "PNG")
-
-            result_url = f"/static/generated/{filename}"
-            self._log_response("background_removal", True)
-
-            return {
-                "success": True,
-                "task_id": f"local-rembg-{filename}",
-                "output": {"image_url": result_url}
-            }
-        except Exception as e:
-            self._log_response("background_removal", False, str(e))
-            raise
+        return await self._submit_and_poll(payload)
 
     # ─────────────────────────────────────────────────────────────────────────
     # VIDEO STYLE TRANSFER (Wan VACE via PiAPI)
@@ -484,12 +442,15 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("upscale", params)
 
+        # Qubico/image-toolkit upscale requires the input key `image` (not
+        # `image_url`). PiAPI rejects the wrong key with a 500. Also normalize
+        # backend-local /static/ paths so PiAPI can fetch the source.
         payload = {
             "model": "Qubico/image-toolkit",
             "task_type": "upscale",
             "input": {
-                "image_url": params["image_url"],
-                "scale": params.get("scale", 2)
+                "image": self._resolve_image_url(params["image_url"]),
+                "scale": params.get("scale", 2),
             }
         }
 

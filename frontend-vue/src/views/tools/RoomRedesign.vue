@@ -22,7 +22,11 @@ const {
   loadDemoTemplates,
   demoTemplates,
   resolveDemoTemplateResultUrl,
-  generateOnDemand
+  generateOnDemand,
+  loadInputLibrary,
+  inputLibrary,
+  loadEffectCatalog,
+  effectCatalog,
 } = useDemoMode()
 
 // Data
@@ -105,36 +109,34 @@ interface DemoRoom {
   nameZh: string
 }
 
-const defaultRooms: DemoRoom[] = [
-  {
-    id: 'room-1',
-    type_id: 'living_room',
-    input: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800',
-    name: 'Living Room',
-    nameZh: '客廳'
-  },
-  {
-    id: 'room-2',
-    type_id: 'bedroom',
-    input: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800',
-    name: 'Bedroom',
-    nameZh: '臥室'
-  },
-  {
-    id: 'room-3',
-    type_id: 'kitchen',
-    input: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800',
-    name: 'Kitchen',
-    nameZh: '廚房'
-  },
-  {
-    id: 'room-4',
-    type_id: 'bathroom',
-    input: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800',
-    name: 'Bathroom',
-    nameZh: '浴室'
-  }
+const STATIC_ROOM_FALLBACKS: Record<string, string> = {
+  living_room: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800',
+  bedroom: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800',
+  kitchen: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800',
+  bathroom: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800',
+}
+
+const STATIC_ROOM_DEFS: Array<{ id: string; type_id: string; name: string; nameZh: string }> = [
+  { id: 'room-1', type_id: 'living_room', name: 'Living Room', nameZh: '客廳' },
+  { id: 'room-2', type_id: 'bedroom',     name: 'Bedroom',     nameZh: '臥室' },
+  { id: 'room-3', type_id: 'kitchen',     name: 'Kitchen',     nameZh: '廚房' },
+  { id: 'room-4', type_id: 'bathroom',    name: 'Bathroom',    nameZh: '浴室' },
 ]
+
+// Room picker list — the pregenerated Vertex input library wins when rows
+// exist for the given type_id; otherwise we use the static Unsplash fallback
+// so the view always renders something.
+const defaultRooms = computed<DemoRoom[]>(() => {
+  return STATIC_ROOM_DEFS.map(def => {
+    const libRow = inputLibrary.value.find(
+      (item: any) => item.topic === def.type_id,
+    )
+    return {
+      ...def,
+      input: (libRow?.input_image_url as string) || STATIC_ROOM_FALLBACKS[def.type_id] || '',
+    }
+  })
+})
 
 // Demo design styles - only relevant interior design styles for demo users
 // These are the style IDs that make sense for interior design transformation
@@ -190,12 +192,18 @@ onMounted(async () => {
     styles.value = stylesData
     roomTypes.value = roomTypesData
 
-    // Load demo templates for demo users
-    await loadDemoTemplates('room_redesign')
+    // Load demo templates for demo users plus the Vertex-pregenerated room
+    // input library and the interior-style effect catalog (its `prompt`
+    // strings are what the runtime hashes as part of the cache key).
+    await Promise.all([
+      loadDemoTemplates('room_redesign'),
+      loadInputLibrary('room_redesign'),
+      loadEffectCatalog('room_redesign', locale.value),
+    ])
 
     // For demo users, auto-select first default room
-    if (isDemoUser.value && defaultRooms.length > 0) {
-      const firstRoom = defaultRooms[0]
+    if (isDemoUser.value && defaultRooms.value.length > 0) {
+      const firstRoom = defaultRooms.value[0]
       selectedRoomType.value = firstRoom.type_id
       selectedDemoRoomId.value = firstRoom.id
       uploadedImage.value = firstRoom.input
@@ -216,7 +224,7 @@ function loadAllPreGeneratedResults() {
   preGeneratedTemplateIds.value = {}
 
   // For demo, we'll check templates that match room input + room type + style
-  for (const room of defaultRooms) {
+  for (const room of defaultRooms.value) {
     for (const roomType of roomTypes.value) {
       for (const style of displayStyles.value) {
         const resultKey = `${room.id}_${roomType.id}_${style.id}`
@@ -258,7 +266,7 @@ async function handleRedesign() {
         }
       }
 
-      const selectedRoom = defaultRooms.find(r => r.id === selectedDemoRoomId.value)
+      const selectedRoom = defaultRooms.value.find(r => r.id === selectedDemoRoomId.value)
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
         const matchesRoom = params.room_id === selectedDemoRoomId.value ||
@@ -282,7 +290,18 @@ async function handleRedesign() {
 
       // VG-BUG-010 fix: cache-through on demand.
       uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
-      const onDemandUrl = await generateOnDemand('room_redesign', selectedStyle.value || undefined)
+      // Prefer the Vertex-pregenerated room input when the user picked one
+      // from the library, then the finished-example input, finally the
+      // user-uploaded file. The effect_prompt is resolved from the catalog
+      // (full interior style prompt) so it matches the cache key the
+      // /tools/room-redesign endpoint uses.
+      const libRoom = (defaultRooms.value.find(r => r.id === selectedDemoRoomId.value) as any)?.input
+      const pickedRoom = libRoom || (template as any)?.input_image_url || uploadedImage.value || undefined
+      const stylePrompt = effectCatalog.value.find((e: any) => e.id === selectedStyle.value)?.prompt
+      const onDemandUrl = await generateOnDemand('room_redesign', selectedStyle.value || undefined, {
+        input_image_url: pickedRoom,
+        effect_prompt: (prompt.value as any) || stylePrompt || undefined,
+      })
       if (onDemandUrl) {
         resultImage.value = onDemandUrl
         resultDescription.value = ''
@@ -391,7 +410,7 @@ async function handleStyleTransfer() {
         }
       }
 
-      const selectedRoom = defaultRooms.find(r => r.id === selectedDemoRoomId.value)
+      const selectedRoom = defaultRooms.value.find(r => r.id === selectedDemoRoomId.value)
       const template = demoTemplates.value.find(t => {
         const params = (t as any).input_params || {}
         const matchesRoom = params.room_id === selectedDemoRoomId.value ||
@@ -414,7 +433,18 @@ async function handleStyleTransfer() {
 
       // VG-BUG-010 fix: cache-through on demand for the style transfer path.
       uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
-      const onDemandUrl = await generateOnDemand('room_redesign', selectedStyle.value || undefined)
+      // Prefer the Vertex-pregenerated room input when the user picked one
+      // from the library, then the finished-example input, finally the
+      // user-uploaded file. The effect_prompt is resolved from the catalog
+      // (full interior style prompt) so it matches the cache key the
+      // /tools/room-redesign endpoint uses.
+      const libRoom = (defaultRooms.value.find(r => r.id === selectedDemoRoomId.value) as any)?.input
+      const pickedRoom = libRoom || (template as any)?.input_image_url || uploadedImage.value || undefined
+      const stylePrompt = effectCatalog.value.find((e: any) => e.id === selectedStyle.value)?.prompt
+      const onDemandUrl = await generateOnDemand('room_redesign', selectedStyle.value || undefined, {
+        input_image_url: pickedRoom,
+        effect_prompt: (prompt.value as any) || stylePrompt || undefined,
+      })
       if (onDemandUrl) {
         resultImage.value = onDemandUrl
         resultDescription.value = ''
@@ -590,8 +620,8 @@ function reset() {
   modelUrl.value = null
 
   // For demo users, re-select first default room
-  if (isDemoUser.value && defaultRooms.length > 0) {
-    const firstRoom = defaultRooms[0]
+  if (isDemoUser.value && defaultRooms.value.length > 0) {
+    const firstRoom = defaultRooms.value[0]
     selectedDemoRoomId.value = firstRoom.id
     uploadedImage.value = firstRoom.input
     selectedRoomType.value = 'living_room'  // Reset to default
@@ -604,7 +634,7 @@ function reset() {
 // Update demo room pattern when room type changes
 watch(selectedRoomType, (newType) => {
   if (isDemoUser.value) {
-    const matchingRoom = defaultRooms.find(r => r.type_id === newType)
+    const matchingRoom = defaultRooms.value.find(r => r.type_id === newType)
     if (matchingRoom) {
       selectedDemoRoomId.value = matchingRoom.id
       uploadedImage.value = matchingRoom.input

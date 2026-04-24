@@ -41,9 +41,9 @@ class StyleInfo(BaseModel):
 
 
 class ApplyStyleRequest(BaseModel):
-    image_url: str = Field(..., description="URL of the input image")
-    style_id: str = Field(..., description="Style effect ID (anime, cartoon, 3d, etc.)")
-    intensity: float = Field(1.0, ge=0.0, le=1.0, description="Effect intensity")
+    image_url: str = Field(..., description="Publicly reachable source image URL for style transfer.")
+    style_id: str = Field(..., description="Target style preset ID, for example anime, cartoon, cinematic, product, or watercolor.")
+    intensity: float = Field(1.0, ge=0.0, le=1.0, description="Style strength from 0.0 to 1.0. Higher values apply a more visible effect.")
 
 
 class ApplyStyleResponse(BaseModel):
@@ -59,8 +59,8 @@ class ApplyStyleResponse(BaseModel):
 
 
 class HDEnhanceRequest(BaseModel):
-    image_url: str = Field(..., description="URL of the input image")
-    target_resolution: str = Field("4k", description="Target resolution (2k or 4k)")
+    image_url: str = Field(..., description="Publicly reachable source image URL to upscale.")
+    target_resolution: str = Field("4k", description="Requested output resolution. Supported values are 2k and 4k.")
 
 
 class HDEnhanceResponse(BaseModel):
@@ -74,8 +74,8 @@ class HDEnhanceResponse(BaseModel):
 
 
 class VideoEnhanceRequest(BaseModel):
-    video_url: str = Field(..., description="URL of the input video")
-    enhancement_type: str = Field("quality", description="Enhancement type: quality, stabilize, denoise")
+    video_url: str = Field(..., description="Publicly reachable source video URL to enhance.")
+    enhancement_type: str = Field("quality", description="Enhancement mode: quality, stabilize, or denoise.")
 
 
 class VideoEnhanceResponse(BaseModel):
@@ -135,16 +135,35 @@ async def apply_style_effect(
 
     **Credits:** 8 points per use (subscribers only)
     """
-    # Demo/free user path: cache-first with on-demand generation
-    # Everyone can trigger generation — results are cached for future requests
+    # Demo/free user path: cache-first with on-demand generation keyed on
+    # (tool, style_id, user-picked input_url). When the user passes an
+    # `image_url` it flows straight through — cache miss triggers a real API
+    # call against their chosen input, and the result is persisted under the
+    # same lookup_hash so the next identical (input, style) request hits cache.
     if not is_subscribed_user(current_user):
         try:
             redis = await get_redis()
         except Exception:
             redis = None
         cache_service = DemoCacheService(db, redis)
-        # Try cache first, then generate on-demand if missing
-        demo = await cache_service.get_or_generate(ToolType.EFFECT, topic=request.style_id)
+        # Resolve /static/ paths to public URLs so the hash matches whatever
+        # the cached material stored.
+        import os as _os
+        user_input_url = request.image_url
+        if user_input_url and user_input_url.startswith("/static/"):
+            pub = _os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+            if pub:
+                user_input_url = f"{pub}{user_input_url}"
+        # Resolve style_id → style_prompt so the effect_prompt goes into the
+        # cache key and the real API call.
+        from app.services.effects_service import get_style_prompt
+        style_prompt = get_style_prompt(request.style_id) if request.style_id else None
+        demo = await cache_service.get_or_generate(
+            ToolType.EFFECT,
+            topic=request.style_id,
+            input_image_url=user_input_url,
+            effect_prompt=style_prompt,
+        )
         if not demo:
             raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable. Please try again.")
         return ApplyStyleResponse(

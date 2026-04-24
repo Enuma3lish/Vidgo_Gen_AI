@@ -16,8 +16,8 @@ The TopicDefinition classes below are kept for reference only.
 They should NOT be used in any new code.
 
 Legacy Topics vs Active Topics Example:
----------------------------------------
-- This file defines: luxury_watch, perfume_bottle, ecommerce_pitch_en
+--------------------------------------
+- This file defines: bubble_tea_showcase, handmade_soap_set, ecommerce_pitch_en
 - Active registry defines: spokesperson, product_intro, electronics, fashion
 
 If you query the API with a topic from this file, it will NOT find any materials.
@@ -112,7 +112,11 @@ class TopicDefinition:
                 mood=self.mood
             )
         # Default effect prompt based on mood
-        return f"Smooth cinematic motion, {self.mood}, professional quality"
+        return (
+            f"Animate the {self.subject} with smooth cinematic motion, keep the subject "
+            f"clearly recognizable, maintain a {self.mood} mood, and deliver "
+            f"professional commercial quality."
+        )
 
 
 # =============================================================================
@@ -121,42 +125,42 @@ class TopicDefinition:
 
 PRODUCT_VIDEO_TOPICS: List[TopicDefinition] = [
     TopicDefinition(
-        id="luxury_watch",
+    id="bubble_tea_showcase",
         category=TopicCategory.PRODUCT_VIDEO,
         output_type=OutputType.VIDEO,
-        subject="luxury wristwatch",
-        mood="elegant, sophisticated, premium",
+    subject="bubble tea takeaway cup with tapioca pearls",
+    mood="fresh, friendly, shop-ready",
         image_prompt_template="""
-A {subject} on polished marble surface,
-{mood} lighting, studio photography,
-golden hour reflection, 8K quality,
+A {subject} on a clean cafe counter,
+{mood} lighting, commercial photography,
+condensation on the cup, bright menu-board atmosphere,
 professional product photography
 """.strip(),
         effect_prompt_template="""
-Slow cinematic rotation, {mood},
-gentle light play on metal surfaces,
-premium brand commercial feel
+Gentle camera push-in, {mood},
+subtle cup rotation and straw movement,
+social ad video for a neighborhood drink shop
 """.strip(),
-        tags=["watch", "luxury", "ecommerce", "product"]
+    tags=["bubble_tea", "drink", "ecommerce", "product"]
     ),
     TopicDefinition(
-        id="perfume_bottle",
+    id="handmade_soap_set",
         category=TopicCategory.PRODUCT_VIDEO,
         output_type=OutputType.VIDEO,
-        subject="elegant perfume bottle",
-        mood="luxurious, glamorous, sensual",
+    subject="handmade soap gift box with dried flowers",
+    mood="clean, natural, artisan",
         image_prompt_template="""
-A {subject} with crystal clear liquid,
-{mood} atmosphere, soft studio lighting,
-water droplets, reflective surface,
-high-end cosmetic photography
+A {subject} on a wooden display tray,
+{mood} atmosphere, soft daylight,
+paper packaging details, craft market styling,
+small business product photography
 """.strip(),
         effect_prompt_template="""
-Ethereal mist rising, {mood},
-light rays through crystal,
-slow motion liquid shimmer
+Slow top-down camera sweep, {mood},
+gentle ribbon movement and floating petals,
+gift-ready product video for an online handmade shop
 """.strip(),
-        tags=["perfume", "cosmetics", "luxury", "beauty"]
+    tags=["soap", "handmade", "gift", "beauty"]
     ),
     TopicDefinition(
         id="sneaker_product",
@@ -283,7 +287,7 @@ A {subject} with natural stone and wood,
 {mood} atmosphere, soaking tub,
 bamboo elements, indoor plants,
 Japanese ryokan inspired,
-luxury bathroom design
+calm spa bathroom design
 """.strip(),
         tags=["bathroom", "zen", "japanese", "spa"]
     ),
@@ -312,7 +316,7 @@ architectural photography
 A {subject} with ocean view,
 {mood} atmosphere, white and blue palette,
 natural textures, driftwood accents,
-beach house luxury dining,
+beach house family dining,
 lifestyle interior photography
 """.strip(),
         tags=["dining", "coastal", "beach", "nautical"]
@@ -562,15 +566,15 @@ T2I_SHOWCASE_TOPICS: List[TopicDefinition] = [
         id="seamless_marble",
         category=TopicCategory.T2I_SHOWCASE,
         output_type=OutputType.IMAGE,
-        subject="rose gold marble pattern",
-        mood="elegant, luxurious, seamless",
+        subject="soft beige marble pattern",
+        mood="clean, refined, seamless",
         image_prompt_template="""
 A {subject} seamless tileable texture,
 {mood} aesthetic, veining details,
 high resolution, textile design quality,
 perfect for product backgrounds
 """.strip(),
-        tags=["pattern", "marble", "seamless", "luxury"],
+        tags=["pattern", "marble", "seamless", "packaging"],
         metadata={"pattern_style": "seamless"}
     ),
     TopicDefinition(
@@ -598,7 +602,7 @@ fabric print quality, botanical art
 A {subject} with gold and black,
 {mood} design, 1920s inspired,
 symmetrical shapes, fan motifs,
-luxury wallpaper quality
+retail wallpaper quality
 """.strip(),
         tags=["pattern", "geometric", "artdeco", "gold"],
         metadata={"pattern_style": "geometric"}

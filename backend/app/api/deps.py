@@ -93,10 +93,22 @@ async def get_current_user_optional(
 ) -> Optional[User]:
     """
     Get current user from JWT token if provided.
-    Returns None if no token or invalid token.
+
+    Returns None when no Authorization header is sent (true visitor).
+
+    Raises 401 when a token IS sent but is expired, malformed, or doesn't
+    resolve to a user. Silently returning None in that case lets a stale
+    browser access token masquerade as a demo session, so paid-tier tools
+    downgrade to demo instead of prompting the client to refresh.
     """
     if not token:
         return None
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
     try:
         payload = jwt.decode(
@@ -106,14 +118,17 @@ async def get_current_user_optional(
         token_type: str = payload.get("type", "access")
 
         if user_id is None or token_type != "access":
-            return None
+            raise credentials_exception
 
     except JWTError:
-        return None
+        raise credentials_exception
 
     # Get user from database
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
+
+    if not user:
+        raise credentials_exception
 
     return user
 

@@ -18,7 +18,6 @@ Requires:
     - google-genai, google-cloud-storage packages
 """
 import argparse
-import io
 import logging
 import os
 import sys
@@ -84,16 +83,81 @@ def generate_image(client, prompt: str) -> bytes:
     raise Exception(f"No image in Imagen response for: {prompt[:50]}")
 
 
+def iter_presets(selected_tool: str | None = None):
+    from app.config.example_presets import EXAMPLE_PRESETS
+
+    for tool_type, presets in EXAMPLE_PRESETS.items():
+        if selected_tool and tool_type != selected_tool:
+            continue
+        yield tool_type, presets
+
+
+def extract_blob_name(image_url: str) -> str | None:
+    """Extract the GCS blob name under examples/ from a preset URL."""
+    try:
+        suffix = image_url.split("/examples/", 1)[1]
+    except IndexError:
+        return None
+    return f"examples/{suffix}"
+
+
+def verify_existing_inputs(gcs, selected_tool: str | None = None) -> tuple[int, int, int]:
+    """Verify all image-based example presets point to existing GCS blobs."""
+    verified = 0
+    skipped = 0
+    errors = 0
+
+    for tool_type, presets in iter_presets(selected_tool):
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Verify tool: {tool_type} ({len(presets)} presets)")
+        logger.info(f"{'='*60}")
+
+        for preset in presets:
+            preset_id = preset["id"]
+            gemini_prompt = preset.get("gemini_prompt", "")
+            image_url = preset.get("image_url", "")
+
+            if not gemini_prompt:
+                logger.info(f"  SKIP {preset_id} (no gemini_prompt — text-only tool)")
+                skipped += 1
+                continue
+
+            if not image_url:
+                logger.error(f"  FAIL {preset_id} (missing image_url)")
+                errors += 1
+                continue
+
+            blob_name = extract_blob_name(image_url)
+            if not blob_name:
+                logger.error(f"  FAIL {preset_id} (image_url is not under /examples/: {image_url})")
+                errors += 1
+                continue
+
+            blob = gcs.bucket.blob(blob_name)
+            if not blob.exists():
+                logger.error(f"  FAIL {preset_id} (missing GCS blob: {blob_name})")
+                errors += 1
+                continue
+
+            logger.info(f"  OK {preset_id} → {blob_name}")
+            verified += 1
+
+    return verified, skipped, errors
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate example input images")
     parser.add_argument("--dry-run", action="store_true", help="Show plan without generating")
     parser.add_argument("--tool", type=str, help="Only generate for this tool type")
     parser.add_argument("--force", action="store_true", help="Regenerate even if image exists in GCS")
+    parser.add_argument("--verify", action="store_true", help="Fail if any image-based example preset is missing in GCS")
     args = parser.parse_args()
 
-    from app.config.example_presets import EXAMPLE_PRESETS
+    if args.verify and args.dry_run:
+        logger.error("--verify and --dry-run cannot be used together")
+        sys.exit(2)
 
-    client = None if args.dry_run else get_genai_client()
+    client = None if args.dry_run or args.verify else get_genai_client()
     gcs = None if args.dry_run else get_gcs_service()
 
     total = 0
@@ -101,9 +165,14 @@ def main():
     existed = 0
     errors = 0
 
-    for tool_type, presets in EXAMPLE_PRESETS.items():
-        if args.tool and tool_type != args.tool:
-            continue
+    if args.verify:
+        verified, skipped, errors = verify_existing_inputs(gcs, args.tool)
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Verify done: {verified} verified, {skipped} skipped, {errors} errors")
+        logger.info(f"{'='*60}")
+        sys.exit(1 if errors else 0)
+
+    for tool_type, presets in iter_presets(args.tool):
 
         logger.info(f"\n{'='*60}")
         logger.info(f"Tool: {tool_type} ({len(presets)} presets)")
@@ -125,13 +194,8 @@ def main():
                 skipped += 1
                 continue
 
-            # Extract blob name from URL
-            # URL: https://storage.googleapis.com/bucket/examples/bg/bubbletea.png
-            # Blob: examples/bg/bubbletea.png
-            try:
-                blob_name = image_url.split("/examples/", 1)[1]
-                blob_name = f"examples/{blob_name}"
-            except IndexError:
+            blob_name = extract_blob_name(image_url)
+            if not blob_name:
                 logger.warning(f"  SKIP {preset_id} (can't parse blob name from {image_url})")
                 skipped += 1
                 continue

@@ -476,6 +476,31 @@ PRODUCT_SCENE_MAPPING = {
             "name": "Holiday",
             "name_zh": "節日",
             "prompt": "festive holiday decoration background, christmas lights, celebration"
+        },
+        "spring": {
+            "name": "Spring Sale",
+            "name_zh": "春季特賣",
+            "prompt": "fresh cherry blossom petals, bright spring sunlight, pastel pink and green, spring campaign"
+        },
+        "valentines": {
+            "name": "Valentine's Day",
+            "name_zh": "情人節",
+            "prompt": "romantic rose petals, warm candlelight, red and pink hearts, satin ribbons, valentine campaign"
+        },
+        "black_friday": {
+            "name": "Black Friday",
+            "name_zh": "黑色星期五",
+            "prompt": "sleek black surface, dramatic spotlight, neon sale tags, black and gold, retail promotion"
+        },
+        "christmas": {
+            "name": "Christmas",
+            "name_zh": "聖誕節",
+            "prompt": "christmas pine branches, golden fairy lights, red ornaments, snow frost, warm holiday"
+        },
+        "new_year": {
+            "name": "New Year",
+            "name_zh": "新年",
+            "prompt": "gold confetti, champagne, sparkling lights, black and gold, new year celebration"
         }
     }
 }
@@ -861,8 +886,8 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "3D圖案",
             "prompts": [
                 {
-                    "en": "3D embossed pattern for premium product packaging, raised geometric shapes, metallic finish, luxury brand",
-                    "zh": "高級產品包裝用3D浮雕圖案，凸起幾何形狀，金屬光澤，奢華品牌"
+                    "en": "3D embossed pattern for gift box and bakery packaging, raised geometric shapes, metallic finish, polished small-business brand",
+                    "zh": "禮盒與烘焙包裝用3D浮雕圖案，凸起幾何形狀，金屬光澤，精緻小品牌風格"
                 },
                 {
                     "en": "3D isometric pattern for tech product branding, cubes and blocks, modern digital aesthetic",
@@ -1605,7 +1630,13 @@ class VidGoPreGenerator:
         count = 0
 
         products = PRODUCT_SCENE_MAPPING["products"]
-        scenes = PRODUCT_SCENE_MAPPING["scenes"]
+        all_scenes = PRODUCT_SCENE_MAPPING["scenes"]
+        # Apply --topics filter if provided
+        if getattr(self, 'topic_filter', None):
+            scenes = {k: v for k, v in all_scenes.items() if k in self.topic_filter}
+            logger.info(f"  Filtered to {len(scenes)} scenes: {list(scenes.keys())}")
+        else:
+            scenes = all_scenes
         product_image_cache = {}
         topic_counts: Dict[str, int] = {}
 
@@ -2766,13 +2797,17 @@ class VidGoPreGenerator:
         tool: Optional[str] = None,
         limit: int = 10,
         dry_run: bool = False,
-        per_topic_limit: Optional[int] = None
+        per_topic_limit: Optional[int] = None,
+        topic_filter: Optional[List[str]] = None
     ):
         """Run pre-generation pipeline."""
         logger.info("=" * 60)
         logger.info("VidGo Main Pre-generation Pipeline")
         logger.info("=" * 60)
         self.per_topic_limit = per_topic_limit
+        self.topic_filter = topic_filter
+        if topic_filter:
+            logger.info(f"Topic filter: {topic_filter}")
 
         # Check APIs
         api_status = await self.check_apis()
@@ -2913,6 +2948,12 @@ Workflow for Virtual Try-On:
         action="store_true",
         help="Delete existing Material rows for the target tool before generating (clean slate)"
     )
+    parser.add_argument(
+        "--topics",
+        type=str,
+        default=None,
+        help="Comma-separated topic/scene IDs to generate (e.g. 'spring,valentines,christmas'). Only generates these topics."
+    )
 
     args = parser.parse_args()
 
@@ -2939,12 +2980,18 @@ Workflow for Virtual Try-On:
                 await session.commit()
                 logger.info(f"--clean: deleted {res.rowcount} existing {args.tool} rows")
 
+    topic_filter = None
+    if args.topics:
+        topic_filter = [t.strip() for t in args.topics.split(',') if t.strip()]
+        logger.info(f"Topic filter: {topic_filter}")
+
     generator = VidGoPreGenerator()
     await generator.run(
         tool=args.tool if not args.all else None,
         limit=args.limit,
         dry_run=args.dry_run,
-        per_topic_limit=args.per_topic_limit
+        per_topic_limit=args.per_topic_limit,
+        topic_filter=topic_filter
     )
 
 

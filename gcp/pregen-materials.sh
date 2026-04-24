@@ -80,6 +80,7 @@ TOOLS_TO_RUN=()
 AUTO_YES=false
 LIMIT=""
 CLEAN=false
+TOPICS=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -95,6 +96,7 @@ while [[ $# -gt 0 ]]; do
     --yes|-y)  AUTO_YES=true; shift ;;
     --limit)   LIMIT="$2"; shift 2 ;;
     --clean)   CLEAN=true; shift ;;
+    --topics)  TOPICS="$2"; shift 2 ;;
     --list)
       echo "Canonical tool names:"
       printf '  %s\n' "${ALL_TOOLS[@]}"
@@ -211,6 +213,7 @@ for tool in "${TOOLS_TO_RUN[@]}"; do
   cmd_args="python -m scripts.main_pregenerate --tool ${tool}"
   [[ -n "${LIMIT}" ]] && cmd_args="${cmd_args} --limit ${LIMIT}"
   [[ "${CLEAN}" == "true" ]] && cmd_args="${cmd_args} --clean"
+  [[ -n "${TOPICS}" ]] && cmd_args="${cmd_args} --topics ${TOPICS}"
 
   if gcloud run jobs execute "${JOB_NAME}" \
         --region="${REGION}" \

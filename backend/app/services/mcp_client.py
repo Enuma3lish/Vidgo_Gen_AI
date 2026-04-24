@@ -171,10 +171,11 @@ class MCPClientManager:
             )
 
         piapi_key = os.getenv("PIAPI_KEY", "")
+        piapi_mcp_enabled = os.getenv("PIAPI_MCP_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
         piapi_mcp_path = os.getenv(
             "PIAPI_MCP_PATH", "/app/mcp-servers/piapi-mcp-server/dist/index.js"
         )
-        if piapi_key:
+        if piapi_key and piapi_mcp_enabled:
             servers["piapi"] = StdioServerParameters(
                 command="node",
                 args=[piapi_mcp_path],

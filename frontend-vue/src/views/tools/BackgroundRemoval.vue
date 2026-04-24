@@ -24,7 +24,9 @@ const {
   tryPrompts,
   dbEmpty,
   resolveDemoTemplateResultUrl,
-  generateOnDemand
+  generateOnDemand,
+  loadInputLibrary,
+  inputLibrary,
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -41,12 +43,25 @@ const selectedDemoIndex = ref<number>(0)
 const isLoadingTemplates = ref(true)
 
 const demoImages = computed(() => {
+  // Prefer the pregenerated INPUT library (Vertex Imagen → GCS) when present.
+  // These rows have null result URLs by design — background removal runs
+  // live per click via the cache-through path, so `result` is left null and
+  // resolved at generate-time.
+  if (inputLibrary.value.length > 0) {
+    return inputLibrary.value
+      .filter(item => item.input_image_url)
+      .map(item => ({
+        id: item.id,
+        input: item.input_image_url as string,
+        result: null as string | null,
+      }))
+  }
   return demoTemplates.value
     .filter(t => t.input_image_url)
     .map(t => ({
       id: t.id,
-      input: t.input_image_url,
-      result: t.result_watermarked_url || t.result_image_url
+      input: t.input_image_url as string,
+      result: (t.result_watermarked_url || t.result_image_url) as string | null
     }))
 })
 
@@ -61,9 +76,9 @@ const STATIC_BG_EXAMPLES = [
   },
   {
     id: 'static-bg-2',
-    input: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&fit=crop',
-    result: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&fit=crop',
-    label: 'Watch'
+    input: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&fit=crop',
+    result: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&fit=crop',
+    label: 'Coffee Bag'
   },
   {
     id: 'static-bg-3',
@@ -98,7 +113,13 @@ const effectiveDemoImages = computed(() =>
 // Load demo templates on mount
 onMounted(async () => {
   isLoadingTemplates.value = true
-  await loadDemoTemplates('background_removal', undefined, locale.value)
+  await Promise.all([
+    loadDemoTemplates('background_removal', undefined, locale.value),
+    // Pregenerated Vertex AI input library — rows with null result URLs that
+    // the user picks from. Runtime generates the cutout on first click per
+    // input and caches under the same lookup_hash for subsequent hits.
+    loadInputLibrary('background_removal'),
+  ])
   isLoadingTemplates.value = false
 
   // For demo users, auto-select first example
@@ -150,7 +171,12 @@ async function removeBackground() {
 
       // VG-BUG-010 fix: no cached result — call cache-through endpoint.
       uiStore.showInfo(isZh.value ? '此圖片尚未生成結果，正在為您即時處理...' : 'Generating in real-time...')
-      const onDemandUrl = await generateOnDemand('background_removal')
+      // `demoImages` items expose the source URL as `input` (see the computed
+      // above — flattened from library/template rows), not `input_image_url`.
+      const pickedInput = demoImages.value[selectedDemoIndex.value]?.input || uploadedImage.value || undefined
+      const onDemandUrl = await generateOnDemand('background_removal', undefined, {
+        input_image_url: pickedInput,
+      })
       if (onDemandUrl) {
         resultImage.value = onDemandUrl
         uiStore.showSuccess(isZh.value ? '處理成功' : 'Processed successfully')

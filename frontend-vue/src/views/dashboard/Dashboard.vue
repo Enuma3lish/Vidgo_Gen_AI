@@ -25,7 +25,7 @@ const creditsProgressWidth = computed(() => {
 
 const quickActions = computed(() => [
   { key: 'shortVideo', icon: '🎬', route: '/tools/short-video', label: t('dashboard.tools.shortVideo'), color: '#1677ff', bg: 'rgba(22,119,255,0.08)' },
-  { key: 'avatar', icon: '🎭', route: '/tools/avatar', label: t('dashboard.tools.avatar'), color: '#722ed1', bg: 'rgba(114,46,209,0.08)' },
+  { key: 'upscale', icon: '🔍', route: '/tools/upscale', label: t('lp.allTools.hdUpscale.name'), color: '#722ed1', bg: 'rgba(114,46,209,0.08)' },
   { key: 'tryOn', icon: '👗', route: '/tools/try-on', label: t('dashboard.tools.tryOn'), color: '#eb2f96', bg: 'rgba(235,47,150,0.08)' },
   { key: 'productScene', icon: '📸', route: '/tools/product-scene', label: t('dashboard.tools.productScene'), color: '#fa8c16', bg: 'rgba(250,140,22,0.08)' },
   { key: 'backgroundRemoval', icon: '✂️', route: '/tools/background-removal', label: t('dashboard.tools.bgRemoval'), color: '#13c2c2', bg: 'rgba(19,194,194,0.08)' },

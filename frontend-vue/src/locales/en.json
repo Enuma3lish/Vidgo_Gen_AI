@@ -98,9 +98,9 @@
       "desc": "Remove image backgrounds with one click"
     },
     "productScene": {
-      "name": "Product Photography Inspiration",
-      "desc": "Browse professional product photography examples",
-      "longDesc": "Explore AI-generated product photography concepts. Subscribe to upload your own products for custom scene generation."
+      "name": "AI Product Scene Studio",
+      "desc": "Upload product images and apply premium style templates for commercial-ready scenes",
+      "longDesc": "Choose from curated scene templates (Mediterranean sunset, wabi-sabi living room, Paris street, etc.). Upload your product image, click a template, and generate."
     },
     "productEnhance": {
       "name": "Product Enhancement",
@@ -123,24 +123,24 @@
       "longDesc": "Generate dynamic product showcase videos automatically"
     },
     "backgroundRemoval": {
-      "name": "Background Removal",
-      "desc": "Remove backgrounds instantly with AI",
-      "longDesc": "Automatically detect and remove backgrounds from any image with one click"
+      "name": "Smart Background Removal (Base)",
+      "desc": "Lowest-cost API call for clean cutouts before composition",
+      "longDesc": "Automatically remove image backgrounds for e-commerce-ready source assets."
     },
     "tryOn": {
-      "name": "Fashion Model Showcase",
-      "desc": "Browse fashion model styling examples",
-      "longDesc": "View AI-generated fashion model styling inspiration. Subscribe to use virtual try-on with your own photos."
+      "name": "AI Model Outfit Swap",
+      "desc": "Upload apparel images and generate realistic model wear results",
+      "longDesc": "Built-in model and scene templates for high-conversion fashion e-commerce visuals."
     },
     "roomRedesign": {
-      "name": "Interior Design Gallery",
-      "desc": "Browse interior design inspiration",
-      "longDesc": "Explore AI-generated interior design examples. Subscribe to upload your own room photos for custom designs."
+      "name": "Raw Space / Sketch Instant Render",
+      "desc": "Upload raw spaces or line sketches and render photorealistic interiors instantly",
+      "longDesc": "Convert empty-room photos and sketch-like drafts into high-fidelity interior renders. Image transform workflows are merged here."
     },
     "shortVideo": {
-      "name": "Short Video",
-      "desc": "Create engaging short videos",
-      "longDesc": "Generate captivating short videos from text descriptions or images",
+      "name": "Product Dynamic Shorts (Image-to-Video)",
+      "desc": "Image-only workflow for stable, credit-efficient product motion videos",
+      "longDesc": "Focused on Image-to-Video only. Upload a product image to generate natural motion for ads and social content.",
       "tryExamples": "Please try our amazing examples",
       "clickToSee": "Click to see different motion effects",
       "selectExample": "Select an Example",
@@ -293,7 +293,11 @@
       },
       "aiVideo": {
         "title": "AI Video Creation",
-        "desc": "Generate videos from images and text"
+        "desc": "Generate videos from images",
+        "longDesc": "Focused on Image-to-Video for stable product motion ads from a single image",
+        "styleTransform": "Image-to-Video",
+        "stylesDesc": "Upload one image to generate short motion assets for IG and TikTok",
+        "ctaDesc": "One image in, stable product motion video out"
       },
       "ecommerce": {
         "title": "Product & E-commerce",
@@ -474,7 +478,7 @@
     "noWorksDesc": "Start creating with any AI tool!",
     "startCreating": "Start Creating Now",
     "tools": {
-      "shortVideo": "AI Short Video",
+      "shortVideo": "Product Dynamic Shorts (Image-to-Video)",
       "avatar": "AI Avatar",
       "tryOn": "Virtual Try-On",
       "productScene": "Product Scene",
@@ -493,6 +497,10 @@
     "subtitle": "Start free and scale as you grow",
     "monthly": "Monthly",
     "yearly": "Yearly",
+    "perMonthShort": "mo",
+    "billedAnnually": "Billed annually",
+    "saveVsMonthly": "Save {pct}% vs monthly",
+    "yearlyDiscountLabel": "Save ~17%",
     "demo": "Demo",
     "starter": "Starter",
     "standard": "Standard",
@@ -513,7 +521,7 @@
     "subscribeSuccess": "Subscription activated successfully!",
     "redirectingToPayment": "Redirecting to payment...",
     "subscribeFailed": "Failed to subscribe. Please try again.",
-    "refundProcessed": "Refund processed successfully. Your subscription has been cancelled.",
+    "refundProcessed": "Refund request submitted and notification sent. Subscription is cancelled immediately, plan credits reset, and e-invoice void flow is triggered.",
     "subscriptionCancelled": "Subscription cancelled. You can continue using credits until the end of your billing period.",
     "cancelFailed": "Failed to cancel subscription. Please try again.",
     "confirmRefundTitle": "Cancel and request refund?",
@@ -866,19 +874,19 @@
       "imageTranslator": { "name": "Image Translator", "desc": "Accurately translate image text" },
       "aiShadows": { "name": "AI Shadows", "desc": "Add natural shadows to any object" },
       "roomRedesign": { "name": "Sketch Instant Render", "desc": "Upload raw spaces or sketches, instantly render photorealistic interiors" },
-      "bgRemoval": { "name": "Smart Background Removal", "desc": "Remove image backgrounds for free" },
+      "bgRemoval": { "name": "Smart Background Removal (Base)", "desc": "Lowest-cost API call for product cutouts" },
       "hdUpscale": { "name": "Commercial HD Upscale", "desc": "Upscale images to 4K for e-commerce and print" },
-      "imageTransform": { "name": "Image Transform", "desc": "AI-powered image style transformation" },
+      "imageTransform": { "name": "Image Transform (Merged)", "desc": "Merged into Raw Space / Sketch Instant Render" },
       "videoTransform": { "name": "Video Transform", "desc": "AI-powered video style transformation" },
       "patternGenerate": { "name": "Pattern Design", "desc": "Generate seamless patterns for branding" }
     },
     "categories": {
       "fashionAI": "Fashion AI",
-      "fashionAIDesc": "Virtual try-on, fashion reels, and AI model showcase — the complete solution for fashion e-commerce visual content.",
+      "fashionAIDesc": "Centered on AI Model Outfit Swap and Product Dynamic Shorts (Image-to-Video) for higher fashion-commerce conversion.",
       "ecommerceAI": "E-commerce AI",
-      "ecommerceAIDesc": "Product scene generation, background removal, and AI shadows — make your products stand out on every platform.",
+      "ecommerceAIDesc": "Smart Background Removal (Base), AI Product Scene Studio, and Commercial HD Upscale for listing-ready assets.",
       "designAI": "Design & Content AI",
-      "designAIDesc": "Room redesign, style cloning, and image translation — powerful tools for creative design workflows."
+      "designAIDesc": "Raw Space / Sketch Instant Render for photoreal interior visualization from empty rooms and drafts."
     },
     "seasons": {
       "spring": "Spring Sale",
@@ -971,8 +979,8 @@
     ]
   },
   "gallery": {
-    "title": "Inspiration Gallery",
-    "subtitle": "Browse AI-generated examples from real businesses. Free users can view and try examples. Subscribe to upload your own materials.",
+    "title": "Product Photography Inspiration Library",
+    "subtitle": "Explore AI-generated product photography concepts. Free users can browse curated examples. Subscribe to upload your own products for custom scene generation.",
     "searchPlaceholder": "Search examples by keyword, style, or industry...",
     "filterByIndustry": "Filter by Industry",
     "filterByTool": "Filter by Tool",

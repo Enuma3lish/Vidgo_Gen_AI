@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 from app.models.user import User
 from app.models.billing import Plan, Subscription, Order, CreditTransaction, Generation, ServicePricing
 from app.models.material import Material, MaterialStatus, ToolType
+from app.models.user_generation import UserGeneration
 from app.services.session_tracker import session_tracker
 
 logger = logging.getLogger(__name__)
@@ -47,58 +48,59 @@ class AdminDashboardService:
         Get comprehensive dashboard statistics.
         Combines real-time Redis data with database aggregations.
         """
-        # Real-time stats from Redis
-        online_stats = await session_tracker.get_stats()
+        try:
+            online_stats = await session_tracker.get_stats()
 
-        # Database stats
-        today = datetime.utcnow().date()
-        week_ago = today - timedelta(days=7)
-        month_ago = today - timedelta(days=30)
+            today = datetime.utcnow().date()
+            month_ago = today - timedelta(days=30)
 
-        # Total users
-        total_users = await self.db.scalar(
-            select(func.count(User.id))
-        )
-
-        # Users by plan
-        users_by_plan = await self._get_users_by_plan()
-
-        # Paid vs free split
-        paid_stats = await self.get_paid_user_stats()
-
-        # New users today
-        new_today = await self.db.scalar(
-            select(func.count(User.id)).where(
-                func.date(User.created_at) == today
+            total_users = await self.db.scalar(
+                select(func.count(User.id))
             )
-        )
 
-        # Generations today
-        generations_today = await self.db.scalar(
-            select(func.count(Generation.id)).where(
-                func.date(Generation.created_at) == today
+            users_by_plan = await self._get_users_by_plan()
+            paid_stats = await self.get_paid_user_stats()
+
+            new_today = await self.db.scalar(
+                select(func.count(User.id)).where(
+                    func.date(User.created_at) == today
+                )
             )
-        )
 
-        # Revenue this month
-        revenue_month = await self._get_revenue_for_period(month_ago, today)
+            generations_today = await self.db.scalar(
+                select(func.count(Generation.id)).where(
+                    func.date(Generation.created_at) == today
+                )
+            )
 
-        return {
-            "online": online_stats,
-            "users": {
-                "total": total_users or 0,
-                "new_today": new_today or 0,
-                "by_plan": users_by_plan
-            },
-            "paid_stats": paid_stats,
-            "generations": {
-                "today": generations_today or 0
-            },
-            "revenue": {
-                "month": revenue_month
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }
+            revenue_month = await self._get_revenue_for_period(month_ago, today)
+
+            return {
+                "online": online_stats,
+                "users": {
+                    "total": total_users or 0,
+                    "new_today": new_today or 0,
+                    "by_plan": users_by_plan
+                },
+                "paid_stats": paid_stats,
+                "generations": {
+                    "today": generations_today or 0
+                },
+                "revenue": {
+                    "month": revenue_month
+                },
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        except Exception:
+            logger.exception("Admin dashboard stats query failed")
+            return {
+                "online": {"online_users": 0, "by_tier": {}, "active_today": 0, "timestamp": datetime.utcnow().isoformat()},
+                "users": {"total": 0, "new_today": 0, "by_plan": {}},
+                "paid_stats": {"total": 0, "paid": 0, "free": 0, "paid_percent": 0.0, "free_percent": 0.0},
+                "generations": {"today": 0},
+                "revenue": {"month": 0.0},
+                "timestamp": datetime.utcnow().isoformat(),
+            }
 
     async def _get_users_by_plan(self) -> Dict[str, int]:
         """Get user count grouped by plan"""
@@ -149,16 +151,20 @@ class AdminDashboardService:
         end_date: datetime
     ) -> float:
         """Calculate total revenue for a period"""
-        result = await self.db.scalar(
-            select(func.sum(Order.amount)).where(
-                and_(
-                    Order.status == "completed",
-                    Order.created_at >= start_date,
-                    Order.created_at <= end_date
+        try:
+            result = await self.db.scalar(
+                select(func.sum(Order.amount)).where(
+                    and_(
+                        Order.status == "paid",
+                        Order.created_at >= start_date,
+                        Order.created_at <= end_date
+                    )
                 )
             )
-        )
-        return float(result or 0)
+            return float(result or 0)
+        except Exception:
+            logger.exception("Admin revenue-for-period query failed")
+            return 0.0
 
     # =========================================================================
     # Charts & Trends
@@ -187,51 +193,59 @@ class AdminDashboardService:
 
     async def get_revenue_trend(self, months: int = 12) -> List[Dict[str, Any]]:
         """Get monthly revenue for the past N months"""
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=months * 30)
+        try:
+            end_date = datetime.utcnow()
+            start_date = end_date - timedelta(days=months * 30)
 
-        result = await self.db.execute(
-            select(
-                func.date_trunc('month', Order.created_at).label('month'),
-                func.sum(Order.amount).label('revenue')
-            ).where(
-                and_(
-                    Order.status == "completed",
-                    Order.created_at >= start_date
-                )
-            ).group_by(
-                func.date_trunc('month', Order.created_at)
-            ).order_by('month')
-        )
+            month_bucket = func.date_trunc('month', Order.created_at)
 
-        return [
-            {"month": str(row.month)[:7], "revenue": float(row.revenue or 0)}
-            for row in result.all()
-        ]
+            result = await self.db.execute(
+                select(
+                    month_bucket.label('month'),
+                    func.sum(Order.amount).label('revenue')
+                ).where(
+                    and_(
+                        Order.status == "paid",
+                        Order.created_at >= start_date
+                    )
+                ).group_by(month_bucket).order_by(month_bucket)
+            )
+
+            return [
+                {"month": str(row.month)[:7], "revenue": float(row.revenue or 0)}
+                for row in result.all()
+            ]
+        except Exception:
+            logger.exception("Admin revenue-trend query failed")
+            return []
 
     async def get_revenue_daily_trend(self, days: int = 30) -> List[Dict[str, Any]]:
         """Get daily revenue for the past N days."""
-        end_date = datetime.utcnow().date()
-        start_date = end_date - timedelta(days=days)
+        try:
+            end_date = datetime.utcnow().date()
+            start_date = end_date - timedelta(days=days)
 
-        result = await self.db.execute(
-            select(
-                func.date(Order.created_at).label('date'),
-                func.sum(Order.amount).label('revenue'),
-            ).where(
-                and_(
-                    Order.status == "completed",
-                    Order.created_at >= start_date,
-                )
-            ).group_by(
-                func.date(Order.created_at)
-            ).order_by('date')
-        )
+            date_bucket = func.date(Order.created_at)
 
-        return [
-            {"date": str(row.date), "revenue": float(row.revenue or 0)}
-            for row in result.all()
-        ]
+            result = await self.db.execute(
+                select(
+                    date_bucket.label('date'),
+                    func.sum(Order.amount).label('revenue'),
+                ).where(
+                    and_(
+                        Order.status == "paid",
+                        Order.created_at >= start_date,
+                    )
+                ).group_by(date_bucket).order_by(date_bucket)
+            )
+
+            return [
+                {"date": str(row.date), "revenue": float(row.revenue or 0)}
+                for row in result.all()
+            ]
+        except Exception:
+            logger.exception("Admin revenue-daily-trend query failed")
+            return []
 
     async def get_user_growth_trend(self, days: int = 30) -> List[Dict[str, Any]]:
         """Get daily new user registrations for the past N days"""
@@ -261,163 +275,212 @@ class AdminDashboardService:
     async def get_tool_usage_stats(self) -> Dict[str, Any]:
         """Get tool usage: most frequently used tools and most credit-consuming tools."""
         from app.models.user_generation import UserGeneration
+        try:
+            freq_result = await self.db.execute(
+                select(
+                    UserGeneration.tool_type,
+                    func.count(UserGeneration.id).label('usage_count')
+                ).group_by(UserGeneration.tool_type)
+                .order_by(desc(func.count(UserGeneration.id)))
+            )
+            by_frequency = [
+                {"tool": row.tool_type.value if hasattr(row.tool_type, 'value') else str(row.tool_type),
+                 "count": row.usage_count}
+                for row in freq_result.all()
+            ]
 
-        # Most frequently used tools (count of generations per tool_type)
-        freq_result = await self.db.execute(
-            select(
-                UserGeneration.tool_type,
-                func.count(UserGeneration.id).label('usage_count')
-            ).group_by(UserGeneration.tool_type)
-            .order_by(desc(func.count(UserGeneration.id)))
-        )
-        by_frequency = [
-            {"tool": row.tool_type.value if hasattr(row.tool_type, 'value') else str(row.tool_type),
-             "count": row.usage_count}
-            for row in freq_result.all()
-        ]
+            credit_result = await self.db.execute(
+                select(
+                    UserGeneration.tool_type,
+                    func.sum(UserGeneration.credits_used).label('total_credits')
+                ).group_by(UserGeneration.tool_type)
+                .order_by(desc(func.sum(UserGeneration.credits_used)))
+            )
+            by_credits = [
+                {"tool": row.tool_type.value if hasattr(row.tool_type, 'value') else str(row.tool_type),
+                 "total_credits": int(row.total_credits or 0)}
+                for row in credit_result.all()
+            ]
 
-        # Most credit-consuming tools (sum of credits_used per tool_type)
-        credit_result = await self.db.execute(
-            select(
-                UserGeneration.tool_type,
-                func.sum(UserGeneration.credits_used).label('total_credits')
-            ).group_by(UserGeneration.tool_type)
-            .order_by(desc(func.sum(UserGeneration.credits_used)))
-        )
-        by_credits = [
-            {"tool": row.tool_type.value if hasattr(row.tool_type, 'value') else str(row.tool_type),
-             "total_credits": int(row.total_credits or 0)}
-            for row in credit_result.all()
-        ]
-
-        return {
-            "by_frequency": by_frequency,
-            "by_credits": by_credits,
-        }
+            return {
+                "by_frequency": by_frequency,
+                "by_credits": by_credits,
+            }
+        except Exception:
+            logger.exception("Admin tool usage query failed")
+            return {"by_frequency": [], "by_credits": []}
 
     async def get_earnings_stats(self) -> Dict[str, Any]:
         """Get weekly and monthly earnings from paid orders."""
-        today = datetime.utcnow().date()
-        week_ago = today - timedelta(days=7)
-        month_start = today.replace(day=1)
+        try:
+            today = datetime.utcnow().date()
+            week_ago = today - timedelta(days=7)
+            month_start = today.replace(day=1)
 
-        week_revenue = await self._get_revenue_for_period(week_ago, today)
-        month_revenue = await self._get_revenue_for_period(month_start, today)
+            week_revenue = await self._get_revenue_for_period(week_ago, today)
+            month_revenue = await self._get_revenue_for_period(month_start, today)
 
-        # Monthly breakdown for the last 6 months
-        monthly = []
-        for i in range(5, -1, -1):
-            m_start = (today.replace(day=1) - timedelta(days=30 * i)).replace(day=1)
-            if i > 0:
-                m_end = (m_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-            else:
-                m_end = today
-            rev = await self._get_revenue_for_period(m_start, m_end)
-            monthly.append({"month": m_start.strftime("%Y-%m"), "revenue": rev})
+            monthly = []
+            for i in range(5, -1, -1):
+                m_start = (today.replace(day=1) - timedelta(days=30 * i)).replace(day=1)
+                if i > 0:
+                    m_end = (m_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+                else:
+                    m_end = today
+                rev = await self._get_revenue_for_period(m_start, m_end)
+                monthly.append({"month": m_start.strftime("%Y-%m"), "revenue": rev})
 
-        return {
-            "week": week_revenue,
-            "month": month_revenue,
-            "monthly_breakdown": monthly,
-        }
+            return {
+                "week": week_revenue,
+                "month": month_revenue,
+                "monthly_breakdown": monthly,
+            }
+        except Exception:
+            logger.exception("Admin earnings query failed")
+            return {"week": 0.0, "month": 0.0, "monthly_breakdown": []}
 
     async def get_api_cost_stats(self) -> Dict[str, Any]:
         """
         Get API cost breakdown by service type for this week and this month.
         JOINs generations with service_pricing to compute actual USD costs.
         """
-        today = datetime.utcnow().date()
-        week_ago = today - timedelta(days=7)
-        month_start = today.replace(day=1)
+        try:
+            now = datetime.utcnow()
+            current_week_start = now - timedelta(days=7)
+            previous_week_start = now - timedelta(days=14)
 
-        # Per-service costs for this week
-        week_result = await self.db.execute(
-            select(
-                Generation.service_type,
-                ServicePricing.display_name,
-                func.count(Generation.id).label('call_count'),
-                func.sum(ServicePricing.api_cost_usd).label('total_cost')
-            ).join(
-                ServicePricing,
-                Generation.service_type == ServicePricing.service_type
-            ).where(
-                and_(
-                    Generation.created_at >= week_ago,
-                    Generation.status == "completed"
+            current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            previous_month_end = current_month_start
+            previous_month_start = (previous_month_end - timedelta(days=1)).replace(day=1)
+
+            async def _query_costs_by_service(start: datetime, end: Optional[datetime] = None) -> Dict[str, Dict[str, Any]]:
+                """
+                Count real user-generation calls per tool and join to
+                ServicePricing for a per-call USD cost estimate.
+
+                Why UserGeneration and not Generation:
+                  - Every /tools/* endpoint writes to the `user_generations`
+                    table via the UserGeneration ORM model.
+                  - The legacy `generations` table (Generation model) is no
+                    longer written by any active request path, so a JOIN
+                    against it returns 0 rows and the admin dashboard
+                    appears empty even on a busy prod.
+
+                Join: UserGeneration.tool_type (ToolType enum string, e.g.
+                "background_removal") == ServicePricing.tool_type. A LEFT
+                OUTER JOIN is used so tools that are missing a pricing row
+                still show up with an accurate call count and a zero cost
+                (better than hiding them entirely).
+                """
+                conditions = [UserGeneration.created_at >= start]
+                if end is not None:
+                    conditions.append(UserGeneration.created_at < end)
+
+                tool_expr = func.cast(UserGeneration.tool_type, type_=None)
+
+                result = await self.db.execute(
+                    select(
+                        UserGeneration.tool_type.label('tool_type'),
+                        ServicePricing.display_name,
+                        func.count(UserGeneration.id).label('call_count'),
+                        func.coalesce(
+                            func.sum(ServicePricing.api_cost_usd),
+                            0,
+                        ).label('total_cost'),
+                    ).select_from(UserGeneration).outerjoin(
+                        ServicePricing,
+                        ServicePricing.tool_type == UserGeneration.tool_type,
+                    ).where(
+                        and_(*conditions)
+                    ).group_by(
+                        UserGeneration.tool_type,
+                        ServicePricing.display_name,
+                    ).order_by(
+                        desc(func.coalesce(func.sum(ServicePricing.api_cost_usd), 0))
+                    )
                 )
-            ).group_by(
-                Generation.service_type, ServicePricing.display_name
-            ).order_by(desc(func.sum(ServicePricing.api_cost_usd)))
-        )
-        week_data = {
-            row.service_type: {
-                "service": row.service_type,
-                "display_name": row.display_name,
-                "calls": row.call_count,
-                "cost": float(row.total_cost or 0)
+
+                out: Dict[str, Dict[str, Any]] = {}
+                for row in result.all():
+                    # Enum instances round-trip as their value string for the
+                    # dict key so the frontend's service lookup stays stable.
+                    tt = row.tool_type
+                    key = tt.value if hasattr(tt, "value") else str(tt)
+                    out[key] = {
+                        "service": key,
+                        "display_name": row.display_name or key,
+                        "calls": row.call_count,
+                        "cost": float(row.total_cost or 0),
+                    }
+                return out
+
+            week_data = await _query_costs_by_service(current_week_start)
+            month_data = await _query_costs_by_service(current_month_start)
+            previous_week_data = await _query_costs_by_service(previous_week_start, current_week_start)
+            previous_month_data = await _query_costs_by_service(previous_month_start, previous_month_end)
+
+            all_services = set(
+                list(week_data.keys())
+                + list(month_data.keys())
+                + list(previous_week_data.keys())
+                + list(previous_month_data.keys())
+            )
+            by_service = []
+            week_total = 0.0
+            month_total = 0.0
+            previous_week_total = 0.0
+            previous_month_total = 0.0
+
+            for svc in sorted(all_services):
+                w = week_data.get(svc, {})
+                m = month_data.get(svc, {})
+                pw = previous_week_data.get(svc, {})
+                pm = previous_month_data.get(svc, {})
+                w_cost = w.get("cost", 0.0)
+                m_cost = m.get("cost", 0.0)
+                pw_cost = pw.get("cost", 0.0)
+                pm_cost = pm.get("cost", 0.0)
+                week_total += w_cost
+                month_total += m_cost
+                previous_week_total += pw_cost
+                previous_month_total += pm_cost
+                by_service.append({
+                    "service": svc,
+                    "display_name": (
+                        w.get("display_name")
+                        or m.get("display_name")
+                        or pw.get("display_name")
+                        or pm.get("display_name")
+                        or svc
+                    ),
+                    "week_calls": w.get("calls", 0),
+                    "week_cost": w_cost,
+                    "month_calls": m.get("calls", 0),
+                    "month_cost": m_cost,
+                    "prev_week_calls": pw.get("calls", 0),
+                    "prev_week_cost": pw_cost,
+                    "prev_month_calls": pm.get("calls", 0),
+                    "prev_month_cost": pm_cost,
+                })
+
+            by_service.sort(key=lambda x: x["month_cost"], reverse=True)
+
+            return {
+                "by_service": by_service,
+                "week_total": week_total,
+                "month_total": month_total,
+                "prev_week_total": previous_week_total,
+                "prev_month_total": previous_month_total,
             }
-            for row in week_result.all()
-        }
-
-        # Per-service costs for this month
-        month_result = await self.db.execute(
-            select(
-                Generation.service_type,
-                ServicePricing.display_name,
-                func.count(Generation.id).label('call_count'),
-                func.sum(ServicePricing.api_cost_usd).label('total_cost')
-            ).join(
-                ServicePricing,
-                Generation.service_type == ServicePricing.service_type
-            ).where(
-                and_(
-                    Generation.created_at >= month_start,
-                    Generation.status == "completed"
-                )
-            ).group_by(
-                Generation.service_type, ServicePricing.display_name
-            ).order_by(desc(func.sum(ServicePricing.api_cost_usd)))
-        )
-        month_data = {
-            row.service_type: {
-                "service": row.service_type,
-                "display_name": row.display_name,
-                "calls": row.call_count,
-                "cost": float(row.total_cost or 0)
+        except Exception:
+            logger.exception("Admin API cost query failed")
+            return {
+                "by_service": [],
+                "week_total": 0.0,
+                "month_total": 0.0,
+                "prev_week_total": 0.0,
+                "prev_month_total": 0.0,
             }
-            for row in month_result.all()
-        }
-
-        # Merge into unified list
-        all_services = set(list(week_data.keys()) + list(month_data.keys()))
-        by_service = []
-        week_total = 0.0
-        month_total = 0.0
-
-        for svc in sorted(all_services):
-            w = week_data.get(svc, {})
-            m = month_data.get(svc, {})
-            w_cost = w.get("cost", 0.0)
-            m_cost = m.get("cost", 0.0)
-            week_total += w_cost
-            month_total += m_cost
-            by_service.append({
-                "service": svc,
-                "display_name": w.get("display_name") or m.get("display_name", svc),
-                "week_calls": w.get("calls", 0),
-                "week_cost": w_cost,
-                "month_calls": m.get("calls", 0),
-                "month_cost": m_cost,
-            })
-
-        # Sort by month cost descending
-        by_service.sort(key=lambda x: x["month_cost"], reverse=True)
-
-        return {
-            "by_service": by_service,
-            "week_total": week_total,
-            "month_total": month_total,
-        }
 
     async def get_costs_dashboard(self) -> Dict[str, Any]:
         """

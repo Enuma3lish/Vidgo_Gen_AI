@@ -9,6 +9,7 @@ import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import apiClient from '@/api/client'
+import { demoApi } from '@/api/demo'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -16,13 +17,18 @@ const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const isZh = computed(() => locale.value.startsWith('zh'))
 
-// Demo mode
+// Demo mode. We call loadInputLibrary/loadEffectCatalog in onMounted so the
+// composable's shared state is warm for other code paths, but this view's
+// avatar grid still renders the curated 6-portrait UI — so we intentionally
+// do not bind the library/catalog refs here.
 const {
   isDemoUser,
   loadDemoTemplates,
   demoTemplates,
   resolveDemoTemplateResultUrl,
-  generateOnDemand
+  generateOnDemand,
+  loadInputLibrary,
+  loadEffectCatalog,
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
@@ -329,6 +335,8 @@ async function generateAvatar() {
       const onDemandUrl = await generateOnDemand('ai_avatar', scriptCategory, {
         product_id: selectedAvatarId.value || undefined,
         language: selectedLanguage.value,
+        input_image_url: uploadedImage.value || undefined,
+        effect_prompt: script.value || undefined,
       })
       if (onDemandUrl) {
         resultVideo.value = onDemandUrl
@@ -346,8 +354,15 @@ async function generateAvatar() {
   // For subscribed users, call API
   isProcessing.value = true
   try {
+    let imageUrl = uploadedImage.value
+    if (uploadedImage.value?.startsWith('data:')) {
+      const blob = await fetch(uploadedImage.value).then(r => r.blob())
+      const uploaded = await demoApi.uploadImage(blob as File)
+      imageUrl = uploaded.url
+    }
+
     const response = await apiClient.post('/api/v1/tools/avatar', {
-      image_url: uploadedImage.value,
+      image_url: imageUrl,
       script: script.value,
       language: selectedLanguage.value,
       voice_id: selectedVoice.value,
@@ -374,7 +389,14 @@ async function generateAvatar() {
 
 onMounted(async () => {
   loadVoices()
-  await loadDemoTemplates('ai_avatar')
+  await Promise.all([
+    loadDemoTemplates('ai_avatar'),
+    // Pregenerated Vertex Imagen head-shots (3:4 aspect) so Kling's face
+    // detector accepts them; and the script catalog whose `prompt` is the
+    // effect_prompt cached against each headshot.
+    loadInputLibrary('ai_avatar'),
+    loadEffectCatalog('ai_avatar', locale.value),
+  ])
 
   // Populate pre-generated preset cache from loaded templates
   demoTemplates.value.forEach(template => {

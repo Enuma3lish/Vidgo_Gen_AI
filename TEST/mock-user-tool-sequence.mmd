@@ -1,0 +1,120 @@
+%%{init: {'theme':'neutral','themeVariables':{'fontSize':'14px'}}}%%
+sequenceDiagram
+  %% ===================================================================
+  %% VidGo — Tool-call sequence, visitor vs subscriber, happy + edge
+  %% ===================================================================
+  autonumber
+
+  actor V as Visitor
+  actor S as Subscriber
+  participant FE as Frontend
+  participant API as Backend
+  participant DEMO as demo_cache_service
+  participant DB as Postgres
+  participant R as ProviderRouter
+  participant PIAPI as PiAPI
+  participant VAI as Vertex AI
+  participant GCS as GCS
+
+  %% ---------- Visitor path ----------
+  rect rgb(255,248,230)
+  Note over V,DEMO: VISITOR · is_subscribed_user → false · DEMO RETURNED
+  V->>FE: choose tool (e.g. background removal)
+  FE->>API: POST /tools/remove-bg {image_url}<br/>(no token)
+  API->>API: current_user = None via get_current_user_optional
+  API->>API: is_subscribed_user(None) → False
+  API->>DEMO: _demo_response(TOOL=BG_REMOVAL, input_image_url)
+  DEMO->>DB: SELECT pre-generated DemoExample<br/>WHERE tool_type=bg_removal
+  DEMO-->>API: cached image_url + CTA copy
+  API-->>FE: 200 · is_demo=true · message="Subscribe to process your own image"
+  FE-->>V: shows watermarked demo + upgrade CTA
+  end
+
+  %% ---------- Free member path (same as visitor but with token) ----------
+  rect rgb(255,248,230)
+  Note over V,DEMO: FREE MEMBER · plan_expires_at=null or past · DEMO
+  V->>FE: choose tool (token = free member)
+  FE->>API: POST /tools/remove-bg {token}
+  API->>API: current_user loaded · current_plan_id=null
+  API->>API: is_subscribed_user(user) → False
+  API->>DEMO: _demo_response(...)
+  DEMO-->>API: demo response
+  API-->>FE: 200 · is_demo=true
+  end
+
+  %% ---------- Subscriber happy path ----------
+  rect rgb(230,255,235)
+  Note over S,GCS: SUBSCRIBER HAPPY PATH · plan=pro · credits 10000
+  S->>FE: upload image, click "Remove BG"
+  FE->>API: POST /tools/remove-bg {image_url}
+  API->>API: is_subscribed_user(user) → True (plan_expires_at>now)
+  API->>API: _check_plan_resolution(user, "1080p") ok
+  API->>API: _check_and_deduct_credits(3, "remove_bg")
+  API->>DB: UPDATE users.subscription_credits -= 3<br/>INSERT CreditTransaction type=generation -3
+  API->>R: route(TaskType.BACKGROUND_REMOVAL)
+  R->>PIAPI: Qubico/image-toolkit remove-bg
+  PIAPI-->>R: {output: {image_url: cdn.piapi...}}
+  R->>GCS: persist_url(cdn_url, media_type="image")
+  GCS-->>R: gs://vidgo-media-.../generated/image/b590d933e572.png
+  R-->>API: {success:true, output:{image_url: gcs_url}}
+  API->>DB: INSERT UserGeneration result_image_url, credits_used=3
+  API-->>FE: 200 · success=true · result_url (absolute GCS) · credits_used=3
+  FE-->>S: full-res PNG alpha (no watermark)
+  end
+
+  %% ---------- Resolution gate ----------
+  rect rgb(255,235,235)
+  Note over S,API: RESOLUTION GATE · pro requests 4k upscale
+  S->>FE: upscale image at scale=4
+  FE->>API: POST /tools/upscale {scale:4}
+  API->>API: requested_resolution = "4k"
+  API->>API: _check_plan_resolution(pro, "4k") → False
+  API-->>FE: 200 · success=false<br/>msg="Your plan does not support 4k output"
+  end
+
+  %% ---------- Insufficient credits ----------
+  rect rgb(255,235,235)
+  Note over S,API: INSUFFICIENT CREDITS
+  S->>FE: click "AI Avatar" (cost 30)
+  FE->>API: POST /tools/avatar
+  API->>API: check_and_deduct(30)<br/>subscription_credits=20<br/>purchased=0 bonus=0
+  API-->>FE: 400 · "Not enough credits"
+  end
+
+  %% ---------- Tool failure → refund ----------
+  rect rgb(255,230,245)
+  Note over S,PIAPI: PROVIDER FAILURE · automatic refund (VG-FIX-E)
+  S->>FE: click "Short Video" cost 25
+  FE->>API: POST /tools/short-video
+  API->>API: deduct 25 cr
+  API->>R: route(TaskType.I2V)
+  R->>PIAPI: image_to_video
+  PIAPI-->>R: 500 / timeout
+  R->>VAI: fallback Veo
+  VAI-->>R: error
+  R-->>API: Exception "all providers failed"
+  API->>API: _refund_credits(25, "short_video")
+  API->>DB: add_credits(amount=25, credit_type='subscription',<br/>transaction_type='refund')<br/>INSERT CreditTransaction type='refund' (was 'subscription' pre-fix)
+  API-->>FE: 200 · success=false · "Short Video failed"
+  end
+
+  %% ---------- Superuser bypass ----------
+  rect rgb(245,230,255)
+  Note over S,API: SUPERUSER · NO DEDUCTION
+  S->>FE: any tool call
+  FE->>API: POST /tools/anything
+  API->>API: is_superuser → true
+  API->>R: route(...)
+  R-->>API: success
+  API->>API: _refund_credits called → also short-circuits for superuser
+  API-->>FE: 200 · success=true · credits_used=0 (no transaction written)
+  end
+
+  %% ---------- Batch (plan-gated) ----------
+  rect rgb(255,245,230)
+  Note over S,API: BATCH FEATURE GATE
+  S->>FE: select 5 images, "remove bg all"
+  FE->>API: POST /tools/remove-bg/batch
+  API->>API: features.batch_processing == false → 403
+  API-->>FE: 403 · "Your plan does not include batch processing"
+  end

@@ -144,6 +144,14 @@ class VidGoEffectsService:
         self.db = db
         self.router = router or ProviderRouter()
 
+    async def _get_user(self, user_id: str) -> Optional[User]:
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+
+    async def _is_superuser(self, user_id: str) -> bool:
+        user = await self._get_user(user_id)
+        return bool(user and user.is_superuser)
+
     async def check_access(self, user_id: str, service_type: str) -> Tuple[bool, str]:
         """
         Check if user can access VidGo Effects.
@@ -152,13 +160,13 @@ class VidGoEffectsService:
             Tuple of (has_access, message)
         """
         # Get user and plan
-        result = await self.db.execute(
-            select(User).where(User.id == user_id)
-        )
-        user = result.scalar_one_or_none()
+        user = await self._get_user(user_id)
 
         if not user:
             return False, "User not found"
+
+        if user.is_superuser:
+            return True, "OK"
 
         # Get user's plan
         plan = None
@@ -252,14 +260,14 @@ class VidGoEffectsService:
 
             output_url = result.get("image_url") or result.get("output_url") or (result.get("output", {}).get("image_url") if isinstance(result.get("output"), dict) else None)
             if output_url:
-                # Deduct credits
-                credit_service = CreditService(self.db)
-                await credit_service.deduct_credits(
-                    user_id=user_id,
-                    amount=8,  # vidgo_style costs 8 credits
-                    service_type=service_type,
-                    description=f"VidGo Style Effects - {style_id}"
-                )
+                if not await self._is_superuser(user_id):
+                    credit_service = CreditService(self.db)
+                    await credit_service.deduct_credits(
+                        user_id=user_id,
+                        amount=8,  # vidgo_style costs 8 credits
+                        service_type=service_type,
+                        description=f"VidGo Style Effects - {style_id}"
+                    )
 
                 return True, {
                     "output_url": output_url,
@@ -306,16 +314,24 @@ class VidGoEffectsService:
                 }
             )
 
-            output_url = result.get("image_url") or result.get("output_url")
+            # Provider router returns {"success": True, "output": {"image_url": ...}};
+            # keep the legacy flat keys as a defensive fallback.
+            output = result.get("output") or {}
+            output_url = (
+                output.get("image_url")
+                or output.get("output_url")
+                or result.get("image_url")
+                or result.get("output_url")
+            )
             if output_url:
-                # Deduct credits
-                credit_service = CreditService(self.db)
-                await credit_service.deduct_credits(
-                    user_id=user_id,
-                    amount=10,  # vidgo_hd_enhance costs 10 credits
-                    service_type=service_type,
-                    description=f"VidGo HD Enhance - {target_resolution}"
-                )
+                if not await self._is_superuser(user_id):
+                    credit_service = CreditService(self.db)
+                    await credit_service.deduct_credits(
+                        user_id=user_id,
+                        amount=10,  # vidgo_hd_enhance costs 10 credits
+                        service_type=service_type,
+                        description=f"VidGo HD Enhance - {target_resolution}"
+                    )
 
                 return True, {
                     "output_url": output_url,
@@ -348,10 +364,7 @@ class VidGoEffectsService:
         service_type = "vidgo_video_pro"
 
         # Check access - Pro plans only
-        user_result = await self.db.execute(
-            select(User).where(User.id == user_id)
-        )
-        user = user_result.scalar_one_or_none()
+        user = await self._get_user(user_id)
 
         if not user:
             return False, {"error": "User not found"}
@@ -383,14 +396,14 @@ class VidGoEffectsService:
 
             output_url = result.get("video_url") or result.get("output_url")
             if output_url:
-                # Deduct credits
-                credit_service = CreditService(self.db)
-                await credit_service.deduct_credits(
-                    user_id=user_id,
-                    amount=12,  # vidgo_video_pro costs 12 credits
-                    service_type=service_type,
-                    description=f"VidGo Video Pro - {enhancement_type}"
-                )
+                if not await self._is_superuser(user_id):
+                    credit_service = CreditService(self.db)
+                    await credit_service.deduct_credits(
+                        user_id=user_id,
+                        amount=12,  # vidgo_video_pro costs 12 credits
+                        service_type=service_type,
+                        description=f"VidGo Video Pro - {enhancement_type}"
+                    )
 
                 return True, {
                     "output_url": output_url,

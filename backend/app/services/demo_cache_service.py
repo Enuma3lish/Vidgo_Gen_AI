@@ -47,7 +47,28 @@ _TOOL_TYPE_MAP = {
 
 
 def _generate_lookup_hash(tool_type: str, prompt: str, effect_prompt: str = None, input_image_url: str = None) -> str:
+    """
+    Deprecated four-arg form, kept for back-compat with older callers.
+    New code should use `_request_cache_hash` which keys only on the fields
+    the request actually carries (tool, chosen effect/topic, chosen input URL).
+    """
     content = f"{tool_type}:{prompt}:{effect_prompt or ''}:{input_image_url or ''}"
+    return hashlib.sha256(content.encode()).hexdigest()[:64]
+
+
+def _request_cache_hash(
+    tool_type: str,
+    effect_or_topic: Optional[str],
+    input_url: Optional[str],
+) -> str:
+    """
+    Canonical cache key for the demo flow: the identity of a request is the
+    tuple (tool, what the user picked as the effect/topic, what the user picked
+    as the input). Decorative wording in the human-facing prompt column is NOT
+    part of the key, so a cache hit is possible whenever the same user
+    selection is repeated.
+    """
+    content = f"v2|{tool_type}|{effect_or_topic or ''}|{input_url or ''}"
     return hashlib.sha256(content.encode()).hexdigest()[:64]
 
 
@@ -78,38 +99,68 @@ class DemoCacheService:
         topic: Optional[str] = None,
         product_id: Optional[str] = None,
         language: Optional[str] = None,
+        input_image_url: Optional[str] = None,
+        input_video_url: Optional[str] = None,
+        effect_prompt: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
-        Get a demo result — from cache if available, otherwise generate on-demand.
+        Resolve a demo result for the (input, effect) pair the user actually chose.
 
-        For product_scene, `product_id` narrows lookup to a specific product.
-        For ai_avatar, `product_id` = avatar_id and `language` picks the script
-        language (zh-TW or en).
+        Lookup precedence:
+            1. lookup_hash match on (tool_type, effect_prompt or topic, user input URL)
+               — the exact-pair cache.
+            2. Generic (tool_type, topic [, product_id]) match for back-compat.
+            3. Redis bucketed list.
+            4. On-demand generation using the user-provided input + effect_prompt.
 
-        Returns dict: {result_url, input_image_url, prompt, tool_type, topic}
+        `input_image_url` / `input_video_url` is the exact asset the user picked
+        (from the pregenerated input library). `effect_prompt` is the style /
+        scene / motion prompt the user chose. Both flow through to the real
+        provider call on cache miss, and the result is persisted under the same
+        lookup_hash so the next identical request hits cache.
         """
-        # 1. Material DB (filtered by product_id if provided). Skip Redis cache when
-        # product_id is set, since the cache key only includes topic.
-        demo = await self._get_from_db(
-            tool_type, topic, product_id=product_id, language=language
-        )
-        if demo:
-            if self.redis and not product_id:
-                await self._warm_cache(tool_type, topic)
-            return demo
+        tt_key = tool_type.value if hasattr(tool_type, "value") else str(tool_type)
+        user_input = input_image_url or input_video_url
 
-        if self.redis and not product_id and not language:
-            cached = await self._get_from_cache(tool_type, topic)
-            if cached:
-                return cached
+        # 1. Exact-pair lookup (user picked a specific input + effect).
+        if user_input:
+            hashed = await self._get_from_db_by_hash(
+                tt_key, effect_prompt or topic, user_input
+            )
+            if hashed:
+                return hashed
 
-        # 3. On-demand generation
+        # 2. Generic DB lookup (back-compat) — only runs when the caller did
+        # NOT pick a specific input; otherwise the exact-pair path above is
+        # authoritative and a generic match could return the wrong result.
+        if not user_input:
+            demo = await self._get_from_db(
+                tool_type, topic, product_id=product_id, language=language
+            )
+            if demo:
+                if self.redis and not product_id:
+                    await self._warm_cache(tool_type, topic)
+                return demo
+
+            # 3. Redis bucket only for the generic (no user-picked input) path.
+            if self.redis and not product_id and not language:
+                cached = await self._get_from_cache(tool_type, topic)
+                if cached:
+                    return cached
+
+        # 4. On-demand generation — honor user-chosen input and effect.
         logger.info(
-            "[DemoCache] Cache miss for %s:%s product=%s lang=%s — on-demand gen.",
+            "[DemoCache] Cache miss for %s:%s product=%s lang=%s input=%s — on-demand gen.",
             tool_type, topic, product_id, language,
+            (user_input[:80] + "…") if user_input and len(user_input) > 80 else user_input,
         )
         generated = await self._generate_on_demand(
-            tool_type, topic, product_id=product_id, language=language
+            tool_type, topic,
+            product_id=product_id,
+            language=language,
+            input_image_url=input_image_url,
+            input_video_url=input_video_url,
+            effect_prompt=effect_prompt,
         )
         if generated:
             return generated
@@ -192,12 +243,20 @@ class DemoCacheService:
         topic: Optional[str] = None,
         product_id: Optional[str] = None,
         language: Optional[str] = None,
+        input_image_url: Optional[str] = None,
+        input_video_url: Optional[str] = None,
+        effect_prompt: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Generate a demo example on-the-fly using provider_router.
 
-        The result is stored in Material DB and cached in Redis.
-        This allows any user to trigger generation — not just developers.
+        When `input_image_url`/`input_video_url` is provided the generator uses
+        that exact asset (user picked it from the pregenerated input library);
+        otherwise we fall back to the curated defaults.
+
+        The result is stored in Material DB keyed by
+        lookup_hash(tool, effect_prompt or topic, input_url) so the next
+        request with the same pair hits cache.
         """
         try:
             from app.providers.provider_router import get_provider_router, TaskType
@@ -207,28 +266,45 @@ class DemoCacheService:
 
         provider = get_provider_router()
         result = None
-        input_image_url = None
-        prompt = ""
-        effect_prompt = None
 
         try:
             if tool_type in ("effect", ToolType.EFFECT.value if hasattr(ToolType.EFFECT, 'value') else "effect"):
-                result = await self._generate_effect(provider, TaskType, topic, product_id)
+                result = await self._generate_effect(
+                    provider, TaskType, topic, product_id,
+                    input_image_url=input_image_url, effect_prompt=effect_prompt,
+                )
             elif tool_type in ("background_removal", "BACKGROUND_REMOVAL"):
-                result = await self._generate_background_removal(provider, TaskType, topic)
+                result = await self._generate_background_removal(
+                    provider, TaskType, topic, input_image_url=input_image_url,
+                )
             elif tool_type in ("product_scene", "PRODUCT_SCENE"):
-                result = await self._generate_product_scene(provider, TaskType, topic, product_id)
+                result = await self._generate_product_scene(
+                    provider, TaskType, topic, product_id,
+                    input_image_url=input_image_url, effect_prompt=effect_prompt,
+                )
             elif tool_type in ("room_redesign", "ROOM_REDESIGN"):
-                result = await self._generate_room_redesign(provider, TaskType, topic)
+                result = await self._generate_room_redesign(
+                    provider, TaskType, topic,
+                    input_image_url=input_image_url, effect_prompt=effect_prompt,
+                )
             elif tool_type in ("short_video", "SHORT_VIDEO"):
-                result = await self._generate_short_video(provider, TaskType, topic)
+                result = await self._generate_short_video(
+                    provider, TaskType, topic,
+                    input_image_url=input_image_url, effect_prompt=effect_prompt,
+                )
             elif tool_type in ("pattern_generate", "PATTERN_GENERATE"):
-                result = await self._generate_pattern(provider, TaskType, topic)
+                result = await self._generate_pattern(
+                    provider, TaskType, topic, effect_prompt=effect_prompt,
+                )
             elif tool_type in ("try_on", "TRY_ON"):
-                result = await self._generate_try_on(provider, TaskType, topic, product_id)
+                result = await self._generate_try_on(
+                    provider, TaskType, topic, product_id,
+                    input_image_url=input_image_url,
+                )
             elif tool_type in ("ai_avatar", "AI_AVATAR"):
                 result = await self._generate_ai_avatar(
-                    provider, TaskType, topic, product_id, language
+                    provider, TaskType, topic, product_id, language,
+                    input_image_url=input_image_url, effect_prompt=effect_prompt,
                 )
             else:
                 logger.info(f"[DemoCache] No on-demand generator for tool_type={tool_type}")
@@ -238,7 +314,11 @@ class DemoCacheService:
                 logger.warning(f"[DemoCache] On-demand generation failed for {tool_type}: {result}")
                 return None
 
-            # Store in Material DB
+            # Store in Material DB. Pin the cache key to the CALLER's
+            # (effect_or_topic, input_url) pair — not the generator's
+            # embellished echo — so the next lookup with the same inputs
+            # deterministically hits this row.
+            user_input = input_image_url or input_video_url
             material_dict = await self._store_generated_result(
                 tool_type=tool_type,
                 topic=topic or result.get("topic", "_all"),
@@ -248,6 +328,8 @@ class DemoCacheService:
                 result_image_url=result.get("result_image_url"),
                 result_video_url=result.get("result_video_url"),
                 input_params=result.get("input_params", {}),
+                cache_effect_or_topic=effect_prompt or topic,
+                cache_input_url=user_input or result.get("input_image_url"),
             )
 
             if material_dict:
@@ -267,26 +349,30 @@ class DemoCacheService:
         TaskType,
         topic: Optional[str],
         product_id: Optional[str] = None,
+        input_image_url: Optional[str] = None,
+        effect_prompt: Optional[str] = None,
     ) -> Optional[Dict]:
         """Generate an effect (style transfer) example on-demand.
 
-        Source images are the 8 frozen product photos (gs://.../static/products/)
-        — no more T2I-generated source each run. Only the I2I style application
-        is non-deterministic. `topic` = style_id, `product_id` = source product.
+        If the caller provided `input_image_url` (a pregenerated input the user
+        picked), we apply the style to that exact asset. Otherwise we fall
+        back to the 8 frozen curated products keyed by `product_id`.
         """
         from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 
-        # Resolve style
+        # Resolve style: explicit effect_prompt wins; else style_id -> prompt; else random.
         style_id = topic
-        if not style_id or style_id == "_all":
-            style_id = random.choice([s["id"] for s in VIDGO_STYLES])
-        style = get_style_by_id(style_id)
-        if not style:
-            logger.warning(f"[DemoCache] Unknown style: {style_id}")
-            return None
-        style_prompt = get_style_prompt(style_id)
+        style_prompt = effect_prompt
+        if not style_prompt:
+            if not style_id or style_id == "_all":
+                style_id = random.choice([s["id"] for s in VIDGO_STYLES])
+            style = get_style_by_id(style_id)
+            if not style:
+                logger.warning(f"[DemoCache] Unknown style: {style_id}")
+                return None
+            style_prompt = get_style_prompt(style_id)
 
-        # Frozen source photos (reuse the curated product library)
+        # Frozen source photos (used only when user didn't pass their own input).
         source_urls = {
             "product-1": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-1.png",
             "product-2": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-2.png",
@@ -297,10 +383,14 @@ class DemoCacheService:
             "product-7": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-7.png",
             "product-8": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-8.png",
         }
-        resolved_pid = product_id if product_id in source_urls else random.choice(list(source_urls.keys()))
-        source_url = source_urls[resolved_pid]
+        if input_image_url:
+            source_url = input_image_url
+            resolved_pid = product_id or "user"
+        else:
+            resolved_pid = product_id if product_id in source_urls else random.choice(list(source_urls.keys()))
+            source_url = source_urls[resolved_pid]
 
-        logger.info(f"[DemoCache] Effect: {resolved_pid} -> style={style_id}")
+        logger.info(f"[DemoCache] Effect: src={resolved_pid} -> style={style_id or 'custom'}")
         i2i_result = await provider.route(
             TaskType.I2I,
             {
@@ -319,7 +409,7 @@ class DemoCacheService:
 
         return {
             "success": True,
-            "topic": style_id,
+            "topic": style_id or "custom",
             "prompt": f"{resolved_pid} | Style: {style_prompt}",
             "effect_prompt": style_prompt,
             "input_image_url": source_url,
@@ -330,7 +420,13 @@ class DemoCacheService:
             },
         }
 
-    async def _generate_background_removal(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+    async def _generate_background_removal(
+        self,
+        provider,
+        TaskType,
+        topic: Optional[str],
+        input_image_url: Optional[str] = None,
+    ) -> Optional[Dict]:
         """Generate a background removal example on-demand."""
         prompts_by_topic = {
             "drinks": "A cup of bubble milk tea with tapioca pearls on white background, food photography",
@@ -344,18 +440,21 @@ class DemoCacheService:
         }
         prompt = prompts_by_topic.get(topic, random.choice(list(prompts_by_topic.values())))
 
-        # Step 1: Generate source image
-        logger.info(f"[DemoCache] BG removal: generating source image...")
-        t2i_result = await provider.route(
-            TaskType.T2I,
-            {"prompt": prompt, "width": 1024, "height": 1024},
-        )
-        if not t2i_result.get("success"):
-            return {"success": False, "error": "T2I failed"}
-
-        source_url = t2i_result.get("output", {}).get("image_url")
-        if not source_url:
-            return {"success": False, "error": "No image URL from T2I"}
+        # Step 1: Source image — reuse the user-picked pregenerated input if
+        # provided, otherwise run T2I to synthesize a showcase image.
+        if input_image_url:
+            source_url = input_image_url
+        else:
+            logger.info(f"[DemoCache] BG removal: generating source image...")
+            t2i_result = await provider.route(
+                TaskType.T2I,
+                {"prompt": prompt, "width": 1024, "height": 1024},
+            )
+            if not t2i_result.get("success"):
+                return {"success": False, "error": "T2I failed"}
+            source_url = t2i_result.get("output", {}).get("image_url")
+            if not source_url:
+                return {"success": False, "error": "No image URL from T2I"}
 
         # Step 2: Remove background
         logger.info(f"[DemoCache] BG removal: removing background...")
@@ -384,11 +483,14 @@ class DemoCacheService:
         TaskType,
         topic: Optional[str],
         product_id: Optional[str] = None,
+        input_image_url: Optional[str] = None,
+        effect_prompt: Optional[str] = None,
     ) -> Optional[Dict]:
         """Generate a product scene example on-demand for the given (product_id, scene).
 
-        Uses frozen, human-reviewed product photos as inputs (no T2I product step)
-        so every on-demand run produces the same product image for the same id.
+        When `input_image_url` is given we use that exact product image the
+        user picked; otherwise we fall back to the curated 8-photo library.
+        When `effect_prompt` is given we use it as the scene prompt directly.
         """
         # Fixed curated product URLs — must stay in sync with
         # scripts/main_pregenerate.py PRODUCT_SCENE_MAPPING and the GCS assets at
@@ -413,9 +515,14 @@ class DemoCacheService:
             "product-7": "handmade soy candle in glass jar",
             "product-8": "premium retail gift box set",
         }
-        resolved_pid = product_id if product_id in product_urls else random.choice(list(product_urls.keys()))
-        product_url = product_urls[resolved_pid]
-        product_label = product_labels[resolved_pid]
+        if input_image_url:
+            resolved_pid = product_id or "user"
+            product_url = input_image_url
+            product_label = product_labels.get(resolved_pid, "user product")
+        else:
+            resolved_pid = product_id if product_id in product_urls else random.choice(list(product_urls.keys()))
+            product_url = product_urls[resolved_pid]
+            product_label = product_labels[resolved_pid]
 
         scene_prompts = {
             "studio": "professional studio lighting, solid color background, product photography",
@@ -426,8 +533,13 @@ class DemoCacheService:
             "urban": "urban city backdrop, modern architecture, street style",
             "seasonal": "seasonal autumn leaves background, warm golden colors, cozy seasonal mood",
             "holiday": "festive holiday decoration background, warm holiday lights, celebration",
+            "spring": "fresh cherry blossom petals, bright spring sunlight, pastel pink and green, spring campaign",
+            "valentines": "romantic rose petals, warm candlelight, red and pink hearts, satin ribbons, valentine campaign",
+            "black_friday": "sleek black surface, dramatic spotlight, neon sale tags, black and gold, retail promotion",
+            "christmas": "christmas pine branches, golden fairy lights, red ornaments, snow frost, warm holiday",
+            "new_year": "gold confetti, champagne, sparkling lights, black and gold, new year celebration",
         }
-        scene_prompt = scene_prompts.get(topic, scene_prompts["studio"])
+        scene_prompt = effect_prompt or scene_prompts.get(topic, scene_prompts["studio"])
 
         # Step 1: Remove background from the frozen product image
         logger.info(f"[DemoCache] Product scene: removing background from {resolved_pid}...")
@@ -457,6 +569,7 @@ class DemoCacheService:
             "success": True,
             "topic": topic or "studio",
             "prompt": f"{product_label} | {scene_prompt}",
+            "effect_prompt": scene_prompt,
             "input_image_url": product_url,
             "result_image_url": result_url,
             "input_params": {
@@ -465,20 +578,36 @@ class DemoCacheService:
             },
         }
 
-    async def _generate_room_redesign(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
-        """Generate a room redesign example on-demand."""
+    async def _generate_room_redesign(
+        self,
+        provider,
+        TaskType,
+        topic: Optional[str],
+        input_image_url: Optional[str] = None,
+        effect_prompt: Optional[str] = None,
+    ) -> Optional[Dict]:
+        """Generate a room redesign example on-demand.
+
+        Uses the caller-provided `input_image_url` (the pregenerated room the
+        user picked) and `effect_prompt` (the style they chose) when present;
+        falls back to the 4 curated Unsplash rooms and a default modern prompt.
+        """
         room_urls = {
             "living_room": "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800",
             "bedroom": "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800",
             "kitchen": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800",
             "bathroom": "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800",
         }
-        room_type = topic if topic in room_urls else random.choice(list(room_urls.keys()))
-        room_url = room_urls[room_type]
+        if input_image_url:
+            room_url = input_image_url
+            room_type = topic or "user_room"
+        else:
+            room_type = topic if topic in room_urls else random.choice(list(room_urls.keys()))
+            room_url = room_urls[room_type]
 
-        style_prompt = "modern minimalist style, clean lines, neutral colors, photorealistic interior design, 8K"
+        style_prompt = effect_prompt or "modern minimalist style, clean lines, neutral colors, photorealistic interior design, 8K"
 
-        logger.info(f"[DemoCache] Room redesign: I2I transform...")
+        logger.info(f"[DemoCache] Room redesign: I2I transform (style={topic or 'custom'})...")
         result = await provider.route(
             TaskType.I2I,
             {"image_url": room_url, "prompt": style_prompt, "strength": 0.65},
@@ -494,32 +623,48 @@ class DemoCacheService:
             "success": True,
             "topic": room_type,
             "prompt": style_prompt,
+            "effect_prompt": style_prompt,
             "input_image_url": room_url,
             "result_image_url": result_url,
         }
 
-    async def _generate_short_video(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
-        """Generate a short video example on-demand."""
+    async def _generate_short_video(
+        self,
+        provider,
+        TaskType,
+        topic: Optional[str],
+        input_image_url: Optional[str] = None,
+        effect_prompt: Optional[str] = None,
+    ) -> Optional[Dict]:
+        """Generate a short video example on-demand.
+
+        When `input_image_url` is given we skip the T2I stage and go straight
+        to I2V on the user-picked pregenerated frame. `effect_prompt` becomes
+        the motion/style prompt passed to the I2V provider.
+        """
         prompts = {
             "product_showcase": "Cinematic close-up of bubble milk tea being poured, tapioca pearls swirling, 4K",
             "brand_intro": "Cozy drink shop interior, barista preparing beverage, warm lighting, brand story",
             "tutorial": "Step by step bubble tea preparation, adding tapioca and milk, instruction video",
             "promo": "Buy one get one free drink promotion, two colorful beverages, festive graphics",
         }
-        prompt = prompts.get(topic, random.choice(list(prompts.values())))
+        prompt = effect_prompt or prompts.get(topic, random.choice(list(prompts.values())))
 
-        # Step 1: T2I
-        logger.info(f"[DemoCache] Short video: generating source image...")
-        t2i = await provider.route(TaskType.T2I, {"prompt": prompt, "width": 1024, "height": 1024})
-        if not t2i.get("success"):
-            return {"success": False}
+        # Step 1: Source frame — reuse the user-picked pregenerated frame when
+        # present; otherwise T2I a showcase frame from the preset prompt.
+        if input_image_url:
+            source_url = input_image_url
+        else:
+            logger.info(f"[DemoCache] Short video: generating source image...")
+            t2i = await provider.route(TaskType.T2I, {"prompt": prompt, "width": 1024, "height": 1024})
+            if not t2i.get("success"):
+                return {"success": False}
+            source_url = t2i.get("output", {}).get("image_url")
+            if not source_url:
+                return {"success": False}
 
-        source_url = t2i.get("output", {}).get("image_url")
-        if not source_url:
-            return {"success": False}
-
-        # Step 2: I2V
-        logger.info(f"[DemoCache] Short video: generating video from image...")
+        # Step 2: I2V — animate the chosen frame with the chosen motion prompt.
+        logger.info(f"[DemoCache] Short video: I2V on {'user frame' if input_image_url else 'T2I frame'}...")
         i2v = await provider.route(TaskType.I2V, {"image_url": source_url, "prompt": prompt})
         if not i2v.get("success"):
             return {"success": False}
@@ -532,11 +677,18 @@ class DemoCacheService:
             "success": True,
             "topic": topic or "product_showcase",
             "prompt": prompt,
+            "effect_prompt": prompt,
             "input_image_url": source_url,
             "result_video_url": video_url,
         }
 
-    async def _generate_pattern(self, provider, TaskType, topic: Optional[str]) -> Optional[Dict]:
+    async def _generate_pattern(
+        self,
+        provider,
+        TaskType,
+        topic: Optional[str],
+        effect_prompt: Optional[str] = None,
+    ) -> Optional[Dict]:
         """Generate a pattern example on-demand."""
         prompts = {
             "seamless": "Elegant floral pattern for packaging, rose and navy, seamless tile",
@@ -545,7 +697,7 @@ class DemoCacheService:
             "abstract": "Marble texture pattern for cosmetics packaging, gold veins",
             "traditional": "Chinese cloud pattern, red and gold, auspicious design",
         }
-        prompt = prompts.get(topic, random.choice(list(prompts.values())))
+        prompt = effect_prompt or prompts.get(topic, random.choice(list(prompts.values())))
         full_prompt = f"Seamless pattern design, {prompt}, tileable, high quality, 8K"
 
         logger.info(f"[DemoCache] Pattern: generating...")
@@ -570,17 +722,20 @@ class DemoCacheService:
         TaskType,
         topic: Optional[str],
         product_id: Optional[str] = None,
+        input_image_url: Optional[str] = None,
     ) -> Optional[Dict]:
         """
-        Generate a virtual try-on example on-demand using the frozen curated
-        model + garment photos from GCS. `topic` is the clothing category
-        (tshirt/dress/jacket/blouse/sweater/coat). `product_id` carries the
-        model_id (female-1..3 / male-1..3) — we overload the name since the
-        on-demand endpoint only exposes one extra param.
+        Generate a virtual try-on example on-demand.
+
+        `input_image_url` (when provided) is the garment image the user picked
+        from the pregenerated input library; that replaces the curated garment
+        so the result reflects the user's choice. `product_id` is the model
+        selection (female-1..3 / male-1..3) and `topic` is the garment
+        category used only when no explicit input URL is given.
 
         Try-on has NO MCP path — we call PiAPI's REST `kling ai_try_on`
         directly via the same client the live /tools/try-on endpoint uses.
-        Result is persisted to Material DB so the next visitor click hits cache.
+        Result is persisted to Material DB so the next identical request hits cache.
         """
         from scripts.services.piapi_client import PiAPIClient
         import os
@@ -609,21 +764,26 @@ class DemoCacheService:
         model_id = product_id if product_id in MODELS else "female-1"
         model = MODELS[model_id]
 
-        # Resolve garment from topic; fall back to tshirt if unknown
-        garment_key = topic if topic in GARMENTS else "tshirt"
-        garment = GARMENTS[garment_key]
-
-        # Enforce gender restriction
-        if garment["female_only"] and model["gender"] == "male":
-            logger.info(
-                f"[DemoCache] Try-On: {garment_key} is female-only, "
-                f"model={model_id} is male — falling back to tshirt"
-            )
-            garment_key = "tshirt"
-            garment = GARMENTS["tshirt"]
+        # Resolve garment: explicit user-picked URL wins, else map `topic` to
+        # the curated library, else default to tshirt.
+        if input_image_url:
+            garment_key = topic or "user"
+            garment = {"name": "user garment", "url": input_image_url, "female_only": False}
+        else:
+            garment_key = topic if topic in GARMENTS else "tshirt"
+            garment = GARMENTS[garment_key]
+            # Enforce gender restriction only when using the curated library.
+            if garment["female_only"] and model["gender"] == "male":
+                logger.info(
+                    f"[DemoCache] Try-On: {garment_key} is female-only, "
+                    f"model={model_id} is male — falling back to tshirt"
+                )
+                garment_key = "tshirt"
+                garment = GARMENTS["tshirt"]
 
         logger.info(
-            f"[DemoCache] Try-On: model={model_id} garment={garment_key}"
+            f"[DemoCache] Try-On: model={model_id} garment={garment_key} "
+            f"(user_upload={'yes' if input_image_url else 'no'})"
         )
 
         piapi = PiAPIClient(api_key=os.getenv("PIAPI_KEY", ""))
@@ -663,15 +823,19 @@ class DemoCacheService:
         topic: Optional[str],
         product_id: Optional[str] = None,
         language: Optional[str] = None,
+        input_image_url: Optional[str] = None,
+        effect_prompt: Optional[str] = None,
     ) -> Optional[Dict]:
         """
         Generate an AI avatar example on-demand.
 
-        `product_id` → avatar_id (female-1..3 / male-1..3). Picks the correct
-        frozen portrait so the gender the visitor chose is honored.
-        `language`   → zh-TW or en. Picks the right script + TTS language.
-        `topic`      → script category (spokesperson / product_intro / etc.),
-                       optional — defaults to spokesperson.
+        `input_image_url` (when provided) is the headshot the user picked from
+        the pregenerated avatar library; `effect_prompt` is the script the
+        user chose (or custom text). Curated defaults are used when either
+        is missing.
+        `product_id` → avatar_id (female-1..3 / male-1..3).
+        `language`   → zh-TW or en.
+        `topic`      → script category (spokesperson / product_intro / etc.).
         """
         # Dedicated head-and-shoulders portraits for Kling Avatar (full-body
         # try-on models don't pass Kling's face detector — "failed to freeze
@@ -701,11 +865,11 @@ class DemoCacheService:
         }
 
         resolved_avatar_id = product_id if product_id in AVATAR_URLS else "female-1"
-        image_url = AVATAR_URLS[resolved_avatar_id]
+        image_url = input_image_url or AVATAR_URLS[resolved_avatar_id]
 
         resolved_language = language if language in ("zh-TW", "en") else "zh-TW"
         resolved_topic = topic if (topic, resolved_language) in SCRIPTS else "spokesperson"
-        script = SCRIPTS[(resolved_topic, resolved_language)]
+        script = effect_prompt or SCRIPTS[(resolved_topic, resolved_language)]
 
         logger.info(
             f"[DemoCache] AI Avatar: avatar={resolved_avatar_id} lang={resolved_language} "
@@ -758,8 +922,15 @@ class DemoCacheService:
         result_image_url: Optional[str] = None,
         result_video_url: Optional[str] = None,
         input_params: Optional[Dict] = None,
+        cache_effect_or_topic: Optional[str] = None,
+        cache_input_url: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Store an on-demand generated result into Material DB and return as dict."""
+        """Store an on-demand generated result into Material DB and return as dict.
+
+        `cache_effect_or_topic` / `cache_input_url` pin the lookup_hash to the
+        caller's request identity (the values passed to `get_or_generate`), so
+        a repeat request with the same (input, effect) pair hits this row.
+        """
         try:
             # Resolve tool_type to enum
             tt = tool_type
@@ -767,9 +938,16 @@ class DemoCacheService:
                 tt_lower = tool_type.lower()
                 tt = _TOOL_TYPE_MAP.get(tt_lower, tool_type)
 
-            lookup_hash = _generate_lookup_hash(
-                str(tool_type), prompt, effect_prompt, input_image_url
+            # Canonical cache key = (tool_type, effect_or_topic, input_url)
+            # pinned to whatever the caller requested, not the generator's
+            # echoed topic/prompt. This keeps store and lookup symmetric.
+            tt_key = str(tool_type.value) if hasattr(tool_type, "value") else str(tool_type)
+            key_effect = cache_effect_or_topic if cache_effect_or_topic is not None else (effect_prompt or topic)
+            key_input = cache_input_url if cache_input_url is not None else (
+                input_image_url
+                or (input_params.get("input_video_url") if input_params else None)
             )
+            lookup_hash = _request_cache_hash(tt_key, key_effect, key_input)
 
             # Check duplicate
             existing = await self.db.execute(
@@ -851,6 +1029,25 @@ class DemoCacheService:
     # ------------------------------------------------------------------
     # DB helpers
     # ------------------------------------------------------------------
+
+    async def _get_from_db_by_hash(
+        self,
+        tool_type_key: str,
+        effect_or_topic: Optional[str],
+        input_url: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Exact-pair lookup: returns the cached Material for (tool, effect|topic, input)."""
+        if not input_url:
+            return None
+        lookup_hash = _request_cache_hash(tool_type_key, effect_or_topic, input_url)
+        result = await self.db.execute(
+            select(Material).where(
+                Material.lookup_hash == lookup_hash,
+                Material.is_active == True,
+            )
+        )
+        m = result.scalars().first()
+        return self._material_to_dict(m) if m else None
 
     async def _get_from_db(
         self,

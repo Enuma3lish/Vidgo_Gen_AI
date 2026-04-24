@@ -36,7 +36,7 @@ const toolExamplePrompts = {
     { en: 'Apply marble texture for premium packaging look', zh: '將大理石紋理用於高級包裝感' },
     { en: 'Convert to embroidery style for textile business', zh: '轉換為刺繡風格，織品業用' },
     { en: 'Watercolor style for menu and flyer design', zh: '水彩風格，菜單與傳單設計' },
-    { en: 'Add metallic gold for luxury brand finish', zh: '添加金屬金效果，奢華品牌用' }
+    { en: 'Add metallic gold accents for gift packaging and seasonal campaigns', zh: '加入金屬金點綴，適合禮盒包裝與節慶活動' }
   ],
   patternSeamless: [
     { en: 'Seamless tile for packaging and wallpaper', zh: '包裝與壁紙用無縫磁磚' },

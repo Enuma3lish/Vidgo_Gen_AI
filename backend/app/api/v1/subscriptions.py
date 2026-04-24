@@ -42,6 +42,14 @@ class SubscribeRequest(BaseModel):
     plan_id: str = Field(..., description="UUID of the plan to subscribe to")
     billing_cycle: str = Field("monthly", description="'monthly' or 'yearly'")
     payment_method: str = Field("paddle", description="'paddle' or 'ecpay'")
+    action: Optional[str] = Field(
+        None,
+        description=(
+            "Optional admin action. Pass 'refresh' alongside superuser auth "
+            "to re-grant monthly credits on the current plan. Omitted or "
+            "non-admin callers get the default subscribe behaviour."
+        ),
+    )
 
 
 class SubscribeResponse(BaseModel):
@@ -92,6 +100,9 @@ class CancelResponse(BaseModel):
     status: Optional[str] = None
     refund_processed: bool = False
     refund_amount: Optional[float] = None
+    refund_requires_manual: bool = False
+    invoice_voided: Optional[bool] = None
+    invoice_void_required_manual: bool = False
     active_until: Optional[str] = None
     work_retention_until: Optional[str] = None  # 7-day work download deadline
     message: Optional[str] = None
@@ -125,14 +136,35 @@ DEFAULT_VIDGO_PLANS = [
 
 
 async def ensure_vidgo_plans(db: AsyncSession) -> None:
-    """Ensure default VidGo plans exist so pricing page always shows plans with prices."""
-    r = await db.execute(select(Plan).limit(1))
-    if r.scalar_one_or_none() is not None:
-        return
+    """
+    Ensure every plan in DEFAULT_VIDGO_PLANS exists.
+
+    Previous implementation bailed out if ANY plan was already in the DB,
+    which meant that databases seeded before a new plan was added (e.g.
+    Standard @ 399 TWD) would never backfill. That caused the pricing page
+    to miss plans on prod. Switch to per-name upsert so adding a new plan
+    to DEFAULT_VIDGO_PLANS is enough to make it appear after the next
+    request to /plans.
+    """
+    existing_result = await db.execute(select(Plan))
+    existing_by_name = {p.name: p for p in existing_result.scalars().all()}
+
+    added = 0
     for data in DEFAULT_VIDGO_PLANS:
+        name = data["name"]
+        if name in existing_by_name:
+            # Keep an existing row as-is — admin may have customized prices.
+            # Only touch if it was explicitly deactivated by accident.
+            existing = existing_by_name[name]
+            if not existing.is_active:
+                existing.is_active = True
+            continue
         plan = Plan(**data)
         db.add(plan)
-    await db.commit()
+        added += 1
+
+    if added:
+        await db.commit()
 
 
 @router.get("/plans", response_model=List[PlanInfo])
@@ -239,13 +271,25 @@ async def subscribe_to_plan(
         logger.info("ECPay not configured — falling back to mock mode")
         force_skip = True
 
+    # Admin override: superusers always activate directly. Without this, an
+    # admin trying to change plans on prod gets stuck in the payment flow
+    # (ECPay/Paddle redirect) even though they never need to actually pay —
+    # which blocks all internal QA / plan experiments. The audit trail still
+    # records the transaction via _activate_subscription_directly.
+    if getattr(current_user, "is_superuser", False):
+        logger.info(
+            f"[subscribe] superuser {current_user.email} — bypassing payment"
+        )
+        force_skip = True
+
     result = await subscription_service.subscribe(
         db=db,
         user_id=current_user.id,
         plan_id=plan_uuid,
         billing_cycle=request.billing_cycle,
         payment_method=request.payment_method,
-        skip_payment=force_skip  # Force skip when no payment provider available
+        skip_payment=force_skip,  # Force skip when no payment provider available
+        action=request.action,
     )
 
     if not result.get("success"):
@@ -299,12 +343,16 @@ async def subscribe_directly(
 
 
 @router.get("/status", response_model=SubscriptionStatusResponse)
+@router.get("/current", response_model=SubscriptionStatusResponse)
 async def get_subscription_status(
     current_user: User = Depends(deps.get_current_active_user),
     db: AsyncSession = Depends(deps.get_db)
 ):
     """
     Get current subscription status.
+
+    Also available as `/subscriptions/current` (alias) for frontends that
+    follow REST naming conventions.
 
     Returns:
     - Subscription details (plan, dates, status)
@@ -438,14 +486,18 @@ async def list_invoices(
     db: AsyncSession = Depends(deps.get_db)
 ):
     """
-    List paid orders (invoices) for the current user.
+    List billable orders (invoices) for the current user, most recent first.
 
-    Returns orders with status=paid, most recent first.
-    Used by Dashboard > Invoices page.
+    Includes both paid orders (real payments) and complimentary orders
+    (direct activations used for admin/QA flows) so the dashboard and
+    cancellation flow have a consistent audit trail (VG-BUG-D).
     """
     result = await db.execute(
         select(Order)
-        .where(Order.user_id == current_user.id, Order.status == "paid")
+        .where(
+            Order.user_id == current_user.id,
+            Order.status.in_(["paid", "complimentary"]),
+        )
         .order_by(Order.paid_at.desc().nullslast(), Order.created_at.desc())
         .limit(limit)
     )
@@ -522,15 +574,54 @@ async def get_invoice_pdf(
 
 @router.get("/plan-features")
 async def get_plan_features(
+    plan_id: Optional[str] = Query(
+        None,
+        description=(
+            "UUID of a plan to preview. Omit to get the current user's "
+            "active plan features."
+        ),
+    ),
     current_user: User = Depends(deps.get_current_active_user),
     db: AsyncSession = Depends(deps.get_db)
 ):
     """
-    Get current user's plan features for frontend UI gating.
+    Return plan feature flags for frontend UI gating.
 
-    Returns plan-specific feature flags so the frontend can show/hide
-    features based on the user's plan level.
+    When `plan_id` is supplied the endpoint previews THAT plan's features so
+    the frontend can render comparison tables before upgrade (VG-BUG-F).
+    Omitting `plan_id` returns the caller's current plan features.
     """
+    # Plan preview mode — look up the requested plan directly, no subscription
+    # check. Makes upgrade-compare UI possible.
+    if plan_id:
+        try:
+            plan_uuid = UUID(plan_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid plan ID format")
+        plan = await db.get(Plan, plan_uuid)
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        return {
+            "success": True,
+            "has_plan": True,
+            "preview": True,
+            "plan_name": plan.name,
+            "plan_type": plan.plan_type,
+            "features": {
+                "max_resolution": plan.max_resolution or "720p",
+                "has_watermark": plan.has_watermark if plan.has_watermark is not None else True,
+                "can_use_effects": plan.can_use_effects or False,
+                "batch_processing": plan.feature_batch_processing or False,
+                "custom_styles": plan.feature_custom_styles or False,
+                "priority_queue": plan.priority_queue or False,
+                "api_access": plan.api_access or False,
+            },
+            "monthly_credits": plan.monthly_credits or 0,
+            "weekly_credits": plan.weekly_credits or 0,
+            "price_monthly": float(plan.price_monthly) if plan.price_monthly else 0,
+            "price_yearly": float(plan.price_yearly) if plan.price_yearly else 0,
+        }
+
     from app.api.deps import get_user_plan_features
     features = await get_user_plan_features(current_user, db)
 

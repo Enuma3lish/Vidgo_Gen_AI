@@ -15,7 +15,10 @@ const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const isZh = computed(() => locale.value.startsWith('zh'))
 
-// Demo mode
+// Demo mode. `inputLibrary` backs the garment picker via
+// `inputLibraryClothingItems` below. `loadEffectCatalog` is called in mount
+// to warm the composable state; its catalog ref is not consumed in this
+// view, so we don't bind it here (vue-tsc flags unused binds as errors).
 const {
   isDemoUser,
   canUseCustomInputs,
@@ -25,7 +28,10 @@ const {
   tryPrompts,
   dbEmpty,
   resolveDemoTemplateResultUrl,
-  generateOnDemand
+  generateOnDemand,
+  loadInputLibrary,
+  inputLibrary,
+  loadEffectCatalog,
 } = useDemoMode()
 
 // State
@@ -130,8 +136,28 @@ const fallbackClothingItems = computed(() => {
   }))
 })
 
-// Display items: use DB items if available, otherwise fallback from try_prompts, then STATIC_CLOTHING
+// Pregenerated garment library (Vertex Imagen → GCS). Rows are input-only
+// (null result URLs); the try-on result is resolved per click via cache-
+// through against the picked (garment, model) pair.
+const inputLibraryClothingItems = computed(() => {
+  return inputLibrary.value
+    .filter((item: any) => item.input_image_url)
+    .map((item: any) => {
+      const params = item.input_params || {}
+      return {
+        id: item.id,
+        name: isZh.value ? (item.prompt || item.topic) : (item.prompt || item.topic),
+        preview: item.input_image_url as string,
+        clothingType: item.topic || params.clothing_type || 'general',
+        genderRestriction: params.gender_restriction || null,
+      }
+    })
+})
+
+// Display items: Vertex input library first, then DB finished-example
+// inputs, then try_prompts fallback, then static Unsplash.
 const displayClothingItems = computed(() => {
+  if (inputLibraryClothingItems.value.length > 0) return inputLibraryClothingItems.value
   if (demoClothingItems.value.length > 0) return demoClothingItems.value
   if (fallbackClothingItems.value.length > 0) return fallbackClothingItems.value
   // Last resort: static clothing images
@@ -173,7 +199,14 @@ const STATIC_CLOTHING = [
 
 // Load demo presets on mount
 onMounted(async () => {
-  await loadDemoTemplates('try_on')
+  await Promise.all([
+    loadDemoTemplates('try_on'),
+    // Pregenerated garment inputs (Vertex Imagen → GCS) and garment-category
+    // effect catalog so the picker's (input × effect) pair matches the
+    // backend's lookup_hash key.
+    loadInputLibrary('try_on'),
+    loadEffectCatalog('try_on', locale.value),
+  ])
 
   // Load curated style templates for try-on scenes
   try {
@@ -256,8 +289,10 @@ async function generateTryOn() {
       // the garment category via topic so the backend picks the right pair.
       const garmentTopic = (demoTemplates.value.find(t => (t as any).input_params?.clothing_id === selectedClothingId.value) as any)?.topic
       uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成（約 30-60 秒）...' : 'Generating in real-time (30-60s)...')
+      const pickedGarment = (demoTemplates.value.find((t: any) => t.input_params?.clothing_id === selectedClothingId.value) as any)?.input_image_url
       const onDemandUrl = await generateOnDemand('try_on', garmentTopic, {
         product_id: selectedModel.value,
+        input_image_url: pickedGarment || clothingImage.value,
       })
       if (onDemandUrl) {
         resultImage.value = onDemandUrl

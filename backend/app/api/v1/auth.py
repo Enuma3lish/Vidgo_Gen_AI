@@ -3,6 +3,7 @@ Authentication API endpoints with email verification support.
 """
 from datetime import datetime, timedelta, timezone
 from typing import Any
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,7 @@ import redis.asyncio as redis
 
 settings = get_settings()
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # Redis client for verification service
@@ -77,7 +79,7 @@ async def login(
     if not user.email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email before logging in. Check your inbox for the verification link."
+            detail="Please verify your email before logging in. Check your inbox for the 6-digit verification code."
         )
 
     # Check if user is active
@@ -277,15 +279,38 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    # Send 6-digit verification code
+    # Send 6-digit verification code.
+    # IMPORTANT: do NOT silently swallow send failures. If SMTP is broken or
+    # the provider throttled us, the user will never receive the code — and
+    # login enforces email_verified, so they become a zombie account. Log
+    # the failure loudly server-side and surface it in the response so the
+    # frontend can prompt "try resend" instead of just "check your email".
     redis_client = await get_redis_client()
     verify_service = EmailVerificationService(db, redis_client, email_service)
-    success, message = await verify_service.send_verification_code(
-        user.email,
-        str(user.id)
-    )
-    if redis_client:
-        await redis_client.close()
+    try:
+        email_success, email_message = await verify_service.send_verification_code(
+            user.email,
+            str(user.id)
+        )
+    except Exception as e:
+        logger.exception(f"[register] verification email send crashed for {user.email}: {e}")
+        email_success, email_message = False, f"crash: {e}"
+    finally:
+        if redis_client:
+            await redis_client.close()
+
+    if not email_success:
+        logger.error(
+            f"[register] verification email FAILED for {user.email}: {email_message}. "
+            f"User id={user.id} was created but cannot log in until email is verified. "
+            f"Check SMTP_HOST/SMTP_USER/SMTP_PASSWORD and provider quotas."
+        )
+        return MessageResponse(
+            message=(
+                "Account created, but we could not send the verification code right now. "
+                "Please use the resend option, or contact support if the problem persists."
+            )
+        )
 
     return MessageResponse(
         message="Registration successful! Please check your email for the 6-digit verification code."
@@ -525,6 +550,7 @@ async def get_current_user_profile(
         "referral_code": current_user.referral_code,
         "referral_count": current_user.referral_count or 0,
         "plan_type": plan_type,
+        "current_plan_id": current_user.current_plan_id,
         "created_at": current_user.created_at,
         "updated_at": current_user.updated_at,
         "last_login_at": current_user.last_login_at,

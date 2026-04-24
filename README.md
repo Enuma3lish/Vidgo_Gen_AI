@@ -468,6 +468,24 @@ SECRET_KEY=your-secret-key-here
 # Email (dev uses Mailpit)
 SMTP_HOST=mailpit
 SMTP_PORT=1025
+
+# Gmail SMTP on GCP Cloud Run
+# Use a Gmail App Password, not your normal account password.
+# For STARTTLS on port 587:
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USER=your-account@gmail.com
+# SMTP_PASSWORD=your-16-char-app-password
+# SMTP_TLS=true
+# SMTP_SSL=false
+# SMTP_FROM_EMAIL=your-account@gmail.com   # or a verified Gmail alias
+# SMTP_FROM_NAME=VidGo
+# SMTP_TIMEOUT_SECONDS=15
+#
+# For implicit SSL on port 465 instead:
+# SMTP_PORT=465
+# SMTP_TLS=false
+# SMTP_SSL=true
 ```
 
 ### MCP Server Setup

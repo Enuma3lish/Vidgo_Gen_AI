@@ -37,6 +37,34 @@ export interface DemoTemplate {
   input_params?: Record<string, any>
 }
 
+/**
+ * A pregenerated INPUT (not a finished example) that the user picks as the
+ * source asset. Returned by GET /api/v1/demo/inputs/{tool_type} — rows live
+ * in Material DB with `input_params.is_input_library = true` and null
+ * result URLs.
+ */
+export interface InputLibraryItem {
+  id: string
+  topic: string
+  prompt: string
+  input_image_url?: string | null
+  input_video_url?: string | null
+  input_params?: Record<string, any>
+}
+
+/**
+ * A per-tool effect the user picks. `prompt` is the string sent as
+ * `effect_prompt` to the runtime endpoint, which uses it as part of the
+ * cache key. Returned by GET /api/v1/demo/effects/{tool_type}.
+ */
+export interface EffectCatalogItem {
+  id: string
+  name: string
+  name_zh?: string
+  prompt?: string | null
+  category?: string
+}
+
 export interface DemoPresetResult {
   success: boolean
   preset_id: string
@@ -67,6 +95,19 @@ export function useDemoMode() {
   const tryPrompts = ref<Array<{ id: string; topic: string; prompt: string }>>([])
   const dbEmpty = ref(false)
 
+  // Pregenerated input library + per-tool effect catalog for the
+  // (input × effect) picker flow. These are distinct from `demoTemplates`,
+  // which holds finished example rows; inputs have null result URLs.
+  const inputLibrary = ref<InputLibraryItem[]>([])
+  const isLoadingInputLibrary = ref(false)
+  const effectCatalog = ref<EffectCatalogItem[]>([])
+  const isLoadingEffectCatalog = ref(false)
+
+  const hasPaidPlan = computed(() => {
+    const user = authStore.user
+    return Boolean(user?.plan_type && user.plan_type !== 'demo' && user.plan_type !== 'free')
+  })
+
   /**
    * PRESET-ONLY MODE: Demo user check
    * A user is a demo user if they have no paid plan AND no active subscription.
@@ -74,15 +115,16 @@ export function useDemoMode() {
   const isDemoUser = computed(() => {
     const user = authStore.user
     if (!user) return true // No user = demo
-    
+
     // If subscription API confirmed active subscription, user is NOT demo
     if (hasSubscription.value) return false
-    
-    // Check if user has a non-demo plan from user profile
-    const hasPlan = user.plan_type && user.plan_type !== 'demo' && user.plan_type !== 'free'
-    
-    // Simple check: if user has a paid plan, they are NOT a demo user
-    return !hasPlan
+
+    // Do not trust cached user state until the current session has been
+    // validated. Optional-auth tool endpoints silently downgrade invalid
+    // tokens to demo mode, so optimistic paid gating causes UI/API mismatch.
+    if (!subscriptionChecked.value) return true
+
+    return !hasPaidPlan.value
   })
 
   /**
@@ -112,7 +154,7 @@ export function useDemoMode() {
    * Fetch subscription status for authenticated users
    */
   async function checkSubscription() {
-    if (!authStore.isAuthenticated) {
+    if (!authStore.accessToken) {
       subscriptionChecked.value = true
       hasSubscription.value = false
       return
@@ -120,6 +162,12 @@ export function useDemoMode() {
 
     isLoadingSubscription.value = true
     try {
+      const user = await authStore.fetchUser()
+      if (!user) {
+        hasSubscription.value = false
+        return
+      }
+
       const status = await subscriptionApi.getStatus()
       hasSubscription.value = status.has_subscription
     } catch (error) {
@@ -222,16 +270,21 @@ export function useDemoMode() {
   /**
    * On-demand cache-through generation.
    *
-   * When a visitor clicks a preset that has no cached result yet, call this
-   * to ask the backend to generate one for real (via DemoCacheService.get_or_generate
-   * which routes through provider_router → real PiAPI/Pollo/Vertex). The
-   * generated result is persisted to Material DB so the next click hits the
-   * cache.
+   * Flow: the backend keys the Material DB lookup on
+   * (tool_type, effect_prompt_or_topic, input_image_url). When the caller
+   * passes the exact `input_image_url` the user picked from the pregenerated
+   * input library and the `effect_prompt` (or topic-mapped style) they chose,
+   * a repeat click with the same pair hits cache. On cache miss the backend
+   * calls the real provider with that same (input, effect) pair and persists
+   * the result under the same lookup_hash.
    *
-   * Returns a usable result URL on success, null on failure (in which case
-   * the caller should fall back to a "Subscribe" lock CTA — only as last
-   * resort, e.g. for tools the backend cache-through doesn't yet support
-   * like try_on / ai_avatar).
+   * Supported `extraParams` keys (all optional):
+   *   - product_id, language         — legacy filters
+   *   - input_image_url              — user-picked pregenerated input (image)
+   *   - input_video_url              — user-picked pregenerated input (video)
+   *   - effect_prompt                — user-picked effect/style/motion prompt
+   *
+   * Returns a usable result URL on success, null on failure.
    */
   async function generateOnDemand(
     toolType: string,
@@ -272,6 +325,51 @@ export function useDemoMode() {
   }
 
   /**
+   * Load the pregenerated INPUT library for a tool (the visitor's pick list).
+   *
+   * Backed by GET /api/v1/demo/inputs/{tool_type}. Rows are produced by
+   * scripts/pregenerate_inputs.py via Vertex AI (Imagen/Veo) and uploaded
+   * to GCS. Use these as the "input" half of the (input × effect) pair the
+   * user submits to the tool endpoint.
+   */
+  async function loadInputLibrary(toolType: string, topic?: string) {
+    isLoadingInputLibrary.value = true
+    try {
+      const params: Record<string, string> = {}
+      if (topic) params.topic = topic
+      const response = await apiClient.get(`/api/v1/demo/inputs/${toolType}`, { params })
+      inputLibrary.value = Array.isArray(response.data?.inputs) ? response.data.inputs : []
+    } catch (error) {
+      console.error('Failed to load input library:', error)
+      inputLibrary.value = []
+    } finally {
+      isLoadingInputLibrary.value = false
+    }
+  }
+
+  /**
+   * Load the per-tool effect prompt catalog (the user's effect menu).
+   *
+   * Backed by GET /api/v1/demo/effects/{tool_type}. Each item carries a
+   * `prompt` which gets sent as `effect_prompt` on the tool request — it
+   * is also part of the cache key the backend uses to dedupe repeats.
+   */
+  async function loadEffectCatalog(toolType: string, locale?: string) {
+    isLoadingEffectCatalog.value = true
+    try {
+      const lang = locale || (typeof navigator !== 'undefined' ? navigator.language : 'en')
+      const params = { language: lang.startsWith('zh') ? 'zh-TW' : 'en' }
+      const response = await apiClient.get(`/api/v1/demo/effects/${toolType}`, { params })
+      effectCatalog.value = Array.isArray(response.data?.effects) ? response.data.effects : []
+    } catch (error) {
+      console.error('Failed to load effect catalog:', error)
+      effectCatalog.value = []
+    } finally {
+      isLoadingEffectCatalog.value = false
+    }
+  }
+
+  /**
    * Get or create session ID for demo users
    */
   function getSessionId(): string {
@@ -302,6 +400,10 @@ export function useDemoMode() {
     isLoadingTemplates,
     tryPrompts,
     dbEmpty,
+    inputLibrary,
+    isLoadingInputLibrary,
+    effectCatalog,
+    isLoadingEffectCatalog,
 
     // Computed
     isPaid,
@@ -316,6 +418,8 @@ export function useDemoMode() {
     getDemoResultUrl,
     resolveDemoTemplateResultUrl,
     generateOnDemand,
+    loadInputLibrary,
+    loadEffectCatalog,
     getSessionId
   }
 }

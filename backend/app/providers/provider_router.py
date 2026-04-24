@@ -2,21 +2,22 @@
 Provider Router — Routes AI tasks to the correct provider.
 
 Architecture:
-1. PiAPI MCP     — PRIMARY for video tasks (I2V, T2V, V2V) + image/specialized tasks
+1. PiAPI REST    — PRIMARY for video, image, and specialized tasks
 2. Pollo.ai MCP  — BACKUP for video tasks when PiAPI fails
 3. Vertex AI     — 3rd backup for video (Veo), BACKUP for image tasks (Gemini),
                    PRIMARY for moderation/embeddings/material generation
 4. A2E           — BACKUP for avatar tasks when PiAPI fails
 5. GCS Storage   — Persists CDN URLs to Google Cloud Storage
 
-Legacy direct-API providers (PiAPI REST, Pollo REST) are kept as fallback
-when MCP servers are unavailable.
+PiAPI MCP is currently disabled because its runtime dependency tree is broken in the
+deployed image. The direct PiAPI provider remains the stable path.
 """
 from typing import Dict, Any, Optional
 from enum import Enum
 from datetime import datetime, timedelta
 import asyncio
 import logging
+import os
 
 from app.providers.piapi_mcp_provider import PiAPIMCPProvider
 from app.providers.pollo_mcp_provider import PolloMCPProvider
@@ -24,9 +25,12 @@ from app.providers.piapi_provider import PiAPIProvider
 from app.providers.vertex_ai_provider import VertexAIProvider
 from app.providers.pollo_provider import PolloProvider
 from app.providers.a2e_provider import A2EProvider
+from app.core.config import get_settings
 from app.services.gcs_storage_service import get_gcs_storage
+from app.services.email_service import email_service
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class TaskType(str, Enum):
@@ -57,38 +61,82 @@ class ProviderRouter:
     Routes AI tasks to the correct provider.
 
     Routing:
-      - Video tasks (I2V, T2V, V2V) → PiAPI MCP (primary) → Pollo MCP (backup) → Vertex AI Veo (3rd)
-      - Image tasks (T2I, I2I, Effects) → PiAPI MCP (primary) → Vertex AI Gemini (backup)
-      - Specialized (Try-On, Interior, Avatar, Upscale, 3D, TTS) → PiAPI MCP (primary)
+            - Video tasks (I2V, T2V, V2V) → PiAPI REST (primary) → Pollo MCP (backup) → Vertex AI Veo (3rd)
+            - T2I → PiAPI REST (primary) → Pollo REST (backup) → Vertex AI Imagen (tertiary)
+            - Image tasks (I2I, Effects) → PiAPI REST (primary) → Vertex AI Gemini (backup)
+            - Specialized (Try-On, Interior, Avatar, Upscale, 3D, TTS) → PiAPI REST (primary)
       - Moderation / Material Gen → Vertex AI Gemini (primary)
 
-    Fallback: If MCP servers are unavailable, falls back to direct REST providers.
+        Fallback: If the primary path is unavailable, tries the configured backups.
     """
 
     # ── Routing config ──
     # "primary" is tried first, then "backup", "tertiary", "fallback" (REST legacy)
     ROUTING_CONFIG = {
-        # Video tasks — PiAPI MCP primary, Pollo MCP backup, Vertex AI Veo 3rd
-        TaskType.I2V: {"primary": "piapi_mcp", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": "piapi"},
-        TaskType.T2V: {"primary": "piapi_mcp", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": "piapi"},
-        TaskType.V2V: {"primary": "piapi_mcp", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": "piapi"},
+        # Video tasks — PiAPI REST primary, Pollo MCP backup, Vertex AI Veo 3rd
+        TaskType.I2V: {"primary": "piapi", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": None},
+        TaskType.T2V: {"primary": "piapi", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": None},
+        TaskType.V2V: {"primary": "piapi", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": None},
 
-        # Image tasks — PiAPI MCP primary, Vertex AI Gemini backup
-        TaskType.T2I:                {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
-        TaskType.I2I:                {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
-        TaskType.EFFECTS:            {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
-        TaskType.UPSCALE:            {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
-        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
+        # Image tasks — PiAPI REST primary, Pollo T2I backup, Vertex AI Gemini tertiary
+        TaskType.T2I:                {"primary": "piapi", "backup": "pollo", "tertiary": "vertex_ai", "fallback": None},
+        TaskType.I2I:                {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
+        TaskType.EFFECTS:            {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
+        TaskType.UPSCALE:            {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
+        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
 
-        # Specialized tasks — PiAPI MCP primary
-        TaskType.INTERIOR:    {"primary": "piapi_mcp", "backup": "vertex_ai", "fallback": "piapi"},
-        TaskType.INTERIOR_3D: {"primary": "piapi_mcp", "backup": None,        "fallback": "piapi"},
-        TaskType.AVATAR:      {"primary": "piapi_mcp", "backup": "a2e",       "fallback": "piapi"},
+        # Specialized tasks — PiAPI REST primary
+        TaskType.INTERIOR:    {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
+        TaskType.INTERIOR_3D: {"primary": "piapi", "backup": None,        "fallback": None},
+        TaskType.AVATAR:      {"primary": "piapi", "backup": "a2e",       "fallback": None},
 
         # Vertex AI-only tasks
         TaskType.MODERATION:          {"primary": "vertex_ai", "backup": None, "fallback": None},
         TaskType.MATERIAL_GENERATION: {"primary": "vertex_ai", "backup": None, "fallback": None},
     }
+
+    POLLO_I2V_MODEL_IDS = {
+        "pixverse_v4.5",
+        "pixverse_v5",
+        "kling_v1.5",
+        "kling_v1_5",
+        "kling_v2",
+        "luma_ray2",
+    }
+
+    SYSTEM_FAILURE_HINTS = (
+        "internal",
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+        "server error",
+        "service unavailable",
+        "temporarily unavailable",
+        "timeout",
+        "timed out",
+        "connection",
+        "connect",
+        "unreachable",
+        "unhealthy",
+        "health check",
+        "not responding",
+        "not configured",
+        "quota",
+        "rate limit",
+        "balance",
+        "credit",
+    )
+
+    NON_ALERT_FAILURE_HINTS = (
+        "required",
+        "validation",
+        "invalid",
+        "unsupported",
+        "unknown task type",
+        "doesn't support",
+        "valueerror",
+    )
 
     def __init__(self):
         # MCP providers
@@ -106,6 +154,10 @@ class ProviderRouter:
         self._status_cache: Dict[str, Dict] = {}
         self._last_health_check: Dict[str, datetime] = {}
         self._failure_counts: Dict[str, int] = {}
+        self._last_provider_alert: Dict[str, datetime] = {}
+        self._provider_alert_cooldown = timedelta(
+            minutes=max(1, settings.PROVIDER_ALERT_COOLDOWN_MINUTES)
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # MAIN ROUTING METHOD
@@ -127,11 +179,7 @@ class ProviderRouter:
         if not config:
             raise ValueError(f"Unknown task type: {task_type}")
 
-        providers_to_try = []
-        for key in ("primary", "backup", "tertiary", "fallback"):
-            p = config.get(key)
-            if p and p not in providers_to_try:
-                providers_to_try.append(p)
+        providers_to_try = self._get_providers_for_task(task_type, params)
 
         last_error = None
         for i, provider_name in enumerate(providers_to_try):
@@ -153,6 +201,10 @@ class ProviderRouter:
                 if persist_to_gcs:
                     result = await self._persist_result_to_gcs(result, task_type)
 
+                # Normalize backend-local static paths to absolute public URLs so the
+                # frontend can load results from a separate origin like vidgo.co.
+                result = self._absolutize_local_media_urls(result)
+
                 return {
                     **result,
                     "used_backup": i > 0,
@@ -163,6 +215,13 @@ class ProviderRouter:
             except Exception as e:
                 logger.error(f"Provider {provider_name} failed for {task_type}: {e}")
                 self._record_failure(provider_name, str(e))
+                await self._maybe_alert_provider_failure(
+                    provider_name=provider_name,
+                    task_type=task_type,
+                    error=str(e),
+                    fallback_provider=providers_to_try[i + 1] if i + 1 < len(providers_to_try) else None,
+                    request_params=params,
+                )
                 last_error = str(e)
 
         error_msg = self._get_user_friendly_error(
@@ -171,6 +230,29 @@ class ProviderRouter:
             last_error or "All providers failed",
         )
         raise Exception(error_msg)
+
+    def _get_providers_for_task(
+        self,
+        task_type: TaskType,
+        params: Dict[str, Any],
+    ) -> list[str]:
+        """Return provider order for a task, with model-aware overrides where needed."""
+        config = self.ROUTING_CONFIG[task_type]
+
+        model_id = str(params.get("model") or "").strip()
+        if task_type == TaskType.I2V and model_id in self.POLLO_I2V_MODEL_IDS:
+            # Keep PiAPI as the default entry point, but when a Pollo-native I2V
+            # model alias is requested, prefer Pollo before Vertex in the fallback
+            # chain so the request can still land on the matching model if PiAPI fails.
+            return ["piapi", "pollo", "pollo_mcp", "vertex_ai"]
+
+        providers_to_try = []
+        for key in ("primary", "backup", "tertiary", "fallback"):
+            provider_name = config.get(key)
+            if provider_name and provider_name not in providers_to_try:
+                providers_to_try.append(provider_name)
+
+        return providers_to_try
 
     # ─────────────────────────────────────────────────────────────────────────
     # GCS PERSISTENCE
@@ -195,6 +277,21 @@ class ProviderRouter:
                     output[key] = persisted_url
                 except Exception as e:
                     logger.warning(f"GCS persist failed for {key}, keeping CDN URL: {e}")
+
+        result["output"] = output
+        return result
+
+    def _absolutize_local_media_urls(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert backend-local /static media paths into public absolute URLs."""
+        output = result.get("output", {})
+        public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+        if not public_base:
+            return result
+
+        for key in ("image_url", "video_url", "audio_url", "model_url"):
+            url = output.get(key)
+            if isinstance(url, str) and url.startswith("/"):
+                output[key] = f"{public_base}{url}"
 
         result["output"] = output
         return result
@@ -398,8 +495,10 @@ class ProviderRouter:
     async def _execute_pollo(
         self, task_type: TaskType, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute on Pollo REST (legacy fallback for video)."""
-        if task_type == TaskType.I2V:
+        """Execute on Pollo REST — T2I backup + video fallback."""
+        if task_type == TaskType.T2I:
+            return await self.pollo.text_to_image(params)
+        elif task_type == TaskType.I2V:
             return await self.pollo.image_to_video(params)
         elif task_type == TaskType.T2V:
             return await self.pollo.text_to_video(params)
@@ -431,6 +530,13 @@ class ProviderRouter:
         try:
             provider_instance = self._get_provider_instance(provider)
             if provider_instance is None:
+                await self._maybe_alert_provider_failure(
+                    provider_name=provider,
+                    task_type="health_check",
+                    error="Provider instance unavailable or not configured",
+                    fallback_provider=None,
+                    request_params={},
+                )
                 return False
             is_healthy = await provider_instance.health_check()
             self._status_cache[provider] = {
@@ -438,6 +544,14 @@ class ProviderRouter:
                 "last_check": datetime.now(),
             }
             self._last_health_check[provider] = datetime.now()
+            if not is_healthy:
+                await self._maybe_alert_provider_failure(
+                    provider_name=provider,
+                    task_type="health_check",
+                    error="Provider health check reported unhealthy status",
+                    fallback_provider=None,
+                    request_params={},
+                )
             return is_healthy
         except Exception as e:
             logger.error(f"Health check failed for {provider}: {e}")
@@ -446,6 +560,13 @@ class ProviderRouter:
                 "error": str(e),
                 "last_check": datetime.now(),
             }
+            await self._maybe_alert_provider_failure(
+                provider_name=provider,
+                task_type="health_check",
+                error=f"Health check failed: {e}",
+                fallback_provider=None,
+                request_params={},
+            )
             return False
 
     async def is_piapi_healthy(self) -> bool:
@@ -487,6 +608,51 @@ class ProviderRouter:
                 "failure_count": count,
                 "last_failure": datetime.now(),
             }
+
+    def _should_alert_provider_failure(self, provider: str, error: str) -> bool:
+        if not provider:
+            return False
+
+        normalized_error = error.lower()
+        if any(token in normalized_error for token in self.NON_ALERT_FAILURE_HINTS):
+            return False
+
+        return any(token in normalized_error for token in self.SYSTEM_FAILURE_HINTS)
+
+    async def _maybe_alert_provider_failure(
+        self,
+        provider_name: str,
+        task_type: TaskType | str,
+        error: str,
+        fallback_provider: Optional[str],
+        request_params: Dict[str, Any],
+    ) -> None:
+        if not self._should_alert_provider_failure(provider_name, error):
+            return
+
+        now = datetime.now()
+        last_alert = self._last_provider_alert.get(provider_name)
+        if last_alert and now - last_alert < self._provider_alert_cooldown:
+            return
+
+        self._last_provider_alert[provider_name] = now
+
+        task_label = task_type.value if isinstance(task_type, TaskType) else str(task_type)
+
+        try:
+            await email_service.send_provider_failure_alert(
+                provider_name=provider_name,
+                task_type=task_label,
+                error=error,
+                fallback_provider=fallback_provider,
+                request_params=request_params,
+            )
+        except Exception as alert_error:
+            logger.error(
+                "Failed to send provider failure alert for %s: %s",
+                provider_name,
+                alert_error,
+            )
 
     def _get_user_friendly_error(
         self,

@@ -84,9 +84,6 @@ onUnmounted(() => {
                   <RouterLink to="/tools/short-video" class="dropdown-item" @click="toolsOpen = false">
                     <span>🎬</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.fashionReels.name') }}</span>
                   </RouterLink>
-                  <RouterLink to="/tools/avatar" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🎭</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.productAvatars.name') }}</span>
-                  </RouterLink>
                 </div>
                 <!-- E-commerce AI Column -->
                 <div>
@@ -100,9 +97,6 @@ onUnmounted(() => {
                   <RouterLink to="/tools/upscale" class="dropdown-item" @click="toolsOpen = false">
                     <span>🔍</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.hdUpscale.name') }}</span>
                   </RouterLink>
-                  <RouterLink to="/tools/pattern-generate" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🎨</span><span class="font-medium" style="color: #e8e8f0;">Pattern Design</span>
-                  </RouterLink>
                 </div>
                 <!-- Design & Effects Column -->
                 <div>
@@ -110,8 +104,8 @@ onUnmounted(() => {
                   <RouterLink to="/tools/room-redesign" class="dropdown-item" @click="toolsOpen = false">
                     <span>🏠</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.roomRedesign.name') }}</span>
                   </RouterLink>
-                  <RouterLink to="/tools/video-transform" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🎞️</span><span class="font-medium" style="color: #e8e8f0;">Video Style Transfer</span>
+                  <RouterLink to="/gallery" class="dropdown-item" @click="toolsOpen = false">
+                    <span>🖼️</span><span class="font-medium" style="color: #e8e8f0;">{{ t('gallery.title') }}</span>
                   </RouterLink>
                 </div>
               </div>
@@ -170,7 +164,6 @@ onUnmounted(() => {
         <div class="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider" style="color: #6b6b8a;">{{ t('nav.tools') }}</div>
         <RouterLink to="/tools/try-on" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">👗 {{ t('lp.allTools.tryOn.name') }}</RouterLink>
         <RouterLink to="/tools/short-video" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🎬 {{ t('lp.allTools.fashionReels.name') }}</RouterLink>
-        <RouterLink to="/tools/avatar" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🎭 {{ t('lp.allTools.productAvatars.name') }}</RouterLink>
         <RouterLink to="/tools/product-scene" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">📸 {{ t('lp.allTools.productAnyshoot.name') }}</RouterLink>
         <RouterLink to="/tools/background-removal" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">✂️ {{ t('lp.allTools.bgRemoval.name') }}</RouterLink>
         <RouterLink to="/tools/upscale" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🔍 {{ t('lp.allTools.hdUpscale.name') }}</RouterLink>

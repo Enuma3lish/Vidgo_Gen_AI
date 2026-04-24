@@ -291,7 +291,18 @@
       "Bash(gsutil -m cp /tmp/vidgo-avatar-candidates/*.png gs://vidgo-media-vidgo-ai/static/avatars/)",
       "Bash(wc -l docs/*.md)",
       "Bash(export PUBLIC_APP_URL=https://api.vidgo.co)",
-      "Bash(.venv/bin/python -c ':*)"
+      "Bash(.venv/bin/python -c ':*)",
+      "Bash(dig vidgo.co +short)",
+      "Bash(bash gcp/deploy.sh)",
+      "Bash(tee /tmp/vidgo-deploy.log)",
+      "Bash(bash gcp/deploy.sh --from 9)",
+      "Bash(tee /tmp/vidgo-deploy-resume.log)",
+      "Bash(gcloud artifacts *)",
+      "Bash(/usr/bin/curl -sS -X POST https://api.vidgo.co/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"vidgo168@gmail.com\",\"password\":\"Vidgo96003146\"}' --max-time 15 -w '\\\\nHTTP: %{http_code}\\\\n')",
+      "Bash(/usr/bin/curl -sS -X POST https://api.vidgo.co/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"qaz0978005418@gmail.com\",\"password\":\"qaz129946858\"}' --max-time 15 -w '\\\\nHTTP: %{http_code}\\\\n')"
+    ],
+    "additionalDirectories": [
+      "/private/tmp"
     ]
   }
 }

@@ -19,11 +19,11 @@ const perPage = 20
 
 const filters = [
   { id: 'all', label: '全部' },
-  { id: 'background_removal', label: '去背' },
-  { id: 'product_scene', label: '商品場景' },
-  { id: 'try_on', label: '虛擬試穿' },
-  { id: 'room_redesign', label: '室內設計' },
-  { id: 'short_video', label: '短影音' },
+  { id: 'background_removal', label: '智能去背（基礎）' },
+  { id: 'product_scene', label: 'AI 商品情境攝影棚' },
+  { id: 'try_on', label: 'AI 模特換裝' },
+  { id: 'room_redesign', label: '毛胚屋/線稿秒渲染' },
+  { id: 'short_video', label: '商品動態短影音（圖生影片）' },
   { id: 'ai_avatar', label: 'AI 頭像' },
   { id: 'pattern_generate', label: '圖案設計' },
   { id: 'effect', label: '風格特效' }
@@ -127,11 +127,11 @@ function getExpiryColor(work: UserGeneration): string {
 /** 取得工具類型的中文名稱 */
 function getToolName(toolType: string): string {
   const names: Record<string, string> = {
-    background_removal: '去背工具',
-    product_scene: '商品場景',
-    try_on: '虛擬試穿',
-    room_redesign: '室內設計',
-    short_video: '短影音',
+    background_removal: '智能去背（基礎）',
+    product_scene: 'AI 商品情境攝影棚',
+    try_on: 'AI 模特換裝',
+    room_redesign: '毛胚屋/線稿秒渲染',
+    short_video: '商品動態短影音（圖生影片）',
     ai_avatar: 'AI 頭像',
     pattern_generate: '圖案設計',
     effect: '風格特效',

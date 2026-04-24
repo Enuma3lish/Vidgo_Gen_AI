@@ -32,18 +32,6 @@ const tools = [
     icon: '🎬',
     credits: 25,
     route: '/tools/image-to-video'
-  },
-  {
-    key: 'videoTransform',
-    icon: '🎨',
-    credits: 30,
-    route: '/tools/video-transform'
-  },
-  {
-    key: 'productVideo',
-    icon: '📦',
-    credits: 35,
-    route: '/tools/product-video'
   }
 ]
 
@@ -51,11 +39,9 @@ const tools = [
 const videoStyles = ref<any[]>([])
 const selectedStyle = ref('anime_v5')
 const uploadedImage = ref<string | null>(null)
-const uploadedVideo = ref<string | null>(null)
 const isProcessing = ref(false)
 const result = ref<string | null>(null)
 const examples = ref<any[]>([])
-const activeTab = ref<'image' | 'video'>('image')
 
 // Default fallback styles with preview URLs
 const defaultStyles = [
@@ -153,20 +139,8 @@ function handleImageSelect(files: File[]) {
   }
 }
 
-function handleVideoSelect(files: File[]) {
-  if (!canUseCustomInputs.value) {
-    uiStore.showError(isZh.value ? '請訂閱以上傳自訂影片' : 'Please subscribe to upload custom videos')
-    return
-  }
-
-  if (files.length > 0) {
-    uploadedVideo.value = URL.createObjectURL(files[0])
-  }
-}
-
 async function generateVideo() {
-  if (activeTab.value === 'image' && !uploadedImage.value) return
-  if (activeTab.value === 'video' && !uploadedVideo.value) return
+  if (!uploadedImage.value) return
 
   isProcessing.value = true
   result.value = null
@@ -185,25 +159,14 @@ async function generateVideo() {
       return
     }
 
-    if (activeTab.value === 'image') {
-      const response = await generationApi.imageToVideo({
-        image_url: uploadedImage.value!,
-        motion_strength: 5,
-        style: selectedStyle.value
-      })
+    const response = await generationApi.imageToVideo({
+      image_url: uploadedImage.value!,
+      motion_strength: 5,
+      style: selectedStyle.value
+    })
 
-      if (response.success && response.result_url) {
-        result.value = response.result_url
-      }
-    } else {
-      const response = await generationApi.transformVideo({
-        video_url: uploadedVideo.value!,
-        style: selectedStyle.value
-      })
-
-      if (response.success && response.result_url) {
-        result.value = response.result_url
-      }
+    if (response.success && response.result_url) {
+      result.value = response.result_url
     }
   } catch (error) {
     console.error('Video generation failed:', error)
@@ -241,7 +204,7 @@ onMounted(() => {
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2 class="section-title text-center mb-12">{{ t('sections.availableTools') }}</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-1 gap-6 max-w-3xl mx-auto">
           <div
             v-for="tool in tools"
             :key="tool.key"
@@ -279,37 +242,20 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Tab Switch -->
         <div class="flex justify-center gap-4 mb-8">
-          <button
-            @click="activeTab = 'image'"
-            class="px-6 py-3 rounded-xl font-medium transition-all"
-            :class="activeTab === 'image'
-              ? 'bg-primary-500 text-white'
-              : 'bg-dark-700 text-gray-400 hover:text-white'"
-          >
+          <div class="px-6 py-3 rounded-xl font-medium bg-primary-500 text-white">
             🖼️ {{ t('topics.video.imageToVideo') }}
-          </button>
-          <button
-            @click="activeTab = 'video'"
-            class="px-6 py-3 rounded-xl font-medium transition-all"
-            :class="activeTab === 'video'
-              ? 'bg-primary-500 text-white'
-              : 'bg-dark-700 text-gray-400 hover:text-white'"
-          >
-            🎨 {{ t('topics.video.styleTransform') }}
-          </button>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <!-- Upload Section -->
           <div>
             <h3 class="text-lg font-semibold text-white mb-4">
-              {{ activeTab === 'image' ? t('common.uploadImage') : t('common.uploadVideo') }}
+              {{ t('common.uploadImage') }}
             </h3>
 
-            <!-- Image Upload -->
-            <div v-if="activeTab === 'image'">
+            <div>
               <!-- Demo Images for demo users -->
               <div v-if="isDemoUser || demoImages.length > 0" class="mb-4">
                 <p class="text-sm text-gray-400 mb-3">
@@ -357,26 +303,6 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Video Upload -->
-            <div v-else>
-              <div v-if="!canUseCustomInputs" class="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-4">
-                <p class="text-sm text-yellow-400">
-                  {{ isZh ? '示範模式下無法上傳影片。請訂閱以解鎖此功能。' : 'Video upload is disabled in demo mode. Subscribe to unlock.' }}
-                </p>
-              </div>
-
-              <div v-if="canUseCustomInputs">
-                <UploadZone
-                  accept="video/*"
-                  :hint="t('common.supportedVideoFormats')"
-                  @files-selected="handleVideoSelect"
-                />
-              </div>
-
-              <div v-if="uploadedVideo" class="mt-4">
-                <video :src="uploadedVideo" controls class="w-full rounded-xl" />
-              </div>
-            </div>
           </div>
 
           <!-- Style Selection & Actions -->
@@ -402,7 +328,7 @@ onMounted(() => {
             <!-- Generate Button -->
             <button
               @click="generateVideo"
-              :disabled="(activeTab === 'image' && !uploadedImage) || (activeTab === 'video' && !uploadedVideo) || isProcessing"
+              :disabled="!uploadedImage || isProcessing"
               class="btn-primary w-full py-4"
             >
               <span v-if="isProcessing" class="flex items-center justify-center gap-2">
@@ -414,7 +340,7 @@ onMounted(() => {
               </span>
               <span v-else class="flex items-center justify-center gap-2">
                 {{ t('common.generate') }}
-                <CreditCost :cost="activeTab === 'image' ? 25 : 30" />
+                <CreditCost :cost="25" />
               </span>
             </button>
 

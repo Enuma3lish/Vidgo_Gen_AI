@@ -47,6 +47,7 @@ TOOL_BASE_CREDITS = {
     "try_on": 15,
     "room_redesign": 10,
     "short_video": 30,
+    "video_transform": 35,
     "ai_avatar": 40,
     "pattern_generate": 8,
     "effect": 10,
@@ -74,6 +75,9 @@ TOOL_MODELS = {
         {"id": "pixverse_v5", "name": "Creative (Pixverse v5)", "name_zh": "創意 (Pixverse v5)", "credit_multiplier": 1.5},
         {"id": "kling_v2", "name": "High Quality (Kling v2)", "name_zh": "高品質 (Kling v2)", "credit_multiplier": 2},
         {"id": "luma_ray2", "name": "Cinematic (Luma Ray2)", "name_zh": "電影級 (Luma Ray2)", "credit_multiplier": 3},
+    ],
+    "video_transform": [
+        {"id": "default", "name": "Standard (Wan VACE)", "name_zh": "標準 (Wan VACE)", "credit_multiplier": 1},
     ],
     "ai_avatar": [
         {"id": "default", "name": "Standard", "name_zh": "標準", "credit_multiplier": 1},
@@ -364,6 +368,18 @@ async def _trigger_generation(
         result = await provider_router.route(
             TaskType.I2V,
             {"image_url": abs_file_url, "prompt": prompt, "model": i2v_model, "duration": 5}
+        )
+        if result.get("success"):
+            output = result.get("output", {})
+            upload.result_video_url = output.get("video_url") or output.get("url")
+
+    elif tool_type == "video_transform":
+        result = await provider_router.route(
+            TaskType.V2V,
+            {
+                "video_url": abs_file_url,
+                "prompt": prompt,
+            }
         )
         if result.get("success"):
             output = result.get("output", {})

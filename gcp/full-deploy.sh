@@ -6,15 +6,22 @@
 #   1. Preflight  — gcloud auth, project, git clean, working dir
 #   2. Infra      — bash gcp/deploy.sh  (infra + Cloud Run services)
 #   3. Admin      — seed test_user / admin account (one-shot Job)
-#   4. Pregen     — populate Material DB for all 8 tools (EXPENSIVE, prompts)
-#   5. Verify     — health + preset counts + basic smoke test
+#   4. Pregen     — pregenerate INPUT library via Vertex AI (Imagen + Veo)
+#                   → GCS → Material DB. Rows have null result_*_url; the
+#                   runtime cache-through path fills finished results per
+#                   (input, effect) pair on first click and caches them.
+#                   Typical cost: $3-10 USD. Idempotent.
+#   5. Verify     — health + input-library counts + basic smoke test
 #
 # Usage:
 #   bash gcp/full-deploy.sh                     # full run, prompts before pregen
 #   bash gcp/full-deploy.sh --skip-infra        # skip step 2 (infra already up)
-#   bash gcp/full-deploy.sh --skip-pregen       # skip step 4 (don't burn credits)
+#   bash gcp/full-deploy.sh --skip-pregen       # skip step 4 (no Vertex calls)
 #   bash gcp/full-deploy.sh --only-verify       # only run step 5
-#   bash gcp/full-deploy.sh --pregen-tool bg    # pregen a single tool
+#   bash gcp/full-deploy.sh --pregen-tool bg    # pregen inputs for a single tool
+#   bash gcp/full-deploy.sh --pregen-count 4    # inputs per topic (default 2)
+#   bash gcp/full-deploy.sh --legacy-pregen     # run old main_pregenerate.py
+#                                                 (full examples, ~\$40-75 USD)
 #   bash gcp/full-deploy.sh --yes               # non-interactive (auto-confirm)
 #
 # Env overrides (same vars as deploy.sh):
@@ -49,6 +56,8 @@ SKIP_PREGEN=false
 ONLY_VERIFY=false
 AUTO_YES=false
 PREGEN_TOOL=""
+PREGEN_COUNT=""
+LEGACY_PREGEN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -58,8 +67,10 @@ while [[ $# -gt 0 ]]; do
     --only-verify)     ONLY_VERIFY=true; shift ;;
     --yes|-y)          AUTO_YES=true;    shift ;;
     --pregen-tool)     PREGEN_TOOL="$2"; shift 2 ;;
+    --pregen-count)    PREGEN_COUNT="$2"; shift 2 ;;
+    --legacy-pregen)   LEGACY_PREGEN=true; shift ;;
     -h|--help)
-      sed -n '3,25p' "$0"
+      sed -n '3,28p' "$0"
       exit 0
       ;;
     *) echo "Unknown flag: $1" >&2; exit 2 ;;
@@ -195,6 +206,7 @@ seed_admin() {
     admin_account="$(grep -E '^ADMIN_ACCOUNT=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
     admin_password="$(grep -E '^ADMIN_PASSWORD=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
     admin_extra="$(grep -E '^ADMIN_EXTRA_ACCOUNTS=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
+    test_accounts="$(grep -E '^TEST_ACCOUNTS=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
     if [[ -n "${admin_account}" && -n "${admin_password}" ]]; then
       ok "found ADMIN_ACCOUNT + ADMIN_PASSWORD in backend/.env"
     fi
@@ -245,15 +257,28 @@ seed_admin() {
     push_secret "ADMIN_EXTRA_ACCOUNTS" "${admin_extra}"
     log "  + pushed ADMIN_EXTRA_ACCOUNTS secret"
   fi
+  if [[ -n "${test_accounts:-}" ]]; then
+    push_secret "TEST_ACCOUNTS" "${test_accounts}"
+    log "  + pushed TEST_ACCOUNTS secret"
+  fi
 
-  # 4. Deploy / update the one-shot Job
+  # 4. Build --set-secrets dynamically (only include secrets that exist)
+  local secrets="DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,ADMIN_ACCOUNT=ADMIN_ACCOUNT:latest,ADMIN_PASSWORD=ADMIN_PASSWORD:latest"
+  if [[ -n "${admin_extra:-}" ]]; then
+    secrets="${secrets},ADMIN_EXTRA_ACCOUNTS=ADMIN_EXTRA_ACCOUNTS:latest"
+  fi
+  if [[ -n "${test_accounts:-}" ]]; then
+    secrets="${secrets},TEST_ACCOUNTS=TEST_ACCOUNTS:latest"
+  fi
+
+  # 5. Deploy / update the one-shot Job
   log "Deploying one-shot Job: ${job_name}"
   gcloud run jobs deploy "${job_name}" \
     --image="${IMAGE}" \
     --region="${REGION}" \
     --project="${PROJECT_ID}" \
     --service-account="${BACKEND_SA}" \
-    --set-secrets="DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,ADMIN_ACCOUNT=ADMIN_ACCOUNT:latest,ADMIN_PASSWORD=ADMIN_PASSWORD:latest,ADMIN_EXTRA_ACCOUNTS=ADMIN_EXTRA_ACCOUNTS:latest" \
+    --set-secrets="${secrets}" \
     --task-timeout=300 \
     --max-retries=0 \
     --command="/bin/bash" \
@@ -274,19 +299,41 @@ seed_admin() {
   log "Admin login: ${admin_account} at https://${CUSTOM_DOMAIN_FRONTEND}/auth/login"
 }
 
-# ── Phase 4: Pre-generate materials (EXPENSIVE) ─────────────────────────────
+# ── Phase 4: Pre-generate INPUT library via Vertex AI ───────────────────────
+#
+# Default path: gcp/pregen-inputs.sh → scripts/pregenerate_inputs.py
+#   - Imagen T2I + Veo T2V only (NO finished-example generation).
+#   - Uploads to GCS under inputs/{tool}/{topic}/... and writes Material rows
+#     with is_input_library=true, null result_*_url.
+#   - Runtime cache-through generates per-(input, effect) results on demand
+#     and caches them under lookup_hash.
+#   - Cost: ~$3-10 USD for a full run; idempotent (re-runs skip existing).
+#
+# --legacy-pregen switches to the OLD main_pregenerate.py path (full-example
+# generation, $40-75 USD). Kept for backwards compatibility only.
 pregen_materials() {
-  step "Phase 4 / 5 — Pre-generate Material DB (EXPENSIVE)"
+  step "Phase 4 / 5 — Pregenerate INPUT library (Vertex Imagen + Veo)"
 
   if [[ "${SKIP_PREGEN}" == "true" ]]; then
     log "--skip-pregen set, skipping"
     return 0
   fi
 
-  warn "This runs main_pregenerate.py and WILL burn real PiAPI + Pollo + Vertex credits."
-  warn "Estimated cost for a full 8-tool run: \$40-75 USD."
+  if [[ "${LEGACY_PREGEN}" == "true" ]]; then
+    warn "--legacy-pregen set — running OLD main_pregenerate.py (full examples)."
+    warn "Estimated cost for a full 8-tool legacy run: \$40-75 USD."
+    bash gcp/pregen-materials.sh \
+      ${PREGEN_TOOL:+--tool "${PREGEN_TOOL}"} \
+      ${AUTO_YES:+--yes}
+    return 0
+  fi
 
-  bash gcp/pregen-materials.sh ${PREGEN_TOOL:+--tool "${PREGEN_TOOL}"} ${AUTO_YES:+--yes}
+  log "Running input-only pregen (Vertex Imagen T2I + Veo T2V)"
+  log "Estimated cost: \$3-10 USD for a full run (idempotent)."
+  bash gcp/pregen-inputs.sh \
+    ${PREGEN_TOOL:+--tool "${PREGEN_TOOL}"} \
+    ${PREGEN_COUNT:+--count "${PREGEN_COUNT}"} \
+    ${AUTO_YES:+--yes}
 }
 
 # ── Phase 5: Verify ─────────────────────────────────────────────────────────
@@ -301,27 +348,42 @@ verify() {
   [[ "${health}" != *'"status":"ok"'* ]] && die "Backend /health failed"
   ok "backend healthy"
 
-  # Preset counts for all 8 tools
-  log "Checking preset counts..."
+  # Input-library counts per tool (primary path).
+  # pattern_generate is T2I-only at runtime (no user input), so it's expected
+  # to have 0 input-library rows — we still list it for completeness.
+  log "Checking input-library counts (/api/v1/demo/inputs)..."
   local all_ok=true
   for tool in background_removal try_on ai_avatar effect product_scene room_redesign short_video pattern_generate; do
-    local resp count db_empty
-    resp="$(curl -fsS "${BACKEND_URL}/api/v1/demo/presets/${tool}" 2>&1 || echo '')"
+    local resp count
+    resp="$(curl -fsS "${BACKEND_URL}/api/v1/demo/inputs/${tool}" 2>&1 || echo '')"
     if [[ -z "${resp}" ]]; then
       printf "  %-20s ERROR\n" "${tool}" | tee -a "${LOG_FILE}"
       all_ok=false
       continue
     fi
-    count="$(echo "${resp}"    | python3 -c "import sys,json;print(json.load(sys.stdin).get('count',0))"    2>/dev/null || echo '?')"
-    db_empty="$(echo "${resp}" | python3 -c "import sys,json;print(json.load(sys.stdin).get('db_empty',False))" 2>/dev/null || echo '?')"
-    printf "  %-20s count=%-4s db_empty=%s\n" "${tool}" "${count}" "${db_empty}" | tee -a "${LOG_FILE}"
-    [[ "${count}" == "0" ]] && all_ok=false
+    count="$(echo "${resp}" | python3 -c "import sys,json;print(json.load(sys.stdin).get('count',0))" 2>/dev/null || echo '?')"
+    printf "  %-20s inputs=%s\n" "${tool}" "${count}" | tee -a "${LOG_FILE}"
+    if [[ "${tool}" != "pattern_generate" && "${count}" == "0" ]]; then
+      all_ok=false
+    fi
   done
 
   if [[ "${all_ok}" == "true" ]]; then
-    ok "All 8 tools have preset rows"
+    ok "Input library populated for all tools (pattern_generate is T2I-only by design)"
   else
-    warn "Some tools have 0 presets — re-run pregen for those tools"
+    warn "Some tools have 0 inputs — re-run: bash gcp/pregen-inputs.sh --tool <name>"
+  fi
+
+  # Also surface legacy preset counts when --legacy-pregen was used (or for
+  # back-compat data that may still be in the DB). Non-fatal.
+  if [[ "${LEGACY_PREGEN}" == "true" ]]; then
+    log "Legacy preset counts (/api/v1/demo/presets):"
+    for tool in background_removal try_on ai_avatar effect product_scene room_redesign short_video pattern_generate; do
+      local pcount
+      pcount="$(curl -fsS "${BACKEND_URL}/api/v1/demo/presets/${tool}" 2>/dev/null \
+                | python3 -c "import sys,json;print(json.load(sys.stdin).get('count',0))" 2>/dev/null || echo '?')"
+      printf "  %-20s presets=%s\n" "${tool}" "${pcount}" | tee -a "${LOG_FILE}"
+    done
   fi
 
   # Print login info

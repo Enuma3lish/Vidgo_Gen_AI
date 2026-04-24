@@ -60,9 +60,16 @@ class VertexAIProvider(BaseProvider):
     def __init__(self):
         self.project = os.getenv("VERTEX_AI_PROJECT", "")
         self.location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
-        # Image generation models are only available in us-central1
+        # Image generation models are only available in us-central1.
         self.image_location = os.getenv("VERTEX_AI_IMAGE_LOCATION", "us-central1")
-        self.veo_model = os.getenv("VEO_MODEL", "veo-3.0-generate-preview")
+        # Veo is only available in us-central1 today. Pin it independently so
+        # deployments that set VERTEX_AI_LOCATION to a regional Gemini endpoint
+        # (e.g. asia-east1) still resolve Veo to the correct regional host.
+        self.video_location = os.getenv("VEO_LOCATION", "us-central1")
+        # Default to Veo 2 GA (`veo-2.0-generate-001`) since Veo 3 preview is
+        # behind an allowlist that most projects don't have. Set VEO_MODEL
+        # explicitly when your project has 3.0 access.
+        self.veo_model = os.getenv("VEO_MODEL", "veo-2.0-generate-001")
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.gemini_image_model = os.getenv(
             "GEMINI_IMAGE_MODEL", "gemini-2.0-flash-exp-image-generation"
@@ -286,13 +293,14 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             if params.get("negative_prompt"):
                 prompt = f"{prompt}. Avoid: {params['negative_prompt']}"
 
+            aspect_ratio = params.get("aspect_ratio") or "1:1"
             response = await asyncio.to_thread(
                 client.models.generate_images,
                 model=self.imagen_model,
                 prompt=prompt,
                 config=types.GenerateImagesConfig(
                     number_of_images=1,
-                    aspect_ratio="1:1",
+                    aspect_ratio=aspect_ratio,
                     output_mime_type="image/png",
                 ),
             )
@@ -410,20 +418,97 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
     # ─────────────────────────────────────────────────────────────────────────
 
     async def background_removal(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Remove background using Gemini image editing on Vertex AI."""
+        # Imagen edit does not produce a clean alpha cutout — the primary PiAPI
+        # path already uses local rembg. Mirror that here so the fallback
+        # actually produces a segmented result instead of a near-identical RGB.
         self._log_request("background_removal", params)
-        return await self.edit_image({
-            "image_url": params["image_url"],
-            "prompt": "Remove the background completely, leaving only the main subject on a transparent background.",
-        })
+        try:
+            from rembg import remove
+            from PIL import Image
+
+            image_url = params["image_url"]
+            if image_url.startswith("/"):
+                image_data = Path("/app" + image_url).read_bytes()
+            else:
+                http = self._get_http_client()
+                img_resp = await http.get(image_url)
+                if img_resp.status_code != 200:
+                    raise Exception(f"Failed to fetch image: HTTP {img_resp.status_code}")
+                image_data = img_resp.content
+
+            loop = asyncio.get_event_loop()
+            output_bytes = await loop.run_in_executor(None, remove, image_data)
+
+            from app.services.gcs_storage_service import get_gcs_storage
+            gcs = get_gcs_storage()
+            filename = f"rembg_{uuid.uuid4().hex[:8]}.png"
+            if gcs.enabled:
+                result_url = gcs.upload_public(
+                    output_bytes,
+                    f"generated/background_removal/{filename}",
+                    content_type="image/png",
+                )
+            else:
+                output_dir = Path("/app/static/generated")
+                output_dir.mkdir(parents=True, exist_ok=True)
+                (output_dir / filename).write_bytes(output_bytes)
+                result_url = f"/static/generated/{filename}"
+
+            self._log_response("background_removal", True)
+            return {"success": True, "output": {"image_url": result_url}}
+        except Exception as e:
+            logger.error(f"[VertexAI] Background removal failed: {e}")
+            return {"success": False, "error": str(e)}
 
     async def upscale(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Upscale image using Gemini on Vertex AI."""
-        scale = params.get("scale", 2)
-        return await self.edit_image({
-            "image_url": params["image_url"],
-            "prompt": f"Upscale this image to {scale}x resolution. Enhance details, sharpen edges, improve clarity.",
-        })
+        # Imagen edit refuses pure upscale prompts and returns empty responses.
+        # Use deterministic PIL Lanczos so the fallback is guaranteed to succeed
+        # when PiAPI is unavailable — real pixels at scale beats a hard failure.
+        self._log_request("upscale", params)
+        try:
+            scale = int(params.get("scale", 2))
+            scale = max(2, min(scale, 4))
+
+            image_url = params["image_url"]
+            if image_url.startswith("/"):
+                img_bytes = Path("/app" + image_url).read_bytes()
+            else:
+                http = self._get_http_client()
+                img_resp = await http.get(image_url)
+                if img_resp.status_code != 200:
+                    raise Exception(f"Failed to fetch image: HTTP {img_resp.status_code}")
+                img_bytes = img_resp.content
+
+            from PIL import Image
+            src = Image.open(io.BytesIO(img_bytes))
+            upscaled = src.resize(
+                (src.width * scale, src.height * scale),
+                Image.Resampling.LANCZOS,
+            )
+            buf = io.BytesIO()
+            upscaled.save(buf, "PNG")
+            out_bytes = buf.getvalue()
+
+            from app.services.gcs_storage_service import get_gcs_storage
+            gcs = get_gcs_storage()
+            filename = f"upscale_{uuid.uuid4().hex[:8]}.png"
+            if gcs.enabled:
+                result_url = gcs.upload_public(
+                    out_bytes,
+                    f"generated/image/{filename}",
+                    content_type="image/png",
+                )
+            else:
+                output_dir = Path("/app/static/generated")
+                output_dir.mkdir(parents=True, exist_ok=True)
+                (output_dir / filename).write_bytes(out_bytes)
+                result_url = f"/static/generated/{filename}"
+
+            self._log_response("upscale", True)
+            return {"success": True, "output": {"image_url": result_url}}
+        except Exception as e:
+            logger.error(f"[VertexAI] Upscale failed: {e}")
+            return {"success": False, "error": str(e)}
 
     # ─────────────────────────────────────────────────────────────────────────
     # GEMINI — MATERIAL GENERATION
@@ -446,6 +531,9 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         Generate video from text using Veo on Vertex AI.
 
         Uses the Vertex AI predict API with long-running operation polling.
+        Returns `{"success": False, "error": ...}` on provider-side failures
+        (model-not-available 404, quota 429, timeout, bad response shape) so
+        upstream callers can degrade gracefully instead of crashing a batch.
 
         Args:
             params: {
@@ -477,7 +565,11 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             },
         }
 
-        return await self._veo_generate(request_body)
+        try:
+            return await self._veo_generate(request_body)
+        except Exception as e:
+            logger.error(f"[VertexAI:Veo] text_to_video failed: {e}")
+            return {"success": False, "error": str(e)}
 
     async def image_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -519,7 +611,11 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             },
         }
 
-        return await self._veo_generate(request_body)
+        try:
+            return await self._veo_generate(request_body)
+        except Exception as e:
+            logger.error(f"[VertexAI:Veo] image_to_video failed: {e}")
+            return {"success": False, "error": str(e)}
 
     async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -543,18 +639,24 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         """
         Submit Veo generation request and poll the long-running operation.
 
-        Vertex AI Veo returns a long-running operation (LRO) that must be
-        polled until the video is ready.
+        Veo 2 / 3 GA go through the `:predictLongRunning` endpoint (NOT
+        `:predict`, which returns 429 with the message
+        "Veo must be accessed through the Vertex PredictLongRunning API").
+        Poll via `:fetchPredictOperation` on the same model, passing the
+        returned `operationName`. Result parsing is shared with the older
+        preview path so downstream callers don't change.
+
+        https://cloud.google.com/vertex-ai/generative-ai/docs/video/overview
         """
         token = await self._get_access_token()
         http = self._get_http_client()
 
-        # Submit generation request
-        predict_url = (
-            f"https://{self.location}-aiplatform.googleapis.com/v1/"
-            f"projects/{self.project}/locations/{self.location}/"
-            f"publishers/google/models/{self.veo_model}:predict"
+        base_model_url = (
+            f"https://{self.video_location}-aiplatform.googleapis.com/v1/"
+            f"projects/{self.project}/locations/{self.video_location}/"
+            f"publishers/google/models/{self.veo_model}"
         )
+        predict_url = f"{base_model_url}:predictLongRunning"
 
         logger.info(f"[VertexAI:Veo] Submitting video generation: {predict_url}")
 
@@ -573,30 +675,35 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
 
         result = resp.json()
 
-        # Check if result contains a long-running operation name
+        # predictLongRunning always returns `{"name": <operation>}` — we do
+        # not expect inline predictions, but keep the old fast-path just in
+        # case a future model variant returns synchronously.
         operation_name = result.get("name")
         if not operation_name:
-            # Some models return predictions directly
             return self._parse_veo_predictions(result)
 
         logger.info(f"[VertexAI:Veo] Operation started: {operation_name}")
 
-        # Poll the long-running operation
-        operation_url = (
-            f"https://{self.location}-aiplatform.googleapis.com/v1/{operation_name}"
-        )
+        # Poll with the model's fetchPredictOperation endpoint — the standard
+        # GET-on-operation path used by Vertex generic LROs does NOT work for
+        # Veo (returns 400/404 on long-running video ops).
+        fetch_url = f"{base_model_url}:fetchPredictOperation"
 
         for attempt in range(1, VEO_POLL_MAX_ATTEMPTS + 1):
             await asyncio.sleep(VEO_POLL_INTERVAL)
 
-            # Refresh token if needed (long polls)
+            # Refresh token periodically for long polls.
             if attempt % 30 == 0:
                 token = await self._get_access_token()
 
             try:
-                poll_resp = await http.get(
-                    operation_url,
-                    headers={"Authorization": f"Bearer {token}"},
+                poll_resp = await http.post(
+                    fetch_url,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"operationName": operation_name},
                 )
                 poll_data = poll_resp.json()
             except Exception as e:

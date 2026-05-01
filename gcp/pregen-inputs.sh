@@ -152,7 +152,8 @@ ENV_VARS="${ENV_VARS},VEO_LOCATION=us-central1"
 # approval lands.
 ENV_VARS="${ENV_VARS},VEO_MODEL=${VEO_MODEL:-veo-2.0-generate-001}"
 ENV_VARS="${ENV_VARS},IMAGEN_MODEL=imagen-3.0-generate-002"
-ENV_VARS="${ENV_VARS},GEMINI_MODEL=gemini-2.0-flash"
+ENV_VARS="${ENV_VARS},GEMINI_MODEL=gemini-2.5-flash"
+ENV_VARS="${ENV_VARS},GEMINI_IMAGE_MODEL=gemini-2.5-flash-image"
 # Pace Vertex calls (seconds) to stay under the per-minute Imagen quota.
 ENV_VARS="${ENV_VARS},VERTEX_PACING_SECONDS=${VERTEX_PACING_SECONDS:-2.5}"
 ENV_VARS="${ENV_VARS},VERTEX_MAX_RETRIES=${VERTEX_MAX_RETRIES:-3}"

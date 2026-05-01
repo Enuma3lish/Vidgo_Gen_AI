@@ -322,18 +322,20 @@ pregen_materials() {
   if [[ "${LEGACY_PREGEN}" == "true" ]]; then
     warn "--legacy-pregen set — running OLD main_pregenerate.py (full examples)."
     warn "Estimated cost for a full 8-tool legacy run: \$40-75 USD."
-    bash gcp/pregen-materials.sh \
-      ${PREGEN_TOOL:+--tool "${PREGEN_TOOL}"} \
-      ${AUTO_YES:+--yes}
+    local legacy_args=()
+    [[ -n "${PREGEN_TOOL}" ]] && legacy_args+=(--tool "${PREGEN_TOOL}")
+    [[ "${AUTO_YES}" == "true" ]] && legacy_args+=(--yes)
+    bash gcp/pregen-materials.sh "${legacy_args[@]}" 2>&1 | tee -a "${LOG_FILE}"
     return 0
   fi
 
   log "Running input-only pregen (Vertex Imagen T2I + Veo T2V)"
   log "Estimated cost: \$3-10 USD for a full run (idempotent)."
-  bash gcp/pregen-inputs.sh \
-    ${PREGEN_TOOL:+--tool "${PREGEN_TOOL}"} \
-    ${PREGEN_COUNT:+--count "${PREGEN_COUNT}"} \
-    ${AUTO_YES:+--yes}
+  local input_args=()
+  [[ -n "${PREGEN_TOOL}" ]] && input_args+=(--tool "${PREGEN_TOOL}")
+  [[ -n "${PREGEN_COUNT}" ]] && input_args+=(--count "${PREGEN_COUNT}")
+  [[ "${AUTO_YES}" == "true" ]] && input_args+=(--yes)
+  bash gcp/pregen-inputs.sh "${input_args[@]}" 2>&1 | tee -a "${LOG_FILE}"
 }
 
 # ── Phase 5: Verify ─────────────────────────────────────────────────────────
@@ -341,11 +343,26 @@ verify() {
   step "Phase 5 / 5 — Verify"
 
   # /health
-  log "Checking ${BACKEND_URL}/health ..."
+  local backend_custom_url="https://${CUSTOM_DOMAIN_BACKEND}"
+  local backend_run_url
+  local backend_verify_url
   local health
-  health="$(curl -fsS "${BACKEND_URL}/health" 2>&1 || echo 'FAILED')"
+
+  backend_run_url="$(gcloud run services describe "${BACKEND_SERVICE}" \
+          --project="${PROJECT_ID}" --region="${REGION}" \
+          --format='value(status.url)' 2>/dev/null || echo '')"
+  backend_verify_url="${backend_custom_url}"
+
+  log "Checking ${backend_verify_url}/health ..."
+  health="$(curl -fsS --max-time 30 "${backend_verify_url}/health" 2>&1 || echo 'FAILED')"
+  if [[ "${health}" != *'"status":"ok"'* && -n "${backend_run_url}" && "${backend_run_url}" != "${backend_verify_url}" ]]; then
+    warn "Custom backend domain is not healthy yet; falling back to Cloud Run URL: ${backend_run_url}"
+    backend_verify_url="${backend_run_url}"
+    health="$(curl -fsS --max-time 30 "${backend_verify_url}/health" 2>&1 || echo 'FAILED')"
+  fi
   echo "  ${health}" | tee -a "${LOG_FILE}"
   [[ "${health}" != *'"status":"ok"'* ]] && die "Backend /health failed"
+  BACKEND_URL="${backend_verify_url}"
   ok "backend healthy"
 
   # Input-library counts per tool (primary path).
@@ -353,25 +370,65 @@ verify() {
   # to have 0 input-library rows — we still list it for completeness.
   log "Checking input-library counts (/api/v1/demo/inputs)..."
   local all_ok=true
+  local zero_input_tools=()
+  local short_video_zero=false
+  local other_missing_tools=()
   for tool in background_removal try_on ai_avatar effect product_scene room_redesign short_video pattern_generate; do
     local resp count
     resp="$(curl -fsS "${BACKEND_URL}/api/v1/demo/inputs/${tool}" 2>&1 || echo '')"
     if [[ -z "${resp}" ]]; then
       printf "  %-20s ERROR\n" "${tool}" | tee -a "${LOG_FILE}"
       all_ok=false
+      zero_input_tools+=("${tool}")
+      if [[ "${tool}" == "short_video" ]]; then
+        short_video_zero=true
+      else
+        other_missing_tools+=("${tool}")
+      fi
       continue
     fi
     count="$(echo "${resp}" | python3 -c "import sys,json;print(json.load(sys.stdin).get('count',0))" 2>/dev/null || echo '?')"
+    if [[ "${count}" == "?" ]]; then
+      printf "  %-20s ERROR (invalid response)\n" "${tool}" | tee -a "${LOG_FILE}"
+      all_ok=false
+      zero_input_tools+=("${tool}")
+      if [[ "${tool}" == "short_video" ]]; then
+        short_video_zero=true
+      else
+        other_missing_tools+=("${tool}")
+      fi
+      continue
+    fi
+
+    if [[ "${tool}" == "pattern_generate" ]]; then
+      printf "  %-20s inputs=%s (expected: T2I-only, no input library)\n" "${tool}" "${count}" | tee -a "${LOG_FILE}"
+      continue
+    fi
+
     printf "  %-20s inputs=%s\n" "${tool}" "${count}" | tee -a "${LOG_FILE}"
     if [[ "${tool}" != "pattern_generate" && "${count}" == "0" ]]; then
       all_ok=false
+      zero_input_tools+=("${tool}")
+      if [[ "${tool}" == "short_video" ]]; then
+        short_video_zero=true
+      else
+        other_missing_tools+=("${tool}")
+      fi
     fi
   done
 
   if [[ "${all_ok}" == "true" ]]; then
     ok "Input library populated for all tools (pattern_generate is T2I-only by design)"
   else
-    warn "Some tools have 0 inputs — re-run: bash gcp/pregen-inputs.sh --tool <name>"
+    warn "Input library is missing rows for: ${zero_input_tools[*]}"
+    if [[ "${short_video_zero}" == "true" ]]; then
+      warn "short_video uses Vertex Veo. If job logs show 'No predictions in Veo response', deploy the latest backend image first, then rerun:"
+      warn "  bash gcp/pregen-inputs.sh --tool short_video --count 1 --yes"
+      warn "Other short_video causes to check: Veo quota/access, operation timeout, or GCS fetch/upload errors."
+    fi
+    if [[ "${#other_missing_tools[@]}" -gt 0 ]]; then
+      warn "For other missing input tools (${other_missing_tools[*]}), rerun: bash gcp/pregen-inputs.sh --tool <name> --yes"
+    fi
   fi
 
   # Also surface legacy preset counts when --legacy-pregen was used (or for

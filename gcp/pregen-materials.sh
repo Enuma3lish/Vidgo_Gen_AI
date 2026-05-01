@@ -179,7 +179,8 @@ ENV_VARS="${ENV_VARS},VERTEX_AI_PROJECT=${PROJECT_ID}"
 ENV_VARS="${ENV_VARS},VERTEX_AI_LOCATION=${REGION}"
 ENV_VARS="${ENV_VARS},VERTEX_AI_IMAGE_LOCATION=us-central1"
 ENV_VARS="${ENV_VARS},IMAGEN_MODEL=imagen-3.0-generate-002"
-ENV_VARS="${ENV_VARS},GEMINI_MODEL=gemini-2.0-flash"
+ENV_VARS="${ENV_VARS},GEMINI_MODEL=gemini-2.5-flash"
+ENV_VARS="${ENV_VARS},GEMINI_IMAGE_MODEL=gemini-2.5-flash-image"
 ENV_VARS="${ENV_VARS},PIAPI_MCP_PATH=/app/mcp-servers/piapi-mcp-server/dist/index.js"
 ENV_VARS="${ENV_VARS},PUBLIC_APP_URL=https://${CUSTOM_DOMAIN_BACKEND}"
 
@@ -215,10 +216,10 @@ for tool in "${TOOLS_TO_RUN[@]}"; do
   [[ "${CLEAN}" == "true" ]] && cmd_args="${cmd_args} --clean"
   [[ -n "${TOPICS}" ]] && cmd_args="${cmd_args} --topics ${TOPICS}"
 
-  if gcloud run jobs execute "${JOB_NAME}" \
+    if gcloud run jobs execute "${JOB_NAME}" \
         --region="${REGION}" \
         --project="${PROJECT_ID}" \
-        --args="-c,${cmd_args}" \
+      --args="^|^-c|${cmd_args}" \
         --wait; then
     ok "${tool} finished"
   else

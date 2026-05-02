@@ -25,7 +25,7 @@ TEST_IMAGES = {
     "product":  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=768",
     "garment":  "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=768",
     "room":     "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800",
-    "portrait": "https://images.unsplash.com/photo-1615262239828-a4d49e6503ea?w=512",
+    "portrait": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512",
     "food":     "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=768",
 }
 
@@ -154,7 +154,7 @@ async def call_tool(client: httpx.AsyncClient, token: str,
         r = await client.post(
             f"{BACKEND}{endpoint}", json=body,
             headers={"Authorization": f"Bearer {token}"},
-            timeout=300,
+            timeout=600,
         )
     except Exception as e:
         report.error = f"request failed: {e}"
@@ -191,7 +191,7 @@ async def call_tool(client: httpx.AsyncClient, token: str,
 
 async def run():
     reports: list[ToolReport] = []
-    async with httpx.AsyncClient(timeout=300) as client:
+    async with httpx.AsyncClient(timeout=600) as client:
         token, user = await login(client)
         print(f"Logged in as plan={user.get('plan_type')} superuser={user.get('is_superuser')}")
 
@@ -269,7 +269,8 @@ async def run():
     print("-" * 78)
     for r in reports:
         wh = f"{r.width}×{r.height}" if r.width else ("video" if r.is_video else "-")
-        s = r.sanity if not r.error else f"ERR: {r.error[:40]}"
+        err_str = r.error if isinstance(r.error, str) else str(r.error)
+        s = r.sanity if not r.error else f"ERR: {err_str[:60]}"
         print(f"{r.tool:<20} {r.api_ms:>7.0f} {r.download_bytes:>10} {wh:>10} {r.credits_used:>8}  {s}")
     print("=" * 78)
 

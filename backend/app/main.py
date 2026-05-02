@@ -200,14 +200,34 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+_health_cache: dict = {"ready": False, "ts": 0.0}
+_HEALTH_CACHE_TTL = 120  # re-check DB at most every 2 minutes
+
+
 @app.get("/health")
-def health_check():
-    """Health check endpoint with material validation status."""
-    materials_ready = getattr(app.state, 'materials_validated', False)
+async def health_check():
+    """Health check endpoint — live DB check for materials_ready (cached 2 min)."""
+    import time
+    now = time.monotonic()
+    if now - _health_cache["ts"] > _HEALTH_CACHE_TTL:
+        try:
+            from app.services.material_generator import get_material_generator
+            from app.core.database import AsyncSessionLocal
+            generator = get_material_generator()
+            async with AsyncSessionLocal() as session:
+                status = await asyncio.wait_for(
+                    generator.check_all_materials(session), timeout=10
+                )
+            ready = all(v.get("ready", False) for v in status.values() if isinstance(v, dict))
+            _health_cache["ready"] = ready
+            _health_cache["ts"] = now
+            app.state.materials_validated = ready
+        except Exception as exc:
+            logger.warning(f"Health check materials query failed: {exc}")
     return {
         "status": "ok",
         "mode": "preset-only",
-        "materials_ready": materials_ready
+        "materials_ready": _health_cache["ready"],
     }
 
 

@@ -25,7 +25,7 @@ TEST_IMAGES = {
     "product":  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=768",
     "garment":  "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=768",
     "room":     "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800",
-    "portrait": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512",
+    "portrait": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512&h=512&fit=crop&crop=faces",
     "food":     "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=768",
 }
 

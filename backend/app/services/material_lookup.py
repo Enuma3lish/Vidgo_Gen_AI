@@ -134,17 +134,20 @@ class MaterialLookupService:
             logger.warning(f"Invalid tool type: {tool_type}")
             return []
 
-        # PRESET-ONLY MODE: Accept materials with any result URL
-        # (watermarked preferred, but fallback to original)
+        # PRESET-ONLY MODE: Accept materials with any non-empty result URL
+        # isnot(None) alone is insufficient — empty strings ("") also pass; use != "" too.
+        def _has_url(col):
+            return and_(col.isnot(None), col != "")
+
         conditions = [
             Material.tool_type == tool_enum,
             Material.is_active == True,
             Material.status.in_([MaterialStatus.APPROVED, MaterialStatus.FEATURED]),
             or_(
-                Material.result_watermarked_url.isnot(None),
-                Material.result_video_url.isnot(None),
-                Material.result_image_url.isnot(None)
-            )
+                _has_url(Material.result_watermarked_url),
+                _has_url(Material.result_video_url),
+                _has_url(Material.result_image_url),
+            ),
         ]
 
         if topic:

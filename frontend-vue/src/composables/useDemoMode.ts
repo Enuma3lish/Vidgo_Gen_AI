@@ -191,8 +191,7 @@ export function useDemoMode() {
     try {
       const params: Record<string, string> = {}
       if (topic) params.topic = topic
-      const lang = locale || (typeof navigator !== 'undefined' ? navigator.language : 'en')
-      params.language = lang.startsWith('zh') ? 'zh-TW' : 'en'
+      params.language = resolveSelectedLanguage(locale)
 
       const response = await apiClient.get(`/api/v1/demo/presets/${toolType}`, { params })
 
@@ -357,8 +356,7 @@ export function useDemoMode() {
   async function loadEffectCatalog(toolType: string, locale?: string) {
     isLoadingEffectCatalog.value = true
     try {
-      const lang = locale || (typeof navigator !== 'undefined' ? navigator.language : 'en')
-      const params = { language: lang.startsWith('zh') ? 'zh-TW' : 'en' }
+      const params = { language: resolveSelectedLanguage(locale) }
       const response = await apiClient.get(`/api/v1/demo/effects/${toolType}`, { params })
       effectCatalog.value = Array.isArray(response.data?.effects) ? response.data.effects : []
     } catch (error) {
@@ -367,6 +365,13 @@ export function useDemoMode() {
     } finally {
       isLoadingEffectCatalog.value = false
     }
+  }
+
+  function resolveSelectedLanguage(locale?: string): 'zh-TW' | 'en' {
+    const storedLocale = typeof localStorage !== 'undefined' ? localStorage.getItem('locale') : null
+    const browserLocale = typeof navigator !== 'undefined' ? navigator.language : 'en'
+    const lang = locale || storedLocale || browserLocale || 'en'
+    return lang.startsWith('zh') ? 'zh-TW' : 'en'
   }
 
   /**

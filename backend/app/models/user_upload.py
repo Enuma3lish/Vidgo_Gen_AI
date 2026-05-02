@@ -44,7 +44,16 @@ class UserUpload(Base):
     extra_params = Column(Text, nullable=True)                       # JSON string for extra params
 
     # Generation output
-    status = Column(Enum(UploadStatus), default=UploadStatus.PENDING, nullable=False, index=True)
+    status = Column(
+      Enum(
+        UploadStatus,
+        name="uploadstatus",
+        values_callable=lambda enum_cls: [status.value for status in enum_cls],
+      ),
+      default=UploadStatus.PENDING,
+      nullable=False,
+      index=True,
+    )
     task_id = Column(String(200), nullable=True)                     # External API task id
     result_url = Column(String(500), nullable=True)                  # Result image URL (no watermark)
     result_video_url = Column(String(500), nullable=True)            # Result video URL (no watermark)

@@ -2,15 +2,11 @@
 Provider Router — Routes AI tasks to the correct provider.
 
 Architecture:
-1. PiAPI REST    — PRIMARY for video, image, and specialized tasks
-2. Pollo.ai MCP  — BACKUP for video tasks when PiAPI fails
-3. Vertex AI     — 3rd backup for video (Veo), BACKUP for image tasks (Gemini),
-                   PRIMARY for moderation/embeddings/material generation
-4. A2E           — BACKUP for avatar tasks when PiAPI fails
+1. PiAPI MCP/REST — PRIMARY for normal generation flows
+2. Pollo.ai       — BACKUP when PiAPI paths fail, especially video
+3. Vertex AI      — FINAL backup for image/video tasks and primary for Gemini workflows
+4. A2E            — BACKUP for avatar tasks when PiAPI fails
 5. GCS Storage   — Persists CDN URLs to Google Cloud Storage
-
-PiAPI MCP is currently disabled because its runtime dependency tree is broken in the
-deployed image. The direct PiAPI provider remains the stable path.
 """
 from typing import Dict, Any, Optional
 from enum import Enum
@@ -61,47 +57,52 @@ class ProviderRouter:
     Routes AI tasks to the correct provider.
 
     Routing:
-            - Video tasks (I2V, T2V, V2V) → PiAPI REST (primary) → Pollo MCP (backup) → Vertex AI Veo (3rd)
-            - T2I → PiAPI REST (primary) → Pollo REST (backup) → Vertex AI Imagen (tertiary)
-            - Image tasks (I2I, Effects) → PiAPI REST (primary) → Vertex AI Gemini (backup)
-            - Specialized (Try-On, Interior, Avatar, Upscale, 3D, TTS) → PiAPI REST (primary)
-      - Moderation / Material Gen → Vertex AI Gemini (primary)
+            - Normal generation → PiAPI MCP/REST first, then Pollo, then Vertex/Gemini
+            - Explicit model choices → REST first so provider-specific model IDs are honored
+            - 3D generation → PiAPI REST Trellis only
+            - Moderation / Material Gen → Vertex AI Gemini (primary)
 
         Fallback: If the primary path is unavailable, tries the configured backups.
     """
 
     # ── Routing config ──
-    # "primary" is tried first, then "backup", "tertiary", "fallback" (REST legacy)
+    # "primary" is tried first, then "backup", "tertiary", "fallback".
+    # REST-first exceptions are handled in _get_providers_for_task.
     ROUTING_CONFIG = {
-        # Video tasks — PiAPI REST primary, Pollo MCP backup, Vertex AI Veo 3rd
-        TaskType.I2V: {"primary": "piapi", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": None},
-        TaskType.T2V: {"primary": "piapi", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": None},
-        TaskType.V2V: {"primary": "piapi", "backup": "pollo_mcp", "tertiary": "vertex_ai", "fallback": None},
+        # Video tasks — PiAPI first, then Pollo.ai, then Vertex AI/Veo.
+        TaskType.I2V: {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "pollo_mcp", "fallback": "pollo", "final": "vertex_ai"},
+        TaskType.T2V: {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "pollo_mcp", "fallback": "pollo", "final": "vertex_ai"},
+        TaskType.V2V: {"primary": "piapi_mcp", "backup": "pollo", "tertiary": "pollo_mcp", "fallback": "vertex_ai"},
 
-        # Image tasks — PiAPI REST primary, Pollo T2I backup, Vertex AI Gemini tertiary
-        TaskType.T2I:                {"primary": "piapi", "backup": "pollo", "tertiary": "vertex_ai", "fallback": None},
-        TaskType.I2I:                {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
-        TaskType.EFFECTS:            {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
-        TaskType.UPSCALE:            {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
-        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
+        # Image tasks — PiAPI first. Pollo is included where useful, then Gemini via Vertex AI.
+        TaskType.T2I:                {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "pollo", "fallback": "vertex_ai"},
+        TaskType.I2I:                {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
+        TaskType.EFFECTS:            {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
+        TaskType.UPSCALE:            {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
+        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
 
-        # Specialized tasks — PiAPI REST primary
-        TaskType.INTERIOR:    {"primary": "piapi", "backup": "vertex_ai", "fallback": None},
-        TaskType.INTERIOR_3D: {"primary": "piapi", "backup": None,        "fallback": None},
-        TaskType.AVATAR:      {"primary": "piapi", "backup": "a2e",       "fallback": None},
+        # Specialized tasks — MCP primary except REST-only 3D
+        TaskType.INTERIOR:    {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
+        TaskType.INTERIOR_3D: {"primary": "piapi",     "backup": None,    "tertiary": None,        "fallback": None},
+        # Avatar uses PiAPI first, then A2E.ai for avatar/digital-human fallback.
+        TaskType.AVATAR:      {"primary": "piapi",     "backup": "a2e",   "tertiary": None,        "fallback": None},
 
         # Vertex AI-only tasks
         TaskType.MODERATION:          {"primary": "vertex_ai", "backup": None, "fallback": None},
         TaskType.MATERIAL_GENERATION: {"primary": "vertex_ai", "backup": None, "fallback": None},
     }
 
-    POLLO_I2V_MODEL_IDS = {
+    POLLO_VIDEO_MODEL_IDS = {
         "pixverse_v4.5",
         "pixverse_v5",
         "kling_v1.5",
         "kling_v1_5",
         "kling_v2",
         "luma_ray2",
+        "kling2.5",
+        "hailuo",
+        "wan2.6",
+        "pollo-v1-6",
     }
 
     SYSTEM_FAILURE_HINTS = (
@@ -158,6 +159,15 @@ class ProviderRouter:
         self._provider_alert_cooldown = timedelta(
             minutes=max(1, settings.PROVIDER_ALERT_COOLDOWN_MINUTES)
         )
+        self._provider_health_cache_ttl = timedelta(
+            seconds=max(5, settings.PROVIDER_HEALTH_CACHE_SECONDS)
+        )
+        self._provider_circuit_breaker_failures = max(
+            1, settings.PROVIDER_CIRCUIT_BREAKER_FAILURES
+        )
+        self._provider_circuit_breaker_cooldown = timedelta(
+            seconds=max(30, settings.PROVIDER_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # MAIN ROUTING METHOD
@@ -180,9 +190,11 @@ class ProviderRouter:
             raise ValueError(f"Unknown task type: {task_type}")
 
         providers_to_try = self._get_providers_for_task(task_type, params)
+        candidate_providers, skipped_providers = self._route_candidates(providers_to_try)
 
         last_error = None
-        for i, provider_name in enumerate(providers_to_try):
+        for provider_name in candidate_providers:
+            provider_index = providers_to_try.index(provider_name)
             try:
                 result = await self._execute_on_provider(
                     provider_name, task_type, params
@@ -207,10 +219,11 @@ class ProviderRouter:
 
                 return {
                     **result,
-                    "used_backup": i > 0,
+                    "used_backup": provider_index > 0,
                     "primary_provider": providers_to_try[0],
                     "provider_used": provider_name,
-                    **({"backup_provider": provider_name, "primary_failed": True} if i > 0 else {}),
+                    **({"backup_provider": provider_name, "primary_failed": True} if provider_index > 0 else {}),
+                    **({"skipped_providers": skipped_providers} if skipped_providers else {}),
                 }
             except Exception as e:
                 logger.error(f"Provider {provider_name} failed for {task_type}: {e}")
@@ -219,7 +232,7 @@ class ProviderRouter:
                     provider_name=provider_name,
                     task_type=task_type,
                     error=str(e),
-                    fallback_provider=providers_to_try[i + 1] if i + 1 < len(providers_to_try) else None,
+                    fallback_provider=self._next_candidate_provider(candidate_providers, provider_name),
                     request_params=params,
                 )
                 last_error = str(e)
@@ -240,19 +253,85 @@ class ProviderRouter:
         config = self.ROUTING_CONFIG[task_type]
 
         model_id = str(params.get("model") or "").strip()
-        if task_type == TaskType.I2V and model_id in self.POLLO_I2V_MODEL_IDS:
-            # Keep PiAPI as the default entry point, but when a Pollo-native I2V
-            # model alias is requested, prefer Pollo before Vertex in the fallback
-            # chain so the request can still land on the matching model if PiAPI fails.
-            return ["piapi", "pollo", "pollo_mcp", "vertex_ai"]
+        has_explicit_model = bool(model_id and model_id != "default")
 
-        providers_to_try = []
-        for key in ("primary", "backup", "tertiary", "fallback"):
+        if task_type == TaskType.INTERIOR_3D:
+            return ["piapi"]
+
+        if task_type == TaskType.V2V:
+            return self._provider_order_from_config(config)
+
+        if has_explicit_model:
+            if task_type in {TaskType.I2V, TaskType.T2V, TaskType.V2V} and model_id in self.POLLO_VIDEO_MODEL_IDS:
+                return self._provider_order_with_first(
+                    "pollo",
+                    ["pollo_mcp", "piapi_mcp", "piapi", "vertex_ai"],
+                )
+
+            if task_type in {
+                TaskType.T2I,
+                TaskType.I2I,
+                TaskType.I2V,
+                TaskType.T2V,
+                TaskType.V2V,
+                TaskType.INTERIOR,
+                TaskType.AVATAR,
+                TaskType.UPSCALE,
+                TaskType.EFFECTS,
+                TaskType.BACKGROUND_REMOVAL,
+            }:
+                return self._provider_order_with_first(
+                    "piapi",
+                    self._provider_order_from_config(config),
+                )
+
+        return self._provider_order_from_config(config)
+
+    def _provider_order_from_config(self, config: Dict[str, Optional[str]]) -> list[str]:
+        providers_to_try: list[str] = []
+        for key in ("primary", "backup", "tertiary", "fallback", "final"):
             provider_name = config.get(key)
             if provider_name and provider_name not in providers_to_try:
                 providers_to_try.append(provider_name)
 
         return providers_to_try
+
+    def _provider_order_with_first(self, first_provider: str, providers: list[str]) -> list[str]:
+        ordered = [first_provider]
+        for provider_name in providers:
+            if provider_name and provider_name not in ordered:
+                ordered.append(provider_name)
+        return ordered
+
+    def _route_candidates(self, providers: list[str]) -> tuple[list[str], list[str]]:
+        """Skip providers with open circuits when another candidate is available."""
+        if len(providers) <= 1:
+            return providers, []
+
+        candidates = []
+        skipped = []
+        for provider_name in providers:
+            if self._is_provider_circuit_open(provider_name):
+                skipped.append(provider_name)
+            else:
+                candidates.append(provider_name)
+
+        if candidates:
+            return candidates, skipped
+
+        logger.warning(
+            "All provider circuits are open for route %s; probing primary provider %s",
+            providers,
+            providers[0],
+        )
+        return [providers[0]], providers[1:]
+
+    def _next_candidate_provider(self, candidates: list[str], current_provider: str) -> Optional[str]:
+        try:
+            index = candidates.index(current_provider)
+        except ValueError:
+            return None
+        return candidates[index + 1] if index + 1 < len(candidates) else None
 
     # ─────────────────────────────────────────────────────────────────────────
     # GCS PERSISTENCE
@@ -503,9 +582,9 @@ class ProviderRouter:
         elif task_type == TaskType.T2V:
             return await self.pollo.text_to_video(params)
         elif task_type == TaskType.V2V:
-            if params.get("video_url"):
-                return await self.pollo.effects(params)
-            return await self.pollo.multi_model(params)
+            # Pollo has no native V2V endpoint; route through video_style_transfer,
+            # which feeds the first frame (image_url) into per-model I2V.
+            return await self.pollo.video_style_transfer(params)
         else:
             raise ValueError(f"Pollo doesn't support: {task_type}")
 
@@ -523,13 +602,14 @@ class ProviderRouter:
 
     async def _check_provider_health(self, provider: str) -> bool:
         if provider in self._last_health_check:
-            if datetime.now() - self._last_health_check[provider] < timedelta(seconds=60):
+            if datetime.now() - self._last_health_check[provider] < self._health_cache_ttl():
                 cached = self._status_cache.get(provider, {})
                 return cached.get("status") == ProviderStatus.HEALTHY
 
         try:
             provider_instance = self._get_provider_instance(provider)
             if provider_instance is None:
+                self._record_failure(provider, "Provider instance unavailable or not configured")
                 await self._maybe_alert_provider_failure(
                     provider_name=provider,
                     task_type="health_check",
@@ -539,11 +619,14 @@ class ProviderRouter:
                 )
                 return False
             is_healthy = await provider_instance.health_check()
-            self._status_cache[provider] = {
-                "status": ProviderStatus.HEALTHY if is_healthy else ProviderStatus.DOWN,
-                "last_check": datetime.now(),
-            }
-            self._last_health_check[provider] = datetime.now()
+            now = datetime.now()
+            if is_healthy:
+                self._record_success(provider)
+                self._status_cache[provider]["last_check"] = now
+            else:
+                self._record_failure(provider, "Provider health check reported unhealthy status")
+                self._status_cache.setdefault(provider, {})["last_check"] = now
+            self._last_health_check[provider] = now
             if not is_healthy:
                 await self._maybe_alert_provider_failure(
                     provider_name=provider,
@@ -555,11 +638,8 @@ class ProviderRouter:
             return is_healthy
         except Exception as e:
             logger.error(f"Health check failed for {provider}: {e}")
-            self._status_cache[provider] = {
-                "status": ProviderStatus.DOWN,
-                "error": str(e),
-                "last_check": datetime.now(),
-            }
+            self._record_failure(provider, str(e))
+            self._status_cache.setdefault(provider, {})["last_check"] = datetime.now()
             await self._maybe_alert_provider_failure(
                 provider_name=provider,
                 task_type="health_check",
@@ -601,13 +681,42 @@ class ProviderRouter:
     def _record_failure(self, provider: str, error: str):
         count = self._failure_counts.get(provider, 0) + 1
         self._failure_counts[provider] = count
-        if count >= 3:
-            self._status_cache[provider] = {
-                "status": ProviderStatus.DOWN,
-                "error": error,
-                "failure_count": count,
-                "last_failure": datetime.now(),
-            }
+        now = datetime.now()
+        status = (
+            ProviderStatus.DOWN
+            if count >= self._circuit_breaker_failure_threshold()
+            else ProviderStatus.DEGRADED
+        )
+        status_entry = {
+            "status": status,
+            "error": error,
+            "failure_count": count,
+            "last_failure": now,
+        }
+        if status == ProviderStatus.DOWN:
+            status_entry["circuit_open_until"] = now + self._circuit_breaker_cooldown()
+        self._status_cache[provider] = status_entry
+
+    def _is_provider_circuit_open(self, provider: str) -> bool:
+        cached = self._status_cache.get(provider, {})
+        open_until = cached.get("circuit_open_until")
+        if not isinstance(open_until, datetime):
+            return False
+
+        if datetime.now() >= open_until:
+            cached.pop("circuit_open_until", None)
+            return False
+
+        return True
+
+    def _health_cache_ttl(self) -> timedelta:
+        return getattr(self, "_provider_health_cache_ttl", timedelta(seconds=60))
+
+    def _circuit_breaker_failure_threshold(self) -> int:
+        return getattr(self, "_provider_circuit_breaker_failures", 3)
+
+    def _circuit_breaker_cooldown(self) -> timedelta:
+        return getattr(self, "_provider_circuit_breaker_cooldown", timedelta(seconds=180))
 
     def _should_alert_provider_failure(self, provider: str, error: str) -> bool:
         if not provider:
@@ -692,6 +801,17 @@ class ProviderRouter:
                 if cached.get("last_check")
                 else None,
                 "failure_count": self._failure_counts.get(provider, 0),
+                "last_success": cached.get("last_success").isoformat()
+                if cached.get("last_success")
+                else None,
+                "last_failure": cached.get("last_failure").isoformat()
+                if cached.get("last_failure")
+                else None,
+                "circuit_open": self._is_provider_circuit_open(provider),
+                "circuit_open_until": cached.get("circuit_open_until").isoformat()
+                if cached.get("circuit_open_until")
+                else None,
+                "error": cached.get("error"),
             }
         return status
 

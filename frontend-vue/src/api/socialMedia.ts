@@ -1,116 +1,56 @@
 /**
- * Social Media API client
- * Handles account binding, OAuth flow, content publishing, and post history
+ * Client-side social sharing helpers.
+ * VidGo shares work links by opening platform share/upload destinations; no OAuth
+ * account connection or server-side publishing is required.
  */
-import { apiClient } from './index'
 
-export interface SocialAccountInfo {
-  platform: 'facebook' | 'instagram' | 'tiktok' | 'youtube'
-  platform_username: string | null
-  platform_avatar: string | null
-  platform_user_id: string | null
-  is_active: boolean
-  connected_at: string | null
-}
+export type SocialShareMode = 'direct_share' | 'copy_first'
 
-export interface PublishRequest {
-  platforms: string[]
-  caption: string
-  privacy_level?: string
-}
-
-export interface PublishResult {
-  platform: string
-  success: boolean
-  post_url?: string
-  error?: string
-  mock?: boolean
-}
-
-export interface OAuthStartResponse {
-  oauth_url: string
-  mock_mode: boolean
-}
-
-export interface SocialPost {
+export interface SocialSharePlatform {
   id: string
-  platform: string
-  post_url: string | null
-  caption: string | null
-  media_type: string | null
-  status: string
-  likes_count: number
-  comments_count: number
-  shares_count: number
-  views_count: number
-  published_at: string | null
+  name: string
+  icon: string
+  color: string
+  mode: SocialShareMode
+  supportsImage: boolean
+  supportsVideo: boolean
+  destinationUrl?: string
 }
 
-export interface PostAnalytics {
-  total_posts: number
-  by_platform: Record<string, number>
-  total_likes: number
-  total_comments: number
-  total_shares: number
-  total_views: number
-}
+export const socialSharePlatforms: SocialSharePlatform[] = [
+  { id: 'facebook', name: 'Facebook', icon: 'f', color: '#1877f2', mode: 'direct_share', supportsImage: true, supportsVideo: true },
+  { id: 'x', name: 'X', icon: 'X', color: '#e8f4ff', mode: 'direct_share', supportsImage: true, supportsVideo: true },
+  { id: 'threads', name: 'Threads', icon: '@', color: '#e8f4ff', mode: 'direct_share', supportsImage: true, supportsVideo: true },
+  { id: 'linkedin', name: 'LinkedIn', icon: 'in', color: '#0a66c2', mode: 'direct_share', supportsImage: true, supportsVideo: true },
+  { id: 'line', name: 'LINE', icon: 'L', color: '#06c755', mode: 'direct_share', supportsImage: true, supportsVideo: true },
+  { id: 'whatsapp', name: 'WhatsApp', icon: 'W', color: '#25d366', mode: 'direct_share', supportsImage: true, supportsVideo: true },
+  { id: 'telegram', name: 'Telegram', icon: 'T', color: '#229ed9', mode: 'direct_share', supportsImage: true, supportsVideo: true },
+  { id: 'instagram', name: 'Instagram', icon: 'IG', color: '#e1306c', mode: 'copy_first', supportsImage: true, supportsVideo: true, destinationUrl: 'https://www.instagram.com/' },
+  { id: 'tiktok', name: 'TikTok', icon: '♪', color: '#e8f4ff', mode: 'copy_first', supportsImage: false, supportsVideo: true, destinationUrl: 'https://www.tiktok.com/upload' },
+  { id: 'youtube', name: 'YouTube', icon: '▶', color: '#ff0000', mode: 'copy_first', supportsImage: false, supportsVideo: true, destinationUrl: 'https://studio.youtube.com/' },
+]
 
-// ─── Account Management ────────────────────────────────────────────────────
+export function buildSocialShareUrl(platform: SocialSharePlatform, workUrl: string, caption: string): string {
+  const encodedUrl = encodeURIComponent(workUrl)
+  const encodedCaption = encodeURIComponent(caption)
+  const encodedCaptionWithUrl = encodeURIComponent(caption ? `${caption} ${workUrl}` : workUrl)
 
-export async function getConnectedAccounts(): Promise<SocialAccountInfo[]> {
-  const resp = await apiClient.get('/api/v1/social/accounts')
-  return resp.data
-}
-
-export async function disconnectAccount(platform: string): Promise<void> {
-  await apiClient.delete(`/api/v1/social/accounts/${platform}`)
-}
-
-// ─── OAuth Flow ────────────────────────────────────────────────────────────
-
-export async function startOAuth(platform: string): Promise<OAuthStartResponse> {
-  const resp = await apiClient.get(`/api/v1/social/oauth/${platform}`)
-  return resp.data
-}
-
-export async function mockConnect(platform: string, username?: string): Promise<{ success: boolean; mock: boolean }> {
-  const platformNames: Record<string, string> = {
-    facebook: 'Facebook',
-    instagram: 'Instagram',
-    tiktok: 'TikTok',
-    youtube: 'YouTube',
+  switch (platform.id) {
+    case 'facebook':
+      return `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`
+    case 'x':
+      return `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedCaption}`
+    case 'threads':
+      return `https://www.threads.net/intent/post?text=${encodedCaptionWithUrl}`
+    case 'linkedin':
+      return `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`
+    case 'line':
+      return `https://social-plugins.line.me/lineit/share?url=${encodedUrl}`
+    case 'whatsapp':
+      return `https://api.whatsapp.com/send?text=${encodedCaptionWithUrl}`
+    case 'telegram':
+      return `https://t.me/share/url?url=${encodedUrl}&text=${encodedCaption}`
+    default:
+      return platform.destinationUrl || workUrl
   }
-  const resp = await apiClient.post('/api/v1/social/oauth/mock-connect', {
-    platform,
-    username: username || `測試${platformNames[platform] || platform}帳號`,
-  })
-  return resp.data
-}
-
-// ─── Publishing ────────────────────────────────────────────────────────────
-
-export async function publishWork(
-  generationId: string,
-  req: PublishRequest,
-): Promise<PublishResult[]> {
-  const resp = await apiClient.post(`/api/v1/social/publish/${generationId}`, req)
-  return resp.data
-}
-
-// ─── Post History ──────────────────────────────────────────────────────────
-
-export async function getPostHistory(
-  page = 1,
-  perPage = 20,
-  platform?: string,
-): Promise<SocialPost[]> {
-  const params: Record<string, any> = { page, per_page: perPage }
-  if (platform) params.platform = platform
-  const resp = await apiClient.get('/api/v1/social/posts', { params })
-  return resp.data
-}
-
-export async function getPostAnalytics(): Promise<PostAnalytics> {
-  const resp = await apiClient.get('/api/v1/social/posts/analytics')
-  return resp.data
 }

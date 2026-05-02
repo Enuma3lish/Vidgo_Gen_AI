@@ -293,8 +293,9 @@ onMounted(() => {
                   {{ isZh ? '或上傳自訂圖片' : 'Or upload custom image' }}
                 </p>
                 <UploadZone
-                  accept="image/*"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                   @files-selected="handleImageSelect"
+                  @error="uiStore.showError"
                 />
               </div>
 

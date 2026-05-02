@@ -22,7 +22,7 @@
         @change="emitCustomRange"
         class="bg-gray-800 border border-gray-600 rounded-md px-2 py-1.5 text-xs text-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
       />
-      <span class="text-gray-500 text-xs">to</span>
+      <span class="text-gray-500 text-xs">至</span>
       <input
         type="date"
         v-model="customEnd"
@@ -53,7 +53,7 @@ const presets = [
   { label: '30D', value: '30d' },
   { label: '90D', value: '90d' },
   { label: '1Y', value: '1y' },
-  { label: 'Custom', value: 'custom' },
+  { label: '自訂', value: 'custom' },
 ]
 
 const selectedPreset = ref('30d')

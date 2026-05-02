@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
 
-const { t, tm } = useI18n()
+const { t, tm, locale } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -30,6 +30,16 @@ function demo(cat: string, idx: 'before' | 'after') {
 
 const demoCats = ['try_on', 'background_removal', 'room_redesign', 'short_video', 'product_scene']
 let pollTimer: ReturnType<typeof setInterval> | null = null
+
+// Hero interactive demo tabs
+const heroDemoTabs = [
+  { key: 'product_scene',     label: 'Studio Scene' },
+  { key: 'background_removal',label: 'Cutout' },
+  { key: 'try_on',            label: 'Try-On' },
+  { key: 'room_redesign',     label: 'Room' },
+] as const
+const activeDemoTab = ref<typeof heroDemoTabs[number]['key']>('product_scene')
+let heroTabTimer: ReturnType<typeof setInterval> | null = null
 
 async function loadDemos() {
   const results = await Promise.allSettled(
@@ -59,79 +69,120 @@ async function loadDemos() {
   }
 }
 
-// ── All AI Creation Tools (only real PiAPI-backed tools) ──
-const allTools = [
+interface LandingTool {
+  id: string
+  route: string
+  emoji: string
+  color: string
+  tag: string
+  nameKey?: string
+  descKey?: string
+}
+
+// ── All AI Creation Tools ──
+const allTools: LandingTool[] = [
   { id: 'tryOn',           route: '/tools/try-on',             emoji: '👗', color: '#eb2f96', tag: 'Hot' },
   { id: 'fashionReels',    route: '/tools/short-video',        emoji: '🎬', color: '#1677ff', tag: 'Hot' },
+  { id: 'productAvatars',  route: '/tools/avatar',             emoji: '🗣️', color: '#722ed1', tag: 'New' },
   { id: 'productAnyshoot', route: '/tools/product-scene',      emoji: '📸', color: '#fa8c16', tag: '' },
   { id: 'bgRemoval',       route: '/tools/background-removal', emoji: '✂️', color: '#08979c', tag: 'Free' },
   { id: 'roomRedesign',    route: '/tools/room-redesign',      emoji: '🏠', color: '#52c41a', tag: '' },
   { id: 'hdUpscale',       route: '/tools/upscale',            emoji: '🔍', color: '#13c2c2', tag: 'New' },
+  { id: 'videoTransform',  route: '/tools/video-transform',    emoji: '🎞️', color: '#2f54eb', tag: 'Pro' },
+  { id: 'patternGenerate', route: '/tools/pattern-generate',   emoji: '▦', color: '#f759ab', tag: '' },
+  { id: 'imageTranslator', route: '/tools/image-translator',   emoji: '文', color: '#faad14', tag: 'New' },
+  {
+    id: 'videoDubbing',
+    route: '/tools/video-dubbing',
+    emoji: '🎙️',
+    color: '#13c2c2',
+    tag: 'Pro',
+    nameKey: 'lp.videoDubbing.title',
+    descKey: 'lp.videoDubbing.desc',
+  },
 ]
+
+function toolName(tool: LandingTool): string {
+  return t(tool.nameKey || `lp.allTools.${tool.id}.name`)
+}
+
+function toolDesc(tool: LandingTool): string {
+  return t(tool.descKey || `lp.allTools.${tool.id}.desc`)
+}
 
 // ── Seasonal marketing scenarios ──
 const seasons = ref([
-  { id: 'spring', topic: 'spring', active: false },
-  { id: 'valentines', topic: 'valentines', active: false },
-  { id: 'blackFriday', topic: 'black_friday', active: false },
-  { id: 'christmas', topic: 'christmas', active: false },
-  { id: 'newYear', topic: 'new_year', active: true },
+  { id: 'spring', topics: ['spring', 'seasonal'], active: false },
+  { id: 'valentines', topics: ['valentines', 'seasonal', 'holiday'], active: false },
+  { id: 'blackFriday', topics: ['black_friday', 'holiday', 'seasonal'], active: false },
+  { id: 'christmas', topics: ['christmas', 'holiday'], active: false },
+  { id: 'newYear', topics: ['new_year', 'holiday'], active: true },
 ])
 const activeSeason = ref('newYear')
+const seasonLoading = ref(true)
 
 // Pre-generated season showcase data from API
 interface SeasonItem { url: string; input_url: string; label: string }
 const seasonData = ref<Record<string, SeasonItem[]>>({})
 
-// Fallback images per festival (shown until pregen data loads)
-const SEASON_FALLBACK: Record<string, SeasonItem[]> = {
-  spring: [
-    { url: 'https://images.unsplash.com/photo-1490750967868-88aa4f44baee?w=600&q=80', input_url: '', label: '🌸 Spring Floral' },
-    { url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&q=80', input_url: '', label: '🌿 Fresh Green Tea' },
-    { url: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&q=80', input_url: '', label: '💐 Pastel Cosmetics' },
-    { url: 'https://images.unsplash.com/photo-1525904097878-94fb15835963?w=600&q=80', input_url: '', label: '🌷 Spring Fragrance' },
-  ],
-  valentines: [
-    { url: 'https://images.unsplash.com/photo-1549488344-1f9b8d2bd1f3?w=600&q=80', input_url: '', label: '💝 Valentine Gift Box' },
-    { url: 'https://images.unsplash.com/photo-1519864600265-abb23847ef2c?w=600&q=80', input_url: '', label: '🕯️ Scented Candle' },
-    { url: 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=600&q=80', input_url: '', label: '🍪 Cookie Gift Tin' },
-    { url: 'https://images.unsplash.com/photo-1481391032119-d89fee407e44?w=600&q=80', input_url: '', label: '🍫 Chocolate Collection' },
-  ],
-  blackFriday: [
-    { url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&q=80', input_url: '', label: '🏷️ Flash Deal' },
-    { url: 'https://images.unsplash.com/photo-1517705008128-361805f42e86?w=600&q=80', input_url: '', label: '🎒 Backpack Deal' },
-    { url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80', input_url: '', label: '🎧 Audio Gear Sale' },
-    { url: 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=80', input_url: '', label: '👟 Sneaker Drop' },
-  ],
-  christmas: [
-    { url: 'https://images.unsplash.com/photo-1512909006721-3d6018887383?w=600&q=80', input_url: '', label: '🎄 Holiday Gift Set' },
-    { url: 'https://images.unsplash.com/photo-1543934638-bd2e138430c4?w=600&q=80', input_url: '', label: '🎁 Christmas Candle' },
-    { url: 'https://images.unsplash.com/photo-1482330454287-8cd42b24e80e?w=600&q=80', input_url: '', label: '⛄ Winter Skincare' },
-    { url: 'https://images.unsplash.com/photo-1513885535751-8b9238bd345a?w=600&q=80', input_url: '', label: '🧣 Cozy Accessories' },
-  ],
-  newYear: [
-    { url: 'https://images.unsplash.com/photo-1546189612-f5ec73e91ecf?w=600&q=80', input_url: '', label: '🎆 New Year Champagne' },
-    { url: 'https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&q=80', input_url: '', label: '✨ Gold Cosmetics' },
-    { url: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=600&q=80', input_url: '', label: '🥂 Celebration Set' },
-    { url: 'https://images.unsplash.com/photo-1617897903246-719242758050?w=600&q=80', input_url: '', label: '🎊 Party Collection' },
-  ],
+function compactLabel(value: string): string {
+  return value
+    .replace(/\s*\|\s*Scene:.*/i, '')
+    .replace(/棚拍產品照[:：]?\s*/g, '')
+    .replace(/，.*$/g, '')
+    .trim()
+}
+
+function seasonLabel(preset: any): string {
+  const params = preset.input_params || {}
+  const isZh = locale.value.startsWith('zh')
+  const productName = isZh
+    ? params.product_name_zh || params.product_name
+    : params.product_name_en || params.product_name
+  const title = isZh ? preset.title_zh || preset.title_en : preset.title_en || preset.title_zh
+  const prompt = isZh ? preset.prompt_zh || preset.prompt : preset.prompt_en || preset.prompt
+  return compactLabel(productName || title || prompt || t('lp.seasonShowcase')) || t('lp.seasonShowcase')
 }
 
 async function loadSeasonPresets(seasonId: string) {
   const season = seasons.value.find(s => s.id === seasonId)
-  if (!season || seasonData.value[seasonId]?.length) return
+  if (!season || seasonData.value[seasonId]) return
   try {
     const client = (await import('@/api/client')).default
-    const res = await client.get(`/api/v1/demo/presets/product_scene?topic=${season.topic}&limit=4`)
-    const presets = res.data?.presets || []
-    if (presets.length > 0) {
-      seasonData.value[seasonId] = presets.map((p: any) => ({
-        url: p.result_image_url || p.thumbnail_url || '',
+    const topicResults = await Promise.allSettled(
+      season.topics.map(topic => client.get(`/api/v1/demo/presets/product_scene?topic=${topic}&limit=4`))
+    )
+    const seen = new Set<string>()
+    const presets = topicResults.flatMap(result =>
+      result.status === 'fulfilled' ? (result.value.data?.presets || []) : []
+    )
+    seasonData.value[seasonId] = presets
+      .filter((p: any) => p.result_image_url || p.thumbnail_url)
+      .filter((p: any) => {
+        const key = p.id || p.result_image_url || p.thumbnail_url
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .slice(0, 4)
+      .map((p: any) => ({
+        url: p.result_watermarked_url || p.result_image_url || p.thumbnail_url || '',
         input_url: p.input_image_url || '',
-        label: p.input_params?.product_name || p.prompt_zh || p.prompt || t('lp.seasonShowcase'),
+        label: seasonLabel(p),
       }))
-    }
-  } catch { /* fallback images will be used */ }
+  } catch {
+    seasonData.value[seasonId] = []
+  }
+}
+
+async function loadAllSeasonPresets() {
+  seasonLoading.value = true
+  await Promise.all(seasons.value.map(s => loadSeasonPresets(s.id)))
+  const firstAvailable = seasons.value.find(season => (seasonData.value[season.id]?.length || 0) > 0)
+  if (firstAvailable && !seasonData.value[activeSeason.value]?.length) {
+    setActiveSeason(firstAvailable.id)
+  }
+  seasonLoading.value = false
 }
 
 function setActiveSeason(id: string) {
@@ -140,10 +191,12 @@ function setActiveSeason(id: string) {
   loadSeasonPresets(id)
 }
 
+const availableSeasons = computed(() => {
+  return seasons.value
+})
+
 const activeSeasonItems = computed(() => {
-  const live = seasonData.value[activeSeason.value]
-  if (live && live.length > 0) return live
-  return SEASON_FALLBACK[activeSeason.value] || SEASON_FALLBACK.newYear
+  return seasonData.value[activeSeason.value] || []
 })
 
 // ── Before/After deep dives ──
@@ -170,55 +223,98 @@ function handleStartCreating() {
 
 onMounted(() => {
   loadDemos()
-  // Load all festival presets in parallel
-  seasons.value.forEach(s => loadSeasonPresets(s.id))
+  loadAllSeasonPresets()
+  // Auto-rotate hero demo tabs every 4s
+  heroTabTimer = setInterval(() => {
+    const idx = heroDemoTabs.findIndex(t => t.key === activeDemoTab.value)
+    activeDemoTab.value = heroDemoTabs[(idx + 1) % heroDemoTabs.length].key
+  }, 4000)
 })
-onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } })
+onUnmounted(() => {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  if (heroTabTimer) { clearInterval(heroTabTimer); heroTabTimer = null }
+})
+
+watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
 </script>
 
 <template>
-  <div style="background: #09090b; color: #f5f5fa;">
+  <div class="commerce-page">
 
     <!-- ============================================================
-         SECTION 1 — HERO (Dark PicCopilot style)
+            SECTION 1 — HERO (Demo-first SMB layout)
     ============================================================= -->
-    <section class="relative pt-28 pb-20 md:pt-36 md:pb-28 overflow-hidden">
-      <!-- Background glow effects -->
-      <div class="absolute inset-0 bg-mesh"></div>
-      <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] opacity-30" style="background: radial-gradient(ellipse, rgba(22,119,255,0.2), transparent 70%);"></div>
+    <section class="commerce-hero relative pt-24 pb-16 md:pt-28 md:pb-20 overflow-hidden">
+      <div class="hero-bg-orb hero-bg-orb-a"></div>
+      <div class="hero-bg-orb hero-bg-orb-b"></div>
 
-      <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <div class="max-w-4xl mx-auto">
-          <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium mb-6"
-            style="background: rgba(22,119,255,0.1); color: #69b1ff; border: 1px solid rgba(22,119,255,0.2);">
-            <span class="w-2 h-2 rounded-full animate-pulse" style="background: #1677ff;"></span>
-            {{ t('lp.badge') }}
+      <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+
+          <!-- LEFT: Copy column -->
+          <div class="lg:col-span-6 text-center lg:text-left">
+            <div class="hero-eyebrow inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-6">
+              <span class="w-1.5 h-1.5 rounded-full hero-eyebrow-dot"></span>
+              {{ t('lp.badge') }}
+            </div>
+            <h1 class="hero-headline mb-5">
+              <span class="hero-brand-mark">VidGo AI</span>
+              <span class="hero-headline-main">{{ t('lp.headline') }}</span>
+            </h1>
+            <p class="hero-sub mb-6">
+              {{ t('lp.sub1') }}
+            </p>
+            <p class="hero-sub-accent mb-8">
+              {{ t('lp.sub2') }}
+            </p>
+            <div class="flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-3 mb-6">
+              <button @click="handleStartCreating" class="hero-cta-primary">
+                {{ t('lp.ctaPrimary') }}
+                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              </button>
+              <RouterLink to="/pricing" class="hero-cta-secondary">
+                {{ t('lp.ctaSecondary') }}
+              </RouterLink>
+            </div>
+            <div class="flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-2 text-sm hero-trust">
+              <span class="flex items-center gap-1.5"><span class="hero-check">✓</span> {{ t('lp.trust1') }}</span>
+              <span class="flex items-center gap-1.5"><span class="hero-check">✓</span> {{ t('lp.trust2') }}</span>
+              <span class="flex items-center gap-1.5"><span class="hero-check">✓</span> {{ t('lp.trust3') }}</span>
+            </div>
           </div>
-          <h1 class="text-4xl md:text-5xl lg:text-6xl font-black leading-tight mb-5" style="color: #f5f5fa;">
-            VidGo AI<br>
-            <span class="gradient-text">{{ t('lp.headline') }}</span>
-          </h1>
-          <p class="text-lg md:text-xl max-w-2xl mx-auto mb-4 leading-relaxed" style="color: #9494b0;">
-            {{ t('lp.sub1') }}
-          </p>
-          <p class="text-base max-w-xl mx-auto mb-10 font-semibold" style="color: #f97316;">
-            {{ t('lp.sub2') }}
-          </p>
-          <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
-            <button @click="handleStartCreating"
-              class="btn-accent px-8 py-3.5 text-base">
-              {{ t('lp.ctaPrimary') }}
-            </button>
-            <RouterLink to="/pricing"
-              class="btn-secondary px-8 py-3.5 text-base">
-              {{ t('lp.ctaSecondary') }}
-            </RouterLink>
+
+          <!-- RIGHT: Interactive before/after demo -->
+          <div class="lg:col-span-6">
+            <div class="hero-demo-card">
+              <div class="hero-demo-tabs">
+                <button v-for="cat in heroDemoTabs" :key="cat.key"
+                  class="hero-demo-tab" :class="{ 'is-active': activeDemoTab === cat.key }"
+                  @click="activeDemoTab = cat.key">
+                  {{ cat.label }}
+                </button>
+              </div>
+              <div class="hero-demo-stage">
+                <div class="hero-demo-pane">
+                  <img :src="demo(activeDemoTab, 'before') || FALLBACK[activeDemoTab]?.before" alt="Before" class="hero-demo-img" />
+                  <span class="hero-demo-badge hero-demo-badge-before">BEFORE</span>
+                </div>
+                <div class="hero-demo-pane">
+                  <img :src="demo(activeDemoTab, 'after') || FALLBACK[activeDemoTab]?.after" alt="After" class="hero-demo-img" />
+                  <span class="hero-demo-badge hero-demo-badge-after">AFTER · AI</span>
+                </div>
+              </div>
+              <div class="hero-demo-meta">
+                <div class="hero-demo-meta-left">
+                  <span class="hero-demo-dot"></span>
+                  Generated in seconds
+                </div>
+                <div class="hero-demo-meta-right">
+                  Powered by VidGo AI
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="flex flex-wrap items-center justify-center gap-6 text-sm" style="color: #6b6b8a;">
-            <span class="flex items-center gap-1.5"><span style="color: #10b981;">✓</span> {{ t('lp.trust1') }}</span>
-            <span class="flex items-center gap-1.5"><span style="color: #10b981;">✓</span> {{ t('lp.trust2') }}</span>
-            <span class="flex items-center gap-1.5"><span style="color: #10b981;">✓</span> {{ t('lp.trust3') }}</span>
-          </div>
+
         </div>
       </div>
     </section>
@@ -243,7 +339,7 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
     <!-- ============================================================
          SECTION 3 — EXPLORE ALL AI CREATION TOOLS (PicCopilot tool grid)
     ============================================================= -->
-    <section class="section-padding" style="background: #0a0a0f;">
+    <section class="section-padding" style="background: var(--bg-section);">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
           <h2 class="text-3xl md:text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ t('lp.sec3Title') }}</h2>
@@ -252,7 +348,7 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           <RouterLink v-for="tool in allTools" :key="tool.id" :to="tool.route"
             class="group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 p-5 text-center"
-            style="background: #141420; border: 1px solid rgba(255,255,255,0.06);"
+            style="background: var(--bg-card); border: 1px solid var(--border-subtle);"
             @mouseenter="($event.currentTarget as HTMLElement).style.borderColor = tool.color + '40'; ($event.currentTarget as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.4)'"
             @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'; ($event.currentTarget as HTMLElement).style.boxShadow = 'none'">
             <div v-if="tool.tag" class="absolute top-2 right-2">
@@ -265,8 +361,8 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
               :style="'background: ' + tool.color + '15;'">
               {{ tool.emoji }}
             </div>
-            <div class="font-semibold text-sm mb-1" style="color: #e8e8f0;">{{ t('lp.allTools.' + tool.id + '.name') }}</div>
-            <div class="text-xs" style="color: #6b6b8a;">{{ t('lp.allTools.' + tool.id + '.desc') }}</div>
+            <div class="font-semibold text-sm mb-1" style="color: #e8e8f0;">{{ toolName(tool) }}</div>
+            <div class="text-xs line-clamp-3" style="color: #6b6b8a;">{{ toolDesc(tool) }}</div>
           </RouterLink>
         </div>
       </div>
@@ -275,7 +371,7 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
     <!-- ============================================================
          SECTION 4 — GENERATE ENDLESS POSSIBILITIES (Category showcase)
     ============================================================= -->
-    <section class="section-padding" style="background: #0f0f17;">
+    <section class="section-padding" style="background: var(--bg-section-alt);">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
           <h2 class="text-3xl md:text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ t('lp.sec4Title') }}</h2>
@@ -284,26 +380,26 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <!-- Card 1: Fashion AI -->
           <div class="rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1"
-            style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
               <img :src="demo('try_on', 'after') || FALLBACK.try_on.after"
                 alt="Fashion AI" class="w-full h-full object-cover" />
-              <div class="absolute inset-0" style="background: linear-gradient(to top, #141420 0%, transparent 60%);"></div>
+              <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.fashionAI') }}</div>
             </div>
             <div class="p-5">
               <p class="text-sm mb-4" style="color: #9494b0;">{{ t('lp.categories.fashionAIDesc') }}</p>
               <div class="space-y-2">
-                <RouterLink to="/tools/try-on" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                <RouterLink to="/tools/try-on" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
                   <span>👗</span> {{ t('lp.allTools.tryOn.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/tools/short-video" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                <RouterLink to="/tools/short-video" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
                   <span>🎬</span> {{ t('lp.allTools.fashionReels.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/tools/upscale" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
-                  <span>🔍</span> {{ t('lp.allTools.hdUpscale.name') }}
+                <RouterLink to="/tools/avatar" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
+                  <span>🗣️</span> {{ t('lp.allTools.productAvatars.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
               </div>
@@ -311,26 +407,30 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
           </div>
           <!-- Card 2: E-commerce AI -->
           <div class="rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1"
-            style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
               <img :src="demo('product_scene', 'after') || FALLBACK.product_scene.after"
                 alt="E-commerce AI" class="w-full h-full object-cover" />
-              <div class="absolute inset-0" style="background: linear-gradient(to top, #141420 0%, transparent 60%);"></div>
+              <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.ecommerceAI') }}</div>
             </div>
             <div class="p-5">
               <p class="text-sm mb-4" style="color: #9494b0;">{{ t('lp.categories.ecommerceAIDesc') }}</p>
               <div class="space-y-2">
-                <RouterLink to="/tools/product-scene" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                <RouterLink to="/tools/product-scene" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
                   <span>📸</span> {{ t('lp.allTools.productAnyshoot.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/tools/background-removal" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                <RouterLink to="/tools/background-removal" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
                   <span>✂️</span> {{ t('lp.allTools.bgRemoval.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/tools/upscale" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                <RouterLink to="/tools/upscale" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
                   <span>🔍</span> {{ t('lp.allTools.hdUpscale.name') }}
+                  <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </RouterLink>
+                <RouterLink to="/tools/pattern-generate" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
+                  <span>▦</span> {{ t('lp.allTools.patternGenerate.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
               </div>
@@ -338,22 +438,26 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
           </div>
           <!-- Card 3: Design & Content AI -->
           <div class="rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1"
-            style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
               <img :src="demo('room_redesign', 'after') || FALLBACK.room_redesign.after"
                 alt="Design AI" class="w-full h-full object-cover" />
-              <div class="absolute inset-0" style="background: linear-gradient(to top, #141420 0%, transparent 60%);"></div>
+              <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.designAI') }}</div>
             </div>
             <div class="p-5">
               <p class="text-sm mb-4" style="color: #9494b0;">{{ t('lp.categories.designAIDesc') }}</p>
               <div class="space-y-2">
-                <RouterLink to="/tools/room-redesign" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                <RouterLink to="/tools/room-redesign" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
                   <span>🏠</span> {{ t('lp.allTools.roomRedesign.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/gallery" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#1677ff'" @mouseleave="($event.target as HTMLElement).style.color='#c4c4d8'">
+                <RouterLink to="/gallery" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
                   <span>🖼️</span> {{ t('gallery.title') }}
+                  <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </RouterLink>
+                <RouterLink to="/tools/video-transform" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
+                  <span>🎞️</span> {{ t('lp.allTools.videoTransform.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
               </div>
@@ -366,7 +470,7 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
     <!-- ============================================================
          SECTION 5 — THE FIRST AI THAT TRULY UNDERSTANDS MARKETING
     ============================================================= -->
-    <section class="section-padding" style="background: #09090b;">
+    <section class="section-padding" style="background: var(--bg-section);">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
           <h2 class="text-3xl md:text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ t('lp.sec5Title') }}</h2>
@@ -374,17 +478,24 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
         </div>
         <!-- Season tabs -->
         <div class="flex flex-wrap items-center justify-center gap-3 mb-10">
-          <button v-for="season in seasons" :key="season.id"
+          <button v-for="season in availableSeasons" :key="season.id"
             @click="setActiveSeason(season.id)"
             class="px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200"
             :style="activeSeason === season.id
-              ? 'background: #1677ff; color: #ffffff; box-shadow: 0 4px 16px rgba(22,119,255,0.35);'
-              : 'background: #141420; color: #9494b0; border: 1px solid rgba(255,255,255,0.08);'">
+              ? 'background: #f59e0b; color: #0a0a0a; font-weight: 600; box-shadow: 0 4px 16px rgba(245,158,11,0.30);'
+              : 'background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-light);'">
             {{ t('lp.seasons.' + season.id) }}
           </button>
         </div>
         <!-- Season showcase grid -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div v-if="seasonLoading && activeSeasonItems.length === 0" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div v-for="idx in 4" :key="idx"
+            class="rounded-xl overflow-hidden relative"
+            style="aspect-ratio: 3/4; background: var(--bg-card); border: 1px solid var(--border-subtle);">
+            <div class="absolute inset-0 animate-pulse" style="background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);"></div>
+          </div>
+        </div>
+        <div v-else-if="activeSeasonItems.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div v-for="(item, idx) in activeSeasonItems" :key="activeSeason + '-' + idx"
             class="rounded-xl overflow-hidden relative group cursor-pointer transition-all duration-300 hover:-translate-y-1"
             style="aspect-ratio: 3/4; background: #141420; border: 1px solid rgba(255,255,255,0.06);">
@@ -399,13 +510,16 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
             </div>
           </div>
         </div>
+        <div v-else class="rounded-xl p-8 text-center" style="background: #141420; border: 1px solid rgba(255,255,255,0.06); color: #9494b0;">
+          {{ t('lp.seasonUnavailable') }}
+        </div>
       </div>
     </section>
 
     <!-- ============================================================
          SECTION 6 — BEFORE/AFTER DEEP DIVES
     ============================================================= -->
-    <section class="section-padding" style="background: #0f0f17;">
+    <section class="section-padding" style="background: var(--bg-section-alt);">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-20">
         <div v-for="(feature, i) in deepDiveDefs" :key="feature.key"
           class="flex flex-col lg:flex-row items-center gap-10 md:gap-16"
@@ -445,40 +559,9 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
     </section>
 
     <!-- ============================================================
-         SECTION 7 — IMAGE TRANSLATION & VIDEO DUBBING
-    ============================================================= -->
-    <section class="section-padding" style="background: #09090b;">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <!-- Image Translation -->
-          <div class="rounded-2xl p-8" style="background: linear-gradient(135deg, #0f1830, #141420); border: 1px solid rgba(22,119,255,0.15);">
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4" style="background: rgba(22,119,255,0.1);">🌐</div>
-            <h3 class="text-2xl font-bold mb-3" style="color: #f5f5fa;">{{ t('lp.imageTranslation.title') }}</h3>
-            <p class="text-sm leading-relaxed mb-6" style="color: #9494b0;">{{ t('lp.imageTranslation.desc') }}</p>
-            <RouterLink to="/tools/image-translator"
-              class="btn-accent px-5 py-2.5 text-sm">
-              {{ t('lp.tryNow') }}
-            </RouterLink>
-          </div>
-          <!-- Video Translation & Dubbing -->
-          <div class="rounded-2xl p-8" style="background: linear-gradient(135deg, #14102a, #141420); border: 1px solid rgba(99,102,241,0.15);">
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4" style="background: rgba(99,102,241,0.1);">📺</div>
-            <h3 class="text-2xl font-bold mb-3" style="color: #f5f5fa;">{{ t('lp.videoDubbing.title') }}</h3>
-            <p class="text-sm leading-relaxed mb-6" style="color: #9494b0;">{{ t('lp.videoDubbing.desc') }}</p>
-            <RouterLink to="/tools/short-video"
-              class="inline-flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-lg transition-all hover:opacity-90"
-              style="background: linear-gradient(135deg, #6366f1, #a855f7);">
-              {{ t('lp.tryNow') }}
-            </RouterLink>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============================================================
          SECTION 8 — TESTIMONIALS
     ============================================================= -->
-    <section class="section-padding" style="background: #0f0f17;">
+    <section class="section-padding" style="background: var(--bg-section-alt);">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
           <h2 class="text-3xl md:text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ t('lp.sec8Title') }}</h2>
@@ -487,7 +570,7 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           <div v-for="(t2, idx) in (tm('lp.testimonials') as any[])" :key="idx"
             class="rounded-xl p-6 flex flex-col transition-all duration-300 hover:-translate-y-1"
-            style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="flex gap-0.5 mb-4">
               <span v-for="s in 5" :key="s" class="text-base" style="color: #f59e0b;">★</span>
             </div>
@@ -512,7 +595,7 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
     <!-- ============================================================
          SECTION 9 — CUSTOMER SUCCESS STORIES
     ============================================================= -->
-    <section class="section-padding" style="background: #09090b;">
+    <section class="section-padding" style="background: var(--bg-section);">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
           <h2 class="text-3xl md:text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ t('lp.sec9Title') }}</h2>
@@ -521,7 +604,7 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div v-for="story in successStories" :key="story.id"
             class="group rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1"
-            style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="p-6">
               <div class="flex items-center gap-3 mb-4">
                 <span class="text-2xl">{{ story.icon }}</span>
@@ -594,5 +677,312 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
 
 .marquee-track {
   animation: marquee 30s linear infinite;
+}
+
+.commerce-page {
+  background: #f8fafc;
+  color: #0f172a;
+  --bg-page: #f8fafc;
+  --bg-section: #f8fafc;
+  --bg-section-alt: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8fafc;
+  --bg-elevated: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --border-light: rgba(15, 23, 42, 0.12);
+  --border-medium: rgba(15, 23, 42, 0.18);
+}
+
+/* Force readable text on the light commerce theme — global @layer base sets
+   headings/body to white (--text-primary), which would be invisible here. */
+.commerce-page,
+.commerce-page p,
+.commerce-page span,
+.commerce-page li,
+.commerce-page a {
+  color: #0f172a;
+}
+.commerce-page h1,
+.commerce-page h2,
+.commerce-page h3,
+.commerce-page h4,
+.commerce-page h5,
+.commerce-page h6 {
+  color: #0f172a;
+}
+
+.commerce-page section {
+  background: #f8fafc !important;
+}
+
+.commerce-page section:nth-of-type(even) {
+  background: #ffffff !important;
+}
+
+.commerce-hero {
+  min-height: 640px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f8fc 60%, #eef2f9 100%);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  position: relative;
+}
+
+/* Disable any leftover dark-mesh overlays from other sections */
+.commerce-page :deep(.bg-mesh) { display: none; }
+
+/* Force readable colors on legacy dark inline styles in other sections */
+.commerce-page [style^="background: #141420"],
+.commerce-page [style^="background: #0f0f17"],
+.commerce-page [style^="background: #0a0a0f"],
+.commerce-page [style^="background: #09090b"],
+.commerce-page [style^="background: linear-gradient(135deg, #141420"],
+.commerce-page [style^="background: linear-gradient(135deg, #0f1830"] {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08) !important;
+}
+.commerce-page [style*="color: #f5f5fa"],
+.commerce-page [style*="color: #e8e8f0"],
+.commerce-page [style*="color: #c4c4d8"] { color: #0f172a !important; }
+.commerce-page [style*="color: #9494b0"],
+.commerce-page [style*="color: #6b6b8a"] { color: #475569 !important; }
+.commerce-page [style*="rgba(255,255,255,0.1)"] { color: #475569 !important; }
+.commerce-page :deep(.gradient-text) {
+  background: none; -webkit-text-fill-color: #0f172a; color: #0f172a;
+}
+.commerce-page :deep(.btn-secondary) {
+  border-color: rgba(15,23,42,0.16); color: #0f172a; background: #ffffff;
+}
+.commerce-page :deep(.btn-secondary:hover) {
+  border-color: #ea580c; color: #ea580c; background: #fff7ed;
+}
+.hero-bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 0;
+}
+.hero-bg-orb-a {
+  width: 480px; height: 480px;
+  top: -120px; left: -100px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.35), transparent 70%);
+}
+.hero-bg-orb-b {
+  width: 520px; height: 520px;
+  bottom: -160px; right: -120px;
+  background: radial-gradient(circle, rgba(22, 119, 255, 0.22), transparent 70%);
+}
+
+/* Eyebrow badge */
+.hero-eyebrow {
+  background: rgba(245, 158, 11, 0.10);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.hero-eyebrow-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
+/* Headline */
+.hero-headline {
+  font-family: 'Syne', system-ui, sans-serif;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  color: #0b1220;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.hero-headline-main {
+  font-size: clamp(2.25rem, 5vw, 3.75rem);
+  color: #0b1220;
+}
+.commerce-page .hero-brand-mark {
+  display: inline-block;
+  font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  margin-bottom: 4px;
+}
+.hero-sub {
+  font-size: 1.125rem;
+  line-height: 1.65;
+  color: #475569;
+  max-width: 32rem;
+}
+.hero-sub-accent {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ea580c;
+  max-width: 32rem;
+}
+
+/* CTAs */
+.hero-cta-primary {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 14px 28px;
+  font-size: 0.95rem; font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  border-radius: 10px;
+  border: none;
+  box-shadow: 0 10px 28px rgba(234, 88, 12, 0.32), inset 0 1px 0 rgba(255,255,255,0.18);
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+  cursor: pointer;
+}
+.hero-cta-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 36px rgba(234, 88, 12, 0.42);
+  filter: brightness(1.05);
+}
+.hero-cta-secondary {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 14px 26px;
+  font-size: 0.95rem; font-weight: 600;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1.5px solid rgba(15, 23, 42, 0.14);
+  border-radius: 10px;
+  transition: all .15s ease;
+}
+.hero-cta-secondary:hover {
+  border-color: #ea580c;
+  color: #ea580c;
+  background: #fff7ed;
+}
+
+.hero-trust { color: #475569; }
+.hero-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981; font-weight: 800;
+}
+
+/* Demo card (right column) */
+.hero-demo-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  box-shadow: 0 30px 80px -20px rgba(15, 23, 42, 0.22), 0 8px 24px -8px rgba(15, 23, 42, 0.08);
+  padding: 16px;
+  overflow: hidden;
+}
+.hero-demo-card::before {
+  content: '';
+  position: absolute; inset: -1px;
+  border-radius: 20px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(245,158,11,0.45), rgba(22,119,255,0.2), transparent 60%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+
+.hero-demo-tabs {
+  display: flex; gap: 6px;
+  padding: 4px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+.hero-demo-tab {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.8rem; font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all .2s ease;
+  white-space: nowrap;
+}
+.hero-demo-tab:hover { color: #0f172a; }
+.hero-demo-tab.is-active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.10), 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.hero-demo-stage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.hero-demo-pane {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+.hero-demo-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity .3s ease;
+}
+.hero-demo-badge {
+  position: absolute; top: 10px; left: 10px;
+  padding: 4px 9px;
+  font-size: 0.65rem; font-weight: 800;
+  letter-spacing: 0.08em;
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+}
+.hero-demo-badge-before {
+  background: rgba(15, 23, 42, 0.65);
+  color: #ffffff;
+}
+.hero-demo-badge-after {
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.35);
+}
+
+.hero-demo-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 14px;
+  padding: 0 4px;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+.hero-demo-meta-left { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.hero-demo-meta-right { font-weight: 500; opacity: 0.7; }
+.hero-demo-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18);
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@media (max-width: 1024px) {
+  .hero-demo-card { margin-top: 8px; }
+}
+@media (max-width: 768px) {
+  .commerce-hero { min-height: 0; }
+  .hero-headline-main { font-size: 2rem; }
+  .hero-demo-pane { aspect-ratio: 4 / 5; }
 }
 </style>

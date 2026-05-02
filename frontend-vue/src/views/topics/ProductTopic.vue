@@ -386,8 +386,9 @@ onMounted(async () => {
             <div v-if="canUseCustomInputs">
               <p class="text-sm text-gray-400 mb-2">{{ isZh ? '或上傳自訂圖片' : 'Or upload custom image' }}</p>
               <UploadZone
-                accept="image/*"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                 @files-selected="handleFileSelect"
+                @error="uiStore.showError"
               />
             </div>
 

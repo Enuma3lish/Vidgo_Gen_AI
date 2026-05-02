@@ -71,7 +71,7 @@ function handleClick(event: MouseEvent) {
 
 .base-button:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
 }
 
 /* Sizes */
@@ -92,51 +92,58 @@ function handleClick(event: MouseEvent) {
 
 /* Variants */
 .variant-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: #f59e0b;
+  color: #0a0a0a;
+  font-weight: 600;
 }
 
 .variant-primary:hover:not(:disabled) {
+  background: #fbbf24;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.35);
 }
 
 .variant-secondary {
-  background: #f5f5f5;
-  color: #1a1a2e;
+  background: transparent;
+  color: var(--text-primary, #fafaf9);
+  border: 1px solid rgba(255, 251, 245, 0.16);
 }
 
 .variant-secondary:hover:not(:disabled) {
-  background: #e0e0e0;
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
 }
 
 .variant-outline {
   background: transparent;
-  border: 2px solid #667eea;
-  color: #667eea;
+  border: 1.5px solid #f59e0b;
+  color: #f59e0b;
 }
 
 .variant-outline:hover:not(:disabled) {
-  background: #667eea;
-  color: white;
+  background: #f59e0b;
+  color: #0a0a0a;
 }
 
 .variant-ghost {
   background: transparent;
-  color: #667eea;
+  color: var(--text-secondary, #a8a29e);
 }
 
 .variant-ghost:hover:not(:disabled) {
-  background: rgba(102, 126, 234, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #fafaf9);
 }
 
 .variant-danger {
-  background: #dc3545;
+  background: #dc2626;
   color: white;
 }
 
 .variant-danger:hover:not(:disabled) {
-  background: #c82333;
+  background: #b91c1c;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
 }
 
 /* States */

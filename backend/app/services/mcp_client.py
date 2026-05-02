@@ -202,6 +202,18 @@ class MCPClientManager:
         self._started = True
         logger.info(f"[MCPManager] Startup initiated for: {list(params_map.keys())}")
 
+    async def ensure_available(self, server_name: str) -> bool:
+        """Ensure a configured MCP server is started and connected."""
+        if not self._started:
+            await self.startup()
+
+        conn = self._servers.get(server_name)
+        if not conn:
+            return False
+        if conn.connected:
+            return True
+        return await conn.connect()
+
     async def _connect_with_retry(self, conn: MCPServerConnection, max_retries: int = 3):
         """Try connecting with retries."""
         for attempt in range(1, max_retries + 1):
@@ -225,6 +237,9 @@ class MCPClientManager:
         self, server_name: str, tool_name: str, arguments: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Call a tool on a specific MCP server."""
+        if not self._started:
+            await self.startup()
+
         conn = self._servers.get(server_name)
         if not conn:
             raise ValueError(f"MCP server '{server_name}' not configured")

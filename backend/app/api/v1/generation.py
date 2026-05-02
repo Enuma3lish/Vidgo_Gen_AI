@@ -29,6 +29,7 @@ from app.providers.provider_router import get_provider_router, TaskType
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.similarity import get_similarity_service
 from app.api.deps import get_current_user_optional, get_db, get_redis, is_subscribed_user
+from app.core.upload_validation import image_dimension_rules_for_tool, validate_uploaded_content
 from app.models.demo import ToolShowcase, PromptCache
 from app.models.material import Material, ToolType
 from app.models.user_generation import UserGeneration
@@ -1119,21 +1120,15 @@ async def upload_and_generate(
             detail="Active subscription required to upload and process custom materials. Subscribe to unlock this feature.",
         )
 
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only image files are supported (JPEG, PNG, WebP)",
-        )
-
     import base64
     contents = await file.read()
-    if len(contents) > 10 * 1024 * 1024:  # 10MB limit
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File size exceeds 10MB limit",
-        )
-
-    mime = file.content_type or "image/png"
+    mime = validate_uploaded_content(
+        content=contents,
+        declared_content_type=file.content_type,
+        expected_kind="image",
+        max_bytes=20 * 1024 * 1024,
+        dimension_rules=image_dimension_rules_for_tool(tool_type),
+    )
     b64 = base64.b64encode(contents).decode("utf-8")
     data_url = f"data:{mime};base64,{b64}"
 

@@ -5,11 +5,14 @@ import { useAdminStore } from '@/stores/admin'
 const adminStore = useAdminStore()
 
 const toolTypes: Record<string, string> = {
-  background_removal: 'Background Removal',
-  product_scene: 'Product Scene',
-  try_on: 'AI Try-On',
-  room_redesign: 'Room Redesign',
-  short_video: 'Short Video'
+  background_removal: '智能去背',
+  product_scene: '商品情境',
+  try_on: '模特換裝',
+  room_redesign: '空間改造',
+  short_video: '短影音',
+  ai_avatar: '數位人',
+  pattern_generate: '圖案生成',
+  effect: '圖片特效'
 }
 
 onMounted(() => {
@@ -19,7 +22,7 @@ onMounted(() => {
 async function reviewItem(materialId: string, action: 'approve' | 'reject' | 'feature') {
   let reason: string | undefined
   if (action === 'reject') {
-    reason = prompt('Enter rejection reason:') || undefined
+    reason = prompt('請輸入拒絕原因：') || undefined
     if (!reason) return
   }
 
@@ -39,15 +42,15 @@ function getToolLabel(toolType: string | null): string {
 <template>
   <div class="admin-moderation">
     <header class="page-header">
-      <h1>Content Moderation</h1>
-      <p class="subtitle">Review pending user-generated content</p>
+      <h1>內容審核</h1>
+      <p class="subtitle">審核待處理的使用者生成內容</p>
     </header>
 
     <!-- Queue Stats -->
     <div class="queue-stats">
       <div class="stat">
         <span class="stat-value">{{ adminStore.moderationQueue.length }}</span>
-        <span class="stat-label">Items in Queue</span>
+        <span class="stat-label">待審核項目</span>
       </div>
     </div>
 
@@ -70,7 +73,7 @@ function getToolLabel(toolType: string | null): string {
             muted
             controls
           />
-          <div v-else class="no-preview">No Preview</div>
+          <div v-else class="no-preview">無預覽</div>
         </div>
 
         <div class="item-details">
@@ -82,27 +85,27 @@ function getToolLabel(toolType: string | null): string {
           <h3 class="item-topic">{{ item.topic }}</h3>
 
           <div class="item-prompt" v-if="item.prompt">
-            <strong>Prompt:</strong>
+            <strong>提示詞：</strong>
             <p>{{ item.prompt }}</p>
           </div>
 
           <div class="item-meta">
-            <span>Submitted: {{ formatDate(item.created_at) }}</span>
+            <span>提交時間：{{ formatDate(item.created_at) }}</span>
           </div>
         </div>
 
         <div class="item-actions">
           <button @click="reviewItem(item.id, 'approve')" class="action-btn approve">
             <span class="icon">✓</span>
-            Approve
+            通過
           </button>
           <button @click="reviewItem(item.id, 'feature')" class="action-btn feature">
             <span class="icon">★</span>
-            Feature
+            設為精選
           </button>
           <button @click="reviewItem(item.id, 'reject')" class="action-btn reject">
             <span class="icon">✕</span>
-            Reject
+            拒絕
           </button>
         </div>
       </div>
@@ -111,8 +114,8 @@ function getToolLabel(toolType: string | null): string {
     <!-- Empty State -->
     <div v-if="adminStore.moderationQueue.length === 0 && !adminStore.isLoading" class="empty-state">
       <div class="empty-icon">✓</div>
-      <h2>All Clear!</h2>
-      <p>No items pending review</p>
+      <h2>目前無待審核內容</h2>
+      <p>所有項目都已處理完畢</p>
     </div>
 
     <!-- Loading -->

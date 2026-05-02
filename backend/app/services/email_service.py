@@ -5,6 +5,8 @@ import html
 import smtplib
 import logging
 import ssl
+import time
+import traceback as _traceback
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Any, Dict, List, Optional
@@ -489,6 +491,67 @@ Get started at: {self.frontend_url}
 
         return await self.send_email(to_email, subject, html_content, text_content)
 
+    async def send_promotion_code_used_email(
+        self,
+        to_email: str,
+        new_user_email: str,
+        promotion_code: str,
+        reward_credits: int,
+        username: Optional[str] = None,
+    ) -> bool:
+        """Notify a promoter when someone registers with their promotion code."""
+        subject = "[VidGo] Your promotion code was used"
+        greeting = f"Hi {username}," if username else "Hi,"
+        safe_user_email = html.escape(new_user_email)
+        safe_code = html.escape(promotion_code)
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }}
+                .notice {{ background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; margin: 20px 0; }}
+                .credits {{ color: #4f46e5; font-weight: bold; }}
+                .footer {{ text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Promotion Code Used</h1>
+                </div>
+                <div class="content">
+                    <p>{greeting}</p>
+                    <div class="notice">
+                        <p><strong>User:</strong> {safe_user_email} used your promotion code <strong>{safe_code}</strong>.</p>
+                        <p>You received <span class="credits">{reward_credits} bonus credits</span>.</p>
+                    </div>
+                    <p>You can view your referral stats from your VidGo dashboard.</p>
+                </div>
+                <div class="footer">
+                    <p>© 2024 VidGo. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""{greeting}
+
+User: {new_user_email} used your promotion code {promotion_code}.
+You received {reward_credits} bonus credits.
+
+You can view your referral stats from your VidGo dashboard.
+
+© 2024 VidGo. All rights reserved.
+        """
+
+        return await self.send_email(to_email, subject, html_content, text_content)
+
     async def send_invoice_email(
         self,
         to_email: str,
@@ -662,5 +725,99 @@ If you have any questions, please contact our support team.
         return await self.send_email(to_email, subject, html_content, text_content)
 
 
+# In-memory rate limiter for admin tool-failure alerts
+# Key: (tool_name, error_signature) -> last sent timestamp (epoch seconds)
+_TOOL_FAILURE_ALERT_LAST_SENT: Dict[str, float] = {}
+_TOOL_FAILURE_ALERT_INTERVAL_SECONDS = 60.0
+
+
 # Singleton instance
 email_service = EmailService()
+
+
+async def send_admin_tool_failure_email(
+    tool_name: str,
+    user_email: Optional[str],
+    error: BaseException,
+    request_id: Optional[str] = None,
+    extra_context: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Notify admins that an internal tool/api failed for a user.
+
+    Rate-limited per (tool_name, error_class) at most once per minute to
+    avoid an email storm during outages. Failures here are swallowed so a
+    broken mail pipeline never affects user-facing requests.
+    """
+    try:
+        error_class = type(error).__name__
+        error_summary = str(error)[:500] or error_class
+        rate_key = f"{tool_name}::{error_class}"
+        now = time.monotonic()
+        last = _TOOL_FAILURE_ALERT_LAST_SENT.get(rate_key, 0.0)
+        if now - last < _TOOL_FAILURE_ALERT_INTERVAL_SECONDS:
+            logger.info(
+                "Suppressing duplicate admin tool-failure alert for %s (%s)",
+                tool_name,
+                error_class,
+            )
+            return False
+        _TOOL_FAILURE_ALERT_LAST_SENT[rate_key] = now
+
+        recipients = email_service.get_admin_recipients()
+        if not recipients:
+            logger.warning("No admin recipients configured for tool-failure alerts.")
+            return False
+
+        traceback_excerpt = ""
+        try:
+            tb = _traceback.format_exception(type(error), error, error.__traceback__)
+            traceback_excerpt = "".join(tb)[-2000:]
+        except Exception:
+            traceback_excerpt = ""
+
+        context_lines = []
+        if request_id:
+            context_lines.append(f"Request ID: {request_id}")
+        if user_email:
+            context_lines.append(f"User: {user_email}")
+        if extra_context:
+            for k, v in extra_context.items():
+                context_lines.append(f"{k}: {str(v)[:200]}")
+        context_block = "\n".join(context_lines) or "(no additional context)"
+
+        subject = f"[VidGo] Tool failure: {tool_name} ({error_class})"
+
+        html_body = f"""
+        <!DOCTYPE html><html><body style="font-family: Arial, sans-serif; line-height: 1.55; color: #111;">
+            <h2 style="color:#b91c1c;">Tool failure: {html.escape(tool_name)}</h2>
+            <p>An internal tool raised an unhandled exception while serving a user request.</p>
+            <h3>Context</h3>
+            <pre style="background:#f3f4f6;padding:12px;border-radius:6px;white-space:pre-wrap;">{html.escape(context_block)}</pre>
+            <h3>Error</h3>
+            <pre style="background:#fef2f2;padding:12px;border-radius:6px;white-space:pre-wrap;color:#b91c1c;">{html.escape(error_class)}: {html.escape(error_summary)}</pre>
+            <h3>Traceback</h3>
+            <pre style="background:#f9fafb;padding:12px;border-radius:6px;white-space:pre-wrap;font-size:12px;">{html.escape(traceback_excerpt or '(unavailable)')}</pre>
+            <p style="color:#6b7280;font-size:12px;">Alerts are rate-limited to one per minute per error class.</p>
+        </body></html>
+        """
+
+        text_body = (
+            f"Tool failure: {tool_name}\n"
+            f"Error: {error_class}: {error_summary}\n\n"
+            f"Context:\n{context_block}\n\n"
+            f"Traceback:\n{traceback_excerpt or '(unavailable)'}\n"
+        )
+
+        sent_any = False
+        for recipient in recipients:
+            try:
+                delivered = await email_service.send_email(
+                    recipient, subject, html_body, text_body
+                )
+                sent_any = sent_any or delivered
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error("Failed to send admin tool-failure alert: %s", exc)
+        return sent_any
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("send_admin_tool_failure_email crashed: %s", exc)
+        return False

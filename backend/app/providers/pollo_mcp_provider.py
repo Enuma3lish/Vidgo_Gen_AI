@@ -65,7 +65,7 @@ class PolloMCPProvider(VideoGenerationProvider):
 
     async def health_check(self) -> bool:
         manager = get_mcp_manager()
-        return manager.is_available("pollo")
+        return await manager.ensure_available("pollo")
 
     async def close(self):
         pass  # Lifecycle managed by MCPClientManager
@@ -172,18 +172,21 @@ class PolloMCPProvider(VideoGenerationProvider):
         if expected_name in available_names:
             return expected_name
 
-        # Try to find an alternative tool with the same prefix
-        matching = [n for n in available_names if n.startswith(f"{prefix}_")]
-        if matching:
-            fallback = matching[0]
-            logger.warning(
-                f"[Pollo MCP] Tool '{expected_name}' not found. "
-                f"Using fallback: '{fallback}'. Available: {available_names}"
+        # If the caller explicitly asked for a model whose MCP tool is not
+        # available, do NOT silently swap to a different model — that would
+        # produce an unexpected result. Raise so ProviderRouter falls back to
+        # Pollo REST (which supports far more model IDs via per-model HTTP
+        # endpoints) or to the next provider in the chain.
+        if model_alias != DEFAULT_VIDEO_MODEL:
+            raise ValueError(
+                f"Pollo MCP has no '{expected_name}' tool. "
+                f"Available {prefix}_* tools: "
+                f"{[n for n in available_names if n.startswith(f'{prefix}_')] or available_names}. "
+                f"Falling through to next provider."
             )
-            return fallback
 
-        # No tools found — return expected name and let the call fail
-        # (this handles the case where tools haven't been cached yet)
+        # Default model requested but its tool isn't loaded yet — return the
+        # expected name and let the call fail with a clean error.
         logger.warning(
             f"[Pollo MCP] No {prefix}_* tools found. "
             f"Attempting '{expected_name}'. Available: {available_names}"

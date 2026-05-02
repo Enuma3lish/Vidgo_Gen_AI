@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
-import { toolsApi } from '@/api'
+import { toolsApi, uploadsApi } from '@/api'
+import type { ModelInfo, UploadStatusResponse } from '@/api'
 // PRESET-ONLY MODE: UploadZone removed - all users use presets
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
@@ -46,14 +47,28 @@ const {
 } = useDemoMode()
 
 const uploadedImage = ref<string | undefined>(undefined)
+const uploadedProductFile = ref<File | null>(null)
 const resultImages = ref<string[]>([])
 const isProcessing = ref(false)
+const CUSTOM_PROMPT_MAX_CHARS = 300
+const UPLOAD_POLL_INTERVAL_MS = 3000
+const UPLOAD_POLL_MAX_ATTEMPTS = 180
 // True when a demo user clicked Generate but the selected tile isn't backed
 // by a real Material DB preset (db_empty fallback or missing preset id).
 // Surfaces a persistent in-block message instead of a silent no-op.
 const demoEmptyState = ref(false)
 const selectedScene = ref('studio')
 const prompt = ref('')
+const productModels = ref<ModelInfo[]>([])
+const selectedProductModel = ref('default')
+const subscriberUploadId = ref<string | null>(null)
+const customScenePrompt = computed(() => prompt.value.trim().slice(0, CUSTOM_PROMPT_MAX_CHARS))
+const customPromptLength = computed(() => prompt.value.length)
+const pendingTitle = computed(() => isZh.value
+  ? '我正在產生所需的圖片，這可能需要一些時間，請稍後再回來查看是否已完成。'
+  : 'I am generating the requested image. This may take a little time, so please check back shortly.')
+const pendingDetail = computed(() => isZh.value ? '正在生成商品情境...' : 'Generating product scene...')
+const pendingDuration = computed(() => isZh.value ? '需要 1 至 2 分鐘' : 'Usually takes 1 to 2 minutes')
 
 // Style templates (curated prompts hidden from user)
 interface StyleTemplateItem {
@@ -189,6 +204,27 @@ onMounted(async () => {
   }
 })
 
+watch(isDemoUser, async (demo) => {
+  if (!demo) await loadProductModels()
+}, { immediate: true })
+
+watch(locale, async () => {
+  await Promise.all([
+    loadDemoTemplates("product_scene", undefined, locale.value),
+    loadEffectCatalog("product_scene", locale.value)
+  ])
+})
+
+async function loadProductModels() {
+  try {
+    const response = await uploadsApi.getToolModels('product_scene')
+    productModels.value = response.models
+    selectedProductModel.value = response.models[0]?.id || 'default'
+  } catch (error) {
+    console.warn('Failed to load product scene models:', error)
+  }
+}
+
 // Load pre-generated preset IDs for ALL product×scene combinations from database
 function loadAllPreGeneratedResults() {
   preGeneratedTemplateIds.value = {}
@@ -217,9 +253,136 @@ function loadAllPreGeneratedResults() {
 function selectDefaultProduct(product: DemoProduct) {
   selectedProductId.value = product.id
   uploadedImage.value = product.input
+  uploadedProductFile.value = null
   // Don't change the scene - user can select any scene independently
   resultImages.value = []
+  subscriberUploadId.value = null
   demoEmptyState.value = false
+}
+
+function handleUploadedProductFile(file: File) {
+  uploadedProductFile.value = file
+  resultImages.value = []
+  subscriberUploadId.value = null
+  demoEmptyState.value = false
+}
+
+function selectScene(scene: { id: string; proOnly?: boolean }) {
+  if (scene.proOnly && !canUseCustomInputs.value) {
+    uiStore.showError(isZh.value ? '請訂閱以使用此功能' : 'Please subscribe to use this feature')
+    return
+  }
+
+  selectedScene.value = scene.id
+  if (scene.id !== 'custom') {
+    selectedTemplateId.value = null
+  }
+  resultImages.value = []
+  subscriberUploadId.value = null
+  demoEmptyState.value = false
+}
+
+function selectStyleTemplate(templateId: string) {
+  selectedTemplateId.value = templateId
+  selectedScene.value = 'custom'
+  prompt.value = ''
+  resultImages.value = []
+  subscriberUploadId.value = null
+  demoEmptyState.value = false
+}
+
+watch(prompt, (value) => {
+  if (value.length > CUSTOM_PROMPT_MAX_CHARS) {
+    prompt.value = value.slice(0, CUSTOM_PROMPT_MAX_CHARS)
+  }
+})
+
+function buildStableProductScenePrompt(sceneDescription: string): string {
+  const cleanScene = sceneDescription.replace(/\s+/g, ' ').trim().slice(0, 180)
+  return [
+    'E-commerce product photo.',
+    `Scene: ${cleanScene || 'clean professional studio background'}.`,
+    'Keep the uploaded product unchanged: shape, label, color, material.',
+    'Shot: centered 3/4 front view, realistic scale, clean contact shadow.',
+    'Lighting: soft diffused studio light, natural reflections, high clarity.',
+    'Avoid duplicate products, warped text or logos, watermark, and clutter covering the product.'
+  ].join(' ')
+}
+
+function resolveSubscriberScenePrompt(): string {
+  if (selectedScene.value === 'custom' && !selectedTemplateId.value) {
+    return buildStableProductScenePrompt(customScenePrompt.value)
+  }
+  if (selectedTemplateId.value) {
+    const template = styleTemplates.value.find(tmpl => tmpl.id === selectedTemplateId.value)
+    if (template) return buildStableProductScenePrompt(`${isZh.value ? template.name_zh : template.name_en} professional product photography scene`)
+  }
+  const catalogPrompt = effectCatalog.value.find(effect => effect.id === selectedScene.value)?.prompt
+  if (catalogPrompt) return buildStableProductScenePrompt(catalogPrompt)
+  const scene = sceneTemplates.value.find(item => item.id === selectedScene.value)
+  return buildStableProductScenePrompt(scene ? `${scene.name}: ${scene.desc}` : 'professional product photography scene')
+}
+
+async function waitForUploadCompletion(uploadId: string): Promise<UploadStatusResponse> {
+  let status = await uploadsApi.getUploadStatus(uploadId)
+  for (let attempt = 0; attempt < UPLOAD_POLL_MAX_ATTEMPTS && (status.status === 'pending' || status.status === 'processing'); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, UPLOAD_POLL_INTERVAL_MS))
+    status = await uploadsApi.getUploadStatus(uploadId)
+  }
+  return status
+}
+
+function extensionFromType(contentType: string): string {
+  if (contentType.includes('video')) return 'mp4'
+  if (contentType.includes('png')) return 'png'
+  if (contentType.includes('webp')) return 'webp'
+  return 'jpg'
+}
+
+async function downloadSubscriberResult() {
+  if (!subscriberUploadId.value) return
+  try {
+    const blob = await uploadsApi.downloadResult(subscriberUploadId.value)
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = `vidgo_product_scene_${subscriberUploadId.value.slice(0, 8)}.${extensionFromType(blob.type)}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(objectUrl)
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail || error?.message || ''
+    uiStore.showError(detail || (isZh.value ? '下載失敗，請稍後再試' : 'Download failed. Please try again.'))
+  }
+}
+
+async function generateSubscriberUploadScene(): Promise<boolean> {
+  if (isDemoUser.value || !uploadedProductFile.value) return false
+
+  const upload = await uploadsApi.uploadAndGenerate(
+    'product_scene',
+    uploadedProductFile.value,
+    selectedProductModel.value,
+    resolveSubscriberScenePrompt(),
+  )
+  const status = await waitForUploadCompletion(upload.upload_id)
+  if (status.status === 'pending' || status.status === 'processing') {
+    throw new Error(isZh.value ? '生成時間較長，已在背景繼續處理。請稍後到作品庫查看結果。' : 'Generation is taking longer than expected and is still processing in the background. Please check your library later.')
+  }
+  if (status.status === 'failed') {
+    throw new Error(status.error_message || 'Generation failed')
+  }
+  const resultUrl = status.result_url || status.result_video_url
+  if (!resultUrl) {
+    throw new Error(isZh.value ? '生成完成但沒有返回結果' : 'Generation completed without a result URL')
+  }
+
+  resultImages.value = [resultUrl]
+  subscriberUploadId.value = upload.upload_id
+  await creditsStore.fetchBalance()
+  uiStore.showSuccess(t('common.success'))
+  return true
 }
 
 async function generateScenes() {
@@ -228,6 +391,11 @@ async function generateScenes() {
   // Demo users cannot use custom scene
   if (isDemoUser.value && selectedScene.value === 'custom') {
     uiStore.showError(isZh.value ? '請訂閱以使用自訂場景' : 'Please subscribe to use custom scene')
+    return
+  }
+
+  if (selectedScene.value === 'custom' && !selectedTemplateId.value && !customScenePrompt.value) {
+    uiStore.showError(isZh.value ? '請輸入 300 字內的自訂場景描述' : 'Please enter a custom scene prompt up to 300 characters')
     return
   }
 
@@ -299,6 +467,11 @@ async function generateScenes() {
       return
     }
 
+    if (await generateSubscriberUploadScene()) {
+      return
+    }
+
+    subscriberUploadId.value = null
     let uploadUrl = uploadedImage.value
     if (uploadedImage.value.startsWith('data:')) {
       const blob = dataURItoBlob(uploadedImage.value)
@@ -313,13 +486,14 @@ async function generateScenes() {
     const result = await toolsApi.productScene(
       uploadUrl,
       selectedScene.value,
-      selectedScene.value === 'custom' ? prompt.value : undefined,
+      selectedScene.value === 'custom' ? customScenePrompt.value : undefined,
       selectedProductId.value || undefined,
       selectedTemplateId.value || undefined,
     )
 
     if (result.success && (result.image_url || result.result_url)) {
       resultImages.value = [result.image_url || result.result_url || '']
+      subscriberUploadId.value = null
       creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success'))
     } else {
@@ -349,8 +523,14 @@ function dataURItoBlob(dataURI: string): Blob | null {
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
-    <LoadingOverlay :show="isProcessing" :message="t('common.processing')" />
+  <div class="commerce-tool-page min-h-screen pt-24 pb-20" style="background: #f8fafc; color: #0f172a;">
+    <LoadingOverlay
+      :show="isProcessing"
+      :message="t('common.processing')"
+      :title="pendingTitle"
+      :detail="pendingDetail"
+      :duration="pendingDuration"
+    />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
@@ -443,8 +623,31 @@ function dataURItoBlob(dataURI: string): Blob | null {
              <ImageUploader 
                v-model="uploadedImage" 
                :label="isZh ? '點擊上傳或拖放產品圖片' : 'Drop product image here'"
+               @file-selected="handleUploadedProductFile"
                class="mb-4"
              />
+             <div v-if="productModels.length > 1" class="mt-4">
+               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? 'AI 模型' : 'AI Model' }}</h4>
+               <div class="space-y-2">
+                 <button
+                   v-for="model in productModels"
+                   :key="model.id"
+                   @click="selectedProductModel = model.id"
+                   class="w-full p-3 rounded-xl border-2 transition-all text-left flex items-center justify-between"
+                   :class="selectedProductModel === model.id
+                     ? 'border-primary-500 bg-primary-500/10'
+                     : 'hover:border-dark-500'"
+                   style="border-color: rgba(255,255,255,0.08);"
+                 >
+                   <span class="text-sm font-medium text-dark-50">
+                     {{ isZh ? model.name_zh : model.name }}
+                   </span>
+                   <span class="text-xs text-primary-400 ml-3 shrink-0">
+                     {{ model.credit_cost }} {{ isZh ? '點數' : 'credits' }}
+                   </span>
+                 </button>
+               </div>
+             </div>
           </div>
 
           <!-- PRESET-ONLY: Custom upload hidden? No, we just added it above. -->
@@ -463,7 +666,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
             <button
               v-for="scene in sceneTemplates"
               :key="scene.id"
-              @click="!scene.proOnly || canUseCustomInputs ? (selectedScene = scene.id) : uiStore.showError(isZh ? '請訂閱以使用此功能' : 'Please subscribe to use this feature')"
+              @click="selectScene(scene)"
               class="p-4 rounded-xl border-2 transition-all text-left relative"
               :class="[
                 selectedScene === scene.id
@@ -497,7 +700,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
               <button
                 v-for="tmpl in styleTemplates"
                 :key="tmpl.id"
-                @click="selectedTemplateId = tmpl.id; selectedScene = 'custom'"
+                @click="selectStyleTemplate(tmpl.id)"
                 class="relative rounded-xl border-2 p-3 transition-all text-left"
                 :class="selectedTemplateId === tmpl.id
                   ? 'border-primary-500 bg-primary-500/10'
@@ -532,9 +735,19 @@ function dataURItoBlob(dataURI: string): Blob | null {
              <textarea
                v-model="prompt"
                rows="3"
-               class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
-               :placeholder="isZh ? '描述您想要的場景細節...' : 'Describe the scene details...'"
+               :maxlength="CUSTOM_PROMPT_MAX_CHARS"
+               :placeholder="isZh ? '例：白色保養品瓶，乾淨奶油色背景，柔和棚燈，45度商品攝影，保留包裝文字清晰' : 'Example: skincare bottle, warm cream background, soft studio light, 45-degree product shot, keep label text clear'"
+               class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
              ></textarea>
+             <div class="prompt-stability-row mt-2">
+               <span>{{ isZh ? '主體不變' : 'Subject locked' }}</span>
+               <span>{{ isZh ? '光線' : 'Lighting' }}</span>
+               <span>{{ isZh ? '鏡頭角度' : 'Camera angle' }}</span>
+               <span>{{ isZh ? '乾淨背景' : 'Clean background' }}</span>
+             </div>
+             <div class="mt-1 flex justify-end text-xs text-dark-400">
+               <span>{{ customPromptLength }}/{{ CUSTOM_PROMPT_MAX_CHARS }}</span>
+             </div>
            </div>
 
           <!-- Credit Cost & Generate -->
@@ -564,13 +777,20 @@ function dataURItoBlob(dataURI: string): Blob | null {
               
               <!-- Download Button -->
                <a
-                  v-if="!isDemoUser"
+                v-if="!isDemoUser && !subscriberUploadId"
                   :href="img"
                   download="vidgo_product_scene.png"
                   class="btn-primary w-full text-center py-2 block"
                >
                  {{ t('common.download') }}
                </a>
+              <button
+                v-else-if="!isDemoUser && subscriberUploadId"
+                @click="downloadSubscriberResult"
+                class="btn-primary w-full text-center py-2 block"
+              >
+                {{ t('common.download') }}
+              </button>
             </div>
               
               <!-- Subscribe CTA for Demo Users -->
@@ -603,3 +823,69 @@ function dataURItoBlob(dataURI: string): Blob | null {
     </div>
   </div>
 </template>
+
+<style scoped>
+.commerce-tool-page :deep(.card) {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+}
+
+.commerce-tool-page :deep(.text-dark-50),
+.commerce-tool-page :deep(.text-dark-100),
+.commerce-tool-page :deep(.text-dark-200),
+.commerce-tool-page :deep(h1.text-white),
+.commerce-tool-page :deep(h2.text-white),
+.commerce-tool-page :deep(h3.text-white),
+.commerce-tool-page :deep(h4.text-white) {
+  color: #0f172a !important;
+}
+
+.commerce-tool-page :deep(.text-dark-300),
+.commerce-tool-page :deep(.text-dark-400),
+.commerce-tool-page :deep(.text-gray-400),
+.commerce-tool-page :deep(.text-gray-500) {
+  color: #64748b !important;
+}
+
+.commerce-tool-page :deep(.bg-dark-700),
+.commerce-tool-page :deep(.bg-dark-800),
+.commerce-tool-page [style^="background: #141420"],
+.commerce-tool-page [style^="background: #1a1a2e"] {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+.commerce-tool-page [style*="color: #f5f5fa"] {
+  color: #0f172a !important;
+}
+
+.commerce-tool-page textarea,
+.commerce-tool-page input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+.commerce-tool-page textarea::placeholder,
+.commerce-tool-page input::placeholder {
+  color: #94a3b8;
+}
+
+.prompt-stability-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.prompt-stability-row span {
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #0958d9;
+  border: 1px solid rgba(22, 119, 255, 0.14);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+</style>

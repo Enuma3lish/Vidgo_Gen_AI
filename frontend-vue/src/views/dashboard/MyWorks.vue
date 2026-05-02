@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/user'
 import type { UserGeneration } from '@/api/user'
 import ShareToSocialModal from '@/components/social/ShareToSocialModal.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const router = useRouter()
 const authStore = useAuthStore()
 
 const selectedFilter = ref('all')
@@ -17,28 +19,36 @@ const totalWorks = ref(0)
 const currentPage = ref(1)
 const perPage = 20
 
-const filters = [
-  { id: 'all', label: '全部' },
-  { id: 'background_removal', label: '智能去背（基礎）' },
-  { id: 'product_scene', label: 'AI 商品情境攝影棚' },
-  { id: 'try_on', label: 'AI 模特換裝' },
-  { id: 'room_redesign', label: '毛胚屋/線稿秒渲染' },
-  { id: 'short_video', label: '商品動態短影音（圖生影片）' },
-  { id: 'ai_avatar', label: 'AI 頭像' },
-  { id: 'pattern_generate', label: '圖案設計' },
-  { id: 'effect', label: '風格特效' }
-]
+const toolTranslationKeys: Record<string, string> = {
+  all: 'dashboard.myWorks.filters.all',
+  background_removal: 'dashboard.myWorks.filters.background_removal',
+  product_scene: 'dashboard.myWorks.filters.product_scene',
+  try_on: 'dashboard.myWorks.filters.try_on',
+  room_redesign: 'dashboard.myWorks.filters.room_redesign',
+  short_video: 'dashboard.myWorks.filters.short_video',
+  ai_avatar: 'dashboard.myWorks.filters.ai_avatar',
+  pattern_generate: 'dashboard.myWorks.filters.pattern_generate',
+  effect: 'dashboard.myWorks.filters.effect',
+}
+
+const filterDefinitions = Object.keys(toolTranslationKeys).map(id => ({ id }))
+const filters = computed(() => filterDefinitions.map(filter => ({
+  id: filter.id,
+  label: t(toolTranslationKeys[filter.id]),
+})))
 
 // Social media sharing
 const showShareModal = ref(false)
 const shareTarget = ref<UserGeneration | null>(null)
 
 const isSubscribed = computed(() => {
+  if (authStore.isAdmin) return true
   const plan = authStore.user?.plan_type
   return plan && plan !== 'free' && plan !== 'demo'
 })
 
 async function fetchWorks() {
+  if (authStore.isAdmin) return
   loading.value = true
   try {
     const params: Record<string, unknown> = {
@@ -60,9 +70,30 @@ async function fetchWorks() {
   }
 }
 
-onMounted(fetchWorks)
+async function redirectAdminAway(): Promise<boolean> {
+  if (!authStore.user && authStore.accessToken) {
+    try { await authStore.fetchUser() } catch { /* route guard handles unauthenticated users */ }
+  }
+  if (authStore.isAdmin) {
+    await router.replace({ name: 'admin-dashboard' })
+    return true
+  }
+  return false
+}
+
+onMounted(async () => {
+  if (await redirectAdminAway()) return
+  await fetchWorks()
+})
+
+watch(() => authStore.isAdmin, (isAdmin) => {
+  if (isAdmin) {
+    router.replace({ name: 'admin-dashboard' })
+  }
+}, { immediate: true })
 
 watch([selectedFilter, showExpired], () => {
+  if (authStore.isAdmin) return
   currentPage.value = 1
   fetchWorks()
 })
@@ -96,23 +127,22 @@ function isVideo(work: UserGeneration): boolean {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  return new Date(dateStr).toLocaleDateString(locale.value)
 }
 
 function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('zh-TW')
+  return new Date(dateStr).toLocaleString(locale.value)
 }
 
 /** 取得過期倒數文字 */
 function getExpiryLabel(work: UserGeneration): string {
-  if (work.media_expired) return '已過期'
+  if (work.media_expired) return t('dashboard.myWorks.expiry.expired')
   if (!work.expires_at) return ''
   const hours = work.hours_until_expiry ?? 0
   const days = work.days_until_expiry ?? 0
-  if (hours <= 0) return '即將過期'
-  if (hours < 24) return `${hours} 小時後過期`
-  if (days <= 3) return `${days} 天後過期`
-  return `${days} 天後過期`
+  if (hours <= 0) return t('dashboard.myWorks.expiry.soon')
+  if (hours < 24) return t('dashboard.myWorks.expiry.hours', { hours })
+  return t('dashboard.myWorks.expiry.days', { days })
 }
 
 /** 過期倒數的顏色 */
@@ -124,38 +154,28 @@ function getExpiryColor(work: UserGeneration): string {
   return '#4a7bb5'                     // 正常藍色
 }
 
-/** 取得工具類型的中文名稱 */
 function getToolName(toolType: string): string {
-  const names: Record<string, string> = {
-    background_removal: '智能去背（基礎）',
-    product_scene: 'AI 商品情境攝影棚',
-    try_on: 'AI 模特換裝',
-    room_redesign: '毛胚屋/線稿秒渲染',
-    short_video: '商品動態短影音（圖生影片）',
-    ai_avatar: 'AI 頭像',
-    pattern_generate: '圖案設計',
-    effect: '風格特效',
-  }
-  return names[toolType] || toolType.replace(/_/g, ' ')
+  const key = toolTranslationKeys[toolType]
+  return key ? t(key) : toolType.replace(/_/g, ' ')
 }
 
 /** 取得生成參數的可讀摘要 */
 function getParamsSummary(work: UserGeneration): string[] {
   const params = work.input_params || {}
   const summary: string[] = []
-  if (params.style) summary.push(`風格：${params.style}`)
-  if (params.prompt) summary.push(`提示詞：${String(params.prompt).slice(0, 50)}${String(params.prompt).length > 50 ? '...' : ''}`)
-  if (params.model) summary.push(`模型：${params.model}`)
-  if (params.scene) summary.push(`場景：${params.scene}`)
-  if (params.room_type) summary.push(`房型：${params.room_type}`)
-  if (params.garment_type) summary.push(`服裝類型：${params.garment_type}`)
+  if (params.style) summary.push(`${t('dashboard.myWorks.params.style')}：${params.style}`)
+  if (params.prompt) summary.push(`${t('dashboard.myWorks.params.prompt')}：${String(params.prompt).slice(0, 50)}${String(params.prompt).length > 50 ? '...' : ''}`)
+  if (params.model) summary.push(`${t('dashboard.myWorks.params.model')}：${params.model}`)
+  if (params.scene) summary.push(`${t('dashboard.myWorks.params.scene')}：${params.scene}`)
+  if (params.room_type) summary.push(`${t('dashboard.myWorks.params.roomType')}：${params.room_type}`)
+  if (params.garment_type) summary.push(`${t('dashboard.myWorks.params.garmentType')}：${params.garment_type}`)
   return summary
 }
 
 async function downloadWork() {
   if (!selectedWork.value) return
   if (selectedWork.value.media_expired) {
-    alert('此作品的媒體檔案已過期（超過14天），無法下載。\n您仍可查看生成記錄。')
+    alert(t('dashboard.myWorks.downloadExpired'))
     return
   }
   const url = selectedWork.value.result_video_url || selectedWork.value.result_image_url
@@ -169,7 +189,7 @@ async function downloadWork() {
 
 async function deleteWork() {
   if (!selectedWork.value) return
-  if (!confirm('確定要刪除此作品嗎？此操作無法復原，包含生成記錄。')) return
+  if (!confirm(t('dashboard.myWorks.deleteConfirm'))) return
   deleting.value = true
   try {
     await userApi.deleteGeneration(selectedWork.value.id)
@@ -184,7 +204,7 @@ async function deleteWork() {
 
 function openShareModal(work: UserGeneration) {
   if (work.media_expired) {
-    alert('此作品的媒體檔案已過期，無法發布至社交媒體。')
+    alert(t('dashboard.myWorks.shareExpired'))
     return
   }
   shareTarget.value = work
@@ -205,21 +225,21 @@ function closeShareModal() {
       <!-- Header -->
       <div class="mb-8 flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 class="text-3xl font-bold mb-2" style="color: #e8f4ff;">我的作品庫</h1>
-          <p style="color: #6b9ab8;">瀏覽並管理您的 AI 創作內容 · 媒體檔案保存 14 天</p>
+          <h1 class="text-3xl font-bold mb-2" style="color: #e8f4ff;">{{ t('dashboard.myWorks.title') }}</h1>
+          <p style="color: #6b9ab8;">{{ t('dashboard.myWorks.subtitle') }}</p>
         </div>
         <div class="flex items-center gap-3">
           <!-- 顯示過期作品切換 -->
           <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" v-model="showExpired" class="w-4 h-4 accent-cyan-400" />
-            <span class="text-sm" style="color: #a8c8e8;">顯示歷史記錄</span>
+            <span class="text-sm" style="color: #a8c8e8;">{{ t('dashboard.myWorks.showHistory') }}</span>
           </label>
           <router-link
-            to="/dashboard/social-accounts"
+            to="/dashboard/share-links"
             class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all"
             style="background: rgba(0,184,230,0.05); border-color: rgba(0,184,230,0.2); color: #00b8e6;"
           >
-            📡 社交媒體帳號
+            🔗 {{ t('dashboard.myWorks.socialAccounts') }}
           </router-link>
         </div>
       </div>
@@ -229,11 +249,9 @@ function closeShareModal() {
            style="background: rgba(0,184,230,0.05); border: 1px solid rgba(0,184,230,0.15);">
         <span class="text-lg flex-shrink-0">💾</span>
         <div>
-          <p class="text-sm font-medium mb-1" style="color: #e8f4ff;">媒體保存政策</p>
+          <p class="text-sm font-medium mb-1" style="color: #e8f4ff;">{{ t('dashboard.myWorks.mediaPolicyTitle') }}</p>
           <p class="text-xs" style="color: #6b9ab8;">
-            AI 生成的媒體檔案（圖片/影片）保存 <strong style="color: #00b8e6;">14 天</strong>，超過後將自動清除媒體 URL，但
-            <strong style="color: #a8c8e8;">生成記錄永久保留</strong>（包含工具類型、參數設定、使用點數等）。
-            請在期限內下載您的作品。
+            {{ t('dashboard.myWorks.mediaPolicyCopy', { days: 14 }) }}
           </p>
         </div>
       </div>
@@ -257,7 +275,7 @@ function closeShareModal() {
       <div v-if="loading" class="card text-center py-12">
         <div class="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto mb-4"
              style="border-color: #00b8e6; border-top-color: transparent;"></div>
-        <p style="color: #6b9ab8;">載入作品中...</p>
+        <p style="color: #6b9ab8;">{{ t('dashboard.myWorks.loading') }}</p>
       </div>
 
       <!-- Works Grid -->
@@ -280,8 +298,8 @@ function closeShareModal() {
                    class="w-full h-full flex flex-col items-center justify-center gap-2"
                    style="background: rgba(255,80,80,0.05);">
                 <span class="text-4xl">📋</span>
-                <span class="text-xs font-medium" style="color: #ff5050;">媒體已過期</span>
-                <span class="text-xs" style="color: #6b9ab8;">記錄已保留</span>
+                <span class="text-xs font-medium" style="color: #ff5050;">{{ t('dashboard.myWorks.mediaExpired') }}</span>
+                <span class="text-xs" style="color: #6b9ab8;">{{ t('dashboard.myWorks.recordKept') }}</span>
               </div>
               <!-- 正常：顯示縮圖 -->
               <template v-else>
@@ -298,13 +316,13 @@ function closeShareModal() {
                 <div v-if="isVideo(work)"
                      class="absolute top-2 right-2 text-xs px-2 py-1 rounded-full font-medium"
                      style="background: rgba(0,0,0,0.7); color: #00b8e6;">
-                  ▶ 影片
+                  ▶ {{ t('dashboard.myWorks.video') }}
                 </div>
                 <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
                      style="background: rgba(10,22,40,0.7);">
                   <button class="px-4 py-2 rounded-lg text-sm font-medium"
                           style="background: linear-gradient(135deg, #00b8e6, #0066cc); color: white;">
-                    查看
+                    {{ t('dashboard.myWorks.view') }}
                   </button>
                 </div>
               </template>
@@ -317,7 +335,7 @@ function closeShareModal() {
               </p>
               <div class="flex items-center justify-between text-xs mb-2" style="color: #4a7bb5;">
                 <span>{{ formatDate(work.created_at) }}</span>
-                <span>{{ work.credits_used }} 點</span>
+                <span>{{ t('dashboard.myWorks.creditsUsedShort', { credits: work.credits_used }) }}</span>
               </div>
 
               <!-- 過期倒數 / 已過期標示 -->
@@ -337,16 +355,16 @@ function closeShareModal() {
                     ? 'background: transparent; border-color: rgba(255,80,80,0.2); color: #ff8080;'
                     : 'background: transparent; border-color: rgba(0,184,230,0.2); color: #00b8e6;'"
                 >
-                  {{ work.media_expired ? '📋 記錄' : '查看' }}
+                  {{ work.media_expired ? `📋 ${t('dashboard.myWorks.record')}` : t('dashboard.myWorks.view') }}
                 </button>
                 <button
                   v-if="isSubscribed && !work.media_expired"
                   @click="openShareModal(work)"
                   class="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all"
                   style="background: rgba(0,184,230,0.1); color: #00b8e6; border: 1px solid rgba(22,119,255,0.15);"
-                  title="發布至社交媒體"
+                  :title="t('dashboard.myWorks.publishSocial')"
                 >
-                  📡 發布
+                  🔗 {{ t('dashboard.myWorks.publishShort') }}
                 </button>
               </div>
             </div>
@@ -361,7 +379,7 @@ function closeShareModal() {
             class="px-4 py-2 rounded-lg text-sm transition-all disabled:opacity-50"
             style="background: rgba(255,255,255,0.05); color: #a8c8e8; border: 1px solid rgba(255,255,255,0.08);"
           >
-            上一頁
+            {{ t('dashboard.myWorks.previous') }}
           </button>
           <span class="text-sm px-3" style="color: #6b9ab8;">
             {{ currentPage }} / {{ totalPages }}
@@ -372,7 +390,7 @@ function closeShareModal() {
             class="px-4 py-2 rounded-lg text-sm transition-all disabled:opacity-50"
             style="background: rgba(255,255,255,0.05); color: #a8c8e8; border: 1px solid rgba(255,255,255,0.08);"
           >
-            下一頁
+            {{ t('dashboard.myWorks.next') }}
           </button>
         </div>
       </div>
@@ -380,8 +398,8 @@ function closeShareModal() {
       <!-- Empty State -->
       <div v-else class="card text-center py-12">
         <span class="text-5xl block mb-4">🔍</span>
-        <h3 class="text-lg font-medium mb-2" style="color: #e8f4ff;">尚無作品</h3>
-        <p style="color: #6b9ab8;">嘗試其他篩選條件或建立新內容</p>
+        <h3 class="text-lg font-medium mb-2" style="color: #e8f4ff;">{{ t('dashboard.myWorks.emptyTitle') }}</h3>
+        <p style="color: #6b9ab8;">{{ t('dashboard.myWorks.emptyDesc') }}</p>
       </div>
     </div>
 
@@ -408,33 +426,32 @@ function closeShareModal() {
           <div v-if="selectedWork.media_expired" class="p-8">
             <div class="text-center mb-6">
               <span class="text-6xl block mb-4">📋</span>
-              <h3 class="text-xl font-bold mb-2" style="color: #e8f4ff;">媒體已過期</h3>
+              <h3 class="text-xl font-bold mb-2" style="color: #e8f4ff;">{{ t('dashboard.myWorks.expiredTitle') }}</h3>
               <p class="text-sm" style="color: #6b9ab8;">
-                此作品的媒體檔案已超過 14 天保存期限，已自動清除。<br>
-                以下是完整的生成記錄，永久保存。
+                {{ t('dashboard.myWorks.expiredDesc', { days: 14 }) }}
               </p>
             </div>
 
             <!-- 生成記錄卡片 -->
             <div class="rounded-xl p-5 mb-4" style="background: rgba(0,184,230,0.05); border: 1px solid rgba(0,0,0,0.08);">
               <h4 class="text-sm font-semibold mb-4 flex items-center gap-2" style="color: #00b8e6;">
-                <span>🔧</span> 生成記錄
+                <span>🔧</span> {{ t('dashboard.myWorks.generationRecord') }}
               </h4>
               <div class="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span class="block text-xs mb-1" style="color: #4a7bb5;">工具</span>
+                  <span class="block text-xs mb-1" style="color: #4a7bb5;">{{ t('dashboard.myWorks.tool') }}</span>
                   <span style="color: #e8f4ff;">{{ getToolName(selectedWork.tool_type) }}</span>
                 </div>
                 <div>
-                  <span class="block text-xs mb-1" style="color: #4a7bb5;">建立時間</span>
+                  <span class="block text-xs mb-1" style="color: #4a7bb5;">{{ t('dashboard.myWorks.createdAt') }}</span>
                   <span style="color: #e8f4ff;">{{ formatDateTime(selectedWork.created_at) }}</span>
                 </div>
                 <div>
-                  <span class="block text-xs mb-1" style="color: #4a7bb5;">使用點數</span>
-                  <span style="color: #e8f4ff;">{{ selectedWork.credits_used }} 點</span>
+                  <span class="block text-xs mb-1" style="color: #4a7bb5;">{{ t('dashboard.myWorks.creditsUsed') }}</span>
+                  <span style="color: #e8f4ff;">{{ t('dashboard.myWorks.creditsUsedShort', { credits: selectedWork.credits_used }) }}</span>
                 </div>
                 <div v-if="selectedWork.expires_at">
-                  <span class="block text-xs mb-1" style="color: #4a7bb5;">過期時間</span>
+                  <span class="block text-xs mb-1" style="color: #4a7bb5;">{{ t('dashboard.myWorks.expiryTime') }}</span>
                   <span style="color: #ff8080;">{{ formatDateTime(selectedWork.expires_at) }}</span>
                 </div>
               </div>
@@ -444,7 +461,7 @@ function closeShareModal() {
             <div v-if="selectedWork.input_text"
                  class="rounded-xl p-4 mb-4"
                  style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
-              <h4 class="text-xs font-semibold mb-2" style="color: #4a7bb5;">輸入文字 / 提示詞</h4>
+              <h4 class="text-xs font-semibold mb-2" style="color: #4a7bb5;">{{ t('dashboard.myWorks.inputTextTitle') }}</h4>
               <p class="text-sm" style="color: #a8c8e8;">{{ selectedWork.input_text }}</p>
             </div>
 
@@ -452,7 +469,7 @@ function closeShareModal() {
             <div v-if="getParamsSummary(selectedWork).length > 0"
                  class="rounded-xl p-4 mb-4"
                  style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
-              <h4 class="text-xs font-semibold mb-3" style="color: #4a7bb5;">生成參數</h4>
+              <h4 class="text-xs font-semibold mb-3" style="color: #4a7bb5;">{{ t('dashboard.myWorks.paramsTitle') }}</h4>
               <div class="space-y-1">
                 <p v-for="param in getParamsSummary(selectedWork)" :key="param"
                    class="text-sm" style="color: #a8c8e8;">
@@ -469,7 +486,7 @@ function closeShareModal() {
                 class="py-2.5 px-6 rounded-xl font-medium text-sm transition-all border disabled:opacity-50"
                 style="background: transparent; border-color: rgba(255,80,80,0.3); color: #ff5050;"
               >
-                {{ deleting ? '刪除中...' : '🗑 刪除記錄' }}
+                {{ deleting ? t('dashboard.myWorks.deleting') : `🗑 ${t('dashboard.myWorks.deleteRecord')}` }}
               </button>
             </div>
           </div>
@@ -500,8 +517,8 @@ function closeShareModal() {
                 {{ getToolName(selectedWork.tool_type) }}
               </h3>
               <div class="flex items-center gap-4 text-sm mb-3" style="color: #6b9ab8;">
-                <span>建立於：{{ formatDate(selectedWork.created_at) }}</span>
-                <span>使用點數：{{ selectedWork.credits_used }}</span>
+                <span>{{ t('dashboard.myWorks.createdOn', { date: formatDate(selectedWork.created_at) }) }}</span>
+                <span>{{ t('dashboard.myWorks.creditsUsedInline', { credits: selectedWork.credits_used }) }}</span>
               </div>
 
               <!-- 過期倒數提示 -->
@@ -510,8 +527,8 @@ function closeShareModal() {
                    :style="`background: ${getExpiryColor(selectedWork)}18; color: ${getExpiryColor(selectedWork)};`">
                 <span>⏳</span>
                 <span>
-                  媒體保存剩餘：<strong>{{ getExpiryLabel(selectedWork) }}</strong>
-                  （{{ formatDateTime(selectedWork.expires_at) }} 後清除）
+                  {{ t('dashboard.myWorks.mediaRetentionRemaining') }} <strong>{{ getExpiryLabel(selectedWork) }}</strong>
+                  ({{ t('dashboard.myWorks.clearedAfter', { date: formatDateTime(selectedWork.expires_at) }) }})
                 </span>
               </div>
 
@@ -527,14 +544,14 @@ function closeShareModal() {
                   ⬇ {{ t('common.download') }}
                 </button>
 
-                <!-- 發布至社交媒體（付費會員） -->
+                <!-- 分享作品連結（付費會員） -->
                 <button
                   v-if="isSubscribed"
                   @click="openShareModal(selectedWork)"
                   class="flex-1 py-2.5 rounded-xl font-medium text-sm transition-all border"
                   style="background: rgba(0,184,230,0.1); border-color: rgba(0,184,230,0.3); color: #00b8e6;"
                 >
-                  📡 發布至社交媒體
+                  🔗 {{ t('dashboard.myWorks.publishSocial') }}
                 </button>
                 <router-link
                   v-else
@@ -543,7 +560,7 @@ function closeShareModal() {
                   class="flex-1 py-2.5 rounded-xl font-medium text-sm transition-all border text-center"
                   style="background: rgba(255,165,0,0.1); border-color: rgba(255,165,0,0.3); color: #ffa500;"
                 >
-                  🔒 升級以發布
+                  🔒 {{ t('dashboard.myWorks.upgradeToPublish') }}
                 </router-link>
 
                 <!-- 刪除 -->
@@ -553,7 +570,7 @@ function closeShareModal() {
                   class="py-2.5 px-4 rounded-xl font-medium text-sm transition-all border disabled:opacity-50"
                   style="background: transparent; border-color: rgba(255,80,80,0.3); color: #ff5050;"
                 >
-                  {{ deleting ? '刪除中...' : t('common.delete') }}
+                  {{ deleting ? t('dashboard.myWorks.deleting') : t('common.delete') }}
                 </button>
               </div>
             </div>

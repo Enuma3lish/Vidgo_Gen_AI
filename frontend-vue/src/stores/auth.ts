@@ -15,7 +15,7 @@ export const useAuthStore = defineStore('auth', () => {
   // Getters
   const isAuthenticated = computed(() => !!accessToken.value && !!user.value)
   const isVerified = computed(() => user.value?.email_verified ?? false)
-  const isAdmin = computed(() => user.value?.is_superuser ?? false)
+  const isAdmin = computed(() => Boolean(user.value?.is_superuser || user.value?.is_admin))
 
   // Actions
   async function login(data: LoginRequest) {
@@ -29,14 +29,16 @@ export const useAuthStore = defineStore('auth', () => {
         ?? (response as { refresh_token?: string }).refresh_token
       if (access && refresh) setTokens(access, refresh)
       user.value = response.user
-      // VG-BUG-003 fix: hydrate the credits store immediately after login so
-      // the header badge + any "Insufficient" gates render the real balance
-      // instead of the initial 0. Dynamic import avoids a circular dep.
-      try {
+      if (isAdmin.value) {
         const { useCreditsStore } = await import('./credits')
-        await useCreditsStore().fetchBalance()
-      } catch (e) {
-        console.warn('[auth.login] credits fetch failed (non-fatal):', e)
+        useCreditsStore().clearBalance()
+      } else {
+        try {
+          const { useCreditsStore } = await import('./credits')
+          await useCreditsStore().fetchBalance()
+        } catch (e) {
+          console.warn('[auth.login] credits fetch failed (non-fatal):', e)
+        }
       }
       return response
     } catch (err: unknown) {
@@ -135,10 +137,10 @@ export const useAuthStore = defineStore('auth', () => {
   async function init() {
     if (accessToken.value) {
       await fetchUser()
-      // VG-BUG-003 fix: on page reload with an existing token, also hydrate
-      // the credits store so the header badge shows the real balance
-      // instead of the default 0.
-      if (user.value) {
+      if (user.value && isAdmin.value) {
+        const { useCreditsStore } = await import('./credits')
+        useCreditsStore().clearBalance()
+      } else if (user.value) {
         try {
           const { useCreditsStore } = await import('./credits')
           await useCreditsStore().fetchBalance()

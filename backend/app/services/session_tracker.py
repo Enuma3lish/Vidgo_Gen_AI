@@ -69,6 +69,8 @@ class SessionTracker:
         await self.init_redis()
 
         try:
+            await self.cleanup_expired()
+
             now = datetime.utcnow()
             timestamp = now.timestamp()
 
@@ -159,6 +161,7 @@ class SessionTracker:
         """Get total number of online users"""
         await self.init_redis()
         try:
+            await self.cleanup_expired()
             return await self.redis.zcard(ONLINE_USERS_KEY)
         except Exception as e:
             logger.error(f"Get online count error: {e}")
@@ -197,6 +200,7 @@ class SessionTracker:
         """
         await self.init_redis()
         try:
+            await self.cleanup_expired()
             # Get users sorted by most recent heartbeat
             users_with_scores = await self.redis.zrevrange(
                 ONLINE_USERS_KEY,
@@ -238,6 +242,7 @@ class SessionTracker:
         """Get comprehensive session statistics"""
         await self.init_redis()
         try:
+            await self.cleanup_expired()
             online_count = await self.get_online_count()
             by_tier = await self.get_online_by_tier()
             active_today = await self.get_active_today()

@@ -183,9 +183,22 @@ class InteriorDesignService:
                 return image_data, mime_type
             raise Exception(f"Failed to fetch image: {response.status_code}")
 
-    def _save_generated_image(self, image_data: bytes, prefix: str = "design") -> str:
-        """Save generated image to static directory and return URL."""
+    def _save_generated_image(self, image_data: bytes, prefix: str = "design", content_type: str = "image/png") -> str:
+        """Save generated image to durable public storage when available."""
         filename = f"{prefix}_{uuid.uuid4().hex[:8]}.png"
+
+        try:
+            from app.services.gcs_storage_service import get_gcs_storage
+            gcs = get_gcs_storage()
+            if gcs.enabled:
+                return gcs.upload_public(
+                    data=image_data,
+                    blob_name=f"generated/interior/{filename}",
+                    content_type=content_type or "image/png",
+                )
+        except Exception as exc:
+            logger.warning("GCS interior upload failed; falling back to local static: %s", exc)
+
         filepath = self.static_dir / filename
         filepath.write_bytes(image_data)
         return f"/static/generated/interior/{filename}"
@@ -688,7 +701,7 @@ Generate a photorealistic result."""
                 image_data = base64.b64decode(inline_data["data"])
 
                 # Save to static directory
-                result["image_url"] = self._save_generated_image(image_data, prefix)
+                result["image_url"] = self._save_generated_image(image_data, prefix, mime_type)
                 result["mime_type"] = mime_type
 
         if not result["image_url"]:
@@ -698,7 +711,7 @@ Generate a photorealistic result."""
                     inline_data = part["inline_data"]
                     mime_type = inline_data.get("mime_type", "image/png")
                     image_data = base64.b64decode(inline_data["data"])
-                    result["image_url"] = self._save_generated_image(image_data, prefix)
+                    result["image_url"] = self._save_generated_image(image_data, prefix, mime_type)
                     result["mime_type"] = mime_type
                     break
 

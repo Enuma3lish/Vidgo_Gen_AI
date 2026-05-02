@@ -25,7 +25,7 @@ sys.modules.setdefault("mcp.client", mcp_client_module)
 sys.modules.setdefault("mcp.client.stdio", mcp_stdio_module)
 
 import app.providers.provider_router as provider_router_module
-from app.providers.provider_router import ProviderRouter, TaskType
+from app.providers.provider_router import ProviderRouter, ProviderStatus, TaskType
 
 
 class TestProviderRouterModelAwareRouting:
@@ -37,9 +37,9 @@ class TestProviderRouterModelAwareRouting:
             {"model": "pixverse_v4.5"},
         )
 
-        assert providers == ["piapi", "pollo", "pollo_mcp", "vertex_ai"]
+        assert providers == ["pollo", "pollo_mcp", "piapi_mcp", "piapi", "vertex_ai"]
 
-    def test_i2v_without_pollo_model_keeps_default_chain(self):
+    def test_i2v_without_model_uses_piapi_then_pollo_then_vertex_chain(self):
         router = ProviderRouter.__new__(ProviderRouter)
 
         providers = router._get_providers_for_task(
@@ -47,7 +47,37 @@ class TestProviderRouterModelAwareRouting:
             {},
         )
 
-        assert providers == ["piapi", "pollo_mcp", "vertex_ai"]
+        assert providers == ["piapi_mcp", "piapi", "pollo_mcp", "pollo", "vertex_ai"]
+
+    def test_avatar_uses_piapi_then_a2e(self):
+        router = ProviderRouter.__new__(ProviderRouter)
+
+        providers = router._get_providers_for_task(
+            TaskType.AVATAR,
+            {"image_url": "https://example.com/avatar.jpg", "text": "hello"},
+        )
+
+        assert providers == ["piapi", "a2e"]
+
+    def test_3d_uses_piapi_rest_only(self):
+        router = ProviderRouter.__new__(ProviderRouter)
+
+        providers = router._get_providers_for_task(
+            TaskType.INTERIOR_3D,
+            {"image_url": "https://example.com/floor-plan.jpg"},
+        )
+
+        assert providers == ["piapi"]
+
+    def test_explicit_non_pollo_model_uses_piapi_rest_first(self):
+        router = ProviderRouter.__new__(ProviderRouter)
+
+        providers = router._get_providers_for_task(
+            TaskType.T2I,
+            {"prompt": "studio product shot", "model": "flux-dev"},
+        )
+
+        assert providers == ["piapi", "piapi_mcp", "pollo", "vertex_ai"]
 
 
 @pytest.mark.asyncio
@@ -151,6 +181,103 @@ async def test_route_alerts_on_pollo_credit_failure(monkeypatch):
 
     assert result["provider_used"] == "vertex_ai"
     email_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_route_skips_provider_with_open_circuit():
+    router = ProviderRouter.__new__(ProviderRouter)
+    router._failure_counts = {"piapi": 3}
+    router._status_cache = {
+        "piapi": {
+            "status": ProviderStatus.DOWN,
+            "failure_count": 3,
+            "last_failure": datetime.now(),
+            "circuit_open_until": datetime.now() + timedelta(minutes=3),
+        }
+    }
+    router._last_health_check = {}
+    router._last_provider_alert = {}
+    router._provider_alert_cooldown = timedelta(minutes=15)
+    router._get_providers_for_task = lambda task_type, params: ["piapi", "pollo"]
+    router._record_success = lambda provider: None
+    router._record_failure = lambda provider, error: None
+    router._absolutize_local_media_urls = lambda result: result
+    router._persist_result_to_gcs = AsyncMock(side_effect=lambda result, task_type: result)
+
+    executed = []
+
+    async def fake_execute(provider_name, task_type, params):
+        executed.append(provider_name)
+        return {"success": True, "output": {"image_url": "https://example.com/image.png"}}
+
+    router._execute_on_provider = fake_execute
+
+    result = await ProviderRouter.route(
+        router,
+        TaskType.T2I,
+        {"prompt": "studio product shot"},
+        persist_to_gcs=False,
+    )
+
+    assert executed == ["pollo"]
+    assert result["provider_used"] == "pollo"
+    assert result["used_backup"] is True
+    assert result["skipped_providers"] == ["piapi"]
+
+
+@pytest.mark.asyncio
+async def test_route_probes_primary_when_all_provider_circuits_are_open():
+    router = ProviderRouter.__new__(ProviderRouter)
+    open_until = datetime.now() + timedelta(minutes=3)
+    router._failure_counts = {"piapi": 3, "pollo": 3}
+    router._status_cache = {
+        "piapi": {"status": ProviderStatus.DOWN, "circuit_open_until": open_until},
+        "pollo": {"status": ProviderStatus.DOWN, "circuit_open_until": open_until},
+    }
+    router._last_health_check = {}
+    router._last_provider_alert = {}
+    router._provider_alert_cooldown = timedelta(minutes=15)
+    router._get_providers_for_task = lambda task_type, params: ["piapi", "pollo"]
+    router._record_success = lambda provider: None
+    router._record_failure = lambda provider, error: None
+    router._absolutize_local_media_urls = lambda result: result
+    router._persist_result_to_gcs = AsyncMock(side_effect=lambda result, task_type: result)
+
+    executed = []
+
+    async def fake_execute(provider_name, task_type, params):
+        executed.append(provider_name)
+        return {"success": True, "output": {"image_url": "https://example.com/image.png"}}
+
+    router._execute_on_provider = fake_execute
+
+    result = await ProviderRouter.route(
+        router,
+        TaskType.T2I,
+        {"prompt": "studio product shot"},
+        persist_to_gcs=False,
+    )
+
+    assert executed == ["piapi"]
+    assert result["provider_used"] == "piapi"
+    assert result["skipped_providers"] == ["pollo"]
+
+
+def test_record_failure_opens_and_expires_provider_circuit():
+    router = ProviderRouter.__new__(ProviderRouter)
+    router._failure_counts = {}
+    router._status_cache = {}
+    router._provider_circuit_breaker_failures = 2
+    router._provider_circuit_breaker_cooldown = timedelta(milliseconds=1)
+
+    ProviderRouter._record_failure(router, "piapi", "HTTP 500")
+    assert ProviderRouter._is_provider_circuit_open(router, "piapi") is False
+
+    ProviderRouter._record_failure(router, "piapi", "HTTP 500")
+    assert ProviderRouter._is_provider_circuit_open(router, "piapi") is True
+
+    router._status_cache["piapi"]["circuit_open_until"] = datetime.now() - timedelta(seconds=1)
+    assert ProviderRouter._is_provider_circuit_open(router, "piapi") is False
 
 
 @pytest.mark.asyncio

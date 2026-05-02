@@ -26,6 +26,8 @@ from app.models.user import User
 from app.models.billing import Plan, Subscription, Order, Invoice
 from app.services.subscription_service import get_subscription_service, REFUND_ELIGIBILITY_DAYS
 from app.services.paddle_service import get_paddle_service
+from app.core.public_plans import can_list_public_plan, plan_monthly_price
+from app.core.test_plans import TEST_PRO_PLAN_DEFAULTS, can_access_test_pro_plan, is_test_pro_plan
 
 settings = get_settings()
 
@@ -117,6 +119,8 @@ class PlanInfo(BaseModel):
     description: Optional[str]
     price_monthly: float
     price_yearly: float
+    currency: str = "TWD"
+    is_test_only: bool = False
     monthly_credits: int
     features: dict
 
@@ -132,6 +136,7 @@ DEFAULT_VIDGO_PLANS = [
     {"name": "standard", "display_name": "Standard", "slug": "standard", "plan_type": "basic", "price_monthly": 399.0, "price_yearly": 3990.0, "price_twd": 399, "monthly_credits": 150, "weekly_credits": 38, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False},
     {"name": "pro", "display_name": "Pro", "slug": "pro", "plan_type": "pro", "price_monthly": 599.0, "price_yearly": 5990.0, "price_twd": 599, "monthly_credits": 250, "weekly_credits": 60, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True},
     {"name": "pro_plus", "display_name": "Pro+", "slug": "pro_plus", "plan_type": "enterprise", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "monthly_credits": 500, "weekly_credits": 125, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True},
+    TEST_PRO_PLAN_DEFAULTS,
 ]
 
 
@@ -150,6 +155,7 @@ async def ensure_vidgo_plans(db: AsyncSession) -> None:
     existing_by_name = {p.name: p for p in existing_result.scalars().all()}
 
     added = 0
+    changed = False
     for data in DEFAULT_VIDGO_PLANS:
         name = data["name"]
         if name in existing_by_name:
@@ -158,18 +164,25 @@ async def ensure_vidgo_plans(db: AsyncSession) -> None:
             existing = existing_by_name[name]
             if not existing.is_active:
                 existing.is_active = True
+                changed = True
+            if is_test_pro_plan(existing):
+                for key, value in data.items():
+                    if getattr(existing, key, None) != value:
+                        setattr(existing, key, value)
+                        changed = True
             continue
         plan = Plan(**data)
         db.add(plan)
         added += 1
 
-    if added:
+    if added or changed:
         await db.commit()
 
 
 @router.get("/plans", response_model=List[PlanInfo])
 async def list_available_plans(
-    db: AsyncSession = Depends(deps.get_db)
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: Optional[User] = Depends(deps.get_current_user_optional_lenient),
 ):
     """
     List all available subscription plans.
@@ -182,42 +195,47 @@ async def list_available_plans(
         select(Plan).where(Plan.is_active == True).order_by(Plan.price_monthly)
     )
     plans = result.scalars().all()
+    can_view_test_plan = can_access_test_pro_plan(current_user.email if current_user else None)
+    if not can_view_test_plan and current_user and current_user.current_plan_id:
+        can_view_test_plan = any(
+            is_test_pro_plan(plan) and plan.id == current_user.current_plan_id
+            for plan in plans
+        )
+    plans = [plan for plan in plans if can_list_public_plan(plan, can_view_test_plan)]
 
-    def _monthly(p: Plan) -> float:
-        v = p.price_monthly
+    def _monthly(plan: Plan) -> float:
+        return plan_monthly_price(plan)
+
+    def _yearly(plan: Plan) -> float:
+        v = plan.price_yearly
         if v is not None and float(v) > 0:
             return float(v)
-        twd = getattr(p, "price_twd", None)
-        return float(twd) if twd is not None else 0.0
-
-    def _yearly(p: Plan) -> float:
-        v = p.price_yearly
-        if v is not None and float(v) > 0:
-            return float(v)
-        m = _monthly(p)
+        m = _monthly(plan)
         return m * 10.0 if m > 0 else 0.0
 
     return [
         PlanInfo(
-            id=str(p.id),
-            name=p.name,
-            display_name=p.display_name,
-            description=p.description,
-            price_monthly=_monthly(p),
-            price_yearly=_yearly(p),
-            monthly_credits=p.monthly_credits or p.weekly_credits or 0,
+            id=str(plan.id),
+            name=plan.name,
+            display_name=plan.display_name,
+            description=plan.description,
+            price_monthly=_monthly(plan),
+            price_yearly=_yearly(plan),
+            currency=plan.currency or "TWD",
+            is_test_only=is_test_pro_plan(plan),
+            monthly_credits=plan.monthly_credits or plan.weekly_credits or 0,
             features={
-                "max_video_length": p.max_video_length,
-                "max_resolution": p.max_resolution,
-                "has_watermark": p.has_watermark,
-                "priority_queue": p.priority_queue,
-                "api_access": p.api_access,
-                "can_use_effects": p.can_use_effects,
-                "batch_processing": p.feature_batch_processing,
-                "custom_styles": p.feature_custom_styles
+                "max_video_length": plan.max_video_length,
+                "max_resolution": plan.max_resolution,
+                "has_watermark": plan.has_watermark,
+                "priority_queue": plan.priority_queue,
+                "api_access": plan.api_access,
+                "can_use_effects": plan.can_use_effects,
+                "batch_processing": plan.feature_batch_processing,
+                "custom_styles": plan.feature_custom_styles
             }
         )
-        for p in plans
+        for plan in plans
     ]
 
 
@@ -256,6 +274,13 @@ async def subscribe_to_plan(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID format")
 
+    plan_for_policy = await db.get(Plan, plan_uuid)
+    if not plan_for_policy:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    if is_test_pro_plan(plan_for_policy) and request.payment_method != "ecpay":
+        raise HTTPException(status_code=400, detail="Test plan requires ECPay checkout")
+
     # Check if payment providers are actually configured
     paddle = get_paddle_service()
     ecpay_configured = bool(
@@ -276,7 +301,7 @@ async def subscribe_to_plan(
     # (ECPay/Paddle redirect) even though they never need to actually pay —
     # which blocks all internal QA / plan experiments. The audit trail still
     # records the transaction via _activate_subscription_directly.
-    if getattr(current_user, "is_superuser", False):
+    if getattr(current_user, "is_superuser", False) and not is_test_pro_plan(plan_for_policy):
         logger.info(
             f"[subscribe] superuser {current_user.email} — bypassing payment"
         )

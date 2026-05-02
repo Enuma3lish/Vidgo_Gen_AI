@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
 import { useUIStore } from '@/stores'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
@@ -24,8 +24,18 @@ async function handleSubmit() {
   isLoading.value = true
   try {
     await authStore.login({ email: email.value, password: password.value })
-    const redirect = route.query.redirect as string
-    router.push(redirect || '/dashboard')
+    const redirect = route.query.redirect as string | undefined
+    const fallback = authStore.isAdmin ? '/admin/dashboard' : '/dashboard/my-works'
+    const target = redirect
+      ? authStore.isAdmin
+        ? (redirect.startsWith('/admin') ? redirect : '/admin/dashboard')
+        : (redirect !== '/dashboard' && !redirect.startsWith('/admin') ? redirect : fallback)
+      : fallback
+    if (authStore.isAdmin && (target.startsWith('/admin') || target === '/dashboard')) {
+      locale.value = 'zh-TW'
+      uiStore.setLocale('zh-TW')
+    }
+    router.push(target)
   } catch (err: unknown) {
     const error = err as { response?: { status?: number; data?: { detail?: string } } }
     // If 403 because email not verified, redirect to verify page

@@ -49,19 +49,25 @@ VidGo is a comprehensive AI platform that enables e-commerce businesses to creat
 |  Port: 5432    |  |  Port: 6379    |  |                  |
 +----------------+  +----------------+  +------------------+
                                                |
-                    +------------ MCP Protocol -----------+
-                    |                                     |
+                    +---------- AI Providers -----------+
+                    |                                   |
          +------------------+              +------------------+
-         |  Pollo.ai MCP    |              |  PiAPI MCP       |
-         |  (PRIMARY video) |              |  (SUPPLEMENT +   |
-         |  - T2V (50+ mod) |              |   VIDEO BACKUP)  |
-         |  - I2V           |              |  - T2I, I2I      |
-         |  pollo-mcp (npm) |              |  - Try-On, Avatar|
-         +------------------+              |  - Interior, 3D  |
-                                           |  - TTS, Upscale  |
-                                           |  piapi-mcp-server|
-                                           +------------------+
-                                                    |
+         |  PiAPI MCP       |              |  Pollo.ai MCP    |
+         |  (normal path)   |              |  (video backup)  |
+         |  - T2I, I2I      |              |  - T2V / I2V     |
+         |  - Video         |              |  - V2V fallback  |
+         |  - Try-On, Avatar|              |  pollo-mcp (npm) |
+         |  - Interior      |              +------------------+
+         |  - Upscale       |
+         +------------------+
+                    |
+         +------------------+
+         | REST APIs        |
+         | - PiAPI 3D       |
+         | - Explicit model |
+         | - Pollo models   |
+         +------------------+
+                    |
                                            +------------------+
                                            | Google Gemini    |
                                            | - Image backup   |
@@ -112,7 +118,7 @@ Subscribers receive real-time AI generation with:
 | **Product Scene** | Composite frozen product photos into AI-generated scenes (rembg → scene T2I → PIL composite) | PiAPI Flux + rembg |
 | **Virtual Try-On** | Place curated garments on curated full-body models | PiAPI Kling virtual try-on |
 | **Room Redesign** | AI interior design with 10 styles + iterative editing | PiAPI Flux interior |
-| **Short Video** | Image-to-video, Text-to-video | Pollo MCP (primary) / PiAPI (backup) |
+| **Short Video** | Image-to-video, Text-to-video | MCP by default; Pollo REST when a Pollo model is selected |
 | **AI Avatar** | Talking head with lip-sync TTS (curated head-and-shoulders portraits) | PiAPI Kling Avatar |
 | **Image Effects** | Artistic style transfer on frozen product photos | PiAPI I2I |
 | **Pattern Generate** | Seamless pattern generation | PiAPI Flux |
@@ -151,7 +157,7 @@ VidGo supports **3-tier user system** with distinct capabilities:
 | Real AI API generation | ❌ | ❌ | ✅ | ❌ |
 | Promotion code (own) | ❌ | ❌ | ✅ (auto-issued) | Can create special ones |
 | Use others' promo codes | ❌ | ✅ | ✅ | N/A |
-| Work repo (7-day retention) | ❌ | ❌ | ✅ | N/A |
+| Private work library (14-day media retention) | ❌ | ❌ | ✅ | N/A |
 | View API analytics | ❌ | ❌ | ❌ | ✅ |
 | Manage users/credits | ❌ | ❌ | ❌ | ✅ |
 | Create special promo codes | ❌ | ❌ | ❌ | ✅ |
@@ -160,7 +166,7 @@ VidGo supports **3-tier user system** with distinct capabilities:
 
 ### Custom Material Upload
 Subscribers can upload their own product images and trigger real AI API calls:
-- Supported tools: All 10 tools
+- Supported tools: the 8 supported generation tools plus subscriber-only 3D export in Room Redesign
 - Supported formats: JPEG, PNG, WebP (max 20 MB)
 - Results returned without watermarks
 - Results downloadable via `/api/v1/uploads/{id}/download`
@@ -179,13 +185,14 @@ Paid users can choose from multiple AI models per tool:
 ### Personal Promotion Code System
 Every **paid subscriber** automatically receives a unique promotion code:
 - Share your code: Earn **50 credits** when someone registers using your code
-- New users get **20 welcome credits** for using a referral code
+- New users get **40 welcome credits** for using a referral code
 - Admin can create special promotion codes for specific users
 - Free users can use others' codes but cannot create their own
 
-### 7-Day Work Retention
+### Work Library Retention
 When a subscriber cancels their subscription:
-- All generated works are retained for **7 days**
+- Generated media remains available for **14 days** from creation
+- Generation records stay in the user's private work library unless the account is deleted
 - Can download existing works during retention period
 - Cannot generate new works after cancellation
 - Account deletion: All works deleted immediately (no retention)
@@ -193,7 +200,7 @@ When a subscriber cancels their subscription:
 ### Referral Program
 Invite friends and earn credits:
 - Referrer earns **50 credits** per successful registration
-- New user earns **20 welcome credits** for using a referral code
+- New user earns **40 welcome credits** for using a referral code
 - Referral leaderboard at `/dashboard/referrals`
 - Share via LINE, X/Twitter, Facebook, or direct link
 
@@ -210,7 +217,7 @@ Invite friends and earn credits:
 | Style Effects | Browse styles | Real-time AI Engine |
 | Credits on signup | 40 pts (30-day expiry) | Purchase packages (Starter / Standard / Premium) |
 | Personal promotion code | ❌ | ✅ (auto-generated) |
-| 7-day work retention | ❌ | ✅ (post-cancellation) |
+| Private work library | ❌ | ✅ (14-day media retention) |
 | Social media publishing | ❌ | ✅ (FB, IG, TikTok, YouTube) |
 
 ## Admin Features
@@ -259,13 +266,15 @@ Override locally via `.env`; in production these are seeded once into the databa
 | Docker | 24+ | Containerization |
 | Docker Compose | 2.0+ | Orchestration |
 
-### AI Providers (MCP-based Architecture)
+### AI Providers
 | Provider | Role | Services | Details |
 |----------|------|----------|---------|
-| Pollo.ai MCP | **Primary** (video) | I2V, T2V, V2V | 50+ models (Kling, Wan, Runway, Sora, Seedance, etc.) via `pollo-mcp` npm package |
-| PiAPI MCP | **Supplement** + video backup | T2I, I2I, Try-On, Interior, Avatar, TTS, Upscale, 3D, V2V | Flux (image); Wan (video); Kling (try-on/avatar); Trellis (3D) via `piapi-mcp-server` |
-| Google Gemini | **Backup** (image) + moderation | T2I, I2I, Interior, BG Removal, Upscale | Backup when PiAPI MCP fails; content moderation; material pre-generation |
-| A2E | **Backup** (avatar) | Avatar | Digital human video backup when PiAPI MCP fails |
+| PiAPI MCP | **Normal primary** | T2I, I2I, video, try-on, interior, avatar, upscale | Default path for standard generation requests |
+| PiAPI REST | **REST lane** | Explicit PiAPI model choices, Trellis 3D | Trellis image-to-3D returns GLB models via `/api/v1/interior/3d-model` |
+| Pollo.ai MCP | **Video backup** | I2V, T2V, V2V | Default Pollo backup path via `pollo-mcp` npm package |
+| Pollo.ai REST | **REST lane** | Explicit Pollo video model choices | Used when users choose Pollo model IDs such as Pixverse, Kling, or Luma |
+| Google Gemini | **Backup** (image) + moderation | T2I, I2I, Interior, BG Removal, Upscale | Backup when PiAPI lanes fail; content moderation; material pre-generation |
+| A2E | **Backup** (avatar) | Avatar | Digital human video backup when PiAPI fails |
 | GCS | **Storage** | Media persistence | Downloads CDN URLs → persists in GCS bucket (providers have 14-day CDN expiry) |
 
 ### Payment & Billing
@@ -313,8 +322,8 @@ Vidgo_Gen_AI/
 │   └── Dockerfile
 │
 ├── docker-compose.yml
-├── vidgo-backend-architecture.md
-├── vidgo-frontend-architecture.md
+├── docs/vidgo-backend-architecture.md
+├── docs/vidgo-frontend-architecture.md
 └── README.md
 ```
 
@@ -441,12 +450,18 @@ gcloud run services logs read vidgo-worker --project vidgo-ai --region asia-east
 ```env
 # backend/.env
 
-# AI Providers (MCP-based)
-POLLO_API_KEY=your_pollo_key            # Primary video (pollo.ai)
-PIAPI_KEY=your_piapi_key                # Supplement + video backup (piapi.ai)
+# AI Providers
+PIAPI_KEY=your_piapi_key                # PiAPI MCP + REST lane
+POLLO_API_KEY=your_pollo_key            # Pollo MCP + REST lane
 GEMINI_API_KEY=your_gemini_key          # Image backup + moderation
 
-# MCP Server Path (PiAPI)
+# Provider recovery
+PROVIDER_HEALTH_CACHE_SECONDS=60
+PROVIDER_CIRCUIT_BREAKER_FAILURES=3
+PROVIDER_CIRCUIT_BREAKER_COOLDOWN_SECONDS=180
+PROVIDER_ALERT_COOLDOWN_MINUTES=15
+
+# MCP Server Path
 PIAPI_MCP_PATH=/app/mcp-servers/piapi-mcp-server/dist/index.js
 
 # GCS Storage (persist media beyond CDN expiry)
@@ -490,7 +505,7 @@ SMTP_PORT=1025
 
 ### MCP Server Setup
 
-Both AI providers run as MCP (Model Context Protocol) servers:
+VidGo runs generation through two lanes: MCP for the normal path, and REST APIs for explicit model choices or REST-only tools such as Trellis 3D:
 
 ```bash
 # Install Pollo MCP server (global npm package)
@@ -501,8 +516,9 @@ git clone https://github.com/PiAPI-1/piapi-mcp-server.git mcp-servers/piapi-mcp-
 cd mcp-servers/piapi-mcp-server && npm install && npm run build
 ```
 
-The backend automatically starts both MCP servers as subprocesses on startup.
-If MCP servers are unavailable, the system falls back to direct REST API calls.
+The backend starts configured MCP servers as subprocesses on startup. If a request selects a provider-specific model or uses 3D, the provider router sends it directly to the matching REST API; otherwise it starts with MCP and falls back through REST/provider backups.
+
+Provider checks are cached briefly. After repeated provider failures, the router opens a short circuit for that provider and skips it while another fallback is available. Status checks can close the circuit again once the provider reports healthy.
 
 ### Pre-generation Control
 
@@ -615,15 +631,15 @@ npm run dev
 | Watermarking | All demo outputs watermarked; subscribers get clean output |
 | Credit Gating | All generation endpoints check credit balance before processing (HTTP 402) |
 
-See [backend architecture doc](./vidgo-backend-architecture.md) for full security details.
+See [backend architecture doc](./docs/vidgo-backend-architecture.md) for full security details.
 
 ---
 
 ## Documentation
 
-- **Backend Architecture**: [vidgo-backend-architecture.md](./vidgo-backend-architecture.md)
-- **Frontend Architecture**: [vidgo-frontend-architecture.md](./vidgo-frontend-architecture.md)
-- **Infrastructure**: [vidgo-infra-architecture.md](./vidgo-infra-architecture.md)
+- **Backend Architecture**: [docs/vidgo-backend-architecture.md](./docs/vidgo-backend-architecture.md)
+- **Frontend Architecture**: [docs/vidgo-frontend-architecture.md](./docs/vidgo-frontend-architecture.md)
+- **Infrastructure**: [docs/vidgo-infra-architecture.md](./docs/vidgo-infra-architecture.md)
 - **MCP Provider Architecture**: [docs/mcp-provider-architecture.md](./docs/mcp-provider-architecture.md)
 - **DNS & ECPay Setup**: [docs/dns-and-ecpay-setup.md](./docs/dns-and-ecpay-setup.md)
 - **Payment & Invoice**: [docs/payment_and_infra.md](./docs/payment_and_infra.md)

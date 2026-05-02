@@ -7,7 +7,7 @@ import { subscriptionApi } from '@/api'
 import ConfirmModal from '@/components/molecules/ConfirmModal.vue'
 import type { PlanInfo, SubscriptionStatus } from '@/api'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -21,25 +21,34 @@ const error = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
 const showCancelModal = ref(false)
 const cancelWithRefund = ref(false)
+const TEST_PRO_PLAN_NAME = 'test_pro_usd_1'
 
 // Computed
 const isLoggedIn = computed(() => authStore.isAuthenticated)
+const visiblePlans = computed(() => plans.value.filter(plan => !isHiddenDisplayPlan(plan)))
 const currentPlanId = computed(() => subscriptionStatus.value?.plan?.id)
 const isRefundEligible = computed(() => subscriptionStatus.value?.refund_eligible ?? false)
 const refundDaysRemaining = computed(() => subscriptionStatus.value?.refund_days_remaining ?? 0)
 
 // Plan name mapping for display
 const planDisplayNames: Record<string, string> = {
+  demo: 'demo',
   free: 'demo',
+  basic: 'basic',
   starter: 'starter',
   standard: 'standard',
   pro: 'pro',
-  enterprise: 'proPlus',
+  premium: 'premium',
+  enterprise: 'enterprise',
+  pro_plus: 'proPlus',
+  test_pro_usd_1: 'testPro',
   '免費體驗': 'demo',
+  '基礎進階版': 'basic',
   'Starter': 'starter',
   'Standard': 'standard',
   'Pro': 'pro',
-  'Enterprise': 'proPlus'
+  'Premium': 'premium',
+  'Enterprise': 'enterprise'
 }
 
 // Fetch plans from API
@@ -53,26 +62,6 @@ async function fetchPlans() {
     // Values MUST match backend DEFAULT_VIDGO_PLANS (TWD per month / per year
     // TOTAL) so the UI never disagrees with what the backend would charge.
     plans.value = [
-      {
-        id: 'demo',
-        name: 'demo',
-        display_name: 'Demo',
-        description: '新用戶專屬，立即體驗 AI 生成',
-        price_monthly: 0,
-        price_yearly: 0,
-        monthly_credits: 0,
-        features: { max_video_length: 5, max_resolution: '720p', has_watermark: true, priority_queue: false, api_access: false, can_use_effects: false, batch_processing: false, custom_styles: false }
-      },
-      {
-        id: 'starter',
-        name: 'starter',
-        display_name: 'Starter',
-        description: '適合個人創作者與小型電商',
-        price_monthly: 299,
-        price_yearly: 2990,
-        monthly_credits: 100,
-        features: { max_video_length: 30, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: false, custom_styles: false }
-      },
       {
         id: 'standard',
         name: 'standard',
@@ -146,7 +135,7 @@ async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paddle' | 'ecpay'
 
   if (plan.name === 'free' || plan.name === 'demo') {
     // Free plan - just redirect to dashboard
-    router.push('/dashboard')
+    router.push('/dashboard/my-works')
     return
   }
 
@@ -157,14 +146,14 @@ async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paddle' | 'ecpay'
 
     const result = await subscriptionApi.subscribe({
       plan_id: plan.id,
-      billing_cycle: billingPeriod.value,
+      billing_cycle: isTestPlan(plan) ? 'monthly' : billingPeriod.value,
       payment_method: paymentMethod
     })
 
     if (result.success) {
       if (result.payment_method === 'ecpay' && result.ecpay_form) {
         // ECPay: auto-submit form to ECPay payment page
-        successMessage.value = '正在導向 ECPay 付款頁面...'
+        successMessage.value = t('pricing.redirectingToPayment')
         setTimeout(() => submitECPayForm(result.ecpay_form!), 500)
       } else if (result.checkout_url && !result.is_mock) {
         // Paddle: redirect to checkout URL
@@ -227,9 +216,54 @@ function getPlanDisplayKey(name: string): string {
   return planDisplayNames[name] || name
 }
 
+function getLocalizedPlanName(name?: string | null, fallback?: string | null): string {
+  const displayKey = getPlanDisplayKey(name || fallback || '')
+  const translationKey = `pricing.${displayKey}`
+  if (te(translationKey)) {
+    return t(translationKey)
+  }
+  return fallback || name || ''
+}
+
+function getPlanDisplayName(plan: PlanInfo): string {
+  return getLocalizedPlanName(plan.name, plan.display_name)
+}
+
+function getCurrentPlanDisplayName(): string {
+  const plan = subscriptionStatus.value?.plan
+  return plan ? getLocalizedPlanName(plan.name, plan.display_name || plan.name) : ''
+}
+
+function getCreditsPerMonthLabel(plan: PlanInfo): string {
+  return plan.monthly_credits === -1
+    ? t('pricing.unlimitedCredits')
+    : t('pricing.creditsPerMonth', { credits: plan.monthly_credits })
+}
+
 // Check if plan is popular
 function isPlanPopular(name: string): boolean {
   return name === 'pro' || name === 'Pro'
+}
+
+function isTestPlan(plan: PlanInfo): boolean {
+  return Boolean(plan.is_test_only) || plan.name === TEST_PRO_PLAN_NAME
+}
+
+function isHiddenDisplayPlan(plan: PlanInfo): boolean {
+  const name = (plan.name || plan.display_name || '').toLowerCase()
+  return name === 'demo' || name === 'free' || name === 'starter' || plan.price_monthly <= 0 || plan.price_monthly === 299
+}
+
+function getCurrencySymbol(plan: PlanInfo): string {
+  return plan.currency?.toUpperCase() === 'USD' || isTestPlan(plan) ? 'US$' : 'NT$'
+}
+
+function formatPlanPrice(plan: PlanInfo): string {
+  return `${getCurrencySymbol(plan)}${getPrice(plan)}`
+}
+
+function getPrimaryPaymentLabel(plan: PlanInfo): string {
+  return isTestPlan(plan) ? t('pricing.testPaymentLabel') : t('pricing.ecpayPaymentLabel')
 }
 
 // Price shown in the big headline. Backend returns price_yearly as the TOTAL
@@ -238,6 +272,9 @@ function isPlanPopular(name: string): boolean {
 // Show the per-month-billed-annually rate instead, with the real annual total
 // surfaced underneath via `getAnnualTotal()`.
 function getPrice(plan: PlanInfo): number {
+  if (isTestPlan(plan)) {
+    return plan.price_monthly
+  }
   if (billingPeriod.value === 'monthly') {
     return plan.price_monthly
   }
@@ -254,6 +291,7 @@ function getAnnualTotal(plan: PlanInfo): number {
 
 // Yearly discount percentage vs 12 × monthly. Non-fatal: 0 when data missing.
 function getYearlySavingsPct(plan: PlanInfo): number {
+  if (isTestPlan(plan)) return 0
   const monthlyTotal = (plan.price_monthly || 0) * 12
   const yearlyTotal = plan.price_yearly || 0
   if (monthlyTotal <= 0 || yearlyTotal <= 0 || yearlyTotal >= monthlyTotal) return 0
@@ -309,7 +347,7 @@ onMounted(async () => {
           <div class="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h3 class="text-lg font-semibold" style="color: #f5f5fa;">
-                {{ t('pricing.currentPlan') }}: {{ subscriptionStatus.plan?.display_name || subscriptionStatus.plan?.name }}
+                {{ t('pricing.currentPlan') }}: {{ getCurrentPlanDisplayName() }}
               </h3>
               <p class="text-sm" style="color: #6b6b8a;">
                 {{ t('pricing.status') }}:
@@ -373,9 +411,9 @@ onMounted(async () => {
       </div>
 
       <!-- Plans Grid -->
-      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div
-          v-for="plan in plans"
+          v-for="plan in visiblePlans"
           :key="plan.id"
           class="relative rounded-xl p-6 transition-all duration-300 hover:-translate-y-1"
           :style="isPlanPopular(plan.name)
@@ -393,6 +431,14 @@ onMounted(async () => {
             {{ t('badges.hot') }}
           </span>
 
+          <span
+            v-if="isTestPlan(plan)"
+            class="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-semibold px-4 py-1 rounded-full text-white"
+            style="background: #7c3aed;"
+          >
+            {{ t('pricing.testOnly') }}
+          </span>
+
           <!-- Current Plan Badge -->
           <span
             v-if="isCurrentPlan(plan.id)"
@@ -404,13 +450,13 @@ onMounted(async () => {
 
           <!-- Plan Name -->
           <h3 class="text-xl font-semibold mb-4" style="color: #f5f5fa;">
-            {{ plan.display_name || t(`pricing.${getPlanDisplayKey(plan.name)}`) }}
+            {{ getPlanDisplayName(plan) }}
           </h3>
 
           <!-- Price -->
           <div class="mb-6">
             <span class="text-4xl font-bold" style="color: #f5f5fa;">
-              NT${{ getPrice(plan) }}
+              {{ formatPlanPrice(plan) }}
             </span>
             <span style="color: #6b6b8a;">
               /{{ t('pricing.perMonthShort', 'mo') }}
@@ -418,7 +464,7 @@ onMounted(async () => {
             <!-- When the user is viewing yearly pricing, also surface the real
                  annual total + savings so they understand the full commitment. -->
             <div
-              v-if="billingPeriod === 'yearly' && plan.price_monthly > 0"
+              v-if="billingPeriod === 'yearly' && plan.price_monthly > 0 && !isTestPlan(plan)"
               class="mt-2 text-xs"
               style="color: #6b6b8a;"
             >
@@ -435,7 +481,7 @@ onMounted(async () => {
 
           <!-- Credits -->
           <p class="mb-6 text-sm" style="color: #9494b0;">
-            {{ plan.monthly_credits === -1 ? "無限制" : plan.monthly_credits }} 點數/月
+            {{ getCreditsPerMonthLabel(plan) }}
           </p>
 
           <!-- CTA Button -->
@@ -452,17 +498,17 @@ onMounted(async () => {
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                正在處理...
+                {{ t('pricing.processing') }}
               </span>
               <span v-else class="flex items-center justify-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
-                信用卡付款 (ECPay)
+                {{ getPrimaryPaymentLabel(plan) }}
               </span>
             </button>
             <button
-              v-if="plan.price_monthly > 0 && isLoggedIn"
+              v-if="plan.price_monthly > 0 && isLoggedIn && !isTestPlan(plan)"
               @click="handleSubscribe(plan, 'paddle')"
               :disabled="subscribing === plan.id"
               class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 disabled:opacity-50"
@@ -472,7 +518,7 @@ onMounted(async () => {
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                 </svg>
-                International Payment (Paddle)
+                {{ t('pricing.paddlePaymentLabel') }}
               </span>
             </button>
             <button
@@ -493,31 +539,31 @@ onMounted(async () => {
           <ul class="space-y-3">
             <li class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              {{ plan.monthly_credits }} credits/month
+              {{ getCreditsPerMonthLabel(plan) }}
             </li>
             <li v-if="plan.features.max_resolution" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              {{ plan.features.max_resolution }} quality
+              {{ t('pricing.qualityFeature', { resolution: plan.features.max_resolution }) }}
             </li>
             <li v-if="plan.features.priority_queue" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              Priority queue
+              {{ t('pricing.priorityQueueFeature') }}
             </li>
             <li v-if="plan.features.api_access" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              API access
+              {{ t('pricing.apiAccessFeature') }}
             </li>
             <li v-if="plan.features.batch_processing" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              Batch processing
+              {{ t('pricing.batchProcessingFeature') }}
             </li>
             <li v-if="!plan.features.has_watermark" class="flex items-start gap-2 text-sm" style="color: #9494b0;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              No watermark
+              {{ t('pricing.noWatermarkFeature') }}
             </li>
             <li v-if="plan.features.has_watermark" class="flex items-start gap-2 text-sm" style="color: #6b6b8a;">
               <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #faad14;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-              With watermark
+              {{ t('pricing.withWatermarkFeature') }}
             </li>
           </ul>
         </div>

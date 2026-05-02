@@ -134,11 +134,13 @@ Plans can restrict tool access via feature flags:
 |  |  |                       AI Provider Layer                               |  | |
 |  |  |  +---------------+ +---------------+ +-------------------+          |  | |
 |  |  |  | PiAPI MCP     | | Pollo.ai MCP  | | Vertex AI (GCP)   |          |  | |
-|  |  |  | PRIMARY:      | | BACKUP:       | | - Gemini: image   |          |  | |
+|  |  |  | NORMAL:       | | BACKUP:       | | - Gemini: image   |          |  | |
 |  |  |  | T2I,I2I,I2V,  | | I2V, T2V, V2V | |   backup+moderat. |          |  | |
 |  |  |  | T2V,V2V,Avatar| | (50+ models)  | | - Veo: 3rd video  |          |  | |
-|  |  |  | Interior,3D,  | |               | |   backup          |          |  | |
+|  |  |  | Interior,     | | Pollo REST for| |   backup          |          |  | |
 |  |  |  | BG Rem,Effects| |               | | - Material gen    |          |  | |
+|  |  |  | REST for 3D + | | model choices | |                   |          |  | |
+|  |  |  | model choices | |               | |                   |          |  | |
 |  |  |  +---------------+ +---------------+ +-------------------+          |  | |
 |  |  +-----------------------------------------------------------------------+  | |
 |  +-----------------------------------------------------------------------------+ |
@@ -215,11 +217,11 @@ backend/
 │   │
 │   ├── providers/
 │   │   ├── base.py                  # Base provider interface
-│   │   ├── piapi_mcp_provider.py    # PiAPI via MCP (primary: video + image)
-│   │   ├── pollo_mcp_provider.py    # Pollo.ai via MCP (backup: video)
+│   │   ├── piapi_mcp_provider.py    # PiAPI via MCP (normal primary path)
+│   │   ├── pollo_mcp_provider.py    # Pollo.ai via MCP (normal video backup)
 │   │   ├── vertex_ai_provider.py    # Vertex AI Gemini + Veo (image backup, 3rd video, moderation)
-│   │   ├── piapi_provider.py        # PiAPI REST (legacy fallback)
-│   │   ├── pollo_provider.py        # Pollo REST (legacy fallback)
+│   │   ├── piapi_provider.py        # PiAPI REST (explicit model choices + 3D)
+│   │   ├── pollo_provider.py        # Pollo REST (explicit Pollo model choices)
 │   │   ├── a2e_provider.py          # A2E (avatar backup)
 │   │   └── provider_router.py       # Routes tasks → providers
 │   │
@@ -445,17 +447,27 @@ class Material(Base):
 
 | Provider | Interface | Purpose | Env Variable |
 |----------|-----------|---------|--------------|
-| PiAPI | MCP (stdio) | **Primary** for video + image + specialized: T2I, I2I, I2V, T2V, V2V, Interior, Avatar, BG Removal, Effects, 3D | `PIAPI_KEY` |
-| Pollo.ai | MCP (stdio) | **Backup** for video tasks (50+ models): I2V, T2V, V2V | `POLLO_API_KEY` |
+| PiAPI | MCP + REST | MCP is the normal path; REST handles explicit PiAPI model choices and Trellis 3D | `PIAPI_KEY` |
+| Pollo.ai | MCP + REST | MCP is the normal video backup; REST handles explicit Pollo model choices | `POLLO_API_KEY` |
 | Vertex AI | GCP SDK | **Backup** for image tasks (Gemini), **3rd backup** for video (Veo), **Primary** for moderation + material gen | `VERTEX_AI_PROJECT` |
 | A2E | REST | **Backup** for avatar generation | `A2E_API_KEY` |
 
 **Failover Strategy:**
-- **Video tasks** (I2V, T2V, V2V): PiAPI MCP → Pollo MCP → Vertex AI Veo → PiAPI REST
-- **Image tasks** (T2I, I2I, Interior, BG Removal, Upscale, Effects): PiAPI MCP → Vertex AI Gemini → PiAPI REST
-- **Avatar**: PiAPI MCP → A2E → PiAPI REST
+- **Normal video tasks** (I2V, T2V, V2V): PiAPI MCP → Pollo MCP → Vertex AI Veo → PiAPI REST
+- **Explicit Pollo video model choices**: Pollo REST → Pollo MCP → PiAPI MCP → PiAPI REST → Vertex AI Veo
+- **Normal image tasks** (T2I, I2I, Interior, BG Removal, Upscale, Effects): PiAPI MCP → PiAPI REST → Vertex AI Gemini
+- **Explicit PiAPI model choices**: PiAPI REST → PiAPI MCP → configured backups
+- **3D model tasks**: PiAPI REST Trellis via `/api/v1/interior/3d-model`
+- **Avatar**: PiAPI MCP → PiAPI REST → A2E
 - **Moderation & Material generation**: Vertex AI Gemini only
 - Provider names are never exposed to end users
+
+**Provider Health & Recovery:**
+- Health checks are cached by `PROVIDER_HEALTH_CACHE_SECONDS`.
+- Repeated runtime failures open an in-memory provider circuit after `PROVIDER_CIRCUIT_BREAKER_FAILURES` failures.
+- Open circuits are skipped for `PROVIDER_CIRCUIT_BREAKER_COOLDOWN_SECONDS` when another fallback is available.
+- If all circuits in a route are open, the primary provider is probed so recovery can be detected.
+- Successful health checks reset failure counts and close the provider circuit.
 
 ### 5.2 Provider Router
 
@@ -476,9 +488,11 @@ class TaskType(str, Enum):
     MATERIAL_GENERATION = "material_generation"
 
 # Routing configuration:
-# Video (I2V, T2V, V2V) → PiAPI MCP primary, Pollo MCP backup, Vertex AI Veo 3rd
-# Image (T2I, I2I, Interior, BG Removal, Upscale, Effects) → PiAPI MCP primary, Vertex AI Gemini backup
-# Avatar → PiAPI MCP primary, A2E backup
+# Normal video (I2V, T2V, V2V) → PiAPI MCP primary, Pollo MCP backup, Vertex AI Veo 3rd, PiAPI REST fallback
+# Pollo model choices → Pollo REST first
+# Normal image (T2I, I2I, Interior, BG Removal, Upscale, Effects) → PiAPI MCP primary, PiAPI REST fallback, Vertex AI Gemini backup
+# PiAPI model choices and Interior 3D → PiAPI REST first
+# Avatar → PiAPI MCP primary, PiAPI REST fallback, A2E backup
 # Moderation & Material pre-generation → Vertex AI Gemini only
 ```
 

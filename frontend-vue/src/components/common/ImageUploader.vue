@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { commonImageDimensionRule, validateImageFileDimensions } from '@/utils/mediaValidation'
 
 defineProps({
   modelValue: {
@@ -27,38 +28,56 @@ function triggerUpload() {
   fileInput.value?.click()
 }
 
-function handleFile(event: Event) {
+async function handleFile(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.files && target.files.length > 0) {
-    processFile(target.files[0])
+    if (!(await processFile(target.files[0]))) {
+      target.value = ''
+    }
   }
 }
 
-function handleDrop(event: DragEvent) {
+async function handleDrop(event: DragEvent) {
   isDragging.value = false
   if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
-    processFile(event.dataTransfer.files[0])
+    await processFile(event.dataTransfer.files[0])
   }
 }
 
-const MAX_SIZE_MB = 10
+const MAX_SIZE_MB = 20
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const uploadError = ref('')
 
-function processFile(file: File) {
+async function processFile(file: File): Promise<boolean> {
   uploadError.value = ''
 
-  if (!file.type.startsWith('image/')) {
-    uploadError.value = isZh ? '僅支援圖片檔案（PNG、JPG、WebP）' : 'Only image files are supported (PNG, JPG, WebP)'
-    return
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    uploadError.value = isZh
+      ? '僅支援 JPG、PNG、WebP 圖片，請重新選擇圖片'
+      : 'Only JPG, PNG, or WebP images are supported. Please choose a different image.'
+    return false
   }
 
   if (file.size > MAX_SIZE_BYTES) {
     const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
     uploadError.value = isZh
-      ? `檔案大小 ${sizeMB}MB 超過上限 ${MAX_SIZE_MB}MB，請壓縮或裁剪後重試`
-      : `File size ${sizeMB}MB exceeds the ${MAX_SIZE_MB}MB limit. Please compress or resize and try again.`
-    return
+      ? `檔案大小 ${sizeMB}MB 超過上限 ${MAX_SIZE_MB}MB，請壓縮或裁剪後重新選擇`
+      : `File size ${sizeMB}MB exceeds the ${MAX_SIZE_MB}MB limit. Please compress or resize and choose again.`
+    return false
+  }
+
+  try {
+    const dimensionError = await validateImageFileDimensions(file, commonImageDimensionRule, isZh)
+    if (dimensionError) {
+      uploadError.value = dimensionError
+      return false
+    }
+  } catch {
+    uploadError.value = isZh
+      ? '無法讀取圖片尺寸，請重新選擇圖片'
+      : 'Image dimensions could not be read. Please choose a different image.'
+    return false
   }
 
   const reader = new FileReader()
@@ -68,6 +87,7 @@ function processFile(file: File) {
     emit('file-selected', file)
   }
   reader.readAsDataURL(file)
+  return true
 }
 </script>
 
@@ -86,7 +106,7 @@ function processFile(file: File) {
     <input
       ref="fileInput"
       type="file"
-      accept="image/*"
+      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
       class="hidden"
       @change="handleFile"
     />
@@ -109,7 +129,7 @@ function processFile(file: File) {
       <p class="font-medium text-center px-4">
         {{ label || (isZh ? '點擊或拖放圖片' : 'Click or drop image here') }}
       </p>
-      <p class="text-xs text-gray-500 mt-1">PNG, JPG {{ isZh ? '最大' : 'up to' }} 10MB</p>
+      <p class="text-xs text-gray-500 mt-1">JPG, PNG, WebP {{ isZh ? '最大' : 'up to' }} 20MB</p>
     </div>
 
     <!-- Error message -->

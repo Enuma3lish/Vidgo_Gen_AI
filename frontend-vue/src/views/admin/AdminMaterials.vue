@@ -8,21 +8,21 @@ const selectedToolType = ref('')
 const selectedStatus = ref('')
 
 const toolTypes = [
-  { value: 'background_removal', label: 'Background Removal' },
-  { value: 'product_scene', label: 'Product Scene' },
-  { value: 'try_on', label: 'AI Try-On' },
-  { value: 'room_redesign', label: 'Room Redesign' },
-  { value: 'short_video', label: 'Short Video' },
-  { value: 'ai_avatar', label: 'AI Avatar' },
-  { value: 'pattern_generate', label: 'Pattern Generate' },
-  { value: 'effect', label: 'Image Effects' }
+  { value: 'background_removal', label: '智能去背' },
+  { value: 'product_scene', label: '商品情境' },
+  { value: 'try_on', label: '模特換裝' },
+  { value: 'room_redesign', label: '空間改造' },
+  { value: 'short_video', label: '短影音' },
+  { value: 'ai_avatar', label: '數位人' },
+  { value: 'pattern_generate', label: '圖案生成' },
+  { value: 'effect', label: '圖片特效' }
 ]
 
 const statuses = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'featured', label: 'Featured' }
+  { value: 'pending', label: '待審核' },
+  { value: 'approved', label: '已通過' },
+  { value: 'rejected', label: '已拒絕' },
+  { value: 'featured', label: '精選' }
 ]
 
 onMounted(() => {
@@ -45,7 +45,7 @@ async function loadMaterials(page = 1) {
 async function reviewMaterial(materialId: string, action: 'approve' | 'reject' | 'feature') {
   let reason: string | undefined
   if (action === 'reject') {
-    reason = prompt('Enter rejection reason:') || undefined
+    reason = prompt('請輸入拒絕原因：') || undefined
     if (!reason) return
   }
 
@@ -67,25 +67,30 @@ function getToolLabel(toolType: string | null): string {
   const tool = toolTypes.find(t => t.value === toolType)
   return tool?.label || toolType || '-'
 }
+
+function getStatusLabel(status: string | null): string {
+  const item = statuses.find(s => s.value === status)
+  return item?.label || status || '-'
+}
 </script>
 
 <template>
   <div class="admin-materials">
     <header class="page-header">
-      <h1>Material Management</h1>
-      <p class="subtitle">Manage generated examples and showcases</p>
+      <h1>素材管理</h1>
+      <p class="subtitle">管理預生成範例、展示素材與審核狀態</p>
     </header>
 
     <!-- Filters -->
     <div class="filters">
       <select v-model="selectedToolType" class="filter-select">
-        <option value="">All Tools</option>
+        <option value="">全部工具</option>
         <option v-for="tool in toolTypes" :key="tool.value" :value="tool.value">
           {{ tool.label }}
         </option>
       </select>
       <select v-model="selectedStatus" class="filter-select">
-        <option value="">All Statuses</option>
+        <option value="">全部狀態</option>
         <option v-for="status in statuses" :key="status.value" :value="status.value">
           {{ status.label }}
         </option>
@@ -103,7 +108,7 @@ function getToolLabel(toolType: string | null): string {
           <img
             v-if="material.result_image_url"
             :src="material.result_image_url"
-            :alt="material.title_en || 'Material'"
+            :alt="material.title_zh || material.title_en || '素材'"
           />
           <video
             v-else-if="material.result_video_url"
@@ -113,38 +118,38 @@ function getToolLabel(toolType: string | null): string {
             @mouseenter="($event.target as HTMLVideoElement).play()"
             @mouseleave="($event.target as HTMLVideoElement).pause()"
           />
-          <div v-else class="no-preview">No Preview</div>
+          <div v-else class="no-preview">無預覽</div>
         </div>
 
         <div class="material-info">
           <div class="material-header">
             <span class="tool-type">{{ getToolLabel(material.tool_type) }}</span>
             <span class="status-badge" :class="getStatusClass(material.status)">
-              {{ material.status }}
+              {{ getStatusLabel(material.status) }}
             </span>
           </div>
 
-          <h3 class="material-title">{{ material.title_en || material.topic }}</h3>
+          <h3 class="material-title">{{ material.title_zh || material.title_en || material.topic }}</h3>
 
           <div class="material-meta">
-            <span>{{ material.view_count }} views</span>
+            <span>{{ material.view_count }} 次瀏覽</span>
             <span>{{ formatDate(material.created_at) }}</span>
           </div>
 
           <div class="material-actions" v-if="material.status === 'pending'">
             <button @click="reviewMaterial(material.id, 'approve')" class="btn approve">
-              Approve
+              通過
             </button>
             <button @click="reviewMaterial(material.id, 'feature')" class="btn feature">
-              Feature
+              設為精選
             </button>
             <button @click="reviewMaterial(material.id, 'reject')" class="btn reject">
-              Reject
+              拒絕
             </button>
           </div>
           <div class="material-actions" v-else-if="material.status !== 'featured'">
             <button @click="reviewMaterial(material.id, 'feature')" class="btn feature">
-              Make Featured
+              設為精選
             </button>
           </div>
         </div>
@@ -153,7 +158,7 @@ function getToolLabel(toolType: string | null): string {
 
     <!-- Empty State -->
     <div v-if="adminStore.materials.length === 0 && !adminStore.isLoading" class="empty-state">
-      <p>No materials found</p>
+      <p>找不到素材</p>
     </div>
 
     <!-- Pagination -->
@@ -163,17 +168,17 @@ function getToolLabel(toolType: string | null): string {
         :disabled="adminStore.materialsPage <= 1"
         class="page-btn"
       >
-        Previous
+        上一頁
       </button>
       <span class="page-info">
-        Page {{ adminStore.materialsPage }} of {{ Math.ceil(adminStore.materialsTotal / 20) }}
+        第 {{ adminStore.materialsPage }} / {{ Math.ceil(adminStore.materialsTotal / 20) }} 頁
       </span>
       <button
         @click="loadMaterials(adminStore.materialsPage + 1)"
         :disabled="adminStore.materialsPage >= Math.ceil(adminStore.materialsTotal / 20)"
         class="page-btn"
       >
-        Next
+        下一頁
       </button>
     </div>
 

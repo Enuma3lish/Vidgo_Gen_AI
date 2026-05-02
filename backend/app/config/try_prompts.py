@@ -22,12 +22,12 @@ from typing import List, Dict, Any
 # Product Scene: product + scene = one try option
 # Taiwan SMB focus: food, drinks, daily necessities — NOT luxury/tech
 PRODUCT_SCENE_TRY_PROMPTS: List[Dict[str, Any]] = [
-    {"id": "bubble-tea-studio", "topic": "studio", "prompt_en": "Bubble tea in studio lighting", "prompt_zh": "珍珠奶茶攝影棚場景", "product": "bubble_tea", "scene": "studio"},
-    {"id": "fried-chicken-lifestyle", "topic": "lifestyle", "prompt_en": "Fried chicken box in lifestyle setting", "prompt_zh": "炸雞排生活風格場景", "product": "fried_chicken", "scene": "lifestyle"},
-    {"id": "bento-minimal", "topic": "minimal", "prompt_en": "Lunch bento box minimalist style", "prompt_zh": "便當極簡風格", "product": "bento", "scene": "minimal"},
-    {"id": "backpack-nature", "topic": "nature", "prompt_en": "Student backpack in nature setting", "prompt_zh": "學生書包自然場景", "product": "backpack", "scene": "nature"},
-    {"id": "soap-studio", "topic": "studio", "prompt_en": "Handmade soap studio shot", "prompt_zh": "手工皂棚拍", "product": "soap", "scene": "studio"},
-    {"id": "cake-seasonal", "topic": "seasonal", "prompt_en": "Birthday cake in seasonal setting", "prompt_zh": "生日蛋糕季節性場景", "product": "cake", "scene": "seasonal"},
+    {"id": "bubble-tea-studio", "topic": "studio", "prompt_en": "E-commerce product photo of bubble tea on a clean warm-white studio surface, soft diffused light, realistic condensation, centered 3/4 angle, crisp cup label, no extra text", "prompt_zh": "珍珠奶茶電商商品照，乾淨暖白攝影棚桌面，柔和棚燈，杯身凝結水珠自然，45度置中構圖，杯標清晰，不要額外文字", "product": "bubble_tea", "scene": "studio"},
+    {"id": "fried-chicken-lifestyle", "topic": "lifestyle", "prompt_en": "Fried chicken box in a bright casual takeout table scene, warm daylight, appetizing steam, clean sauce props to the side, product unobstructed, social-ad ready", "prompt_zh": "炸雞盒放在明亮外帶餐桌生活場景，暖日光、誘人熱氣，醬料小道具在側邊，主商品不被遮住，適合社群廣告", "product": "fried_chicken", "scene": "lifestyle"},
+    {"id": "bento-minimal", "topic": "minimal", "prompt_en": "Lunch bento box on a minimalist cream background, top-front commercial angle, neat shadow, balanced negative space for marketplace listing, natural food color", "prompt_zh": "便當盒置於極簡奶油色背景，商用正前上方角度，乾淨陰影，保留電商上架留白，食物色澤自然", "product": "bento", "scene": "minimal"},
+    {"id": "backpack-nature", "topic": "nature", "prompt_en": "Student backpack staged outdoors near soft greenery, morning light, realistic fabric texture, product upright and fully visible, gentle depth of field, no people", "prompt_zh": "學生書包在柔和綠意戶外場景展示，晨光、布料紋理真實，商品直立完整可見，淺景深，不出現人物", "product": "backpack", "scene": "nature"},
+    {"id": "soap-studio", "topic": "studio", "prompt_en": "Handmade soap studio hero shot with kraft paper, natural linen, soft side light, gentle shadow, premium small-brand packaging mood, readable label", "prompt_zh": "手工皂攝影棚主視覺，牛皮紙與天然亞麻布，柔和側光、細緻陰影，高質感小品牌包裝氛圍，標籤可讀", "product": "soap", "scene": "studio"},
+    {"id": "cake-seasonal", "topic": "seasonal", "prompt_en": "Birthday cake seasonal campaign photo, pastel celebratory background, soft bokeh string lights, centered cake, clean plate shadow, no distorted candles or text", "prompt_zh": "生日蛋糕季節活動商品照，粉彩慶祝背景、柔和燈串散景，蛋糕置中，盤子陰影乾淨，不要扭曲蠟燭或文字", "product": "cake", "scene": "seasonal"},
 ]
 
 # Effect: source x style (common people business: menu, shop, social ads)
@@ -206,32 +206,32 @@ ROOM_REDESIGN_TRY_PROMPTS: List[Dict[str, Any]] = [
 SHORT_VIDEO_TRY_PROMPTS: List[Dict[str, Any]] = [
     {
         "id": "showcase-bubbletea-1", "topic": "product_showcase",
-        "prompt_en": "Product showcase video for bubble tea shop",
-        "prompt_zh": "珍珠奶茶店產品展示影片",
+        "prompt_en": "8-second vertical product showcase for a bubble tea shop. Shot 1: slow push-in on the cup with condensation. Shot 2: pearls swirl naturally. Shot 3: handoff-ready hero frame, warm daylight, no extra text.",
+        "prompt_zh": "8秒直式珍珠奶茶商品展示。鏡頭1：緩慢推近杯身與凝結水珠。鏡頭2：珍珠自然旋動。鏡頭3：可交付主視覺定格，暖日光，不要額外文字。",
         "content_type": "product_showcase", "product": "bubble_tea",
     },
     {
         "id": "brand-chicken-1", "topic": "brand_intro",
-        "prompt_en": "Brand introduction video for fried chicken restaurant",
-        "prompt_zh": "炸雞店品牌介紹影片",
+        "prompt_en": "10-second restaurant brand intro for fried chicken. Shot 1: crispy box opens with steam. Shot 2: sauce dip close-up. Shot 3: clean storefront table hero shot, handheld but stable, appetizing warm color.",
+        "prompt_zh": "10秒炸雞店品牌介紹。鏡頭1：酥脆餐盒打開冒熱氣。鏡頭2：沾醬特寫。鏡頭3：店面桌上乾淨主視覺，手持但穩定，暖色誘人。",
         "content_type": "brand_intro", "product": "fried_chicken",
     },
     {
         "id": "tutorial-skincare-1", "topic": "tutorial",
-        "prompt_en": "Tutorial video for skincare routine",
-        "prompt_zh": "保養品使用教學影片",
+        "prompt_en": "12-second skincare tutorial clip. Shot 1: serum bottle on clean vanity. Shot 2: one drop on fingertip macro. Shot 3: product beside fresh towel, soft studio light, realistic glass reflections, calm pacing.",
+        "prompt_zh": "12秒保養品使用教學。鏡頭1：精華瓶在乾淨梳妝台。鏡頭2：指尖一滴精華微距。鏡頭3：商品與乾淨毛巾同框，柔和棚燈、玻璃反射真實、節奏平穩。",
         "content_type": "tutorial", "product": "skincare",
     },
     {
         "id": "promo-backpack-1", "topic": "promo",
-        "prompt_en": "Promotional video for student backpacks",
-        "prompt_zh": "學生書包促銷影片",
+        "prompt_en": "8-second student backpack promo. Shot 1: backpack upright on desk. Shot 2: zipper opens smoothly to show capacity. Shot 3: outdoor school walkway hero frame, natural fabric motion, no people blocking product.",
+        "prompt_zh": "8秒學生書包促銷。鏡頭1：書包直立在書桌。鏡頭2：拉鍊順暢打開展示容量。鏡頭3：校園走道戶外主視覺，布料動態自然，沒有人遮擋商品。",
         "content_type": "promo", "product": "backpack",
     },
     {
         "id": "showcase-sneaker-1", "topic": "product_showcase",
-        "prompt_en": "Dynamic showcase for running sneakers",
-        "prompt_zh": "運動鞋動態展示影片",
+        "prompt_en": "10-second running sneaker showcase. Shot 1: clean turntable rotation. Shot 2: sole texture macro with light sweep. Shot 3: shoe lands on track surface, realistic shadow and dust, sharp brand-safe frame.",
+        "prompt_zh": "10秒運動鞋動態展示。鏡頭1：乾淨轉台旋轉。鏡頭2：鞋底紋理與掃光微距。鏡頭3：鞋落在跑道表面，陰影與微塵真實，畫面銳利且品牌安全。",
         "content_type": "product_showcase", "product": "sneaker",
     },
 ]
@@ -240,32 +240,32 @@ SHORT_VIDEO_TRY_PROMPTS: List[Dict[str, Any]] = [
 PATTERN_GENERATE_TRY_PROMPTS: List[Dict[str, Any]] = [
     {
         "id": "seamless-bubbletea-1", "topic": "seamless",
-        "prompt_en": "Seamless bubble tea pattern for packaging",
-        "prompt_zh": "珍珠奶茶無縫圖案，包裝用",
+        "prompt_en": "Seamless bubble tea packaging pattern, tapioca pearls, cup silhouettes and tiny straw icons, milk tea beige and cocoa palette, clean repeat, no text",
+        "prompt_zh": "珍珠奶茶包裝用無縫圖案，珍珠、杯子剪影與小吸管圖示，奶茶米色與可可色配色，乾淨重複，不要文字",
         "pattern_style": "seamless", "application": "packaging",
     },
     {
         "id": "floral-skincare-1", "topic": "floral",
-        "prompt_en": "Floral pattern for skincare brand packaging",
-        "prompt_zh": "花卉圖案，保養品品牌包裝用",
+        "prompt_en": "Boutique skincare floral pattern, white camellia petals and soft water droplets, pearl white and sage green palette, airy spacing, seamless luxury repeat",
+        "prompt_zh": "保養品牌花卉圖案，白山茶花瓣與柔和水滴，珍珠白與鼠尾草綠配色，留白充足，高級無縫重複",
         "pattern_style": "floral", "application": "branding",
     },
     {
         "id": "geometric-tech-1", "topic": "geometric",
-        "prompt_en": "Geometric pattern for tech brand background",
-        "prompt_zh": "幾何圖案，科技品牌背景用",
+        "prompt_en": "Modern tech accessory pattern, rounded geometric modules with subtle depth, cobalt blue and graphite accents, precise tileable repeat, no logo",
+        "prompt_zh": "現代科技配件圖案，圓角幾何模組帶微立體感，鈷藍與石墨灰點綴，精準可平鋪，不要 Logo",
         "pattern_style": "geometric", "application": "background",
     },
     {
         "id": "abstract-cafe-1", "topic": "abstract",
-        "prompt_en": "Abstract pattern for cafe menu design",
-        "prompt_zh": "抽象圖案，咖啡廳菜單設計用",
+        "prompt_en": "Cafe menu abstract pattern, hand-drawn coffee bean curves, steam doodles, warm mocha and ivory, playful clean repeat with balanced negative space",
+        "prompt_zh": "咖啡廳菜單抽象圖案，手繪咖啡豆曲線與蒸氣線稿，摩卡與象牙白，俏皮乾淨重複並保留留白",
         "pattern_style": "abstract", "application": "menu",
     },
     {
         "id": "traditional-gift-1", "topic": "traditional",
-        "prompt_en": "Traditional Chinese pattern for gift wrapping",
-        "prompt_zh": "傳統中式紋樣，禮品包裝用",
+        "prompt_en": "Modern traditional gift-wrap pattern, cloud motifs, plum blossoms and fine line borders, red clay and muted gold palette, refined seamless print",
+        "prompt_zh": "現代傳統禮品包裝圖案，雲紋、梅花與細線邊框，陶土紅與霧金配色，精緻無縫印刷",
         "pattern_style": "traditional", "application": "gift",
     },
 ]

@@ -13,6 +13,7 @@ const uiStore = useUIStore()
 
 const email = ref('')
 const password = ref('')
+const promotionCode = ref(((route.query.ref as string) || '').toUpperCase())
 const isLoading = ref(false)
 const showPassword = ref(false)
 
@@ -23,7 +24,7 @@ async function handleSubmit() {
   }
   isLoading.value = true
   try {
-    const referralCode = (route.query.ref as string) || undefined
+    const referralCode = promotionCode.value.trim().toUpperCase() || undefined
     await authStore.register({ email: email.value, password: password.value, referral_code: referralCode })
     router.push({ path: '/auth/verify', query: { email: email.value } })
   } catch (error) {
@@ -135,6 +136,17 @@ async function handleSubmit() {
                   <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
                 </button>
               </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1.5" style="color: #f5f5fa;">{{ t('auth.promotionCode') }}</label>
+              <input v-model="promotionCode" type="text"
+                class="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all uppercase"
+                style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
+                :placeholder="t('auth.promotionCodePlaceholder')"
+                autocomplete="off" maxlength="16"
+                onfocus="this.style.borderColor='#1677ff';this.style.boxShadow='0 0 0 3px rgba(22,119,255,0.1)'"
+                onblur="this.style.borderColor='rgba(255,255,255,0.08)';this.style.boxShadow=''"/>
+              <p class="text-xs mt-1.5" style="color: #6b6b8a;">{{ t('auth.promotionCodeHint') }}</p>
             </div>
             <button type="submit" :disabled="isLoading"
               class="w-full py-3.5 rounded font-bold text-white transition-all duration-200 flex items-center justify-center gap-2"

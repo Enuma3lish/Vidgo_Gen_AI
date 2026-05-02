@@ -21,8 +21,8 @@ async function checkOrderStatus(order: string) {
       if (data.status === 'paid') {
         status.value = 'success'
         loading.value = false
-        // Redirect to dashboard after 3 seconds
-        setTimeout(() => router.replace('/dashboard'), 3000)
+        // Redirect to the user's work library after 3 seconds
+        setTimeout(() => router.replace('/dashboard/my-works'), 3000)
       } else if (data.status === 'pending' && pollCount.value < MAX_POLLS) {
         // Still pending - poll again after 5 seconds
         pollCount.value++
@@ -96,7 +96,7 @@ onMounted(() => {
         <button
           type="button"
           class="btn-primary w-full"
-          @click="router.replace('/dashboard')"
+          @click="router.replace('/dashboard/my-works')"
         >
           立即前往儀表板
         </button>
@@ -143,7 +143,7 @@ onMounted(() => {
           <button
             type="button"
             class="flex-1 btn-primary"
-            @click="router.replace('/dashboard')"
+            @click="router.replace('/dashboard/my-works')"
           >
             前往儀表板
           </button>

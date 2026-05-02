@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -25,6 +25,7 @@ type GalleryItem = {
 }
 
 const isZh = computed(() => locale.value.startsWith('zh'))
+const apiLanguage = computed(() => isZh.value ? 'zh-TW' : 'en')
 function displayTitle(item: GalleryItem): string {
   if (isZh.value && item.title_zh) return item.title_zh
   return item.title
@@ -152,29 +153,87 @@ const CURATED_FALLBACK_ITEMS: GalleryItem[] = [
   },
 ]
 
-// Gallery categories (matching piapi.ai style)
-const categories = ref([
-  { id: 'all', name: t('gallery.categories.all'), icon: '🌟', count: 0 },
-  { id: 'product_scene', name: t('gallery.categories.product_scene'), icon: '📸', count: 0 },
-  { id: 'background_removal', name: t('gallery.categories.background_removal'), icon: '✂️', count: 0 },
-  { id: 'try_on', name: t('gallery.categories.try_on'), icon: '👗', count: 0 },
-  { id: 'room_redesign', name: t('gallery.categories.room_redesign'), icon: '🏠', count: 0 },
-  { id: 'short_video', name: t('gallery.categories.short_video'), icon: '🎬', count: 0 },
-  { id: 'ai_avatar', name: t('gallery.categories.ai_avatar'), icon: '🎭', count: 0 },
-  { id: 'effect', name: t('gallery.categories.effect'), icon: '🎨', count: 0 },
-  { id: 'pattern_generate', name: t('gallery.categories.pattern_generate'), icon: '🔲', count: 0 },
-])
+// Gallery filters. Labels are computed from `t(...)` so they update when the
+// user switches language without a full page reload.
+const categoryDefinitions = [
+  { id: 'all', labelKey: 'gallery.categories.all', icon: '🌟' },
+  { id: 'product_scene', labelKey: 'gallery.categories.product_scene', icon: '📸' },
+  { id: 'background_removal', labelKey: 'gallery.categories.background_removal', icon: '✂️' },
+  { id: 'try_on', labelKey: 'gallery.categories.try_on', icon: '👗' },
+  { id: 'room_redesign', labelKey: 'gallery.categories.room_redesign', icon: '🏠' },
+  { id: 'short_video', labelKey: 'gallery.categories.short_video', icon: '🎬' },
+  { id: 'ai_avatar', labelKey: 'gallery.categories.ai_avatar', icon: '🎭' },
+  { id: 'effect', labelKey: 'gallery.categories.effect', icon: '🎨' },
+  { id: 'pattern_generate', labelKey: 'gallery.categories.pattern_generate', icon: '🔲' },
+]
 
-// Industry filters (for SMB targeting)
-const industries = ref([
-  { id: 'all', name: t('gallery.industries.all'), icon: '🏢' },
-  { id: 'food_beverage', name: t('gallery.industries.food_beverage'), icon: '🍔' },
-  { id: 'fashion', name: t('gallery.industries.fashion'), icon: '👕' },
-  { id: 'ecommerce', name: t('gallery.industries.ecommerce'), icon: '🛒' },
-  { id: 'interior_design', name: t('gallery.industries.interior_design'), icon: '🛋️' },
-  { id: 'marketing', name: t('gallery.industries.marketing'), icon: '📢' },
-  { id: 'small_business', name: t('gallery.industries.small_business'), icon: '🏪' },
-])
+const industryDefinitions = [
+  { id: 'all', labelKey: 'gallery.industries.all', icon: '🏢' },
+  { id: 'food_beverage', labelKey: 'gallery.industries.food_beverage', icon: '🍔' },
+  { id: 'fashion', labelKey: 'gallery.industries.fashion', icon: '👕' },
+  { id: 'ecommerce', labelKey: 'gallery.industries.ecommerce', icon: '🛒' },
+  { id: 'interior_design', labelKey: 'gallery.industries.interior_design', icon: '🛋️' },
+  { id: 'marketing', labelKey: 'gallery.industries.marketing', icon: '📢' },
+  { id: 'small_business', labelKey: 'gallery.industries.small_business', icon: '🏪' },
+]
+
+const categoryCounts = ref<Record<string, number>>({})
+const categories = computed(() => categoryDefinitions.map((category) => ({
+  id: category.id,
+  name: t(category.labelKey),
+  icon: category.icon,
+  count: categoryCounts.value[category.id] || 0,
+})))
+const industries = computed(() => industryDefinitions.map((industry) => ({
+  id: industry.id,
+  name: t(industry.labelKey),
+  icon: industry.icon,
+})))
+
+const tagLabelsZh: Record<string, string> = {
+  product: '商品',
+  ecommerce: '電商',
+  small_business: '中小企業',
+  food: '食品',
+  beverage: '飲品',
+  catalog: '型錄',
+  clean: '乾淨',
+  fashion: '時尚',
+  clothing: '服飾',
+  model: '模特',
+  interior: '室內',
+  living_room: '客廳',
+  design: '設計',
+  marketing: '行銷',
+  social: '社群',
+  video: '影片',
+  brand: '品牌',
+  presenter: '導購',
+  style: '風格',
+  creative: '創意',
+  ad: '廣告',
+  pattern: '圖案',
+  branding: '品牌識別',
+  product_scene: '商品情境',
+  background_removal: '智能去背',
+  try_on: '模特換裝',
+  room_redesign: '空間改造',
+  short_video: '短影音',
+  ai_avatar: '數位人',
+  effect: '圖片特效',
+  pattern_generate: '圖案生成',
+}
+
+function toTitleCaseLabel(value: string): string {
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function displayTag(tag: string): string {
+  if (isZh.value) return tagLabelsZh[tag] || tag
+  return toTitleCaseLabel(tag)
+}
 
 // Gallery items
 const galleryItems = ref<GalleryItem[]>([])
@@ -278,8 +337,8 @@ async function loadGalleryData() {
     }
 
     const [inspirationRes, worksRes] = await Promise.all([
-      safeJson<any>('/api/v1/demo/inspiration?count=50'),
-      safeJson<any>('/api/v1/demo/landing/works?limit=50')
+      safeJson<any>(`/api/v1/demo/inspiration?count=50&language=${apiLanguage.value}`),
+      safeJson<any>(`/api/v1/demo/landing/works?limit=50&language=${apiLanguage.value}`)
     ])
 
     const items: GalleryItem[] = []
@@ -322,13 +381,15 @@ async function loadGalleryData() {
 
     galleryItems.value = withFallbackItems(items)
 
-    categories.value.forEach((cat: { id: string; count: number }) => {
+    const nextCounts: Record<string, number> = {}
+    categoryDefinitions.forEach((cat) => {
       if (cat.id === 'all') {
-        cat.count = galleryItems.value.length
+        nextCounts[cat.id] = galleryItems.value.length
       } else {
-        cat.count = galleryItems.value.filter(item => item.tool_type === cat.id).length
+        nextCounts[cat.id] = galleryItems.value.filter(item => item.tool_type === cat.id).length
       }
     })
+    categoryCounts.value = nextCounts
 
   } catch (error) {
     console.error('Failed to load gallery data:', error)
@@ -383,6 +444,10 @@ function tryExample(item: any) {
 }
 
 onMounted(() => {
+  loadGalleryData()
+})
+
+watch(locale, () => {
   loadGalleryData()
 })
 </script>
@@ -576,7 +641,7 @@ onMounted(() => {
                   class="px-2 py-1 text-xs rounded"
                   style="background: rgba(255,255,255,0.04); color: #6b6b8a;"
                 >
-                  {{ tag }}
+                  {{ displayTag(tag) }}
                 </span>
                 <span v-if="item.tags.length > 3" class="px-2 py-1 text-xs" style="color: #3a3a55;">
                   +{{ item.tags.length - 3 }}

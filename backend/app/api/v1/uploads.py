@@ -11,14 +11,17 @@ Endpoints:
 - GET  /uploads/{upload_id}/download      - Download result (no watermark)
 - GET  /uploads/models/{tool_type}        - List available models for a tool (with credit costs)
 """
+import asyncio
 import json
 import logging
 import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,12 +32,26 @@ from app.api.deps import get_db, get_current_active_user, is_subscribed_user
 from app.models.user import User
 from app.models.user_upload import UserUpload, UploadStatus
 from app.core.config import get_settings
+from app.core.upload_validation import (
+    extension_for_content_type,
+    image_dimension_rules_for_tool,
+    validate_uploaded_content,
+)
 from app.providers.provider_router import get_provider_router, TaskType
+from app.services.gcs_storage_service import get_gcs_storage
+from app.services.email_service import send_admin_tool_failure_email
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 provider_router = get_provider_router()
+_UPLOAD_GENERATION_TASKS: set[asyncio.Task] = set()
+
+# Generic, user-facing message returned when an upload-triggered generation
+# fails for an internal reason. Admin is notified via email separately.
+GENERIC_UPLOAD_FAILURE_MESSAGE = (
+    "This tool is temporarily unavailable. Please try again later."
+)
 
 # ─────────────────────────────────────────
 # Model / credit configuration
@@ -60,7 +77,7 @@ TOOL_MODELS = {
     ],
     "product_scene": [
         {"id": "default", "name": "Standard (Flux)", "name_zh": "標準 (Flux)", "credit_multiplier": 1},
-        {"id": "wan_pro", "name": "Pro (Wan Pro)", "name_zh": "進階 (Wan Pro)", "credit_multiplier": 2},
+        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 2},
     ],
     "try_on": [
         {"id": "default", "name": "Standard (Kling v1.5)", "name_zh": "標準 (Kling v1.5)", "credit_multiplier": 1},
@@ -68,7 +85,7 @@ TOOL_MODELS = {
     ],
     "room_redesign": [
         {"id": "default", "name": "Standard (Flux)", "name_zh": "標準 (Flux)", "credit_multiplier": 1},
-        {"id": "wan_pro", "name": "Pro (Wan Pro)", "name_zh": "進階 (Wan Pro)", "credit_multiplier": 2},
+        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 2},
     ],
     "short_video": [
         {"id": "pixverse_v4.5", "name": "Fast (Pixverse v4.5)", "name_zh": "快速 (Pixverse v4.5)", "credit_multiplier": 1},
@@ -84,16 +101,28 @@ TOOL_MODELS = {
     ],
     "pattern_generate": [
         {"id": "default", "name": "Standard (Flux)", "name_zh": "標準 (Flux)", "credit_multiplier": 1},
-        {"id": "wan_pro", "name": "Pro (Wan Pro)", "name_zh": "進階 (Wan Pro)", "credit_multiplier": 2},
+        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 2},
     ],
     "effect": [
         {"id": "default", "name": "Standard (Flux I2I)", "name_zh": "標準 (Flux I2I)", "credit_multiplier": 1},
-        {"id": "wan_pro", "name": "Pro (Wan Pro)", "name_zh": "進階 (Wan Pro)", "credit_multiplier": 2},
+        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 2},
     ],
 }
 
-ALLOWED_CONTENT_TYPES = {ct.strip() for ct in settings.UPLOAD_ALLOWED_TYPES.split(",")}
 MAX_UPLOAD_BYTES = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+PRODUCT_SCENE_PROMPT_MAX_CHARS = 500
+
+IMAGE_UPLOAD_TOOLS = {
+    "background_removal",
+    "product_scene",
+    "try_on",
+    "room_redesign",
+    "short_video",
+    "ai_avatar",
+    "pattern_generate",
+    "effect",
+}
+VIDEO_UPLOAD_TOOLS = {"video_transform"}
 
 UPLOAD_DIR = "/app/static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -152,27 +181,269 @@ def _calculate_credit_cost(tool_type: str, model_id: str) -> int:
     return max(1, int(base * multiplier))
 
 
-async def _save_upload(file: UploadFile, user_id: str) -> tuple[str, int]:
-    """Save uploaded file to disk. Returns (file_url, file_size)."""
-    ext = os.path.splitext(file.filename or "upload")[1] or ".jpg"
-    filename = f"{user_id}_{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(UPLOAD_DIR, filename)
+def _is_valid_model(tool_type: str, model_id: str) -> bool:
+    """Return whether the requested model is available for the given tool."""
+    if model_id == "default":
+        return tool_type in TOOL_MODELS
+    return any(model["id"] == model_id for model in TOOL_MODELS.get(tool_type, []))
 
+
+def _deduct_upload_credits(user: User, amount: int) -> dict[str, int]:
+    """Deduct upload credits and return the exact bucket breakdown."""
+    remaining = amount
+    breakdown = {"subscription_credits": 0, "purchased_credits": 0, "bonus_credits": 0}
+
+    for field in breakdown:
+        available = max(0, getattr(user, field) or 0)
+        used = min(available, remaining)
+        setattr(user, field, available - used)
+        breakdown[field] = used
+        remaining -= used
+        if remaining == 0:
+            break
+
+    if remaining:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Insufficient credits. This generation costs {amount} credits."
+        )
+
+    return breakdown
+
+
+def _refund_upload_credits(user: User, breakdown: dict[str, int]) -> None:
+    """Restore credits deducted by upload_and_generate when generation fails."""
+    for field, amount in breakdown.items():
+        setattr(user, field, (getattr(user, field) or 0) + amount)
+
+
+def _normalize_upload_prompt(tool_type: str, prompt: Optional[str]) -> Optional[str]:
+    """Normalize bounded prompts before storing or sending to providers."""
+    if prompt is None:
+        return None
+
+    cleaned = " ".join(prompt.split())
+    if tool_type == "product_scene" and len(cleaned) > PRODUCT_SCENE_PROMPT_MAX_CHARS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Product scene prompt must be {PRODUCT_SCENE_PROMPT_MAX_CHARS} characters or fewer.",
+        )
+    return cleaned or None
+
+
+def _load_upload_extra_params(upload: UserUpload) -> dict:
+    if not upload.extra_params:
+        return {}
+    try:
+        data = json.loads(upload.extra_params)
+        return data if isinstance(data, dict) else {}
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+
+async def _refund_failed_upload(
+    db: AsyncSession,
+    upload: UserUpload,
+    credit_breakdown: dict[str, int],
+) -> None:
+    """Refund a failed background generation exactly once."""
+    extra_params = _load_upload_extra_params(upload)
+    if extra_params.get("credits_refunded"):
+        return
+
+    result = await db.execute(select(User).where(User.id == upload.user_id))
+    user = result.scalars().first()
+    if not user:
+        logger.error("Cannot refund failed upload %s: user not found", upload.id)
+        return
+
+    _refund_upload_credits(user, credit_breakdown)
+    extra_params["credits_refunded"] = True
+    upload.extra_params = json.dumps(extra_params)
+    await db.commit()
+
+
+async def _trigger_generation_background(
+    upload_id: str,
+    file_url: str,
+    tool_type: str,
+    model_id: str,
+    prompt: str,
+    credit_breakdown: dict[str, int],
+) -> None:
+    """Run provider generation after the upload response has been returned."""
+    from app.core.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(UserUpload).where(UserUpload.id == uuid.UUID(upload_id)))
+        upload = result.scalars().first()
+        if not upload:
+            logger.error("Background generation upload not found: %s", upload_id)
+            return
+
+        try:
+            await _trigger_generation(upload, file_url, tool_type, model_id, prompt, db)
+        except Exception as exc:
+            logger.exception("Background generation failed for upload %s", upload_id)
+            upload.status = UploadStatus.FAILED
+            upload.error_message = GENERIC_UPLOAD_FAILURE_MESSAGE
+            await db.commit()
+            try:
+                user_email_result = await db.execute(select(User).where(User.id == upload.user_id))
+                user_for_alert = user_email_result.scalars().first()
+                user_email = getattr(user_for_alert, "email", None)
+            except Exception:
+                user_email = None
+            try:
+                await send_admin_tool_failure_email(
+                    tool_name=f"upload:{tool_type}",
+                    user_email=user_email,
+                    error=exc,
+                    request_id=upload_id,
+                    extra_context={
+                        "model_id": model_id,
+                        "file_url": file_url,
+                    },
+                )
+            except Exception as alert_exc:  # pragma: no cover - defensive
+                logger.error("Admin alert email failed for upload %s: %s", upload_id, alert_exc)
+
+        if upload.status == UploadStatus.FAILED:
+            await _refund_failed_upload(db, upload, credit_breakdown)
+
+
+def _schedule_generation_task(
+    background_tasks: BackgroundTasks,
+    upload_id: str,
+    file_url: str,
+    tool_type: str,
+    model_id: str,
+    prompt: str,
+    credit_breakdown: dict[str, int],
+) -> None:
+    """Start upload generation outside the request response lifecycle."""
+    args = (upload_id, file_url, tool_type, model_id, prompt, credit_breakdown)
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        background_tasks.add_task(_trigger_generation_background, *args)
+        return
+
+    task = loop.create_task(_trigger_generation_background(*args))
+    _UPLOAD_GENERATION_TASKS.add(task)
+
+    def _cleanup(done: asyncio.Task) -> None:
+        _UPLOAD_GENERATION_TASKS.discard(done)
+        if done.cancelled():
+            logger.warning("Detached upload generation task was cancelled: %s", upload_id)
+            return
+        exc = done.exception()
+        if exc:
+            logger.error(
+                "Detached upload generation task crashed for %s: %s",
+                upload_id,
+                exc,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+
+    task.add_done_callback(_cleanup)
+
+
+async def _save_upload(file: UploadFile, user_id: str, tool_type: str) -> tuple[str, int, str]:
+    """Save uploaded file to durable storage. Returns (file_url, file_size)."""
     content = await file.read()
     file_size = len(content)
 
-    if file_size > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB} MB."
-        )
+    expected_kind = "video" if tool_type in VIDEO_UPLOAD_TOOLS else "image"
+    content_type = validate_uploaded_content(
+        content=content,
+        declared_content_type=file.content_type,
+        expected_kind=expected_kind,
+        max_bytes=MAX_UPLOAD_BYTES,
+        dimension_rules=image_dimension_rules_for_tool(tool_type),
+    )
+    filename = f"{user_id}_{uuid.uuid4().hex}{extension_for_content_type(content_type)}"
 
+    gcs = get_gcs_storage()
+    if gcs.enabled:
+        file_url = gcs.upload_public(
+            data=content,
+            blob_name=f"uploads/{user_id}/{filename}",
+            content_type=content_type,
+        )
+        return file_url, file_size, content_type
+
+    dest = os.path.join(UPLOAD_DIR, filename)
     with open(dest, "wb") as f:
         f.write(content)
 
     # Return a URL path accessible via static files
     file_url = f"/static/uploads/{filename}"
-    return file_url, file_size
+    return file_url, file_size, content_type
+
+async def _run_ffmpeg_video_transform(source_url: str, upload: UserUpload) -> str:
+    """Apply a lightweight local video transform when external V2V providers are unavailable."""
+    with tempfile.TemporaryDirectory(prefix="vidgo-video-transform-") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+
+        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+            response = await client.get(source_url)
+            response.raise_for_status()
+            input_path.write_bytes(response.content)
+
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-vf",
+            "eq=contrast=1.08:saturation=1.18:brightness=0.02,unsharp=5:5:0.6:3:3:0.3",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0 or not output_path.exists():
+            detail = (stderr or stdout).decode("utf-8", errors="replace")[-1000:]
+            raise RuntimeError(f"ffmpeg video transform failed: {detail}")
+
+        output_bytes = output_path.read_bytes()
+        gcs = get_gcs_storage()
+        if gcs.enabled:
+            return gcs.upload_public(
+                data=output_bytes,
+                blob_name=f"generated/video/uploads/{upload.user_id}/{upload.id}.mp4",
+                content_type="video/mp4",
+            )
+
+        output_dir = Path(UPLOAD_DIR).parent / "generated"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"video_transform_{upload.id}.mp4"
+        local_output = output_dir / filename
+        local_output.write_bytes(output_bytes)
+        public_base = settings.BACKEND_URL.rstrip("/") if settings.BACKEND_URL else ""
+        return f"{public_base}/static/generated/{filename}" if public_base else f"/static/generated/{filename}"
 
 
 # ─────────────────────────────────────────
@@ -231,6 +502,7 @@ async def get_tool_models(
 
 @router.post("/material", response_model=UploadResponse)
 async def upload_and_generate(
+    background_tasks: BackgroundTasks,
     tool_type: str = Form(...),
     model_id: str = Form(default="default"),
     prompt: Optional[str] = Form(default=None),
@@ -244,36 +516,38 @@ async def upload_and_generate(
     The result is stored without watermarks and available for download.
     Credits are deducted based on tool type and selected model.
     """
-    if not is_subscribed_user(current_user):
+    is_admin = bool(getattr(current_user, "is_superuser", False))
+    if not is_admin and not is_subscribed_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="A subscription is required to use custom material upload and real API generation."
-        )
-
-    # Validate content type
-    if file.content_type not in ALLOWED_CONTENT_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file type: {file.content_type}. Allowed: {settings.UPLOAD_ALLOWED_TYPES}"
         )
 
     # Validate tool type
     if tool_type not in TOOL_BASE_CREDITS:
         raise HTTPException(status_code=400, detail=f"Unknown tool type: {tool_type}")
 
+    if tool_type not in IMAGE_UPLOAD_TOOLS and tool_type not in VIDEO_UPLOAD_TOOLS:
+        raise HTTPException(status_code=400, detail=f"Uploads are not configured for tool type: {tool_type}")
+
+    if not _is_valid_model(tool_type, model_id):
+        raise HTTPException(status_code=400, detail=f"Unknown model_id '{model_id}' for tool_type '{tool_type}'")
+
+    prompt = _normalize_upload_prompt(tool_type, prompt)
+
     # Calculate credit cost
-    credit_cost = _calculate_credit_cost(tool_type, model_id)
+    credit_cost = 0 if is_admin else _calculate_credit_cost(tool_type, model_id)
 
     # Check credit balance
     total_credits = current_user.total_credits
-    if total_credits < credit_cost:
+    if not is_admin and total_credits < credit_cost:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=f"Insufficient credits. This generation costs {credit_cost} credits, you have {total_credits}."
         )
 
     # Save file
-    file_url, file_size = await _save_upload(file, str(current_user.id))
+    file_url, file_size, content_type = await _save_upload(file, str(current_user.id), tool_type)
 
     # Create upload record (starts as PROCESSING)
     upload = UserUpload(
@@ -282,7 +556,7 @@ async def upload_and_generate(
         original_filename=file.filename,
         file_url=file_url,
         file_size=file_size,
-        content_type=file.content_type,
+        content_type=content_type,
         prompt=prompt,
         selected_model=model_id,
         status=UploadStatus.PROCESSING,
@@ -292,32 +566,30 @@ async def upload_and_generate(
     await db.flush()
     upload_id = str(upload.id)
 
-    # Deduct credits
-    if current_user.subscription_credits >= credit_cost:
-        current_user.subscription_credits -= credit_cost
-    elif (current_user.subscription_credits or 0) + (current_user.purchased_credits or 0) >= credit_cost:
-        remaining = credit_cost - (current_user.subscription_credits or 0)
-        current_user.subscription_credits = 0
-        current_user.purchased_credits = (current_user.purchased_credits or 0) - remaining
-    else:
-        # Deduct from bonus credits as last resort
-        current_user.bonus_credits = (current_user.bonus_credits or 0) - credit_cost
+    credit_breakdown = (
+        {"subscription_credits": 0, "purchased_credits": 0, "bonus_credits": 0}
+        if is_admin
+        else _deduct_upload_credits(current_user, credit_cost)
+    )
+    upload.extra_params = json.dumps({
+        "credit_breakdown": credit_breakdown,
+        "credits_refunded": False,
+    })
 
     await db.commit()
-
-    # Trigger async generation (fire-and-forget via ARQ worker or inline)
-    try:
-        await _trigger_generation(upload, file_url, tool_type, model_id, prompt or "", db)
-    except Exception as e:
-        logger.error(f"Generation trigger failed for upload {upload_id}: {e}")
-        # Mark as failed but don't raise — credits already deducted, refund logic can be added
-        upload.status = UploadStatus.FAILED
-        upload.error_message = str(e)
-        await db.commit()
+    _schedule_generation_task(
+        background_tasks,
+        upload_id,
+        file_url,
+        tool_type,
+        model_id,
+        prompt or "",
+        credit_breakdown,
+    )
 
     return UploadResponse(
         upload_id=upload_id,
-        status=upload.status.value,
+        status=UploadStatus.PROCESSING.value,
         credits_used=credit_cost,
         message="Generation started. Check status at /uploads/{upload_id}",
     )
@@ -374,21 +646,48 @@ async def _trigger_generation(
             upload.result_video_url = output.get("video_url") or output.get("url")
 
     elif tool_type == "video_transform":
-        result = await provider_router.route(
-            TaskType.V2V,
-            {
-                "video_url": abs_file_url,
-                "prompt": prompt,
-            }
-        )
+        provider_error = None
+        try:
+            result = await provider_router.route(
+                TaskType.V2V,
+                {
+                    "video_url": abs_file_url,
+                    "prompt": prompt,
+                    "effect": "style_transfer",
+                    "intensity": 0.5,
+                }
+            )
+        except Exception as exc:
+            provider_error = str(exc)
+            logger.warning("Provider V2V failed for upload %s; trying local transform: %s", upload.id, exc)
+
+        if not result or not result.get("success"):
+            provider_error = provider_error or result.get("error", "Provider returned no result") if result else provider_error
+            try:
+                local_video_url = await _run_ffmpeg_video_transform(abs_file_url, upload)
+                result = {"success": True, "output": {"video_url": local_video_url}}
+            except Exception as exc:
+                result = {
+                    "success": False,
+                    "error": f"Provider V2V failed ({provider_error or 'unknown'}); local transform failed ({exc})",
+                }
+
         if result.get("success"):
             output = result.get("output", {})
             upload.result_video_url = output.get("video_url") or output.get("url")
 
     elif tool_type == "ai_avatar":
+        script = prompt or "Hello, I am your AI assistant."
         result = await provider_router.route(
             TaskType.AVATAR,
-            {"image_url": abs_file_url, "text": prompt or "Hello, I am your AI assistant."}
+            {
+                "image_url": abs_file_url,
+                "script": script,
+                "text": script,
+                "language": "en",
+                "duration": 30,
+                "user_id": str(upload.user_id),
+            }
         )
         if result.get("success"):
             output = result.get("output", {})
@@ -398,9 +697,25 @@ async def _trigger_generation(
         upload.status = UploadStatus.COMPLETED
         upload.completed_at = datetime.now(timezone.utc)
     else:
-        error = result.get("error", "Unknown error") if result else "Provider returned no result"
+        provider_error = result.get("error", "Unknown error") if result else "Provider returned no result"
+        logger.error(
+            "Upload generation failed for upload %s (tool=%s): %s",
+            upload.id,
+            tool_type,
+            provider_error,
+        )
         upload.status = UploadStatus.FAILED
-        upload.error_message = error
+        upload.error_message = GENERIC_UPLOAD_FAILURE_MESSAGE
+        try:
+            await send_admin_tool_failure_email(
+                tool_name=f"upload:{tool_type}",
+                user_email=None,
+                error=RuntimeError(provider_error),
+                request_id=str(upload.id),
+                extra_context={"model_id": model_id, "stage": "provider_result"},
+            )
+        except Exception as alert_exc:  # pragma: no cover - defensive
+            logger.error("Admin alert email failed for upload %s: %s", upload.id, alert_exc)
 
     await db.commit()
 
@@ -481,7 +796,7 @@ async def download_result(
 
     Returns the file as a streaming response.
     """
-    if not is_subscribed_user(current_user):
+    if not getattr(current_user, "is_superuser", False) and not is_subscribed_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="A subscription is required to download results."

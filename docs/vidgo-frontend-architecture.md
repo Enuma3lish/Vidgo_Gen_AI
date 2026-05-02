@@ -585,23 +585,12 @@ export const getGenerationStatus = async (taskId: string) => {
 
 ```typescript
 // Trellis 3D model generation
-export const generate3DModel = async (imageUrl: string) => {
-  return client.post('/interior/3d-model', { image_url: imageUrl })
-  // Returns: { task_id, model_url: "https://...file.glb" }
-}
-
-// Room-type constraints
-export const getRoomConstraints = async () => {
-  return client.get('/interior/room-constraints')
-  // Returns: { constraints: { bathroom: ["bathroom"], kitchen: ["kitchen"], ... } }
-}
-
-// Full 3D model generation with parameters (used by RoomRedesign "3D Model" tab)
-// interiorApi.generate3DModel(request) — 5-minute timeout
-export const generate3DModelFull = async (request: Generate3DRequest) => {
-  return client.post('/interior/3d-model', request, { timeout: 300000 })
+// Used by the subscriber-only RoomRedesign "3D Model" tab.
+// Local/data-URL images are uploaded first so Trellis receives a public URL.
+export const generate3DModel = async (request: Generate3DRequest) => {
+  return client.post('/api/v1/interior/3d-model', request, { timeout: 300000 })
   // Sends: { image_url, texture_size, mesh_simplify }
-  // Returns: Generate3DResponse { model_url }
+  // Returns: Generate3DResponse { success, model_url, preview_image_url, preview_video_url, task_id }
 }
 
 interface Generate3DRequest {
@@ -611,7 +600,12 @@ interface Generate3DRequest {
 }
 
 interface Generate3DResponse {
-  model_url: string
+  success: boolean
+  model_url?: string
+  preview_image_url?: string
+  preview_video_url?: string
+  task_id?: string
+  error?: string
 }
 ```
 
@@ -919,7 +913,7 @@ VidGo supports **3-tier user system** with distinct capabilities:
 | Real AI API generation | ❌ | ❌ | ✅ | ❌ |
 | Promotion code (own) | ❌ | ❌ | ✅ (auto-issued) | Can create special ones |
 | Use others' promo codes | ❌ | ✅ | ✅ | N/A |
-| Work repo (7-day retention) | ❌ | ❌ | ✅ | N/A |
+| Private work library (14-day media retention) | ❌ | ❌ | ✅ | N/A |
 | View API analytics | ❌ | ❌ | ❌ | ✅ |
 | Manage users/credits | ❌ | ❌ | ❌ | ✅ |
 | Create special promo codes | ❌ | ❌ | ❌ | ✅ |
@@ -935,17 +929,17 @@ VidGo supports **3-tier user system** with distinct capabilities:
 **Promotion Code Types:**
 | Type | Who Can Create | Credits Awarded | Expiry |
 |------|---------------|-----------------|--------|
-| Personal referral code | Auto-generated for paid subscribers | Referrer: +50, New user: +20 | Never |
+| Personal referral code | Auto-generated for paid subscribers | Referrer: +50, New user: +40 | Never |
 | Special admin code | Admin only | Custom (e.g., 100 credits) | Custom date |
 | Public promo code | Admin only | Discount or credits | Fixed expiry |
 
-### 9.3 7-Day Work Retention
+### 9.3 Work Library Retention
 
 **Active subscribers**: All works stored indefinitely
-**Cancelled subscribers**: Works retained for 7 days post-cancellation
+**Cancelled subscribers**: Generation records remain in the private work library
 **During retention**: Can download existing works, cannot generate new works
 **Account deletion**: All works deleted immediately (no retention)
-**Media expiry**: Works older than 14 days have media URLs cleared
+**Media expiry**: Generated media remains available for 14 days from creation
 
 ### 9.4 Preset-Only Mode (Demo/Trial)
 
@@ -965,7 +959,7 @@ VidGo supports **3-tier user system** with distinct capabilities:
 | Real-API generation | No | Yes (credits deducted) |
 | Referral program | Earn credits | Earn credits |
 | Personal promotion code | ❌ | ✅ (auto-generated) |
-| 7-day work retention | ❌ | ✅ (post-cancellation) |
+| Private work library | ❌ | ✅ (14-day media retention) |
 | Social media publishing | ❌ | ✅ (FB, IG, TikTok, YouTube) |
 
 ### 9.6 User Flow
@@ -1248,7 +1242,7 @@ Three.js-based GLB model viewer for interior design 3D outputs.
 - Location: `src/components/tools/ThreeViewer.vue`
 - Used by: `RoomRedesign.vue` (3D Model tab)
 - GLTFLoader, OrbitControls, auto-rotation
-- Dependencies: `three`, `@types/three`
+- Dependency: `three`
 
 ### 15.3 ShareToSocialModal
 

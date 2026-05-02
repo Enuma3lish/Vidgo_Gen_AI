@@ -28,7 +28,7 @@ __pycache__
 *.pyc
 *.pyo
 *.py[codz]
-.venv
+**/.venv
 venv
 env
 *.egg-info

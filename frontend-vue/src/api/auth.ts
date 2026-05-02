@@ -22,6 +22,7 @@ export interface User {
   is_active: boolean
   email_verified: boolean
   is_superuser?: boolean
+  is_admin?: boolean
   plan_type?: string
   referral_code?: string
   referral_count?: number

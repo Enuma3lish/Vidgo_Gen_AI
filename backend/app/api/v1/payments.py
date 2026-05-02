@@ -6,12 +6,13 @@ Supports:
 - ECPay: Taiwan credit card payment, callback handling
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import datetime
 from typing import Optional
 import logging
+import urllib.parse
 
 from fastapi.responses import HTMLResponse
 from app.api import deps
@@ -27,6 +28,29 @@ logger = logging.getLogger(__name__)
 
 # Initialize Paddle service
 paddle_service = get_paddle_service()
+
+
+async def _ecpay_query_confirms_paid(ecpay_client: ECPayClient, order_number: str) -> bool:
+    """Confirm payment with ECPay when the callback signature cannot be trusted."""
+    if not order_number:
+        return False
+
+    query_result = await ecpay_client.query_payment_async(
+        order_number,
+        settings.ECPAY_QUERY_URL,
+    )
+    trade_status = str(query_result.get("TradeStatus", ""))
+    merchant_trade_no = str(query_result.get("MerchantTradeNo", ""))
+    rtn_code = str(query_result.get("RtnCode", ""))
+    confirmed = merchant_trade_no == order_number and (trade_status == "1" or rtn_code == "1")
+    if confirmed:
+        logger.info(f"ECPay query confirmed paid order after callback signature failure: {order_number}")
+    else:
+        logger.error(
+            "ECPay query did not confirm paid order after callback signature failure: "
+            f"order={order_number} TradeStatus={trade_status} RtnCode={rtn_code}"
+        )
+    return confirmed
 
 
 # =============================================================================
@@ -319,14 +343,17 @@ async def ecpay_payment_callback(
             payment_url=settings.ECPAY_PAYMENT_URL
         )
 
-        # Verify signature
-        if not ecpay_client.verify_callback(callback_data.copy()):
-            logger.error(f"ECPay callback signature verification failed for order: {callback_data.get('MerchantTradeNo')}")
-            return HTMLResponse(content="0|SignatureError", status_code=200)
-
         # Check payment status (RtnCode=1 means success)
         rtn_code = callback_data.get("RtnCode", "0")
         order_number = callback_data.get("MerchantTradeNo", "")
+
+        # Verify signature. If verification fails on a success callback, query
+        # ECPay directly before activating; this keeps the callback secure while
+        # recovering from provider encoding variants in the returned form data.
+        if not ecpay_client.verify_callback(callback_data.copy()):
+            logger.error(f"ECPay callback signature verification failed for order: {order_number}")
+            if rtn_code != "1" or not await _ecpay_query_confirms_paid(ecpay_client, order_number):
+                return HTMLResponse(content="0|SignatureError", status_code=200)
 
         if rtn_code == "1" and order_number:
             # Idempotency: check if order already paid (duplicate callback)
@@ -387,6 +414,26 @@ async def ecpay_payment_callback(
     except Exception as e:
         logger.error(f"ECPay callback error: {e}")
         return HTMLResponse(content="0|Error", status_code=200)
+
+
+@router.api_route("/ecpay/result-redirect", methods=["GET", "POST"])
+async def ecpay_payment_result_redirect(request: Request):
+    """
+    Browser-facing ECPay OrderResultURL target.
+
+    ECPay can submit this URL with POST. Static frontend hosting cannot serve a
+    Vue history route for POST, so this endpoint converts either GET or POST
+    into a 303 redirect to the SPA result page.
+    """
+    order_number = request.query_params.get("order", "")
+    if not order_number and request.method == "POST":
+        form_data = await request.form()
+        order_number = str(form_data.get("MerchantTradeNo") or form_data.get("order") or "")
+
+    target = f"{settings.FRONTEND_URL}/subscription/ecpay-result"
+    if order_number:
+        target = f"{target}?order={urllib.parse.quote(order_number)}"
+    return RedirectResponse(url=target, status_code=303)
 
 
 @router.get("/ecpay/result")

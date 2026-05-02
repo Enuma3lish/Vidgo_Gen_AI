@@ -48,7 +48,7 @@ function formatCurrency(amount: number): string {
 
 function formatShortDate(dateStr: string): string {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })
 }
 
 function getMaxRevenue(): number {
@@ -86,27 +86,27 @@ function trendArrow(ratio: number): string {
 
 function trendLabel(ratio: number, period: 'week' | 'month'): string {
   const direction = trendDirection(ratio)
-  const baseline = period === 'week' ? 'last week' : 'last month'
-  if (direction === 'up') return `Up vs ${baseline}`
-  if (direction === 'down') return `Down vs ${baseline}`
-  return `Flat vs ${baseline}`
+  const baseline = period === 'week' ? '上週' : '上月'
+  if (direction === 'up') return `較${baseline}上升`
+  if (direction === 'down') return `較${baseline}下降`
+  return `較${baseline}持平`
 }
 
 function trendDeltaText(current: number, previous: number): string {
   if (previous <= 0) {
-    return current > 0 ? '(new)' : '(0.0%)'
+    return current > 0 ? '（新增）' : '（0.0%）'
   }
   const deltaPercent = ((current - previous) / previous) * 100
   const sign = deltaPercent > 0 ? '+' : ''
-  return `(${sign}${deltaPercent.toFixed(1)}%)`
+  return `（${sign}${deltaPercent.toFixed(1)}%）`
 }
 </script>
 
 <template>
   <div class="admin-revenue">
     <header class="page-header">
-      <h1>Revenue Analytics</h1>
-      <p class="subtitle">Track platform earnings and growth</p>
+      <h1>收入分析</h1>
+      <p class="subtitle">追蹤平台營收、API 成本與成長趨勢</p>
     </header>
 
     <!-- Period Selector -->
@@ -118,24 +118,24 @@ function trendDeltaText(current: number, previous: number): string {
         :class="{ active: selectedPeriod === period }"
         class="period-btn"
       >
-        {{ period === '1y' ? '1 Year' : period === '7d' ? '7 Days' : period === '30d' ? '30 Days' : '90 Days' }}
+        {{ period === '1y' ? '1 年' : period === '7d' ? '7 天' : period === '30d' ? '30 天' : '90 天' }}
       </button>
     </div>
 
     <!-- Summary Cards -->
     <div class="summary-grid">
       <div class="summary-card">
-        <span class="summary-label">This Month</span>
+        <span class="summary-label">本月收入</span>
         <span class="summary-value">{{ formatCurrency(adminStore.monthRevenue) }}</span>
       </div>
       <div class="summary-card">
-        <span class="summary-label">Total Revenue (All Time)</span>
+        <span class="summary-label">累計收入</span>
         <span class="summary-value">
           {{ formatCurrency(adminStore.revenueChart.reduce((sum, d) => sum + (d.revenue || 0), 0)) }}
         </span>
       </div>
       <div class="summary-card">
-        <span class="summary-label">Avg. Monthly</span>
+        <span class="summary-label">平均月收入</span>
         <span class="summary-value">
           {{ formatCurrency(
             adminStore.revenueChart.length > 0
@@ -145,9 +145,9 @@ function trendDeltaText(current: number, previous: number): string {
         </span>
       </div>
       <div class="summary-card top-cost-month" v-if="topCostApiMonth">
-        <span class="summary-label">Top Cost API (Month)</span>
+        <span class="summary-label">最高成本 API（本月）</span>
         <span class="summary-value">{{ formatCurrency(topCostApiMonth.month_cost) }}</span>
-        <span class="summary-subvalue">{{ topCostApiMonth.display_name }} · {{ formatNumber(topCostApiMonth.month_calls) }} calls</span>
+        <span class="summary-subvalue">{{ topCostApiMonth.display_name }} · {{ formatNumber(topCostApiMonth.month_calls) }} 次</span>
         <span class="summary-trend" :class="trendDirection(topCostMonthTrendRatio)">
           {{ trendArrow(topCostMonthTrendRatio) }}
           {{ trendLabel(topCostMonthTrendRatio, 'month') }}
@@ -155,9 +155,9 @@ function trendDeltaText(current: number, previous: number): string {
         </span>
       </div>
       <div class="summary-card top-cost-week" v-if="topCostApiWeek">
-        <span class="summary-label">Top Cost API (Week)</span>
+        <span class="summary-label">最高成本 API（本週）</span>
         <span class="summary-value">{{ formatCurrency(topCostApiWeek.week_cost) }}</span>
-        <span class="summary-subvalue">{{ topCostApiWeek.display_name }} · {{ formatNumber(topCostApiWeek.week_calls) }} calls</span>
+        <span class="summary-subvalue">{{ topCostApiWeek.display_name }} · {{ formatNumber(topCostApiWeek.week_calls) }} 次</span>
         <span class="summary-trend" :class="trendDirection(topCostWeekTrendRatio)">
           {{ trendArrow(topCostWeekTrendRatio) }}
           {{ trendLabel(topCostWeekTrendRatio, 'week') }}
@@ -168,7 +168,7 @@ function trendDeltaText(current: number, previous: number): string {
 
     <!-- Revenue Chart -->
     <section class="chart-section">
-      <h2>Monthly Revenue</h2>
+      <h2>月收入</h2>
       <div class="chart-container">
         <div class="chart-bars">
           <div
@@ -193,7 +193,7 @@ function trendDeltaText(current: number, previous: number): string {
 
     <!-- Generation Trend -->
     <section class="chart-section">
-      <h2>Daily Generations</h2>
+      <h2>每日生成次數</h2>
       <div class="line-chart">
         <div class="chart-grid">
           <div
@@ -204,7 +204,7 @@ function trendDeltaText(current: number, previous: number): string {
           >
             <div
               class="point"
-              :title="`${formatShortDate(data.date || '')}: ${data.count} generations`"
+              :title="`${formatShortDate(data.date || '')}：${data.count} 次生成`"
             ></div>
           </div>
         </div>
@@ -221,21 +221,21 @@ function trendDeltaText(current: number, previous: number): string {
 
     <!-- User Growth -->
     <section class="chart-section">
-      <h2>User Growth</h2>
+      <h2>使用者成長</h2>
       <div class="growth-stats">
         <div class="growth-item">
           <span class="growth-value">{{ adminStore.dashboardStats?.users?.total || 0 }}</span>
-          <span class="growth-label">Total Users</span>
+          <span class="growth-label">總使用者</span>
         </div>
         <div class="growth-item">
           <span class="growth-value">{{ adminStore.dashboardStats?.users?.new_today || 0 }}</span>
-          <span class="growth-label">New Today</span>
+          <span class="growth-label">今日新增</span>
         </div>
         <div class="growth-item">
           <span class="growth-value">
             {{ adminStore.userGrowthChart.reduce((sum, d) => sum + (d.count || 0), 0) }}
           </span>
-          <span class="growth-label">New This Period</span>
+          <span class="growth-label">本期間新增</span>
         </div>
       </div>
     </section>

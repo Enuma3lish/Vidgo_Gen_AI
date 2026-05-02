@@ -12,16 +12,18 @@ import sys
 import time
 import tempfile
 import httpx
+import struct
 from pathlib import Path
 from dataclasses import dataclass
 
 from playwright.async_api import async_playwright, Page, BrowserContext
 
 # ─── Config ──────────────────────────────────────────────────────────────────
-FRONTEND = "https://vidgo-frontend-38714015566.asia-east1.run.app"
-BACKEND  = "https://vidgo-backend-38714015566.asia-east1.run.app"
-EMAIL    = "qaz0978005418@gmail.com"
-PASSWORD = "qaz129946858"
+FRONTEND = os.getenv("VIDGO_FRONTEND_URL", "https://vidgo-frontend-38714015566.asia-east1.run.app").rstrip("/")
+BACKEND  = os.getenv("VIDGO_BACKEND_URL", "https://vidgo-backend-38714015566.asia-east1.run.app").rstrip("/")
+EMAIL    = os.getenv("VIDGO_TEST_EMAIL", "qaz0978005418@gmail.com")
+PASSWORD = os.getenv("VIDGO_TEST_PASSWORD", "qaz129946858")
+API_TIMEOUT_SECONDS = float(os.getenv("VIDGO_API_TIMEOUT_SECONDS", "900"))
 
 # Test image URLs (reliable Unsplash images at proper sizes)
 TEST_IMAGES = {
@@ -49,12 +51,105 @@ def log(tool: str, step: str, ok: bool, msg: str = "", dur: float = 0):
     print(f"  {icon} [{tool}] {step}" + (f" — {msg}" if msg else ""))
 
 
+def _content_length(headers: httpx.Headers) -> int:
+    content_range = headers.get("content-range", "")
+    if "/" in content_range:
+        total = content_range.rsplit("/", 1)[1]
+        if total.isdigit():
+            return int(total)
+    value = headers.get("content-length")
+    if value and value.isdigit():
+        return int(value)
+    return 0
+
+
+def _parse_png_dimensions(data: bytes) -> tuple[int, int] | None:
+    if len(data) >= 24 and data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return struct.unpack(">II", data[16:24])
+    return None
+
+
+def _parse_jpeg_dimensions(data: bytes) -> tuple[int, int] | None:
+    if not data.startswith(b"\xff\xd8"):
+        return None
+    offset = 2
+    while offset + 9 < len(data):
+        if data[offset] != 0xFF:
+            offset += 1
+            continue
+        marker = data[offset + 1]
+        offset += 2
+        if marker in (0xD8, 0xD9):
+            continue
+        if offset + 2 > len(data):
+            return None
+        segment_length = int.from_bytes(data[offset:offset + 2], "big")
+        if segment_length < 2 or offset + segment_length > len(data):
+            return None
+        if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+            height = int.from_bytes(data[offset + 3:offset + 5], "big")
+            width = int.from_bytes(data[offset + 5:offset + 7], "big")
+            return width, height
+        offset += segment_length
+    return None
+
+
+def _image_dimensions(data: bytes) -> tuple[int, int] | None:
+    return _parse_png_dimensions(data) or _parse_jpeg_dimensions(data)
+
+
+async def validate_media_url(api: "API", tool: str, url: str, media_type: str) -> bool:
+    """Validate result media is fetchable and renderable, not just present as a URL."""
+    if not url:
+        log(tool, "Result media valid", False, "missing result URL")
+        return False
+
+    media_url = f"{BACKEND}{url}" if url.startswith("/") else url
+    try:
+        try:
+            head = await api.client.head(media_url, follow_redirects=True)
+            head_headers = head.headers if head.status_code < 400 else httpx.Headers()
+        except Exception:
+            head_headers = httpx.Headers()
+
+        response = await api.client.get(
+            media_url,
+            headers={"Range": "bytes=0-65535"},
+            follow_redirects=True,
+        )
+        data = response.content
+        content_type = (response.headers.get("content-type") or head_headers.get("content-type") or "").lower()
+        total_bytes = _content_length(response.headers) or _content_length(head_headers) or len(data)
+        status_ok = response.status_code in (200, 206)
+
+        if media_type == "image":
+            dims = _image_dimensions(data)
+            magic_ok = data.startswith((b"\x89PNG", b"\xff\xd8", b"RIFF"))
+            type_ok = "image" in content_type or magic_ok
+            size_ok = total_bytes >= 10_000
+            dims_ok = dims is None or (dims[0] >= 128 and dims[1] >= 128)
+            ok = status_ok and type_ok and size_ok and dims_ok
+            dim_msg = f" {dims[0]}x{dims[1]}" if dims else " dimensions=unknown"
+            log(tool, "Result media valid", ok, f"{content_type or 'unknown'} {total_bytes} bytes{dim_msg}")
+            return ok
+
+        has_mp4_header = b"ftyp" in data[:128]
+        type_ok = "video" in content_type or has_mp4_header or ".mp4" in media_url.split("?", 1)[0]
+        size_ok = total_bytes >= 50_000
+        ok = status_ok and type_ok and size_ok
+        log(tool, "Result media valid", ok, f"{content_type or 'unknown'} {total_bytes} bytes mp4_header={has_mp4_header}")
+        return ok
+    except Exception as exc:
+        log(tool, "Result media valid", False, str(exc)[:100])
+        return False
+
+
 # ─── API helper ──────────────────────────────────────────────────────────────
 class API:
     def __init__(self):
         self.token = ""
         self.user = {}
-        self.client = httpx.AsyncClient(timeout=120.0)
+        self.client = httpx.AsyncClient(timeout=API_TIMEOUT_SECONDS)
 
     async def login(self):
         r = await self.client.post(f"{BACKEND}/api/v1/auth/login",
@@ -125,6 +220,8 @@ async def test_background_removal(api: API):
         log(tool, "Generate", ok,
             f"credits={credits} result={result_url[:60]}" if ok
             else f"ERROR: {result.get('message') or result.get('detail', '?')}")
+        if ok:
+            await validate_media_url(api, tool, result_url, "image")
         return result_url if ok else None
     except Exception as e:
         log(tool, "Generate", False, str(e)[:100])
@@ -146,6 +243,8 @@ async def test_product_scene(api: API):
         log(tool, "Generate", ok,
             f"credits={result.get('credits_used',0)} result={result_url[:60]}" if ok
             else f"ERROR: {result.get('message') or result.get('detail', '?')}")
+        if ok:
+            await validate_media_url(api, tool, result_url, "image")
         return result_url if ok else None
     except Exception as e:
         log(tool, "Generate", False, str(e)[:100])
@@ -167,6 +266,8 @@ async def test_try_on(api: API):
         log(tool, "Generate (female-2)", ok,
             f"credits={result.get('credits_used',0)}" if ok
             else f"ERROR: {result.get('message') or result.get('detail', '?')}")
+        if ok:
+            await validate_media_url(api, tool, result_url, "image")
         return result_url if ok else None
     except Exception as e:
         log(tool, "Generate", False, str(e)[:100])
@@ -185,6 +286,8 @@ async def test_room_redesign(api: API):
         log(tool, "Generate (scandinavian)", ok,
             f"credits={result.get('credits_used',0)} result={result_url[:60]}" if ok
             else f"ERROR: {result.get('message') or result.get('detail', '?')}")
+        if ok:
+            await validate_media_url(api, tool, result_url, "image")
         return result_url if ok else None
     except Exception as e:
         log(tool, "Generate", False, str(e)[:100])
@@ -207,6 +310,8 @@ async def test_effects_style(api: API):
         log(tool, "Apply anime style", ok,
             f"credits={result.get('credits_used',0)} demo={result.get('is_demo',False)}" if ok
             else f"ERROR: {result.get('error') or result.get('detail', '?')}")
+        if ok:
+            await validate_media_url(api, tool, result_url, "image")
         return result_url if ok else None
     except Exception as e:
         log(tool, "Generate", False, str(e)[:100])
@@ -229,6 +334,8 @@ async def test_image_transform(api: API):
         log(tool, "Transform (watercolor)", ok,
             f"credits={result.get('credits_used',0)} result={result_url[:60]}" if ok
             else f"ERROR: {result.get('message') or result.get('detail', '?')}")
+        if ok:
+            await validate_media_url(api, tool, result_url, "image")
         return result_url if ok else None
     except Exception as e:
         log(tool, "Generate", False, str(e)[:100])
@@ -250,6 +357,8 @@ async def test_short_video(api: API):
         log(tool, "Generate video", ok,
             f"credits={result.get('credits_used',0)} video={result_url[:60]}" if ok
             else f"ERROR: {result.get('message') or result.get('detail', '?')}")
+        if ok:
+            await validate_media_url(api, tool, result_url, "video")
         return result_url if ok else None
     except Exception as e:
         log(tool, "Generate", False, str(e)[:100])
@@ -268,6 +377,8 @@ async def test_avatar(api: API):
         log(tool, "Generate avatar video", ok,
             f"credits={result.get('credits_used',0)}" if ok
             else f"ERROR: {result.get('message') or result.get('detail', '?')}")
+        if ok:
+            await validate_media_url(api, tool, result_url, "video")
         return result_url if ok else None
     except Exception as e:
         log(tool, "Generate", False, str(e)[:100])

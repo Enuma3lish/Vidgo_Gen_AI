@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     ADMIN_ACCOUNT: str = ""
     ADMIN_EXTRA_ACCOUNTS: str = ""
     PROVIDER_ALERT_COOLDOWN_MINUTES: int = 15
+    PROVIDER_HEALTH_CACHE_SECONDS: int = 60
+    PROVIDER_CIRCUIT_BREAKER_FAILURES: int = 3
+    PROVIDER_CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 180
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/vidgo"
@@ -39,15 +42,15 @@ class Settings(BaseSettings):
     # Backup video: Pollo.ai MCP — I2V, T2V (50+ models)
     POLLO_API_KEY: str = ""
 
-    # Vertex AI (GCP) — Gemini for image backup/moderation, Veo for 3rd video backup
-    VERTEX_AI_PROJECT: str = ""          # GCP project ID (required for Vertex AI)
+    # Gemini API (AI Studio) — primary LLM backend for moderation, prompt enhancement
+    GEMINI_API_KEY: str = ""             # Gemini API key (preferred; get from aistudio.google.com)
+    GEMINI_MODEL: str = "gemini-2.5-pro"  # gemini-2.5-pro is more capable than flash
+    GEMINI_IMAGE_MODEL: str = "gemini-2.5-flash-image"
+
+    # Vertex AI (GCP) — Imagen for image generation, Veo for video (not available via Gemini API)
+    VERTEX_AI_PROJECT: str = ""          # GCP project ID (required for Imagen/Veo only)
     VERTEX_AI_LOCATION: str = "us-central1"  # GCP region
     VEO_MODEL: str = "veo-3.0-generate-preview"  # Veo model name
-    GEMINI_MODEL: str = "gemini-2.0-flash"  # Gemini model for Vertex AI
-    GEMINI_IMAGE_MODEL: str = "gemini-2.0-flash-exp-image-generation"
-
-    # Legacy Gemini API key (fallback if Vertex AI not configured)
-    GEMINI_API_KEY: str = ""
 
     # GCS Storage (persist generated media beyond provider CDN expiry)
     GCS_BUCKET: str = ""  # e.g. "vidgo-media-vidgo-ai"
@@ -55,6 +58,11 @@ class Settings(BaseSettings):
     # Legacy (deprecated — kept for fallback)
     WAN_API_KEY: str = ""
     RUNWAY_API_KEY: str = ""
+
+    # A2E.ai avatar fallback
+    A2E_API_KEY: str = ""
+    A2E_API_ID: str = ""
+    A2E_DEFAULT_CREATOR_ID: str = ""
 
     # Taiwanese TTS (台語/閩南語 TTS)
     # Option 1: Taigi TTS API (https://learn-language.tokyo/en/taiwanese-taigi-tts-api)
@@ -71,6 +79,7 @@ class Settings(BaseSettings):
     ECPAY_HASH_KEY: str = ""
     ECPAY_HASH_IV: str = ""
     ECPAY_PAYMENT_URL: str = "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V2"
+    ECPAY_QUERY_URL: str = "https://payment.ecpay.com.tw/Cashier/QueryTradeInfo/V5"
     ECPAY_INVOICE_URL: str = "https://einvoice.ecpay.com.tw"  # Base URL, paths appended by client
 
     # Giveme E-Invoice (Taiwan 電子發票). Credentials must come from Secret
@@ -143,7 +152,7 @@ class Settings(BaseSettings):
 
     # Referral System
     REFERRAL_BONUS_CREDITS: int = 50       # Credits awarded to referrer per successful referral
-    REFERRAL_WELCOME_CREDITS: int = 20     # Credits awarded to new user who used a referral code
+    REFERRAL_WELCOME_CREDITS: int = 40     # Credits awarded to new user who used a promotion/referral code
 
     # Upload settings (subscriber material upload)
     MAX_UPLOAD_SIZE_MB: int = 20           # Max file size for subscriber uploads

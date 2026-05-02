@@ -15,10 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 from typing import List, Dict, Any
 
-from app.api.deps import get_db, get_current_user, get_current_active_user, get_redis
+from app.api.deps import get_db, get_current_user, get_current_active_user, get_current_user_optional_lenient, get_redis
 from app.services.credit_service import CreditService
 from app.models.user import User
 from app.models.billing import Plan
+from app.core.public_plans import can_list_public_plan
+from app.core.test_plans import can_access_test_pro_plan, is_test_pro_plan
 from sqlalchemy import select
 
 router = APIRouter(prefix="/plans", tags=["plans"])
@@ -26,13 +28,21 @@ router = APIRouter(prefix="/plans", tags=["plans"])
 
 @router.get("/", response_model=List[Dict[str, Any]])
 async def get_plans(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional_lenient),
 ):
     """Get all available plans."""
     result = await db.execute(
         select(Plan).where(Plan.is_active == True).order_by(Plan.price_twd)
     )
     plans = result.scalars().all()
+    can_view_test_plan = can_access_test_pro_plan(current_user.email if current_user else None)
+    if not can_view_test_plan and current_user and current_user.current_plan_id:
+        can_view_test_plan = any(
+            is_test_pro_plan(plan) and plan.id == current_user.current_plan_id
+            for plan in plans
+        )
+    plans = [plan for plan in plans if can_list_public_plan(plan, can_view_test_plan)]
 
     return [
         {

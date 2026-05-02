@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useCreditsStore } from '@/stores'
@@ -12,19 +12,70 @@ const creditsStore = useCreditsStore()
 const isScrolled = ref(false)
 const mobileMenuOpen = ref(false)
 const toolsOpen = ref(false)
+const showCreditBadge = computed(() => authStore.isAuthenticated && !authStore.isAdmin)
+const showPublicGalleryLinks = computed(() => !authStore.isAdmin)
+
+interface ToolEntry { to: string; emoji: string; key: string }
+interface ToolGroup { titleKey: string; items: ToolEntry[] }
+
+const toolGroups: ToolGroup[] = [
+  {
+    titleKey: 'lp.categories.fashionAI',
+    items: [
+      { to: '/tools/try-on',      emoji: '👗', key: 'lp.allTools.tryOn.name' },
+      { to: '/tools/short-video', emoji: '🎬', key: 'lp.allTools.fashionReels.name' },
+      { to: '/tools/avatar',      emoji: '🗣️', key: 'lp.allTools.productAvatars.name' },
+    ],
+  },
+  {
+    titleKey: 'lp.categories.ecommerceAI',
+    items: [
+      { to: '/tools/product-scene',      emoji: '📸', key: 'lp.allTools.productAnyshoot.name' },
+      { to: '/tools/background-removal', emoji: '✂️', key: 'lp.allTools.bgRemoval.name' },
+      { to: '/tools/upscale',            emoji: '🔍', key: 'lp.allTools.hdUpscale.name' },
+      { to: '/tools/pattern-generate',   emoji: '▦',  key: 'lp.allTools.patternGenerate.name' },
+    ],
+  },
+  {
+    titleKey: 'lp.categories.designAI',
+    items: [
+      { to: '/tools/room-redesign',  emoji: '🏠',  key: 'lp.allTools.roomRedesign.name' },
+      { to: '/tools/video-transform', emoji: '🎞️', key: 'lp.allTools.videoTransform.name' },
+      { to: '/gallery',               emoji: '🖼️', key: 'gallery.title' },
+    ],
+  },
+  {
+    titleKey: 'lp.imageTranslation.title',
+    items: [
+      { to: '/tools/image-translator', emoji: '文',  key: 'lp.allTools.imageTranslator.name' },
+      { to: '/tools/video-dubbing',    emoji: '🎙️', key: 'lp.videoDubbing.title' },
+    ],
+  },
+]
+
+const visibleToolGroups = computed(() =>
+  toolGroups.map(group => ({
+    ...group,
+    items: showPublicGalleryLinks.value
+      ? group.items
+      : group.items.filter(item => item.to !== '/gallery'),
+  })).filter(group => group.items.length > 0)
+)
 
 function handleScroll() {
-  isScrolled.value = window.scrollY > 10
+  isScrolled.value = window.scrollY > 8
 }
 function handleLogout() {
   authStore.logout()
   router.push('/')
 }
+function closeMobile() { mobileMenuOpen.value = false }
+
 onMounted(async () => {
-  if (authStore.isAuthenticated) {
-    try { await creditsStore.fetchBalance() } catch {}
+  if (authStore.isAuthenticated && !authStore.isAdmin) {
+    try { await creditsStore.fetchBalance() } catch { /* noop */ }
   }
-  window.addEventListener('scroll', handleScroll)
+  window.addEventListener('scroll', handleScroll, { passive: true })
   handleScroll()
 })
 onUnmounted(() => {
@@ -34,121 +85,137 @@ onUnmounted(() => {
 
 <template>
   <header
-    class="fixed top-0 left-0 right-0 z-50 transition-all duration-300"
-    :style="isScrolled
-      ? 'background: rgba(9,9,11,0.95); backdrop-filter: blur(16px); box-shadow: 0 1px 0 rgba(255,255,255,0.06);'
-      : 'background: rgba(9,9,11,0.8); backdrop-filter: blur(8px);'"
+    class="app-header fixed top-0 left-0 right-0 z-50"
+    :class="{ scrolled: isScrolled }"
   >
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
 
         <!-- Logo -->
-        <RouterLink to="/" class="flex items-center gap-2.5 flex-shrink-0">
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm"
-            style="background: linear-gradient(135deg, #1677ff, #0958d9);">
-            V
+        <RouterLink to="/" class="flex items-center gap-2.5 flex-shrink-0 group" aria-label="VidGo AI Home">
+          <div class="relative w-8 h-8 flex-shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_0_18px_rgba(245,158,11,0.45)]" style="border-radius: 9px; background: #f59e0b;">
+            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 32 32" fill="none">
+              <path d="M9 10.5 L16 21 L23 10.5" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
           </div>
-          <span class="text-lg font-black tracking-tight" style="color: #f5f5fa;">VidGo <span style="color: #1677ff;">AI</span></span>
+          <span class="text-[15px] font-bold leading-none tracking-tight" style="font-family: 'Syne', sans-serif; color: var(--text-primary); letter-spacing: -0.025em;">
+            Vidgo<span style="color: #f59e0b;">AI</span>
+          </span>
         </RouterLink>
 
         <!-- Center Nav -->
         <nav class="hidden md:flex items-center gap-1">
-          <RouterLink to="/" class="nav-link rounded-lg" active-class="!text-white">
-            {{ t('nav.home') }}
-          </RouterLink>
-
-          <RouterLink to="/gallery" class="nav-link rounded-lg" active-class="!text-white">
-            {{ t('gallery.title') }}
-          </RouterLink>
+          <RouterLink to="/" class="nav-link">{{ t('nav.home') }}</RouterLink>
+          <RouterLink v-if="showPublicGalleryLinks" to="/gallery" class="nav-link">{{ t('gallery.title') }}</RouterLink>
 
           <!-- Tools Dropdown -->
           <div class="relative" @mouseenter="toolsOpen = true" @mouseleave="toolsOpen = false">
-            <button class="nav-link rounded-lg flex items-center gap-1">
+            <button class="nav-link flex items-center gap-1" :aria-expanded="toolsOpen" aria-haspopup="true">
               {{ t('nav.tools') }}
-              <svg class="w-3.5 h-3.5 mt-0.5 transition-transform" :class="toolsOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="toolsOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
               </svg>
             </button>
-            <div
-              v-show="toolsOpen"
-              class="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-[calc(100vw-2rem)] md:w-[600px]"
+            <Transition
+              enter-active-class="transition duration-150 ease-out"
+              enter-from-class="opacity-0 -translate-y-1"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="opacity-100"
+              leave-to-class="opacity-0"
             >
-              <div class="rounded-xl overflow-hidden dropdown-menu">
-              <div class="grid grid-cols-3 gap-0 p-4">
-                <!-- Fashion & Video Column -->
-                <div>
-                  <div class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider" style="color: #6b6b8a;">{{ t('lp.categories.fashionAI') }}</div>
-                  <RouterLink to="/tools/try-on" class="dropdown-item" @click="toolsOpen = false">
-                    <span>👗</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.tryOn.name') }}</span>
-                  </RouterLink>
-                  <RouterLink to="/tools/short-video" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🎬</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.fashionReels.name') }}</span>
-                  </RouterLink>
-                </div>
-                <!-- E-commerce AI Column -->
-                <div>
-                  <div class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider" style="color: #6b6b8a;">{{ t('lp.categories.ecommerceAI') }}</div>
-                  <RouterLink to="/tools/product-scene" class="dropdown-item" @click="toolsOpen = false">
-                    <span>📸</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.productAnyshoot.name') }}</span>
-                  </RouterLink>
-                  <RouterLink to="/tools/background-removal" class="dropdown-item" @click="toolsOpen = false">
-                    <span>✂️</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.bgRemoval.name') }}</span>
-                  </RouterLink>
-                  <RouterLink to="/tools/upscale" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🔍</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.hdUpscale.name') }}</span>
-                  </RouterLink>
-                </div>
-                <!-- Design & Effects Column -->
-                <div>
-                  <div class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider" style="color: #6b6b8a;">{{ t('lp.categories.designAI') }}</div>
-                  <RouterLink to="/tools/room-redesign" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🏠</span><span class="font-medium" style="color: #e8e8f0;">{{ t('lp.allTools.roomRedesign.name') }}</span>
-                  </RouterLink>
-                  <RouterLink to="/gallery" class="dropdown-item" @click="toolsOpen = false">
-                    <span>🖼️</span><span class="font-medium" style="color: #e8e8f0;">{{ t('gallery.title') }}</span>
-                  </RouterLink>
+              <div
+                v-show="toolsOpen"
+                class="absolute top-full left-1/2 -translate-x-1/2 pt-3 w-[calc(100vw-2rem)] md:w-[820px]"
+              >
+                <div class="dropdown-menu overflow-hidden">
+                  <div class="grid grid-cols-4 gap-1 p-4">
+                    <div v-for="group in visibleToolGroups" :key="group.titleKey">
+                      <div class="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted">
+                        {{ t(group.titleKey) }}
+                      </div>
+                      <RouterLink
+                        v-for="item in group.items"
+                        :key="item.to"
+                        :to="item.to"
+                        class="dropdown-item"
+                        @click="toolsOpen = false"
+                      >
+                        <span class="text-base leading-none">{{ item.emoji }}</span>
+                        <span>{{ t(item.key) }}</span>
+                      </RouterLink>
+                    </div>
+                  </div>
+                  <div class="px-4 py-3 flex items-center justify-between" style="background: rgba(245,158,11,0.05); border-top: 1px solid var(--border-subtle);">
+                    <span class="text-xs text-secondary">{{ t('nav.tools') }} · {{ t('lp.sec3Sub') }}</span>
+                    <RouterLink to="/" class="text-xs font-semibold" style="color: var(--color-primary);" @click="toolsOpen = false">
+                      {{ t('lp.ctaSecondary') }} →
+                    </RouterLink>
+                  </div>
                 </div>
               </div>
-              </div>
-            </div>
+            </Transition>
           </div>
 
-          <RouterLink to="/pricing" class="nav-link rounded-lg" active-class="!text-white">
-            {{ t('nav.pricing') }}
-          </RouterLink>
+          <RouterLink to="/pricing" class="nav-link">{{ t('nav.pricing') }}</RouterLink>
         </nav>
 
         <!-- Right Side -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5">
           <LanguageSelector />
           <template v-if="authStore.isAuthenticated">
             <RouterLink
-              to="/dashboard"
-              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all credit-badge"
+              v-if="showCreditBadge"
+              to="/dashboard/my-works"
+              class="hidden md:inline-flex credit-badge transition-all hover:scale-[1.02]"
             >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
               {{ creditsStore.remainingCredits.toLocaleString() }} {{ t('nav.credits') }}
             </RouterLink>
-            <RouterLink to="/dashboard" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors" style="color: #9494b0;" @mouseenter="($event.target as HTMLElement).style.color='#f5f5fa'" @mouseleave="($event.target as HTMLElement).style.color='#9494b0'">
+            <RouterLink v-if="!authStore.isAdmin" to="/dashboard/my-works" class="hidden md:inline-flex nav-link">
               {{ t('nav.dashboard') }}
             </RouterLink>
-            <button @click="handleLogout" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors" style="color: #6b6b8a;" @mouseenter="($event.target as HTMLElement).style.color='#9494b0'" @mouseleave="($event.target as HTMLElement).style.color='#6b6b8a'">
+            <RouterLink
+              v-else
+              to="/admin/dashboard"
+              class="hidden md:inline-flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200"
+              style="color: #d6d3d1; border: 1px solid rgba(255,255,255,0.14);"
+              aria-label="管理後台"
+              title="管理後台"
+              @mouseenter="($event.currentTarget as HTMLElement).style.color='#fff'; ($event.currentTarget as HTMLElement).style.background='rgba(22,119,255,0.10)'; ($event.currentTarget as HTMLElement).style.borderColor='rgba(22,119,255,0.35)'"
+              @mouseleave="($event.currentTarget as HTMLElement).style.color='#d6d3d1'; ($event.currentTarget as HTMLElement).style.background='transparent'; ($event.currentTarget as HTMLElement).style.borderColor='rgba(255,255,255,0.14)'"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.08A1.7 1.7 0 0 0 4.64 8.94a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9A1.7 1.7 0 0 0 10 3.08V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1H21a2 2 0 1 1 0 4h-.08A1.7 1.7 0 0 0 19.4 15Z" />
+              </svg>
+            </RouterLink>
+            <button @click="handleLogout" class="hidden md:inline-flex btn-ghost text-sm">
               {{ t('nav.logout') }}
             </button>
           </template>
           <template v-else>
-            <RouterLink to="/auth/login" class="hidden md:inline-flex px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="color: #9494b0;" @mouseenter="($event.target as HTMLElement).style.color='#f5f5fa'" @mouseleave="($event.target as HTMLElement).style.color='#9494b0'">
+            <RouterLink to="/auth/login" class="hidden md:inline-flex btn-ghost text-sm">
               {{ t('nav.login') }}
             </RouterLink>
-            <RouterLink to="/auth/register" class="hidden md:inline-flex items-center px-5 py-2 text-sm font-semibold text-white rounded-lg transition-all duration-200" style="background: #1677ff;" @mouseenter="($event.target as HTMLElement).style.boxShadow='0 4px 20px rgba(22,119,255,0.4)'" @mouseleave="($event.target as HTMLElement).style.boxShadow='none'">
+            <RouterLink to="/auth/register" class="hidden md:inline-flex btn-primary py-2 px-4 text-sm">
               {{ t('lp.ctaPrimary') }}
             </RouterLink>
           </template>
+
           <!-- Mobile Menu Button -->
-          <button @click="mobileMenuOpen = !mobileMenuOpen" class="md:hidden p-2 rounded-lg transition-colors" style="color: #9494b0;" @mouseenter="($event.target as HTMLElement).style.background='rgba(255,255,255,0.06)'" @mouseleave="($event.target as HTMLElement).style.background='transparent'">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path v-if="!mobileMenuOpen" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-              <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          <button
+            @click="mobileMenuOpen = !mobileMenuOpen"
+            class="md:hidden p-2 rounded-lg transition-colors"
+            style="color: #d6d3d1;"
+            :aria-expanded="mobileMenuOpen"
+            aria-label="Toggle menu"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+              <path v-if="!mobileMenuOpen" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+              <path v-else stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
             </svg>
           </button>
         </div>
@@ -156,27 +223,51 @@ onUnmounted(() => {
     </div>
 
     <!-- Mobile Menu -->
-    <div v-if="mobileMenuOpen" class="md:hidden" style="background: #0f0f17; border-top: 1px solid rgba(255,255,255,0.06);">
-      <div class="px-4 py-4 space-y-1">
-        <RouterLink to="/" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">{{ t('nav.home') }}</RouterLink>
-        <RouterLink to="/gallery" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">{{ t('gallery.title') }}</RouterLink>
-        <RouterLink to="/pricing" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">{{ t('nav.pricing') }}</RouterLink>
-        <div class="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider" style="color: #6b6b8a;">{{ t('nav.tools') }}</div>
-        <RouterLink to="/tools/try-on" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">👗 {{ t('lp.allTools.tryOn.name') }}</RouterLink>
-        <RouterLink to="/tools/short-video" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🎬 {{ t('lp.allTools.fashionReels.name') }}</RouterLink>
-        <RouterLink to="/tools/product-scene" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">📸 {{ t('lp.allTools.productAnyshoot.name') }}</RouterLink>
-        <RouterLink to="/tools/background-removal" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">✂️ {{ t('lp.allTools.bgRemoval.name') }}</RouterLink>
-        <RouterLink to="/tools/upscale" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🔍 {{ t('lp.allTools.hdUpscale.name') }}</RouterLink>
-        <RouterLink to="/tools/room-redesign" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">🏠 {{ t('lp.allTools.roomRedesign.name') }}</RouterLink>
-        <div v-if="!authStore.isAuthenticated" class="pt-3 space-y-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
-          <RouterLink to="/auth/login" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">{{ t('nav.login') }}</RouterLink>
-          <RouterLink to="/auth/register" class="block px-4 py-2.5 rounded-lg text-white text-center font-semibold" style="background: #1677ff;" @click="mobileMenuOpen = false">{{ t('lp.ctaPrimary') }}</RouterLink>
-        </div>
-        <div v-else class="pt-3 space-y-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
-          <RouterLink to="/dashboard" class="block px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #9494b0;" @click="mobileMenuOpen = false">{{ t('nav.dashboard') }}</RouterLink>
-          <button @click="handleLogout; mobileMenuOpen = false" class="block w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors" style="color: #6b6b8a;">{{ t('nav.logout') }}</button>
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="mobileMenuOpen"
+        class="md:hidden border-t"
+        style="background: rgba(9,9,11,0.96); backdrop-filter: blur(20px); border-color: rgba(255,255,255,0.06);"
+      >
+        <div class="px-4 py-4 space-y-1 max-h-[80vh] overflow-y-auto">
+          <RouterLink to="/" class="dropdown-item w-full" @click="closeMobile">{{ t('nav.home') }}</RouterLink>
+          <RouterLink v-if="showPublicGalleryLinks" to="/gallery" class="dropdown-item w-full" @click="closeMobile">{{ t('gallery.title') }}</RouterLink>
+          <RouterLink to="/pricing" class="dropdown-item w-full" @click="closeMobile">{{ t('nav.pricing') }}</RouterLink>
+
+          <template v-for="group in visibleToolGroups" :key="group.titleKey">
+            <div class="px-3 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted">{{ t(group.titleKey) }}</div>
+            <RouterLink
+              v-for="item in group.items"
+              :key="item.to"
+              :to="item.to"
+              class="dropdown-item w-full"
+              @click="closeMobile"
+            >
+              <span>{{ item.emoji }}</span>
+              <span>{{ t(item.key) }}</span>
+            </RouterLink>
+          </template>
+
+          <div class="pt-3 mt-2 space-y-2 border-t" style="border-color: rgba(255,255,255,0.06);">
+            <template v-if="!authStore.isAuthenticated">
+              <RouterLink to="/auth/login" class="btn-secondary w-full" @click="closeMobile">{{ t('nav.login') }}</RouterLink>
+              <RouterLink to="/auth/register" class="btn-primary w-full" @click="closeMobile">{{ t('lp.ctaPrimary') }}</RouterLink>
+            </template>
+            <template v-else>
+              <RouterLink v-if="!authStore.isAdmin" to="/dashboard/my-works" class="btn-secondary w-full" @click="closeMobile">{{ t('nav.dashboard') }}</RouterLink>
+              <RouterLink v-else to="/admin/dashboard" class="btn-secondary w-full" @click="closeMobile">⚙ 管理後台</RouterLink>
+              <button @click="handleLogout(); closeMobile()" class="btn-ghost w-full justify-center">{{ t('nav.logout') }}</button>
+            </template>
+          </div>
         </div>
       </div>
-    </div>
+    </Transition>
   </header>
 </template>

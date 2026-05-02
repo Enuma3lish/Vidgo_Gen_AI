@@ -34,6 +34,8 @@ export const useAdminStore = defineStore('admin', () => {
   const todayGenerations = computed(() => dashboardStats.value?.generations?.today ?? 0)
   const monthRevenue = computed(() => dashboardStats.value?.revenue?.month ?? 0)
   const totalUsers = computed(() => dashboardStats.value?.users?.total ?? 0)
+  const promotionAccounts = computed(() => dashboardStats.value?.promotions?.accounts ?? 0)
+  const promotionRegistrations = computed(() => dashboardStats.value?.promotions?.registrations ?? 0)
 
   // Actions
   async function fetchDashboardStats() {
@@ -100,6 +102,30 @@ export const useAdminStore = defineStore('admin', () => {
     } catch (e: any) {
       error.value = e.message || 'Failed to adjust credits'
       return false
+    }
+  }
+
+  async function setPromotionCode(userId: string, promotionCode?: string) {
+    try {
+      const result = await adminApi.setPromotionCode(userId, promotionCode)
+      await fetchUsers({ page: usersPage.value })
+      await fetchDashboardStats()
+      return result
+    } catch (e: any) {
+      error.value = e.response?.data?.detail || e.message || 'Failed to assign promotion code'
+      return null
+    }
+  }
+
+  async function grantTestAccount(userId: string) {
+    try {
+      const result = await adminApi.grantTestAccount(userId)
+      await fetchUsers({ page: usersPage.value })
+      await fetchDashboardStats()
+      return result
+    } catch (e: any) {
+      error.value = e.response?.data?.detail || e.message || 'Failed to grant test account'
+      return null
     }
   }
 
@@ -234,6 +260,7 @@ export const useAdminStore = defineStore('admin', () => {
       fetchEarnings(),
       fetchApiCosts(),
       fetchActiveUsers(),
+      fetchAIServicesStatus(),
     ])
     lastRefreshed.value = new Date()
   }
@@ -252,6 +279,14 @@ export const useAdminStore = defineStore('admin', () => {
         // Update active generations count from WebSocket
         if (data.data.active_generations_count !== undefined) {
           activeGenerationsCount.value = data.data.active_generations_count
+        }
+        if (data.data.online_sessions || data.data.active_generations) {
+          activeUsers.value = {
+            active_generations_count: data.data.active_generations_count ?? activeGenerationsCount.value,
+            active_generations: data.data.active_generations ?? activeUsers.value?.active_generations ?? [],
+            online_sessions: data.data.online_sessions ?? activeUsers.value?.online_sessions ?? [],
+            online_count: data.data.online_count ?? data.data.online_users ?? activeUsers.value?.online_count ?? 0,
+          }
         }
       }
     })
@@ -294,6 +329,8 @@ export const useAdminStore = defineStore('admin', () => {
     todayGenerations,
     monthRevenue,
     totalUsers,
+    promotionAccounts,
+    promotionRegistrations,
 
     // Actions
     fetchDashboardStats,
@@ -301,6 +338,8 @@ export const useAdminStore = defineStore('admin', () => {
     banUser,
     unbanUser,
     adjustCredits,
+    setPromotionCode,
+    grantTestAccount,
     fetchMaterials,
     reviewMaterial,
     fetchModerationQueue,

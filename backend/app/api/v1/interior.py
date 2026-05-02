@@ -16,8 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user_optional
+from app.api.deps import get_db, get_current_active_user, get_current_user_optional, is_subscribed_user
+from app.core.upload_validation import ROOM_REDESIGN_IMAGE_DIMENSION_RULES, validate_uploaded_content
 from app.models.user import User
+from app.providers.provider_router import TaskType, get_provider_router
 from app.services.interior_design_service import (
     get_interior_design_service,
     DESIGN_STYLES,
@@ -84,6 +86,30 @@ class DesignResponse(BaseModel):
     description: Optional[str] = None
     conversation_id: Optional[str] = None
     turn_count: Optional[int] = None
+    error: Optional[str] = None
+
+
+class Generate3DRequest(BaseModel):
+    image_url: str = Field(..., description="Public URL of the room/floor-plan image to convert")
+    texture_size: int = Field(1024, ge=512, le=2048, description="Texture size for the GLB model")
+    mesh_simplify: float = Field(0.95, ge=0.5, le=1.0, description="Mesh simplification ratio")
+    model_version: str = Field("v1", description="Trellis model version: 'v1' (fast/cheap) or 'v2' (high quality)")
+
+
+class Generate3DFromFloorplanRequest(BaseModel):
+    image_url: str = Field(..., description="Public URL of the architectural floor plan image")
+    style_id: Optional[str] = Field(None, description="Optional design style to apply when rendering the interior")
+    room_type: Optional[str] = Field("living_room", description="Room type hint for the photorealistic render")
+    prompt: Optional[str] = Field(None, description="Optional extra description (materials, mood, dimensions)")
+    model_version: str = Field("v2", description="Trellis model version for the final mesh, default high quality")
+
+
+class Generate3DResponse(BaseModel):
+    success: bool
+    model_url: Optional[str] = None
+    preview_image_url: Optional[str] = None
+    preview_video_url: Optional[str] = None
+    task_id: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -409,6 +435,150 @@ async def style_transfer(
     )
 
 
+@router.post("/3d-model", response_model=Generate3DResponse)
+async def generate_3d_model(
+    request: Generate3DRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Convert a 2D room image or floor plan into an interactive GLB model.
+
+    This is a subscriber-only endpoint backed by PiAPI Trellis. The frontend
+    uploads local files first so Trellis receives a public image URL.
+    """
+    if not is_subscribed_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="3D model generation requires an active subscription"
+        )
+
+    if not request.image_url.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Image URL is required"
+        )
+
+    provider_router = get_provider_router()
+    try:
+        result = await provider_router.route(
+            TaskType.INTERIOR_3D,
+            {
+                "image_url": request.image_url,
+                "texture_size": request.texture_size,
+                "mesh_simplify": request.mesh_simplify,
+                "model_version": request.model_version,
+            },
+            user_tier="paid",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate 3D model: {exc}"
+        ) from exc
+
+    output = result.get("output") or {}
+    model_url = output.get("model_url") or output.get("model_file") or output.get("url")
+    if not model_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="3D provider completed without returning a model URL"
+        )
+
+    return Generate3DResponse(
+        success=True,
+        model_url=model_url,
+        preview_image_url=output.get("image_url") or output.get("no_background_image"),
+        preview_video_url=output.get("video_url") or output.get("combined_video"),
+        task_id=result.get("task_id"),
+    )
+
+
+@router.post("/3d-from-floorplan", response_model=Generate3DResponse)
+async def generate_3d_from_floorplan(
+    request: Generate3DFromFloorplanRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Two-stage Floor-Plan -> 3D pipeline (subscriber only).
+
+    Stage 1: Gemini 2.5 Flash Image renders a photorealistic isometric
+    interior from the user's architectural floor plan + dimensions.
+    Stage 2: PiAPI Trellis2 reconstructs the rendered image into a GLB mesh.
+    """
+    if not is_subscribed_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Floor-plan to 3D requires an active subscription"
+        )
+
+    if not request.image_url.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Floor plan image URL is required"
+        )
+
+    # ---- Stage 1: Gemini renders an isometric photorealistic interior ----
+    floorplan_prompt = (
+        "Treat the supplied image as a 2D top-down architectural floor plan. "
+        "Render a photorealistic isometric (3/4 perspective) interior visualization "
+        "that exactly matches the room shape, wall positions, doors, and windows shown. "
+        "Walls should be approximately 2.8 meters tall. Use realistic materials: "
+        "hardwood or tiled floor, painted walls, soft natural daylight. "
+        "No people, no text, no dimension labels, no measurement lines. "
+        "Output a clean architectural visualization render of the empty interior space "
+        "with correct perspective, depth and shadows."
+    )
+    if request.prompt:
+        floorplan_prompt += f" Additional notes: {request.prompt.strip()}."
+
+    interior_service = get_interior_design_service()
+    render_result = await interior_service.redesign_room(
+        room_image_url=request.image_url,
+        prompt=floorplan_prompt,
+        style_id=request.style_id,
+        room_type=request.room_type,
+        keep_layout=True,
+    )
+    if not render_result.get("success") or not render_result.get("image_url"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Floor-plan render failed: {render_result.get('error', 'unknown error')}"
+        )
+    rendered_url = render_result["image_url"]
+    # ---- Stage 2: Trellis2 reconstructs the rendered image into a GLB ----
+    provider_router = get_provider_router()
+    try:
+        result = await provider_router.route(
+            TaskType.INTERIOR_3D,
+            {
+                "image_url": rendered_url,
+                "model_version": request.model_version or "v2",
+            },
+            user_tier="paid",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate 3D model from floor plan: {exc}"
+        ) from exc
+
+    output = result.get("output") or {}
+    model_url = output.get("model_url") or output.get("model_file") or output.get("url")
+    if not model_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="3D provider completed without returning a model URL"
+        )
+
+    return Generate3DResponse(
+        success=True,
+        model_url=model_url,
+        preview_image_url=rendered_url,
+        preview_video_url=output.get("video_url") or output.get("combined_video"),
+        task_id=result.get("task_id"),
+    )
+
+
 # ============ Demo Endpoint (No Auth Required) ============
 
 @router.post("/demo/redesign", response_model=DesignResponse)
@@ -428,6 +598,13 @@ async def demo_redesign(
 
     # Read and encode the image
     contents = await image.read()
+    validate_uploaded_content(
+        content=contents,
+        declared_content_type=image.content_type,
+        expected_kind="image",
+        max_bytes=20 * 1024 * 1024,
+        dimension_rules=ROOM_REDESIGN_IMAGE_DIMENSION_RULES,
+    )
     image_base64 = base64.b64encode(contents).decode()
 
     service = get_interior_design_service()

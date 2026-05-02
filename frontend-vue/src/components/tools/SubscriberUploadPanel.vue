@@ -35,6 +35,13 @@
 
     <!-- Subscriber upload UI -->
     <div v-else class="space-y-4">
+      <LoadingOverlay
+        :show="isLoading && !resultUrl && !resultVideoUrl"
+        :message="statusMessage || pendingDetail"
+        :title="pendingTitle"
+        :detail="pendingDetail"
+        :duration="pendingDuration"
+      />
 
       <!-- Model selector -->
       <div v-if="models.length > 1">
@@ -71,7 +78,7 @@
         <input
           ref="fileInput"
           type="file"
-          :accept="accept"
+          :accept="uploadAccept"
           class="hidden"
           @change="handleFileChange"
         />
@@ -132,13 +139,14 @@
       <div v-if="resultUrl || resultVideoUrl" class="rounded-xl overflow-hidden border border-emerald-700/40">
         <div class="bg-emerald-900/20 px-4 py-2 flex items-center justify-between">
           <span class="text-emerald-400 text-sm font-medium">✓ {{ $t('upload.resultReady') }}</span>
-          <a
-            :href="downloadUrl"
-            download
+          <button
+            type="button"
+            @click="downloadResult"
+            :disabled="isDownloading"
             class="text-sm text-white bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded-lg transition-colors"
           >
-            {{ $t('upload.download') }}
-          </a>
+            {{ isDownloading ? $t('upload.downloading') : $t('upload.download') }}
+          </button>
         </div>
         <video
           v-if="resultVideoUrl"
@@ -194,6 +202,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { uploadsApi } from '@/api/uploads'
 import type { ModelInfo, UploadStatusResponse } from '@/api/uploads'
+import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import { imageDimensionRuleForTool, validateImageFileDimensions } from '@/utils/mediaValidation'
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -223,6 +233,7 @@ const statusClass = ref('')
 const resultUrl = ref<string | null>(null)
 const resultVideoUrl = ref<string | null>(null)
 const currentUploadId = ref<string | null>(null)
+const isDownloading = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 // ─── Computed ────────────────────────────────────────────────────────────────
@@ -230,10 +241,22 @@ const currentCreditCost = computed(() => {
   const m = models.value.find(m => m.id === selectedModel.value)
   return m?.credit_cost ?? 0
 })
-
-const downloadUrl = computed(() =>
-  currentUploadId.value ? uploadsApi.getDownloadUrl(currentUploadId.value) : '#'
-)
+const isZh = computed(() => locale.value.startsWith('zh'))
+const isVideoTool = computed(() => props.toolType.includes('video') || props.toolType.includes('avatar'))
+const uploadAccept = computed(() => props.accept || (
+  props.toolType === 'video_transform'
+    ? '.mp4,.webm,.mov,video/mp4,video/webm,video/quicktime'
+    : '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+))
+const pendingTitle = computed(() => isVideoTool.value
+  ? (isZh.value ? '我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。' : 'I am creating the requested video. This may take a few minutes, so please check back shortly.')
+  : (isZh.value ? '我正在產生所需的圖片，這可能需要一些時間，請稍後再回來查看是否已完成。' : 'I am generating the requested image. This may take a little time, so please check back shortly.'))
+const pendingDetail = computed(() => isVideoTool.value
+  ? (isZh.value ? '正在生成影片...' : 'Generating video...')
+  : (isZh.value ? '正在生成圖片...' : 'Generating image...'))
+const pendingDuration = computed(() => isVideoTool.value
+  ? (isZh.value ? '需要 1 至 5 分鐘' : 'Usually takes 1 to 5 minutes')
+  : (isZh.value ? '需要 1 至 2 分鐘' : 'Usually takes 1 to 2 minutes'))
 
 // ─── Watchers ────────────────────────────────────────────────────────────────
 watch(() => props.isSubscribed, async (val) => {
@@ -256,18 +279,50 @@ async function loadModels() {
   }
 }
 
-function handleDrop(e: DragEvent) {
+async function handleDrop(e: DragEvent) {
   isDragging.value = false
   const file = e.dataTransfer?.files[0]
-  if (file) setFile(file)
+  if (file) await setFile(file)
 }
 
-function handleFileChange(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (file) setFile(file)
+async function handleFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file && !(await setFile(file))) {
+    input.value = ''
+  }
 }
 
-function setFile(file: File) {
+async function setFile(file: File): Promise<boolean> {
+  const expectsVideo = props.toolType === 'video_transform'
+  const allowedTypes = expectsVideo
+    ? ['video/mp4', 'video/webm', 'video/quicktime']
+    : ['image/jpeg', 'image/png', 'image/webp']
+  if (!allowedTypes.includes(file.type)) {
+    setStatus(
+      'error',
+      expectsVideo
+        ? (isZh.value ? '僅支援 MP4、WebM、MOV 影片，請重新選擇' : 'Only MP4, WebM, or MOV videos are supported. Please choose again.')
+        : (isZh.value ? '僅支援 JPG、PNG、WebP 圖片，請重新選擇' : 'Only JPG, PNG, or WebP images are supported. Please choose again.'),
+    )
+    return false
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    setStatus('error', isZh.value ? '檔案需小於 20MB，請重新選擇' : 'File must be under 20MB. Please choose a smaller file.')
+    return false
+  }
+  if (file.type.startsWith('image/')) {
+    try {
+      const dimensionError = await validateImageFileDimensions(file, imageDimensionRuleForTool(props.toolType), isZh.value)
+      if (dimensionError) {
+        setStatus('error', dimensionError)
+        return false
+      }
+    } catch {
+      setStatus('error', isZh.value ? '無法讀取圖片尺寸，請重新選擇圖片' : 'Image dimensions could not be read. Please choose a different image.')
+      return false
+    }
+  }
   selectedFile.value = file
   if (file.type.startsWith('image/')) {
     previewUrl.value = URL.createObjectURL(file)
@@ -277,6 +332,7 @@ function setFile(file: File) {
   statusMessage.value = ''
   resultUrl.value = null
   resultVideoUrl.value = null
+  return true
 }
 
 function clearFile() {
@@ -289,6 +345,34 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+function extensionFromType(contentType: string): string {
+  if (contentType.includes('video')) return 'mp4'
+  if (contentType.includes('png')) return 'png'
+  if (contentType.includes('webp')) return 'webp'
+  return 'jpg'
+}
+
+async function downloadResult() {
+  if (!currentUploadId.value || isDownloading.value) return
+  isDownloading.value = true
+  try {
+    const blob = await uploadsApi.downloadResult(currentUploadId.value)
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = `vidgo_result_${currentUploadId.value.slice(0, 8)}.${extensionFromType(blob.type)}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(objectUrl)
+  } catch (err: any) {
+    const msg = err?.response?.data?.detail ?? 'Download failed. Please try again.'
+    setStatus('error', msg)
+  } finally {
+    isDownloading.value = false
+  }
 }
 
 async function generate() {

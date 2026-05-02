@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
@@ -238,6 +238,15 @@ const processingMessage = computed(() => {
 
   return isZh.value ? '正在處理影片轉換... 這可能需要幾分鐘' : 'Processing video transform... This may take a few minutes'
 })
+const pendingTitle = computed(() => isVideoTransformMode.value
+  ? (isZh.value ? '我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。' : 'I am creating the requested video. This may take a few minutes, so please check back shortly.')
+  : (isZh.value ? '我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。' : 'I am generating the requested video. This may take a few minutes, so please check back shortly.'))
+const pendingDetail = computed(() => isVideoTransformMode.value
+  ? (isZh.value ? '正在轉換影片...' : 'Transforming video...')
+  : (isZh.value ? '正在生成影片...' : 'Generating video...'))
+const pendingDuration = computed(() => isVideoTransformMode.value
+  ? (isZh.value ? '需要 2 至 5 分鐘' : 'Usually takes 2 to 5 minutes')
+  : (isZh.value ? '需要 1 至 2 分鐘' : 'Usually takes 1 to 2 minutes'))
 
 // Load demo presets on mount
 onMounted(async () => {
@@ -267,6 +276,8 @@ onBeforeUnmount(() => {
     URL.revokeObjectURL(uploadedVideoPreview.value)
   }
 })
+
+watch(locale, () => loadEffectCatalog('short_video', locale.value))
 
 function selectDemoImage(item: { id: string; preview?: string; video_url?: string; motion?: string }) {
   selectedDemoImageId.value = item.id
@@ -374,8 +385,16 @@ function handleVideoUpload(event: Event) {
   const file = input?.files?.[0]
   if (!file) return
 
-  if (!file.type.startsWith('video/')) {
-    uiStore.showError(isZh.value ? '請上傳影片檔案' : 'Please upload a video file')
+  const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime']
+  if (!allowedVideoTypes.includes(file.type)) {
+    uiStore.showError(isZh.value ? '僅支援 MP4、WebM、MOV 影片，請重新選擇' : 'Only MP4, WebM, or MOV videos are supported. Please choose a different video.')
+    if (input) input.value = ''
+    return
+  }
+
+  if (file.size > 20 * 1024 * 1024) {
+    uiStore.showError(isZh.value ? '影片需小於 20MB，請壓縮後重新選擇' : 'Video must be under 20MB. Please compress it and choose again.')
+    if (input) input.value = ''
     return
   }
 
@@ -504,7 +523,13 @@ function dataURItoBlob(dataURI: string): Blob | null {
 
 <template>
   <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
-    <LoadingOverlay :show="isProcessing" :message="processingMessage" />
+    <LoadingOverlay
+      :show="isProcessing"
+      :message="processingMessage"
+      :title="pendingTitle"
+      :detail="pendingDetail"
+      :duration="pendingDuration"
+    />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->
@@ -561,7 +586,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
               <div>
                 <label class="label">{{ isZh ? '上傳影片' : 'Upload Video' }}</label>
                 <label class="block rounded-xl border-2 border-dashed p-6 cursor-pointer transition-colors" style="border-color: rgba(255,255,255,0.08); background: #141420;">
-                  <input type="file" accept="video/mp4,video/webm,video/quicktime" class="hidden" @change="handleVideoUpload" />
+                  <input type="file" accept=".mp4,.webm,.mov,video/mp4,video/webm,video/quicktime" class="hidden" @change="handleVideoUpload" />
                   <div class="text-center">
                     <p class="text-dark-50 text-sm font-medium">{{ isZh ? '點擊或拖放 MP4 / WEBM / MOV' : 'Click or drop MP4 / WEBM / MOV' }}</p>
                     <p class="text-dark-400 text-xs mt-1">{{ isZh ? '付費用戶可上傳自己的影片做風格轉換' : 'Paid users can upload their own videos for style transfer' }}</p>

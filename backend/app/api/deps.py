@@ -133,6 +133,34 @@ async def get_current_user_optional(
     return user
 
 
+async def get_current_user_optional_lenient(
+    db: AsyncSession = Depends(get_db),
+    token: Optional[str] = Depends(reusable_oauth2_optional)
+) -> Optional[User]:
+    """Get current user when available, but ignore invalid tokens.
+
+    Public endpoints such as plan listing should keep working for visitors even
+    if a browser has a stale access token in local storage. Auth-required and
+    demo-sensitive flows should continue to use get_current_user_optional.
+    """
+    if not token:
+        return None
+
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type", "access")
+        if user_id is None or token_type != "access":
+            return None
+    except JWTError:
+        return None
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalars().first()
+
+
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:

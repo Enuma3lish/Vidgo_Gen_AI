@@ -216,7 +216,7 @@ async def apply_referral_code(
 
     return ApplyReferralResponse(
         success=True,
-        message=f"Referral applied! You received {settings.REFERRAL_WELCOME_CREDITS} bonus credits.",
+        message=f"Promotion code applied! You received {settings.REFERRAL_WELCOME_CREDITS} bonus credits.",
         bonus_credits=settings.REFERRAL_WELCOME_CREDITS,
     )
 

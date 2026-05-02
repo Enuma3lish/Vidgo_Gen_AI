@@ -13,7 +13,7 @@ import logging
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, desc
+from sqlalchemy import String, cast, select, func, and_, or_, desc
 from sqlalchemy.orm import selectinload
 
 from app.models.user import User
@@ -60,6 +60,7 @@ class AdminDashboardService:
 
             users_by_plan = await self._get_users_by_plan()
             paid_stats = await self.get_paid_user_stats()
+            promotion_stats = await self.get_promotion_stats()
 
             new_today = await self.db.scalar(
                 select(func.count(User.id)).where(
@@ -89,6 +90,7 @@ class AdminDashboardService:
                 "revenue": {
                     "month": revenue_month
                 },
+                "promotions": promotion_stats,
                 "timestamp": datetime.utcnow().isoformat()
             }
         except Exception:
@@ -99,8 +101,27 @@ class AdminDashboardService:
                 "paid_stats": {"total": 0, "paid": 0, "free": 0, "paid_percent": 0.0, "free_percent": 0.0},
                 "generations": {"today": 0},
                 "revenue": {"month": 0.0},
+                "promotions": {"accounts": 0, "registrations": 0, "referred_users": 0},
                 "timestamp": datetime.utcnow().isoformat(),
             }
+
+    async def get_promotion_stats(self) -> Dict[str, int]:
+        """Get promotion-code account and signup counters for the admin dashboard."""
+        accounts = await self.db.scalar(
+            select(func.count(User.id)).where(User.referral_code != None)
+        ) or 0
+        registrations = await self.db.scalar(
+            select(func.coalesce(func.sum(User.referral_count), 0))
+        ) or 0
+        referred_users = await self.db.scalar(
+            select(func.count(User.id)).where(User.referred_by_id != None)
+        ) or 0
+
+        return {
+            "accounts": int(accounts),
+            "registrations": int(registrations),
+            "referred_users": int(referred_users),
+        }
 
     async def _get_users_by_plan(self) -> Dict[str, int]:
         """Get user count grouped by plan"""
@@ -311,37 +332,49 @@ class AdminDashboardService:
             return {"by_frequency": [], "by_credits": []}
 
     async def get_earnings_stats(self) -> Dict[str, Any]:
-        """Get weekly and monthly earnings from paid orders."""
+        """Get weekly, monthly, and yearly earnings from paid orders."""
         try:
-            today = datetime.utcnow().date()
-            week_ago = today - timedelta(days=7)
-            month_start = today.replace(day=1)
+            now = datetime.utcnow()
+            week_ago = now - timedelta(days=7)
+            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            year_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
-            week_revenue = await self._get_revenue_for_period(week_ago, today)
-            month_revenue = await self._get_revenue_for_period(month_start, today)
+            week_revenue = await self._get_revenue_for_period(week_ago, now)
+            month_revenue = await self._get_revenue_for_period(month_start, now)
+            year_revenue = await self._get_revenue_for_period(year_start, now)
 
             monthly = []
             for i in range(5, -1, -1):
-                m_start = (today.replace(day=1) - timedelta(days=30 * i)).replace(day=1)
+                m_start = (month_start - timedelta(days=30 * i)).replace(day=1)
                 if i > 0:
                     m_end = (m_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
                 else:
-                    m_end = today
+                    m_end = now
                 rev = await self._get_revenue_for_period(m_start, m_end)
                 monthly.append({"month": m_start.strftime("%Y-%m"), "revenue": rev})
+
+            yearly = []
+            for i in range(4, -1, -1):
+                year = now.year - i
+                y_start = now.replace(year=year, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+                y_end = now if year == now.year else now.replace(year=year, month=12, day=31, hour=23, minute=59, second=59, microsecond=999999)
+                rev = await self._get_revenue_for_period(y_start, y_end)
+                yearly.append({"year": str(year), "revenue": rev})
 
             return {
                 "week": week_revenue,
                 "month": month_revenue,
+                "year": year_revenue,
                 "monthly_breakdown": monthly,
+                "yearly_breakdown": yearly,
             }
         except Exception:
             logger.exception("Admin earnings query failed")
-            return {"week": 0.0, "month": 0.0, "monthly_breakdown": []}
+            return {"week": 0.0, "month": 0.0, "year": 0.0, "monthly_breakdown": [], "yearly_breakdown": []}
 
     async def get_api_cost_stats(self) -> Dict[str, Any]:
         """
-        Get API cost breakdown by service type for this week and this month.
+        Get API cost breakdown by service type for this week, month, and year.
         JOINs generations with service_pricing to compute actual USD costs.
         """
         try:
@@ -352,6 +385,10 @@ class AdminDashboardService:
             current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             previous_month_end = current_month_start
             previous_month_start = (previous_month_end - timedelta(days=1)).replace(day=1)
+
+            current_year_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            previous_year_end = current_year_start
+            previous_year_start = current_year_start.replace(year=current_year_start.year - 1)
 
             async def _query_costs_by_service(start: datetime, end: Optional[datetime] = None) -> Dict[str, Dict[str, Any]]:
                 """
@@ -376,7 +413,7 @@ class AdminDashboardService:
                 if end is not None:
                     conditions.append(UserGeneration.created_at < end)
 
-                tool_expr = func.cast(UserGeneration.tool_type, type_=None)
+                tool_type_as_text = cast(UserGeneration.tool_type, String)
 
                 result = await self.db.execute(
                     select(
@@ -389,7 +426,7 @@ class AdminDashboardService:
                         ).label('total_cost'),
                     ).select_from(UserGeneration).outerjoin(
                         ServicePricing,
-                        ServicePricing.tool_type == UserGeneration.tool_type,
+                        ServicePricing.tool_type == tool_type_as_text,
                     ).where(
                         and_(*conditions)
                     ).group_by(
@@ -416,70 +453,93 @@ class AdminDashboardService:
 
             week_data = await _query_costs_by_service(current_week_start)
             month_data = await _query_costs_by_service(current_month_start)
+            year_data = await _query_costs_by_service(current_year_start)
             previous_week_data = await _query_costs_by_service(previous_week_start, current_week_start)
             previous_month_data = await _query_costs_by_service(previous_month_start, previous_month_end)
+            previous_year_data = await _query_costs_by_service(previous_year_start, previous_year_end)
 
             all_services = set(
                 list(week_data.keys())
                 + list(month_data.keys())
+                + list(year_data.keys())
                 + list(previous_week_data.keys())
                 + list(previous_month_data.keys())
+                + list(previous_year_data.keys())
             )
             by_service = []
             week_total = 0.0
             month_total = 0.0
+            year_total = 0.0
             previous_week_total = 0.0
             previous_month_total = 0.0
+            previous_year_total = 0.0
 
             for svc in sorted(all_services):
                 w = week_data.get(svc, {})
                 m = month_data.get(svc, {})
+                y = year_data.get(svc, {})
                 pw = previous_week_data.get(svc, {})
                 pm = previous_month_data.get(svc, {})
+                py = previous_year_data.get(svc, {})
                 w_cost = w.get("cost", 0.0)
                 m_cost = m.get("cost", 0.0)
+                y_cost = y.get("cost", 0.0)
                 pw_cost = pw.get("cost", 0.0)
                 pm_cost = pm.get("cost", 0.0)
+                py_cost = py.get("cost", 0.0)
                 week_total += w_cost
                 month_total += m_cost
+                year_total += y_cost
                 previous_week_total += pw_cost
                 previous_month_total += pm_cost
+                previous_year_total += py_cost
                 by_service.append({
                     "service": svc,
                     "display_name": (
                         w.get("display_name")
                         or m.get("display_name")
+                        or y.get("display_name")
                         or pw.get("display_name")
                         or pm.get("display_name")
+                        or py.get("display_name")
                         or svc
                     ),
                     "week_calls": w.get("calls", 0),
                     "week_cost": w_cost,
                     "month_calls": m.get("calls", 0),
                     "month_cost": m_cost,
+                    "year_calls": y.get("calls", 0),
+                    "year_cost": y_cost,
                     "prev_week_calls": pw.get("calls", 0),
                     "prev_week_cost": pw_cost,
                     "prev_month_calls": pm.get("calls", 0),
                     "prev_month_cost": pm_cost,
+                    "prev_year_calls": py.get("calls", 0),
+                    "prev_year_cost": py_cost,
                 })
 
-            by_service.sort(key=lambda x: x["month_cost"], reverse=True)
+            by_service.sort(key=lambda x: x["year_cost"], reverse=True)
 
             return {
                 "by_service": by_service,
                 "week_total": week_total,
                 "month_total": month_total,
+                "year_total": year_total,
                 "prev_week_total": previous_week_total,
                 "prev_month_total": previous_month_total,
+                "prev_year_total": previous_year_total,
             }
         except Exception:
             logger.exception("Admin API cost query failed")
+            await self.db.rollback()
             return {
                 "by_service": [],
                 "week_total": 0.0,
                 "month_total": 0.0,
+                "year_total": 0.0,
                 "prev_week_total": 0.0,
                 "prev_month_total": 0.0,
+                "prev_year_total": 0.0,
             }
 
     async def get_costs_dashboard(self) -> Dict[str, Any]:
@@ -586,7 +646,7 @@ class AdminDashboardService:
                     UserUpload.tool_type,
                     UserUpload.created_at
                 ).where(
-                    UserUpload.status == UploadStatus.PROCESSING
+                    UserUpload.status == UploadStatus.PROCESSING.value
                 ).order_by(desc(UserUpload.created_at))
                 .limit(50)
             )
@@ -600,6 +660,7 @@ class AdminDashboardService:
             ]
         except Exception as e:
             logger.warning(f"Could not query active generations: {e}")
+            await self.db.rollback()
             active_generations = []
 
         # Also check Generation model for pending/processing
@@ -622,6 +683,7 @@ class AdminDashboardService:
                     "started_at": (row.started_at or row.created_at).isoformat() if (row.started_at or row.created_at) else None,
                 })
         except Exception:
+            await self.db.rollback()
             pass
 
         # Online sessions from Redis
@@ -653,7 +715,7 @@ class AdminDashboardService:
         Returns:
             Tuple of (users list, total count)
         """
-        query = select(User)
+        query = select(User).options(selectinload(User.current_plan))
         count_query = select(func.count(User.id))
 
         # Apply filters
@@ -693,7 +755,7 @@ class AdminDashboardService:
     async def get_user_detail(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get detailed user information"""
         result = await self.db.execute(
-            select(User).where(User.id == user_id)
+            select(User).options(selectinload(User.current_plan)).where(User.id == user_id)
         )
         user = result.scalar_one_or_none()
 

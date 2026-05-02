@@ -11,12 +11,14 @@ Tools:
 6. AI Avatar - /tools/avatar (NEW: Photo-to-Avatar with lip sync)
 """
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
+import asyncio
 import uuid
+import tempfile
 from pathlib import Path
 from PIL import Image, ImageOps
 import httpx
@@ -25,6 +27,18 @@ from io import BytesIO
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.rescue_service import get_rescue_service
 from app.providers.provider_router import get_provider_router, TaskType
+from app.core.config import get_settings
+from app.core.upload_validation import (
+    AVATAR_HEADSHOT_DIMENSION_RULES,
+    COMMON_IMAGE_DIMENSION_RULES,
+    IMAGE_TO_VIDEO_DIMENSION_RULES,
+    PRODUCT_SCENE_IMAGE_DIMENSION_RULES,
+    ROOM_REDESIGN_IMAGE_DIMENSION_RULES,
+    TRY_ON_GARMENT_IMAGE_DIMENSION_RULES,
+    TRY_ON_MODEL_IMAGE_DIMENSION_RULES,
+    validate_image_url_dimensions_or_raise,
+    validate_media_url_or_raise,
+)
 # Voice data still sourced from a2e_service module for compatibility
 try:
     from app.services.a2e_service import A2E_VOICES
@@ -35,13 +49,52 @@ from app.models.user_generation import UserGeneration
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
 from app.services.credit_service import CreditService
 from app.services.demo_cache_service import DemoCacheService
+from app.services.gcs_storage_service import get_gcs_storage
+from app.services.email_service import send_admin_tool_failure_email
 import logging
 import os
 import hashlib
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
+
+# Generic, user-facing message returned when an internal tool exception occurs.
+# The original exception detail is logged and emailed to admins instead.
+GENERIC_TOOL_FAILURE_MESSAGE = (
+    "This tool is temporarily unavailable. Please try again in a few minutes."
+)
+
+
+def _notify_admin_of_tool_failure(
+    tool_name: str,
+    exc: BaseException,
+    user=None,
+    extra_context: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Schedule an admin alert email without blocking the request."""
+    try:
+        user_email = getattr(user, "email", None) if user is not None else None
+        request_id = uuid.uuid4().hex[:12]
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(
+                send_admin_tool_failure_email(
+                    tool_name=tool_name,
+                    user_email=user_email,
+                    error=exc,
+                    request_id=request_id,
+                    extra_context=extra_context or {},
+                )
+            )
+        except RuntimeError:
+            # No running loop (rare in async endpoints) – best effort, log only.
+            logger.error("No running loop to schedule admin alert for %s", tool_name)
+    except Exception as alert_exc:  # pragma: no cover - defensive
+        logger.error("Failed to schedule admin alert for %s: %s", tool_name, alert_exc)
 
 PRODUCT_SCENE_MAX_DIMENSION = 1536
+PRODUCT_SCENE_CUSTOM_PROMPT_MAX_CHARS = 300
+PRODUCT_SCENE_CUSTOM_SCENE_TYPE = "custom"
 
 
 async def _maybe_recycle_for_demo(
@@ -51,6 +104,7 @@ async def _maybe_recycle_for_demo(
     topic: str = "_all",
     prompt: str = "",
     input_image_url: str | None = None,
+    input_video_url: str | None = None,
     result_image_url: str | None = None,
     result_video_url: str | None = None,
     effect_prompt: str | None = None,
@@ -97,6 +151,7 @@ async def _maybe_recycle_for_demo(
             prompt=prompt,
             effect_prompt=effect_prompt,
             input_image_url=input_image_url,
+            input_video_url=input_video_url,
             result_image_url=result_image_url,
             result_video_url=result_video_url,
             result_watermarked_url=result_image_url or result_video_url,
@@ -171,6 +226,136 @@ def _resolve_public_url(url: str) -> str:
         if public_base:
             return f"{public_base}{static_path}"
     return url
+
+
+async def _download_media_to_path(url: str, path: Path) -> None:
+    """Download a public URL or copy a local /static/ file into a temp path."""
+    resolved_url = _resolve_public_url(url)
+    if resolved_url.startswith("/static/"):
+        candidates = [Path("/app") / resolved_url.lstrip("/"), Path.cwd() / resolved_url.lstrip("/")]
+        for candidate in candidates:
+            if candidate.exists():
+                path.write_bytes(candidate.read_bytes())
+                return
+        raise FileNotFoundError(f"Local static file not found: {resolved_url}")
+
+    async with httpx.AsyncClient(timeout=240.0, follow_redirects=True) as client:
+        response = await client.get(resolved_url)
+        response.raise_for_status()
+        path.write_bytes(response.content)
+
+
+async def _run_ffmpeg_voiceover_mux(video_url: str, audio_url: str, user_id: str) -> str:
+    """Replace the video's audio track with generated voiceover and persist the MP4."""
+    with tempfile.TemporaryDirectory(prefix="vidgo-dubbing-") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        input_video = tmp_path / "input_video"
+        input_audio = tmp_path / "voiceover"
+        output_video = tmp_path / "dubbed.mp4"
+
+        await _download_media_to_path(video_url, input_video)
+        await _download_media_to_path(audio_url, input_audio)
+
+        async def run_ffmpeg(args: list[str]) -> tuple[int, str]:
+            process = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            detail = (stderr or stdout).decode("utf-8", errors="replace")[-1200:]
+            return process.returncode, detail
+
+        copy_args = [
+            "ffmpeg", "-y",
+            "-i", str(input_video),
+            "-i", str(input_audio),
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "160k",
+            "-shortest",
+            "-movflags", "+faststart",
+            str(output_video),
+        ]
+        returncode, detail = await run_ffmpeg(copy_args)
+
+        if returncode != 0 or not output_video.exists():
+            reencode_args = [
+                "ffmpeg", "-y",
+                "-i", str(input_video),
+                "-i", str(input_audio),
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "160k",
+                "-shortest",
+                "-movflags", "+faststart",
+                str(output_video),
+            ]
+            returncode, detail = await run_ffmpeg(reencode_args)
+
+        if returncode != 0 or not output_video.exists():
+            raise RuntimeError(f"ffmpeg dubbing mux failed: {detail}")
+
+        output_bytes = output_video.read_bytes()
+        output_id = uuid.uuid4().hex[:12]
+        gcs = get_gcs_storage()
+        if gcs.enabled:
+            return gcs.upload_public(
+                data=output_bytes,
+                blob_name=f"generated/video/dubbing/{user_id}/{output_id}.mp4",
+                content_type="video/mp4",
+            )
+
+        output_dir = Path("/app/static/generated")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"video_dubbing_{output_id}.mp4"
+        local_output = output_dir / filename
+        local_output.write_bytes(output_bytes)
+        public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/") or settings.BACKEND_URL.rstrip("/")
+        static_path = f"/static/generated/{filename}"
+        return f"{public_base}{static_path}" if public_base else static_path
+
+
+async def _translate_text_for_dubbing(text: str, target_language: str, source_language: str | None = None) -> str:
+    """Translate a spoken script with Gemini when available; fall back to source text."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return ""
+
+    try:
+        from app.services.gemini_service import get_gemini_service
+        from google.genai import types
+
+        gemini = get_gemini_service()
+        if not getattr(gemini, "api_key", "") and not getattr(gemini, "_use_vertex", False):
+            return cleaned
+
+        language_hint = f" from {source_language}" if source_language else ""
+        prompt = (
+            f"Translate this spoken video script{language_hint} to {target_language}. "
+            "Keep it natural for voiceover, preserve names, brands, numbers, and line breaks. "
+            "Return only the translated script, no explanations.\n\n"
+            f"{cleaned}"
+        )
+        client = gemini._get_genai_client()
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=getattr(gemini, "model_name", "gemini-2.5-flash"),
+            contents=[prompt],
+            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=1200),
+        )
+        translated = (response.text or "").strip().strip('"')
+        return translated or cleaned
+    except Exception as exc:
+        logger.warning("Video dubbing translation fallback used: %s", exc)
+        return cleaned
 
 
 async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str):
@@ -315,11 +500,13 @@ class ProductSceneRequest(BaseModel):
     product_id: Optional[str] = Field(None, description="Optional preset product identifier used to match a cached demo example.")
     scene_type: str = Field(
         "studio",
+        max_length=40,
         description="Named preset scene. Valid values: studio, nature, elegant, minimal, lifestyle, urban, seasonal, holiday, spring, valentines, black_friday, christmas, new_year.",
     )
     custom_prompt: Optional[str] = Field(
         None,
-        description="Optional full natural-language scene prompt. When provided, it overrides scene_type unless template_id is also set.",
+        max_length=PRODUCT_SCENE_CUSTOM_PROMPT_MAX_CHARS,
+        description="Optional natural-language scene prompt. Accepted only when scene_type is 'custom', unless template_id is set.",
     )
     template_id: Optional[str] = Field(
         None,
@@ -331,6 +518,20 @@ class ProductSceneRequest(BaseModel):
         if not url:
             raise ValueError("product_image_url or image_url is required")
         return _resolve_public_url(url)
+
+    @field_validator("scene_type")
+    @classmethod
+    def normalize_scene_type(cls, value: str) -> str:
+        scene_type = (value or "studio").strip()
+        return scene_type or "studio"
+
+    @field_validator("custom_prompt")
+    @classmethod
+    def normalize_custom_prompt(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        return cleaned or None
 
 
 class TryOnRequest(BaseModel):
@@ -375,6 +576,41 @@ class ShortVideoRequest(BaseModel):
     voice_id: Optional[str] = Field(None, description="Optional voice identifier for TTS narration.")
 
 
+class ImageTranslateRequest(BaseModel):
+    """Translate visible text inside an image while preserving the original layout."""
+    image_url: str = Field(..., description="Input image URL that contains visible text to translate.")
+    target_language: str = Field("Traditional Chinese", max_length=80, description="Language to translate visible text into.")
+    source_language: Optional[str] = Field(None, max_length=80, description="Optional source language hint.")
+    instructions: Optional[str] = Field(None, max_length=500, description="Optional layout, brand, or tone instructions.")
+
+    @field_validator("target_language", "source_language", "instructions")
+    @classmethod
+    def normalize_text_field(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        return cleaned or None
+
+
+class VideoDubbingRequest(BaseModel):
+    """Generate translated speech and mux it onto an uploaded video."""
+    video_url: str = Field(..., description="Input video URL to localize.")
+    target_language: str = Field("Traditional Chinese", max_length=80, description="Target spoken language.")
+    source_language: Optional[str] = Field(None, max_length=80, description="Optional source language hint.")
+    source_script: Optional[str] = Field(None, max_length=4000, description="Original transcript/script to translate before dubbing.")
+    translated_script: Optional[str] = Field(None, max_length=4000, description="Already translated voiceover script. Takes priority over source_script.")
+    voice_reference_url: Optional[str] = Field(None, max_length=1000, description="Optional reference voice audio URL for voice cloning.")
+    voice_reference_text: Optional[str] = Field(None, max_length=1000, description="Optional transcript for the reference voice audio.")
+
+    @field_validator("target_language", "source_language", "source_script", "translated_script", "voice_reference_url", "voice_reference_text")
+    @classmethod
+    def normalize_optional_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
 class AvatarRequest(BaseModel):
     """AI Avatar - Photo-to-Avatar with lip sync"""
     image_url: str = Field(..., description="Clear frontal headshot URL used to generate the speaking avatar.")
@@ -390,6 +626,10 @@ class ToolResponse(BaseModel):
     """Standard tool response"""
     success: bool
     result_url: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+    audio_url: Optional[str] = None
+    translated_script: Optional[str] = None
     results: Optional[List[Dict]] = None
     credits_used: int = 0
     message: Optional[str] = None
@@ -526,6 +766,9 @@ async def remove_background(
 
     Credits: 3 per image
     """
+    validate_media_url_or_raise(str(request.image_url), "image", "Background removal input")
+    await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
         return await _demo_response(
@@ -587,11 +830,12 @@ async def remove_background(
                 message=result.get("error", "Background removal failed")
             )
     except Exception as e:
-        logger.error(f"Background removal error: {e}")
+        logger.error(f"Background removal error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "background_removal")
+        _notify_admin_of_tool_failure("background_removal", e, current_user)
         return ToolResponse(
             success=False,
-            message=f"Generation failed: {str(e)}"
+            message=GENERIC_TOOL_FAILURE_MESSAGE,
         )
 
 
@@ -610,16 +854,21 @@ async def remove_background_batch(
     if len(request.image_urls) > 10:
         raise HTTPException(status_code=400, detail="Maximum 10 images per batch")
 
+    for image_url in request.image_urls:
+        validate_media_url_or_raise(str(image_url), "image", "Batch background removal input")
+        await validate_image_url_dimensions_or_raise(str(image_url), COMMON_IMAGE_DIMENSION_RULES)
+
     # Check plan-level batch processing permission
     allowed, err, _ = await _check_plan_feature(db, current_user, "batch_processing", "batch processing")
     if not allowed:
         raise HTTPException(status_code=403, detail=err)
 
     total_cost = len(request.image_urls) * 3
-    credit_service = CreditService(db)
-    balance = await credit_service.get_balance(str(current_user.id))
-    if balance["total"] < total_cost:
-        raise HTTPException(status_code=403, detail=f"Insufficient credits. Need {total_cost}, have {balance['total']}")
+    if not getattr(current_user, "is_superuser", False):
+        credit_service = CreditService(db)
+        balance = await credit_service.get_balance(str(current_user.id))
+        if balance["total"] < total_cost:
+            raise HTTPException(status_code=403, detail=f"Insufficient credits. Need {total_cost}, have {balance['total']}")
 
     results = []
     credits_used = 0
@@ -639,7 +888,8 @@ async def remove_background_batch(
                     "result_url": output.get("image_url"),
                     "success": True
                 })
-                credits_used += 3
+                if not getattr(current_user, "is_superuser", False):
+                    credits_used += 3
             else:
                 results.append({
                     "input_url": str(image_url),
@@ -683,10 +933,32 @@ async def generate_product_scene(
     2. Generate scene background (T2I)
     3. Composite product onto scene (PIL)
 
-    Scene type priority: template_id > custom_prompt > scene_type
-    Scene types: studio, nature, elegant, minimal, lifestyle, urban, seasonal, holiday, spring, valentines, black_friday, christmas, new_year
+    Scene prompt priority: template_id > custom scene prompt > preset scene_type
+    Scene types: studio, nature, elegant, minimal, lifestyle, urban, seasonal, holiday, spring, valentines, black_friday, christmas, new_year, custom
     Credits: 10 per generation
     """
+    try:
+        product_media_url = request.get_product_url()
+    except ValueError:
+        product_media_url = None
+    if product_media_url:
+        validate_media_url_or_raise(product_media_url, "image", "Product scene input")
+        await validate_image_url_dimensions_or_raise(product_media_url, PRODUCT_SCENE_IMAGE_DIMENSION_RULES)
+
+    valid_scene_ids = {scene["id"] for scene in SCENE_TEMPLATES}
+    valid_scene_options = ", ".join(scene["id"] for scene in SCENE_TEMPLATES)
+    if request.scene_type not in valid_scene_ids and request.scene_type != PRODUCT_SCENE_CUSTOM_SCENE_TYPE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown scene_type '{request.scene_type}'. Valid options: {valid_scene_options}, or '{PRODUCT_SCENE_CUSTOM_SCENE_TYPE}' with custom_prompt.",
+        )
+
+    if request.custom_prompt and request.scene_type != PRODUCT_SCENE_CUSTOM_SCENE_TYPE and not request.template_id:
+        raise HTTPException(
+            status_code=400,
+            detail="custom_prompt is only allowed when scene_type is 'custom'. Choose a preset scene without custom_prompt or set scene_type to 'custom'.",
+        )
+
     # Resolve scene prompt — template_id takes priority, then custom_prompt, then scene_type
     scene_prompt: Optional[str] = None
     if request.template_id:
@@ -696,14 +968,36 @@ async def generate_product_scene(
             raise HTTPException(status_code=400, detail="Template not found or inactive.")
 
     if not scene_prompt:
-        scene = next((s for s in SCENE_TEMPLATES if s["id"] == request.scene_type), None)
-        if not scene and not request.custom_prompt:
-            valid_ids = ", ".join(s["id"] for s in SCENE_TEMPLATES)
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown scene_type '{request.scene_type}'. Valid options: {valid_ids}, or provide custom_prompt.",
-            )
-        scene_prompt = request.custom_prompt or scene["prompt"]
+        if request.custom_prompt:
+            scene_prompt = request.custom_prompt
+        else:
+            scene = next((s for s in SCENE_TEMPLATES if s["id"] == request.scene_type), None)
+            if not scene:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Custom scene requires custom_prompt or template_id.",
+                )
+            scene_prompt = scene["prompt"]
+
+    if not is_subscribed_user(current_user) and (
+        request.scene_type == PRODUCT_SCENE_CUSTOM_SCENE_TYPE or request.custom_prompt or request.template_id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="A subscription is required to use custom Product Scene prompts or templates.",
+        )
+
+    if request.scene_type == PRODUCT_SCENE_CUSTOM_SCENE_TYPE and not scene_prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Custom scene requires custom_prompt or template_id.",
+        )
+
+    if request.scene_type == PRODUCT_SCENE_CUSTOM_SCENE_TYPE and not request.custom_prompt and not request.template_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Custom scene requires custom_prompt or template_id.",
+        )
     
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
@@ -800,11 +1094,12 @@ async def generate_product_scene(
         )
         
     except Exception as e:
-        logger.error(f"Product scene error: {e}")
+        logger.error(f"Product scene error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "product_scene")
+        _notify_admin_of_tool_failure("product_scene", e, current_user)
         return ToolResponse(
             success=False,
-            message=f"Generation failed: {str(e)}"
+            message=GENERIC_TOOL_FAILURE_MESSAGE,
         )
 
 
@@ -925,6 +1220,17 @@ async def ai_try_on(
 
     Credits: 15 per generation
     """
+    try:
+        garment_media_url = request.get_garment_url()
+    except ValueError:
+        garment_media_url = None
+    if garment_media_url:
+        validate_media_url_or_raise(garment_media_url, "image", "Try-on garment input")
+        await validate_image_url_dimensions_or_raise(garment_media_url, TRY_ON_GARMENT_IMAGE_DIMENSION_RULES)
+    if request.model_image_url:
+        validate_media_url_or_raise(str(request.model_image_url), "image", "Try-on model input")
+        await validate_image_url_dimensions_or_raise(str(request.model_image_url), TRY_ON_MODEL_IMAGE_DIMENSION_RULES)
+
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
         try:
@@ -1067,11 +1373,12 @@ async def ai_try_on(
         )
 
     except Exception as e:
-        logger.error(f"Try-On error: {e}")
+        logger.error(f"Try-On error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+        _notify_admin_of_tool_failure("try_on", e, current_user)
         return ToolResponse(
             success=False,
-            message=f"Try-On generation failed: {str(e)}"
+            message=GENERIC_TOOL_FAILURE_MESSAGE,
         )
 
 
@@ -1096,6 +1403,14 @@ async def room_redesign(
     Styles: modern, nordic, japanese, industrial, minimalist, luxury, bohemian, coastal
     Credits: 20 per generation
     """
+    try:
+        room_media_url = request.get_room_url()
+    except ValueError:
+        room_media_url = None
+    if room_media_url:
+        validate_media_url_or_raise(room_media_url, "image", "Room redesign input")
+        await validate_image_url_dimensions_or_raise(room_media_url, ROOM_REDESIGN_IMAGE_DIMENSION_RULES)
+
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
         try:
@@ -1181,11 +1496,12 @@ async def room_redesign(
                 message=result.get("error", "Room redesign failed")
             )
     except Exception as e:
-        logger.error(f"Room Redesign error: {e}")
+        logger.error(f"Room Redesign error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
+        _notify_admin_of_tool_failure("room_redesign", e, current_user)
         return ToolResponse(
             success=False,
-            message=f"Generation failed: {str(e)}"
+            message=GENERIC_TOOL_FAILURE_MESSAGE,
         )
 
 
@@ -1208,6 +1524,9 @@ async def generate_short_video(
 
     Credits: 25-35 (varies by features used)
     """
+    validate_media_url_or_raise(str(request.image_url), "image", "Short video input")
+    await validate_image_url_dimensions_or_raise(str(request.image_url), IMAGE_TO_VIDEO_DIMENSION_RULES)
+
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
         user_frame_url = _resolve_public_url(str(request.image_url)) if request.image_url else None
@@ -1349,11 +1668,12 @@ async def generate_short_video(
             )
 
     except Exception as e:
-        logger.error(f"Short video error: {e}")
+        logger.error(f"Short video error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "short_video")
+        _notify_admin_of_tool_failure("short_video", e, current_user)
         return ToolResponse(
             success=False,
-            message=f"Generation failed: {str(e)}"
+            message=GENERIC_TOOL_FAILURE_MESSAGE,
         )
 
 
@@ -1384,6 +1704,8 @@ async def video_transform(
     Uses PiAPI Wan VACE video-to-video.
     Credits: 35 per generation
     """
+    validate_media_url_or_raise(str(request.video_url), "video", "Video transform input")
+
     if not is_subscribed_user(current_user):
         return await _demo_response(
             db,
@@ -1435,9 +1757,10 @@ async def video_transform(
             await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
             return ToolResponse(success=False, message=result.get("error", "Video transform failed"))
     except Exception as e:
-        logger.error(f"Video transform error: {e}")
+        logger.error(f"Video transform error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
-        return ToolResponse(success=False, message=f"Generation failed: {str(e)}")
+        _notify_admin_of_tool_failure("video_transform", e, current_user)
+        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
 
 
 # ============================================================================
@@ -1447,7 +1770,7 @@ async def video_transform(
 class UpscaleRequest(BaseModel):
     """Upscale image to higher resolution"""
     image_url: str
-    scale: int = 2  # 2x or 4x
+    scale: int = Field(2, ge=2, le=10)  # PiAPI MCP accepts 2x through 10x
 
 
 @router.post("/upscale", response_model=ToolResponse)
@@ -1462,6 +1785,9 @@ async def upscale_image(
     Uses PiAPI image-toolkit upscale.
     Credits: 10 per generation
     """
+    validate_media_url_or_raise(str(request.image_url), "image", "Upscale input")
+    await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+
     if not is_subscribed_user(current_user):
         return await _demo_response(
             db,
@@ -1518,9 +1844,10 @@ async def upscale_image(
             await _refund_credits(db, current_user, CREDIT_COST, "upscale")
             return ToolResponse(success=False, message=result.get("error", "Upscale failed"))
     except Exception as e:
-        logger.error(f"Upscale error: {e}")
+        logger.error(f"Upscale error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "upscale")
-        return ToolResponse(success=False, message=f"Upscale failed: {str(e)}")
+        _notify_admin_of_tool_failure("image_upscale", e, current_user)
+        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
 
 
 # ============================================================================
@@ -1544,6 +1871,9 @@ async def generate_avatar_video(
     Credits: 30 per generation
     """
     from app.models.material import MaterialSource, MaterialStatus
+
+    validate_media_url_or_raise(str(request.image_url), "image", "AI avatar headshot")
+    await validate_image_url_dimensions_or_raise(str(request.image_url), AVATAR_HEADSHOT_DIMENSION_RULES)
 
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
@@ -1596,6 +1926,7 @@ async def generate_avatar_video(
                 "language": request.language,
                 "voice_id": request.voice_id,
                 "duration": request.duration,
+                "user_id": str(current_user.id),
             }
         )
 
@@ -1652,11 +1983,12 @@ async def generate_avatar_video(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Avatar generation error: {e}")
+        logger.error(f"Avatar generation error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
+        _notify_admin_of_tool_failure("ai_avatar", e, current_user)
         return ToolResponse(
             success=False,
-            message=f"Generation failed: {str(e)}"
+            message=GENERIC_TOOL_FAILURE_MESSAGE,
         )
 
 
@@ -1730,6 +2062,9 @@ async def image_transform(
 
     Credits: 20 (free) / 80 (paid) per generation
     """
+    validate_media_url_or_raise(str(request.image_url), "image", "Image transform input")
+    await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
         return await _demo_response(
@@ -1805,12 +2140,264 @@ async def image_transform(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Image transform error: {e}")
+        logger.error(f"Image transform error: {e}", exc_info=True)
         await _refund_credits(db, current_user, cost, "image_transform")
+        _notify_admin_of_tool_failure("image_transform", e, current_user)
         return ToolResponse(
             success=False,
-            message=f"Generation failed: {str(e)}"
+            message=GENERIC_TOOL_FAILURE_MESSAGE,
         )
+
+
+# ============================================================================
+# Image Translation & Video Dubbing
+# ============================================================================
+
+def _build_image_translation_prompt(request: ImageTranslateRequest) -> str:
+    source_clause = f" from {request.source_language}" if request.source_language else ""
+    extra = f" Extra instructions: {request.instructions}" if request.instructions else ""
+    return (
+        f"Translate every visible text element in this image{source_clause} into {request.target_language}. "
+        "Replace the original text in-place while preserving the same layout, line breaks, typography weight, "
+        "signage/card/poster boundaries, product photography, colors, lighting, and non-text image content. "
+        "Keep brand names, logos, URLs, numbers, and currency symbols unchanged unless they are normal words that must be localized. "
+        "Do not add new objects, remove products, or change faces. Produce a clean commercial-quality localized image."
+        f"{extra}"
+    )
+
+
+@router.post("/image-translate", response_model=ToolResponse)
+async def image_translate(
+    request: ImageTranslateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """Translate visible text inside an image using the existing I2I provider path."""
+    validate_media_url_or_raise(str(request.image_url), "image", "Image translation input")
+    await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+    prompt = _build_image_translation_prompt(request)
+
+    if not is_subscribed_user(current_user):
+        preview_url = _resolve_public_url(str(request.image_url))
+        try:
+            return await _demo_response(
+                db,
+                ToolType.EFFECT,
+                cta="Subscribe to translate your own images.",
+                input_image_url=preview_url,
+                effect_prompt=prompt,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 503:
+                raise
+            return ToolResponse(
+                success=True,
+                result_url=preview_url,
+                image_url=preview_url,
+                credits_used=0,
+                cached=True,
+                is_demo=True,
+                demo_input_url=preview_url,
+                demo_prompt=prompt,
+                message="Demo preview ready. Subscribe to translate your own images.",
+            )
+
+    allowed, err, _ = await _check_plan_feature(db, current_user, "can_use_effects", "image translation")
+    if not allowed:
+        return ToolResponse(success=False, message=err)
+
+    from app.services.tier_config import get_credit_cost, get_user_tier
+
+    tier = get_user_tier(current_user)
+    cost = get_credit_cost("i2i", current_user)
+    ok, err = await _check_and_deduct_credits(db, current_user, cost, "image_translation")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        router_instance = get_provider_router()
+        result = await router_instance.route(
+            TaskType.I2I,
+            {
+                "image_url": _resolve_public_url(str(request.image_url)),
+                "prompt": prompt,
+                "strength": 0.45,
+                "negative_prompt": "distorted text, gibberish, extra text, changed logo, changed product, blurry text",
+            },
+            user_tier=tier,
+        )
+
+        if not result.get("success"):
+            await _refund_credits(db, current_user, cost, "image_translation")
+            return ToolResponse(success=False, message=result.get("error", "Image translation failed"))
+
+        output = result.get("output", {})
+        result_url = output.get("image_url") or result.get("image_url")
+        if not result_url:
+            await _refund_credits(db, current_user, cost, "image_translation")
+            return ToolResponse(success=False, message="Image translation failed: no output URL")
+
+        user_gen = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.EFFECT,
+            input_image_url=str(request.image_url),
+            input_text=prompt,
+            input_params={
+                "mode": "image_translation",
+                "target_language": request.target_language,
+                "source_language": request.source_language,
+                "instructions": request.instructions,
+            },
+            result_image_url=result_url,
+            result_metadata={"action": "image_translation", "provider_task": "i2i"},
+            credits_used=cost,
+        )
+        user_gen.set_expiry()
+        db.add(user_gen)
+        await _maybe_recycle_for_demo(
+            db,
+            user_gen,
+            ToolType.EFFECT,
+            topic="image_translation",
+            prompt=prompt,
+            input_image_url=str(request.image_url),
+            result_image_url=result_url,
+            effect_prompt=prompt,
+            input_params={"mode": "image_translation", "target_language": request.target_language},
+        )
+        await db.commit()
+
+        return ToolResponse(
+            success=True,
+            result_url=result_url,
+            image_url=result_url,
+            credits_used=cost,
+            message=f"Image translated to {request.target_language}",
+        )
+    except Exception as exc:
+        logger.error("Image translation error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, cost, "image_translation")
+        _notify_admin_of_tool_failure("image_translation", exc, current_user)
+        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+@router.post("/video-dubbing", response_model=ToolResponse)
+async def video_dubbing(
+    request: VideoDubbingRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """Create a localized voiceover track and return a new dubbed MP4."""
+    validate_media_url_or_raise(str(request.video_url), "video", "Video dubbing input")
+    script = request.translated_script or request.source_script
+    if not script:
+        return ToolResponse(
+            success=False,
+            message="Please provide a source script/transcript or a translated script for dubbing.",
+        )
+
+    if not is_subscribed_user(current_user):
+        demo_video = _resolve_public_url(str(request.video_url))
+        return ToolResponse(
+            success=True,
+            result_url=demo_video,
+            video_url=demo_video,
+            translated_script=script,
+            credits_used=0,
+            cached=True,
+            is_demo=True,
+            message="Demo preview ready. Subscribe to generate a dubbed video with your own media.",
+        )
+
+    translated_script = request.translated_script or await _translate_text_for_dubbing(
+        request.source_script or "",
+        request.target_language,
+        request.source_language,
+    )
+
+    allowed, err, _ = await _check_plan_feature(db, current_user, "can_use_effects", "video dubbing")
+    if not allowed:
+        return ToolResponse(success=False, message=err)
+
+    CREDIT_COST = 35
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "video_dubbing")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        router_instance = get_provider_router()
+        speech_result = await router_instance.piapi.text_to_speech(
+            {
+                "text": translated_script,
+                "ref_audio": request.voice_reference_url or "",
+                "ref_text": request.voice_reference_text,
+            }
+        )
+        if not speech_result.get("success"):
+            await _refund_credits(db, current_user, CREDIT_COST, "video_dubbing")
+            return ToolResponse(success=False, message=speech_result.get("error", "Speech generation failed"))
+
+        speech_output = speech_result.get("output", {})
+        audio_url = speech_output.get("audio_url") or speech_output.get("url") or speech_result.get("audio_url")
+        if not audio_url:
+            await _refund_credits(db, current_user, CREDIT_COST, "video_dubbing")
+            return ToolResponse(success=False, message="Speech generation failed: no audio URL")
+
+        result_video_url = await _run_ffmpeg_voiceover_mux(
+            _resolve_public_url(str(request.video_url)),
+            audio_url,
+            str(current_user.id),
+        )
+
+        user_gen = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.SHORT_VIDEO,
+            input_video_url=str(request.video_url),
+            input_text=translated_script,
+            input_params={
+                "mode": "video_dubbing",
+                "target_language": request.target_language,
+                "source_language": request.source_language,
+                "has_voice_reference": bool(request.voice_reference_url),
+            },
+            result_video_url=result_video_url,
+            result_metadata={
+                "action": "video_dubbing",
+                "audio_url": audio_url,
+                "speech_provider": "piapi_tts",
+                "mux": "ffmpeg",
+            },
+            credits_used=CREDIT_COST,
+        )
+        user_gen.set_expiry()
+        db.add(user_gen)
+        await _maybe_recycle_for_demo(
+            db,
+            user_gen,
+            ToolType.SHORT_VIDEO,
+            topic="video_dubbing",
+            prompt=translated_script[:300],
+            input_video_url=str(request.video_url),
+            result_video_url=result_video_url,
+            effect_prompt=f"dubbed_{request.target_language}",
+            input_params={"mode": "video_dubbing", "target_language": request.target_language},
+        )
+        await db.commit()
+
+        return ToolResponse(
+            success=True,
+            result_url=result_video_url,
+            video_url=result_video_url,
+            audio_url=audio_url,
+            translated_script=translated_script,
+            credits_used=CREDIT_COST,
+            message=f"Video dubbed in {request.target_language}",
+        )
+    except Exception as exc:
+        logger.error("Video dubbing error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, CREDIT_COST, "video_dubbing")
+        _notify_admin_of_tool_failure("video_dubbing", exc, current_user)
+        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
 
 
 # ============================================================================

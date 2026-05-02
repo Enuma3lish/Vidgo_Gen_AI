@@ -1,29 +1,30 @@
 """
-Vertex AI Provider — Unified GCP provider for Gemini (image/text) + Veo (video).
+Vertex AI Provider — GCP provider for Imagen (image) + Veo (video) generation.
 
-Replaces the old GeminiProvider that used API key auth against
-generativelanguage.googleapis.com. Now uses Vertex AI SDK with
-service account / ADC authentication.
+Gemini text operations (moderation, interior design text) use the Gemini API
+(AI Studio) when GEMINI_API_KEY is set, falling back to Vertex AI otherwise.
+Imagen and Veo are Vertex AI-only and always require VERTEX_AI_PROJECT + ADC.
 
 Capabilities:
-  - Content moderation (Gemini)
-  - Text-to-image / Image-to-image editing (Gemini)
-  - Interior design suggestions (Gemini)
-  - Background removal / Upscale (Gemini)
-  - Material generation (Gemini)
+  - Content moderation (Gemini API / Vertex AI Gemini)
+  - Text-to-image / Image-to-image editing (Imagen on Vertex AI)
+  - Interior design suggestions (Gemini API / Vertex AI Gemini + Imagen)
+  - Background removal / Upscale (local rembg / PIL)
+  - Material generation (Imagen on Vertex AI)
   - Text-to-video (Veo) — 3rd backup for video tasks
   - Image-to-video (Veo) — 3rd backup for video tasks
 
-Auth: Uses Google Application Default Credentials (ADC).
-  - On GCP (Cloud Run / GKE): automatic via service account
-  - Local dev: set GOOGLE_APPLICATION_CREDENTIALS env var or run `gcloud auth application-default login`
+Auth:
+  - Gemini text ops: GEMINI_API_KEY (preferred) or ADC
+  - Imagen / Veo: Google ADC (service account in GCP, gcloud ADC locally)
 
 Env vars:
-  - VERTEX_AI_PROJECT: GCP project ID (required)
+  - GEMINI_API_KEY: Gemini API key (for moderation / text, preferred)
+  - GEMINI_MODEL: Gemini model, default "gemini-2.5-pro"
+  - VERTEX_AI_PROJECT: GCP project ID (required for Imagen/Veo)
   - VERTEX_AI_LOCATION: Region, default "us-central1"
   - VEO_MODEL: Veo model name, default "veo-3.0-generate-preview"
-  - GEMINI_MODEL: Gemini model for Vertex AI, default "gemini-2.0-flash"
-  - GEMINI_IMAGE_MODEL: Gemini image model, default "gemini-2.0-flash-exp-image-generation"
+  - GEMINI_IMAGE_MODEL: Gemini image model, default "gemini-2.5-flash-image"
 """
 import asyncio
 import base64
@@ -34,7 +35,7 @@ import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -58,31 +59,30 @@ class VertexAIProvider(BaseProvider):
     name = "vertex_ai"
 
     def __init__(self):
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
         self.project = os.getenv("VERTEX_AI_PROJECT", "")
         self.location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
-        # Image generation models are only available in us-central1.
+        # Imagen and Veo are only available in us-central1.
         self.image_location = os.getenv("VERTEX_AI_IMAGE_LOCATION", "us-central1")
-        # Veo is only available in us-central1 today. Pin it independently so
-        # deployments that set VERTEX_AI_LOCATION to a regional Gemini endpoint
-        # (e.g. asia-east1) still resolve Veo to the correct regional host.
         self.video_location = os.getenv("VEO_LOCATION", "us-central1")
-        # Default to Veo 2 GA (`veo-2.0-generate-001`) since Veo 3 preview is
-        # behind an allowlist that most projects don't have. Set VEO_MODEL
-        # explicitly when your project has 3.0 access.
+        # Default to Veo 2 GA; set VEO_MODEL=veo-3.0-generate-preview when your project has access.
         self.veo_model = os.getenv("VEO_MODEL", "veo-2.0-generate-001")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
         self.gemini_image_model = os.getenv(
-            "GEMINI_IMAGE_MODEL", "gemini-2.0-flash-exp-image-generation"
+            "GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"
         )
         self.imagen_model = os.getenv("IMAGEN_MODEL", "imagen-3.0-generate-002")
         self.imagen_edit_model = os.getenv("IMAGEN_EDIT_MODEL", "imagen-3.0-capability-001")
 
-        if not self.project:
-            logger.warning("VERTEX_AI_PROJECT not set — Vertex AI provider disabled")
+        if not self.gemini_api_key and not self.project:
+            logger.warning("Neither GEMINI_API_KEY nor VERTEX_AI_PROJECT set — provider degraded")
+        elif not self.project:
+            logger.info("[VertexAI] GEMINI_API_KEY set — text ops via Gemini API; Imagen/Veo disabled (no VERTEX_AI_PROJECT)")
 
         self._client: Optional[httpx.AsyncClient] = None
-        self._genai_client = None
-        self._genai_image_client = None
+        self._gemini_text_client = None   # Gemini API (API key) — for text/moderation
+        self._genai_client = None         # Vertex AI genai — fallback text or Imagen
+        self._genai_image_client = None   # Vertex AI genai (us-central1) — for Imagen
 
     def _get_http_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -100,8 +100,27 @@ class VertexAIProvider(BaseProvider):
         credentials.refresh(google.auth.transport.requests.Request())
         return credentials.token
 
+    def _get_gemini_text_client(self):
+        """Gemini API (AI Studio) client for text/moderation — API key preferred, Vertex AI fallback."""
+        if self._gemini_text_client is None:
+            from google import genai
+
+            if self.gemini_api_key:
+                self._gemini_text_client = genai.Client(api_key=self.gemini_api_key)
+                logger.info("[VertexAI] Gemini text ops via Gemini API (API key)")
+            elif self.project:
+                self._gemini_text_client = genai.Client(
+                    vertexai=True,
+                    project=self.project,
+                    location=self.location,
+                )
+                logger.info("[VertexAI] Gemini text ops via Vertex AI (no GEMINI_API_KEY)")
+            else:
+                raise RuntimeError("No GEMINI_API_KEY or VERTEX_AI_PROJECT configured")
+        return self._gemini_text_client
+
     def _get_genai_client(self):
-        """Lazy-init the google-genai client configured for Vertex AI."""
+        """Vertex AI genai client — used as fallback for text ops and for Imagen."""
         if self._genai_client is None:
             from google import genai
 
@@ -113,7 +132,7 @@ class VertexAIProvider(BaseProvider):
         return self._genai_client
 
     def _get_genai_image_client(self):
-        """Lazy-init a separate client for image generation (us-central1 only)."""
+        """Vertex AI genai client pinned to us-central1 for Imagen image generation."""
         if self._genai_image_client is None:
             from google import genai
 
@@ -125,11 +144,16 @@ class VertexAIProvider(BaseProvider):
         return self._genai_image_client
 
     async def health_check(self) -> bool:
-        if not self.project:
+        if not self.gemini_api_key and not self.project:
             return False
         try:
-            token = await self._get_access_token()
-            return bool(token)
+            if self.gemini_api_key:
+                # Quick connectivity check via Gemini API
+                client = self._get_gemini_text_client()
+                return client is not None
+            else:
+                token = await self._get_access_token()
+                return bool(token)
         except Exception as e:
             logger.error(f"[VertexAI] Health check failed: {e}")
             return False
@@ -155,7 +179,7 @@ class VertexAIProvider(BaseProvider):
         """
         self._log_request("moderate_content", params)
 
-        client = self._get_genai_client()
+        client = self._get_gemini_text_client()
         from google.genai import types
 
         parts = []
@@ -370,7 +394,7 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
     async def _interior_text_description(self, params: Dict[str, Any]) -> Optional[str]:
         """Get text description for interior design."""
         try:
-            client = self._get_genai_client()
+            client = self._get_gemini_text_client()
             from google.genai import types
 
             style = params.get("style", "modern")
@@ -729,15 +753,8 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         )
 
     def _parse_veo_predictions(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse Veo prediction response to extract video URL."""
-        predictions = result.get("predictions", [])
-        if not predictions:
-            raise Exception(f"No predictions in Veo response: {result}")
-
-        prediction = predictions[0]
-
-        # Veo can return video as GCS URI or base64
-        video_uri = prediction.get("videoUri") or prediction.get("gcsUri")
+        """Parse Veo prediction response to extract a playable video asset."""
+        video_uri, video_b64 = self._extract_veo_video(result)
         if video_uri:
             self._log_response("veo_generation", True)
             return {
@@ -746,8 +763,6 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
                 "output": {"video_url": video_uri},
             }
 
-        # Base64-encoded video
-        video_b64 = prediction.get("bytesBase64Encoded")
         if video_b64:
             output_dir = Path("/app/static/generated")
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -758,11 +773,63 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             self._log_response("veo_generation", True)
             return {
                 "success": True,
-                "task_id": "",
+                "task_id": result.get("name", ""),
                 "output": {"video_url": local_url},
             }
 
-        raise Exception(f"No video in Veo response: {list(prediction.keys())}")
+        top_level = list(result.keys()) if isinstance(result, dict) else type(result).__name__
+        raise Exception(f"No video in Veo response; top-level keys: {top_level}")
+
+    def _extract_veo_video(self, payload: Any) -> Tuple[Optional[str], Optional[str]]:
+        """Find video URI/base64 payloads across Veo response variants."""
+        if isinstance(payload, list):
+            for item in payload:
+                video_uri, video_b64 = self._extract_veo_video(item)
+                if video_uri or video_b64:
+                    return video_uri, video_b64
+            return None, None
+
+        if not isinstance(payload, dict):
+            return None, None
+
+        for key in ("videoUri", "gcsUri", "uri", "url", "signedUri"):
+            candidate = payload.get(key)
+            if isinstance(candidate, str) and self._looks_like_video_uri(candidate):
+                return candidate, None
+
+        for key in ("bytesBase64Encoded", "videoBytes", "bytes", "data"):
+            candidate = payload.get(key)
+            if isinstance(candidate, str):
+                return None, self._normalize_base64(candidate)
+
+        for key in (
+            "predictions",
+            "response",
+            "videos",
+            "generatedVideos",
+            "samples",
+            "video",
+            "output",
+        ):
+            if key in payload:
+                video_uri, video_b64 = self._extract_veo_video(payload[key])
+                if video_uri or video_b64:
+                    return video_uri, video_b64
+
+        for value in payload.values():
+            video_uri, video_b64 = self._extract_veo_video(value)
+            if video_uri or video_b64:
+                return video_uri, video_b64
+
+        return None, None
+
+    def _looks_like_video_uri(self, value: str) -> bool:
+        return value.startswith(("gs://", "http://", "https://", "/"))
+
+    def _normalize_base64(self, value: str) -> str:
+        if value.startswith("data:") and "," in value:
+            value = value.split(",", 1)[1]
+        return "".join(value.split())
 
     # ─────────────────────────────────────────────────────────────────────────
     # UNSUPPORTED — return clear errors

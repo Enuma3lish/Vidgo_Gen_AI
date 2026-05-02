@@ -75,7 +75,7 @@ class PiAPIMCPProvider(BaseProvider):
 
     async def health_check(self) -> bool:
         manager = get_mcp_manager()
-        return manager.is_available("piapi")
+        return await manager.ensure_available("piapi")
 
     async def close(self):
         pass  # Lifecycle managed by MCPClientManager
@@ -120,9 +120,28 @@ class PiAPIMCPProvider(BaseProvider):
             "width": int(params.get("size", "1024*1024").split("*")[0]),
             "height": int(params.get("size", "1024*1024").split("*")[1]),
         }
-        # PiAPI generate_image supports model: "schnell" (fast) or "dev" (quality)
-        if params.get("model"):
-            arguments["model"] = params["model"]
+        # PiAPI generate_image only accepts model in {"schnell", "dev"}.
+        # Map common frontend aliases; reject anything else (router falls
+        # through to PiAPI REST which has richer model coverage).
+        raw_model = str(params.get("model") or "").strip().lower()
+        if raw_model:
+            mcp_model = {
+                "schnell": "schnell",
+                "dev": "dev",
+                "flux_schnell": "schnell",
+                "flux-schnell": "schnell",
+                "flux_dev": "dev",
+                "flux-dev": "dev",
+                "fast": "schnell",
+                "quality": "dev",
+            }.get(raw_model)
+            if mcp_model:
+                arguments["model"] = mcp_model
+            else:
+                logger.info(
+                    f"[PiAPI MCP] Unsupported T2I model '{raw_model}' — letting "
+                    f"PiAPI MCP pick its default; REST fallback handles richer models."
+                )
         result = await self._call_tool("text_to_image", arguments)
         return self._normalize_result(result, "image")
 
@@ -151,30 +170,51 @@ class PiAPIMCPProvider(BaseProvider):
     async def image_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Image-to-video via Wan (backup when Pollo is down)."""
         self._log_request("image_to_video", params)
-        # generate_video_wan: prompt, referenceImage, aspectRatio, model
-        result = await self._call_tool("image_to_video", {
+        # generate_video_wan schema: prompt, referenceImage, aspectRatio,
+        # negativePrompt, model in {"wan1_3b","wan14b"}.
+        arguments: Dict[str, Any] = {
             "prompt": params.get("prompt", ""),
             "referenceImage": self._resolve_image_url(params["image_url"]),
-        })
+            "model": "wan14b",  # required for I2V (referenceImage path)
+        }
+        if params.get("aspect_ratio") in {"16:9", "1:1", "9:16"}:
+            arguments["aspectRatio"] = params["aspect_ratio"]
+        if params.get("negative_prompt"):
+            arguments["negativePrompt"] = params["negative_prompt"]
+        result = await self._call_tool("image_to_video", arguments)
         return self._normalize_result(result, "video")
 
     async def text_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Text-to-video via Wan (backup when Pollo is down)."""
         self._log_request("text_to_video", params)
-        # generate_video_wan: prompt, aspectRatio, model
-        result = await self._call_tool("text_to_video", {
+        arguments: Dict[str, Any] = {
             "prompt": params["prompt"],
-        })
+        }
+        if params.get("aspect_ratio") in {"16:9", "1:1", "9:16"}:
+            arguments["aspectRatio"] = params["aspect_ratio"]
+        if params.get("negative_prompt"):
+            arguments["negativePrompt"] = params["negative_prompt"]
+        # Map quality hint to wan model; default wan1_3b (faster).
+        quality = str(params.get("quality") or params.get("model") or "").lower()
+        if quality in {"wan14b", "hd", "quality", "high"}:
+            arguments["model"] = "wan14b"
+        else:
+            arguments["model"] = "wan1_3b"
+        result = await self._call_tool("text_to_video", arguments)
         return self._normalize_result(result, "video")
 
     async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Video style transfer via Wan — use referenceImage + style prompt."""
         self._log_request("video_style_transfer", params)
         image_url = params.get("image_url") or params.get("video_url", "")
-        result = await self._call_tool("video_style_transfer", {
+        arguments: Dict[str, Any] = {
             "prompt": params.get("prompt", "stylized video"),
             "referenceImage": self._resolve_image_url(image_url),
-        })
+            "model": "wan14b",
+        }
+        if params.get("aspect_ratio") in {"16:9", "1:1", "9:16"}:
+            arguments["aspectRatio"] = params["aspect_ratio"]
+        result = await self._call_tool("video_style_transfer", arguments)
         return self._normalize_result(result, "video")
 
     # ─────────────────────────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useAdminStore } from '@/stores/admin'
 import { adminApi } from '@/api/admin'
-import type { UserDetail } from '@/api/admin'
+import type { AdminUser, UserDetail } from '@/api/admin'
 
 const adminStore = useAdminStore()
 
@@ -12,13 +12,21 @@ const sortBy = ref('created_at')
 const sortOrder = ref<'asc' | 'desc'>('desc')
 const selectedUser = ref<UserDetail | null>(null)
 const showUserModal = ref(false)
-const showCreditsModal = ref(false)
-const creditsAmount = ref(0)
-const creditsReason = ref('')
+const showPromotionModal = ref(false)
+const promotionTarget = ref<AdminUser | null>(null)
+const promotionCodeInput = ref('')
+const promotingUserId = ref<string | null>(null)
+const testingUserId = ref<string | null>(null)
 
-const plans = ['demo', 'basic', 'pro', 'enterprise']
+const plans = ['demo', 'basic', 'pro', 'premium', 'enterprise', 'test_pro_usd_1']
+
+const registeredUsersTotal = computed(() => adminStore.dashboardStats?.users?.total ?? adminStore.usersTotal)
+const filteredUsersTotal = computed(() => adminStore.usersTotal)
+const paidUsersTotal = computed(() => adminStore.dashboardStats?.paid_stats?.paid ?? 0)
+const freeUsersTotal = computed(() => adminStore.dashboardStats?.paid_stats?.free ?? 0)
 
 onMounted(() => {
+  adminStore.fetchDashboardStats()
   loadUsers()
 })
 
@@ -42,13 +50,12 @@ async function viewUser(userId: string) {
   selectedUser.value = result.user as UserDetail
   selectedUser.value.generation_count = result.generation_count
   selectedUser.value.is_online = result.is_online
-  selectedUser.value.recent_transactions = result.recent_transactions
   showUserModal.value = true
 }
 
 async function toggleBan(userId: string, isActive: boolean) {
   if (isActive) {
-    const reason = prompt('Enter ban reason:')
+    const reason = prompt('請輸入停權原因：')
     if (reason) {
       await adminStore.banUser(userId, reason)
     }
@@ -57,23 +64,55 @@ async function toggleBan(userId: string, isActive: boolean) {
   }
 }
 
-function openCreditsModal(userId: string) {
-  selectedUser.value = adminStore.users.find(u => u.id === userId) as any
-  creditsAmount.value = 0
-  creditsReason.value = ''
-  showCreditsModal.value = true
+function openPromotionModal(user: AdminUser) {
+  promotionTarget.value = user
+  promotionCodeInput.value = user.referral_code || ''
+  showPromotionModal.value = true
 }
 
-async function submitCreditsAdjustment() {
-  if (!selectedUser.value || !creditsReason.value) return
+async function makePromotionAccount(user: AdminUser) {
+  if (user.referral_code || promotingUserId.value) return
+  promotingUserId.value = user.id
+  try {
+    const result = await adminStore.setPromotionCode(user.id)
+    if (result) {
+      await loadUsers(adminStore.usersPage)
+    }
+  } finally {
+    promotingUserId.value = null
+  }
+}
 
-  await adminStore.adjustCredits(
-    selectedUser.value.id,
-    creditsAmount.value,
-    creditsReason.value
+async function submitPromotionCode() {
+  if (!promotionTarget.value) return
+
+  const result = await adminStore.setPromotionCode(
+    promotionTarget.value.id,
+    promotionCodeInput.value.trim() || undefined
   )
-  showCreditsModal.value = false
-  loadUsers(adminStore.usersPage)
+  if (result) {
+    showPromotionModal.value = false
+    promotionTarget.value = null
+    await loadUsers(adminStore.usersPage)
+  }
+}
+
+async function grantTestAccount(user: AdminUser) {
+  if (testingUserId.value) return
+  const actionLabel = user.is_test_account
+    ? '重設 $1 測試方案'
+    : '指派 $1 測試方案'
+  if (!confirm(`${actionLabel}？\n${user.email}\n\n此使用者將以 $1 USD / 月使用 Pro 全功能。`)) return
+
+  testingUserId.value = user.id
+  try {
+    const result = await adminStore.grantTestAccount(user.id)
+    if (result) {
+      await loadUsers(adminStore.usersPage)
+    }
+  } finally {
+    testingUserId.value = null
+  }
 }
 
 function formatDate(dateStr: string | null): string {
@@ -81,40 +120,67 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
-function getTotalCredits(user: any): number {
-  return (user.subscription_credits || 0) + (user.purchased_credits || 0) + (user.bonus_credits || 0)
+function formatPlan(plan?: string | null): string {
+  return (plan || 'demo').replace(/_/g, ' ')
+}
+
+function planClass(plan?: string | null): string {
+  return (plan || 'demo').toLowerCase().replace(/[^a-z0-9_-]/g, '-')
 }
 </script>
 
 <template>
   <div class="admin-users">
     <header class="page-header">
-      <h1>User Management</h1>
-      <p class="subtitle">Manage platform users</p>
+      <h1>使用者管理</h1>
+      <p class="subtitle">管理會員方案、帳號狀態與推廣帳號</p>
     </header>
+
+    <div v-if="adminStore.error" class="error-banner">
+      <span>{{ adminStore.error }}</span>
+      <button @click="adminStore.error = null" class="dismiss-btn">&times;</button>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="summary-label">註冊使用者</span>
+        <strong>{{ registeredUsersTotal }}</strong>
+        <span class="summary-note">目前篩選符合 {{ filteredUsersTotal }} 位</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">付費 / 免費</span>
+        <strong>{{ paidUsersTotal }} / {{ freeUsersTotal }}</strong>
+        <span class="summary-note">依目前方案統計</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">推廣帳號</span>
+        <strong>{{ adminStore.promotionAccounts }}</strong>
+        <span class="summary-note">帶來 {{ adminStore.promotionRegistrations }} 位註冊</span>
+      </div>
+    </div>
 
     <!-- Filters -->
     <div class="filters">
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Search by email or name..."
+        placeholder="搜尋電子郵件或姓名..."
         class="search-input"
       />
       <select v-model="selectedPlan" class="filter-select">
-        <option value="">All Plans</option>
+        <option value="">全部方案</option>
         <option v-for="plan in plans" :key="plan" :value="plan">
           {{ plan }}
         </option>
       </select>
       <select v-model="sortBy" class="filter-select">
-        <option value="created_at">Join Date</option>
+        <option value="created_at">註冊日期</option>
         <option value="email">Email</option>
-        <option value="plan">Plan</option>
+        <option value="plan">方案</option>
       </select>
       <select v-model="sortOrder" class="filter-select">
-        <option value="desc">Descending</option>
-        <option value="asc">Ascending</option>
+        <option value="desc">由新到舊</option>
+        <option value="asc">由舊到新</option>
       </select>
     </div>
 
@@ -123,13 +189,14 @@ function getTotalCredits(user: any): number {
       <table class="users-table">
         <thead>
           <tr>
-            <th>Email</th>
-            <th>Name</th>
-            <th>Plan</th>
-            <th>Credits</th>
-            <th>Status</th>
-            <th>Joined</th>
-            <th>Actions</th>
+            <th>電子郵件</th>
+            <th>姓名</th>
+            <th>方案</th>
+            <th>推廣碼</th>
+            <th>使用次數</th>
+            <th>狀態</th>
+            <th>加入日期</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -139,32 +206,59 @@ function getTotalCredits(user: any): number {
             </td>
             <td>{{ user.name || '-' }}</td>
             <td>
-              <span class="plan-badge" :class="user.plan">
-                {{ user.plan }}
-              </span>
+              <div class="plan-cell">
+                <span class="plan-badge" :class="planClass(user.plan)">
+                  {{ formatPlan(user.plan) }}
+                </span>
+                <span v-if="user.is_test_account" class="role-badge test-account">測試帳號</span>
+              </div>
             </td>
-            <td>{{ getTotalCredits(user) }}</td>
+            <td>
+              <div class="promotion-cell">
+                <span v-if="user.referral_code" class="promo-code">{{ user.referral_code }}</span>
+                <span v-else class="muted">尚非推廣帳號</span>
+                <span v-if="user.is_promotion_account" class="role-badge">推廣帳號</span>
+              </div>
+            </td>
+            <td>{{ user.referral_count || 0 }}</td>
             <td>
               <span class="status-badge" :class="{ active: user.is_active, inactive: !user.is_active }">
-                {{ user.is_active ? 'Active' : 'Banned' }}
+                {{ user.is_active ? '啟用' : '停權' }}
               </span>
             </td>
             <td>{{ formatDate(user.created_at) }}</td>
             <td>
               <div class="actions">
-                <button @click="viewUser(user.id)" class="btn-icon" title="View Details">
-                  View
+                <button @click="viewUser(user.id)" class="btn-icon" title="查看詳細資料">
+                  查看
                 </button>
-                <button @click="openCreditsModal(user.id)" class="btn-icon" title="Adjust Credits">
-                  Credits
+                <button
+                  v-if="!user.referral_code"
+                  @click="makePromotionAccount(user)"
+                  class="btn-icon promoter primary-promoter"
+                  :disabled="promotingUserId === user.id"
+                  title="設為推廣帳號"
+                >
+                  {{ promotingUserId === user.id ? '設定中...' : '設為推廣帳號' }}
+                </button>
+                <button v-else @click="openPromotionModal(user)" class="btn-icon promoter" title="編輯推廣碼">
+                  編輯推廣碼
+                </button>
+                <button
+                  @click="grantTestAccount(user)"
+                  class="btn-icon tester"
+                  :disabled="testingUserId === user.id"
+                  :title="user.is_test_account ? '重設 $1 測試方案' : '指派 $1 測試方案'"
+                >
+                  {{ testingUserId === user.id ? '設定中...' : user.is_test_account ? '重設 $1 測試方案' : '指派 $1 測試方案' }}
                 </button>
                 <button
                   @click="toggleBan(user.id, user.is_active)"
                   class="btn-icon"
                   :class="{ danger: user.is_active }"
-                  :title="user.is_active ? 'Ban User' : 'Unban User'"
+                  :title="user.is_active ? '停權使用者' : '解除停權'"
                 >
-                  {{ user.is_active ? 'Ban' : 'Unban' }}
+                  {{ user.is_active ? '停權' : '解除' }}
                 </button>
               </div>
             </td>
@@ -180,17 +274,17 @@ function getTotalCredits(user: any): number {
         :disabled="adminStore.usersPage <= 1"
         class="page-btn"
       >
-        Previous
+        上一頁
       </button>
       <span class="page-info">
-        Page {{ adminStore.usersPage }} of {{ Math.ceil(adminStore.usersTotal / 20) }}
+        第 {{ adminStore.usersPage }} / {{ Math.ceil(adminStore.usersTotal / 20) }} 頁
       </span>
       <button
         @click="loadUsers(adminStore.usersPage + 1)"
         :disabled="adminStore.usersPage >= Math.ceil(adminStore.usersTotal / 20)"
         class="page-btn"
       >
-        Next
+        下一頁
       </button>
     </div>
 
@@ -198,92 +292,84 @@ function getTotalCredits(user: any): number {
     <div v-if="showUserModal" class="modal-overlay" @click.self="showUserModal = false">
       <div class="modal">
         <div class="modal-header">
-          <h2>User Details</h2>
+          <h2>使用者詳細資料</h2>
           <button @click="showUserModal = false" class="close-btn">&times;</button>
         </div>
         <div class="modal-body" v-if="selectedUser">
           <div class="detail-grid">
             <div class="detail-item">
-              <label>Email</label>
+              <label>電子郵件</label>
               <span>{{ selectedUser.email }}</span>
             </div>
             <div class="detail-item">
-              <label>Name</label>
+              <label>姓名</label>
               <span>{{ selectedUser.name || '-' }}</span>
             </div>
             <div class="detail-item">
-              <label>Plan</label>
-              <span class="plan-badge" :class="selectedUser.plan">{{ selectedUser.plan }}</span>
+              <label>方案</label>
+              <span class="plan-badge" :class="planClass(selectedUser.plan)">{{ formatPlan(selectedUser.plan) }}</span>
             </div>
             <div class="detail-item">
-              <label>Status</label>
+              <label>測試帳號</label>
+              <span>{{ selectedUser.is_test_account ? '已啟用 $1 測試方案' : '否' }}</span>
+            </div>
+            <div class="detail-item">
+              <label>狀態</label>
               <span>
                 <span class="status-dot" :class="{ online: selectedUser.is_online }"></span>
-                {{ selectedUser.is_online ? 'Online' : 'Offline' }}
+                {{ selectedUser.is_online ? '在線' : '離線' }}
               </span>
             </div>
             <div class="detail-item">
-              <label>Total Credits</label>
-              <span>{{ getTotalCredits(selectedUser) }}</span>
-            </div>
-            <div class="detail-item">
-              <label>Generations</label>
+              <label>生成次數</label>
               <span>{{ selectedUser.generation_count }}</span>
             </div>
-          </div>
-
-          <h3>Credit Breakdown</h3>
-          <div class="credits-breakdown">
-            <div class="credit-type">
-              <span>Subscription</span>
-              <strong>{{ selectedUser.subscription_credits }}</strong>
+            <div class="detail-item">
+              <label>推廣碼</label>
+              <span>{{ selectedUser.referral_code || '-' }}</span>
             </div>
-            <div class="credit-type">
-              <span>Purchased</span>
-              <strong>{{ selectedUser.purchased_credits }}</strong>
+            <div class="detail-item">
+              <label>推廣使用次數</label>
+              <span>{{ selectedUser.referral_count || 0 }}</span>
             </div>
-            <div class="credit-type">
-              <span>Bonus</span>
-              <strong>{{ selectedUser.bonus_credits }}</strong>
+            <div class="detail-item">
+              <label>推廣狀態</label>
+              <span>{{ selectedUser.is_promotion_account ? '推廣帳號' : '一般使用者' }}</span>
             </div>
           </div>
 
-          <h3>Recent Transactions</h3>
-          <div class="transactions-list">
-            <div
-              v-for="tx in selectedUser.recent_transactions"
-              :key="tx.id"
-              class="transaction-item"
-            >
-              <span class="tx-amount" :class="{ positive: tx.amount > 0, negative: tx.amount < 0 }">
-                {{ tx.amount > 0 ? '+' : '' }}{{ tx.amount }}
-              </span>
-              <span class="tx-desc">{{ tx.description }}</span>
-              <span class="tx-date">{{ formatDate(tx.created_at) }}</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
 
-    <!-- Credits Adjustment Modal -->
-    <div v-if="showCreditsModal" class="modal-overlay" @click.self="showCreditsModal = false">
+    <!-- Promoter Assignment Modal -->
+    <div v-if="showPromotionModal" class="modal-overlay" @click.self="showPromotionModal = false">
       <div class="modal small">
         <div class="modal-header">
-          <h2>Adjust Credits</h2>
-          <button @click="showCreditsModal = false" class="close-btn">&times;</button>
+          <h2>設定推廣帳號</h2>
+          <button @click="showPromotionModal = false" class="close-btn">&times;</button>
         </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label>Amount (positive to add, negative to deduct)</label>
-            <input v-model.number="creditsAmount" type="number" class="form-input" />
+        <div class="modal-body" v-if="promotionTarget">
+          <p class="modal-copy">
+            可自訂推廣碼；若留空，系統會自動產生唯一推廣碼。
+          </p>
+          <div class="target-user">
+            <span>{{ promotionTarget.email }}</span>
+            <span class="plan-badge" :class="planClass(promotionTarget.plan)">{{ formatPlan(promotionTarget.plan) }}</span>
           </div>
           <div class="form-group">
-            <label>Reason</label>
-            <input v-model="creditsReason" type="text" class="form-input" placeholder="Enter reason..." />
+            <label>推廣碼</label>
+            <input
+              v-model="promotionCodeInput"
+              type="text"
+              class="form-input uppercase"
+              placeholder="留空自動產生"
+              maxlength="16"
+            />
+            <p class="form-hint">限 3-16 碼英文字母或數字。</p>
           </div>
-          <button @click="submitCreditsAdjustment" class="btn-primary" :disabled="!creditsReason">
-            Submit
+          <button @click="submitPromotionCode" class="btn-primary">
+            儲存推廣帳號
           </button>
         </div>
       </div>
@@ -308,6 +394,60 @@ function getTotalCredits(user: any): number {
 .subtitle {
   color: #9494b0;
   margin-top: 0.5rem;
+}
+
+.error-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(244,67,54,0.22);
+  border-radius: 8px;
+  background: rgba(244,67,54,0.1);
+  color: #ff8a80;
+}
+
+.dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #ff8a80;
+  cursor: pointer;
+  font-size: 1.25rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0 0;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  background: #141420;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+}
+
+.summary-label {
+  color: #9494b0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.summary-card strong {
+  color: #f5f5fa;
+  font-size: 1.5rem;
+}
+
+.summary-note {
+  color: #6b6b8a;
+  font-size: 0.78rem;
 }
 
 .filters {
@@ -363,6 +503,49 @@ function getTotalCredits(user: any): number {
   font-family: monospace;
 }
 
+.promo-code {
+  display: inline-flex;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(22,119,255,0.12);
+  color: #69b1ff;
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.promotion-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.plan-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.role-badge {
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(16,185,129,0.12);
+  color: #34d399;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.role-badge.test-account {
+  background: rgba(245,158,11,0.14);
+  color: #fbbf24;
+}
+
+.muted {
+  color: #6b6b8a;
+}
+
 .plan-badge {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -372,9 +555,12 @@ function getTotalCredits(user: any): number {
 }
 
 .plan-badge.demo { background: rgba(255,255,255,0.05); color: #9494b0; }
+.plan-badge.free { background: rgba(255,255,255,0.05); color: #9494b0; }
 .plan-badge.basic { background: rgba(25,118,210,0.15); color: #1976d2; }
 .plan-badge.pro { background: rgba(123,31,162,0.15); color: #7b1fa2; }
+.plan-badge.premium { background: rgba(236,72,153,0.15); color: #f472b6; }
 .plan-badge.enterprise { background: rgba(245,158,11,0.15); color: #f57c00; }
+.plan-badge.test-pro-usd-1 { background: rgba(245,158,11,0.16); color: #fbbf24; }
 
 .status-badge {
   padding: 0.25rem 0.5rem;
@@ -388,6 +574,7 @@ function getTotalCredits(user: any): number {
 .actions {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .btn-icon {
@@ -404,6 +591,11 @@ function getTotalCredits(user: any): number {
   background: #0f0f17;
 }
 
+.btn-icon:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .btn-icon.danger {
   border-color: #d32f2f;
   color: #d32f2f;
@@ -411,6 +603,28 @@ function getTotalCredits(user: any): number {
 
 .btn-icon.danger:hover {
   background: rgba(244,67,54,0.15);
+}
+
+.btn-icon.promoter {
+  border-color: rgba(16,185,129,0.35);
+  color: #34d399;
+}
+
+.btn-icon.promoter:hover {
+  background: rgba(16,185,129,0.12);
+}
+
+.btn-icon.primary-promoter {
+  background: rgba(16,185,129,0.15);
+}
+
+.btn-icon.tester {
+  border-color: rgba(245,158,11,0.4);
+  color: #fbbf24;
+}
+
+.btn-icon.tester:hover {
+  background: rgba(245,158,11,0.12);
 }
 
 .pagination {
@@ -519,65 +733,30 @@ function getTotalCredits(user: any): number {
   background: #4caf50;
 }
 
-.modal-body h3 {
-  font-size: 1rem;
-  margin: 1.5rem 0 1rem;
+.modal-copy {
+  margin: 0 0 1rem;
   color: #9494b0;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
-.credits-breakdown {
-  display: flex;
-  gap: 1rem;
-}
-
-.credit-type {
-  flex: 1;
-  background: #0f0f17;
-  padding: 1rem;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.credit-type span {
-  display: block;
-  font-size: 0.75rem;
-  color: #9494b0;
-}
-
-.credit-type strong {
-  font-size: 1.25rem;
-}
-
-.transactions-list {
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.transaction-item {
+.target-user {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: #0f0f17;
+  color: #f5f5fa;
+  font-size: 0.85rem;
 }
 
-.tx-amount {
-  font-weight: 600;
-  min-width: 60px;
-}
-
-.tx-amount.positive { color: #388e3c; }
-.tx-amount.negative { color: #d32f2f; }
-
-.tx-desc {
-  flex: 1;
-  font-size: 0.875rem;
-  color: #9494b0;
-}
-
-.tx-date {
-  font-size: 0.75rem;
+.form-hint {
+  margin: 0.4rem 0 0;
   color: #6b6b8a;
+  font-size: 0.75rem;
 }
 
 .form-group {
@@ -597,6 +776,12 @@ function getTotalCredits(user: any): number {
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   font-size: 1rem;
+  background: #0f0f17;
+  color: #f5f5fa;
+}
+
+.uppercase {
+  text-transform: uppercase;
 }
 
 .btn-primary {

@@ -63,11 +63,22 @@ export interface Generate3DRequest {
   image_url: string
   texture_size?: number
   mesh_simplify?: number
+  model_version?: 'v1' | 'v2'
+}
+
+export interface Generate3DFromFloorplanRequest {
+  image_url: string
+  style_id?: string
+  room_type?: string
+  prompt?: string
+  model_version?: 'v1' | 'v2'
 }
 
 export interface Generate3DResponse {
   success: boolean
   model_url?: string
+  preview_image_url?: string
+  preview_video_url?: string
   task_id?: string
   error?: string
 }
@@ -179,6 +190,13 @@ export const interiorApi = {
   async generate3DModel(request: Generate3DRequest): Promise<Generate3DResponse> {
     const response = await apiClient.post('/api/v1/interior/3d-model', request, {
       timeout: 300000 // 5 minutes for 3D generation
+    })
+    return response.data
+  },
+
+  async generate3DFromFloorplan(request: Generate3DFromFloorplanRequest): Promise<Generate3DResponse> {
+    const response = await apiClient.post('/api/v1/interior/3d-from-floorplan', request, {
+      timeout: 420000 // 7 minutes (Gemini render + Trellis2)
     })
     return response.data
   }

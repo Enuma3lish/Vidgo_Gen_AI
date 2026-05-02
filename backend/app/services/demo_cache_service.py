@@ -102,6 +102,7 @@ class DemoCacheService:
         input_image_url: Optional[str] = None,
         input_video_url: Optional[str] = None,
         effect_prompt: Optional[str] = None,
+        input_params: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Resolve a demo result for the (input, effect) pair the user actually chose.
@@ -286,6 +287,7 @@ class DemoCacheService:
                 result = await self._generate_room_redesign(
                     provider, TaskType, topic,
                     input_image_url=input_image_url, effect_prompt=effect_prompt,
+                    input_params=input_params,
                 )
             elif tool_type in ("short_video", "SHORT_VIDEO"):
                 result = await self._generate_short_video(
@@ -585,6 +587,7 @@ class DemoCacheService:
         topic: Optional[str],
         input_image_url: Optional[str] = None,
         effect_prompt: Optional[str] = None,
+        input_params: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict]:
         """Generate a room redesign example on-demand.
 
@@ -598,16 +601,20 @@ class DemoCacheService:
             "kitchen": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800",
             "bathroom": "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800",
         }
+        request_params = input_params or {}
+        style_id = request_params.get("style_id") or (topic if topic not in room_urls else None)
+        room_type_hint = request_params.get("room_type")
+
         if input_image_url:
             room_url = input_image_url
-            room_type = topic or "user_room"
+            room_type = room_type_hint or (topic if topic in room_urls else "user_room")
         else:
-            room_type = topic if topic in room_urls else random.choice(list(room_urls.keys()))
+            room_type = room_type_hint or (topic if topic in room_urls else random.choice(list(room_urls.keys())))
             room_url = room_urls[room_type]
 
         style_prompt = effect_prompt or "modern minimalist style, clean lines, neutral colors, photorealistic interior design, 8K"
 
-        logger.info(f"[DemoCache] Room redesign: I2I transform (style={topic or 'custom'})...")
+        logger.info(f"[DemoCache] Room redesign: I2I transform (room_type={room_type}, style={style_id or topic or 'custom'})...")
         result = await provider.route(
             TaskType.I2I,
             {"image_url": room_url, "prompt": style_prompt, "strength": 0.65},
@@ -626,6 +633,12 @@ class DemoCacheService:
             "effect_prompt": style_prompt,
             "input_image_url": room_url,
             "result_image_url": result_url,
+            "input_params": {
+                **request_params,
+                "input_url": room_url,
+                "room_type": room_type,
+                **({"style_id": style_id} if style_id else {}),
+            },
         }
 
     async def _generate_short_video(

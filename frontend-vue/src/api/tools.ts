@@ -7,9 +7,28 @@ export interface ToolResponse {
   result_url?: string
   image_url?: string
   video_url?: string
+  audio_url?: string
+  translated_script?: string
   credits_used: number
   message?: string
   results?: any[]
+}
+
+export interface ImageTranslateParams {
+  imageUrl: string
+  targetLanguage: string
+  sourceLanguage?: string
+  instructions?: string
+}
+
+export interface VideoDubbingParams {
+  videoUrl: string
+  targetLanguage: string
+  sourceLanguage?: string
+  sourceScript?: string
+  translatedScript?: string
+  voiceReferenceUrl?: string
+  voiceReferenceText?: string
 }
 
 export const toolsApi = {
@@ -107,6 +126,37 @@ export const toolsApi = {
     return response.data
   },
 
+  async imageTranslate(params: ImageTranslateParams): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/image-translate',
+      {
+        image_url: params.imageUrl,
+        target_language: params.targetLanguage,
+        source_language: params.sourceLanguage,
+        instructions: params.instructions,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
+  async videoDubbing(params: VideoDubbingParams): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/video-dubbing',
+      {
+        video_url: params.videoUrl,
+        target_language: params.targetLanguage,
+        source_language: params.sourceLanguage,
+        source_script: params.sourceScript,
+        translated_script: params.translatedScript,
+        voice_reference_url: params.voiceReferenceUrl,
+        voice_reference_text: params.voiceReferenceText,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
   async upscale(imageUrl: string, scale = 2): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/upscale',
@@ -120,6 +170,15 @@ export const toolsApi = {
   },
 
   async uploadImage(file: File): Promise<{ url: string }> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await apiClient.post('/api/v1/demo/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
+  async uploadFile(file: File): Promise<{ url: string }> {
     const formData = new FormData()
     formData.append('file', file)
     const response = await apiClient.post('/api/v1/demo/upload', formData, {

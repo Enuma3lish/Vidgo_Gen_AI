@@ -11,10 +11,12 @@ For local dev, set GOOGLE_APPLICATION_CREDENTIALS or use `gcloud auth applicatio
 """
 import hashlib
 import logging
+import mimetypes
 import os
 import uuid
 from datetime import timedelta
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from google.cloud import storage
@@ -72,10 +74,14 @@ class GCSStorageService:
                 response = await http.get(source_url)
                 response.raise_for_status()
                 content = response.content
-                content_type = response.headers.get("content-type", self._guess_content_type(media_type))
+                content_type = self._normalize_content_type(
+                    source_url,
+                    response.headers.get("content-type"),
+                    media_type,
+                )
 
             # Generate GCS path
-            ext = self._extension_from_content_type(content_type, media_type)
+            ext = self._extension_from_content_type(content_type, media_type, source_url)
             file_id = filename_hint or uuid.uuid4().hex[:12]
             prefix = f"generated/{media_type}"
             if user_id:
@@ -140,6 +146,66 @@ class GCSStorageService:
             logger.error(f"[GCS] Failed to delete {blob_name}: {e}")
             return False
 
+    def refresh_signed_url(
+        self,
+        url: Optional[str],
+        expiration_hours: int = 24,
+    ) -> Optional[str]:
+        """
+        If `url` points at our GCS bucket, return a fresh V4 signed URL.
+        Otherwise return the URL unchanged.
+
+        Use this on read paths (e.g. preset download / use-preset response)
+        because long-stored signed URLs from `persist_url` expire after 7 days.
+        """
+        if not url or not self.enabled:
+            return url
+        try:
+            bucket_marker = f"/{self.bucket_name}/"
+            if bucket_marker not in url:
+                return url
+            # Strip query/fragment, then take everything after the bucket name.
+            clean = url.split("?", 1)[0].split("#", 1)[0]
+            blob_name = clean.split(bucket_marker, 1)[1]
+            if not blob_name:
+                return url
+            blob = self.bucket.blob(blob_name)
+
+            # On Cloud Run the default credentials are GCE metadata tokens
+            # which cannot sign locally. Fall back to IAM signBlob via the
+            # service-account email + an OAuth access token so signed URLs
+            # work without a private-key JSON file.
+            try:
+                return blob.generate_signed_url(
+                    version="v4",
+                    expiration=timedelta(hours=expiration_hours),
+                    method="GET",
+                )
+            except Exception:
+                import google.auth
+                from google.auth.transport.requests import Request as AuthRequest
+
+                creds, _ = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+                creds.refresh(AuthRequest())
+                sa_email = (
+                    getattr(creds, "service_account_email", None)
+                    or os.getenv("GCS_SIGNER_SERVICE_ACCOUNT")
+                )
+                if not sa_email:
+                    raise
+                return blob.generate_signed_url(
+                    version="v4",
+                    expiration=timedelta(hours=expiration_hours),
+                    method="GET",
+                    service_account_email=sa_email,
+                    access_token=creds.token,
+                )
+        except Exception as e:
+            logger.warning(f"[GCS] refresh_signed_url failed for {url}: {e}")
+            return url
+
     def _guess_content_type(self, media_type: str) -> str:
         return {
             "image": "image/png",
@@ -148,7 +214,29 @@ class GCSStorageService:
             "model": "model/gltf-binary",
         }.get(media_type, "application/octet-stream")
 
-    def _extension_from_content_type(self, content_type: str, media_type: str) -> str:
+    def _normalize_content_type(
+        self,
+        source_url: str,
+        content_type: Optional[str],
+        media_type: str,
+    ) -> str:
+        raw = (content_type or "").split(";", 1)[0].strip().lower()
+        if raw and raw not in {"application/octet-stream", "binary/octet-stream"}:
+            return raw
+
+        path = urlparse(source_url).path
+        guessed, _ = mimetypes.guess_type(path)
+        if guessed:
+            return guessed
+
+        return self._guess_content_type(media_type)
+
+    def _extension_from_content_type(
+        self,
+        content_type: str,
+        media_type: str,
+        source_url: Optional[str] = None,
+    ) -> str:
         ct_map = {
             "image/png": ".png",
             "image/jpeg": ".jpg",
@@ -156,12 +244,20 @@ class GCSStorageService:
             "video/mp4": ".mp4",
             "video/webm": ".webm",
             "audio/wav": ".wav",
+            "audio/x-wav": ".wav",
             "audio/mpeg": ".mp3",
+            "audio/mp3": ".mp3",
+            "audio/mp4": ".m4a",
+            "audio/x-m4a": ".m4a",
             "model/gltf-binary": ".glb",
         }
         ext = ct_map.get(content_type)
         if ext:
             return ext
+        if source_url:
+            path_ext = os.path.splitext(urlparse(source_url).path)[1].lower()
+            if path_ext in {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".wav", ".mp3", ".m4a", ".glb"}:
+                return ".jpg" if path_ext == ".jpeg" else path_ext
         # Fallback by media type
         return {
             "image": ".png",

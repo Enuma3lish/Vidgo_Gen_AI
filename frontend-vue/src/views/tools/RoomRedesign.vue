@@ -23,6 +23,8 @@ const {
   demoTemplates,
   resolveDemoTemplateResultUrl,
   generateOnDemand,
+  checkSubscription,
+  subscriptionChecked,
   loadInputLibrary,
   inputLibrary,
   loadEffectCatalog,
@@ -69,6 +71,9 @@ const modelUrl = ref<string | null>(null)
 const is3DProcessing = ref(false)
 const textureSize = ref(1024)
 const meshSimplify = ref(0.95)
+const modelQuality = ref<'v1' | 'v2'>('v2') // v2 = Trellis2 (HD)
+const isFloorPlan = ref(false)               // when true, use Floor Plan -> 3D pipeline
+const floorplanRoomType = ref<string>('living_room')
 
 // AI Transform state (merged from ImageEffects)
 const transformPrompt = ref('')
@@ -180,11 +185,56 @@ const roomTypeName = computed(() => {
   return (room: RoomType) => locale.value === 'zh-TW' ? room.name_zh : room.name
 })
 
+const showCustomPrompt = computed(() => !isDemoUser.value && ['redesign', 'generate', 'styleTransfer'].includes(activeTab.value))
+
+const customPromptLabel = computed(() => {
+  if (activeTab.value === 'generate') return t('interior.prompt')
+  if (activeTab.value === 'styleTransfer') return isZh.value ? '補充描述（可選）' : 'Additional Notes (Optional)'
+  return isZh.value ? '自訂描述（可選）' : 'Custom Prompt (Optional)'
+})
+
+const customPromptPlaceholder = computed(() => {
+  if (activeTab.value === 'generate') return t('interior.promptPlaceholder')
+  return isZh.value
+    ? '描述您想要的房間細節，例如顏色、材質、燈光或家具配置...'
+    : 'Describe details like colors, materials, lighting, or furniture placement...'
+})
+
+function buildInteriorPrompt(): string {
+  const trimmedPrompt = prompt.value.trim()
+  if (trimmedPrompt) return trimmedPrompt
+
+  const styleInfo = styles.value.find(s => s.id === selectedStyle.value)
+  const roomInfo = roomTypes.value.find(r => r.id === selectedRoomType.value)
+  const styleLabel = styleInfo?.name || selectedStyle.value.replace(/_/g, ' ') || 'selected'
+  const roomLabel = roomInfo?.name || selectedRoomType.value.replace(/_/g, ' ') || 'room'
+
+  return `Redesign this ${roomLabel} in ${styleLabel} style while preserving the main room layout.`
+}
+
+function clearGeneratedResult() {
+  resultImage.value = null
+  resultDescription.value = ''
+  conversationId.value = null
+  editHistory.value = []
+  modelUrl.value = null
+  demoEmptyState.value = false
+}
+
+function handleRoomFileSelected(file: File) {
+  uploadedFile.value = file
+  clearGeneratedResult()
+}
+
 // Load styles and room types
 
 
 onMounted(async () => {
   try {
+    if (!subscriptionChecked.value) {
+      await checkSubscription()
+    }
+
     const [stylesData, roomTypesData] = await Promise.all([
       interiorApi.getStyles(),
       interiorApi.getRoomTypes()
@@ -298,8 +348,11 @@ async function handleRedesign() {
       const libRoom = (defaultRooms.value.find(r => r.id === selectedDemoRoomId.value) as any)?.input
       const pickedRoom = libRoom || (template as any)?.input_image_url || uploadedImage.value || undefined
       const stylePrompt = effectCatalog.value.find((e: any) => e.id === selectedStyle.value)?.prompt
-      const onDemandUrl = await generateOnDemand('room_redesign', selectedStyle.value || undefined, {
+      const onDemandUrl = await generateOnDemand('room_redesign', selectedRoomType.value || undefined, {
         input_image_url: pickedRoom,
+        room_id: selectedDemoRoomId.value || undefined,
+        room_type: selectedRoomType.value || undefined,
+        style_id: selectedStyle.value || undefined,
         effect_prompt: (prompt.value as any) || stylePrompt || undefined,
       })
       if (onDemandUrl) {
@@ -316,16 +369,17 @@ async function handleRedesign() {
     return
   }
 
-  if (!uploadedFile.value || !prompt.value.trim()) {
-    uiStore.showError(t('interior.errors.imageAndPromptRequired'))
+  if (!uploadedFile.value) {
+    uiStore.showError(t('interior.errors.imageRequired'))
     return
   }
 
   isProcessing.value = true
   try {
+    const effectivePrompt = buildInteriorPrompt()
     const result = await interiorApi.demoRedesign(
       uploadedFile.value,
-      prompt.value,
+      effectivePrompt,
       selectedStyle.value,
       selectedRoomType.value
     )
@@ -339,7 +393,7 @@ async function handleRedesign() {
 
       // Add to history
       editHistory.value.push({
-        prompt: prompt.value,
+        prompt: effectivePrompt,
         image: resultImage.value
       })
 
@@ -441,8 +495,11 @@ async function handleStyleTransfer() {
       const libRoom = (defaultRooms.value.find(r => r.id === selectedDemoRoomId.value) as any)?.input
       const pickedRoom = libRoom || (template as any)?.input_image_url || uploadedImage.value || undefined
       const stylePrompt = effectCatalog.value.find((e: any) => e.id === selectedStyle.value)?.prompt
-      const onDemandUrl = await generateOnDemand('room_redesign', selectedStyle.value || undefined, {
+      const onDemandUrl = await generateOnDemand('room_redesign', selectedRoomType.value || undefined, {
         input_image_url: pickedRoom,
+        room_id: selectedDemoRoomId.value || undefined,
+        room_type: selectedRoomType.value || undefined,
+        style_id: selectedStyle.value || undefined,
         effect_prompt: (prompt.value as any) || stylePrompt || undefined,
       })
       if (onDemandUrl) {
@@ -473,7 +530,8 @@ async function handleStyleTransfer() {
   try {
     // For style transfer, use the redesign endpoint with style-focused prompt
     const styleInfo = styles.value.find(s => s.id === selectedStyle.value)
-    const stylePrompt = `Apply ${styleInfo?.name || selectedStyle.value} style to this room. ${styleInfo?.description || ''}`
+    const extraPrompt = prompt.value.trim()
+    const stylePrompt = `Apply ${styleInfo?.name || selectedStyle.value} style to this room. ${styleInfo?.description || ''}${extraPrompt ? ` ${extraPrompt}` : ''}`
 
     const result = await interiorApi.demoRedesign(
       uploadedFile.value,
@@ -506,7 +564,7 @@ async function handle3DGenerate() {
   }
 
   // Use the generated 2D result or the uploaded image as source
-  const sourceUrl = resultImage.value || uploadedImage.value
+  let sourceUrl = resultImage.value || uploadedImage.value
   if (!sourceUrl) {
     uiStore.showError(isZh.value ? '請先上傳房間圖片或生成 2D 設計' : 'Please upload a room image or generate a 2D design first')
     return
@@ -515,14 +573,33 @@ async function handle3DGenerate() {
   is3DProcessing.value = true
   isProcessing.value = true
   try {
-    const result = await interiorApi.generate3DModel({
-      image_url: sourceUrl,
-      texture_size: textureSize.value,
-      mesh_simplify: meshSimplify.value
-    })
+    if (sourceUrl.startsWith('data:')) {
+      const blob = await fetch(sourceUrl).then(response => response.blob())
+      const uploadFile = new File([blob], 'vidgo-3d-source.png', { type: blob.type || 'image/png' })
+      const uploaded = await demoApi.uploadImage(uploadFile)
+      sourceUrl = uploaded.url
+    }
+
+    const result = isFloorPlan.value
+      ? await interiorApi.generate3DFromFloorplan({
+          image_url: sourceUrl,
+          style_id: selectedStyle.value || undefined,
+          room_type: floorplanRoomType.value,
+          prompt: prompt.value || undefined,
+          model_version: modelQuality.value
+        })
+      : await interiorApi.generate3DModel({
+          image_url: sourceUrl,
+          texture_size: textureSize.value,
+          mesh_simplify: meshSimplify.value,
+          model_version: modelQuality.value
+        })
 
     if (result.success && result.model_url) {
       modelUrl.value = result.model_url
+      if (isFloorPlan.value && result.preview_image_url) {
+        resultImage.value = result.preview_image_url
+      }
       uiStore.showSuccess(isZh.value ? '3D 模型生成成功' : '3D model generated successfully')
     } else {
       uiStore.showError(result.error || (isZh.value ? '3D 模型生成失敗' : '3D model generation failed'))
@@ -632,6 +709,8 @@ function reset() {
 
 
 // Update demo room pattern when room type changes
+watch(locale, () => loadEffectCatalog('room_redesign', locale.value))
+
 watch(selectedRoomType, (newType) => {
   if (isDemoUser.value) {
     const matchingRoom = defaultRooms.value.find(r => r.type_id === newType)
@@ -764,7 +843,7 @@ watch(selectedRoomType, (newType) => {
                  v-model="uploadedImage" 
                  :label="isZh ? '點擊上傳或拖放房間照片' : 'Drop room photo here'"
                  class="mb-4"
-                 @file-selected="(file) => uploadedFile = file"
+                 @file-selected="handleRoomFileSelected"
                />
                <div v-if="uploadedImage" class="mt-4 space-y-2">
                  <img :src="uploadedImage" alt="Selected Room" class="w-full rounded-xl" />
@@ -796,16 +875,16 @@ watch(selectedRoomType, (newType) => {
           </div>
 
           <!-- Custom Prompt (not shown for 3D tab) -->
-          <div v-if="!isDemoUser && activeTab !== '3dModel'" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+          <div v-if="showCustomPrompt" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
              <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
                <span>✏️</span>
-               {{ isZh ? '自訂描述 (可選)' : 'Custom Prompt (Optional)' }}
+               {{ customPromptLabel }}
              </h3>
              <textarea
                v-model="prompt"
                rows="3"
+               :placeholder="customPromptPlaceholder"
                class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
-               :placeholder="isZh ? '描述您想要的房間細節，例如顏色、材質等...' : 'Describe specific details like colors, materials, etc...'"
              ></textarea>
           </div>
 
@@ -815,20 +894,131 @@ watch(selectedRoomType, (newType) => {
               <span>🧊</span>
               {{ isZh ? '3D 模型設定' : '3D Model Settings' }}
             </h3>
+
+            <!-- Input requirements notice (helps users avoid the floor-plan pitfall) -->
+            <div v-if="!isFloorPlan" class="notice mb-4">
+              <span class="notice-icon">i</span>
+              <div class="space-y-1.5">
+                <p class="font-semibold" style="color: var(--text-primary);">
+                  {{ isZh ? '什麼樣的圖片適合？' : 'What kind of image works?' }}
+                </p>
+                <p style="color: var(--text-secondary);">
+                  {{ isZh
+                    ? '請上傳真實「房間照片」或「立體物件照片」（有光影、深度）。系統會用 AI 重建為可旋轉的 3D 模型。'
+                    : 'Upload a real photo of a room or a 3D object (with lighting and depth). Our AI will reconstruct it into a rotatable 3D model.' }}
+                </p>
+              </div>
+            </div>
+            <div v-if="!isFloorPlan" class="notice notice-warn mb-4">
+              <span class="notice-icon">!</span>
+              <div class="space-y-1.5">
+                <p class="font-semibold" style="color: var(--text-primary);">
+                  {{ isZh ? '上傳的是平面圖 / 設計圖？' : 'Uploaded a floor plan / blueprint?' }}
+                </p>
+                <p style="color: var(--text-secondary);">
+                  {{ isZh
+                    ? '純線稿平面圖沒有立體資訊。開啟「平面圖模式」後，系統會先用 AI 渲染成寫實室內視角，再生成 3D 模型。'
+                    : 'Flat line drawings have no depth. Turn on Floor Plan Mode and we will first render a photorealistic interior, then build the 3D mesh.' }}
+                </p>
+                <button
+                  type="button"
+                  class="text-xs font-semibold mt-1"
+                  style="color: #fbbf24;"
+                  @click="isFloorPlan = true"
+                >
+                  {{ isZh ? '→ 開啟平面圖 → 3D 模式' : '→ Enable Floor Plan → 3D mode' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Floor Plan mode active notice -->
+            <div v-if="isFloorPlan" class="notice mb-4" style="border-color: rgba(168, 85, 247, 0.45); background: rgba(168, 85, 247, 0.08);">
+              <span class="notice-icon" style="background: var(--color-accent); color: #fff;">⌂</span>
+              <div class="space-y-1.5 flex-1">
+                <p class="font-semibold" style="color: var(--text-primary);">
+                  {{ isZh ? '平面圖 → 3D 模式已啟用' : 'Floor Plan → 3D Mode Active' }}
+                </p>
+                <p style="color: var(--text-secondary);">
+                  {{ isZh
+                    ? '兩階段流程：① Gemini 將平面圖渲染成寫實等角室內視覺圖；② Trellis2 重建為高品質 GLB 模型（約 3-7 分鐘）。'
+                    : 'Two-stage pipeline: (1) Gemini renders the floor plan as a photorealistic isometric interior; (2) Trellis2 reconstructs it into a high-quality GLB mesh (~3-7 min).' }}
+                </p>
+                <button
+                  type="button"
+                  class="text-xs font-semibold mt-1"
+                  style="color: var(--text-muted);"
+                  @click="isFloorPlan = false"
+                >
+                  {{ isZh ? '× 關閉，使用一般房間照片' : '× Disable, use a normal room photo' }}
+                </button>
+              </div>
+            </div>
+
             <div class="space-y-4">
               <div>
                 <p class="text-sm text-dark-200 mb-2">
-                  {{ isZh ? '將 2D 圖片轉換為可互動的 3D 模型（GLB 格式）。' : 'Convert a 2D image into an interactive 3D model (GLB format).' }}
+                  {{ isFloorPlan
+                    ? (isZh ? '已選的平面圖將先渲染為寫實室內，再生成 3D 模型。' : 'The selected floor plan will be rendered to a photorealistic interior, then turned into a 3D model.')
+                    : (isZh ? '將 2D 圖片轉換為可互動的 3D 模型（GLB 格式）。' : 'Convert a 2D image into an interactive 3D model (GLB format).') }}
                 </p>
-                <p v-if="resultImage" class="text-xs text-primary-400">
+                <p v-if="resultImage && !isFloorPlan" class="text-xs text-primary-400">
                   {{ isZh ? '將使用上方的 2D 設計結果作為來源' : 'Will use the 2D design result above as source' }}
                 </p>
                 <p v-else class="text-xs text-dark-400">
-                  {{ isZh ? '將使用已選擇的房間圖片作為來源' : 'Will use the selected room image as source' }}
+                  {{ isZh ? '將使用已選擇的圖片作為來源' : 'Will use the selected image as source' }}
                 </p>
               </div>
 
+              <!-- Model Quality (Trellis v1 vs v2) -->
               <div>
+                <label class="text-sm font-medium text-dark-200 mb-1 block">
+                  {{ isZh ? '模型品質' : 'Model Quality' }}
+                </label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    @click="modelQuality = 'v1'"
+                    class="p-3 rounded-lg border-2 text-left transition-all"
+                    :class="modelQuality === 'v1' ? 'border-primary-500 bg-primary-500/10' : 'hover:border-dark-500'"
+                    style="border-color: rgba(255,255,255,0.08);"
+                  >
+                    <p class="text-sm font-semibold" style="color: var(--text-primary);">{{ isZh ? '標準' : 'Standard' }}</p>
+                    <p class="text-xs" style="color: var(--text-muted);">Trellis · {{ isZh ? '快速' : 'Fast' }}</p>
+                  </button>
+                  <button
+                    type="button"
+                    @click="modelQuality = 'v2'"
+                    class="p-3 rounded-lg border-2 text-left transition-all"
+                    :class="modelQuality === 'v2' ? 'border-primary-500 bg-primary-500/10' : 'hover:border-dark-500'"
+                    style="border-color: rgba(255,255,255,0.08);"
+                  >
+                    <p class="text-sm font-semibold" style="color: var(--text-primary);">{{ isZh ? '高品質 HD' : 'High Quality' }}</p>
+                    <p class="text-xs" style="color: var(--text-muted);">Trellis2 · {{ isZh ? '精細網格' : 'Finer mesh' }}</p>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Floor-plan extras: room type hint -->
+              <div v-if="isFloorPlan">
+                <label class="text-sm font-medium text-dark-200 mb-1 block">
+                  {{ isZh ? '房間類型（提示）' : 'Room Type (hint)' }}
+                </label>
+                <select
+                  v-model="floorplanRoomType"
+                  class="w-full rounded-lg px-3 py-2 focus:outline-none focus:border-primary-500"
+                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
+                >
+                  <option value="living_room">{{ isZh ? '客廳' : 'Living Room' }}</option>
+                  <option value="bedroom">{{ isZh ? '臥室' : 'Bedroom' }}</option>
+                  <option value="kitchen">{{ isZh ? '廚房' : 'Kitchen' }}</option>
+                  <option value="bathroom">{{ isZh ? '浴室' : 'Bathroom' }}</option>
+                  <option value="office">{{ isZh ? '辦公室' : 'Office' }}</option>
+                  <option value="dining_room">{{ isZh ? '餐廳' : 'Dining Room' }}</option>
+                </select>
+              </div>
+
+              <!-- Texture quality (only relevant for non-floorplan path; Trellis2 ignores) -->
+              <div v-if="!isFloorPlan && modelQuality === 'v1'">
                 <label class="text-sm font-medium text-dark-200 mb-1 block">
                   {{ isZh ? '貼圖品質' : 'Texture Quality' }}
                 </label>
@@ -841,7 +1031,7 @@ watch(selectedRoomType, (newType) => {
                 </select>
               </div>
 
-              <div>
+              <div v-if="!isFloorPlan && modelQuality === 'v1'">
                 <div class="flex justify-between items-center mb-1">
                   <label class="text-sm font-medium text-dark-200">
                     {{ isZh ? '網格精細度' : 'Mesh Detail' }}
@@ -859,7 +1049,9 @@ watch(selectedRoomType, (newType) => {
               </div>
 
               <p class="text-xs text-dark-400">
-                {{ isZh ? '3D 模型生成可能需要 2-5 分鐘' : '3D model generation may take 2-5 minutes' }}
+                {{ isFloorPlan
+                  ? (isZh ? '平面圖 → 3D 約需 3-7 分鐘' : 'Floor Plan → 3D takes about 3-7 minutes')
+                  : (isZh ? '3D 模型生成可能需要 2-5 分鐘' : '3D model generation may take 2-5 minutes') }}
               </p>
             </div>
           </div>
@@ -913,7 +1105,7 @@ watch(selectedRoomType, (newType) => {
             <button
               @click="handleSubmit"
               :disabled="isProcessing || (activeTab !== 'generate' && !uploadedImage)"
-              class="btn-primary w-full py-4 text-lg font-semibold"
+              class="btn-primary cta-glow w-full py-4 text-lg font-semibold"
             >
               <span v-if="isProcessing" class="flex items-center justify-center gap-2">
                 <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">

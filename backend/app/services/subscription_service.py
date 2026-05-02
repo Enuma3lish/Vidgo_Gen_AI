@@ -29,6 +29,7 @@ from app.models.billing import Plan, Subscription, Order, CreditTransaction, Inv
 from app.services.paddle_service import get_paddle_service
 from app.services.ecpay.client import ECPayClient
 from app.core.config import get_settings
+from app.core.test_plans import can_access_test_pro_plan, is_test_pro_plan
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -102,6 +103,16 @@ class SubscriptionService:
         if not plan:
             return {"success": False, "error": "Plan not found"}
 
+        already_assigned_test_plan = user.current_plan_id == plan_id
+        if is_test_pro_plan(plan) and not (can_access_test_pro_plan(user.email) or already_assigned_test_plan):
+            return {"success": False, "error": "Plan not found"}
+
+        if is_test_pro_plan(plan):
+            if skip_payment and action != "refresh":
+                return {"success": False, "error": "Test plan requires payment checkout"}
+            if payment_method != "ecpay" and action != "refresh":
+                return {"success": False, "error": "Test plan requires ECPay checkout"}
+
         # Check if already subscribed to same plan. Reject every duplicate
         # unless the caller is an admin path (skip_payment=True) AND has
         # explicitly asked for a credit refresh (action="refresh"). This
@@ -162,6 +173,7 @@ class SubscriptionService:
         "demo": 0, "free": 0,
         "starter": 1, "basic": 1,
         "standard": 2, "pro": 2,
+        "test_pro_usd_1": 2,
         "pro_plus": 3, "premium": 3,
         "enterprise": 4,
     }
@@ -175,6 +187,9 @@ class SubscriptionService:
         correct when plan names are rebranded (basic/pro/premium/enterprise,
         starter/standard/pro/pro_plus, …).
         """
+        if is_test_pro_plan(plan):
+            return 599.0
+
         price = getattr(plan, "price_monthly", None) or 0
         if price:
             return float(price)
@@ -473,8 +488,10 @@ class SubscriptionService:
         trade_date = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         # Use backend URL for ReturnURL (server callback)
         return_url = f"{settings.BACKEND_URL}/api/v1/payments/ecpay/callback"
-        # Use frontend URL for OrderResultURL (user-facing result page)
-        order_result_url = f"{settings.FRONTEND_URL}/subscription/ecpay-result?order={order_number}"
+        # ECPay may POST OrderResultURL in the user's browser. Send it to the
+        # backend first so FastAPI can convert the POST into a 303 GET redirect
+        # to the Vue result page instead of hitting static nginx with POST.
+        order_result_url = f"{settings.BACKEND_URL}/api/v1/payments/ecpay/result-redirect?order={order_number}"
         client_back_url = f"{settings.FRONTEND_URL}/pricing"
 
         payment_data = ecpay_client.create_payment(
@@ -824,15 +841,15 @@ class SubscriptionService:
 
                     # Persist manual action flags into order.payment_data so
                     # admin dashboards can query unresolved finance tasks.
-                    if not isinstance(order.payment_data, dict):
-                        order.payment_data = {}
-                    refund_meta = order.payment_data.get("refund", {}) or {}
+                    payment_data = dict(order.payment_data or {})
+                    refund_meta = dict(payment_data.get("refund", {}) or {})
                     refund_meta.update({
                         "invoice_voided": invoice_voided,
                         "invoice_void_required_manual": invoice_void_required_manual,
                         "invoice_void_checked_at": utc_now().isoformat(),
                     })
-                    order.payment_data["refund"] = refund_meta
+                    payment_data["refund"] = refund_meta
+                    order.payment_data = payment_data
 
                 # Cancel immediately
                 subscription.status = "cancelled"
@@ -1000,12 +1017,14 @@ class SubscriptionService:
         if self.paddle.is_mock:
             # Mock refund
             order.status = "refunded"
-            order.payment_data["refund"] = {
+            payment_data = dict(order.payment_data or {})
+            payment_data["refund"] = {
                 "status": "completed",
                 "amount": refund_amount,
                 "processed_at": utc_now().isoformat(),
                 "is_mock": True
             }
+            order.payment_data = payment_data
             await db.commit()
 
             return {
@@ -1023,13 +1042,15 @@ class SubscriptionService:
             # ECPay does not provide an automated refund API for credit card payments.
             # Mark as pending refund so admin can process manually via ECPay merchant portal.
             order.status = "refund_pending"
-            order.payment_data["refund"] = {
+            payment_data = dict(order.payment_data or {})
+            payment_data["refund"] = {
                 "status": "pending_manual",
                 "amount": refund_amount,
                 "requested_at": utc_now().isoformat(),
                 "note": "ECPay refunds require manual processing via merchant portal",
-                "ecpay_trade_no": order.payment_data.get("ecpay_trade_no"),
+                "ecpay_trade_no": payment_data.get("ecpay_trade_no"),
             }
+            order.payment_data = payment_data
             await db.commit()
 
             # Record refund transaction
@@ -1074,12 +1095,14 @@ class SubscriptionService:
 
         if paddle_result.get("success"):
             order.status = "refunded"
-            order.payment_data["refund"] = {
+            payment_data = dict(order.payment_data or {})
+            payment_data["refund"] = {
                 "status": "completed",
                 "paddle_refund_id": paddle_result.get("refund_id"),
                 "amount": refund_amount,
                 "processed_at": utc_now().isoformat()
             }
+            order.payment_data = payment_data
             await db.commit()
 
             # Record refund transaction
@@ -1160,7 +1183,9 @@ class SubscriptionService:
         # Update order
         order.status = "paid"
         order.paid_at = utc_now()
-        order.payment_data.update(paddle_data)
+        payment_data = dict(order.payment_data or {})
+        payment_data.update(paddle_data)
+        order.payment_data = payment_data
 
         # Activate subscription
         if order.subscription_id:

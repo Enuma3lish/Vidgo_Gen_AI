@@ -12,7 +12,11 @@ import httpx
 import asyncio
 from typing import Dict, Any, Optional
 import logging
+import base64
+import io
 import os
+import tempfile
+import uuid
 
 from app.providers.base import BaseProvider
 from app.services.gcs_storage_service import get_gcs_storage
@@ -43,21 +47,18 @@ class PiAPIProvider(BaseProvider):
         )
 
     async def health_check(self) -> bool:
-        """Check if PiAPI is healthy by making a simple API call."""
+        """Check whether PiAPI is reachable without creating a billable task."""
+        if not self.api_key:
+            return False
+
         try:
-            # PiAPI doesn't have a dedicated health endpoint, so we check by testing the API
-            # We'll just verify the connection works
-            response = await self.client.post(
+            response = await self.client.get(
                 f"{self.BASE_URL}/task",
-                json={
-                    "model": "Qubico/flux1-schnell",
-                    "task_type": "txt2img",
-                    "input": {"prompt": "test", "width": 64, "height": 64}
-                },
                 timeout=10.0
             )
-            # If we get any response (even error), the API is reachable
-            return response.status_code in [200, 201, 400, 402, 429]
+            if response.status_code in [401, 403]:
+                return False
+            return response.status_code < 500
         except Exception as e:
             logger.error(f"PiAPI health check failed: {e}")
             return False
@@ -82,6 +83,348 @@ class PiAPIProvider(BaseProvider):
                 return f"data:{mime_type};base64,{b64}"
             logger.warning(f"[PiAPI] Local file not found: {local_path}")
         return url
+
+    async def _prepare_avatar_audio_url(self, audio_url: str, user_id: Optional[str] = None) -> str:
+        """Convert avatar dubbing audio to a stable public MP3 for Kling ingestion."""
+        if not audio_url or not audio_url.startswith(("http://", "https://")):
+            return audio_url
+
+        gcs = get_gcs_storage()
+        if not gcs.enabled:
+            return audio_url
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as http:
+                response = await http.get(audio_url, follow_redirects=True)
+                response.raise_for_status()
+                source_bytes = response.content
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                input_path = os.path.join(tmpdir, "input_audio")
+                output_path = os.path.join(tmpdir, "avatar_audio.mp3")
+                with open(input_path, "wb") as f:
+                    f.write(source_bytes)
+
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg",
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    input_path,
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "44100",
+                    "-codec:a",
+                    "libmp3lame",
+                    "-b:a",
+                    "128k",
+                    output_path,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                _, stderr = await proc.communicate()
+                if proc.returncode != 0:
+                    raise RuntimeError(stderr.decode("utf-8", errors="ignore") or "ffmpeg audio conversion failed")
+
+                with open(output_path, "rb") as f:
+                    normalized = f.read()
+
+            prefix = f"users/{user_id}/avatar-audio" if user_id else "generated/avatar-audio"
+            blob_name = f"{prefix}/avatar_tts_{uuid.uuid4().hex[:12]}.mp3"
+            piapi_url = await self._upload_ephemeral_resource(
+                normalized,
+                file_name=f"avatar_tts_{uuid.uuid4().hex[:12]}.mp3",
+                content_type="audio/mpeg",
+            )
+            if piapi_url:
+                logger.warning(
+                    "[PiAPI] Avatar: normalized TTS audio to PiAPI upload (%s -> %s bytes)",
+                    len(source_bytes),
+                    len(normalized),
+                )
+                return piapi_url
+
+            public_url = gcs.upload_public(normalized, blob_name, content_type="audio/mpeg")
+            logger.warning(
+                "[PiAPI] Avatar: normalized TTS audio to GCS fallback (%s -> %s bytes)",
+                len(source_bytes),
+                len(normalized),
+            )
+            return public_url
+        except Exception as e:
+            logger.warning(f"[PiAPI] Avatar: audio normalization failed, trying GCS copy fallback: {e}")
+            try:
+                persisted = await gcs.persist_url(
+                    audio_url,
+                    media_type="audio",
+                    user_id=user_id,
+                    filename_hint=f"avatar_tts_{uuid.uuid4().hex[:12]}",
+                )
+                return persisted
+            except Exception as fallback_error:
+                logger.warning(f"[PiAPI] Avatar: audio GCS fallback failed, using provider URL: {fallback_error}")
+                return audio_url
+
+    async def _prepare_avatar_image_url(self, image_url: str, user_id: Optional[str] = None) -> str:
+        """Normalize avatar input to a small public JPEG for Kling ingestion."""
+        if not image_url or not image_url.startswith(("http://", "https://")):
+            return image_url
+
+        gcs = get_gcs_storage()
+        if not gcs.enabled:
+            return image_url
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as http:
+                response = await http.get(image_url, follow_redirects=True)
+                response.raise_for_status()
+                source_bytes = response.content
+
+            from PIL import Image, ImageOps
+
+            image = Image.open(io.BytesIO(source_bytes))
+            image = ImageOps.exif_transpose(image)
+            if image.mode in {"RGBA", "LA", "P"}:
+                image = image.convert("RGBA")
+                background = Image.new("RGB", image.size, (255, 255, 255))
+                background.paste(image, mask=image.getchannel("A"))
+                image = background
+            else:
+                image = image.convert("RGB")
+
+            image.thumbnail((512, 512), Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=88, optimize=True, progressive=False)
+            normalized = buffer.getvalue()
+
+            piapi_url = await self._upload_ephemeral_resource(
+                normalized,
+                file_name=f"avatar_{uuid.uuid4().hex[:12]}.jpg",
+                content_type="image/jpeg",
+            )
+            if piapi_url:
+                logger.warning(
+                    "[PiAPI] Avatar: normalized input image to PiAPI upload (%s -> %s bytes, %sx%s)",
+                    len(source_bytes),
+                    len(normalized),
+                    image.width,
+                    image.height,
+                )
+                return piapi_url
+
+            prefix = f"users/{user_id}/avatar-inputs" if user_id else "generated/avatar-inputs"
+            blob_name = f"{prefix}/avatar_{uuid.uuid4().hex[:12]}.jpg"
+            public_url = gcs.upload_public(normalized, blob_name, content_type="image/jpeg")
+            logger.warning(
+                "[PiAPI] Avatar: normalized input image to GCS fallback (%s -> %s bytes, %sx%s)",
+                len(source_bytes),
+                len(normalized),
+                image.width,
+                image.height,
+            )
+            return public_url
+        except Exception as e:
+            logger.warning(f"[PiAPI] Avatar: image normalization failed, using original URL: {e}")
+            return image_url
+
+    async def _upload_ephemeral_resource(self, data: bytes, file_name: str, content_type: str) -> Optional[str]:
+        """Upload a temporary resource to PiAPI storage and return its public URL."""
+        if not self.api_key or not data:
+            return None
+
+        try:
+            payload = {
+                "file_name": file_name,
+                "file_data": base64.b64encode(data).decode("ascii"),
+            }
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    "https://upload.theapi.app/api/ephemeral_resource",
+                    headers={
+                        "x-api-key": self.api_key,
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+            if response.status_code >= 400:
+                logger.warning(
+                    "[PiAPI] Avatar: ephemeral upload failed status=%s body=%s",
+                    response.status_code,
+                    response.text[:300],
+                )
+                return None
+
+            body = response.json()
+            url = (body.get("data") or {}).get("url")
+            if not url:
+                logger.warning("[PiAPI] Avatar: ephemeral upload returned no URL: %s", body)
+                return None
+            return url
+        except Exception as e:
+            logger.warning(f"[PiAPI] Avatar: ephemeral upload error for {content_type}: {e}")
+            return None
+
+    async def _fallback_avatar_video(self, image_url: str, audio_url: str, script: str) -> Dict[str, Any]:
+        """Fallback when Kling Avatar cannot ingest an otherwise valid portrait."""
+        presenter_prompt = (
+            "natural presenter talking to camera, subtle head movement, friendly expression, "
+            "professional studio lighting, stable face, no text"
+        )
+        if script:
+            presenter_prompt = f"{presenter_prompt}. Speaker message: {script[:400]}"
+
+        logger.warning("[PiAPI] Avatar: trying presenter image-to-video fallback")
+        try:
+            base_video = await self.image_to_video({
+                "image_url": image_url,
+                "prompt": presenter_prompt,
+                "duration": 5,
+                "resolution": "720P",
+            })
+        except Exception as e:
+            logger.warning("[PiAPI] Avatar: presenter image-to-video fallback raised: %s", e)
+            return await self._render_static_avatar_video(image_url, audio_url)
+
+        if not base_video.get("success"):
+            return await self._render_static_avatar_video(image_url, audio_url)
+
+        output = base_video.get("output") or {}
+        video_url = output.get("video_url") or output.get("url")
+        if not video_url or not audio_url:
+            base_video.setdefault("output", output)
+            if video_url:
+                base_video["output"]["video_url"] = video_url
+            return base_video
+
+        lip_sync_payload = {
+            "model": "kling",
+            "task_type": "lip_sync",
+            "input": {
+                "video_url": video_url,
+                "tts_text": "",
+                "tts_timbre": "",
+                "tts_speed": 1,
+                "local_dubbing_url": audio_url,
+            },
+            "config": {
+                "service_mode": "public"
+            }
+        }
+        logger.warning("[PiAPI] Avatar: trying lip-sync fallback on generated presenter video")
+        try:
+            lip_sync = await self._submit_and_poll(lip_sync_payload)
+        except Exception as e:
+            logger.warning("[PiAPI] Avatar: lip-sync fallback raised, returning presenter video: %s", e)
+            base_video.setdefault("output", output)
+            base_video["output"]["video_url"] = video_url
+            base_video["output"]["avatar_fallback"] = "presenter_i2v"
+            return base_video
+
+        if lip_sync.get("success"):
+            lip_output = lip_sync.get("output") or {}
+            lip_video_url = lip_output.get("video_url") or lip_output.get("url")
+            if not lip_video_url:
+                works = lip_output.get("works") or []
+                for work in works if isinstance(works, list) else []:
+                    if isinstance(work, dict):
+                        video = work.get("video")
+                        if isinstance(video, dict) and video.get("url"):
+                            lip_video_url = video["url"]
+                            break
+                        if isinstance(video, str):
+                            lip_video_url = video
+                            break
+            if lip_video_url:
+                lip_sync.setdefault("output", lip_output)
+                lip_sync["output"]["video_url"] = lip_video_url
+            return lip_sync
+
+        logger.warning("[PiAPI] Avatar: lip-sync fallback failed, returning presenter video: %s", lip_sync.get("error"))
+        base_video.setdefault("output", output)
+        base_video["output"]["video_url"] = video_url
+        base_video["output"]["avatar_fallback"] = "presenter_i2v"
+        return base_video
+
+    async def _render_static_avatar_video(self, image_url: str, audio_url: str) -> Dict[str, Any]:
+        """Last-resort MP4 fallback with the uploaded portrait and generated speech."""
+        gcs = get_gcs_storage()
+        if not gcs.enabled:
+            return {"success": False, "error": "Avatar fallback storage is not configured"}
+
+        try:
+            async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+                image_response = await client.get(image_url)
+                image_response.raise_for_status()
+                image_bytes = image_response.content
+
+                audio_bytes = b""
+                if audio_url:
+                    audio_response = await client.get(audio_url)
+                    audio_response.raise_for_status()
+                    audio_bytes = audio_response.content
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                image_path = os.path.join(tmpdir, "avatar.jpg")
+                audio_path = os.path.join(tmpdir, "speech.mp3")
+                output_path = os.path.join(tmpdir, "avatar.mp4")
+                with open(image_path, "wb") as f:
+                    f.write(image_bytes)
+                with open(audio_path, "wb") as f:
+                    f.write(audio_bytes)
+
+                if audio_bytes:
+                    cmd = [
+                        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                        "-loop", "1", "-framerate", "30", "-i", image_path,
+                        "-i", audio_path,
+                        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+                        "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage",
+                        "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart",
+                        output_path,
+                    ]
+                else:
+                    cmd = [
+                        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                        "-loop", "1", "-framerate", "30", "-i", image_path,
+                        "-t", "5",
+                        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+                        "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage",
+                        "-movflags", "+faststart",
+                        output_path,
+                    ]
+
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                _, stderr = await proc.communicate()
+                if proc.returncode != 0:
+                    raise RuntimeError(stderr.decode("utf-8", errors="ignore") or "ffmpeg avatar fallback failed")
+
+                with open(output_path, "rb") as f:
+                    video_bytes = f.read()
+
+            video_url = gcs.upload_public(
+                video_bytes,
+                f"generated/avatar/fallback/avatar_{uuid.uuid4().hex[:12]}.mp4",
+                content_type="video/mp4",
+            )
+            logger.warning("[PiAPI] Avatar: rendered local portrait+audio fallback MP4 (%s bytes)", len(video_bytes))
+            return {
+                "success": True,
+                "task_id": "local-avatar-fallback",
+                "output": {
+                    "video_url": video_url,
+                    "avatar_fallback": "static_portrait_audio",
+                },
+            }
+        except Exception as e:
+            logger.warning("[PiAPI] Avatar: local fallback failed: %s", e)
+            return {"success": False, "error": f"Avatar fallback failed: {e}"}
 
     # ─────────────────────────────────────────────────────────────────────────
     # TEXT TO IMAGE (using Flux via PiAPI)
@@ -147,6 +490,10 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("image_to_image", params)
 
+        model = str(params.get("model") or "").strip()
+        if model in {"wan_pro", "flux_kontext", "kontext", "pro"}:
+            return await self.kontext_image(params)
+
         payload = {
             "model": "Qubico/flux1-schnell",
             "task_type": "img2img",
@@ -194,6 +541,44 @@ class PiAPIProvider(BaseProvider):
         }
 
         return await self._submit_and_poll(payload)
+
+    async def trellis_3d(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate a GLB model from a public image URL using Qubico Trellis.
+
+        Pass `model_version`: 'v1' (default, Qubico/trellis, $0.02) or
+        'v2' (Qubico/trellis2, higher fidelity, $0.10). Both are image-to-3d.
+
+        PiAPI returns Trellis outputs as no_background_image, combined_video,
+        and model_file. Normalize model_file to model_url so the provider
+        router can persist and return it consistently.
+        """
+        self._log_request("image_to_3d", params)
+
+        model_version = str(params.get("model_version", "v1")).lower()
+        model_name = "Qubico/trellis2" if model_version in ("v2", "trellis2", "hq", "hd") else "Qubico/trellis"
+
+        payload = {
+            "model": model_name,
+            "task_type": "image-to-3d",
+            "input": {
+                "image": self._resolve_image_url(params["image_url"]),
+            },
+        }
+
+        result = await self._submit_and_poll(payload)
+        output = result.get("output") or {}
+        if isinstance(output, dict):
+            model_url = output.get("model_url") or output.get("model_file") or output.get("url")
+            if model_url:
+                output["model_url"] = model_url
+            if output.get("no_background_image") and not output.get("image_url"):
+                output["image_url"] = output["no_background_image"]
+            if output.get("combined_video") and not output.get("video_url"):
+                output["video_url"] = output["combined_video"]
+            result["output"] = output
+
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # VIRTUAL TRY-ON (Kling AI via PiAPI)
@@ -405,22 +790,10 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("video_style_transfer", params)
 
-        style = params.get("style", "")
-        prompt = params.get("prompt", "")
-        if style and style not in prompt:
-            prompt = f"{style} style, {prompt}"
-
-        payload = {
-            "model": "Wan",
-            "task_type": "wan21-vace",
-            "input": {
-                "video": params["video_url"],
-                "prompt": prompt,
-                "watermark": False
-            }
+        return {
+            "success": False,
+            "error": "PiAPI REST video style transfer is unavailable: wan21-vace is not accepted by the current PiAPI API.",
         }
-
-        return await self._submit_and_poll(payload)
 
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -536,7 +909,8 @@ class PiAPIProvider(BaseProvider):
         self._log_request("generate_avatar", params)
 
         image_url = self._resolve_image_url(params["image_url"])
-        script = params.get("script", "")
+        image_url = await self._prepare_avatar_image_url(image_url, params.get("user_id"))
+        script = params.get("script") or params.get("text") or params.get("prompt") or ""
         audio_url = params.get("audio_url") or params.get("local_dubbing_url")
         mode = params.get("mode", "std")
 
@@ -560,11 +934,14 @@ class PiAPIProvider(BaseProvider):
         if not audio_url:
             return {"success": False, "error": "Audio generation failed. Please provide an audio URL or script text."}
 
+        audio_url = await self._prepare_avatar_audio_url(audio_url, params.get("user_id"))
+
         # Step 2: Build Kling Avatar request (requires local_dubbing_url)
         input_data: Dict[str, Any] = {
             "image_url": image_url,
             "local_dubbing_url": audio_url,
             "mode": mode,
+            "batch_size": params.get("batch_size", 1),
         }
         if script:
             input_data["prompt"] = script  # Additional context for lip-sync
@@ -578,13 +955,26 @@ class PiAPIProvider(BaseProvider):
             }
         }
 
-        logger.info(f"[PiAPI] Avatar: sending to Kling (audio={'yes' if audio_url else 'prompt-only'}, mode={mode})")
-        result = await self._submit_and_poll(payload)
+        logger.warning(
+            "[PiAPI] Avatar: sending to Kling (image_host=%s, audio_host=%s, mode=%s)",
+            httpx.URL(image_url).host if image_url.startswith(("http://", "https://")) else "local",
+            httpx.URL(audio_url).host if audio_url.startswith(("http://", "https://")) else "local",
+            mode,
+        )
+        try:
+            result = await self._submit_and_poll(payload)
+        except Exception as e:
+            logger.warning("[PiAPI] Avatar: dedicated Kling Avatar raised, using fallback: %s", e)
+            return await self._fallback_avatar_video(image_url, audio_url, script)
+
+        if not result.get("success"):
+            logger.warning("[PiAPI] Avatar: dedicated Kling Avatar failed, using fallback: %s", result.get("error"))
+            return await self._fallback_avatar_video(image_url, audio_url, script)
 
         # Normalize output: Kling returns video in output
         if result.get("success"):
             output = result.get("output", {})
-            video_url = output.get("video_url") or output.get("works", [{}])[0].get("video", {}).get("url", "") if isinstance(output.get("works"), list) and output.get("works") else output.get("video_url", "")
+            video_url = output.get("video_url") or output.get("url") or ""
             if not video_url:
                 # Try to find video in nested output structure
                 works = output.get("works", [])

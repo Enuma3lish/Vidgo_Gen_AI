@@ -1,0 +1,52 @@
+[
+  {
+    "name": "image_transform",
+    "ok": true,
+    "path": "/api/v1/tools/image-transform",
+    "status_code": 200,
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/21612fea999e.png",
+    "download_path": "TEST/e2e_results/20260428-sync-spotcheck-remaining/image_transform.jpg",
+    "detail": "image/png 343119 bytes image_magic=True",
+    "seconds": 23.447063970000045
+  },
+  {
+    "name": "pattern_generate_sync",
+    "ok": true,
+    "path": "/api/v1/generate/pattern/generate",
+    "status_code": 200,
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/8ba79c5c5d87.png",
+    "download_path": "TEST/e2e_results/20260428-sync-spotcheck-remaining/pattern_generate_sync.jpg",
+    "detail": "image/png 2203215 bytes image_magic=True",
+    "seconds": 19.262899321000077
+  },
+  {
+    "name": "pattern_transfer_sync",
+    "ok": true,
+    "path": "/api/v1/generate/pattern/transfer",
+    "status_code": 200,
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/ce566ed6cb7a.png",
+    "download_path": "TEST/e2e_results/20260428-sync-spotcheck-remaining/pattern_transfer_sync.jpg",
+    "detail": "image/png 369975 bytes image_magic=True",
+    "seconds": 28.670404901999973
+  },
+  {
+    "name": "interior_3d_model",
+    "ok": true,
+    "path": "/api/v1/interior/3d-model",
+    "status_code": 200,
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/model/07e4e8e14641.glb",
+    "download_path": "TEST/e2e_results/20260428-sync-spotcheck-remaining/interior_3d_model.glb",
+    "detail": "model/gltf-binary 1589404 bytes glb_magic=True obj_like=False",
+    "seconds": 58.005081779999955
+  },
+  {
+    "name": "my_works_download",
+    "ok": true,
+    "path": "/api/v1/user/generations",
+    "status_code": 307,
+    "result_url": null,
+    "download_path": null,
+    "detail": "HTTP 307 tool=pattern_generate",
+    "seconds": 0.09811826400004975
+  }
+]

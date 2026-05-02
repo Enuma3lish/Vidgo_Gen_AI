@@ -1068,7 +1068,7 @@ dig api.vidgo.ai
 | Real AI API generation | ❌ | ❌ | ✅ | ❌ |
 | Promotion code (own) | ❌ | ❌ | ✅ (auto-issued) | Can create special ones |
 | Use others' promo codes | ❌ | ✅ | ✅ | N/A |
-| Work repo (7-day retention) | ❌ | ❌ | ✅ | N/A |
+| Private work library (14-day media retention) | ❌ | ❌ | ✅ | N/A |
 | View API analytics | ❌ | ❌ | ❌ | ✅ |
 | Manage users/credits | ❌ | ❌ | ❌ | ✅ |
 | Create special promo codes | ❌ | ❌ | ❌ | ✅ |
@@ -1084,17 +1084,17 @@ dig api.vidgo.ai
 **Promotion Code Types:**
 | Type | Who Can Create | Credits Awarded | Expiry |
 |------|---------------|-----------------|--------|
-| Personal referral code | Auto-generated for paid subscribers | Referrer: +50, New user: +20 | Never |
+| Personal referral code | Auto-generated for paid subscribers | Referrer: +50, New user: +40 | Never |
 | Special admin code | Admin only | Custom (e.g., 100 credits) | Custom date |
 | Public promo code | Admin only | Discount or credits | Fixed expiry |
 
-### 13.3 7-Day Work Retention Infrastructure
+### 13.3 Work Library Retention Infrastructure
 
 **Active subscribers**: All works stored indefinitely
-**Cancelled subscribers**: Works retained for 7 days post-cancellation
+**Cancelled subscribers**: Generation records remain in the private work library
 **During retention**: Can download existing works, cannot generate new works
 **Account deletion**: All works deleted immediately (no retention)
-**Media expiry**: Works older than 14 days have media URLs cleared
+**Media expiry**: Generated media remains available for 14 days from creation
 
 **Database Schema:**
 - `User` model: `subscription_cancelled_at`, `work_retention_until`
@@ -1105,7 +1105,7 @@ dig api.vidgo.ai
 
 **Storage Requirements:**
 - **Active subscribers**: Full media storage (indefinite)
-- **Cancelled subscribers**: 7-day retention buffer
+- **Cancelled subscribers**: Existing generation records remain visible; media URLs follow the 14-day expiry policy
 - **Free users**: No media storage (watermarked results from Material DB only)
 
 **Database Indexing:**

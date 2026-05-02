@@ -25,24 +25,24 @@ const {
 // Example prompts for each tool (aligned with backend PATTERN_GENERATE_MAPPING, common business use)
 const toolExamplePrompts = {
   patternGenerate: [
-    { en: 'Floral pattern for packaging and gift wrap, rose and navy', zh: '禮品包裝與品牌用花卉圖案，玫瑰與深藍' },
-    { en: 'Japanese wave pattern for menu and restaurant branding', zh: '菜單與餐飲品牌用日式波浪紋' },
-    { en: 'Cherry blossom pattern for cafe and bakery, soft pink', zh: '咖啡廳與烘焙用水彩櫻花圖案' },
-    { en: 'Tropical palm pattern for beverage and summer promo', zh: '飲料與夏季促銷用熱帶棕櫚圖案' },
-    { en: 'Geometric pattern for tech and retail branding', zh: '科技與零售品牌用現代幾何圖案' },
-    { en: 'Marble texture for cosmetics packaging', zh: '美妝包裝用大理石紋理圖案' }
+    { en: 'Seamless premium tea packaging pattern, Alishan leaves, misty mountain lines, jade green and warm cream palette, flat vector, clean repeat, no text', zh: '高山茶包裝用無縫圖案，阿里山茶葉、薄霧山線，翡翠綠與暖奶油配色，扁平向量，乾淨可重複，不要文字' },
+    { en: 'Boutique skincare pattern, white camellia petals and soft glass droplets, airy spacing, pearl white and sage green, luxury minimal repeat, no logo', zh: '保養品牌圖案，白山茶花瓣與柔和玻璃水滴，留白充足，珍珠白與鼠尾草綠，高級極簡可重複，不要 Logo' },
+    { en: 'Cafe gift-wrap pattern, hand-drawn coffee beans with tiny steam doodles, warm mocha and ivory, playful but clean seamless tile', zh: '咖啡禮品包裝圖案，手繪咖啡豆與小蒸氣線稿，摩卡與象牙白，俏皮乾淨無縫平鋪' },
+    { en: 'Modern bakery tissue pattern, croissant line art, sesame dots, soft butter yellow palette, balanced negative space, tileable print', zh: '烘焙品牌襯紙圖案，可頌線稿、芝麻點綴，柔和奶油黃，留白平衡，可平鋪印刷' },
+    { en: 'Tech accessory retail pattern, rounded geometric modules, subtle depth, cobalt blue and graphite accents, precise seamless repeat', zh: '科技配件零售圖案，圓角幾何模組、微立體感，鈷藍與石墨灰點綴，精準無縫重複' },
+    { en: 'Children product packaging pattern, soft 3D clay stars and clouds, pastel coral and sky blue, centered spacing, cheerful seamless tile', zh: '兒童商品包裝圖案，柔軟 3D 黏土星星與雲朵，粉珊瑚與天空藍，間距居中，明亮可愛無縫平鋪' }
   ],
   patternTransfer: [
-    { en: 'Apply marble texture for premium packaging look', zh: '將大理石紋理用於高級包裝感' },
-    { en: 'Convert to embroidery style for textile business', zh: '轉換為刺繡風格，織品業用' },
-    { en: 'Watercolor style for menu and flyer design', zh: '水彩風格，菜單與傳單設計' },
-    { en: 'Add metallic gold accents for gift packaging and seasonal campaigns', zh: '加入金屬金點綴，適合禮盒包裝與節慶活動' }
+    { en: 'Apply a pearl marble surface to the product, keep original shape and label readable, soft studio reflections, premium packaging look', zh: '將珍珠大理石表面套用到商品，保留原始外形與可讀標籤，柔和棚燈反射，高級包裝感' },
+    { en: 'Convert the product surface to woven embroidery texture, preserve edges and proportions, visible thread detail, clean white background', zh: '將商品表面轉為刺繡織紋，保留邊緣與比例，清楚線材細節，乾淨白背景' },
+    { en: 'Transfer watercolor floral artwork onto the packaging, gentle pigment bleed, brand-safe blank areas, realistic paper texture', zh: '將水彩花卉轉印到包裝上，柔和顏料暈染，保留品牌安全留白，真實紙張質感' },
+    { en: 'Add metallic gold line accents to the gift box, balanced highlights, no warped text, refined seasonal campaign style', zh: '在禮盒加入金色金屬線條點綴，高光平衡，不扭曲文字，精緻節慶活動風格' }
   ],
   patternSeamless: [
-    { en: 'Seamless tile for packaging and wallpaper', zh: '包裝與壁紙用無縫磁磚' },
-    { en: 'Repeatable pattern for fabric and print', zh: '織物與印刷用可重複圖案' },
-    { en: 'Brand-ready seamless design for social media', zh: '社群用品牌無縫設計' },
-    { en: 'Fabric-ready seamless for retail products', zh: '零售產品用織物無縫設計' }
+    { en: 'Create a perfectly tileable 1:1 repeat for packaging and wallpaper, no visible seams, balanced margins, production-ready print', zh: '建立 1:1 完美可平鋪圖案，用於包裝與壁紙，無接縫，邊距平衡，可直接印刷' },
+    { en: 'Repeatable fabric print, medium-scale motif, consistent spacing, limited four-color palette, no text or logo', zh: '可重複布料印花，中等尺寸圖形，間距一致，限制四色配色，不要文字或 Logo' },
+    { en: 'Brand social backdrop pattern, subtle texture, generous negative space for product overlays, seamless and clean', zh: '品牌社群背景圖案，細緻紋理，保留足夠留白可放商品，無縫乾淨' },
+    { en: 'Retail-ready seamless textile, crisp edges, realistic woven detail, stable repeat, neutral product-friendly colors', zh: '零售用無縫織品圖案，邊緣清楚，真實編織細節，穩定重複，商品友善中性色' }
   ]
 }
 
@@ -251,7 +251,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen pt-20" style="background: #09090b;">
+  <div class="commerce-topic-page min-h-screen pt-20" style="background: #f8fafc;">
     <!-- Hero Section -->
     <section class="py-16 bg-gradient-to-b from-purple-500/10 to-transparent">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -504,3 +504,57 @@ onMounted(() => {
     </section>
   </div>
 </template>
+
+<style scoped>
+.commerce-topic-page {
+  color: #0f172a;
+}
+
+.commerce-topic-page section {
+  background: #f8fafc !important;
+}
+
+.commerce-topic-page section:nth-of-type(even) {
+  background: #ffffff !important;
+}
+
+.commerce-topic-page :deep(.section-title),
+.commerce-topic-page :deep(.text-dark-50),
+.commerce-topic-page :deep(h1.text-white),
+.commerce-topic-page :deep(h2.text-white),
+.commerce-topic-page :deep(h3.text-white),
+.commerce-topic-page :deep(h4.text-white) {
+  color: #0f172a !important;
+}
+
+.commerce-topic-page :deep(.text-gray-400),
+.commerce-topic-page :deep(.text-gray-500),
+.commerce-topic-page :deep(.text-dark-300),
+.commerce-topic-page :deep(.text-dark-400) {
+  color: #64748b !important;
+}
+
+.commerce-topic-page :deep(.card),
+.commerce-topic-page :deep(.card-gradient) {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+}
+
+.commerce-topic-page :deep(.bg-dark-700),
+.commerce-topic-page :deep(.bg-dark-600) {
+  background: #f1f5f9 !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+
+.commerce-topic-page input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+.commerce-topic-page input::placeholder {
+  color: #94a3b8;
+}
+</style>

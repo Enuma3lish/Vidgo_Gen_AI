@@ -48,6 +48,23 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
 
+    // Normalize structured backend errors. Backend may return:
+    //   { detail: { error_code, message } }
+    // Flatten so existing UI code that reads `data.detail` still gets a
+    // human-readable string, while preserving error_code on data.error_code.
+    try {
+      const data: any = error.response?.data
+      if (data && typeof data === 'object' && data.detail && typeof data.detail === 'object') {
+        const d = data.detail as Record<string, unknown>
+        if (typeof d.message === 'string') {
+          if (typeof d.error_code === 'string' && !data.error_code) {
+            data.error_code = d.error_code
+          }
+          data.detail = d.message
+        }
+      }
+    } catch { /* noop */ }
+
     // If 401 and not already retrying
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true

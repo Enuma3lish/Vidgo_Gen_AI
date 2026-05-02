@@ -1,0 +1,41 @@
+[
+  {
+    "name": "background_removal",
+    "ok": true,
+    "upload_id": "4ee3b126-66fd-419f-84b1-84addc526433",
+    "status": "completed",
+    "media_type": "image",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/e57aa30a2ad4.png",
+    "download_path": "TEST/e2e_results/20260428-upload-smoke/upload_background_removal_4ee3b126.jpg",
+    "detail": "image/png 44690 bytes image_magic=True",
+    "submit_seconds": 4.815508487000001,
+    "total_seconds": 5.226254178,
+    "credits_used": 5
+  },
+  {
+    "name": "product_scene",
+    "ok": true,
+    "upload_id": "9fe66e6a-329a-4f85-a268-78dd9c6f19db",
+    "status": "completed",
+    "media_type": "image",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/b19aa6abafe4.png",
+    "download_path": "TEST/e2e_results/20260428-upload-smoke/upload_product_scene_9fe66e6a.jpg",
+    "detail": "image/png 274218 bytes image_magic=True",
+    "submit_seconds": 24.963834317,
+    "total_seconds": 25.273391219000004,
+    "credits_used": 10
+  },
+  {
+    "name": "effect",
+    "ok": true,
+    "upload_id": "7f084e43-4cec-4004-8fb1-0400b517f293",
+    "status": "completed",
+    "media_type": "image",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/5112ce1b6ba6.png",
+    "download_path": "TEST/e2e_results/20260428-upload-smoke/upload_effect_7f084e43.jpg",
+    "detail": "image/png 286391 bytes image_magic=True",
+    "submit_seconds": 19.595930941000006,
+    "total_seconds": 20.059909773999998,
+    "credits_used": 10
+  }
+]

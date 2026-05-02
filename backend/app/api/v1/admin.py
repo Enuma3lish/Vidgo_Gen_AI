@@ -12,12 +12,17 @@ Provides:
 from fastapi import APIRouter, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
+import os
+import re
 
 from app.api.deps import get_current_user, get_db, get_redis
-from app.models.user import User
+from app.core.config import settings
+from app.core.test_plans import TEST_PRO_PLAN_CREDITS, TEST_PRO_PLAN_DEFAULTS, is_test_pro_plan
+from app.models.billing import Plan
+from app.models.user import User, generate_referral_code
 from app.providers.provider_router import get_provider_router, TaskType
 from app.services.admin_dashboard import AdminDashboardService
 from app.services.session_tracker import session_tracker
@@ -42,6 +47,10 @@ class AdjustCreditsRequest(BaseModel):
     reason: str
 
 
+class PromotionCodeRequest(BaseModel):
+    promotion_code: Optional[str] = None
+
+
 class ReviewMaterialRequest(BaseModel):
     action: str  # approve, reject, feature
     rejection_reason: Optional[str] = None
@@ -63,6 +72,127 @@ async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
+
+
+def _plan_name(user: User) -> str:
+    plan = getattr(user, "current_plan", None)
+    if plan:
+        if is_test_pro_plan(plan):
+            return plan.name or "test_pro_usd_1"
+        return plan.plan_type or plan.name or "demo"
+    return "demo"
+
+
+def _is_test_account(user: User) -> bool:
+    return is_test_pro_plan(getattr(user, "current_plan", None))
+
+
+def _display_name(user: User) -> Optional[str]:
+    return user.full_name or user.username
+
+
+def _normalize_promotion_code(code: Optional[str]) -> Optional[str]:
+    if not code:
+        return None
+    normalized = code.strip().upper()
+    if not normalized:
+        return None
+    if not re.fullmatch(r"[A-Z0-9]{3,16}", normalized):
+        raise HTTPException(
+            status_code=400,
+            detail="Promotion code must be 3-16 letters or numbers"
+        )
+    return normalized
+
+
+_PROVIDER_ACCOUNT_ENV = {
+    "piapi_mcp": ("PIAPI_REMAINING_CREDITS", "PIAPI_SUBSCRIPTION_STATUS"),
+    "piapi": ("PIAPI_REMAINING_CREDITS", "PIAPI_SUBSCRIPTION_STATUS"),
+    "pollo_mcp": ("POLLO_REMAINING_CREDITS", "POLLO_SUBSCRIPTION_STATUS"),
+    "pollo": ("POLLO_REMAINING_CREDITS", "POLLO_SUBSCRIPTION_STATUS"),
+    "a2e": ("A2E_REMAINING_CREDITS", "A2E_SUBSCRIPTION_STATUS"),
+    "vertex_ai": ("VERTEX_AI_REMAINING_CREDITS", "VERTEX_AI_SUBSCRIPTION_STATUS"),
+}
+
+
+def _provider_configured(provider_name: str) -> bool:
+    if provider_name in {"piapi", "piapi_mcp"}:
+        return bool(getattr(settings, "PIAPI_KEY", ""))
+    if provider_name in {"pollo", "pollo_mcp"}:
+        return bool(getattr(settings, "POLLO_API_KEY", ""))
+    if provider_name == "a2e":
+        return bool(getattr(settings, "A2E_API_KEY", ""))
+    if provider_name == "vertex_ai":
+        return bool(getattr(settings, "VERTEX_AI_PROJECT", "") or getattr(settings, "GEMINI_API_KEY", ""))
+    return False
+
+
+def _parse_provider_credits(raw_value: Optional[str]) -> Optional[float]:
+    if raw_value is None or raw_value.strip() == "":
+        return None
+    try:
+        return float(raw_value.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _attach_provider_account_status(provider_name: str, status_data: Dict[str, Any]) -> Dict[str, Any]:
+    credits_env, subscription_env = _PROVIDER_ACCOUNT_ENV.get(provider_name, ("", ""))
+    raw_credits = os.getenv(credits_env, "") if credits_env else ""
+    subscription_status = os.getenv(subscription_env, "").strip() if subscription_env else ""
+    configured = _provider_configured(provider_name)
+
+    return {
+        **status_data,
+        "configured": configured,
+        "remaining_credits": _parse_provider_credits(raw_credits),
+        "remaining_credits_label": raw_credits.strip() or None,
+        "subscription_status": subscription_status or ("unknown" if configured else "not_configured"),
+        "account_status_source": "environment" if raw_credits or subscription_status else "not_available",
+    }
+
+
+async def _alert_admins_for_provider_errors(status: Dict[str, Any]) -> None:
+    router_instance = get_provider_router()
+    for provider_name, provider_status in status.items():
+        if str(provider_status.get("status", "")).lower() != "error":
+            continue
+
+        error = (
+            provider_status.get("error")
+            or provider_status.get("message")
+            or f"{provider_name} health check returned error"
+        )
+        await router_instance._maybe_alert_provider_failure(
+            provider_name=provider_name,
+            task_type="health_check",
+            error=str(error),
+            fallback_provider=None,
+            request_params={"source": "admin_ai_services"},
+        )
+
+
+async def _get_or_create_test_plan(db: AsyncSession) -> Plan:
+    result = await db.execute(
+        select(Plan).where(
+            or_(
+                Plan.name == TEST_PRO_PLAN_DEFAULTS["name"],
+                Plan.slug == TEST_PRO_PLAN_DEFAULTS["slug"],
+            )
+        )
+    )
+    plan = result.scalars().first()
+
+    if not plan:
+        plan = Plan(**TEST_PRO_PLAN_DEFAULTS)
+        db.add(plan)
+    else:
+        for key, value in TEST_PRO_PLAN_DEFAULTS.items():
+            if getattr(plan, key, None) != value:
+                setattr(plan, key, value)
+
+    await db.flush()
+    return plan
 
 
 # ============================================================================
@@ -162,7 +292,7 @@ async def get_earnings_stats(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    """Get weekly and monthly earnings from orders"""
+    """Get weekly, monthly, and yearly earnings from orders"""
     service = AdminDashboardService(db)
     return await service.get_earnings_stats()
 
@@ -183,7 +313,7 @@ async def get_api_cost_stats(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    """Get API cost breakdown by service type (weekly and monthly)"""
+    """Get API cost breakdown by service type (weekly, monthly, and yearly)"""
     service = AdminDashboardService(db)
     return await service.get_api_cost_stats()
 
@@ -242,14 +372,18 @@ async def get_users(
             {
                 "id": str(u.id),
                 "email": u.email,
-                "name": u.name,
-                "plan": u.plan,
+                "name": _display_name(u),
+                "plan": _plan_name(u),
                 "is_active": u.is_active,
-                "is_verified": u.is_verified,
+                "is_verified": u.email_verified,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
                 "subscription_credits": u.subscription_credits,
                 "purchased_credits": u.purchased_credits,
-                "bonus_credits": u.bonus_credits
+                "bonus_credits": u.bonus_credits,
+                "referral_code": u.referral_code,
+                "referral_count": u.referral_count or 0,
+                "is_promotion_account": bool(u.referral_code),
+                "is_test_account": _is_test_account(u),
             }
             for u in users
         ],
@@ -278,8 +412,8 @@ async def get_user_detail(
         "user": {
             "id": str(user.id),
             "email": user.email,
-            "name": user.full_name,
-            "plan": str(user.current_plan_id) if user.current_plan_id else None,
+            "name": _display_name(user),
+            "plan": _plan_name(user),
             "is_active": user.is_active,
             "is_verified": user.email_verified,
             "is_admin": user.is_superuser,
@@ -287,7 +421,11 @@ async def get_user_detail(
             "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
             "subscription_credits": user.subscription_credits,
             "purchased_credits": user.purchased_credits,
-            "bonus_credits": user.bonus_credits
+            "bonus_credits": user.bonus_credits,
+            "referral_code": user.referral_code,
+            "referral_count": user.referral_count or 0,
+            "is_promotion_account": bool(user.referral_code),
+            "is_test_account": _is_test_account(user),
         },
         "generation_count": result["generation_count"],
         "is_online": result["is_online"],
@@ -320,6 +458,45 @@ async def ban_user(
         raise HTTPException(status_code=400, detail=message)
 
     return {"success": True, "message": message}
+
+
+@router.post("/users/{user_id}/test-account")
+async def grant_test_account(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Grant the internal $1 Pro test plan and reset test credits to 10,000."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    plan = await _get_or_create_test_plan(db)
+    subscription_service = get_subscription_service()
+    activation = await subscription_service._activate_subscription_directly(
+        db=db,
+        user=user,
+        plan=plan,
+        billing_cycle="monthly",
+        is_upgrade=bool(user.current_plan_id and user.current_plan_id != plan.id),
+    )
+
+    if not activation.get("success"):
+        raise HTTPException(status_code=400, detail=activation.get("error", "Could not grant test account"))
+
+    return {
+        "success": True,
+        "message": f"Test account enabled with {TEST_PRO_PLAN_CREDITS} points",
+        "user_id": str(user.id),
+        "plan_id": str(plan.id),
+        "plan_name": plan.name,
+        "subscription_credits": user.subscription_credits,
+        "total_credits": user.total_credits,
+        "is_test_account": True,
+        "credits_allocated": activation.get("credits_allocated"),
+    }
 
 
 @router.post("/users/{user_id}/unban")
@@ -357,6 +534,51 @@ async def adjust_user_credits(
         raise HTTPException(status_code=400, detail=message)
 
     return {"success": True, "message": message}
+
+
+@router.post("/users/{user_id}/promotion-code")
+async def set_user_promotion_code(
+    user_id: str,
+    request: PromotionCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Assign or generate a promotion code for a user account."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    code = _normalize_promotion_code(request.promotion_code)
+    if not code:
+        for _ in range(10):
+            candidate = generate_referral_code()
+            existing = await db.execute(select(User).where(User.referral_code == candidate))
+            if not existing.scalars().first():
+                code = candidate
+                break
+        if not code:
+            raise HTTPException(status_code=500, detail="Could not generate unique promotion code")
+    else:
+        existing = await db.execute(select(User).where(User.referral_code == code))
+        code_owner = existing.scalars().first()
+        if code_owner and str(code_owner.id) != str(user.id):
+            raise HTTPException(status_code=409, detail="Promotion code is already assigned")
+
+    user.referral_code = code
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "success": True,
+        "message": "Promotion code assigned",
+        "user_id": str(user.id),
+        "promotion_code": user.referral_code,
+        "referral_code": user.referral_code,
+        "referral_count": user.referral_count or 0,
+        "is_promotion_account": True,
+    }
 
 
 # ============================================================================
@@ -475,23 +697,27 @@ async def get_ai_services_status(
     """
     Check status of all AI services.
 
-    Returns status of:
-    - PiAPI (T2I, I2V, V2V, Interior primary)
-    - Gemini (Interior Design rescue, Avatar)
+    Returns status of the configured AI provider chain.
     """
     from app.services.rescue_service import get_rescue_service
 
     rescue_service = get_rescue_service()
     status = await rescue_service.check_service_status()
+    await _alert_admins_for_provider_errors(status)
+    services = {
+        provider_name: _attach_provider_account_status(provider_name, provider_status)
+        for provider_name, provider_status in status.items()
+    }
 
     return {
-        "services": status,
+        "services": services,
         "rescue_config": {
-            "t2i": {"primary": "piapi", "rescue": "gemini"},
-            "i2v": {"primary": "piapi", "rescue": "gemini"},
-            "v2v": {"primary": "piapi", "rescue": "gemini"},
-            "interior": {"primary": "piapi_wan_doodle", "rescue": "gemini"},
-            "avatar": {"primary": "gemini", "rescue": None}
+            "t2i": {"primary": "piapi_mcp/piapi", "rescue": "pollo", "final": "vertex_ai/gemini"},
+            "i2v": {"primary": "piapi_mcp/piapi", "rescue": "pollo_mcp/pollo", "final": "vertex_ai/veo"},
+            "t2v": {"primary": "piapi_mcp/piapi", "rescue": "pollo_mcp/pollo", "final": "vertex_ai/veo"},
+            "v2v": {"primary": "piapi_mcp", "rescue": "pollo/pollo_mcp", "final": "vertex_ai/veo"},
+            "interior": {"primary": "piapi_mcp/piapi", "rescue": None, "final": "vertex_ai/gemini"},
+            "avatar": {"primary": "piapi", "rescue": "a2e", "final": None}
         }
     }
 
@@ -587,8 +813,14 @@ async def admin_realtime_websocket(
             try:
                 active_data = await service.get_active_users_stats()
                 stats["active_generations_count"] = active_data["active_generations_count"]
+                stats["active_generations"] = active_data["active_generations"]
+                stats["online_sessions"] = active_data["online_sessions"]
+                stats["online_count"] = active_data["online_count"]
             except Exception:
                 stats["active_generations_count"] = 0
+                stats["active_generations"] = []
+                stats["online_sessions"] = []
+                stats["online_count"] = stats.get("online_users", 0)
 
             # Send to client
             await websocket.send_json({

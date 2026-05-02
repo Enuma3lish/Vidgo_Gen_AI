@@ -199,6 +199,12 @@ const filteredVoices = computed(() => {
   return voices.value.filter(v => v.gender === avatarGender)
 })
 
+const pendingTitle = computed(() => isZh.value
+  ? '我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。'
+  : 'I am creating the requested video. This may take a few minutes, so please check back shortly.')
+const pendingDetail = computed(() => isZh.value ? '正在生成數位人影片...' : 'Generating avatar video...')
+const pendingDuration = computed(() => isZh.value ? '需要 3 至 5 分鐘' : 'Usually takes 3 to 5 minutes')
+
 
 async function loadVoices() {
   try {
@@ -418,6 +424,8 @@ onMounted(async () => {
   }
 })
 
+watch(locale, () => loadEffectCatalog('ai_avatar', locale.value))
+
 watch(selectedLanguage, () => {
   loadVoices()
   // Update script text to match the new voice language.
@@ -437,7 +445,13 @@ watch(selectedAvatarId, () => {
 
 <template>
   <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
-    <LoadingOverlay :show="isProcessing" :message="t('tools.avatar.processing')" />
+    <LoadingOverlay
+      :show="isProcessing"
+      :message="t('tools.avatar.processing')"
+      :title="pendingTitle"
+      :detail="pendingDetail"
+      :duration="pendingDuration"
+    />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->

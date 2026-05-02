@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { commonImageDimensionRule, validateImageFileDimensions } from '@/utils/mediaValidation'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps<{
   accept?: string
@@ -12,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'files', files: File[]): void
+  (e: 'files-selected', files: File[]): void
   (e: 'error', message: string): void
 }>()
 
@@ -27,37 +29,72 @@ function handleDragLeave() {
   isDragging.value = false
 }
 
-function handleDrop(e: DragEvent) {
+async function handleDrop(e: DragEvent) {
   e.preventDefault()
   isDragging.value = false
 
   const files = e.dataTransfer?.files
   if (files) {
-    processFiles(Array.from(files))
+    await processFiles(Array.from(files))
   }
 }
 
-function handleFileSelect(e: Event) {
+async function handleFileSelect(e: Event) {
   const target = e.target as HTMLInputElement
   if (target.files) {
-    processFiles(Array.from(target.files))
+    if (!(await processFiles(Array.from(target.files)))) {
+      target.value = ''
+    }
   }
 }
 
-function processFiles(files: File[]) {
-  const maxSize = props.maxSize || 10 * 1024 * 1024 // 10MB default
+const AI_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const AI_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
 
-  const validFiles = files.filter(file => {
-    if (file.size > maxSize) {
-      emit('error', `File ${file.name} exceeds maximum size of ${maxSize / 1024 / 1024}MB`)
-      return false
+function allowedTypes() {
+  const accept = props.accept || '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  if (accept.includes('video')) return AI_VIDEO_TYPES
+  return AI_IMAGE_TYPES
+}
+
+async function processFiles(files: File[]): Promise<boolean> {
+  const maxSize = props.maxSize || 20 * 1024 * 1024
+  const allowed = allowedTypes()
+  const isZh = locale.value.startsWith('zh')
+  const validFiles: File[] = []
+
+  for (const file of files) {
+    if (!allowed.includes(file.type)) {
+      const label = allowed === AI_VIDEO_TYPES ? 'MP4, WebM, or MOV video' : 'JPG, PNG, or WebP image'
+      emit('error', `File ${file.name} is not supported. Please choose a ${label}.`)
+      continue
     }
-    return true
-  })
+    if (file.size > maxSize) {
+      emit('error', `File ${file.name} exceeds maximum size of ${maxSize / 1024 / 1024}MB. Please choose a smaller file.`)
+      continue
+    }
+    if (file.type.startsWith('image/')) {
+      try {
+        const dimensionError = await validateImageFileDimensions(file, commonImageDimensionRule, isZh)
+        if (dimensionError) {
+          emit('error', dimensionError)
+          continue
+        }
+      } catch {
+        emit('error', isZh ? '無法讀取圖片尺寸，請重新選擇圖片。' : 'Image dimensions could not be read. Please choose a different image.')
+        continue
+      }
+    }
+    validFiles.push(file)
+  }
 
   if (validFiles.length > 0) {
-    emit('files', props.multiple ? validFiles : [validFiles[0]])
+    const payload = props.multiple ? validFiles : [validFiles[0]]
+    emit('files', payload)
+    emit('files-selected', payload)
+    return true
   }
+  return false
 }
 
 function triggerFileSelect() {
@@ -81,7 +118,7 @@ function triggerFileSelect() {
     <input
       ref="inputRef"
       type="file"
-      :accept="accept || 'image/*'"
+      :accept="accept || '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'"
       :multiple="multiple"
       class="hidden"
       @change="handleFileSelect"

@@ -1,0 +1,80 @@
+[
+  {
+    "name": "try_on",
+    "ok": true,
+    "upload_id": "c17f8811-f72c-4d0c-8f4c-3aba7c1de385",
+    "status": "completed",
+    "media_type": "image",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/b0f0bca161df.png",
+    "download_path": "TEST/e2e_results/20260428-upload-deep-remaining/upload_try_on_c17f8811.jpg",
+    "detail": "image/png 280185 bytes image_magic=True",
+    "submit_seconds": 18.156430498000006,
+    "total_seconds": 18.376590179999994,
+    "credits_used": 15
+  },
+  {
+    "name": "room_redesign",
+    "ok": true,
+    "upload_id": "f9371ad7-8244-4ff6-bbb1-342e05d78845",
+    "status": "completed",
+    "media_type": "image",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/3b70f8d1eb58.png",
+    "download_path": "TEST/e2e_results/20260428-upload-deep-remaining/upload_room_redesign_f9371ad7.jpg",
+    "detail": "image/png 271259 bytes image_magic=True",
+    "submit_seconds": 18.137031666,
+    "total_seconds": 18.935466004000006,
+    "credits_used": 10
+  },
+  {
+    "name": "pattern_generate",
+    "ok": true,
+    "upload_id": "981437ee-64ba-4048-9d16-93c5d3896887",
+    "status": "completed",
+    "media_type": "image",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/4fa74c34423a.png",
+    "download_path": "TEST/e2e_results/20260428-upload-deep-remaining/upload_pattern_generate_981437ee.jpg",
+    "detail": "image/png 261866 bytes image_magic=True",
+    "submit_seconds": 24.85985511700001,
+    "total_seconds": 25.12462201400001,
+    "credits_used": 8
+  },
+  {
+    "name": "short_video",
+    "ok": false,
+    "upload_id": null,
+    "status": "exception",
+    "media_type": "video",
+    "result_url": null,
+    "download_path": null,
+    "detail": "ReadTimeout: ",
+    "submit_seconds": 0.0,
+    "total_seconds": 120.10422983500001,
+    "credits_used": 0
+  },
+  {
+    "name": "video_transform",
+    "ok": false,
+    "upload_id": "24d51f41-85de-4121-9013-6e6f9ad24684",
+    "status": "failed",
+    "media_type": "video",
+    "result_url": null,
+    "download_path": null,
+    "detail": "Video generation services are experiencing issues on all providers. Please try again in a few minutes.",
+    "submit_seconds": 39.39428016099998,
+    "total_seconds": 39.51762390600004,
+    "credits_used": 35
+  },
+  {
+    "name": "ai_avatar",
+    "ok": false,
+    "upload_id": "c5be6e2d-1f42-45b1-853d-0346868da8ff",
+    "status": "failed",
+    "media_type": "video",
+    "result_url": null,
+    "download_path": null,
+    "detail": "Avatar generation services are experiencing issues. Please try again in a few minutes.",
+    "submit_seconds": 16.18509917099999,
+    "total_seconds": 16.542158402999974,
+    "credits_used": 40
+  }
+]

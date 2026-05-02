@@ -97,7 +97,18 @@ const routes: RouteRecordRaw[] = [
 
   // ===== Redirects for removed/aliased routes =====
   { path: '/tools/remove-watermark', redirect: '/tools/effects' },
-  { path: '/tools/image-translator', redirect: '/tools/effects' },
+  {
+    path: '/tools/image-translator',
+    name: 'image-translator',
+    component: () => import('@/views/tools/ImageTranslator.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/tools/video-dubbing',
+    name: 'video-dubbing',
+    component: () => import('@/views/tools/VideoDubbing.vue'),
+    meta: { requiresAuth: false }
+  },
   { path: '/tools/ai-model-swap', redirect: '/tools/try-on' },
   { path: '/tools/try-on-accessories', redirect: '/tools/try-on' },
   { path: '/tools/ai-templates', redirect: '/tools/product-scene' },
@@ -156,8 +167,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/dashboard',
     name: 'dashboard',
-    component: () => import('@/views/dashboard/Dashboard.vue'),
-    meta: { requiresAuth: true }
+    component: () => import('@/views/admin/AdminDashboard.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/dashboard/my-works',
@@ -178,9 +189,14 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/dashboard/social-accounts',
-    name: 'social-accounts',
+    path: '/dashboard/share-links',
+    name: 'share-links',
     component: () => import('@/views/dashboard/SocialAccounts.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/dashboard/social-accounts',
+    redirect: { name: 'share-links' },
     meta: { requiresAuth: true }
   },
 
@@ -226,6 +242,12 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin',
     name: 'admin',
+    redirect: { name: 'admin-dashboard' },
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/dashboard',
+    name: 'admin-dashboard',
     component: () => import('@/views/admin/AdminDashboard.vue'),
     meta: { requiresAuth: true, requiresAdmin: true }
   },
@@ -299,7 +321,32 @@ router.beforeEach(async (to, _from, next) => {
       }
     }
     if (authStore.user) {
-      next({ name: 'dashboard' })
+      next({ name: authStore.isAdmin ? 'admin-dashboard' : 'my-works' })
+    } else {
+      next()
+    }
+  } else if (to.path === '/dashboard' && isAuthenticated) {
+    const { useAuthStore } = await import('@/stores/auth')
+    const authStore = useAuthStore()
+    if (!authStore.user && token) {
+      await authStore.fetchUser()
+    }
+    next({ name: authStore.isAdmin ? 'admin-dashboard' : 'my-works' })
+  } else if (
+    isAuthenticated &&
+    (to.name === 'my-works' ||
+      to.path === '/dashboard/my-works' ||
+      to.path.startsWith('/dashboard/'))
+  ) {
+    // Admins should never see their own credits / personal gallery / works.
+    // Redirect any /dashboard/* route to the admin dashboard for admin accounts.
+    const { useAuthStore } = await import('@/stores/auth')
+    const authStore = useAuthStore()
+    if (!authStore.user && token) {
+      try { await authStore.fetchUser() } catch { /* noop */ }
+    }
+    if (authStore.isAdmin) {
+      next({ name: 'admin-dashboard' })
     } else {
       next()
     }
@@ -310,7 +357,7 @@ router.beforeEach(async (to, _from, next) => {
       await authStore.fetchUser()
     }
     if (!authStore.isAdmin) {
-      next({ name: 'dashboard' })
+      next({ name: 'home' })
     } else {
       next()
     }

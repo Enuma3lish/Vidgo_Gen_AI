@@ -1,0 +1,41 @@
+[
+  {
+    "name": "short_video",
+    "ok": true,
+    "upload_id": "a56b61a9-3198-4dbb-9070-7b3bc21f13c5",
+    "status": "completed",
+    "media_type": "video",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/video/41cdc09dc7c3.mp4",
+    "download_path": "TEST/e2e_results/20260428-upload-post-deploy-provider-fixes/upload_short_video_a56b61a9.mp4",
+    "detail": "video/mp4 2803995 bytes video_magic=True",
+    "submit_seconds": 0.476847805000034,
+    "total_seconds": 133.68521046800015,
+    "credits_used": 30
+  },
+  {
+    "name": "video_transform",
+    "ok": false,
+    "upload_id": "4cb89571-d37e-4a7a-8c10-7fa515674343",
+    "status": "failed",
+    "media_type": "video",
+    "result_url": null,
+    "download_path": null,
+    "detail": "Video generation services are experiencing issues on all providers. Please try again in a few minutes.",
+    "submit_seconds": 0.6452271510001992,
+    "total_seconds": 41.128785336999954,
+    "credits_used": 35
+  },
+  {
+    "name": "ai_avatar",
+    "ok": false,
+    "upload_id": "e5fac233-18fe-462d-a34c-31a1f9c00e3a",
+    "status": "failed",
+    "media_type": "video",
+    "result_url": null,
+    "download_path": null,
+    "detail": "Avatar generation services are experiencing issues. Please try again in a few minutes.",
+    "submit_seconds": 0.2183757110001352,
+    "total_seconds": 101.50498778899964,
+    "credits_used": 40
+  }
+]

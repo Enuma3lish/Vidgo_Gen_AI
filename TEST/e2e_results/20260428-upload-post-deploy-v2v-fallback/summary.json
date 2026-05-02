@@ -1,0 +1,41 @@
+[
+  {
+    "name": "short_video",
+    "ok": true,
+    "upload_id": "4848a169-a516-44a8-a01d-dfb9de8f0fa6",
+    "status": "completed",
+    "media_type": "video",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/video/e96eb8ec551a.mp4",
+    "download_path": "TEST/e2e_results/20260428-upload-post-deploy-v2v-fallback/upload_short_video_4848a169.mp4",
+    "detail": "video/mp4 2581727 bytes video_magic=True",
+    "submit_seconds": 0.5123041020005985,
+    "total_seconds": 123.90318790899983,
+    "credits_used": 30
+  },
+  {
+    "name": "video_transform",
+    "ok": true,
+    "upload_id": "e1b6d26c-1f3b-455f-849f-59c339055358",
+    "status": "completed",
+    "media_type": "video",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/video/uploads/b04fb27a-aa80-4d1a-aa42-b89293075aa7/e1b6d26c-1f3b-455f-849f-59c339055358.mp4",
+    "download_path": "TEST/e2e_results/20260428-upload-post-deploy-v2v-fallback/upload_video_transform_e1b6d26c.mp4",
+    "detail": "video/mp4 492618 bytes video_magic=True",
+    "submit_seconds": 0.31499466100012796,
+    "total_seconds": 202.38213168400034,
+    "credits_used": 35
+  },
+  {
+    "name": "ai_avatar",
+    "ok": false,
+    "upload_id": null,
+    "status": "submit_failed",
+    "media_type": "video",
+    "result_url": null,
+    "download_path": null,
+    "detail": "HTTP 402: {\"detail\":\"Insufficient credits. This generation costs 40 credits, you have 22.\"}",
+    "submit_seconds": 0.05292402199938806,
+    "total_seconds": 0.053025166000225,
+    "credits_used": 0
+  }
+]

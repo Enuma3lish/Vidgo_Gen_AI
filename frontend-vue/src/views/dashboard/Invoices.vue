@@ -147,7 +147,7 @@ function statusBadgeClass(status: string) {
 
       <!-- Back link -->
       <div class="mb-6">
-        <RouterLink to="/dashboard"
+        <RouterLink to="/dashboard/my-works"
           class="text-primary-400 hover:text-primary-300 text-sm font-medium">
           ← {{ t('dashboard.backToDashboard', 'Back to Dashboard') }}
         </RouterLink>

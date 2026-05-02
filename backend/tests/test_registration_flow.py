@@ -13,6 +13,8 @@ from sqlalchemy.sql.elements import BinaryExpression, BooleanClauseList, BindPar
 
 from app.api.deps import get_db
 from app.main import app
+from app.core.config import settings
+from app.models.billing import CreditTransaction
 from app.models.user import User
 from app.models.verification import EmailVerification
 
@@ -101,6 +103,7 @@ class FakeAsyncSession:
     def __init__(self):
         self.users: list[User] = []
         self.verifications: list[EmailVerification] = []
+        self.transactions: list[CreditTransaction] = []
 
     def add(self, instance: Any) -> None:
         if isinstance(instance, User):
@@ -139,6 +142,14 @@ class FakeAsyncSession:
             self.verifications.append(instance)
             return
 
+        if isinstance(instance, CreditTransaction):
+            if not getattr(instance, "id", None):
+                instance.id = uuid.uuid4()
+            if not instance.created_at:
+                instance.created_at = _utcnow()
+            self.transactions.append(instance)
+            return
+
         raise AssertionError(f"Unsupported add() instance: {instance!r}")
 
     async def commit(self) -> None:
@@ -164,6 +175,11 @@ class FakeAsyncSession:
 
         if model is EmailVerification:
             matches = [item for item in self.verifications if self._matches(statement, item)]
+            matches.sort(key=lambda item: item.created_at or _utcnow(), reverse=True)
+            return FakeExecuteResult(matches)
+
+        if model is CreditTransaction:
+            matches = [item for item in self.transactions if self._matches(statement, item)]
             matches.sort(key=lambda item: item.created_at or _utcnow(), reverse=True)
             return FakeExecuteResult(matches)
 
@@ -355,3 +371,87 @@ async def test_registration_reports_email_failure_when_smtp_send_fails(
 
     assert response.status_code == 200
     assert response.json()["message"].startswith("Account created, but we could not send the verification code")
+
+
+async def test_registration_with_promotion_code_awards_extra_credits_after_verification(
+    client: AsyncClient,
+    fake_db: FakeAsyncSession,
+    fake_redis: FakeRedis,
+) -> None:
+    promoter = User(
+        id=uuid.uuid4(),
+        email="promoter@example.com",
+        username="promoter",
+        hashed_password="hashed",
+        is_active=True,
+        email_verified=True,
+        referral_code="PROMO40",
+        referral_count=0,
+        subscription_credits=0,
+        purchased_credits=0,
+        bonus_credits=0,
+        demo_usage_count=0,
+        demo_usage_limit=2,
+        created_at=_utcnow(),
+    )
+    fake_db.users.append(promoter)
+
+    register_payload = {
+        "email": "promo-member@example.com",
+        "username": "promomember",
+        "full_name": "Promo Member",
+        "password": "StrongPass123",
+        "password_confirm": "StrongPass123",
+        "referral_code": "promo40",
+    }
+
+    register_response = await client.post("/api/v1/auth/register", json=register_payload)
+    assert register_response.status_code == 200
+
+    created_user = next(user for user in fake_db.users if user.email == register_payload["email"])
+    assert created_user.referred_by_id == promoter.id
+    assert created_user.bonus_credits == settings.REGISTRATION_BONUS_CREDITS
+
+    with patch(
+        "app.services.referral_service.email_service.send_promotion_code_used_email",
+        new=AsyncMock(return_value=True),
+    ) as promoter_email_mock:
+        verify_response = await client.post(
+            "/api/v1/auth/verify-code",
+            json={"email": register_payload["email"], "code": "246810"},
+        )
+    assert verify_response.status_code == 200
+
+    promoter_email_mock.assert_awaited_once_with(
+        to_email=promoter.email,
+        username=promoter.username,
+        new_user_email=created_user.email,
+        promotion_code=promoter.referral_code,
+        reward_credits=settings.REFERRAL_BONUS_CREDITS,
+    )
+
+    assert created_user.bonus_credits == settings.REGISTRATION_BONUS_CREDITS + settings.REFERRAL_WELCOME_CREDITS
+    assert promoter.referral_count == 1
+    assert promoter.bonus_credits == settings.REFERRAL_BONUS_CREDITS
+
+    verify_payload = verify_response.json()
+    assert verify_payload["user"]["referral_count"] == 0
+    assert created_user.total_credits == 80
+    assert len([tx for tx in fake_db.transactions if tx.description == "Welcome bonus for using a promotion code"]) == 1
+
+
+async def test_registration_with_invalid_promotion_code_is_rejected(
+    client: AsyncClient,
+) -> None:
+    register_response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "bad-promo@example.com",
+            "password": "StrongPass123",
+            "password_confirm": "StrongPass123",
+            "referral_code": "NOPE999",
+        },
+    )
+
+    assert register_response.status_code == 400
+    assert register_response.json()["detail"] == "Invalid promotion code"

@@ -1,18 +1,17 @@
 """
 Gemini AI Service — Prompt enhancement, content moderation, and embedding generation.
 
-Uses Google Vertex AI (google-genai SDK) for LLM capabilities.
-Replaces the old API-key-based generativelanguage.googleapis.com approach.
+Uses Google Gemini API (AI Studio) by default. Falls back to Vertex AI if no API key.
 
-Auth: Uses Google Application Default Credentials (ADC) via Vertex AI.
-  - On GCP: automatic via service account
-  - Local dev: GOOGLE_APPLICATION_CREDENTIALS or `gcloud auth application-default login`
-  - Fallback: GEMINI_API_KEY (legacy, uses AI Studio endpoint)
+Auth priority:
+  1. GEMINI_API_KEY — Gemini API (aistudio.google.com), no GCP project needed
+  2. VERTEX_AI_PROJECT — Vertex AI ADC (service account / gcloud ADC)
 
 Env vars:
-  - VERTEX_AI_PROJECT: GCP project ID
+  - GEMINI_API_KEY: Gemini API key (preferred)
+  - GEMINI_MODEL: Model name, default "gemini-2.5-pro"
+  - VERTEX_AI_PROJECT: GCP project ID (fallback if no API key)
   - VERTEX_AI_LOCATION: Region, default "us-central1"
-  - GEMINI_API_KEY: Legacy fallback if Vertex AI not configured
 """
 import asyncio
 import hashlib
@@ -47,22 +46,23 @@ class GeminiService:
     """
     Gemini AI Service for prompt enhancement and content moderation.
 
-    Prefers Vertex AI (ADC auth). Falls back to API key if Vertex AI not configured.
+    Uses Gemini API (GEMINI_API_KEY) by default; falls back to Vertex AI if no key is set.
     """
 
-    # Legacy fallback endpoint
+    # Legacy fallback endpoint (unused but kept for reference)
     LEGACY_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or getattr(settings, "GEMINI_API_KEY", "")
         self.project = os.getenv("VERTEX_AI_PROJECT", "")
         self.location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
         self._genai_client = None
-        self._use_vertex = bool(self.project)
+        # API key takes priority; Vertex AI is a fallback when no key is configured
+        self._use_vertex = bool(self.project) and not bool(self.api_key)
 
     def _get_genai_client(self):
-        """Lazy-init the google-genai client."""
+        """Lazy-init the google-genai client (Gemini API preferred, Vertex AI fallback)."""
         if self._genai_client is None:
             from google import genai
 
@@ -72,10 +72,10 @@ class GeminiService:
                     project=self.project,
                     location=self.location,
                 )
-                logger.info("[GeminiService] Using Vertex AI backend")
+                logger.info("[GeminiService] Using Vertex AI backend (no GEMINI_API_KEY set)")
             else:
                 self._genai_client = genai.Client(api_key=self.api_key)
-                logger.info("[GeminiService] Using legacy API key backend")
+                logger.info("[GeminiService] Using Gemini API backend")
         return self._genai_client
 
     # =========================================================================

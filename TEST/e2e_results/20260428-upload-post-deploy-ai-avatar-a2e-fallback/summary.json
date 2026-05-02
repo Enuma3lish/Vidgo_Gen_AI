@@ -1,0 +1,15 @@
+[
+  {
+    "name": "ai_avatar",
+    "ok": true,
+    "upload_id": "07e58e0e-b562-4ef7-906d-990a708a7ee8",
+    "status": "completed",
+    "media_type": "video",
+    "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/video/0480626a7819.mp4",
+    "download_path": "TEST/e2e_results/20260428-upload-post-deploy-ai-avatar-a2e-fallback/upload_ai_avatar_07e58e0e.mp4",
+    "detail": "video/mp4 4302901 bytes video_magic=True",
+    "submit_seconds": 1.6759618750002119,
+    "total_seconds": 289.31678134699996,
+    "credits_used": 40
+  }
+]

@@ -93,6 +93,14 @@ export const useCreditsStore = defineStore('credits', () => {
     error.value = null
   }
 
+  function clearBalance() {
+    balance.value = null
+    packages.value = []
+    pricing.value = []
+    transactions.value = []
+    error.value = null
+  }
+
   return {
     // State
     balance,
@@ -113,6 +121,7 @@ export const useCreditsStore = defineStore('credits', () => {
     getServiceCost,
     canAfford,
     deductCredits,
-    clearError
+    clearError,
+    clearBalance
   }
 })

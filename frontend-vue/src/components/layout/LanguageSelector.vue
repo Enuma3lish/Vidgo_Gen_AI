@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useUIStore } from '@/stores'
+import { useAuthStore, useUIStore } from '@/stores'
 
 const { locale } = useI18n()
 const uiStore = useUIStore()
+const authStore = useAuthStore()
+const route = useRoute()
 const isOpen = ref(false)
+const isAdminSurface = computed(() => authStore.isAdmin && (route.path.startsWith('/admin') || route.path === '/dashboard'))
 
 const languages = [
   { code: 'en', name: 'English', flag: '🇺🇸' },
@@ -16,10 +20,16 @@ const languages = [
 ]
 
 const currentLanguage = computed(() =>
-  languages.find(l => l.code === locale.value) || languages[1]
+  isAdminSurface.value ? languages[1] : languages.find(l => l.code === locale.value) || languages[1]
 )
 
 function selectLanguage(code: string) {
+  if (isAdminSurface.value) {
+    locale.value = 'zh-TW'
+    uiStore.setLocale('zh-TW')
+    isOpen.value = false
+    return
+  }
   locale.value = code
   uiStore.setLocale(code)
   isOpen.value = false
@@ -30,18 +40,19 @@ function selectLanguage(code: string) {
   <div class="relative">
     <!-- Trigger Button -->
     <button
-      @click="isOpen = !isOpen"
+      @click="isAdminSurface ? selectLanguage('zh-TW') : isOpen = !isOpen"
       class="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-sm font-medium"
-      style="color: #9494b0;"
-      @mouseenter="($event.target as HTMLElement).style.background='rgba(255,255,255,0.06)'"
+      style="color: #d6d3d1;"
+      @mouseenter="($event.target as HTMLElement).style.background='rgba(255,255,255,0.08)'"
       @mouseleave="($event.target as HTMLElement).style.background='transparent'"
     >
       <span class="text-base leading-none">{{ currentLanguage.flag }}</span>
       <span class="hidden sm:inline text-sm">{{ currentLanguage.name }}</span>
       <svg
+        v-if="!isAdminSurface"
         class="w-3.5 h-3.5 transition-transform duration-200"
         :class="{ 'rotate-180': isOpen }"
-        style="color: #6b6b8a;"
+        style="color: #d6d3d1;"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -60,7 +71,7 @@ function selectLanguage(code: string) {
       leave-to-class="opacity-0 scale-95 -translate-y-1"
     >
       <div
-        v-if="isOpen"
+        v-if="isOpen && !isAdminSurface"
         class="absolute right-0 mt-2 rounded-xl py-1.5 min-w-44 z-50 origin-top-right dropdown-menu"
       >
         <button
@@ -69,15 +80,15 @@ function selectLanguage(code: string) {
           @click="selectLanguage(lang.code)"
           class="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-sm"
           :style="lang.code === locale
-            ? 'background: rgba(22,119,255,0.1); color: #1677ff; font-weight: 600;'
-            : 'color: #9494b0;'"
+            ? 'background: rgba(245,158,11,0.12); color: #fbbf24; font-weight: 600;'
+            : 'color: #d6d3d1;'"
         >
           <span class="text-base leading-none">{{ lang.flag }}</span>
           <span>{{ lang.name }}</span>
           <svg
             v-if="lang.code === locale"
             class="w-4 h-4 ml-auto"
-            style="color: #1677ff;"
+            style="color: #fbbf24;"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

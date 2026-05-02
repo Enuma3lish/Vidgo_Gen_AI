@@ -33,6 +33,11 @@ export interface DashboardStats {
   revenue: {
     month: number
   }
+  promotions?: {
+    accounts: number
+    registrations: number
+    referred_users: number
+  }
   timestamp: string
 }
 
@@ -54,6 +59,10 @@ export interface AdminUser {
   subscription_credits: number
   purchased_credits: number
   bonus_credits: number
+  referral_code?: string | null
+  referral_count?: number
+  is_promotion_account?: boolean
+  is_test_account?: boolean
 }
 
 export interface UserDetail extends AdminUser {
@@ -115,23 +124,16 @@ export interface AIServiceStatus {
   status: string
   message?: string
   error?: string
+  configured?: boolean
+  remaining_credits?: number | null
+  remaining_credits_label?: string | null
+  subscription_status?: string | null
+  account_status_source?: string | null
 }
 
 export interface AIServicesResponse {
-  services: {
-    wan: AIServiceStatus
-    fal: AIServiceStatus
-    gemini: AIServiceStatus
-    goenhance: AIServiceStatus
-    a2e: AIServiceStatus
-  }
-  rescue_config: {
-    t2i: { primary: string; rescue: string | null }
-    i2v: { primary: string; rescue: string | null }
-    interior: { primary: string; rescue: string | null }
-    style_transfer: { primary: string; rescue: string | null }
-    avatar: { primary: string; rescue: string | null }
-  }
+  services: Record<string, AIServiceStatus>
+  rescue_config: Record<string, { primary: string; rescue: string | null; final?: string | null }>
 }
 
 export interface ToolUsageItem {
@@ -148,7 +150,9 @@ export interface ToolUsageStats {
 export interface EarningsStats {
   week: number
   month: number
+  year: number
   monthly_breakdown: { month: string; revenue: number }[]
+  yearly_breakdown?: { year: string; revenue: number }[]
 }
 
 export interface ApiCostItem {
@@ -158,18 +162,24 @@ export interface ApiCostItem {
   week_cost: number
   month_calls: number
   month_cost: number
+  year_calls: number
+  year_cost: number
   prev_week_calls: number
   prev_week_cost: number
   prev_month_calls: number
   prev_month_cost: number
+  prev_year_calls: number
+  prev_year_cost: number
 }
 
 export interface ApiCostStats {
   by_service: ApiCostItem[]
   week_total: number
   month_total: number
+  year_total: number
   prev_week_total: number
   prev_month_total: number
+  prev_year_total: number
 }
 
 export interface ActiveGeneration {
@@ -271,6 +281,36 @@ export const adminApi = {
 
   async adjustCredits(userId: string, amount: number, reason: string): Promise<{ success: boolean; message: string }> {
     const response = await apiClient.post(`/api/v1/admin/users/${userId}/credits`, { amount, reason })
+    return response.data
+  },
+
+  async setPromotionCode(userId: string, promotionCode?: string): Promise<{
+    success: boolean
+    message: string
+    user_id: string
+    promotion_code: string
+    referral_code: string
+    referral_count: number
+    is_promotion_account: boolean
+  }> {
+    const response = await apiClient.post(`/api/v1/admin/users/${userId}/promotion-code`, {
+      promotion_code: promotionCode || undefined
+    })
+    return response.data
+  },
+
+  async grantTestAccount(userId: string): Promise<{
+    success: boolean
+    message: string
+    user_id: string
+    plan_id: string
+    plan_name: string
+    subscription_credits: number
+    total_credits: number
+    is_test_account: boolean
+    credits_allocated?: number
+  }> {
+    const response = await apiClient.post(`/api/v1/admin/users/${userId}/test-account`)
     return response.data
   },
 

@@ -29,7 +29,7 @@ const orderNumber = route.query.order as string
         <button
           type="button"
           class="btn-primary px-6 py-2"
-          @click="router.push('/dashboard')"
+          @click="router.push('/dashboard/my-works')"
         >
           {{ t('subscription.goToDashboard', 'Go to Dashboard') }}
         </button>

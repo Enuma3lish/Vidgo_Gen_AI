@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
@@ -216,6 +216,8 @@ onMounted(async () => {
     console.warn('Failed to load try-on style templates:', e)
   }
 })
+
+watch(locale, () => loadEffectCatalog('try_on', locale.value))
 
 // Kling AI is trained on garments. If an accessory slips into the catalog we
 // still let the user click it, but surface a clear toast up-front so the

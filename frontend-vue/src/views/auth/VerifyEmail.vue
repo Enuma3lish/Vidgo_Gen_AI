@@ -83,7 +83,7 @@ async function handleSubmit() {
 
     sessionStorage.removeItem('pendingVerifyEmail')
     uiStore.showSuccess('Email verified successfully!')
-    router.push('/dashboard')
+    router.push('/dashboard/my-works')
   } catch (error) {
     // Clear code on error
     code.value = ['', '', '', '', '', '']

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
@@ -128,6 +128,8 @@ onMounted(async () => {
     uploadedImage.value = effective[0].input || undefined
   }
 })
+
+watch(locale, () => loadDemoTemplates('background_removal', undefined, locale.value))
 
 function selectDemoExample(index: number) {
   selectedDemoIndex.value = index

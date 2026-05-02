@@ -480,7 +480,7 @@ PRODUCT_SCENE_MAPPING = {
         "spring": {
             "name": "Spring Sale",
             "name_zh": "春季特賣",
-            "prompt": "fresh cherry blossom petals, bright spring sunlight, pastel pink and green, spring campaign"
+            "prompt": "clean seasonal retail sale campaign backdrop, soft daylight, airy pastel mint and blush studio display, large SALE typography and subtle discount tag shapes in the background, clean product placement, keep the original product unchanged, no flowers, no petals, no blossoms, no plants, no leaves, no botanical props, no decorations touching the product"
         },
         "valentines": {
             "name": "Valentine's Day",
@@ -1705,19 +1705,23 @@ class VidGoPreGenerator:
                 logger.info(f"  Product (no bg): {product_no_bg_url}")
 
                 # Step 2: Generate scene background image
-                logger.info("  Step 2: Generating scene background...")
                 scene_prompt = f"{scene_data['prompt']}, empty background for product placement, professional studio lighting, commercial photography, 8K quality"
-                t2i = await self.piapi.generate_image(prompt=scene_prompt, width=1024, height=1024)
+                if scene_id == "spring":
+                    logger.info("  Step 2: Creating deterministic Spring Sale retail backdrop...")
+                    scene_url = self._create_spring_sale_backdrop()
+                else:
+                    logger.info("  Step 2: Generating scene background...")
+                    t2i = await self.piapi.generate_image(prompt=scene_prompt, width=1024, height=1024)
 
-                if not t2i["success"]:
-                    logger.warning(f"  Scene T2I failed: {t2i.get('error')}, skipping...")
-                    self.stats["failed"] += 1
-                    self.stats["by_tool"]["product_scene"]["failed"] += 1
-                    count += 1
-                    self._topic_mark_generated(scene_id, topic_counts)
-                    continue
+                    if not t2i["success"]:
+                        logger.warning(f"  Scene T2I failed: {t2i.get('error')}, skipping...")
+                        self.stats["failed"] += 1
+                        self.stats["by_tool"]["product_scene"]["failed"] += 1
+                        count += 1
+                        self._topic_mark_generated(scene_id, topic_counts)
+                        continue
 
-                scene_url = t2i["image_url"]
+                    scene_url = t2i["image_url"]
                 logger.info(f"  Scene background: {scene_url}")
 
                 # Step 3: Composite product onto scene using PIL
@@ -1778,6 +1782,69 @@ class VidGoPreGenerator:
                 await asyncio.sleep(2)
 
         await self._store_local_to_db("product_scene")
+
+    def _create_spring_sale_backdrop(self) -> str:
+        """Create a clean retail SALE backdrop with no seasonal objects."""
+        from PIL import Image, ImageDraw, ImageFont, ImageFilter
+        from pathlib import Path
+        import uuid
+
+        width = 1024
+        height = 1024
+        top = (235, 248, 242)
+        bottom = (248, 241, 236)
+        image = Image.new("RGB", (width, height), top)
+        pixels = image.load()
+        for y in range(height):
+            ratio = y / max(height - 1, 1)
+            row = tuple(int(top[i] * (1 - ratio) + bottom[i] * ratio) for i in range(3))
+            for x in range(width):
+                pixels[x, y] = row
+
+        draw = ImageDraw.Draw(image, "RGBA")
+
+        # Soft retail-display shapes and shadows; no props around the product.
+        draw.ellipse((-180, 40, 310, 530), fill=(255, 255, 255, 80))
+        draw.ellipse((760, 30, 1160, 420), fill=(255, 255, 255, 64))
+        draw.rounded_rectangle((170, 720, 855, 845), radius=28, fill=(245, 218, 207, 190))
+        draw.rounded_rectangle((220, 690, 805, 795), radius=24, fill=(255, 255, 255, 110))
+        draw.rectangle((0, 780, width, height), fill=(245, 248, 244, 205))
+
+        try:
+            sale_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 180)
+            tag_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 54)
+            small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
+        except Exception:
+            sale_font = ImageFont.load_default()
+            tag_font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
+
+        sale_text = "SALE"
+        sale_box = draw.textbbox((0, 0), sale_text, font=sale_font)
+        sale_w = sale_box[2] - sale_box[0]
+        draw.text(((width - sale_w) / 2, 230), sale_text, font=sale_font, fill=(244, 143, 132, 96))
+
+        tag_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        tag_draw = ImageDraw.Draw(tag_layer, "RGBA")
+        tag_draw.rounded_rectangle((690, 225, 900, 385), radius=20, fill=(250, 174, 166, 220))
+        tag_draw.ellipse((720, 250, 748, 278), fill=(235, 248, 242, 255))
+        tag_draw.text((750, 270), "20%", font=tag_font, fill=(255, 255, 255, 245))
+        tag_draw.text((752, 330), "OFF", font=small_font, fill=(255, 255, 255, 235))
+        tag_layer = tag_layer.rotate(-8, center=(795, 305), resample=Image.Resampling.BICUBIC)
+        image = Image.alpha_composite(image.convert("RGBA"), tag_layer)
+
+        light = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+        light_draw = ImageDraw.Draw(light, "RGBA")
+        light_draw.polygon([(0, 0), (470, 0), (120, height), (0, height)], fill=(255, 255, 255, 55))
+        light_draw.polygon([(720, 0), (width, 0), (width, height), (930, height)], fill=(255, 255, 255, 42))
+        image = Image.alpha_composite(image, light.filter(ImageFilter.GaussianBlur(2)))
+
+        output_dir = Path("/app/static/generated")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"spring_sale_backdrop_{uuid.uuid4().hex[:8]}.png"
+        output_path = output_dir / filename
+        image.convert("RGB").save(output_path, "PNG", quality=95)
+        return f"/static/generated/{filename}"
 
     async def _composite_product_scene(
         self,

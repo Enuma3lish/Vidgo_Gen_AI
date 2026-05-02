@@ -9,12 +9,29 @@ import type { UserGeneration, UserStatsResponse } from '@/api/user'
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const creditsStore = useCreditsStore()
+type DashboardUser = NonNullable<typeof authStore.user> & { plan?: string | null }
 
 const recentWorks = ref<UserGeneration[]>([])
 const userStats = ref<UserStatsResponse | null>(null)
 const loadingWorks = ref(false)
 
 const isZh = computed(() => locale.value.startsWith('zh'))
+
+const displayName = computed(() => {
+  return authStore.user?.email?.split('@')[0] || (isZh.value ? '使用者' : 'creator')
+})
+
+const currentPlanKey = computed(() => {
+  const user = authStore.user as DashboardUser | null
+  return user?.plan_type || user?.plan || 'demo'
+})
+
+const currentPlanLabel = computed(() => {
+  const plan = currentPlanKey.value.toLowerCase()
+  if (plan === 'free') return 'Free'
+  if (plan === 'demo') return 'Demo'
+  return plan.replace(/_/g, ' ')
+})
 
 const creditsProgressWidth = computed(() => {
   const total = creditsStore.balance?.total_credits ?? 0
@@ -50,6 +67,10 @@ function formatRelativeDate(dateStr: string): string {
 }
 
 onMounted(async () => {
+  if (!authStore.user) {
+    await authStore.fetchUser()
+  }
+
   try {
     await creditsStore.fetchBalance()
     await creditsStore.fetchPricing()
@@ -80,7 +101,7 @@ onMounted(async () => {
       <!-- Page Header -->
       <div class="py-8">
         <h1 class="text-2xl font-bold mb-1" style="color: #f5f5fa;">
-          {{ t('dashboard.welcome') }}{{ isZh ? '，' : ', ' }}{{ authStore.user?.email?.split('@')[0] }}{{ isZh ? '！' : '!' }}
+          {{ t('dashboard.welcome') }}{{ isZh ? '，' : ', ' }}{{ displayName }}{{ isZh ? '！' : '!' }}
         </h1>
         <p class="text-sm" style="color: #6b6b8a;">{{ t('dashboard.subtitle') }}</p>
       </div>
@@ -122,7 +143,7 @@ onMounted(async () => {
               <svg class="w-5 h-5" style="color: #fa8c16;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
             </div>
           </div>
-          <p class="text-3xl font-black mb-1 capitalize" style="color: #f5f5fa;">{{ authStore.user?.plan_type ?? 'Free' }}</p>
+          <p class="text-3xl font-black mb-1 capitalize" style="color: #f5f5fa;">{{ currentPlanLabel }}</p>
           <RouterLink to="/pricing" class="text-xs font-medium transition-colors hover:opacity-80" style="color: #1677ff;">
             {{ t('dashboard.upgradePlan') }} →
           </RouterLink>
@@ -163,8 +184,8 @@ onMounted(async () => {
             <RouterLink to="/dashboard/referrals" class="text-sm font-medium transition-colors hover:opacity-80" style="color: #6b6b8a;">
               🎁 {{ t('dashboard.referrals') }}
             </RouterLink>
-            <RouterLink to="/dashboard/social-accounts" class="text-sm font-medium transition-colors hover:opacity-80" style="color: #6b6b8a;">
-              📡 {{ t('dashboard.socialMedia') }}
+            <RouterLink to="/dashboard/share-links" class="text-sm font-medium transition-colors hover:opacity-80" style="color: #6b6b8a;">
+              🔗 {{ t('dashboard.socialMedia') }}
             </RouterLink>
           </div>
         </div>

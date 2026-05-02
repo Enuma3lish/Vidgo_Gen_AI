@@ -115,6 +115,7 @@ PLAN_TIER_MAP = {
     "basic":      "basic",
     "starter":    "basic",
     "pro":        "pro",
+    "test_pro_usd_1": "pro",
     "premium":    "pro",
     "enterprise": "pro",
 }

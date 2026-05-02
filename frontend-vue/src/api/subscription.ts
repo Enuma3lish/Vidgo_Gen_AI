@@ -11,6 +11,8 @@ export interface PlanInfo {
   description: string | null
   price_monthly: number
   price_yearly: number
+  currency?: string
+  is_test_only?: boolean
   monthly_credits: number
   features: {
     max_video_length: number | null

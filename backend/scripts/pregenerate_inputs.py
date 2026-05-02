@@ -44,6 +44,7 @@ import os
 import sys
 import uuid
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 # Make `app` importable when running from the backend/ directory or /app.
 for candidate in ("/app", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
@@ -275,6 +276,21 @@ async def _store_input_material(
 
 async def _fetch_image_bytes(url: str) -> bytes:
     """Pull a remote image so we can re-upload it to our own GCS bucket."""
+    if url.startswith("gs://"):
+        from google.cloud import storage
+
+        parsed = urlparse(url)
+        bucket_name = parsed.netloc
+        blob_name = parsed.path.lstrip("/")
+        if not bucket_name or not blob_name:
+            raise ValueError(f"Invalid GCS URI: {url}")
+        return storage.Client().bucket(bucket_name).blob(blob_name).download_as_bytes()
+
+    if url.startswith("data:") and "," in url:
+        import base64
+
+        return base64.b64decode(url.split(",", 1)[1])
+
     import httpx
     if url.startswith("/"):
         # Local path (when VertexAIProvider.text_to_image writes to /app/static/generated)

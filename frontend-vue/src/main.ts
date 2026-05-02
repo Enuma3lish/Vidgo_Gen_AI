@@ -28,9 +28,12 @@ const i18n = createI18n({
 
 // Create app
 const app = createApp(App)
+const pinia = createPinia()
 
 // Use plugins
-app.use(createPinia())
+// Pinia must be installed before the router so navigation guards can safely
+// resolve auth/admin state on the first page load.
+app.use(pinia)
 app.use(router)
 app.use(i18n)
 

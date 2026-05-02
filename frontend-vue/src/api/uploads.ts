@@ -83,4 +83,12 @@ export const uploadsApi = {
   getDownloadUrl(uploadId: string): string {
     return `/api/v1/uploads/${uploadId}/download`
   },
+
+  /** Download a completed upload result with the current Authorization header. */
+  async downloadResult(uploadId: string): Promise<Blob> {
+    const response = await apiClient.get(`/api/v1/uploads/${uploadId}/download`, {
+      responseType: 'blob',
+    })
+    return response.data
+  },
 }

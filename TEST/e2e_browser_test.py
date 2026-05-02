@@ -11,6 +11,7 @@ Usage:
 """
 import asyncio
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -19,10 +20,10 @@ from typing import Optional
 from playwright.async_api import async_playwright, Page, Browser, expect
 
 # ─── Configuration ───────────────────────────────────────────────────────────
-FRONTEND = "https://vidgo-frontend-38714015566.asia-east1.run.app"
-BACKEND  = "https://vidgo-backend-38714015566.asia-east1.run.app"
-USER_EMAIL = "qaz0978005418@gmail.com"
-USER_PASS  = "qaz129946858"
+FRONTEND = os.getenv("VIDGO_FRONTEND_URL", "https://vidgo-frontend-38714015566.asia-east1.run.app").rstrip("/")
+BACKEND  = os.getenv("VIDGO_BACKEND_URL", "https://vidgo-backend-38714015566.asia-east1.run.app").rstrip("/")
+USER_EMAIL = os.getenv("VIDGO_TEST_EMAIL", "qaz0978005418@gmail.com")
+USER_PASS  = os.getenv("VIDGO_TEST_PASSWORD", "qaz129946858")
 TIMEOUT = 15_000   # ms for page loads
 NAV_TIMEOUT = 10_000
 
@@ -40,6 +41,42 @@ def record(name: str, passed: bool, msg: str = "", dur: float = 0.0):
     results.append(TestResult(name, passed, msg, dur))
     icon = "✅" if passed else "❌"
     print(f"  {icon} {name}" + (f" — {msg}" if msg else ""))
+
+
+ZH_EXPECTED_TERMS = [
+    "產品攝影靈感庫", "按行業篩選", "按工具篩選", "全部範例",
+    "智能去背", "商品動態短影音",
+]
+EN_EXPECTED_TERMS = [
+    "Product Photography Inspiration Library", "Filter by Industry", "Filter by Tool",
+    "All Examples", "Background Removal", "Short Video",
+]
+ZH_UI_LEAKS_ON_EN = [
+    "產品攝影靈感庫", "按行業篩選", "按工具篩選", "全部範例",
+    "智能去背", "商品動態短影音", "室內設計", "圖片特效",
+]
+EN_UI_LEAKS_ON_ZH = [
+    "Product Photography Inspiration Library", "Filter by Industry", "Filter by Tool",
+    "All Examples", "Background Removal", "Short Video", "Room Redesign", "Image Effects",
+]
+
+
+def found_terms(text: str, terms: list[str]) -> list[str]:
+    return [term for term in terms if term in text]
+
+
+async def new_locale_page(browser: Browser, locale_code: str):
+    context = await browser.new_context(
+        viewport={"width": 1280, "height": 800},
+        locale="zh-TW" if locale_code == "zh-TW" else "en-US",
+    )
+    await context.add_init_script(
+        f"""
+        localStorage.setItem('locale', {json.dumps(locale_code)});
+        localStorage.setItem('vidgo_geo_detected', 'true');
+        """,
+    )
+    return context, await context.new_page()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -331,6 +368,67 @@ async def test_language_switch(page: Page):
     record("Language selector visible", has_lang)
 
 
+async def test_language_consistency(browser: Browser):
+    """§10.3 — User-selected Chinese/English should not leave mixed UI labels."""
+    locale_cases = [
+        ("zh-TW", ZH_EXPECTED_TERMS, EN_UI_LEAKS_ON_ZH, "Chinese initial render"),
+        ("en", EN_EXPECTED_TERMS, ZH_UI_LEAKS_ON_EN, "English initial render"),
+    ]
+    for locale_code, expected_terms, leak_terms, name in locale_cases:
+        context, locale_page = await new_locale_page(browser, locale_code)
+        try:
+            await locale_page.goto(f"{FRONTEND}/gallery", wait_until="networkidle", timeout=TIMEOUT)
+            await locale_page.wait_for_timeout(1500)
+            body = await locale_page.text_content("body") or ""
+            expected_hits = found_terms(body, expected_terms)
+            leaks = found_terms(body, leak_terms)
+            record(
+                f"Language consistency: {name}",
+                len(expected_hits) >= 4 and len(leaks) == 0,
+                f"expected={expected_hits}; leaks={leaks}",
+            )
+        finally:
+            await context.close()
+
+    context, locale_page = await new_locale_page(browser, "zh-TW")
+    try:
+        await locale_page.goto(f"{FRONTEND}/gallery", wait_until="networkidle", timeout=TIMEOUT)
+        await locale_page.wait_for_timeout(1500)
+        trigger = locale_page.locator('button:has-text("繁體中文")')
+        if await trigger.count() == 0:
+            trigger = locale_page.locator('button:has-text("English")')
+        await trigger.first.click()
+        await locale_page.locator('button:has-text("English")').last.click()
+        await locale_page.wait_for_timeout(800)
+        body = await locale_page.text_content("body") or ""
+        expected_hits = found_terms(body, EN_EXPECTED_TERMS)
+        leaks = found_terms(body, ZH_UI_LEAKS_ON_EN)
+        record(
+            "Language consistency: live switch zh-TW → en",
+            len(expected_hits) >= 4 and len(leaks) == 0,
+            f"expected={expected_hits}; leaks={leaks}",
+        )
+
+        trigger = locale_page.locator('button:has-text("English")')
+        if await trigger.count() == 0:
+            trigger = locale_page.locator('button:has-text("繁體中文")')
+        await trigger.first.click()
+        await locale_page.locator('button:has-text("繁體中文")').last.click()
+        await locale_page.wait_for_timeout(800)
+        body = await locale_page.text_content("body") or ""
+        expected_hits = found_terms(body, ZH_EXPECTED_TERMS)
+        leaks = found_terms(body, EN_UI_LEAKS_ON_ZH)
+        record(
+            "Language consistency: live switch en → zh-TW",
+            len(expected_hits) >= 4 and len(leaks) == 0,
+            f"expected={expected_hits}; leaks={leaks}",
+        )
+    except Exception as exc:
+        record("Language consistency: live switch", False, str(exc)[:120])
+    finally:
+        await context.close()
+
+
 async def test_mobile_responsive(page: Page, browser: Browser):
     """§7.1 — Mobile viewport renders correctly."""
     mobile_page = await browser.new_page(viewport={"width": 375, "height": 812})
@@ -429,6 +527,7 @@ async def main():
         print("-" * 50)
         await test_404_page(page)
         await test_language_switch(page)
+        await test_language_consistency(browser)
         await test_mobile_responsive(page, browser)
 
         # ── Section 6: Performance ──

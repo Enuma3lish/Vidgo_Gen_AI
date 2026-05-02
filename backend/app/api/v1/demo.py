@@ -19,6 +19,7 @@ Features:
 - PiAPI style transformation demos
 """
 from typing import Optional, List, Dict, Any
+import logging
 import uuid
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, BackgroundTasks, UploadFile, File
@@ -40,8 +41,14 @@ from app.services.gcs_storage_service import get_gcs_storage
 from app.services.similarity import get_similarity_service
 from app.services.rescue_service import get_rescue_service
 from app.core.config import get_settings
+from app.core.upload_validation import (
+    COMMON_IMAGE_DIMENSION_RULES,
+    extension_for_content_type,
+    validate_uploaded_content,
+)
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 SHORT_VIDEO_LENGTH = int(getattr(settings, "SHORT_VIDEO_LENGTH", 8))
 from app.services.material import MaterialLibraryService, UserContentCollector, MATERIAL_REQUIREMENTS
 from app.config.topic_registry import (
@@ -394,9 +401,12 @@ async def use_preset(
     # Increment use count
     await lookup_service.increment_use_count(str(material.id))
 
-    # Determine which URL to surface
-    full_result_url = material.result_video_url or material.result_image_url
-    watermarked_url = material.result_watermarked_url or full_result_url
+    # Determine which URL to surface, refreshing GCS signed URLs on the fly
+    from app.services.gcs_storage_service import get_gcs_storage
+    gcs = get_gcs_storage()
+
+    full_result_url = gcs.refresh_signed_url(material.result_video_url or material.result_image_url)
+    watermarked_url = gcs.refresh_signed_url(material.result_watermarked_url) or full_result_url
 
     if subscribed:
         return PresetResultResponse(
@@ -404,8 +414,8 @@ async def use_preset(
             preset_id=request.preset_id,
             result_url=full_result_url,
             result_watermarked_url=watermarked_url,
-            result_thumbnail_url=getattr(material, "result_thumbnail_url", None),
-            input_image_url=material.input_image_url,
+            result_thumbnail_url=gcs.refresh_signed_url(getattr(material, "result_thumbnail_url", None)),
+            input_image_url=gcs.refresh_signed_url(material.input_image_url),
             prompt=material.prompt,
             prompt_zh=material.prompt_zh,
             can_download=True,
@@ -418,8 +428,8 @@ async def use_preset(
         preset_id=request.preset_id,
         result_url=None,
         result_watermarked_url=watermarked_url,
-        result_thumbnail_url=getattr(material, "result_thumbnail_url", None),
-        input_image_url=material.input_image_url,
+        result_thumbnail_url=gcs.refresh_signed_url(getattr(material, "result_thumbnail_url", None)),
+        input_image_url=gcs.refresh_signed_url(material.input_image_url),
         prompt=material.prompt,
         prompt_zh=material.prompt_zh,
         can_download=False,
@@ -444,7 +454,10 @@ async def download_preset_result(
     if not is_subscribed_user(current_user):
         raise HTTPException(
             status_code=403,
-            detail="A subscription is required to download results."
+            detail={
+                "error": "download_blocked",
+                "message": "A subscription is required to download results.",
+            }
         )
 
     lookup_service = get_material_lookup_service(db)
@@ -456,6 +469,9 @@ async def download_preset_result(
     download_url = material.result_video_url or material.result_image_url
     if not download_url:
         raise HTTPException(status_code=404, detail="No result available for download")
+
+    from app.services.gcs_storage_service import get_gcs_storage
+    download_url = get_gcs_storage().refresh_signed_url(download_url) or download_url
 
     return RedirectResponse(url=download_url)
 
@@ -775,6 +791,11 @@ async def get_presets(
     lookup_service = get_material_lookup_service(db)
     presets = await lookup_service.get_presets_for_tool(tool_type, topic, limit, product_id=product_id)
 
+    from app.services.gcs_storage_service import get_gcs_storage
+    gcs = get_gcs_storage()
+    def _r(u):
+        return gcs.refresh_signed_url(u) if u else u
+
     payload = {
         "success": True,
         "tool_type": tool_type,
@@ -782,17 +803,20 @@ async def get_presets(
         "presets": [
             {
                 "id": str(p.id),
-                "prompt": p.prompt,
-                "prompt_zh": p.prompt_zh,
-                "input_image_url": p.input_image_url,
-                "input_video_url": p.input_video_url,
-                "result_image_url": p.result_image_url,
-                "result_video_url": p.result_video_url,
-                "result_watermarked_url": p.result_watermarked_url,
-                "thumbnail_url": p.result_thumbnail_url or p.result_watermarked_url or p.result_image_url,
-                "topic": p.topic,
-                "input_params": p.input_params or {},
-                "style_tags": p.tags or []
+                    "prompt": getattr(p, "prompt", ""),
+                    "prompt_zh": getattr(p, "prompt_zh", None),
+                    "prompt_en": getattr(p, "prompt_en", None) or getattr(p, "prompt", ""),
+                    "title_zh": getattr(p, "title_zh", None),
+                    "title_en": getattr(p, "title_en", None),
+                    "input_image_url": _r(getattr(p, "input_image_url", None)),
+                    "input_video_url": _r(getattr(p, "input_video_url", None)),
+                    "result_image_url": _r(getattr(p, "result_image_url", None)),
+                    "result_video_url": _r(getattr(p, "result_video_url", None)),
+                    "result_watermarked_url": _r(getattr(p, "result_watermarked_url", None)),
+                    "thumbnail_url": _r(getattr(p, "result_thumbnail_url", None) or getattr(p, "result_watermarked_url", None) or getattr(p, "result_image_url", None)),
+                    "topic": getattr(p, "topic", None),
+                    "input_params": getattr(p, "input_params", None) or {},
+                    "style_tags": getattr(p, "tags", None) or []
             }
             for p in presets
         ],
@@ -851,7 +875,8 @@ async def get_try_prompts(
 @router.get("/inspiration", response_model=InspirationResponse)
 async def get_inspiration_examples(
     topic: Optional[str] = Query(None, description="Filter by topic"),
-    count: int = Query(10, ge=1, le=20, description="Number of examples to return"),
+    count: int = Query(10, ge=1, le=50, description="Number of examples to return"),
+    language: str = Query("en", description="Language code (en, zh-TW)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -882,20 +907,32 @@ async def get_inspiration_examples(
     available_topics = [row[0] for row in topics_result.fetchall()]
 
     # Convert to response format
+    is_zh = language.startswith("zh")
+
+    def contains_cjk(value: Optional[str]) -> bool:
+        return bool(value) and any("\u4e00" <= char <= "\u9fff" for char in value)
+
     example_list = []
     for ex in examples:
-        # Determine display name for topic
-        topic_display = ex.topic_zh or ex.topic.replace("_", " ").title()
+        topic_display = (
+            ex.topic_zh if is_zh else ex.topic_en
+        ) or ex.topic.replace("_", " ").title()
+        raw_title = ex.title or ""
+        title = (ex.title_zh if is_zh else ex.title_en) or (
+            raw_title if contains_cjk(raw_title) == is_zh else topic_display
+        )
+        raw_prompt = ex.prompt or ""
+        prompt = raw_prompt if contains_cjk(raw_prompt) == is_zh else title
 
         example_list.append(InspirationExample(
             id=str(ex.id),
             topic=ex.topic,
             topic_display=topic_display,
-            prompt=ex.prompt,
+            prompt=prompt,
             image_url=ex.image_url,
             video_url=ex.video_url,
             thumbnail_url=ex.thumbnail_url,
-            title=ex.title,
+            title=title,
             style_tags=ex.style_tags or []
         ))
 
@@ -1113,6 +1150,9 @@ async def generate_demo_for_tool(
     input_image_url: Optional[str] = Query(None, description="Pregenerated input image URL the user picked"),
     input_video_url: Optional[str] = Query(None, description="Pregenerated input video URL the user picked"),
     effect_prompt: Optional[str] = Query(None, description="Effect/style/motion prompt the user picked"),
+    room_id: Optional[str] = Query(None, description="Room redesign demo room id"),
+    room_type: Optional[str] = Query(None, description="Room redesign room type"),
+    style_id: Optional[str] = Query(None, description="Room redesign style id"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional),
 ):
@@ -1161,6 +1201,18 @@ async def generate_demo_for_tool(
             redis = None
 
         cache_service = DemoCacheService(db, redis)
+        request_input_params = None
+        if tool_type == "room_redesign":
+            request_input_params = {
+                key: value
+                for key, value in {
+                    "room_id": room_id,
+                    "room_type": room_type,
+                    "style_id": style_id,
+                }.items()
+                if value
+            }
+
         generated = await cache_service.get_or_generate(
             tool_type,
             topic,
@@ -1169,6 +1221,7 @@ async def generate_demo_for_tool(
             input_image_url=input_image_url,
             input_video_url=input_video_url,
             effect_prompt=effect_prompt,
+            input_params=request_input_params,
         )
 
         if generated:
@@ -3021,26 +3074,33 @@ async def upload_file(file: UploadFile = File(...), request: Request = None):
     publicly accessible URL.
     """
     try:
-        # Generate safe filename
-        ext = os.path.splitext(file.filename)[1]
-        if not ext:
-            ext = ".png"
-
-        filename = f"{uuid.uuid4()}{ext}"
         content = await file.read()
-        content_type = file.content_type or "application/octet-stream"
+        content_type = validate_uploaded_content(
+            content=content,
+            declared_content_type=file.content_type,
+            expected_kind=None,
+            max_bytes=20 * 1024 * 1024,
+            dimension_rules=COMMON_IMAGE_DIMENSION_RULES,
+        )
+        filename = f"{uuid.uuid4()}{extension_for_content_type(content_type)}"
 
         static_path = f"/static/uploads/{filename}"
         public_url = static_path
 
         gcs = get_gcs_storage()
+        uploaded_to_gcs = False
         if gcs.enabled:
-            public_url = gcs.upload_public(
-                data=content,
-                blob_name=f"uploads/demo/{filename}",
-                content_type=content_type,
-            )
-        else:
+            try:
+                public_url = gcs.upload_public(
+                    data=content,
+                    blob_name=f"uploads/demo/{filename}",
+                    content_type=content_type,
+                )
+                uploaded_to_gcs = True
+            except Exception as exc:
+                logger.warning("GCS demo upload failed; falling back to local storage: %s", exc)
+
+        if not uploaded_to_gcs:
             # Local dev fallback when GCS is not wired.
             upload_dir = Path("/app/static/uploads")
             upload_dir.mkdir(parents=True, exist_ok=True)
@@ -3049,11 +3109,18 @@ async def upload_file(file: UploadFile = File(...), request: Request = None):
                 buffer.write(content)
 
             public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
-            if not public_base and request:
-                public_base = str(request.base_url).rstrip("/")
             public_url = f"{public_base}{static_path}" if public_base else static_path
 
         return {"url": public_url, "static_path": static_path}
 
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        logger.error("Demo upload failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error_code": "upload_failed",
+                "message": "Upload could not be completed. Please try again.",
+            },
+        )

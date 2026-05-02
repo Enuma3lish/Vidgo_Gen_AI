@@ -677,6 +677,93 @@ async def get_moderation_queue(
 
 
 # ============================================================================
+# Material Readiness Seeding
+# ============================================================================
+
+@router.post("/materials/seed-readiness")
+async def seed_material_readiness(
+    admin: User = Depends(require_admin)
+):
+    """Seed missing material readiness rows by reusing existing completed uploads.
+    No external AI provider calls are made.
+    """
+    from scripts.seed_material_readiness import (
+        CORE_TARGETS, LANDING_VIDEO_PER_TOPIC, LANDING_AVATAR_PER_TOPIC,
+        _seed_to_count, _latest_upload_url, _topic_zh, _landing_topic_zh,
+    )
+    from app.config.topic_registry import get_landing_topics
+    from app.core.database import AsyncSessionLocal
+    from app.models.material import ToolType
+
+    results: dict = {}
+    errors: list = []
+    total_inserted = 0
+
+    async with AsyncSessionLocal() as session:
+        # Pre-fetch one media URL per tool — skip tools that have no completed uploads
+        media_urls: dict = {}
+        for tool_type in CORE_TARGETS:
+            try:
+                media_urls[tool_type] = await _latest_upload_url(session, tool_type)
+            except RuntimeError as exc:
+                errors.append({"tool": tool_type.value, "error": str(exc)})
+
+        for tool_type, topics in CORE_TARGETS.items():
+            if tool_type not in media_urls:
+                continue
+            tool_inserted = 0
+            for topic in topics:
+                try:
+                    n = await _seed_to_count(
+                        session,
+                        tool_type=tool_type,
+                        topic=topic,
+                        topic_zh=_topic_zh(tool_type, topic),
+                        target_count=1,
+                        media_url=media_urls[tool_type],
+                    )
+                    tool_inserted += n
+                except Exception as exc:
+                    errors.append({"tool": tool_type.value, "topic": topic, "error": str(exc)})
+            results[tool_type.value] = tool_inserted
+            total_inserted += tool_inserted
+
+        for item in get_landing_topics():
+            topic = item["id"]
+            topic_zh = item["name_zh"]
+            for tool_type, target in [
+                (ToolType.SHORT_VIDEO, LANDING_VIDEO_PER_TOPIC),
+                (ToolType.AI_AVATAR, LANDING_AVATAR_PER_TOPIC),
+            ]:
+                if tool_type not in media_urls:
+                    continue
+                try:
+                    kwargs = dict(
+                        tool_type=tool_type,
+                        topic=topic,
+                        topic_zh=topic_zh,
+                        target_count=target,
+                        media_url=media_urls[tool_type],
+                        landing=True,
+                    )
+                    if tool_type == ToolType.AI_AVATAR:
+                        kwargs["languages"] = ("en", "zh-TW")
+                    n = await _seed_to_count(session, **kwargs)
+                    total_inserted += n
+                except Exception as exc:
+                    errors.append({"tool": tool_type.value, "topic": topic, "error": str(exc)})
+
+        await session.commit()
+
+    return {
+        "success": True,
+        "total_inserted": total_inserted,
+        "by_tool": results,
+        "errors": errors,
+    }
+
+
+# ============================================================================
 # System Health Endpoints
 # ============================================================================
 

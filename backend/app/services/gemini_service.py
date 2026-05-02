@@ -108,21 +108,68 @@ class GeminiService:
                 "category": category,
             }
 
+        category_context = {
+            "product": (
+                "commercial product photography — think studio hero shots, lifestyle scenes, "
+                "dramatic accent lighting, clean or contextual backgrounds, bokeh, "
+                "sharp detail on textures and materials"
+            ),
+            "food": (
+                "culinary/food photography — think steam, glistening surfaces, vibrant colour, "
+                "moody overhead or 45° angles, shallow depth-of-field, rustic or minimal props, "
+                "natural side-window light or warm golden-hour warmth"
+            ),
+            "fashion": (
+                "editorial fashion photography — think confident model poses, dynamic movement, "
+                "on-location or minimalist studio, directional key light, rich fabric texture, "
+                "depth from foreground/background separation"
+            ),
+            "interior": (
+                "architectural interior photography — think wide-angle perspective, balanced "
+                "natural + artificial light, cohesive colour palette, lifestyle props, "
+                "high ceilings, styled vignettes, premium materials"
+            ),
+            "portrait": (
+                "professional portrait photography — think catchlights in eyes, soft diffused "
+                "key light, subtle background separation, natural skin tones, "
+                "genuine expression, clean or complementary background"
+            ),
+            "lifestyle": (
+                "lifestyle brand photography — think authentic human moments, sun-drenched or "
+                "golden-hour colour grading, aspirational yet approachable setting, "
+                "product integrated naturally into scene"
+            ),
+        }.get(category, "commercial advertising photography — visually compelling, high production value")
+
+        style_hint = f"Preferred visual style: {style}." if style else ""
+
         system_prompt = (
-            "You are an expert prompt engineer for AI image and video generation.\n"
-            "Your task is to enhance user prompts to create better, more detailed prompts for product advertising.\n\n"
-            "Guidelines:\n"
-            "1. Keep the core intent of the original prompt\n"
-            "2. Add specific visual details (lighting, angle, background)\n"
-            "3. Include quality enhancers (high quality, detailed, professional)\n"
-            "4. Make it suitable for product advertising\n"
-            "5. Keep it concise but descriptive (max 100 words)\n"
-            "6. Output ONLY the enhanced prompt, nothing else\n\n"
-            f"Category context: {category}\n"
-            f"Style preference: {style or 'any'}"
+            "You are a senior creative director and AI image-generation prompt specialist.\n"
+            "You write prompts for Flux, DALL-E 3, Stable Diffusion, and Imagen that consistently "
+            "produce commercially stunning, print-quality visuals.\n\n"
+            "When you enhance a prompt, follow this mental checklist:\n"
+            "  • SUBJECT — what is the hero element? make it specific.\n"
+            "  • COMPOSITION — angle (eye-level / overhead / low-angle / three-quarter), "
+            "framing, negative space.\n"
+            "  • LIGHTING — source (softbox / window light / rim light / golden hour), "
+            "quality (diffused / dramatic), colour temperature (warm / cool / neutral).\n"
+            "  • ATMOSPHERE — mood, season, time of day, weather, story.\n"
+            "  • TECHNICAL — lens (50mm / 85mm macro / wide angle), depth of field, "
+            "aspect ratio, film grain or digital clean.\n"
+            "  • QUALITY MARKERS — cinematic, hyper-realistic, award-winning photography, "
+            "8K, sharp focus, colour-graded.\n\n"
+            "Rules:\n"
+            "  1. Keep the user's core intent — never change the subject.\n"
+            "  2. Final prompt must be 30–80 words — rich but not bloated.\n"
+            "  3. Output ONLY the enhanced prompt text, no preamble, no quotes, no labels.\n\n"
+            f"Category: {category_context}\n"
+            f"{style_hint}"
         )
 
-        prompt = f"Enhance this prompt for AI image generation:\n\nOriginal: {user_prompt}\n\nEnhanced prompt:"
+        prompt = (
+            f"Original prompt:\n{user_prompt}\n\n"
+            "Write the enhanced prompt now:"
+        )
 
         try:
             client = self._get_genai_client()
@@ -138,7 +185,11 @@ class GeminiService:
                     ),
                     types.Content(
                         role="model",
-                        parts=[types.Part.from_text("I understand. I will enhance prompts for product advertising images. Please provide the prompt.")],
+                        parts=[types.Part.from_text(
+                            "Understood. I'll enhance each prompt by refining subject specificity, "
+                            "composition, lighting, atmosphere, and quality markers — keeping your "
+                            "core intent intact. Ready."
+                        )],
                     ),
                     types.Content(
                         role="user",
@@ -146,12 +197,16 @@ class GeminiService:
                     ),
                 ],
                 config=types.GenerateContentConfig(
-                    temperature=0.7, max_output_tokens=200
+                    temperature=0.75, max_output_tokens=300
                 ),
             )
 
             enhanced = (response.text or "").strip()
-            enhanced = enhanced.replace("Enhanced prompt:", "").strip().strip('"')
+            # Strip any label prefix the model may accidentally emit
+            for prefix in ("Enhanced prompt:", "Enhanced:", "Output:"):
+                if enhanced.lower().startswith(prefix.lower()):
+                    enhanced = enhanced[len(prefix):].strip()
+            enhanced = enhanced.strip('"').strip("'")
 
             return {
                 "success": True,
@@ -515,32 +570,98 @@ class GeminiService:
         if not self.api_key and not self._use_vertex:
             return {"success": False, "prompts": [], "error": "No API key configured"}
 
-        tool_context = {
-            "background_removal": "product photography with white or transparent backgrounds",
-            "product_scene": "product placement in beautiful scenes, lifestyle photography",
-            "try_on": "fashion items, clothing, accessories on models",
-            "room_redesign": "interior design, room decoration, furniture arrangement",
-            "short_video": "dynamic product videos, motion effects, promotional content",
-        }.get(tool, "general product content")
+        tool_config = {
+            "background_removal": {
+                "purpose": "Clean, isolated product shots for e-commerce listings — subject sharp, background removed",
+                "dimensions": ["hero angle", "material texture", "brand aesthetic", "product category"],
+                "examples": [
+                    "Sleek stainless-steel insulated water bottle, hero front view, sharp metallic sheen, matte finish lid, isolated",
+                    "Artisan leather handbag in caramel brown, three-quarter angle showing stitching detail and gold hardware, isolated",
+                    "Running shoes in neon coral and white mesh, dynamic side profile, clean sole, isolated",
+                ],
+            },
+            "product_scene": {
+                "purpose": "Product placed in aspirational lifestyle or studio scenes for advertising",
+                "dimensions": ["setting/environment", "lighting mood", "props and context", "camera perspective"],
+                "examples": [
+                    "Luxury perfume bottle on a marble vanity table, warm golden morning light streaming through sheer curtains, soft bokeh",
+                    "Protein supplement canister on a gym locker bench, early-morning dramatic side lighting, towel and water bottle props",
+                    "Artisan coffee bag beside a ceramic mug on a rustic wooden café counter, moody window light, steam wisps",
+                ],
+            },
+            "try_on": {
+                "purpose": "Fashion items shown on models in editorial or lifestyle contexts",
+                "dimensions": ["garment fit and drape", "model pose and movement", "setting/backdrop", "lighting and mood"],
+                "examples": [
+                    "Oversized cream linen blazer on a confident female model, breezy outdoor terrace, golden afternoon sun, relaxed power stance",
+                    "Fitted navy suit on a male model in a modern city lobby, cool directional key light, sharp lapels, dynamic walking pose",
+                    "Floral midi dress in soft pastels, female model in sunlit botanical garden, natural backlight, flowing movement",
+                ],
+            },
+            "room_redesign": {
+                "purpose": "Interior spaces redesigned in specific styles for inspiration and marketing",
+                "dimensions": ["design style", "colour palette", "lighting (natural/artificial)", "key furniture and materials"],
+                "examples": [
+                    "Scandinavian living room, warm oak floors, cream bouclé sofa, fiddle-leaf fig, large window with diffused morning light",
+                    "Industrial loft bedroom, exposed brick, black steel bed frame, Edison bulb pendant, warm amber evening light",
+                    "Japanese minimalist bathroom, terrazzo floor, teak bath caddy, washi paper pendant lamp, natural side light",
+                ],
+            },
+            "short_video": {
+                "purpose": "Cinematic short-form product or brand videos optimised for social media",
+                "dimensions": ["motion type", "visual hook", "colour grade", "pacing energy"],
+                "examples": [
+                    "Slow-motion pour of golden honey into glass jar, macro lens, warm amber colour grade, studio backlight",
+                    "Sneaker unboxing with dramatic reveal, hands lifting lid, cool blue tones, quick cuts, product hero close-ups",
+                    "Perfume bottle rotating on a mirrored surface, light refractions, luxury black-and-gold palette, cinematic zoom",
+                ],
+            },
+            "ai_avatar": {
+                "purpose": "AI spokesperson or avatar delivering a product message naturally and engagingly",
+                "dimensions": ["presenter style", "background setting", "delivery tone", "brand alignment"],
+                "examples": [
+                    "Professional female presenter in a modern office, business casual, warm confident delivery, clean blurred background",
+                    "Casual male presenter outdoors in a bright urban setting, friendly direct tone, relaxed styling",
+                    "Expert skincare presenter in a clean white studio, soft beauty lighting, reassuring instructional tone",
+                ],
+            },
+        }.get(tool, {
+            "purpose": "commercial AI-generated product content",
+            "dimensions": ["visual style", "lighting", "composition", "mood"],
+            "examples": [
+                "Premium product in elegant setting, professional studio lighting, hero angle",
+                "Lifestyle brand moment, natural light, authentic feel, aspirational mood",
+            ],
+        })
 
         lang_instruction = {
-            "en": "Generate prompts in English.",
-            "zh": "Generate prompts in Traditional Chinese.",
-            "ja": "Generate prompts in Japanese.",
-        }.get(language, "Generate prompts in English.")
+            "en": "Write every prompt in English.",
+            "zh": "Write every prompt in Traditional Chinese (繁體中文).",
+            "ja": "Write every prompt in Japanese.",
+        }.get(language, "Write every prompt in English.")
+
+        dims = "\n".join(f"  - {d}" for d in tool_config["dimensions"])
+        examples_block = "\n".join(f'  "{ex}"' for ex in tool_config["examples"])
 
         generation_prompt = (
-            f"Generate {count} unique, detailed prompts for AI image/video generation.\n\n"
-            f"Context:\n- Tool: {tool} ({tool_context})\n- Topic: {topic}\n"
-            f"- Purpose: E-commerce product advertising and marketing\n\n"
-            f"{lang_instruction}\n\n"
-            "Requirements:\n"
-            "1. Each prompt should be 15-40 words\n"
-            "2. Include specific details (colors, materials, lighting, style)\n"
-            "3. Suitable for commercial product advertising\n"
-            "4. Diverse variety within the topic\n"
-            "5. No inappropriate content\n\n"
-            'Respond in JSON format:\n{"prompts": ["prompt1", "prompt2", ...]}'
+            f"You are an expert AI image/video generation prompt writer specialising in "
+            f"e-commerce and brand advertising content.\n\n"
+            f"TASK: Generate exactly {count} unique prompts for the following brief.\n\n"
+            f"Tool: {tool}\n"
+            f"Purpose: {tool_config['purpose']}\n"
+            f"Topic / theme: {topic}\n\n"
+            f"Each prompt must vary across these dimensions (do not repeat the same combination):\n"
+            f"{dims}\n\n"
+            f"Quality examples (match this level of specificity):\n"
+            f"{examples_block}\n\n"
+            f"Rules:\n"
+            f"1. Each prompt is 20–60 words — vivid, specific, commercially polished.\n"
+            f"2. Cover the full range of {topic}: different sub-styles, moods, angles, settings.\n"
+            f"3. Every prompt must be immediately usable — no placeholders like [color] or [item].\n"
+            f"4. No repetition across prompts; aim for maximum creative diversity.\n"
+            f"5. {lang_instruction}\n"
+            f"6. No inappropriate or adult content.\n\n"
+            f'Output ONLY valid JSON: {{"prompts": ["prompt 1", "prompt 2", ...]}}'
         )
 
         try:
@@ -552,7 +673,8 @@ class GeminiService:
                 model=self.model_name,
                 contents=[generation_prompt],
                 config=types.GenerateContentConfig(
-                    temperature=0.9, max_output_tokens=4000
+                    temperature=0.95,
+                    max_output_tokens=8000,
                 ),
             )
 

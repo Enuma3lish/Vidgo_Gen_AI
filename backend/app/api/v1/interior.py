@@ -499,13 +499,13 @@ async def generate_3d_from_floorplan(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Two-stage Floor-Plan -> 3D pipeline (subscriber only).
+    Two-stage Floor-Plan -> 3D pipeline (subscribers + superusers).
 
     Stage 1: Gemini 2.5 Flash Image renders a photorealistic isometric
     interior from the user's architectural floor plan + dimensions.
     Stage 2: PiAPI Trellis2 reconstructs the rendered image into a GLB mesh.
     """
-    if not is_subscribed_user(current_user):
+    if not is_subscribed_user(current_user) and not getattr(current_user, "is_superuser", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Floor-plan to 3D requires an active subscription"
@@ -518,26 +518,12 @@ async def generate_3d_from_floorplan(
         )
 
     # ---- Stage 1: Gemini renders an isometric photorealistic interior ----
-    floorplan_prompt = (
-        "Treat the supplied image as a 2D top-down architectural floor plan. "
-        "Render a photorealistic isometric (3/4 perspective) interior visualization "
-        "that exactly matches the room shape, wall positions, doors, and windows shown. "
-        "Walls should be approximately 2.8 meters tall. Use realistic materials: "
-        "hardwood or tiled floor, painted walls, soft natural daylight. "
-        "No people, no text, no dimension labels, no measurement lines. "
-        "Output a clean architectural visualization render of the empty interior space "
-        "with correct perspective, depth and shadows."
-    )
-    if request.prompt:
-        floorplan_prompt += f" Additional notes: {request.prompt.strip()}."
-
     interior_service = get_interior_design_service()
-    render_result = await interior_service.redesign_room(
-        room_image_url=request.image_url,
-        prompt=floorplan_prompt,
+    render_result = await interior_service.render_from_floorplan(
+        floorplan_image_url=request.image_url,
         style_id=request.style_id,
         room_type=request.room_type,
-        keep_layout=True,
+        extra_prompt=request.prompt or "",
     )
     if not render_result.get("success") or not render_result.get("image_url"):
         raise HTTPException(

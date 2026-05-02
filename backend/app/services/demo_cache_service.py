@@ -22,7 +22,7 @@ import logging
 import random
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import and_, or_, select, func
 
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
 
@@ -1062,6 +1062,15 @@ class DemoCacheService:
         m = result.scalars().first()
         return self._material_to_dict(m) if m else None
 
+    @staticmethod
+    def _has_result_url():
+        """SQLAlchemy filter: material must have at least one non-empty result URL."""
+        return or_(
+            and_(Material.result_image_url.is_not(None), Material.result_image_url != ""),
+            and_(Material.result_watermarked_url.is_not(None), Material.result_watermarked_url != ""),
+            and_(Material.result_video_url.is_not(None), Material.result_video_url != ""),
+        )
+
     async def _get_from_db(
         self,
         tool_type: str,
@@ -1073,6 +1082,7 @@ class DemoCacheService:
             Material.tool_type == tool_type,
             Material.is_active == True,
             Material.status.in_([MaterialStatus.APPROVED, MaterialStatus.FEATURED]),
+            self._has_result_url(),
         )
         if topic:
             query = query.where(Material.topic == topic)
@@ -1096,6 +1106,7 @@ class DemoCacheService:
             Material.tool_type == tool_type,
             Material.is_active == True,
             Material.status.in_([MaterialStatus.APPROVED, MaterialStatus.FEATURED]),
+            self._has_result_url(),
         )
         if topic:
             query = query.where(Material.topic == topic)

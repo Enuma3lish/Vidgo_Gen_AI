@@ -327,6 +327,90 @@ class InteriorDesignService:
             logger.error(f"Interior design error: {e}")
             return {"success": False, "error": str(e)}
 
+    async def render_from_floorplan(
+        self,
+        floorplan_image_url: Optional[str] = None,
+        floorplan_image_base64: Optional[str] = None,
+        style_id: Optional[str] = None,
+        room_type: Optional[str] = None,
+        extra_prompt: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Floor-plan image → photorealistic isometric interior render.
+
+        Uses a floor-plan-specific primary prompt so Gemini isn't confused
+        by the generic "redesign this room" instructions used in redesign_room().
+        """
+        if not self.api_key:
+            return {"success": False, "error": "Gemini API key not configured"}
+
+        if floorplan_image_url and not floorplan_image_base64:
+            try:
+                floorplan_image_base64, _ = await self._fetch_image_as_base64(floorplan_image_url)
+            except Exception as exc:
+                return {"success": False, "error": f"Failed to fetch floor plan image: {exc}"}
+
+        if not floorplan_image_base64:
+            return {"success": False, "error": "No floor plan image provided"}
+
+        mime_type = "image/png" if floorplan_image_base64.startswith("iVBOR") else "image/jpeg"
+
+        room_hint = ""
+        if room_type and room_type in ROOM_TYPES:
+            room_hint = f"The primary room type is: {ROOM_TYPES[room_type]['context']}. "
+
+        style_hint = ""
+        if style_id and style_id in DESIGN_STYLES:
+            style_hint = f"Apply this interior design style: {DESIGN_STYLES[style_id]['prompt_suffix']}. "
+
+        primary_prompt = (
+            "The attached image is a 2D architectural floor plan (top-down blueprint). "
+            "Your task: generate a single photorealistic isometric (45-degree bird's-eye) "
+            "interior visualization that faithfully reflects the room shapes, wall positions, "
+            "doorways, and window openings shown in the floor plan. "
+            "Rules: walls should be approximately 2.8 m tall; use realistic materials "
+            "(hardwood or tile flooring, painted plaster walls); soft natural daylight "
+            "through the windows; no people, no dimension text, no measurement labels, "
+            "no overlaid annotations. "
+            "Output must look like a professional architectural render — correct depth, "
+            "realistic shadows and reflections, high detail. "
+            f"{room_hint}{style_hint}{extra_prompt}"
+        ).strip()
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/models/{self.MODEL}:generateContent",
+                    params={"key": self.api_key},
+                    headers=self._get_headers(),
+                    json={
+                        "contents": [
+                            {
+                                "role": "user",
+                                "parts": [
+                                    {"inline_data": {"mime_type": mime_type, "data": floorplan_image_base64}},
+                                    {"text": primary_prompt},
+                                ],
+                            }
+                        ],
+                        "generationConfig": {
+                            "responseModalities": ["TEXT", "IMAGE"],
+                            "temperature": 0.7,
+                        },
+                    },
+                )
+
+            if response.status_code == 200:
+                return await self._process_image_response(response.json(), "floorplan_render")
+
+            error_text = response.text[:500]
+            logger.error(f"Gemini floor-plan render error: {response.status_code} - {error_text}")
+            return {"success": False, "error": f"API error {response.status_code}", "details": error_text}
+
+        except Exception as exc:
+            logger.error(f"Floor-plan render error: {exc}")
+            return {"success": False, "error": str(exc)}
+
     async def generate_design(
         self,
         prompt: str,

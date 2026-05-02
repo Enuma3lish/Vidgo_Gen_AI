@@ -680,45 +680,103 @@ async def get_moderation_queue(
 # Material Readiness Seeding
 # ============================================================================
 
+@router.get("/materials/readiness-status")
+async def get_material_readiness_status(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Full check_all_materials() breakdown — shows exactly which tools/topics are failing."""
+    from app.services.material_generator import get_material_generator
+    generator = get_material_generator()
+    status = await generator.check_all_materials(db)
+    failing = {k: v for k, v in status.items() if not v.get("ready", False)}
+    passing = {k: v for k, v in status.items() if v.get("ready", False)}
+    return {
+        "all_ready": len(failing) == 0,
+        "failing_count": len(failing),
+        "passing_count": len(passing),
+        "failing": failing,
+        "passing_keys": list(passing.keys()),
+    }
+
+
 @router.post("/materials/seed-readiness")
 async def seed_material_readiness(
     admin: User = Depends(require_admin)
 ):
-    """Seed missing material readiness rows by reusing existing completed uploads.
-    No external AI provider calls are made.
+    """Seed missing material readiness rows for ALL tools/topics using existing uploads.
+    Also repairs null prompt / prompt_zh fields.  No external AI provider calls.
     """
     from scripts.seed_material_readiness import (
-        CORE_TARGETS, LANDING_VIDEO_PER_TOPIC, LANDING_AVATAR_PER_TOPIC,
-        _seed_to_count, _latest_upload_url, _topic_zh, _landing_topic_zh,
+        LANDING_VIDEO_PER_TOPIC, LANDING_AVATAR_PER_TOPIC,
+        VIDEO_TOOLS, _seed_to_count, _latest_upload_url, _topic_zh,
     )
-    from app.config.topic_registry import get_landing_topics
+    from app.config.topic_registry import get_landing_topics, get_topic_ids_for_tool, get_topic_info
     from app.core.database import AsyncSessionLocal
-    from app.models.material import ToolType
+    from app.models.material import Material, ToolType
+    from sqlalchemy import update, or_
+
+    # All 8 tools the readiness check covers
+    ALL_TOOLS = {
+        ToolType.BACKGROUND_REMOVAL: "background_removal",
+        ToolType.PRODUCT_SCENE:      "product_scene",
+        ToolType.TRY_ON:             "try_on",
+        ToolType.ROOM_REDESIGN:      "room_redesign",
+        ToolType.SHORT_VIDEO:        "short_video",
+        ToolType.AI_AVATAR:          "ai_avatar",
+        ToolType.PATTERN_GENERATE:   "pattern_generate",
+        ToolType.EFFECT:             "effect",
+    }
 
     results: dict = {}
     errors: list = []
     total_inserted = 0
+    prompts_fixed = 0
 
     async with AsyncSessionLocal() as session:
-        # Pre-fetch one media URL per tool — skip tools that have no completed uploads
+        # ── 1. Repair null prompt fields on existing active materials ──────────
+        res = await session.execute(
+            update(Material)
+            .where(Material.is_active == True)
+            .where(or_(Material.prompt == None, Material.prompt == ""))
+            .values(prompt="VidGo AI generated content")
+        )
+        prompts_fixed += res.rowcount or 0
+
+        res = await session.execute(
+            update(Material)
+            .where(Material.is_active == True)
+            .where(Material.language.like("zh%"))
+            .where(or_(Material.prompt_zh == None, Material.prompt_zh == ""))
+            .values(prompt_zh="VidGo AI 生成內容")
+        )
+        prompts_fixed += res.rowcount or 0
+
+        # ── 2. Pre-fetch media URLs for every tool ─────────────────────────────
         media_urls: dict = {}
-        for tool_type in CORE_TARGETS:
+        for tool_type in ALL_TOOLS:
             try:
                 media_urls[tool_type] = await _latest_upload_url(session, tool_type)
             except RuntimeError as exc:
                 errors.append({"tool": tool_type.value, "error": str(exc)})
 
-        for tool_type, topics in CORE_TARGETS.items():
+        # ── 3. Seed 1 material per topic for every tool (all topics) ──────────
+        for tool_type, tool_key in ALL_TOOLS.items():
             if tool_type not in media_urls:
+                continue
+            topics = get_topic_ids_for_tool(tool_key)
+            if not topics:
                 continue
             tool_inserted = 0
             for topic in topics:
                 try:
+                    info = get_topic_info(tool_key, topic) or {}
+                    topic_zh = info.get("name_zh", topic)
                     n = await _seed_to_count(
                         session,
                         tool_type=tool_type,
                         topic=topic,
-                        topic_zh=_topic_zh(tool_type, topic),
+                        topic_zh=topic_zh,
                         target_count=1,
                         media_url=media_urls[tool_type],
                     )
@@ -728,17 +786,19 @@ async def seed_material_readiness(
             results[tool_type.value] = tool_inserted
             total_inserted += tool_inserted
 
+        # ── 4. Seed landing page materials ────────────────────────────────────
+        landing_inserted = 0
         for item in get_landing_topics():
             topic = item["id"]
             topic_zh = item["name_zh"]
             for tool_type, target in [
                 (ToolType.SHORT_VIDEO, LANDING_VIDEO_PER_TOPIC),
-                (ToolType.AI_AVATAR, LANDING_AVATAR_PER_TOPIC),
+                (ToolType.AI_AVATAR,   LANDING_AVATAR_PER_TOPIC),
             ]:
                 if tool_type not in media_urls:
                     continue
                 try:
-                    kwargs = dict(
+                    kwargs: dict = dict(
                         tool_type=tool_type,
                         topic=topic,
                         topic_zh=topic_zh,
@@ -749,14 +809,17 @@ async def seed_material_readiness(
                     if tool_type == ToolType.AI_AVATAR:
                         kwargs["languages"] = ("en", "zh-TW")
                     n = await _seed_to_count(session, **kwargs)
-                    total_inserted += n
+                    landing_inserted += n
                 except Exception as exc:
                     errors.append({"tool": tool_type.value, "topic": topic, "error": str(exc)})
+        results["landing"] = landing_inserted
+        total_inserted += landing_inserted
 
         await session.commit()
 
     return {
         "success": True,
+        "prompts_fixed": prompts_fixed,
         "total_inserted": total_inserted,
         "by_tool": results,
         "errors": errors,

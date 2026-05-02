@@ -517,20 +517,54 @@ async def generate_3d_from_floorplan(
             detail="Floor plan image URL is required"
         )
 
-    # ---- Stage 1: Gemini renders an isometric photorealistic interior ----
-    interior_service = get_interior_design_service()
-    render_result = await interior_service.render_from_floorplan(
-        floorplan_image_url=request.image_url,
-        style_id=request.style_id,
-        room_type=request.room_type,
-        extra_prompt=request.prompt or "",
-    )
-    if not render_result.get("success") or not render_result.get("image_url"):
+    # ---- Stage 1: PiAPI renders a photorealistic interior from the floor plan ----
+    from app.services.interior_design_service import DESIGN_STYLES, ROOM_TYPES
+
+    style_suffix = ""
+    if request.style_id and request.style_id in DESIGN_STYLES:
+        style_suffix = DESIGN_STYLES[request.style_id]["prompt_suffix"]
+
+    room_hint = ""
+    if request.room_type and request.room_type in ROOM_TYPES:
+        room_hint = f"{ROOM_TYPES[request.room_type]['context']}, "
+
+    floorplan_prompt = (
+        f"Photorealistic interior architectural visualization rendered from a 2D floor plan. "
+        f"{room_hint}"
+        f"Isometric bird's-eye perspective, 2.8m walls, realistic materials, soft natural daylight. "
+        f"No people, no dimension labels. "
+        f"{style_suffix} "
+        f"{(request.prompt or '').strip()}"
+    ).strip()
+
+    provider_router = get_provider_router()
+    try:
+        stage1 = await provider_router.route(
+            TaskType.INTERIOR,
+            {
+                "image_url": request.image_url,
+                "prompt": floorplan_prompt,
+                "style": request.style_id or "modern_minimalist",
+                "preserve_structure": True,
+            },
+            user_tier="paid",
+        )
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Floor-plan render failed: {render_result.get('error', 'unknown error')}"
+            detail=f"Floor-plan interior render failed: {exc}"
+        ) from exc
+
+    rendered_url = (
+        stage1.get("image_url")
+        or stage1.get("output_url")
+        or (stage1.get("output", {}) or {}).get("image_url")
+    )
+    if not rendered_url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Floor-plan render returned no image: {stage1.get('error', 'unknown')}"
         )
-    rendered_url = render_result["image_url"]
     # ---- Stage 2: Trellis2 reconstructs the rendered image into a GLB ----
     provider_router = get_provider_router()
     try:

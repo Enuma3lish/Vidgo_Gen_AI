@@ -734,7 +734,29 @@ async def seed_material_readiness(
     prompts_fixed = 0
 
     async with AsyncSessionLocal() as session:
-        # ── 1. Repair null prompt fields on existing active materials ──────────
+        # ── 1a. Copy result_image_url → result_watermarked_url where watermarked is empty ──
+        from sqlalchemy import case
+        res = await session.execute(
+            update(Material)
+            .where(Material.is_active == True)
+            .where(Material.result_image_url.is_not(None))
+            .where(Material.result_image_url != "")
+            .where(or_(Material.result_watermarked_url == None, Material.result_watermarked_url == ""))
+            .values(result_watermarked_url=Material.result_image_url)
+        )
+        prompts_fixed += res.rowcount or 0
+
+        # ── 1b. Deactivate materials with no result URL at all ─────────────────
+        await session.execute(
+            update(Material)
+            .where(Material.is_active == True)
+            .where(or_(Material.result_image_url == None, Material.result_image_url == ""))
+            .where(or_(Material.result_watermarked_url == None, Material.result_watermarked_url == ""))
+            .where(or_(Material.result_video_url == None, Material.result_video_url == ""))
+            .values(is_active=False)
+        )
+
+        # ── 1c. Repair null prompt fields on existing active materials ──────────
         res = await session.execute(
             update(Material)
             .where(Material.is_active == True)

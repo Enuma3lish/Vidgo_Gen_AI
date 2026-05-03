@@ -526,7 +526,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
   <div class="commerce-tool-page min-h-screen pt-24 pb-20" style="background: #f8fafc; color: #0f172a;">
     <LoadingOverlay
       :show="isProcessing"
-      :message="t('common.processing')"
+      icon="📦"
       :title="pendingTitle"
       :detail="pendingDetail"
       :duration="pendingDuration"

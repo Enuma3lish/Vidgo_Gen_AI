@@ -447,7 +447,7 @@ watch(selectedAvatarId, () => {
   <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
     <LoadingOverlay
       :show="isProcessing"
-      :message="t('tools.avatar.processing')"
+      icon="🎤"
       :title="pendingTitle"
       :detail="pendingDetail"
       :duration="pendingDuration"

@@ -283,7 +283,7 @@ class PiAPIClient:
         logger.info(f"[PiAPI] Virtual Try-On: garment={garment_input[:80] if garment_input else 'None'}...")
 
         try:
-            async with httpx.AsyncClient(timeout=180.0) as client:
+            async with httpx.AsyncClient(timeout=600.0) as client:
                 # Build input data
                 input_data = {
                     "model_input": model_input,
@@ -335,7 +335,7 @@ class PiAPIClient:
                 logger.info(f"[PiAPI] Virtual Try-On task created: {task_id}")
 
                 # Poll for result (Try-On takes longer)
-                for attempt in range(90):  # 3 min timeout
+                for attempt in range(300):  # 10 min timeout
                     await asyncio.sleep(2)
 
                     status_resp = await client.get(
@@ -393,7 +393,7 @@ class PiAPIClient:
                         logger.error(f"[PiAPI] Virtual Try-On failed: {error}")
                         return {"success": False, "error": error}
 
-                return {"success": False, "error": "Timeout (3 min)"}
+                return {"success": False, "error": "Timeout (10 min)"}
 
         except Exception as e:
             logger.exception(f"[PiAPI] Virtual Try-On exception: {e}")
@@ -562,7 +562,7 @@ class PiAPIClient:
                 logger.info(f"[PiAPI] I2I task created: {task_id}")
 
                 # Poll for result
-                for attempt in range(90):  # 3 min timeout
+                for attempt in range(300):  # 10 min timeout
                     await asyncio.sleep(2)
 
                     status_resp = await client.get(
@@ -603,7 +603,7 @@ class PiAPIClient:
                         logger.error(f"[PiAPI] I2I failed: {error}")
                         return {"success": False, "error": error}
 
-                return {"success": False, "error": "Timeout (3 min)"}
+                return {"success": False, "error": "Timeout (10 min)"}
 
         except Exception as e:
             logger.exception(f"[PiAPI] I2I exception: {e}")
@@ -689,7 +689,7 @@ class PiAPIClient:
                 logger.info(f"[PiAPI] Flux Fill task created: {task_id}")
                 
                 # Poll for result
-                for attempt in range(90):  # 3 min timeout
+                for attempt in range(300):  # 10 min timeout
                     await asyncio.sleep(2)
                     
                     status_resp = await client.get(
@@ -730,7 +730,7 @@ class PiAPIClient:
                         logger.error(f"[PiAPI] Flux Fill failed: {error}")
                         return {"success": False, "error": error}
                 
-                return {"success": False, "error": "Timeout (3 min)"}
+                return {"success": False, "error": "Timeout (10 min)"}
         
         except Exception as e:
             logger.exception(f"[PiAPI] Flux Fill exception: {e}")

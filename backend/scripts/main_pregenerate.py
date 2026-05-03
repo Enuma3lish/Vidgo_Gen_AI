@@ -2780,9 +2780,28 @@ class VidGoPreGenerator:
                 existing = await session.execute(
                     select(Material).where(Material.lookup_hash == lookup_hash)
                 )
-                if existing.scalar_one_or_none():
-                    logger.debug(f"  Already exists: {lookup_hash[:16]}...")
-                    continue
+                existing_material = existing.scalar_one_or_none()
+                # Skip only if the record is active, approved/featured, AND has a result.
+                # Rejected or result-less records are stale and should be overwritten.
+                if existing_material:
+                    has_result = (
+                        existing_material.result_image_url
+                        or existing_material.result_video_url
+                    )
+                    is_live = (
+                        existing_material.is_active
+                        and existing_material.status
+                        not in [MaterialStatus.REJECTED, MaterialStatus.PENDING]
+                        and has_result
+                    )
+                    if is_live:
+                        logger.debug(f"  Already exists (active+valid): {lookup_hash[:16]}...")
+                        continue
+                    logger.info(
+                        f"  Overwriting stale record "
+                        f"(status={existing_material.status.value}, "
+                        f"has_result={bool(has_result)}): {lookup_hash[:16]}..."
+                    )
 
                 # Merge metadata into input_params if exists
                 input_params = entry.get("input_params", {})
@@ -2821,6 +2840,19 @@ class VidGoPreGenerator:
                         f"— no persistable result URL (raw image={raw_result_image_url}, "
                         f"raw video={raw_result_video_url})"
                     )
+                    continue
+
+                # Upsert: update stale record in-place, or create new.
+                if existing_material:
+                    existing_material.result_image_url = result_image_url
+                    existing_material.result_video_url = result_video_url
+                    existing_material.result_watermarked_url = result_watermarked_url
+                    if input_image_url:
+                        existing_material.input_image_url = input_image_url
+                    existing_material.status = MaterialStatus.APPROVED
+                    existing_material.is_active = True
+                    existing_material.is_featured = True
+                    stored_count += 1
                     continue
 
                 material = Material(

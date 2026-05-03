@@ -337,7 +337,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
     </section>
 
     <!-- ============================================================
-         SECTION 3 — EXPLORE ALL AI CREATION TOOLS (PicCopilot tool grid)
+         SECTION 3 — EXPLORE ALL AI CREATION TOOLS
     ============================================================= -->
     <section class="section-padding" style="background: var(--bg-section);">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -345,24 +345,44 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <h2 class="text-3xl md:text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ t('lp.sec3Title') }}</h2>
           <p class="text-base md:text-lg max-w-2xl mx-auto" style="color: #9494b0;">{{ t('lp.sec3Sub') }}</p>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          <RouterLink v-for="tool in allTools" :key="tool.id" :to="tool.route"
-            class="group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 p-5 text-center"
-            style="background: var(--bg-card); border: 1px solid var(--border-subtle);"
-            @mouseenter="($event.currentTarget as HTMLElement).style.borderColor = tool.color + '40'; ($event.currentTarget as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.4)'"
-            @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'; ($event.currentTarget as HTMLElement).style.boxShadow = 'none'">
-            <div v-if="tool.tag" class="absolute top-2 right-2">
-              <span v-if="tool.tag === 'Hot'" class="badge-hot">{{ tool.tag }}</span>
-              <span v-else-if="tool.tag === 'New'" class="badge-new">{{ tool.tag }}</span>
+
+        <div class="tool-grid">
+          <RouterLink
+            v-for="tool in allTools"
+            :key="tool.id"
+            :to="tool.route"
+            class="tool-card group"
+            :style="`--tool-color: ${tool.color};`"
+          >
+            <!-- Colored top accent bar -->
+            <div class="tool-card-accent" :style="`background: linear-gradient(90deg, ${tool.color}, ${tool.color}88);`" />
+
+            <!-- Badge -->
+            <div v-if="tool.tag" class="tool-badge-wrap">
+              <span v-if="tool.tag === 'Hot'"  class="badge-hot">{{ tool.tag }}</span>
+              <span v-else-if="tool.tag === 'New'"  class="badge-new">{{ tool.tag }}</span>
               <span v-else-if="tool.tag === 'Free'" class="badge-free">{{ tool.tag }}</span>
-              <span v-else class="px-2 py-0.5 rounded text-[10px] font-bold text-white" :style="'background: ' + tool.color">{{ tool.tag }}</span>
+              <span v-else class="badge-custom" :style="`background: ${tool.color}22; color: ${tool.color}; border: 1px solid ${tool.color}55;`">{{ tool.tag }}</span>
             </div>
-            <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-3 transition-transform duration-300 group-hover:scale-110"
-              :style="'background: ' + tool.color + '15;'">
-              {{ tool.emoji }}
+
+            <!-- Icon -->
+            <div
+              class="tool-icon"
+              :style="`background: ${tool.color}18; border: 1.5px solid ${tool.color}30;`"
+            >
+              <span class="tool-emoji">{{ tool.emoji }}</span>
             </div>
-            <div class="font-semibold text-sm mb-1" style="color: #e8e8f0;">{{ toolName(tool) }}</div>
-            <div class="text-xs line-clamp-3" style="color: #6b6b8a;">{{ toolDesc(tool) }}</div>
+
+            <!-- Text -->
+            <div class="tool-name">{{ toolName(tool) }}</div>
+            <div class="tool-desc">{{ toolDesc(tool) }}</div>
+
+            <!-- Arrow (appears on hover) -->
+            <div class="tool-arrow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </div>
           </RouterLink>
         </div>
       </div>
@@ -668,6 +688,120 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
 .section-padding {
   padding-top: 5rem;
   padding-bottom: 5rem;
+}
+
+/* ── Tool Grid ──────────────────────────────────────────────── */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+@media (min-width: 640px)  { .tool-grid { grid-template-columns: repeat(3, 1fr); gap: 1.25rem; } }
+@media (min-width: 900px)  { .tool-grid { grid-template-columns: repeat(4, 1fr); gap: 1.5rem; } }
+
+/* ── Tool Card ──────────────────────────────────────────────── */
+.tool-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.375rem 1.375rem 1.125rem;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+  min-height: 160px;
+}
+.tool-card:hover {
+  transform: translateY(-4px);
+  background: #202020;
+  border-color: color-mix(in srgb, var(--tool-color) 35%, transparent);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in srgb, var(--tool-color) 20%, transparent);
+}
+
+/* Colored top accent stripe */
+.tool-card-accent {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  opacity: 0.85;
+  border-radius: 18px 18px 0 0;
+}
+
+/* Badge */
+.tool-badge-wrap {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+}
+.badge-custom {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* Icon */
+.tool-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.875rem;
+  transition: transform 0.22s ease;
+  flex-shrink: 0;
+}
+.tool-card:hover .tool-icon {
+  transform: scale(1.08);
+}
+.tool-emoji {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+/* Text */
+.tool-name {
+  font-size: 0.9375rem;
+  font-weight: 650;
+  color: #ededf5;
+  margin-bottom: 0.35rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.tool-desc {
+  font-size: 0.8125rem;
+  color: #7a7a96;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+.tool-card:hover .tool-desc {
+  color: #9494b0;
+}
+
+/* Arrow hint */
+.tool-arrow {
+  position: absolute;
+  bottom: 0.875rem;
+  right: 0.875rem;
+  color: var(--tool-color);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.tool-card:hover .tool-arrow {
+  opacity: 0.8;
+  transform: translateX(0);
 }
 
 @keyframes marquee {

@@ -848,6 +848,72 @@ async def seed_material_readiness(
     }
 
 
+@router.post("/materials/cleanup-gcs-404")
+async def cleanup_gcs_404_materials(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Deactivate materials whose GCS result URLs don't exist in the bucket.
+    Safe to run multiple times (idempotent).
+    """
+    import asyncio
+    from app.services.gcs_storage_service import get_gcs_storage
+    from app.models.material import Material
+    from sqlalchemy import select, and_, or_
+
+    gcs = get_gcs_storage()
+    valid_blobs = await asyncio.to_thread(gcs.list_blob_names, "generated/")
+    logger.info(f"[cleanup-gcs-404] Found {len(valid_blobs)} blobs in GCS generated/")
+
+    result = await db.execute(
+        select(Material).where(
+            and_(
+                Material.is_active == True,
+                or_(
+                    Material.result_watermarked_url.isnot(None),
+                    Material.result_image_url.isnot(None),
+                    Material.result_video_url.isnot(None),
+                )
+            )
+        )
+    )
+    materials = result.scalars().all()
+
+    def _blob_name(url):
+        if not url:
+            return None
+        clean = url.split("?", 1)[0]
+        marker = "/vidgo-media-vidgo-ai/"
+        if marker not in clean:
+            return None
+        return clean.split(marker, 1)[1]
+
+    deactivated_ids = []
+    for m in materials:
+        wm = _blob_name(m.result_watermarked_url)
+        ri = _blob_name(m.result_image_url)
+        rv = _blob_name(m.result_video_url)
+        has_valid = (
+            (wm and wm in valid_blobs) or
+            (ri and ri in valid_blobs) or
+            (rv and rv in valid_blobs)
+        )
+        if not has_valid:
+            m.is_active = False
+            deactivated_ids.append(str(m.id))
+
+    await db.commit()
+    logger.info(f"[cleanup-gcs-404] Deactivated {len(deactivated_ids)} materials")
+    return {
+        "success": True,
+        "valid_gcs_blobs": len(valid_blobs),
+        "total_checked": len(materials),
+        "deactivated": len(deactivated_ids),
+        "sample_deactivated": deactivated_ids[:10],
+    }
+
+
 # ============================================================================
 # System Health Endpoints
 # ============================================================================

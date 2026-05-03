@@ -156,10 +156,14 @@ class MaterialLookupService:
         if product_id:
             conditions.append(Material.input_params["product_id"].astext == product_id)
 
+        from sqlalchemy import case as sa_case
+        featured_first = sa_case(
+            (Material.status == MaterialStatus.FEATURED, 0), else_=1
+        )
         result = await self.db.execute(
             select(Material)
             .where(and_(*conditions))
-            .order_by(Material.sort_order, Material.quality_score.desc())
+            .order_by(featured_first, Material.sort_order, Material.quality_score.desc())
             .limit(limit)
         )
         return list(result.scalars().all())

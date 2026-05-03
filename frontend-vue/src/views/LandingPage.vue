@@ -12,20 +12,27 @@ const authStore = useAuthStore()
 const demoImages = ref<Record<string, { before: string; after: string }[]>>({})
 const demoLoading = ref(true)
 
-// SMB-focused fallback images (food, products, stores - not luxury items)
+// Fallback images — shown while real AI results load or as error fallback.
+// "before" = realistic input state; "after" = compelling AI-transformed result.
 const FALLBACK: Record<string, { before: string; after: string }> = {
-  try_on:            { before: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&q=80', after: 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=600&q=80' },
-  background_removal:{ before: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600&q=80', after: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=600&q=80' },
-  room_redesign:     { before: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=600&q=80', after: 'https://images.unsplash.com/photo-1559329007-40df8a9345d8?w=600&q=80' },
-  short_video:       { before: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&q=80', after: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600&q=80' },
-  product_scene:     { before: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=600&q=80', after: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&q=80' },
-  ai_avatar:         { before: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&q=80', after: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&q=80' },
+  try_on:            { before: 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=600&q=85', after: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=85' },
+  background_removal:{ before: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&q=85', after: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&q=85&bg=ffffff' },
+  room_redesign:     { before: 'https://images.unsplash.com/photo-1560185893-a55cbc8c57e8?w=600&q=85', after: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&q=85' },
+  short_video:       { before: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=600&q=85', after: 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?w=600&q=85' },
+  product_scene:     { before: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=85', after: 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=85' },
+  ai_avatar:         { before: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=85', after: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&q=85' },
 }
 
 function demo(cat: string, idx: 'before' | 'after') {
   const list = demoImages.value[cat]
   if (list && list.length > 0) return idx === 'before' ? list[0].before : list[0].after
   return FALLBACK[cat]?.[idx] || ''
+}
+
+function fallbackImg(e: Event, cat: string, type: 'before' | 'after') {
+  const img = e.target as HTMLImageElement
+  const fb = FALLBACK[cat]?.[type]
+  if (fb && img.src !== fb) img.src = fb
 }
 
 const demoCats = ['try_on', 'background_removal', 'room_redesign', 'short_video', 'product_scene']
@@ -50,8 +57,11 @@ async function loadDemos() {
   results.forEach((r, i) => {
     if (r.status === 'fulfilled' && r.value?.data?.presets?.length) {
       demoImages.value[demoCats[i]] = r.value.data.presets
-        .filter((p: any) => p.input_image_url && p.result_image_url)
-        .map((p: any) => ({ before: p.input_image_url, after: p.result_image_url }))
+        .filter((p: any) => p.result_watermarked_url || p.result_image_url || p.thumbnail_url)
+        .map((p: any) => ({
+          before: p.input_image_url || '',
+          after: p.result_watermarked_url || p.result_image_url || p.thumbnail_url || '',
+        }))
     }
   })
   demoLoading.value = false
@@ -295,11 +305,11 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
               </div>
               <div class="hero-demo-stage">
                 <div class="hero-demo-pane">
-                  <img :src="demo(activeDemoTab, 'before') || FALLBACK[activeDemoTab]?.before" alt="Before" class="hero-demo-img" />
+                  <img :src="demo(activeDemoTab, 'before') || FALLBACK[activeDemoTab]?.before" alt="Before" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'before')" />
                   <span class="hero-demo-badge hero-demo-badge-before">BEFORE</span>
                 </div>
                 <div class="hero-demo-pane">
-                  <img :src="demo(activeDemoTab, 'after') || FALLBACK[activeDemoTab]?.after" alt="After" class="hero-demo-img" />
+                  <img :src="demo(activeDemoTab, 'after') || FALLBACK[activeDemoTab]?.after" alt="After" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'after')" />
                   <span class="hero-demo-badge hero-demo-badge-after">AFTER · AI</span>
                 </div>
               </div>
@@ -403,7 +413,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
               <img :src="demo('try_on', 'after') || FALLBACK.try_on.after"
-                alt="Fashion AI" class="w-full h-full object-cover" />
+                alt="Fashion AI" class="w-full h-full object-cover" @error="fallbackImg($event, 'try_on', 'after')" />
               <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.fashionAI') }}</div>
             </div>
@@ -430,7 +440,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
               <img :src="demo('product_scene', 'after') || FALLBACK.product_scene.after"
-                alt="E-commerce AI" class="w-full h-full object-cover" />
+                alt="E-commerce AI" class="w-full h-full object-cover" @error="fallbackImg($event, 'product_scene', 'after')" />
               <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.ecommerceAI') }}</div>
             </div>
@@ -461,7 +471,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
               <img :src="demo('room_redesign', 'after') || FALLBACK.room_redesign.after"
-                alt="Design AI" class="w-full h-full object-cover" />
+                alt="Design AI" class="w-full h-full object-cover" @error="fallbackImg($event, 'room_redesign', 'after')" />
               <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.designAI') }}</div>
             </div>
@@ -521,7 +531,8 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             style="aspect-ratio: 3/4; background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <img :src="item.url"
               :alt="item.label"
-              class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+              class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              @error="($event.target as HTMLImageElement).src = FALLBACK.product_scene.after" />
             <div class="absolute inset-0" style="background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 50%);"></div>
             <div class="absolute bottom-3 left-3 right-3">
               <span class="text-white text-xs font-medium px-2.5 py-1 rounded-md" style="background: rgba(255,255,255,0.1); backdrop-filter: blur(8px);">
@@ -549,12 +560,14 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             <div class="grid grid-cols-2 gap-3 rounded-2xl overflow-hidden" style="box-shadow: 0 8px 40px rgba(0,0,0,0.5);">
               <div class="relative overflow-hidden" style="aspect-ratio: 3/4;">
                 <img :src="demo(feature.cat, 'before') || FALLBACK[feature.cat]?.before"
-                  :alt="t('lp.deepDives.' + feature.key + '.before')" class="w-full h-full object-cover" />
+                  :alt="t('lp.deepDives.' + feature.key + '.before')" class="w-full h-full object-cover"
+                  @error="fallbackImg($event, feature.cat, 'before')" />
                 <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); color: #ffffff;">Before</div>
               </div>
               <div class="relative overflow-hidden" style="aspect-ratio: 3/4;">
                 <img :src="demo(feature.cat, 'after') || FALLBACK[feature.cat]?.after"
-                  :alt="t('lp.deepDives.' + feature.key + '.after')" class="w-full h-full object-cover" />
+                  :alt="t('lp.deepDives.' + feature.key + '.after')" class="w-full h-full object-cover"
+                  @error="fallbackImg($event, feature.cat, 'after')" />
                 <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" :style="'background: ' + feature.accentColor + '; color: #ffffff;'">After</div>
               </div>
             </div>
@@ -777,7 +790,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
 }
 .tool-desc {
   font-size: 0.8125rem;
-  color: #7a7a96;
+  color: #a0a0bc;
   line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -786,7 +799,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
   flex: 1;
 }
 .tool-card:hover .tool-desc {
-  color: #9494b0;
+  color: #c0c0d4;
 }
 
 /* Arrow hint */

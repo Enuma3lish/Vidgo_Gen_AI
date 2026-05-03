@@ -200,6 +200,12 @@ const customPromptPlaceholder = computed(() => {
     : 'Describe details like colors, materials, lighting, or furniture placement...'
 })
 
+const pendingTitle = computed(() => isZh.value
+  ? '我正在為您重新設計空間，這可能需要幾分鐘，請稍後再回來查看是否已完成。'
+  : 'Redesigning your space — this may take a minute, please check back shortly.')
+const pendingDetail = computed(() => isZh.value ? '正在生成室內設計圖...' : 'Generating interior design...')
+const pendingDuration = computed(() => isZh.value ? '需要 1 至 2 分鐘' : 'Usually takes 1 to 2 minutes')
+
 function buildInteriorPrompt(): string {
   const trimmedPrompt = prompt.value.trim()
   if (trimmedPrompt) return trimmedPrompt
@@ -733,7 +739,13 @@ watch(selectedRoomType, (newType) => {
 
 <template>
   <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
-    <LoadingOverlay :show="isProcessing" :message="t('interior.processing')" />
+    <LoadingOverlay
+      :show="isProcessing"
+      icon="🏠"
+      :title="pendingTitle"
+      :detail="pendingDetail"
+      :duration="pendingDuration"
+    />
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->

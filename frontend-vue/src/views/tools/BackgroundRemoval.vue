@@ -32,6 +32,13 @@ const {
 const uploadedImage = ref<string | undefined>(undefined)
 const resultImage = ref<string | null>(null)
 const isProcessing = ref(false)
+
+const pendingTitle = computed(() => isZh.value
+  ? '我正在為您移除背景，請稍後再回來查看是否已完成。'
+  : 'Removing the background for you — please check back in a moment.')
+const pendingDetail = computed(() => isZh.value ? '正在移除圖片背景...' : 'Removing image background...')
+const pendingDuration = computed(() => isZh.value ? '通常需要 30 秒' : 'Usually takes about 30 seconds')
+
 // True when a demo user clicked Generate but the selected tile isn't backed
 // by a real Material DB preset (db_empty fallback or missing preset id).
 // Surfaces a persistent in-block message instead of a silent no-op.
@@ -237,7 +244,13 @@ function dataURItoBlob(dataURI: string): Blob | null {
 
 <template>
   <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
-    <LoadingOverlay :show="isProcessing" :message="t('common.processing')" />
+    <LoadingOverlay
+      :show="isProcessing"
+      icon="✂️"
+      :title="pendingTitle"
+      :detail="pendingDetail"
+      :duration="pendingDuration"
+    />
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Back Button -->

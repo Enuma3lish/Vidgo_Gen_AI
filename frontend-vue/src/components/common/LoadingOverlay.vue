@@ -7,10 +7,12 @@ withDefaults(defineProps<{
   title?: string
   detail?: string
   duration?: string
+  icon?: string
 }>(), {
   title: undefined,
   detail: undefined,
   duration: undefined,
+  icon: undefined,
 })
 
 const { t } = useI18n()
@@ -31,6 +33,7 @@ const { t } = useI18n()
           <div class="spinner-wrap">
             <div class="spinner-track" />
             <div class="spinner-ring" />
+            <span v-if="icon" class="spinner-icon">{{ icon }}</span>
           </div>
 
           <div>
@@ -102,6 +105,16 @@ const { t } = useI18n()
   width: 46px;
   height: 46px;
   flex: 0 0 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner-icon {
+  position: absolute;
+  font-size: 1.25rem;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .spinner-track,

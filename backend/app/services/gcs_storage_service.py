@@ -146,6 +146,17 @@ class GCSStorageService:
             logger.error(f"[GCS] Failed to delete {blob_name}: {e}")
             return False
 
+    def list_blob_names(self, prefix: str = "generated/") -> set:
+        """List all blob names under a prefix. Returns set of blob names like 'generated/watermarked/foo.png'."""
+        if not self.enabled:
+            return set()
+        try:
+            blobs = self.client.list_blobs(self.bucket_name, prefix=prefix)
+            return {blob.name for blob in blobs}
+        except Exception as e:
+            logger.warning(f"[GCS] list_blob_names failed: {e}")
+            return set()
+
     def refresh_signed_url(
         self,
         url: Optional[str],

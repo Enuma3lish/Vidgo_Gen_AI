@@ -959,7 +959,7 @@
     "allTools": {
       "tryOn": { "name": "AI 模特換裝", "desc": "AI 虛擬模特展示服裝穿搭效果" },
       "aiModelSwap": { "name": "AI 換模特", "desc": "為產品圖替換模特" },
-      "fashionReels": { "name": "商品動態短影音", "desc": "將商品圖片轉為動態短影片（圖生影片）" },
+      "fashionReels": { "name": "商品動態短影音", "desc": "將商品靜態照片轉為吸睛短影片，秒速完成" },
       "productAvatars": { "name": "產品代言人", "desc": "創建會說話的產品代言人影片" },
       "productAnyshoot": { "name": "AI 商品情境攝影棚", "desc": "AI 為商品拍攝專業場景照片" },
       "tryOnAccessories": { "name": "虛擬試戴配飾", "desc": "試戴珠寶、手錶等配飾" },
@@ -968,8 +968,8 @@
       "aiTemplates": { "name": "AI 模板", "desc": "AI 驅動的電商廣告模板" },
       "imageTranslator": { "name": "圖片翻譯", "desc": "準確翻譯圖片中的文字" },
       "aiShadows": { "name": "AI 陰影", "desc": "為任何物體添加自然陰影" },
-      "roomRedesign": { "name": "毛胚屋/線稿秒渲染", "desc": "上傳空屋照或線稿，一鍵生成寫實室內設計圖" },
-      "bgRemoval": { "name": "智能去背（基礎）", "desc": "最低成本 API，快速完成商品去背" },
+      "roomRedesign": { "name": "空間改造設計", "desc": "上傳空屋或草圖，秒速生成令人驚艷的室內設計效果圖" },
+      "bgRemoval": { "name": "智能去背", "desc": "一鍵去除商品背景，無需任何設計技能" },
       "hdUpscale": { "name": "商用無損放大", "desc": "將圖片無損放大至 4K，適用於電商上架與印刷" },
       "imageTransform": { "name": "空間風格轉換（已整合）", "desc": "已整合至「毛胚屋/線稿秒渲染」流程" },
       "videoTransform": { "name": "影片變換", "desc": "AI 驅動的影片風格轉換" },
@@ -977,11 +977,11 @@
     },
     "categories": {
       "fashionAI": "時尚 AI",
-      "fashionAIDesc": "主打 AI 模特換裝與商品動態短影音（圖生影片），專為服飾電商提升轉換。",
+      "fashionAIDesc": "讓虛擬模特穿上您的服裝，製作帶動時尚銷售的吸睛短影片。",
       "ecommerceAI": "電商 AI",
-      "ecommerceAIDesc": "智能去背（基礎）＋ AI 商品情境攝影棚 ＋ 商用無損放大，打造上架即用素材。",
+      "ecommerceAIDesc": "乾淨去背、專業商品場景、高清圖片一次搞定，讓商品上架轉化率倍增。",
       "designAI": "設計與內容 AI",
-      "designAIDesc": "毛胚屋/線稿秒渲染：把空屋照與線稿快速轉成高畫質寫實設計圖。"
+      "designAIDesc": "將空屋或粗糙草圖轉化為讓客戶心動的寫實室內設計圖。"
     },
     "seasons": {
       "spring": "春季特賣",

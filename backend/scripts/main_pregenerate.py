@@ -1763,9 +1763,11 @@ class VidGoPreGenerator:
                     "input_params": {
                         "product_id": prod_id,
                         "product_name": prod_data["name"],
+                        "product_name_zh": prod_data.get("name_zh", ""),
                         "product_prompt": product_prompt,
                         "scene_type": scene_id,
                         "scene_name": scene_data["name"],
+                        "scene_name_zh": scene_data.get("name_zh", ""),
                         "scene_prompt": scene_prompt,
                         "method": "piapi_remove_bg"
                     },

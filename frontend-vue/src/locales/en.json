@@ -975,7 +975,7 @@
     "allTools": {
       "tryOn": { "name": "AI Model Try-On", "desc": "Virtual try-on with AI models for clothing showcases" },
       "aiModelSwap": { "name": "AI Model Swap", "desc": "Swap models in product photos" },
-      "fashionReels": { "name": "Product Dynamic Video", "desc": "Turn product images into dynamic short videos (Image-to-Video)" },
+      "fashionReels": { "name": "Product Dynamic Video", "desc": "Turn still product photos into scroll-stopping short videos in seconds" },
       "productAvatars": { "name": "Product Avatars", "desc": "Create talking product spokesperson videos" },
       "productAnyshoot": { "name": "AI Product Scene Studio", "desc": "Professional AI-generated product photography scenes" },
       "tryOnAccessories": { "name": "Virtual Try On Accessories", "desc": "Try on jewelry, watches & accessories" },
@@ -984,20 +984,20 @@
       "aiTemplates": { "name": "AI Templates", "desc": "E-commerce ad templates powered by AI" },
       "imageTranslator": { "name": "Image Translator", "desc": "Accurately translate image text" },
       "aiShadows": { "name": "AI Shadows", "desc": "Add natural shadows to any object" },
-      "roomRedesign": { "name": "Sketch Instant Render", "desc": "Upload raw spaces or sketches, instantly render photorealistic interiors" },
-      "bgRemoval": { "name": "Smart Background Removal (Base)", "desc": "Lowest-cost API call for product cutouts" },
-      "hdUpscale": { "name": "Commercial HD Upscale", "desc": "Upscale images to 4K for e-commerce and print" },
+      "roomRedesign": { "name": "Room Redesign", "desc": "Upload a sketch or empty room, get a stunning interior design in seconds" },
+      "bgRemoval": { "name": "Background Removal", "desc": "Remove product backgrounds in one click — no design skills needed" },
+      "hdUpscale": { "name": "Commercial HD Upscale", "desc": "Sharpen and enlarge product images to 4K — perfect for stores and print" },
       "imageTransform": { "name": "Image Transform (Merged)", "desc": "Merged into Raw Space / Sketch Instant Render" },
       "videoTransform": { "name": "Video Transform", "desc": "AI-powered video style transformation" },
       "patternGenerate": { "name": "Pattern Design", "desc": "Generate seamless patterns for branding" }
     },
     "categories": {
       "fashionAI": "Fashion AI",
-      "fashionAIDesc": "Centered on AI Model Outfit Swap and Product Dynamic Shorts (Image-to-Video) for higher fashion-commerce conversion.",
+      "fashionAIDesc": "Dress virtual models with your garments and create eye-catching short videos that drive fashion sales.",
       "ecommerceAI": "E-commerce AI",
-      "ecommerceAIDesc": "Smart Background Removal (Base), AI Product Scene Studio, and Commercial HD Upscale for listing-ready assets.",
+      "ecommerceAIDesc": "Clean backgrounds, professional product scenes, and crystal-clear images — everything you need for listings that convert.",
       "designAI": "Design & Content AI",
-      "designAIDesc": "Raw Space / Sketch Instant Render for photoreal interior visualization from empty rooms and drafts."
+      "designAIDesc": "Transform empty rooms or rough sketches into photorealistic interior designs your clients will love."
     },
     "seasons": {
       "spring": "Spring Sale",

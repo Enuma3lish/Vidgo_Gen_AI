@@ -148,7 +148,7 @@ ROOM_TYPES = {
 
 class InteriorDesignService:
     """
-    Interior Design Service using Gemini 2.5 Flash Image.
+    Interior Design Service using Gemini image generation.
 
     Supports:
     - Image + Text → Image (room redesign)
@@ -156,18 +156,66 @@ class InteriorDesignService:
     - Multi-image Fusion (room + style reference)
     - Iterative Editing (multi-turn refinement)
     - Style Transfer (apply design styles)
+
+    Auth priority:
+    1. Vertex AI ADC (service account in Cloud Run, gcloud locally) — preferred
+    2. GEMINI_API_KEY env var — fallback (requires valid key)
     """
 
-    BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-    MODEL = "gemini-2.5-flash-image"  # Gemini 2.5 Flash Image for image generation
+    # Vertex AI endpoint (uses ADC / service account — no API key needed)
+    VERTEX_BASE_URL = "https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent"
+    # Google AI endpoint (requires API key)
+    GENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+    # gemini-2.0-flash-exp supports multimodal image input + image output generation
+    MODEL = "gemini-2.0-flash-exp"
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or getattr(settings, 'GEMINI_API_KEY', '')
+        self.vertex_project = getattr(settings, 'VERTEX_AI_PROJECT', '')
+        self.vertex_location = getattr(settings, 'VERTEX_AI_LOCATION', 'asia-east1')
         self.static_dir = Path("/app/static/generated/interior")
         self.static_dir.mkdir(parents=True, exist_ok=True)
 
         # Conversation history for iterative editing
         self._conversations: Dict[str, List[Dict]] = {}
+
+    async def _get_vertex_token(self) -> Optional[str]:
+        """Get OAuth2 access token via ADC (Application Default Credentials)."""
+        try:
+            import google.auth
+            import google.auth.transport.requests
+            credentials, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            credentials.refresh(google.auth.transport.requests.Request())
+            return credentials.token
+        except Exception as exc:
+            logger.warning(f"[InteriorDesign] ADC token failed: {exc}")
+            return None
+
+    async def _get_headers_and_url(self) -> Tuple[Dict[str, str], str]:
+        """
+        Return (headers, base_url) choosing Vertex AI ADC if available,
+        falling back to Google AI API key.
+        """
+        # Try Vertex AI ADC first
+        if self.vertex_project:
+            token = await self._get_vertex_token()
+            if token:
+                url = self.VERTEX_BASE_URL.format(
+                    location=self.vertex_location,
+                    project=self.vertex_project,
+                    model=self.MODEL,
+                )
+                return {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}, url
+
+        # Fallback: Google AI API key endpoint
+        if self.api_key:
+            url = f"{self.GENAI_BASE_URL}/models/{self.MODEL}:generateContent"
+            return {"Content-Type": "application/json"}, url
+
+        raise RuntimeError("No Gemini credentials available: set VERTEX_AI_PROJECT (ADC) or GEMINI_API_KEY")
 
     def _get_headers(self) -> Dict[str, str]:
         return {"Content-Type": "application/json"}
@@ -240,12 +288,6 @@ class InteriorDesignService:
         Returns:
             Dict with redesigned image URL and description
         """
-        if not self.api_key:
-            return {
-                "success": False,
-                "error": "Gemini API key not configured"
-            }
-
         # Get image as base64
         if room_image_url and not room_image_base64:
             try:
@@ -284,11 +326,17 @@ class InteriorDesignService:
         full_prompt += prompt
 
         try:
+            headers, endpoint_url = await self._get_headers_and_url()
+            # For Google AI API (non-Vertex), append ?key= param
+            params = {}
+            if "generativelanguage.googleapis.com" in endpoint_url and self.api_key:
+                params = {"key": self.api_key}
+
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
-                    f"{self.BASE_URL}/models/{self.MODEL}:generateContent",
-                    params={"key": self.api_key},
-                    headers=self._get_headers(),
+                    endpoint_url,
+                    params=params,
+                    headers=headers,
                     json={
                         "contents": [
                             {
@@ -341,8 +389,7 @@ class InteriorDesignService:
         Uses a floor-plan-specific primary prompt so Gemini isn't confused
         by the generic "redesign this room" instructions used in redesign_room().
         """
-        if not self.api_key:
-            return {"success": False, "error": "Gemini API key not configured"}
+        pass  # credentials resolved dynamically via _get_headers_and_url()
 
         if floorplan_image_url and not floorplan_image_base64:
             try:
@@ -378,11 +425,13 @@ class InteriorDesignService:
         ).strip()
 
         try:
+            _headers, _url = await self._get_headers_and_url()
+            _params = {"key": self.api_key} if "generativelanguage.googleapis.com" in _url and self.api_key else {}
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
-                    f"{self.BASE_URL}/models/{self.MODEL}:generateContent",
-                    params={"key": self.api_key},
-                    headers=self._get_headers(),
+                    _url,
+                    params=_params,
+                    headers=_headers,
                     json={
                         "contents": [
                             {
@@ -430,11 +479,7 @@ class InteriorDesignService:
         Returns:
             Dict with generated image URL and description
         """
-        if not self.api_key:
-            return {
-                "success": False,
-                "error": "Gemini API key not configured"
-            }
+        pass  # credentials resolved dynamically via _get_headers_and_url()
 
         # Build the full prompt
         full_prompt = (
@@ -455,11 +500,13 @@ class InteriorDesignService:
         full_prompt += " Professional interior architectural photography, correct perspective, realistic material textures, natural lighting."
 
         try:
+            _headers, _url = await self._get_headers_and_url()
+            _params = {"key": self.api_key} if "generativelanguage.googleapis.com" in _url and self.api_key else {}
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
-                    f"{self.BASE_URL}/models/{self.MODEL}:generateContent",
-                    params={"key": self.api_key},
-                    headers=self._get_headers(),
+                    _url,
+                    params=_params,
+                    headers=_headers,
                     json={
                         "contents": [
                             {
@@ -513,11 +560,7 @@ class InteriorDesignService:
         Returns:
             Dict with fused design image URL
         """
-        if not self.api_key:
-            return {
-                "success": False,
-                "error": "Gemini API key not configured"
-            }
+        pass  # credentials resolved dynamically via _get_headers_and_url()
 
         # Get room image
         if room_image_url and not room_image_base64:
@@ -553,11 +596,13 @@ Apply the furniture style, color palette, and decorative elements from the secon
 Generate a photorealistic result."""
 
         try:
+            _headers, _url = await self._get_headers_and_url()
+            _params = {"key": self.api_key} if "generativelanguage.googleapis.com" in _url and self.api_key else {}
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
-                    f"{self.BASE_URL}/models/{self.MODEL}:generateContent",
-                    params={"key": self.api_key},
-                    headers=self._get_headers(),
+                    _url,
+                    params=_params,
+                    headers=_headers,
                     json={
                         "contents": [
                             {
@@ -623,11 +668,7 @@ Generate a photorealistic result."""
         Returns:
             Dict with updated design and conversation state
         """
-        if not self.api_key:
-            return {
-                "success": False,
-                "error": "Gemini API key not configured"
-            }
+        pass  # credentials resolved dynamically via _get_headers_and_url()
 
         # Initialize or get conversation history
         if conversation_id not in self._conversations:
@@ -664,11 +705,13 @@ Generate a photorealistic result."""
         })
 
         try:
+            _headers, _url = await self._get_headers_and_url()
+            _params = {"key": self.api_key} if "generativelanguage.googleapis.com" in _url and self.api_key else {}
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
-                    f"{self.BASE_URL}/models/{self.MODEL}:generateContent",
-                    params={"key": self.api_key},
-                    headers=self._get_headers(),
+                    _url,
+                    params=_params,
+                    headers=_headers,
                     json={
                         "contents": history,
                         "generationConfig": {

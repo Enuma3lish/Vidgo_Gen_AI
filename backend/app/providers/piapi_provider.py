@@ -542,6 +542,51 @@ class PiAPIProvider(BaseProvider):
 
         return await self._submit_and_poll(payload)
 
+    async def _resize_image_for_trellis(self, image_url: str, max_dim: int = 1024) -> str:
+        """
+        Download image, resize to fit within max_dim × max_dim, re-upload to GCS.
+        Returns a public URL of the resized image (or original if already small enough).
+        Trellis rejects images larger than 1024×1024.
+        """
+        try:
+            from PIL import Image as PILImage
+            import io as _io
+
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                resp = await client.get(image_url)
+                resp.raise_for_status()
+                data = resp.content
+
+            img = PILImage.open(_io.BytesIO(data))
+            w, h = img.size
+            if w <= max_dim and h <= max_dim:
+                return image_url  # already within bounds
+
+            scale = max_dim / max(w, h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            img = img.resize((new_w, new_h), PILImage.LANCZOS)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            buf = _io.BytesIO()
+            img.save(buf, format="JPEG", quality=92)
+            resized_bytes = buf.getvalue()
+
+            gcs = get_gcs_storage()
+            if gcs.enabled:
+                blob_name = f"temp/trellis_resize_{uuid.uuid4().hex}.jpg"
+                resized_url = gcs.upload_public(resized_bytes, blob_name, "image/jpeg")
+                logger.info(f"[trellis_3d] Resized {w}x{h} → {new_w}x{new_h}, re-uploaded to {resized_url}")
+                return resized_url
+
+            # Fallback: base64 data URL
+            b64 = base64.b64encode(resized_bytes).decode()
+            return f"data:image/jpeg;base64,{b64}"
+
+        except Exception as exc:
+            logger.warning(f"[trellis_3d] Could not resize image {image_url}: {exc} — using original")
+            return image_url
+
     async def trellis_3d(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate a GLB model from a public image URL using Qubico Trellis.
@@ -552,17 +597,22 @@ class PiAPIProvider(BaseProvider):
         PiAPI returns Trellis outputs as no_background_image, combined_video,
         and model_file. Normalize model_file to model_url so the provider
         router can persist and return it consistently.
+        Trellis hard-limits input images to 1024×1024; we auto-resize larger images.
         """
         self._log_request("image_to_3d", params)
 
         model_version = str(params.get("model_version", "v1")).lower()
         model_name = "Qubico/trellis2" if model_version in ("v2", "trellis2", "hq", "hd") else "Qubico/trellis"
 
+        image_url = self._resolve_image_url(params["image_url"])
+        # Trellis rejects images > 1024×1024 — auto-resize if needed
+        image_url = await self._resize_image_for_trellis(image_url, max_dim=1024)
+
         payload = {
             "model": model_name,
             "task_type": "image-to-3d",
             "input": {
-                "image": self._resolve_image_url(params["image_url"]),
+                "image": image_url,
             },
         }
 

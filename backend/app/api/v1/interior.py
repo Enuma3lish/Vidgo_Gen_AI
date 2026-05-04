@@ -192,16 +192,42 @@ async def redesign_room(
             detail="Room image is required (URL or base64)"
         )
 
-    service = get_interior_design_service()
+    provider_router = get_provider_router()
+    user_tier = "paid" if is_subscribed_user(current_user) else "starter"
 
-    result = await service.redesign_room(
-        room_image_base64=request.room_image_base64,
-        room_image_url=request.room_image_url,
-        prompt=request.prompt,
-        style_id=request.style_id,
-        room_type=request.room_type,
-        keep_layout=request.keep_layout
-    )
+    # Build image URL — upload base64 to GCS if needed
+    image_url = request.room_image_url
+    if not image_url and request.room_image_base64:
+        try:
+            from app.services.gcs_storage_service import get_gcs_storage
+            import base64, uuid
+            gcs = get_gcs_storage()
+            if gcs.enabled:
+                raw = base64.b64decode(request.room_image_base64)
+                blob = f"uploads/interior/{uuid.uuid4().hex}.jpg"
+                image_url = gcs.upload_public(raw, blob, "image/jpeg")
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to process image: {exc}")
+
+    if not image_url:
+        raise HTTPException(status_code=400, detail="No image URL could be resolved")
+
+    try:
+        result = await provider_router.route(
+            TaskType.INTERIOR,
+            {
+                "image_url": image_url,
+                "prompt": request.prompt,
+                "style": request.style_id or "modern",
+                "room_type": request.room_type or "living_room",
+            },
+            user_tier=user_tier,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Room redesign failed: {exc}"
+        )
 
     if not result.get("success"):
         raise HTTPException(
@@ -209,10 +235,11 @@ async def redesign_room(
             detail=result.get("error", "Failed to redesign room")
         )
 
+    output = result.get("output") or {}
     return DesignResponse(
         success=True,
-        image_url=result.get("image_url"),
-        description=result.get("description")
+        image_url=output.get("image_url") or result.get("image_url"),
+        description=result.get("description") or "Room redesign complete",
     )
 
 

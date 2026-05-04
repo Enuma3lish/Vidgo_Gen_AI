@@ -91,6 +91,7 @@ class ModerationService:
         prompt_lower = prompt.lower()
 
         # Step 1: Check Redis block cache FIRST (fastest)
+        cached_safe_result: Optional[BlockCacheResult] = None
         try:
             cache_result = await self._block_cache.check_prompt(prompt)
             if cache_result.is_blocked:
@@ -103,15 +104,11 @@ class ModerationService:
                     flagged_keywords=cache_result.blocked_words,
                     source=f"block_cache:{cache_result.source}"
                 )
-            # If cache says safe with high confidence and source is "cache" or "gemini", trust it
+            # Keep safe cache hits as a Gemini shortcut, but still let local
+            # keyword and pattern rules override stale cached approvals.
             if cache_result.source in ("cache", "gemini") and cache_result.confidence >= 0.8:
                 logger.debug(f"Content approved by block cache (confidence: {cache_result.confidence})")
-                return ModerationResult(
-                    is_safe=True,
-                    categories=[ModerationCategory.SAFE],
-                    confidence=cache_result.confidence,
-                    source=f"block_cache:{cache_result.source}"
-                )
+                cached_safe_result = cache_result
         except Exception as e:
             logger.error(f"Block cache error (continuing with fallback): {e}")
 
@@ -130,6 +127,14 @@ class ModerationService:
             if strict_mode:
                 pattern_result.is_safe = False
             return pattern_result
+
+        if cached_safe_result:
+            return ModerationResult(
+                is_safe=True,
+                categories=[ModerationCategory.SAFE],
+                confidence=cached_safe_result.confidence,
+                source=f"block_cache:{cached_safe_result.source}"
+            )
 
         # Step 4: Try Gemini API for deeper analysis
         if self.api_key and self._gemini_available:

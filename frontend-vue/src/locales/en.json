@@ -11,6 +11,8 @@
     "register": "Register",
     "logout": "Logout",
     "dashboard": "Dashboard",
+    "adminDashboard": "Admin Dashboard",
+    "toggleMenu": "Toggle menu",
     "myWorks": "My Works",
     "tools": "Tools",
     "credits": "Credits"
@@ -397,6 +399,7 @@
     "success": "Success",
     "error": "Error",
     "dragDrop": "Drag & drop files here or click to upload",
+    "dropFilesHere": "Drop files here",
     "supportedFormats": "Supported formats: JPG, PNG, WEBP",
     "supportedVideoFormats": "Supported formats: MP4, MOV, WEBM",
     "maxSize": "Max size: 10MB",
@@ -1004,7 +1007,20 @@
       "valentines": "Valentine's Day",
       "blackFriday": "Black Friday",
       "christmas": "Christmas",
-      "newYear": "New Year"
+      "newYear": "Lunar New Year"
+    },
+    "seasonsTagline": {
+      "spring": "Soft pastel mint & blush studio set — perfect for spring launches and seasonal sales banners.",
+      "valentines": "Blush pink & burgundy editorial — gift sets, jewelry and beauty drops that feel romantic.",
+      "blackFriday": "Matte-black with gold accents — drive urgency on hero banners and discount tiles.",
+      "christmas": "Evergreen pine, warm fairy lights, red & gold — premium holiday gifting campaigns.",
+      "newYear": "Red lanterns, gold 福 calligraphy & plum blossoms — auspicious Lunar New Year gifting."
+    },
+    "productNames": {
+      "Bubble Tea": "Bubble Tea",
+      "Canvas Tote Bag": "Canvas Tote Bag",
+      "Handmade Jewelry": "Handmade Jewelry Set",
+      "Skincare Serum": "Skincare Serum"
     },
     "imageTranslation": {
       "title": "Image Translation",

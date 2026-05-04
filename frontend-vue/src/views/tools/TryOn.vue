@@ -8,6 +8,7 @@ import { toolsApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -427,6 +428,16 @@ function dataURItoBlob(dataURI: string): Blob | null {
         </div>
       </div>
 
+      <HowToUseHint
+        tool-type="try_on"
+        media-kind="image"
+        :steps="[
+          { en: 'Upload a clear garment photo (flat-lay or product page works best).', zh: '上傳服裝圖片，以平鋪或商品頁圖片最佳。' },
+          { en: 'Pick a default model or upload a full-body model photo.', zh: '選擇預設模特，或上傳你自己的全身模特照片。' },
+          { en: 'Click Try It On to preview the garment on the chosen model.', zh: '點擊試穿即可預覽服裝上身效果。' },
+        ]"
+      />
+
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <!-- Left Panel - Clothing Selection -->
         <div class="card">
@@ -483,6 +494,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <div v-if="!isDemoUser" class="mb-4">
              <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳服裝' : 'Upload Clothing' }}</h4>
              <ImageUploader 
+               tool-type="try_on"
                v-model="clothingImage" 
                :label="isZh ? '點擊上傳或拖放服裝圖片' : 'Drop clothing image here'"
                class="mb-4"
@@ -542,6 +554,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
                    </button>
                  </div>
                  <ImageUploader 
+                   tool-type="try_on"
                    v-model="modelImage" 
                    :label="isZh ? '上傳全身模特照片' : 'Upload full-body model photo'"
                    height="h-48"

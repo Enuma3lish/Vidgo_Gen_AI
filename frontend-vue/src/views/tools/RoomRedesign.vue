@@ -10,6 +10,7 @@ import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
 import ThreeViewer from '@/components/tools/ThreeViewer.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -780,7 +781,15 @@ watch(selectedRoomType, (newType) => {
         </div>
       </div>
 
-      <!-- Tab Selection (subscriber-only tabs are hidden for visitors) -->
+      <HowToUseHint
+        tool-type="room_redesign"
+        media-kind="image"
+        :steps="[
+          { en: 'Pick a room photo or use one of the demo rooms below.', zh: '上傳你的房間照片，或選下方示範房間。' },
+          { en: 'Choose a room type, design style, and (optional) extra notes.', zh: '選擇房間類型、設計風格，可加上額外描述。' },
+          { en: 'Click Generate to get a redesigned 2D image; subscribers can also create a 3D walk-through.', zh: '點擊生成取得重新設計的 2D 圖片；訂閱用戶可進一步建立 3D 演示。' },
+        ]"
+      />
       <div class="flex justify-center mb-8">
         <div class="inline-flex rounded-xl p-1" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
           <button
@@ -852,6 +861,7 @@ watch(selectedRoomType, (newType) => {
             <div v-else class="mb-6">
                <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳房間照片' : 'Upload Room Photo' }}</h4>
                <ImageUploader 
+                 tool-type="room_redesign"
                  v-model="uploadedImage" 
                  :label="isZh ? '點擊上傳或拖放房間照片' : 'Drop room photo here'"
                  class="mb-4"

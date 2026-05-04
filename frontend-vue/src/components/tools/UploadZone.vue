@@ -65,12 +65,18 @@ async function processFiles(files: File[]): Promise<boolean> {
 
   for (const file of files) {
     if (!allowed.includes(file.type)) {
-      const label = allowed === AI_VIDEO_TYPES ? 'MP4, WebM, or MOV video' : 'JPG, PNG, or WebP image'
-      emit('error', `File ${file.name} is not supported. Please choose a ${label}.`)
+      const label = allowed === AI_VIDEO_TYPES
+        ? (isZh ? 'MP4、WebM 或 MOV 影片' : 'MP4, WebM, or MOV video')
+        : (isZh ? 'JPG、PNG 或 WebP 圖片' : 'JPG, PNG, or WebP image')
+      emit('error', isZh
+        ? `檔案 ${file.name} 不支援，請選擇 ${label}。`
+        : `File ${file.name} is not supported. Please choose a ${label}.`)
       continue
     }
     if (file.size > maxSize) {
-      emit('error', `File ${file.name} exceeds maximum size of ${maxSize / 1024 / 1024}MB. Please choose a smaller file.`)
+      emit('error', isZh
+        ? `檔案 ${file.name} 超過 ${maxSize / 1024 / 1024}MB，請選擇較小的檔案。`
+        : `File ${file.name} exceeds maximum size of ${maxSize / 1024 / 1024}MB. Please choose a smaller file.`)
       continue
     }
     if (file.type.startsWith('image/')) {
@@ -145,7 +151,7 @@ function triggerFileSelect() {
       v-if="isDragging"
       class="absolute inset-0 bg-primary-500/20 rounded-2xl flex items-center justify-center"
     >
-      <p class="text-primary-400 font-semibold">Drop files here</p>
+      <p class="text-primary-400 font-semibold">{{ t('common.dropFilesHere') }}</p>
     </div>
   </div>
 </template>

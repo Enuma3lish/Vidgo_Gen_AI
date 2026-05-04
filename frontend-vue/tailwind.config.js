@@ -22,11 +22,11 @@ const colors = {
     750: "#1c1c1c",   // Card bg
     700: "#242424",   // Card hover
     600: "#2a2a2a",   // Elevated
-    500: "#3a3a3a",
-    400: "#555555",
-    300: "#6b7280",   // Muted text
-    200: "#a8a29e",   // Secondary text
-    100: "#d6d3d1",
+    500: "#44403c",
+    400: "#78716c",
+    300: "#a8a29e",   // Muted text
+    200: "#d6d3d1",   // Secondary text
+    100: "#e7e5e4",
     50:  "#fafaf9",   // Headings / primary text
   },
   accent: {
@@ -70,10 +70,10 @@ export default {
         zh:      ["Noto Sans TC", "system-ui", "sans-serif"],
       },
       borderRadius: {
-        "xl":  "12px",
-        "2xl": "16px",
-        "3xl": "20px",
-        "4xl": "28px",
+        "xl":  "8px",
+        "2xl": "8px",
+        "3xl": "12px",
+        "4xl": "16px",
       },
       animation: {
         "fade-in":    "fadeIn 0.3s ease-out",

@@ -1,18 +1,27 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAdminStore } from '@/stores/admin'
 
 const adminStore = useAdminStore()
+const { locale } = useI18n()
+const isZh = computed(() => locale.value === 'zh-TW')
 
-const toolTypes: Record<string, string> = {
-  background_removal: '智能去背',
-  product_scene: '商品情境',
-  try_on: '模特換裝',
-  room_redesign: '空間改造',
-  short_video: '短影音',
-  ai_avatar: '數位人',
-  pattern_generate: '圖案生成',
-  effect: '圖片特效'
+function localized(zh: string, en: string): string {
+  return isZh.value ? zh : en
+}
+
+function toolTypes(): Record<string, string> {
+  return {
+    background_removal: localized('智能去背', 'Background Removal'),
+    product_scene: localized('商品情境', 'Product Scene'),
+    try_on: localized('模特換裝', 'Try-On'),
+    room_redesign: localized('空間改造', 'Room Redesign'),
+    short_video: localized('短影音', 'Short Video'),
+    ai_avatar: localized('數位人', 'AI Avatar'),
+    pattern_generate: localized('圖案生成', 'Pattern Generator'),
+    effect: localized('圖片特效', 'Image Effect')
+  }
 }
 
 onMounted(() => {
@@ -22,7 +31,7 @@ onMounted(() => {
 async function reviewItem(materialId: string, action: 'approve' | 'reject' | 'feature') {
   let reason: string | undefined
   if (action === 'reject') {
-    reason = prompt('請輸入拒絕原因：') || undefined
+    reason = prompt(localized('請輸入拒絕原因：', 'Please enter a rejection reason:')) || undefined
     if (!reason) return
   }
 
@@ -35,22 +44,22 @@ function formatDate(dateStr: string | null): string {
 }
 
 function getToolLabel(toolType: string | null): string {
-  return toolType ? toolTypes[toolType] || toolType : '-'
+  return toolType ? toolTypes()[toolType] || toolType : '-'
 }
 </script>
 
 <template>
   <div class="admin-moderation">
     <header class="page-header">
-      <h1>內容審核</h1>
-      <p class="subtitle">審核待處理的使用者生成內容</p>
+      <h1>{{ localized('內容審核', 'Content Moderation') }}</h1>
+      <p class="subtitle">{{ localized('審核待處理的使用者生成內容', 'Review pending user-generated content') }}</p>
     </header>
 
     <!-- Queue Stats -->
     <div class="queue-stats">
       <div class="stat">
         <span class="stat-value">{{ adminStore.moderationQueue.length }}</span>
-        <span class="stat-label">待審核項目</span>
+        <span class="stat-label">{{ localized('待審核項目', 'Pending Items') }}</span>
       </div>
     </div>
 
@@ -73,7 +82,7 @@ function getToolLabel(toolType: string | null): string {
             muted
             controls
           />
-          <div v-else class="no-preview">無預覽</div>
+          <div v-else class="no-preview">{{ localized('無預覽', 'No Preview') }}</div>
         </div>
 
         <div class="item-details">
@@ -85,27 +94,27 @@ function getToolLabel(toolType: string | null): string {
           <h3 class="item-topic">{{ item.topic }}</h3>
 
           <div class="item-prompt" v-if="item.prompt">
-            <strong>提示詞：</strong>
+            <strong>{{ localized('提示詞：', 'Prompt:') }}</strong>
             <p>{{ item.prompt }}</p>
           </div>
 
           <div class="item-meta">
-            <span>提交時間：{{ formatDate(item.created_at) }}</span>
+            <span>{{ localized(`提交時間：${formatDate(item.created_at)}`, `Submitted: ${formatDate(item.created_at)}`) }}</span>
           </div>
         </div>
 
         <div class="item-actions">
           <button @click="reviewItem(item.id, 'approve')" class="action-btn approve">
             <span class="icon">✓</span>
-            通過
+            {{ localized('通過', 'Approve') }}
           </button>
           <button @click="reviewItem(item.id, 'feature')" class="action-btn feature">
             <span class="icon">★</span>
-            設為精選
+            {{ localized('設為精選', 'Feature') }}
           </button>
           <button @click="reviewItem(item.id, 'reject')" class="action-btn reject">
             <span class="icon">✕</span>
-            拒絕
+            {{ localized('拒絕', 'Reject') }}
           </button>
         </div>
       </div>
@@ -114,8 +123,8 @@ function getToolLabel(toolType: string | null): string {
     <!-- Empty State -->
     <div v-if="adminStore.moderationQueue.length === 0 && !adminStore.isLoading" class="empty-state">
       <div class="empty-icon">✓</div>
-      <h2>目前無待審核內容</h2>
-      <p>所有項目都已處理完畢</p>
+      <h2>{{ localized('目前無待審核內容', 'No Pending Content') }}</h2>
+      <p>{{ localized('所有項目都已處理完畢', 'All items have been handled') }}</p>
     </div>
 
     <!-- Loading -->

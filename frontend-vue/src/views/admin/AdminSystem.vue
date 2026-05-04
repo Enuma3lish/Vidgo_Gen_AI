@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAdminStore } from '@/stores/admin'
 
 const adminStore = useAdminStore()
+const { locale } = useI18n()
 const lastRefresh = ref<Date | null>(null)
+const isZh = computed(() => locale.value === 'zh-TW')
+
+function localized(zh: string, en: string): string {
+  return isZh.value ? zh : en
+}
 
 onMounted(async () => {
   await refreshAll()
@@ -35,15 +42,15 @@ function getStatusIcon(status: string): string {
 function getStatusLabel(status: string): string {
   const normalized = (status || '').toLowerCase()
   const labels: Record<string, string> = {
-    healthy: '健康',
-    ok: '正常',
-    configured: '已設定',
-    pending: '檢查中',
-    error: '異常',
-    unhealthy: '異常',
-    unknown: '未知',
+    healthy: localized('健康', 'Healthy'),
+    ok: localized('正常', 'OK'),
+    configured: localized('已設定', 'Configured'),
+    pending: localized('檢查中', 'Checking'),
+    error: localized('異常', 'Error'),
+    unhealthy: localized('異常', 'Unhealthy'),
+    unknown: localized('未知', 'Unknown'),
   }
-  return labels[normalized] || status || '未知'
+  return labels[normalized] || status || localized('未知', 'Unknown')
 }
 
 function formatTime(date: Date | null): string {
@@ -58,17 +65,17 @@ function getServiceDisplayName(key: string): string {
     pollo_mcp: 'Pollo MCP',
     pollo: 'Pollo REST',
     vertex_ai: 'Vertex AI / Gemini',
-    wan: 'Wan AI（圖片 / 影片主要服務）',
-    fal: 'fal.ai（圖片 / 影片備援）',
-    gemini: 'Gemini API（室內設計備援）',
-    goenhance: 'GoEnhance（影片轉換）',
-    a2e: 'A2E.ai（數位人）'
+    wan: localized('Wan AI（圖片 / 影片主要服務）', 'Wan AI (primary image/video)'),
+    fal: localized('fal.ai（圖片 / 影片備援）', 'fal.ai (image/video fallback)'),
+    gemini: localized('Gemini API（室內設計備援）', 'Gemini API (room design fallback)'),
+    goenhance: localized('GoEnhance（影片轉換）', 'GoEnhance (video transform)'),
+    a2e: localized('A2E.ai（數位人）', 'A2E.ai (AI avatar)')
   }
   return names[key] || key
 }
 
 function formatProviderCredits(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '未提供'
+  if (value === null || value === undefined || value === '') return localized('未提供', 'Not provided')
   if (typeof value === 'number') return value.toLocaleString()
   const numeric = Number(String(value).replace(/,/g, ''))
   return Number.isFinite(numeric) ? numeric.toLocaleString() : String(value)
@@ -77,27 +84,27 @@ function formatProviderCredits(value: string | number | null | undefined): strin
 function getSubscriptionLabel(status: string | null | undefined): string {
   const normalized = (status || 'unknown').toLowerCase()
   const labels: Record<string, string> = {
-    active: '訂閱中',
-    subscribed: '訂閱中',
-    paid: '已付費',
-    trial: '試用中',
-    free: '免費方案',
-    expired: '已到期',
-    cancelled: '已取消',
-    canceled: '已取消',
-    not_configured: '未設定',
-    unknown: '未提供',
+    active: localized('訂閱中', 'Subscribed'),
+    subscribed: localized('訂閱中', 'Subscribed'),
+    paid: localized('已付費', 'Paid'),
+    trial: localized('試用中', 'Trial'),
+    free: localized('免費方案', 'Free Plan'),
+    expired: localized('已到期', 'Expired'),
+    cancelled: localized('已取消', 'Cancelled'),
+    canceled: localized('已取消', 'Cancelled'),
+    not_configured: localized('未設定', 'Not configured'),
+    unknown: localized('未提供', 'Not provided'),
   }
-  return labels[normalized] || status || '未提供'
+  return labels[normalized] || status || localized('未提供', 'Not provided')
 }
 
 function getServiceMessage(key: string, service: { status: string; message?: string; error?: string }): string {
-  if (service.error) return `錯誤：${service.error}`
+  if (service.error) return localized(`錯誤：${service.error}`, `Error: ${service.error}`)
   const status = (service.status || '').toLowerCase()
   const name = getServiceDisplayName(key)
-  if (status === 'ok' || status === 'healthy' || status === 'configured') return `${name} 服務正常。`
-  if (status === 'error' || status === 'unhealthy') return `${name} 服務異常，已通知管理員檢查。`
-  return service.message || '尚未取得狀態。'
+  if (status === 'ok' || status === 'healthy' || status === 'configured') return localized(`${name} 服務正常。`, `${name} is operating normally.`)
+  if (status === 'error' || status === 'unhealthy') return localized(`${name} 服務異常，已通知管理員檢查。`, `${name} needs attention. Admins have been notified.`)
+  return service.message || localized('尚未取得狀態。', 'No status received yet.')
 }
 
 type RescueConfig = {
@@ -117,19 +124,19 @@ function getRescueLabel(config: RescueConfig): string {
     <header class="page-header">
       <div class="header-content">
         <div>
-          <h1>系統健康與 AI 服務</h1>
-          <p class="subtitle">監控平台基礎設施、AI 服務狀態與供應商額度</p>
+          <h1>{{ localized('系統健康與 AI 服務', 'System Health & AI Services') }}</h1>
+          <p class="subtitle">{{ localized('監控平台基礎設施、AI 服務狀態與供應商額度', 'Monitor platform infrastructure, AI service status, and provider credits') }}</p>
         </div>
         <button @click="refreshAll" class="refresh-btn" :disabled="adminStore.isLoading">
-          <span v-if="adminStore.isLoading">更新中...</span>
-          <span v-else>全部更新</span>
+          <span v-if="adminStore.isLoading">{{ localized('更新中...', 'Refreshing...') }}</span>
+          <span v-else>{{ localized('全部更新', 'Refresh All') }}</span>
         </button>
       </div>
     </header>
 
     <!-- Last Updated -->
     <div class="last-updated" v-if="lastRefresh">
-      最後檢查：{{ formatTime(lastRefresh) }}
+      {{ localized(`最後檢查：${formatTime(lastRefresh)}`, `Last checked: ${formatTime(lastRefresh)}`) }}
     </div>
 
     <!-- Health Overview -->
@@ -140,7 +147,7 @@ function getRescueLabel(config: RescueConfig): string {
           <span>{{ getStatusIcon(health.database.status) }}</span>
         </div>
         <div class="health-info">
-          <h3>資料庫</h3>
+          <h3>{{ localized('資料庫', 'Database') }}</h3>
           <span class="health-status">{{ getStatusLabel(health.database.status) }}</span>
           <p v-if="health.database.error" class="health-error">
             {{ health.database.error }}
@@ -154,7 +161,7 @@ function getRescueLabel(config: RescueConfig): string {
           <span>{{ getStatusIcon(health.redis.status) }}</span>
         </div>
         <div class="health-info">
-          <h3>Redis 快取</h3>
+          <h3>{{ localized('Redis 快取', 'Redis Cache') }}</h3>
           <span class="health-status">{{ getStatusLabel(health.redis.status) }}</span>
           <p v-if="health.redis.error" class="health-error">
             {{ health.redis.error }}
@@ -184,8 +191,8 @@ function getRescueLabel(config: RescueConfig): string {
 
     <!-- AI Services Status -->
     <section class="ai-services-section" v-if="aiServices">
-      <h2>AI 服務狀態</h2>
-      <p class="section-desc">外部 AI 供應商狀態、剩餘額度、訂閱狀態與備援設定</p>
+      <h2>{{ localized('AI 服務狀態', 'AI Service Status') }}</h2>
+      <p class="section-desc">{{ localized('外部 AI 供應商狀態、剩餘額度、訂閱狀態與備援設定', 'External provider status, remaining credits, subscription state, and fallback configuration') }}</p>
 
       <div class="ai-services-grid">
         <div
@@ -203,9 +210,9 @@ function getRescueLabel(config: RescueConfig): string {
             <p class="service-message">{{ getServiceMessage(key as string, service) }}</p>
             <p v-if="service.error" class="service-error">{{ service.error }}</p>
             <div class="service-account">
-              <span>剩餘額度：{{ formatProviderCredits(service.remaining_credits_label || service.remaining_credits) }}</span>
-              <span>訂閱狀態：{{ getSubscriptionLabel(service.subscription_status) }}</span>
-              <span>{{ service.configured ? 'API Key 已設定' : 'API Key 未設定' }}</span>
+              <span>{{ localized(`剩餘額度：${formatProviderCredits(service.remaining_credits_label || service.remaining_credits)}`, `Remaining credits: ${formatProviderCredits(service.remaining_credits_label || service.remaining_credits)}`) }}</span>
+              <span>{{ localized(`訂閱狀態：${getSubscriptionLabel(service.subscription_status)}`, `Subscription: ${getSubscriptionLabel(service.subscription_status)}`) }}</span>
+              <span>{{ service.configured ? localized('API Key 已設定', 'API key configured') : localized('API Key 未設定', 'API key not configured') }}</span>
             </div>
           </div>
         </div>
@@ -213,7 +220,7 @@ function getRescueLabel(config: RescueConfig): string {
 
       <!-- Rescue Configuration -->
       <div class="rescue-config" v-if="aiServices.rescue_config">
-        <h3>備援機制設定</h3>
+        <h3>{{ localized('備援機制設定', 'Fallback Configuration') }}</h3>
         <div class="rescue-grid">
           <div class="rescue-item" v-for="(config, feature) in aiServices.rescue_config" :key="feature">
             <span class="feature-name">{{ feature.toString().toUpperCase().replace('_', ' ') }}</span>
@@ -227,22 +234,22 @@ function getRescueLabel(config: RescueConfig): string {
 
     <!-- System Info -->
     <section class="info-section">
-      <h2>系統資訊</h2>
+      <h2>{{ localized('系統資訊', 'System Information') }}</h2>
       <div class="info-grid">
         <div class="info-item">
-          <label>平台</label>
+          <label>{{ localized('平台', 'Platform') }}</label>
           <span>VidGo AI Generation</span>
         </div>
         <div class="info-item">
-          <label>版本</label>
+          <label>{{ localized('版本', 'Version') }}</label>
           <span>1.0.0</span>
         </div>
         <div class="info-item">
-          <label>環境</label>
-          <span>正式環境</span>
+          <label>{{ localized('環境', 'Environment') }}</label>
+          <span>{{ localized('正式環境', 'Production') }}</span>
         </div>
         <div class="info-item">
-          <label>API 版本</label>
+          <label>{{ localized('API 版本', 'API Version') }}</label>
           <span>v1</span>
         </div>
       </div>
@@ -250,49 +257,49 @@ function getRescueLabel(config: RescueConfig): string {
 
     <!-- Service Status Legend -->
     <section class="legend-section">
-      <h2>狀態說明</h2>
+      <h2>{{ localized('狀態說明', 'Status Legend') }}</h2>
       <div class="legend-grid">
         <div class="legend-item">
           <span class="legend-dot healthy"></span>
-          <span>健康：服務正常運作</span>
+          <span>{{ localized('健康：服務正常運作', 'Healthy: service is operating normally') }}</span>
         </div>
         <div class="legend-item">
           <span class="legend-dot unhealthy"></span>
-          <span>異常：服務需要檢查</span>
+          <span>{{ localized('異常：服務需要檢查', 'Unhealthy: service needs attention') }}</span>
         </div>
         <div class="legend-item">
           <span class="legend-dot unknown"></span>
-          <span>未知：目前無法判斷狀態</span>
+          <span>{{ localized('未知：目前無法判斷狀態', 'Unknown: status cannot be determined yet') }}</span>
         </div>
       </div>
     </section>
 
     <!-- Quick Actions -->
     <section class="actions-section">
-      <h2>快速操作</h2>
+      <h2>{{ localized('快速操作', 'Quick Actions') }}</h2>
       <div class="actions-grid">
         <button class="action-btn" disabled>
-          清除快取
-          <span class="action-desc">清除 Redis 快取</span>
+          {{ localized('清除快取', 'Clear Cache') }}
+          <span class="action-desc">{{ localized('清除 Redis 快取', 'Clear Redis cache') }}</span>
         </button>
         <button class="action-btn" disabled>
-          執行遷移
-          <span class="action-desc">套用待執行資料庫遷移</span>
+          {{ localized('執行遷移', 'Run Migrations') }}
+          <span class="action-desc">{{ localized('套用待執行資料庫遷移', 'Apply pending database migrations') }}</span>
         </button>
         <button class="action-btn" disabled>
-          重啟服務
-          <span class="action-desc">重啟所有服務</span>
+          {{ localized('重啟服務', 'Restart Services') }}
+          <span class="action-desc">{{ localized('重啟所有服務', 'Restart all services') }}</span>
         </button>
       </div>
       <p class="actions-note">
-        注意：為了安全，這些操作在介面中停用；系統操作請使用 CLI 工具執行。
+        {{ localized('注意：為了安全，這些操作在介面中停用；系統操作請使用 CLI 工具執行。', 'Note: these actions are disabled in the interface for safety. Use CLI tools for system operations.') }}
       </p>
     </section>
 
     <!-- Loading -->
     <div v-if="adminStore.isLoading && !health" class="loading">
       <div class="spinner"></div>
-      <p>正在檢查系統健康...</p>
+      <p>{{ localized('正在檢查系統健康...', 'Checking system health...') }}</p>
     </div>
   </div>
 </template>

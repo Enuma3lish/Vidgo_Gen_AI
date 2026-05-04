@@ -1,29 +1,36 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAdminStore } from '@/stores/admin'
 
 const adminStore = useAdminStore()
+const { locale } = useI18n()
 
 const selectedToolType = ref('')
 const selectedStatus = ref('')
+const isZh = computed(() => locale.value === 'zh-TW')
 
-const toolTypes = [
-  { value: 'background_removal', label: '智能去背' },
-  { value: 'product_scene', label: '商品情境' },
-  { value: 'try_on', label: '模特換裝' },
-  { value: 'room_redesign', label: '空間改造' },
-  { value: 'short_video', label: '短影音' },
-  { value: 'ai_avatar', label: '數位人' },
-  { value: 'pattern_generate', label: '圖案生成' },
-  { value: 'effect', label: '圖片特效' }
-]
+function localized(zh: string, en: string): string {
+  return isZh.value ? zh : en
+}
 
-const statuses = [
-  { value: 'pending', label: '待審核' },
-  { value: 'approved', label: '已通過' },
-  { value: 'rejected', label: '已拒絕' },
-  { value: 'featured', label: '精選' }
-]
+const toolTypes = computed(() => [
+  { value: 'background_removal', label: localized('智能去背', 'Background Removal') },
+  { value: 'product_scene', label: localized('商品情境', 'Product Scene') },
+  { value: 'try_on', label: localized('模特換裝', 'Try-On') },
+  { value: 'room_redesign', label: localized('空間改造', 'Room Redesign') },
+  { value: 'short_video', label: localized('短影音', 'Short Video') },
+  { value: 'ai_avatar', label: localized('數位人', 'AI Avatar') },
+  { value: 'pattern_generate', label: localized('圖案生成', 'Pattern Generator') },
+  { value: 'effect', label: localized('圖片特效', 'Image Effect') }
+])
+
+const statuses = computed(() => [
+  { value: 'pending', label: localized('待審核', 'Pending') },
+  { value: 'approved', label: localized('已通過', 'Approved') },
+  { value: 'rejected', label: localized('已拒絕', 'Rejected') },
+  { value: 'featured', label: localized('精選', 'Featured') }
+])
 
 onMounted(() => {
   loadMaterials()
@@ -45,7 +52,7 @@ async function loadMaterials(page = 1) {
 async function reviewMaterial(materialId: string, action: 'approve' | 'reject' | 'feature') {
   let reason: string | undefined
   if (action === 'reject') {
-    reason = prompt('請輸入拒絕原因：') || undefined
+    reason = prompt(localized('請輸入拒絕原因：', 'Please enter a rejection reason:')) || undefined
     if (!reason) return
   }
 
@@ -64,33 +71,39 @@ function getStatusClass(status: string | null): string {
 }
 
 function getToolLabel(toolType: string | null): string {
-  const tool = toolTypes.find(t => t.value === toolType)
+  const tool = toolTypes.value.find(t => t.value === toolType)
   return tool?.label || toolType || '-'
 }
 
 function getStatusLabel(status: string | null): string {
-  const item = statuses.find(s => s.value === status)
+  const item = statuses.value.find(s => s.value === status)
   return item?.label || status || '-'
+}
+
+function getMaterialTitle(material: { title_zh?: string | null; title_en?: string | null; topic?: string | null }): string {
+  return isZh.value
+    ? material.title_zh || material.title_en || material.topic || '-'
+    : material.title_en || material.title_zh || material.topic || '-'
 }
 </script>
 
 <template>
   <div class="admin-materials">
     <header class="page-header">
-      <h1>素材管理</h1>
-      <p class="subtitle">管理預生成範例、展示素材與審核狀態</p>
+      <h1>{{ localized('素材管理', 'Material Management') }}</h1>
+      <p class="subtitle">{{ localized('管理預生成範例、展示素材與審核狀態', 'Manage pregenerated examples, showcase materials, and review status') }}</p>
     </header>
 
     <!-- Filters -->
     <div class="filters">
       <select v-model="selectedToolType" class="filter-select">
-        <option value="">全部工具</option>
+        <option value="">{{ localized('全部工具', 'All Tools') }}</option>
         <option v-for="tool in toolTypes" :key="tool.value" :value="tool.value">
           {{ tool.label }}
         </option>
       </select>
       <select v-model="selectedStatus" class="filter-select">
-        <option value="">全部狀態</option>
+        <option value="">{{ localized('全部狀態', 'All Statuses') }}</option>
         <option v-for="status in statuses" :key="status.value" :value="status.value">
           {{ status.label }}
         </option>
@@ -108,7 +121,7 @@ function getStatusLabel(status: string | null): string {
           <img
             v-if="material.result_image_url"
             :src="material.result_image_url"
-            :alt="material.title_zh || material.title_en || '素材'"
+            :alt="getMaterialTitle(material) || localized('素材', 'Material')"
           />
           <video
             v-else-if="material.result_video_url"
@@ -118,7 +131,7 @@ function getStatusLabel(status: string | null): string {
             @mouseenter="($event.target as HTMLVideoElement).play()"
             @mouseleave="($event.target as HTMLVideoElement).pause()"
           />
-          <div v-else class="no-preview">無預覽</div>
+          <div v-else class="no-preview">{{ localized('無預覽', 'No Preview') }}</div>
         </div>
 
         <div class="material-info">
@@ -129,27 +142,27 @@ function getStatusLabel(status: string | null): string {
             </span>
           </div>
 
-          <h3 class="material-title">{{ material.title_zh || material.title_en || material.topic }}</h3>
+          <h3 class="material-title">{{ getMaterialTitle(material) }}</h3>
 
           <div class="material-meta">
-            <span>{{ material.view_count }} 次瀏覽</span>
+            <span>{{ localized(`${material.view_count} 次瀏覽`, `${material.view_count} views`) }}</span>
             <span>{{ formatDate(material.created_at) }}</span>
           </div>
 
           <div class="material-actions" v-if="material.status === 'pending'">
             <button @click="reviewMaterial(material.id, 'approve')" class="btn approve">
-              通過
+              {{ localized('通過', 'Approve') }}
             </button>
             <button @click="reviewMaterial(material.id, 'feature')" class="btn feature">
-              設為精選
+              {{ localized('設為精選', 'Feature') }}
             </button>
             <button @click="reviewMaterial(material.id, 'reject')" class="btn reject">
-              拒絕
+              {{ localized('拒絕', 'Reject') }}
             </button>
           </div>
           <div class="material-actions" v-else-if="material.status !== 'featured'">
             <button @click="reviewMaterial(material.id, 'feature')" class="btn feature">
-              設為精選
+              {{ localized('設為精選', 'Feature') }}
             </button>
           </div>
         </div>
@@ -158,7 +171,7 @@ function getStatusLabel(status: string | null): string {
 
     <!-- Empty State -->
     <div v-if="adminStore.materials.length === 0 && !adminStore.isLoading" class="empty-state">
-      <p>找不到素材</p>
+      <p>{{ localized('找不到素材', 'No materials found') }}</p>
     </div>
 
     <!-- Pagination -->
@@ -168,17 +181,17 @@ function getStatusLabel(status: string | null): string {
         :disabled="adminStore.materialsPage <= 1"
         class="page-btn"
       >
-        上一頁
+        {{ localized('上一頁', 'Previous') }}
       </button>
       <span class="page-info">
-        第 {{ adminStore.materialsPage }} / {{ Math.ceil(adminStore.materialsTotal / 20) }} 頁
+        {{ localized(`第 ${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)} 頁`, `Page ${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)}`) }}
       </span>
       <button
         @click="loadMaterials(adminStore.materialsPage + 1)"
         :disabled="adminStore.materialsPage >= Math.ceil(adminStore.materialsTotal / 20)"
         class="page-btn"
       >
-        下一頁
+        {{ localized('下一頁', 'Next') }}
       </button>
     </div>
 

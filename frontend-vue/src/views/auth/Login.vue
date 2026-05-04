@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
 import { useUIStore } from '@/stores'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
@@ -31,10 +31,6 @@ async function handleSubmit() {
         ? (redirect.startsWith('/admin') ? redirect : '/admin/dashboard')
         : (redirect !== '/dashboard' && !redirect.startsWith('/admin') ? redirect : fallback)
       : fallback
-    if (authStore.isAdmin && (target.startsWith('/admin') || target === '/dashboard')) {
-      locale.value = 'zh-TW'
-      uiStore.setLocale('zh-TW')
-    }
     router.push(target)
   } catch (err: unknown) {
     const error = err as { response?: { status?: number; data?: { detail?: string } } }

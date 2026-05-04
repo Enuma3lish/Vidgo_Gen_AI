@@ -788,7 +788,20 @@
       "valentines": "バレンタインデー",
       "blackFriday": "ブラックフライデー",
       "christmas": "クリスマス",
-      "newYear": "新年"
+      "newYear": "旧正月"
+    },
+    "seasonsTagline": {
+      "spring": "パステルミント＆ブラッシュのスタジオ背景。春の新作や季節セールに最適。",
+      "valentines": "ブラッシュピンク＆バーガンディの編集風。ギフト・ジュエリー・コスメに。",
+      "blackFriday": "マットブラックにゴールドアクセント。緊急感のあるセール訴求に。",
+      "christmas": "常緑の松、暖かなフェアリーライト、赤と金。プレミアムなホリデーギフトに。",
+      "newYear": "赤い提灯、金の福文字、梅の枝。縁起の良い旧正月のギフトシーン。"
+    },
+    "productNames": {
+      "Bubble Tea": "バブルティー",
+      "Canvas Tote Bag": "キャンバストートバッグ",
+      "Handmade Jewelry": "ハンドメイドジュエリー",
+      "Skincare Serum": "スキンケアセラム"
     },
     "imageTranslation": {
       "title": "画像翻訳",

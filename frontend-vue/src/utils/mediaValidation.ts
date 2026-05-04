@@ -136,3 +136,77 @@ export async function validateImageFileDimensions(
   }
   return null
 }
+
+// =====================================================================
+// Video upload validation
+// =====================================================================
+
+export const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp']
+export const ALLOWED_IMAGE_EXT_LABEL = 'JPG / PNG / WebP'
+export const MAX_IMAGE_SIZE_MB = 20
+
+export const ALLOWED_VIDEO_MIME = [
+  'video/mp4',
+  'video/webm',
+  'video/quicktime', // .mov
+  'video/x-quicktime',
+]
+export const ALLOWED_VIDEO_EXT_LABEL = 'MP4 / WebM / MOV'
+export const MAX_VIDEO_SIZE_MB = 100
+
+export interface VideoValidationOptions {
+  maxSizeMb?: number
+}
+
+/**
+ * Validate a video file's MIME type and size before upload.
+ * Returns a bilingual, "please re-upload as ..." style message when invalid,
+ * or null when the file is acceptable. Falls back to file-extension sniffing
+ * when the browser doesn't fill in `file.type`.
+ */
+export function validateVideoFile(
+  file: File,
+  isZh = false,
+  opts: VideoValidationOptions = {},
+): string | null {
+  const maxSizeMb = opts.maxSizeMb ?? MAX_VIDEO_SIZE_MB
+  const maxBytes = maxSizeMb * 1024 * 1024
+
+  const lowerName = (file.name || '').toLowerCase()
+  const extOk = /\.(mp4|webm|mov)$/.test(lowerName)
+  const typeOk = file.type ? ALLOWED_VIDEO_MIME.includes(file.type) : false
+
+  if (!typeOk && !extOk) {
+    return isZh
+      ? `不支援的影片格式，請改用 ${ALLOWED_VIDEO_EXT_LABEL} 格式重新上傳。`
+      : `Unsupported video format. Please re-upload as ${ALLOWED_VIDEO_EXT_LABEL}.`
+  }
+
+  if (file.size > maxBytes) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+    return isZh
+      ? `影片大小 ${sizeMB}MB 超過上限 ${maxSizeMb}MB，請壓縮或裁短後重新上傳 ${ALLOWED_VIDEO_EXT_LABEL}。`
+      : `Video size ${sizeMB}MB exceeds the ${maxSizeMb}MB limit. Please compress or trim and re-upload as ${ALLOWED_VIDEO_EXT_LABEL}.`
+  }
+
+  return null
+}
+
+/**
+ * Build a short, human-readable hint string describing what kind of image
+ * a given tool expects. Used in the "How to use" hint card so users know
+ * the format requirements before they pick a file.
+ */
+export function imageHintForTool(toolType: string | undefined, isZh = false): string {
+  const rule = imageDimensionRuleForTool(toolType)
+  const guidance = isZh ? rule.guidanceZh : rule.guidance
+  return isZh
+    ? `${ALLOWED_IMAGE_EXT_LABEL}，最大 ${MAX_IMAGE_SIZE_MB}MB。${guidance}`
+    : `${ALLOWED_IMAGE_EXT_LABEL}, up to ${MAX_IMAGE_SIZE_MB}MB. ${guidance}`
+}
+
+export function videoHintForTool(_toolType: string | undefined, isZh = false): string {
+  return isZh
+    ? `${ALLOWED_VIDEO_EXT_LABEL}，最大 ${MAX_VIDEO_SIZE_MB}MB。`
+    : `${ALLOWED_VIDEO_EXT_LABEL}, up to ${MAX_VIDEO_SIZE_MB}MB.`
+}

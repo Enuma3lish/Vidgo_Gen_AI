@@ -10,6 +10,7 @@ import type { ModelInfo, UploadStatusResponse } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -577,6 +578,16 @@ function dataURItoBlob(dataURI: string): Blob | null {
         </div>
       </div>
 
+      <HowToUseHint
+        tool-type="product_scene"
+        media-kind="image"
+        :steps="[
+          { en: 'Pick or upload a clean product photo (white or transparent background works best).', zh: '選擇或上傳一張乾淨的商品圖片，白底或透明背景最佳。' },
+          { en: 'Pick a scene preset or describe your own (subscribers).', zh: '選擇一個場景預設，或訂閱後可自訂描述。' },
+          { en: 'Click Generate to get a polished commerce-ready scene shot.', zh: '點擊生成取得適合電商使用的場景圖。' },
+        ]"
+      />
+
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <!-- Left Panel - Product Selection -->
         <div class="card">
@@ -621,6 +632,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <div v-if="!isDemoUser" class="mb-6">
              <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳您的產品' : 'Upload Your Product' }}</h4>
              <ImageUploader 
+               tool-type="product_scene"
                v-model="uploadedImage" 
                :label="isZh ? '點擊上傳或拖放產品圖片' : 'Drop product image here'"
                @file-selected="handleUploadedProductFile"

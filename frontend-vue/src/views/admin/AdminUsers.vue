@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAdminStore } from '@/stores/admin'
 import { adminApi } from '@/api/admin'
 import type { AdminUser, UserDetail } from '@/api/admin'
 
 const adminStore = useAdminStore()
+const { locale } = useI18n()
 
 const searchQuery = ref('')
 const selectedPlan = ref('')
@@ -24,6 +26,11 @@ const registeredUsersTotal = computed(() => adminStore.dashboardStats?.users?.to
 const filteredUsersTotal = computed(() => adminStore.usersTotal)
 const paidUsersTotal = computed(() => adminStore.dashboardStats?.paid_stats?.paid ?? 0)
 const freeUsersTotal = computed(() => adminStore.dashboardStats?.paid_stats?.free ?? 0)
+const isZh = computed(() => locale.value === 'zh-TW')
+
+function localized(zh: string, en: string): string {
+  return isZh.value ? zh : en
+}
 
 onMounted(() => {
   adminStore.fetchDashboardStats()
@@ -55,7 +62,7 @@ async function viewUser(userId: string) {
 
 async function toggleBan(userId: string, isActive: boolean) {
   if (isActive) {
-    const reason = prompt('請輸入停權原因：')
+    const reason = prompt(localized('請輸入停權原因：', 'Please enter a suspension reason:'))
     if (reason) {
       await adminStore.banUser(userId, reason)
     }
@@ -100,9 +107,12 @@ async function submitPromotionCode() {
 async function grantTestAccount(user: AdminUser) {
   if (testingUserId.value) return
   const actionLabel = user.is_test_account
-    ? '重設 $1 測試方案'
-    : '指派 $1 測試方案'
-  if (!confirm(`${actionLabel}？\n${user.email}\n\n此使用者將以 $1 USD / 月使用 Pro 全功能。`)) return
+    ? localized('重設 $1 測試方案', 'Reset $1 test plan')
+    : localized('指派 $1 測試方案', 'Assign $1 test plan')
+  if (!confirm(localized(
+    `${actionLabel}？\n${user.email}\n\n此使用者將以 $1 USD / 月使用 Pro 全功能。`,
+    `${actionLabel}?\n${user.email}\n\nThis user will receive full Pro access for $1 USD per month.`
+  ))) return
 
   testingUserId.value = user.id
   try {
@@ -117,7 +127,7 @@ async function grantTestAccount(user: AdminUser) {
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString()
+  return new Date(dateStr).toLocaleDateString(locale.value)
 }
 
 function formatPlan(plan?: string | null): string {
@@ -127,13 +137,23 @@ function formatPlan(plan?: string | null): string {
 function planClass(plan?: string | null): string {
   return (plan || 'demo').toLowerCase().replace(/[^a-z0-9_-]/g, '-')
 }
+
+function testAccountActionLabel(user: AdminUser): string {
+  return user.is_test_account
+    ? localized('重設 $1 測試方案', 'Reset $1 test plan')
+    : localized('指派 $1 測試方案', 'Assign $1 test plan')
+}
+
+function activeLabel(isActive: boolean): string {
+  return isActive ? localized('啟用', 'Active') : localized('停權', 'Suspended')
+}
 </script>
 
 <template>
   <div class="admin-users">
     <header class="page-header">
-      <h1>使用者管理</h1>
-      <p class="subtitle">管理會員方案、帳號狀態與推廣帳號</p>
+      <h1>{{ localized('使用者管理', 'User Management') }}</h1>
+      <p class="subtitle">{{ localized('管理會員方案、帳號狀態與推廣帳號', 'Manage plans, account status, and promotion accounts') }}</p>
     </header>
 
     <div v-if="adminStore.error" class="error-banner">
@@ -143,19 +163,19 @@ function planClass(plan?: string | null): string {
 
     <div class="summary-grid">
       <div class="summary-card">
-        <span class="summary-label">註冊使用者</span>
+        <span class="summary-label">{{ localized('註冊使用者', 'Registered Users') }}</span>
         <strong>{{ registeredUsersTotal }}</strong>
-        <span class="summary-note">目前篩選符合 {{ filteredUsersTotal }} 位</span>
+        <span class="summary-note">{{ localized(`目前篩選符合 ${filteredUsersTotal} 位`, `${filteredUsersTotal} users match the current filters`) }}</span>
       </div>
       <div class="summary-card">
-        <span class="summary-label">付費 / 免費</span>
+        <span class="summary-label">{{ localized('付費 / 免費', 'Paid / Free') }}</span>
         <strong>{{ paidUsersTotal }} / {{ freeUsersTotal }}</strong>
-        <span class="summary-note">依目前方案統計</span>
+        <span class="summary-note">{{ localized('依目前方案統計', 'Calculated from current plans') }}</span>
       </div>
       <div class="summary-card">
-        <span class="summary-label">推廣帳號</span>
+        <span class="summary-label">{{ localized('推廣帳號', 'Promotion Accounts') }}</span>
         <strong>{{ adminStore.promotionAccounts }}</strong>
-        <span class="summary-note">帶來 {{ adminStore.promotionRegistrations }} 位註冊</span>
+        <span class="summary-note">{{ localized(`帶來 ${adminStore.promotionRegistrations} 位註冊`, `${adminStore.promotionRegistrations} referred registrations`) }}</span>
       </div>
     </div>
 
@@ -164,23 +184,23 @@ function planClass(plan?: string | null): string {
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="搜尋電子郵件或姓名..."
+        :placeholder="localized('搜尋電子郵件或姓名...', 'Search email or name...')"
         class="search-input"
       />
       <select v-model="selectedPlan" class="filter-select">
-        <option value="">全部方案</option>
+        <option value="">{{ localized('全部方案', 'All Plans') }}</option>
         <option v-for="plan in plans" :key="plan" :value="plan">
           {{ plan }}
         </option>
       </select>
       <select v-model="sortBy" class="filter-select">
-        <option value="created_at">註冊日期</option>
+        <option value="created_at">{{ localized('註冊日期', 'Join Date') }}</option>
         <option value="email">Email</option>
-        <option value="plan">方案</option>
+        <option value="plan">{{ localized('方案', 'Plan') }}</option>
       </select>
       <select v-model="sortOrder" class="filter-select">
-        <option value="desc">由新到舊</option>
-        <option value="asc">由舊到新</option>
+        <option value="desc">{{ localized('由新到舊', 'Newest First') }}</option>
+        <option value="asc">{{ localized('由舊到新', 'Oldest First') }}</option>
       </select>
     </div>
 
@@ -189,14 +209,14 @@ function planClass(plan?: string | null): string {
       <table class="users-table">
         <thead>
           <tr>
-            <th>電子郵件</th>
-            <th>姓名</th>
-            <th>方案</th>
-            <th>推廣碼</th>
-            <th>使用次數</th>
-            <th>狀態</th>
-            <th>加入日期</th>
-            <th>操作</th>
+            <th>{{ localized('電子郵件', 'Email') }}</th>
+            <th>{{ localized('姓名', 'Name') }}</th>
+            <th>{{ localized('方案', 'Plan') }}</th>
+            <th>{{ localized('推廣碼', 'Promotion Code') }}</th>
+            <th>{{ localized('使用次數', 'Uses') }}</th>
+            <th>{{ localized('狀態', 'Status') }}</th>
+            <th>{{ localized('加入日期', 'Joined') }}</th>
+            <th>{{ localized('操作', 'Actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -210,55 +230,55 @@ function planClass(plan?: string | null): string {
                 <span class="plan-badge" :class="planClass(user.plan)">
                   {{ formatPlan(user.plan) }}
                 </span>
-                <span v-if="user.is_test_account" class="role-badge test-account">測試帳號</span>
+                <span v-if="user.is_test_account" class="role-badge test-account">{{ localized('測試帳號', 'Test Account') }}</span>
               </div>
             </td>
             <td>
               <div class="promotion-cell">
                 <span v-if="user.referral_code" class="promo-code">{{ user.referral_code }}</span>
-                <span v-else class="muted">尚非推廣帳號</span>
-                <span v-if="user.is_promotion_account" class="role-badge">推廣帳號</span>
+                <span v-else class="muted">{{ localized('尚非推廣帳號', 'Not a promoter yet') }}</span>
+                <span v-if="user.is_promotion_account" class="role-badge">{{ localized('推廣帳號', 'Promoter') }}</span>
               </div>
             </td>
             <td>{{ user.referral_count || 0 }}</td>
             <td>
               <span class="status-badge" :class="{ active: user.is_active, inactive: !user.is_active }">
-                {{ user.is_active ? '啟用' : '停權' }}
+                {{ activeLabel(user.is_active) }}
               </span>
             </td>
             <td>{{ formatDate(user.created_at) }}</td>
             <td>
               <div class="actions">
-                <button @click="viewUser(user.id)" class="btn-icon" title="查看詳細資料">
-                  查看
+                <button @click="viewUser(user.id)" class="btn-icon" :title="localized('查看詳細資料', 'View details')">
+                  {{ localized('查看', 'View') }}
                 </button>
                 <button
                   v-if="!user.referral_code"
                   @click="makePromotionAccount(user)"
                   class="btn-icon promoter primary-promoter"
                   :disabled="promotingUserId === user.id"
-                  title="設為推廣帳號"
+                  :title="localized('設為推廣帳號', 'Set as promoter')"
                 >
-                  {{ promotingUserId === user.id ? '設定中...' : '設為推廣帳號' }}
+                  {{ promotingUserId === user.id ? localized('設定中...', 'Setting...') : localized('設為推廣帳號', 'Set Promoter') }}
                 </button>
-                <button v-else @click="openPromotionModal(user)" class="btn-icon promoter" title="編輯推廣碼">
-                  編輯推廣碼
+                <button v-else @click="openPromotionModal(user)" class="btn-icon promoter" :title="localized('編輯推廣碼', 'Edit promotion code')">
+                  {{ localized('編輯推廣碼', 'Edit Code') }}
                 </button>
                 <button
                   @click="grantTestAccount(user)"
                   class="btn-icon tester"
                   :disabled="testingUserId === user.id"
-                  :title="user.is_test_account ? '重設 $1 測試方案' : '指派 $1 測試方案'"
+                  :title="testAccountActionLabel(user)"
                 >
-                  {{ testingUserId === user.id ? '設定中...' : user.is_test_account ? '重設 $1 測試方案' : '指派 $1 測試方案' }}
+                  {{ testingUserId === user.id ? localized('設定中...', 'Setting...') : testAccountActionLabel(user) }}
                 </button>
                 <button
                   @click="toggleBan(user.id, user.is_active)"
                   class="btn-icon"
                   :class="{ danger: user.is_active }"
-                  :title="user.is_active ? '停權使用者' : '解除停權'"
+                  :title="user.is_active ? localized('停權使用者', 'Suspend user') : localized('解除停權', 'Unsuspend user')"
                 >
-                  {{ user.is_active ? '停權' : '解除' }}
+                  {{ user.is_active ? localized('停權', 'Suspend') : localized('解除', 'Restore') }}
                 </button>
               </div>
             </td>
@@ -274,17 +294,17 @@ function planClass(plan?: string | null): string {
         :disabled="adminStore.usersPage <= 1"
         class="page-btn"
       >
-        上一頁
+        {{ localized('上一頁', 'Previous') }}
       </button>
       <span class="page-info">
-        第 {{ adminStore.usersPage }} / {{ Math.ceil(adminStore.usersTotal / 20) }} 頁
+        {{ localized(`第 ${adminStore.usersPage} / ${Math.ceil(adminStore.usersTotal / 20)} 頁`, `Page ${adminStore.usersPage} / ${Math.ceil(adminStore.usersTotal / 20)}`) }}
       </span>
       <button
         @click="loadUsers(adminStore.usersPage + 1)"
         :disabled="adminStore.usersPage >= Math.ceil(adminStore.usersTotal / 20)"
         class="page-btn"
       >
-        下一頁
+        {{ localized('下一頁', 'Next') }}
       </button>
     </div>
 
@@ -292,49 +312,49 @@ function planClass(plan?: string | null): string {
     <div v-if="showUserModal" class="modal-overlay" @click.self="showUserModal = false">
       <div class="modal">
         <div class="modal-header">
-          <h2>使用者詳細資料</h2>
+          <h2>{{ localized('使用者詳細資料', 'User Details') }}</h2>
           <button @click="showUserModal = false" class="close-btn">&times;</button>
         </div>
         <div class="modal-body" v-if="selectedUser">
           <div class="detail-grid">
             <div class="detail-item">
-              <label>電子郵件</label>
+              <label>{{ localized('電子郵件', 'Email') }}</label>
               <span>{{ selectedUser.email }}</span>
             </div>
             <div class="detail-item">
-              <label>姓名</label>
+              <label>{{ localized('姓名', 'Name') }}</label>
               <span>{{ selectedUser.name || '-' }}</span>
             </div>
             <div class="detail-item">
-              <label>方案</label>
+              <label>{{ localized('方案', 'Plan') }}</label>
               <span class="plan-badge" :class="planClass(selectedUser.plan)">{{ formatPlan(selectedUser.plan) }}</span>
             </div>
             <div class="detail-item">
-              <label>測試帳號</label>
-              <span>{{ selectedUser.is_test_account ? '已啟用 $1 測試方案' : '否' }}</span>
+              <label>{{ localized('測試帳號', 'Test Account') }}</label>
+              <span>{{ selectedUser.is_test_account ? localized('已啟用 $1 測試方案', '$1 test plan enabled') : localized('否', 'No') }}</span>
             </div>
             <div class="detail-item">
-              <label>狀態</label>
+              <label>{{ localized('狀態', 'Status') }}</label>
               <span>
                 <span class="status-dot" :class="{ online: selectedUser.is_online }"></span>
-                {{ selectedUser.is_online ? '在線' : '離線' }}
+                {{ selectedUser.is_online ? localized('在線', 'Online') : localized('離線', 'Offline') }}
               </span>
             </div>
             <div class="detail-item">
-              <label>生成次數</label>
+              <label>{{ localized('生成次數', 'Generations') }}</label>
               <span>{{ selectedUser.generation_count }}</span>
             </div>
             <div class="detail-item">
-              <label>推廣碼</label>
+              <label>{{ localized('推廣碼', 'Promotion Code') }}</label>
               <span>{{ selectedUser.referral_code || '-' }}</span>
             </div>
             <div class="detail-item">
-              <label>推廣使用次數</label>
+              <label>{{ localized('推廣使用次數', 'Promotion Uses') }}</label>
               <span>{{ selectedUser.referral_count || 0 }}</span>
             </div>
             <div class="detail-item">
-              <label>推廣狀態</label>
-              <span>{{ selectedUser.is_promotion_account ? '推廣帳號' : '一般使用者' }}</span>
+              <label>{{ localized('推廣狀態', 'Promotion Status') }}</label>
+              <span>{{ selectedUser.is_promotion_account ? localized('推廣帳號', 'Promoter') : localized('一般使用者', 'Regular User') }}</span>
             </div>
           </div>
 
@@ -346,30 +366,30 @@ function planClass(plan?: string | null): string {
     <div v-if="showPromotionModal" class="modal-overlay" @click.self="showPromotionModal = false">
       <div class="modal small">
         <div class="modal-header">
-          <h2>設定推廣帳號</h2>
+          <h2>{{ localized('設定推廣帳號', 'Set Promotion Account') }}</h2>
           <button @click="showPromotionModal = false" class="close-btn">&times;</button>
         </div>
         <div class="modal-body" v-if="promotionTarget">
           <p class="modal-copy">
-            可自訂推廣碼；若留空，系統會自動產生唯一推廣碼。
+            {{ localized('可自訂推廣碼；若留空，系統會自動產生唯一推廣碼。', 'Customize a promotion code, or leave it blank to generate a unique one automatically.') }}
           </p>
           <div class="target-user">
             <span>{{ promotionTarget.email }}</span>
             <span class="plan-badge" :class="planClass(promotionTarget.plan)">{{ formatPlan(promotionTarget.plan) }}</span>
           </div>
           <div class="form-group">
-            <label>推廣碼</label>
+            <label>{{ localized('推廣碼', 'Promotion Code') }}</label>
             <input
               v-model="promotionCodeInput"
               type="text"
               class="form-input uppercase"
-              placeholder="留空自動產生"
+              :placeholder="localized('留空自動產生', 'Leave blank to auto-generate')"
               maxlength="16"
             />
-            <p class="form-hint">限 3-16 碼英文字母或數字。</p>
+            <p class="form-hint">{{ localized('限 3-16 碼英文字母或數字。', 'Use 3-16 letters or numbers.') }}</p>
           </div>
           <button @click="submitPromotionCode" class="btn-primary">
-            儲存推廣帳號
+            {{ localized('儲存推廣帳號', 'Save Promotion Account') }}
           </button>
         </div>
       </div>

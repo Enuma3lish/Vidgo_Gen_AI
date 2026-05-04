@@ -67,7 +67,7 @@ const visibleCols = computed(() =>
                 <path d="M9 10.5 L16 21 L23 10.5" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
-            <span class="text-[15px] font-bold leading-none tracking-tight" style="font-family: 'Syne', sans-serif; color: var(--text-primary); letter-spacing: -0.025em;">Vidgo<span style="color: #f59e0b;">AI</span></span>
+            <span class="text-[15px] font-bold leading-none" style="font-family: 'Syne', sans-serif; color: var(--text-primary); letter-spacing: 0;">Vidgo<span style="color: #f59e0b;">AI</span></span>
           </RouterLink>
           <p class="text-sm leading-relaxed max-w-xs mb-6 text-secondary">{{ t('footer.tagline') }}</p>
           <div class="flex items-center gap-2">

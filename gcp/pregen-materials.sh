@@ -79,6 +79,7 @@ resolve_tool_alias() {
 TOOLS_TO_RUN=()
 AUTO_YES=false
 LIMIT=""
+PER_TOPIC_LIMIT=""
 CLEAN=false
 TOPICS=""
 
@@ -95,6 +96,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --yes|-y)  AUTO_YES=true; shift ;;
     --limit)   LIMIT="$2"; shift 2 ;;
+    --per-topic-limit) PER_TOPIC_LIMIT="$2"; shift 2 ;;
     --clean)   CLEAN=true; shift ;;
     --topics)  TOPICS="$2"; shift 2 ;;
     --list)
@@ -213,8 +215,10 @@ for tool in "${TOOLS_TO_RUN[@]}"; do
 
   cmd_args="python -m scripts.main_pregenerate --tool ${tool}"
   [[ -n "${LIMIT}" ]] && cmd_args="${cmd_args} --limit ${LIMIT}"
+  [[ -n "${PER_TOPIC_LIMIT}" ]] && cmd_args="${cmd_args} --per-topic-limit ${PER_TOPIC_LIMIT}"
   [[ "${CLEAN}" == "true" ]] && cmd_args="${cmd_args} --clean"
   [[ -n "${TOPICS}" ]] && cmd_args="${cmd_args} --topics ${TOPICS}"
+
 
     if gcloud run jobs execute "${JOB_NAME}" \
         --region="${REGION}" \

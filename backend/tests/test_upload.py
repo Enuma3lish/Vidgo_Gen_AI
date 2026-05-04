@@ -1,10 +1,13 @@
 
 import unittest
+from io import BytesIO
+
 from fastapi.testclient import TestClient
 from app.api.v1.demo import router
 from fastapi import FastAPI
 from unittest.mock import MagicMock, patch
 import os
+from PIL import Image
 
 # Create a minimal app for testing just the router
 app = FastAPI()
@@ -17,8 +20,9 @@ class TestUploadEndpoint(unittest.TestCase):
         """
         Test the POST /api/v1/demo/upload endpoint.
         """
-        # Create a dummy file content
-        file_content = b"fake image content"
+        image_buffer = BytesIO()
+        Image.new("RGB", (128, 128), "white").save(image_buffer, format="PNG")
+        file_content = image_buffer.getvalue()
         files = {"file": ("test_image.png", file_content, "image/png")}
 
         # Mock the file opening/writing/pathlib to avoid actual disk I/O/mkdir
@@ -31,7 +35,9 @@ class TestUploadEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("url", data)
-        self.assertTrue(data["url"].startswith("/static/uploads/"))
+        self.assertIn("static_path", data)
+        self.assertTrue(data["static_path"].startswith("/static/uploads/"))
+        self.assertTrue(data["url"].endswith(data["static_path"]))
         self.assertTrue(data["url"].endswith(".png"))
         
         print(f"\n✅ Upload Endpoint Test Passed! URL: {data['url']}")

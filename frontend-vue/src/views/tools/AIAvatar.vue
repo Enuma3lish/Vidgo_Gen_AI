@@ -8,6 +8,7 @@ import { useDemoMode } from '@/composables'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import apiClient from '@/api/client'
 import { demoApi } from '@/api/demo'
 
@@ -39,7 +40,7 @@ const isProcessing = ref(false)
 // Surfaces a persistent in-block message instead of a silent no-op.
 const demoEmptyState = ref(false)
 const script = ref('')
-const selectedLanguage = ref('zh-TW')
+const selectedLanguage = ref(locale.value.startsWith('zh') ? 'zh-TW' : 'en')
 const selectedVoice = ref('')
 const voices = ref<any[]>([])
 const selectedDefaultScriptId = ref<string | null>(null)
@@ -49,6 +50,10 @@ const languageOptions = [
   { id: 'zh-TW', name: '繁體中文', flag: '🇹🇼' },
   { id: 'en', name: 'English', flag: '🇺🇸' }
 ]
+
+function avatarLanguageForLocale(value: string): 'zh-TW' | 'en' {
+  return value.startsWith('zh') ? 'zh-TW' : 'en'
+}
 
 // Frozen curated head-and-shoulders avatar portraits — Kling Avatar needs a
 // big, centered face (full-body photos are rejected). Stored in a dedicated
@@ -424,7 +429,13 @@ onMounted(async () => {
   }
 })
 
-watch(locale, () => loadEffectCatalog('ai_avatar', locale.value))
+watch(locale, () => {
+  loadEffectCatalog('ai_avatar', locale.value)
+  const nextLanguage = avatarLanguageForLocale(locale.value)
+  if (selectedLanguage.value !== nextLanguage) {
+    selectedLanguage.value = nextLanguage
+  }
+})
 
 watch(selectedLanguage, () => {
   loadVoices()
@@ -481,6 +492,16 @@ watch(selectedAvatarId, () => {
           </RouterLink>
         </div>
       </div>
+
+      <HowToUseHint
+        tool-type="ai_avatar"
+        media-kind="image"
+        :steps="[
+          { en: 'Pick a default avatar or upload your own front-facing portrait.', zh: '選一個預設頭像，或上傳你自己的正面頭像照片。' },
+          { en: 'Pick a script category or paste your own script.', zh: '選擇腳本分類，或貼上你自己的腳本。' },
+          { en: 'Choose voice and language, then click Generate Video.', zh: '選擇語音與語言，再點擊生成影片。' },
+        ]"
+      />
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Left Panel - Input (example mode: language + script first, then avatar, then voice) -->
@@ -598,6 +619,7 @@ watch(selectedAvatarId, () => {
             <div v-if="!isDemoUser" class="mb-6">
                <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳頭像 (正面人臉)' : 'Upload Portrait (Front-facing)' }}</h4>
                <ImageUploader 
+                 tool-type="ai_avatar"
                  v-model="uploadedImage" 
                  :label="isZh ? '點擊上傳或拖放頭像照片' : 'Drop portrait photo here'"
                  class="mb-4"

@@ -788,7 +788,20 @@
       "valentines": "발렌타인데이",
       "blackFriday": "블랙 프라이데이",
       "christmas": "크리스마스",
-      "newYear": "새해"
+      "newYear": "설날"
+    },
+    "seasonsTagline": {
+      "spring": "파스텔 민트 & 블러시 스튜디오 배경 — 봄 신상품·시즌 세일에 최적.",
+      "valentines": "블러시 핑크 & 버건디 에디토리얼 — 기프트, 주얼리, 뷰티 캠페인에.",
+      "blackFriday": "매트 블랙 & 골드 포인트 — 한정 세일의 긴박한 무드.",
+      "christmas": "상록 솔잎, 따뜻한 페어리 라이트, 레드 & 골드 — 프리미엄 홀리데이 기프팅.",
+      "newYear": "붉은 등롱, 금색 복(福) 캘리그래피, 매화 — 길운의 설날 선물 장면."
+    },
+    "productNames": {
+      "Bubble Tea": "버블티",
+      "Canvas Tote Bag": "캔버스 토트백",
+      "Handmade Jewelry": "수공예 주얼리 세트",
+      "Skincare Serum": "스킨케어 세럼"
     },
     "imageTranslation": {
       "title": "이미지 번역",

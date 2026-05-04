@@ -5,6 +5,7 @@ import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
@@ -114,6 +115,15 @@ async function handleTranslate() {
           </RouterLink>
         </div>
       </div>
+
+      <HowToUseHint
+        media-kind="image"
+        :steps="[
+          { en: 'Pick a demo image or upload your own poster / packshot / banner.', zh: '選示範圖片或上傳自己的海報 / 商品圖 / 橫幅。' },
+          { en: 'Choose source and target languages.', zh: '選擇來源語言與目標語言。' },
+          { en: 'Click Translate to keep the layout and replace the text.', zh: '點擊翻譯，保留排版並替換文字。' },
+        ]"
+      />
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="space-y-4">

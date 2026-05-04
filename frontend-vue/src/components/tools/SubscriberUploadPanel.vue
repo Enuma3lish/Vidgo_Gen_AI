@@ -258,6 +258,10 @@ const pendingDuration = computed(() => isVideoTool.value
   ? (isZh.value ? '需要 1 至 5 分鐘' : 'Usually takes 1 to 5 minutes')
   : (isZh.value ? '需要 1 至 2 分鐘' : 'Usually takes 1 to 2 minutes'))
 
+function localized(zh: string, en: string): string {
+  return isZh.value ? zh : en
+}
+
 // ─── Watchers ────────────────────────────────────────────────────────────────
 watch(() => props.isSubscribed, async (val) => {
   if (val) await loadModels()
@@ -368,7 +372,7 @@ async function downloadResult() {
     link.remove()
     URL.revokeObjectURL(objectUrl)
   } catch (err: any) {
-    const msg = err?.response?.data?.detail ?? 'Download failed. Please try again.'
+    const msg = err?.response?.data?.detail ?? localized('下載失敗，請再試一次。', 'Download failed. Please try again.')
     setStatus('error', msg)
   } finally {
     isDownloading.value = false
@@ -390,11 +394,11 @@ async function generate() {
       (pct) => { uploadProgress.value = pct },
     )
     currentUploadId.value = resp.upload_id
-    setStatus('info', '⏳ Generation started…')
+    setStatus('info', localized('生成已開始...', 'Generation started...'))
     startPolling(resp.upload_id)
   } catch (err: any) {
     isLoading.value = false
-    const msg = err?.response?.data?.detail ?? 'Upload failed. Please try again.'
+    const msg = err?.response?.data?.detail ?? localized('上傳失敗，請再試一次。', 'Upload failed. Please try again.')
     setStatus('error', msg)
   }
 }
@@ -409,7 +413,7 @@ function startPolling(uploadId: string) {
         isLoading.value = false
         resultUrl.value = status.result_url
         resultVideoUrl.value = status.result_video_url
-        setStatus('success', '✓ Generation complete!')
+        setStatus('success', localized('生成完成！', 'Generation complete!'))
         emit('result', {
           result_url: status.result_url,
           result_video_url: status.result_video_url,
@@ -418,9 +422,9 @@ function startPolling(uploadId: string) {
       } else if (status.status === 'failed') {
         stopPolling()
         isLoading.value = false
-        setStatus('error', status.error_message ?? 'Generation failed.')
+        setStatus('error', status.error_message ?? localized('生成失敗。', 'Generation failed.'))
       } else {
-        setStatus('info', `⏳ Processing… (${status.status})`)
+        setStatus('info', localized(`處理中...（${status.status}）`, `Processing... (${status.status})`))
       }
     } catch {
       // keep polling

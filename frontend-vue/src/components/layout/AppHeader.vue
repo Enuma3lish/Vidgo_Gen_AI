@@ -98,7 +98,7 @@ onUnmounted(() => {
               <path d="M9 10.5 L16 21 L23 10.5" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <span class="text-[15px] font-bold leading-none tracking-tight" style="font-family: 'Syne', sans-serif; color: var(--text-primary); letter-spacing: -0.025em;">
+          <span class="text-[15px] font-bold leading-none" style="font-family: 'Syne', sans-serif; color: var(--text-primary); letter-spacing: 0;">
             Vidgo<span style="color: #f59e0b;">AI</span>
           </span>
         </RouterLink>
@@ -182,8 +182,8 @@ onUnmounted(() => {
               to="/admin/dashboard"
               class="hidden md:inline-flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200"
               style="color: #d6d3d1; border: 1px solid rgba(255,255,255,0.14);"
-              aria-label="管理後台"
-              title="管理後台"
+              :aria-label="t('nav.adminDashboard')"
+              :title="t('nav.adminDashboard')"
               @mouseenter="($event.currentTarget as HTMLElement).style.color='#fff'; ($event.currentTarget as HTMLElement).style.background='rgba(22,119,255,0.10)'; ($event.currentTarget as HTMLElement).style.borderColor='rgba(22,119,255,0.35)'"
               @mouseleave="($event.currentTarget as HTMLElement).style.color='#d6d3d1'; ($event.currentTarget as HTMLElement).style.background='transparent'; ($event.currentTarget as HTMLElement).style.borderColor='rgba(255,255,255,0.14)'"
             >
@@ -211,7 +211,7 @@ onUnmounted(() => {
             class="md:hidden p-2 rounded-lg transition-colors"
             style="color: #d6d3d1;"
             :aria-expanded="mobileMenuOpen"
-            aria-label="Toggle menu"
+            :aria-label="t('nav.toggleMenu')"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
               <path v-if="!mobileMenuOpen" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
@@ -262,7 +262,7 @@ onUnmounted(() => {
             </template>
             <template v-else>
               <RouterLink v-if="!authStore.isAdmin" to="/dashboard/my-works" class="btn-secondary w-full" @click="closeMobile">{{ t('nav.dashboard') }}</RouterLink>
-              <RouterLink v-else to="/admin/dashboard" class="btn-secondary w-full" @click="closeMobile">⚙ 管理後台</RouterLink>
+              <RouterLink v-else to="/admin/dashboard" class="btn-secondary w-full" @click="closeMobile">⚙ {{ t('nav.adminDashboard') }}</RouterLink>
               <button @click="handleLogout(); closeMobile()" class="btn-ghost w-full justify-center">{{ t('nav.logout') }}</button>
             </template>
           </div>

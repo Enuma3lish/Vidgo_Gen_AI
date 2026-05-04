@@ -17,6 +17,8 @@ import { useDemoMode } from '@/composables'
 import { toolsApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
+import { validateVideoFile } from '@/utils/mediaValidation'
 
 interface DubbingExample {
   id: string
@@ -150,14 +152,9 @@ function handleVideoFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime']
-  if (!allowedVideoTypes.includes(file.type)) {
-    uiStore.showError(isZh.value ? '僅支援 MP4、WebM、MOV 影片，請重新選擇' : 'Only MP4, WebM, or MOV videos are supported. Please choose a different video.')
-    input.value = ''
-    return
-  }
-  if (file.size > 20 * 1024 * 1024) {
-    uiStore.showError(isZh.value ? '影片需小於 20MB，請壓縮後重新選擇' : 'Video must be under 20MB. Please compress it and choose again.')
+  const validationError = validateVideoFile(file, isZh.value, { maxSizeMb: 20 })
+  if (validationError) {
+    uiStore.showError(validationError)
     input.value = ''
     return
   }
@@ -319,6 +316,15 @@ onBeforeUnmount(() => {
           </RouterLink>
         </div>
       </section>
+
+      <HowToUseHint
+        media-kind="video"
+        :steps="[
+          { en: 'Pick a sample video to preview the dubbing flow.', zh: '選示範影片以快速預覽配音流程。' },
+          { en: 'Subscribers can upload their own MP4 / WebM / MOV.', zh: '訂閱用戶可上傳自己的 MP4 / WebM / MOV 影片。' },
+          { en: 'Choose source / target language and click Generate Dubbing.', zh: '選擇來源 / 目標語言並點擊生成配音。' },
+        ]"
+      />
 
       <div class="workspace-grid">
         <aside class="left-rail">

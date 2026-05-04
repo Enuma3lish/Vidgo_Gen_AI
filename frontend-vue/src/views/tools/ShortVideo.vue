@@ -10,6 +10,8 @@ import type { UploadStatusResponse } from '@/api/uploads'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
+import { validateVideoFile } from '@/utils/mediaValidation'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -166,6 +168,7 @@ const STATIC_VIDEO_EXAMPLES = [
   {
     id: 'static-sv-1',
     name: 'Cherry blossom petals falling in slow motion, cinematic',
+    nameZh: '櫻花花瓣以慢動作飄落，電影感畫面',
     preview: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=600&fit=crop',
     video_url: undefined,
     watermarked_result: undefined,
@@ -175,6 +178,7 @@ const STATIC_VIDEO_EXAMPLES = [
   {
     id: 'static-sv-2',
     name: 'Skincare product rotating on marble surface, studio lighting',
+    nameZh: '保養品在大理石檯面旋轉，棚拍燈光',
     preview: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&fit=crop',
     video_url: undefined,
     watermarked_result: undefined,
@@ -184,6 +188,7 @@ const STATIC_VIDEO_EXAMPLES = [
   {
     id: 'static-sv-3',
     name: 'Coffee being poured into a glass cup, overhead view',
+    nameZh: '咖啡倒入玻璃杯，俯拍視角',
     preview: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&fit=crop',
     video_url: undefined,
     watermarked_result: undefined,
@@ -193,6 +198,7 @@ const STATIC_VIDEO_EXAMPLES = [
   {
     id: 'static-sv-4',
     name: 'Fashion model walking on city street, golden hour',
+    nameZh: '時尚模特在城市街道行走，金色時刻',
     preview: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&fit=crop',
     video_url: undefined,
     watermarked_result: undefined,
@@ -202,6 +208,7 @@ const STATIC_VIDEO_EXAMPLES = [
   {
     id: 'static-sv-5',
     name: 'Mountain landscape with clouds moving, time lapse',
+    nameZh: '山景雲霧流動，縮時攝影感',
     preview: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&fit=crop',
     video_url: undefined,
     watermarked_result: undefined,
@@ -211,6 +218,7 @@ const STATIC_VIDEO_EXAMPLES = [
   {
     id: 'static-sv-6',
     name: 'Bubble tea shop interior, warm lighting, cozy atmosphere',
+    nameZh: '手搖飲店內景，溫暖燈光與舒適氛圍',
     preview: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&fit=crop',
     video_url: undefined,
     watermarked_result: undefined,
@@ -219,7 +227,12 @@ const STATIC_VIDEO_EXAMPLES = [
   }
 ]
 const effectiveDemoImages = computed(() =>
-  demoImages.value.length > 0 ? demoImages.value : STATIC_VIDEO_EXAMPLES
+  demoImages.value.length > 0
+    ? demoImages.value
+    : STATIC_VIDEO_EXAMPLES.map(example => ({
+        ...example,
+        name: isZh.value ? example.nameZh : example.name,
+      }))
 )
 const processingMessage = computed(() => {
   if (!isVideoTransformMode.value) {
@@ -385,15 +398,9 @@ function handleVideoUpload(event: Event) {
   const file = input?.files?.[0]
   if (!file) return
 
-  const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime']
-  if (!allowedVideoTypes.includes(file.type)) {
-    uiStore.showError(isZh.value ? '僅支援 MP4、WebM、MOV 影片，請重新選擇' : 'Only MP4, WebM, or MOV videos are supported. Please choose a different video.')
-    if (input) input.value = ''
-    return
-  }
-
-  if (file.size > 20 * 1024 * 1024) {
-    uiStore.showError(isZh.value ? '影片需小於 20MB，請壓縮後重新選擇' : 'Video must be under 20MB. Please compress it and choose again.')
+  const validationError = validateVideoFile(file, isZh.value, { maxSizeMb: 20 })
+  if (validationError) {
+    uiStore.showError(validationError)
     if (input) input.value = ''
     return
   }
@@ -560,6 +567,22 @@ function dataURItoBlob(dataURI: string): Blob | null {
         </div>
       </div>
 
+      <HowToUseHint
+        tool-type="short_video"
+        :media-kind="isVideoTransformMode ? 'video' : 'image'"
+        :steps="isVideoTransformMode
+          ? [
+              { en: 'Upload an MP4, WebM, or MOV video up to 100MB.', zh: '上傳 MP4 / WebM / MOV 影片，最大 100MB。' },
+              { en: 'Pick a style transform from the catalog.', zh: '從目錄中選擇一個風格轉換效果。' },
+              { en: 'Click Generate to apply the AI style transform.', zh: '點擊生成以套用 AI 風格轉換。' },
+            ]
+          : [
+              { en: 'Pick a demo image or upload your own product / scene image.', zh: '選示範圖片或上傳你自己的商品 / 場景圖。' },
+              { en: 'Choose a motion / effect from the catalog.', zh: '從目錄中選擇一個動態 / 效果。' },
+              { en: 'Click Generate to create a short video clip.', zh: '點擊生成創建一段短影片。' },
+            ]"
+      />
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Left Panel - Input -->
         <div class="space-y-6">
@@ -575,6 +598,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
             <div v-if="!isDemoUser && !isVideoTransformMode" class="mb-6">
                <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳圖片 (.jpg, .png)' : 'Upload Image (.jpg, .png)' }}</h4>
                <ImageUploader 
+                 tool-type="short_video"
                  v-model="uploadedImage" 
                  :label="isZh ? '點擊上傳或拖放起始圖片' : 'Drop starting image here'"
                  class="mb-4"
@@ -615,7 +639,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
               <div v-if="isProcessing || currentUploadId || uploadProgress > 0" class="rounded-2xl p-4 border" style="background: linear-gradient(135deg, rgba(16,24,40,0.92), rgba(19,49,58,0.78)); border-color: rgba(93, 188, 210, 0.28);">
                 <div class="flex items-start justify-between gap-4 mb-3">
                   <div>
-                    <p class="text-xs uppercase tracking-[0.24em] text-cyan-300/80">
+                    <p class="text-xs uppercase text-cyan-300/80">
                       {{ isZh ? '轉換狀態' : 'Transform Status' }}
                     </p>
                     <p class="text-sm text-dark-50 mt-1">{{ processingMessage }}</p>

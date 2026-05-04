@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n'
 import router from './router'
 import App from './App.vue'
 import './assets/styles/main.css'
+import { getStoredLocale } from './utils/locales'
 
 // Import locale messages
 import en from './locales/en.json'
@@ -15,7 +16,7 @@ import es from './locales/es.json'
 // Create i18n instance
 const i18n = createI18n({
   legacy: false,
-  locale: localStorage.getItem('locale') || 'zh-TW',
+  locale: getStoredLocale(),
   fallbackLocale: 'en',
   messages: {
     en,

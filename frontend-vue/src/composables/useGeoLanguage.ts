@@ -14,13 +14,14 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import apiClient from '@/api/client'
+import { LOCALE_STORAGE_KEY, SUPPORTED_LOCALES, normalizeLocale, persistLocale } from '@/utils/locales'
 
 const GEO_DETECTED_KEY = 'vidgo_geo_language_detected'
 // Must match the key used by main.ts + stores/ui.ts (LanguageSelector).
 // Previously this file used a different key ('vidgo_locale'), which caused
 // F-005: manual language selection would survive reload via main.ts init,
 // but then initLanguage() would override it from its own separate key.
-const LOCALE_KEY = 'locale'
+const LOCALE_KEY = LOCALE_STORAGE_KEY
 
 export function useGeoLanguage() {
   const { locale } = useI18n()
@@ -51,7 +52,7 @@ export function useGeoLanguage() {
     if (hasDetected()) {
       const savedLocale = localStorage.getItem(LOCALE_KEY)
       if (savedLocale) {
-        return savedLocale
+        return normalizeLocale(savedLocale)
       }
     }
 
@@ -67,7 +68,7 @@ export function useGeoLanguage() {
         // Mark as detected to prevent future API calls
         markDetected()
 
-        return response.data.language
+        return normalizeLocale(response.data.language)
       }
     } catch (error) {
       console.warn('Failed to detect language from IP:', error)
@@ -88,7 +89,7 @@ export function useGeoLanguage() {
     // Check if user has manually set a locale preference
     const userSetLocale = localStorage.getItem(LOCALE_KEY)
     if (userSetLocale) {
-      locale.value = userSetLocale
+      locale.value = persistLocale(userSetLocale)
       return
     }
 
@@ -96,10 +97,8 @@ export function useGeoLanguage() {
     const detected = await detectLanguage()
 
     // Only set if valid locale
-    const validLocales = ['en', 'zh-TW', 'ja', 'ko', 'es']
-    if (validLocales.includes(detected)) {
-      locale.value = detected
-      localStorage.setItem(LOCALE_KEY, detected)
+    if ((SUPPORTED_LOCALES as readonly string[]).includes(detected)) {
+      locale.value = persistLocale(detected)
     }
   }
 

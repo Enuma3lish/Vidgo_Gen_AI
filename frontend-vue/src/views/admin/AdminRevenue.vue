@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAdminStore } from '@/stores/admin'
 
 const adminStore = useAdminStore()
+const { locale } = useI18n()
 
 const selectedPeriod = ref<'7d' | '30d' | '90d' | '1y'>('30d')
 const periodOptions: Array<'7d' | '30d' | '90d' | '1y'> = ['7d', '30d', '90d', '1y']
+const isZh = computed(() => locale.value === 'zh-TW')
 const topCostApiMonth = computed(() => {
   const services = adminStore.apiCosts?.by_service || []
   if (!services.length) return null
@@ -48,7 +51,21 @@ function formatCurrency(amount: number): string {
 
 function formatShortDate(dateStr: string): string {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
+}
+
+function localized(zh: string, en: string): string {
+  return isZh.value ? zh : en
+}
+
+function getPeriodLabel(period: '7d' | '30d' | '90d' | '1y'): string {
+  const labels: Record<typeof period, string> = {
+    '7d': localized('7 天', '7 Days'),
+    '30d': localized('30 天', '30 Days'),
+    '90d': localized('90 天', '90 Days'),
+    '1y': localized('1 年', '1 Year')
+  }
+  return labels[period]
 }
 
 function getMaxRevenue(): number {
@@ -86,27 +103,29 @@ function trendArrow(ratio: number): string {
 
 function trendLabel(ratio: number, period: 'week' | 'month'): string {
   const direction = trendDirection(ratio)
-  const baseline = period === 'week' ? '上週' : '上月'
-  if (direction === 'up') return `較${baseline}上升`
-  if (direction === 'down') return `較${baseline}下降`
-  return `較${baseline}持平`
+  const baseline = period === 'week'
+    ? localized('上週', 'last week')
+    : localized('上月', 'last month')
+  if (direction === 'up') return localized(`較${baseline}上升`, `Up vs ${baseline}`)
+  if (direction === 'down') return localized(`較${baseline}下降`, `Down vs ${baseline}`)
+  return localized(`較${baseline}持平`, `Flat vs ${baseline}`)
 }
 
 function trendDeltaText(current: number, previous: number): string {
   if (previous <= 0) {
-    return current > 0 ? '（新增）' : '（0.0%）'
+    return current > 0 ? localized('（新增）', '(new)') : localized('（0.0%）', '(0.0%)')
   }
   const deltaPercent = ((current - previous) / previous) * 100
   const sign = deltaPercent > 0 ? '+' : ''
-  return `（${sign}${deltaPercent.toFixed(1)}%）`
+  return isZh.value ? `（${sign}${deltaPercent.toFixed(1)}%）` : `(${sign}${deltaPercent.toFixed(1)}%)`
 }
 </script>
 
 <template>
   <div class="admin-revenue">
     <header class="page-header">
-      <h1>收入分析</h1>
-      <p class="subtitle">追蹤平台營收、API 成本與成長趨勢</p>
+      <h1>{{ localized('收入分析', 'Revenue Analytics') }}</h1>
+      <p class="subtitle">{{ localized('追蹤平台營收、API 成本與成長趨勢', 'Track platform revenue, API costs, and growth trends') }}</p>
     </header>
 
     <!-- Period Selector -->
@@ -118,24 +137,24 @@ function trendDeltaText(current: number, previous: number): string {
         :class="{ active: selectedPeriod === period }"
         class="period-btn"
       >
-        {{ period === '1y' ? '1 年' : period === '7d' ? '7 天' : period === '30d' ? '30 天' : '90 天' }}
+        {{ getPeriodLabel(period) }}
       </button>
     </div>
 
     <!-- Summary Cards -->
     <div class="summary-grid">
       <div class="summary-card">
-        <span class="summary-label">本月收入</span>
+        <span class="summary-label">{{ localized('本月收入', 'Monthly Revenue') }}</span>
         <span class="summary-value">{{ formatCurrency(adminStore.monthRevenue) }}</span>
       </div>
       <div class="summary-card">
-        <span class="summary-label">累計收入</span>
+        <span class="summary-label">{{ localized('累計收入', 'Total Revenue') }}</span>
         <span class="summary-value">
           {{ formatCurrency(adminStore.revenueChart.reduce((sum, d) => sum + (d.revenue || 0), 0)) }}
         </span>
       </div>
       <div class="summary-card">
-        <span class="summary-label">平均月收入</span>
+        <span class="summary-label">{{ localized('平均月收入', 'Average Monthly Revenue') }}</span>
         <span class="summary-value">
           {{ formatCurrency(
             adminStore.revenueChart.length > 0
@@ -145,9 +164,9 @@ function trendDeltaText(current: number, previous: number): string {
         </span>
       </div>
       <div class="summary-card top-cost-month" v-if="topCostApiMonth">
-        <span class="summary-label">最高成本 API（本月）</span>
+        <span class="summary-label">{{ localized('最高成本 API（本月）', 'Highest-Cost API (Month)') }}</span>
         <span class="summary-value">{{ formatCurrency(topCostApiMonth.month_cost) }}</span>
-        <span class="summary-subvalue">{{ topCostApiMonth.display_name }} · {{ formatNumber(topCostApiMonth.month_calls) }} 次</span>
+        <span class="summary-subvalue">{{ topCostApiMonth.display_name }} · {{ localized(`${formatNumber(topCostApiMonth.month_calls)} 次`, `${formatNumber(topCostApiMonth.month_calls)} calls`) }}</span>
         <span class="summary-trend" :class="trendDirection(topCostMonthTrendRatio)">
           {{ trendArrow(topCostMonthTrendRatio) }}
           {{ trendLabel(topCostMonthTrendRatio, 'month') }}
@@ -155,9 +174,9 @@ function trendDeltaText(current: number, previous: number): string {
         </span>
       </div>
       <div class="summary-card top-cost-week" v-if="topCostApiWeek">
-        <span class="summary-label">最高成本 API（本週）</span>
+        <span class="summary-label">{{ localized('最高成本 API（本週）', 'Highest-Cost API (Week)') }}</span>
         <span class="summary-value">{{ formatCurrency(topCostApiWeek.week_cost) }}</span>
-        <span class="summary-subvalue">{{ topCostApiWeek.display_name }} · {{ formatNumber(topCostApiWeek.week_calls) }} 次</span>
+        <span class="summary-subvalue">{{ topCostApiWeek.display_name }} · {{ localized(`${formatNumber(topCostApiWeek.week_calls)} 次`, `${formatNumber(topCostApiWeek.week_calls)} calls`) }}</span>
         <span class="summary-trend" :class="trendDirection(topCostWeekTrendRatio)">
           {{ trendArrow(topCostWeekTrendRatio) }}
           {{ trendLabel(topCostWeekTrendRatio, 'week') }}
@@ -168,7 +187,7 @@ function trendDeltaText(current: number, previous: number): string {
 
     <!-- Revenue Chart -->
     <section class="chart-section">
-      <h2>月收入</h2>
+      <h2>{{ localized('月收入', 'Monthly Revenue') }}</h2>
       <div class="chart-container">
         <div class="chart-bars">
           <div
@@ -193,7 +212,7 @@ function trendDeltaText(current: number, previous: number): string {
 
     <!-- Generation Trend -->
     <section class="chart-section">
-      <h2>每日生成次數</h2>
+      <h2>{{ localized('每日生成次數', 'Daily Generations') }}</h2>
       <div class="line-chart">
         <div class="chart-grid">
           <div
@@ -204,7 +223,7 @@ function trendDeltaText(current: number, previous: number): string {
           >
             <div
               class="point"
-              :title="`${formatShortDate(data.date || '')}：${data.count} 次生成`"
+              :title="localized(`${formatShortDate(data.date || '')}：${data.count} 次生成`, `${formatShortDate(data.date || '')}: ${data.count} generations`)"
             ></div>
           </div>
         </div>
@@ -221,21 +240,21 @@ function trendDeltaText(current: number, previous: number): string {
 
     <!-- User Growth -->
     <section class="chart-section">
-      <h2>使用者成長</h2>
+      <h2>{{ localized('使用者成長', 'User Growth') }}</h2>
       <div class="growth-stats">
         <div class="growth-item">
           <span class="growth-value">{{ adminStore.dashboardStats?.users?.total || 0 }}</span>
-          <span class="growth-label">總使用者</span>
+          <span class="growth-label">{{ localized('總使用者', 'Total Users') }}</span>
         </div>
         <div class="growth-item">
           <span class="growth-value">{{ adminStore.dashboardStats?.users?.new_today || 0 }}</span>
-          <span class="growth-label">今日新增</span>
+          <span class="growth-label">{{ localized('今日新增', 'New Today') }}</span>
         </div>
         <div class="growth-item">
           <span class="growth-value">
             {{ adminStore.userGrowthChart.reduce((sum, d) => sum + (d.count || 0), 0) }}
           </span>
-          <span class="growth-label">本期間新增</span>
+          <span class="growth-label">{{ localized('本期間新增', 'New This Period') }}</span>
         </div>
       </div>
     </section>

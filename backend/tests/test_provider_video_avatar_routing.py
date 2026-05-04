@@ -13,7 +13,7 @@ from app.providers.provider_router import ProviderRouter, TaskType
 pytestmark = pytest.mark.asyncio
 
 
-async def test_v2v_routes_to_pollo_without_unsupported_piapi_rest() -> None:
+async def test_v2v_routes_to_piapi_mcp_without_unsupported_piapi_rest() -> None:
     router = ProviderRouter()
     try:
         providers = router._get_providers_for_task(
@@ -23,7 +23,8 @@ async def test_v2v_routes_to_pollo_without_unsupported_piapi_rest() -> None:
     finally:
         await router.close()
 
-    assert providers[0] == "pollo"
+    assert providers[0] == "piapi_mcp"
+    assert "pollo" in providers
     assert "piapi" not in providers
 
 

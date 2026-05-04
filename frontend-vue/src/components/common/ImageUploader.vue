@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { commonImageDimensionRule, validateImageFileDimensions } from '@/utils/mediaValidation'
+import {
+  imageDimensionRuleForTool,
+  validateImageFileDimensions,
+  ALLOWED_IMAGE_MIME,
+  ALLOWED_IMAGE_EXT_LABEL,
+  MAX_IMAGE_SIZE_MB,
+} from '@/utils/mediaValidation'
 
-defineProps({
+const props = defineProps({
   modelValue: {
     type: String,
     default: null
@@ -15,6 +21,14 @@ defineProps({
   height: {
     type: String,
     default: 'h-64'
+  },
+  // Optional tool slug (e.g. "ai_avatar", "room_redesign", "try_on") so
+  // the uploader can apply the same per-tool dimension/aspect rules that
+  // the backend `/api/v1/demo/upload` validator enforces. When omitted we
+  // fall back to the common rule.
+  toolType: {
+    type: String,
+    default: ''
   }
 })
 
@@ -23,6 +37,8 @@ const { locale } = useI18n()
 const isZh = locale.value.startsWith('zh')
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+
+const rule = computed(() => imageDimensionRuleForTool(props.toolType))
 
 function triggerUpload() {
   fileInput.value?.click()
@@ -44,39 +60,40 @@ async function handleDrop(event: DragEvent) {
   }
 }
 
-const MAX_SIZE_MB = 20
-const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
 const uploadError = ref('')
 
 async function processFile(file: File): Promise<boolean> {
   uploadError.value = ''
 
-  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+  if (!ALLOWED_IMAGE_MIME.includes(file.type)) {
     uploadError.value = isZh
-      ? '僅支援 JPG、PNG、WebP 圖片，請重新選擇圖片'
-      : 'Only JPG, PNG, or WebP images are supported. Please choose a different image.'
+      ? `不支援的圖片格式（${file.type || '未知'}），請改用 ${ALLOWED_IMAGE_EXT_LABEL} 格式重新上傳。`
+      : `Unsupported image format (${file.type || 'unknown'}). Please re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`
     return false
   }
 
   if (file.size > MAX_SIZE_BYTES) {
     const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
     uploadError.value = isZh
-      ? `檔案大小 ${sizeMB}MB 超過上限 ${MAX_SIZE_MB}MB，請壓縮或裁剪後重新選擇`
-      : `File size ${sizeMB}MB exceeds the ${MAX_SIZE_MB}MB limit. Please compress or resize and choose again.`
+      ? `檔案大小 ${sizeMB}MB 超過上限 ${MAX_IMAGE_SIZE_MB}MB，請壓縮或裁剪後重新上傳 ${ALLOWED_IMAGE_EXT_LABEL}。`
+      : `File size ${sizeMB}MB exceeds the ${MAX_IMAGE_SIZE_MB}MB limit. Please compress or resize and re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`
     return false
   }
 
   try {
-    const dimensionError = await validateImageFileDimensions(file, commonImageDimensionRule, isZh)
+    const dimensionError = await validateImageFileDimensions(file, rule.value, isZh)
     if (dimensionError) {
-      uploadError.value = dimensionError
+      // Always tell the user explicitly to re-upload with the correct format.
+      uploadError.value = isZh
+        ? `${dimensionError} 請依上述要求重新上傳。`
+        : `${dimensionError} Please re-upload an image that meets the requirements.`
       return false
     }
   } catch {
     uploadError.value = isZh
-      ? '無法讀取圖片尺寸，請重新選擇圖片'
-      : 'Image dimensions could not be read. Please choose a different image.'
+      ? '無法讀取圖片尺寸，請改用 JPG / PNG / WebP 重新上傳。'
+      : 'Image dimensions could not be read. Please re-upload as JPG, PNG, or WebP.'
     return false
   }
 
@@ -129,7 +146,12 @@ async function processFile(file: File): Promise<boolean> {
       <p class="font-medium text-center px-4">
         {{ label || (isZh ? '點擊或拖放圖片' : 'Click or drop image here') }}
       </p>
-      <p class="text-xs text-gray-500 mt-1">JPG, PNG, WebP {{ isZh ? '最大' : 'up to' }} 20MB</p>
+      <p class="text-xs text-gray-500 mt-1">
+        JPG, PNG, WebP {{ isZh ? '最大' : 'up to' }} {{ MAX_IMAGE_SIZE_MB }}MB
+        <span v-if="toolType">·
+          {{ rule.minWidth }}–{{ rule.maxWidth }}px
+        </span>
+      </p>
     </div>
 
     <!-- Error message -->

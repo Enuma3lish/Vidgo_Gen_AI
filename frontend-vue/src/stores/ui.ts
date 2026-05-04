@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import { getStoredLocale, persistLocale } from '@/utils/locales'
 
 export interface Toast {
   id: number
@@ -10,7 +11,7 @@ export interface Toast {
 
 export const useUIStore = defineStore('ui', () => {
   // State
-  const locale = ref(localStorage.getItem('locale') || 'zh-TW')
+  const locale = ref(getStoredLocale())
   const theme = ref<'dark' | 'light'>('dark')
   const sidebarOpen = ref(false)
   const globalLoading = ref(false)
@@ -20,13 +21,12 @@ export const useUIStore = defineStore('ui', () => {
 
   // Watch locale changes
   watch(locale, (newLocale) => {
-    localStorage.setItem('locale', newLocale)
+    persistLocale(newLocale)
   })
 
   // Actions
   function setLocale(newLocale: string) {
-    locale.value = newLocale
-    localStorage.setItem('locale', newLocale)
+    locale.value = persistLocale(newLocale)
   }
 
   function setTheme(newTheme: 'dark' | 'light') {

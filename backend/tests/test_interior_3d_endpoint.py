@@ -86,6 +86,7 @@ async def test_generate_3d_model_routes_to_trellis(monkeypatch: pytest.MonkeyPat
             "image_url": "https://cdn.example.com/floor-plan.jpg",
             "texture_size": 1024,
             "mesh_simplify": 0.95,
+            "model_version": "v1",
         },
         "user_tier": "paid",
     }

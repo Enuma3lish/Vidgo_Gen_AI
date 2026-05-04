@@ -788,7 +788,20 @@
       "valentines": "San Valentín",
       "blackFriday": "Black Friday",
       "christmas": "Navidad",
-      "newYear": "Año Nuevo"
+      "newYear": "Año Nuevo Lunar"
+    },
+    "seasonsTagline": {
+      "spring": "Set de estudio en menta pastel y rosa — ideal para lanzamientos y rebajas de primavera.",
+      "valentines": "Editorial en rosa pálido y burdeos — perfecto para regalos, joyería y belleza.",
+      "blackFriday": "Negro mate con detalles dorados — comunica urgencia en banners de descuento.",
+      "christmas": "Pino, luces cálidas, rojo y dorado — campañas premium de regalos navideños.",
+      "newYear": "Linternas rojas, caligrafía dorada 福 y flores de ciruelo — regalos auspiciosos de Año Nuevo Lunar."
+    },
+    "productNames": {
+      "Bubble Tea": "Bubble Tea",
+      "Canvas Tote Bag": "Bolsa Tote de Lona",
+      "Handmade Jewelry": "Joyería Artesanal",
+      "Skincare Serum": "Sérum Facial"
     },
     "imageTranslation": {
       "title": "Traducción de Imágenes",

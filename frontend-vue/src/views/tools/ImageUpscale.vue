@@ -4,6 +4,7 @@ import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
@@ -78,6 +79,15 @@ async function handleUpscale() {
           </RouterLink>
         </div>
       </div>
+
+      <HowToUseHint
+        media-kind="image"
+        :steps="[
+          { en: 'Pick a demo image or upload your own low-resolution image.', zh: '選示範圖片或上傳你自己的低解析度圖片。' },
+          { en: 'Choose 2x or 4x scale factor.', zh: '選擇 2 倍或 4 倍放大倍率。' },
+          { en: 'Click Upscale and download the HD result.', zh: '點擊放大並下載高解析度結果。' },
+        ]"
+      />
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="space-y-4">

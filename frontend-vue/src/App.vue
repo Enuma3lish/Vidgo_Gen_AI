@@ -1,36 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { onMounted, watch } from 'vue'
+import { RouterView } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppHeader from './components/layout/AppHeader.vue'
 import AppFooter from './components/layout/AppFooter.vue'
 import Toast from './components/common/Toast.vue'
 import { useGeoLanguage } from './composables/useGeoLanguage'
 import { useSessionHeartbeat } from './composables/useSessionHeartbeat'
-import { useAuthStore, useUIStore } from '@/stores'
+import { useAuthStore } from '@/stores'
+import { localeToHtmlLang, persistLocale } from '@/utils/locales'
 
 const { initLanguage } = useGeoLanguage()
 const { startHeartbeat } = useSessionHeartbeat()
 const { locale } = useI18n()
 const authStore = useAuthStore()
-const uiStore = useUIStore()
-const route = useRoute()
-const isAdminSurface = computed(() => route.path.startsWith('/admin') || route.path.startsWith('/dashboard'))
 
-function enforceAdminLocale() {
-  if (authStore.isAdmin && isAdminSurface.value) {
-    locale.value = 'zh-TW'
-    uiStore.setLocale('zh-TW')
-  }
-}
-
-watch(() => authStore.isAdmin, enforceAdminLocale)
-watch(() => route.path, enforceAdminLocale)
+watch(locale, (newLocale) => {
+  const normalizedLocale = persistLocale(newLocale)
+  document.documentElement.lang = localeToHtmlLang(normalizedLocale)
+}, { immediate: true })
 
 onMounted(async () => {
   await authStore.init()
   await initLanguage()
-  enforceAdminLocale()
   startHeartbeat()
 })
 </script>

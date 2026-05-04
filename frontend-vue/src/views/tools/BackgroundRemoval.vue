@@ -6,6 +6,7 @@ import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
@@ -289,6 +290,16 @@ function dataURItoBlob(dataURI: string): Blob | null {
         </div>
       </div>
 
+      <HowToUseHint
+        tool-type="background_removal"
+        media-kind="image"
+        :steps="[
+          { en: 'Pick one of the demo subjects or upload your own photo.', zh: '選下方的示範圖片，或上傳你自己的照片。' },
+          { en: 'Click Remove Background to get a transparent PNG.', zh: '點擊去背景取得透明背景的 PNG 圖片。' },
+          { en: 'Download or send the result straight to other tools.', zh: '下載結果，或直接送到其他工具使用。' },
+        ]"
+      />
+
       <!-- PRESET-ONLY MODE: All users see the same preset-based layout -->
       <div class="space-y-8">
         <!-- Example Selection (Demo Users) -->
@@ -328,6 +339,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
             {{ isZh ? '上傳圖片' : 'Upload Image' }}
           </h3>
           <ImageUploader 
+            tool-type="background_removal"
             v-model="uploadedImage" 
             :label="isZh ? '點擊上傳或拖放圖片' : 'Drop image here'"
           />

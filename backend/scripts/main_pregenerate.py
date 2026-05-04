@@ -485,22 +485,22 @@ PRODUCT_SCENE_MAPPING = {
         "valentines": {
             "name": "Valentine's Day",
             "name_zh": "情人節",
-            "prompt": "romantic rose petals, warm candlelight, red and pink hearts, satin ribbons, valentine campaign"
+            "prompt": "romantic valentine's day campaign backdrop, soft blush pink and burgundy color palette, scattered fresh red rose petals at the edges, satin ribbon swirls, faint heart bokeh in the background, warm candle glow, premium fashion editorial lighting, empty center for product placement, no text overlays on the product, 8K commercial photography"
         },
         "black_friday": {
             "name": "Black Friday",
             "name_zh": "黑色星期五",
-            "prompt": "sleek black surface, dramatic spotlight, neon sale tags, black and gold, retail promotion"
+            "prompt": "premium black friday retail campaign backdrop, matte black surface with subtle gold metallic accents, dramatic single key spotlight from above, faint 'SALE' typography in deep background, no neon, sleek luxury promotion mood, empty center for product placement, commercial photography, 8K"
         },
         "christmas": {
             "name": "Christmas",
             "name_zh": "聖誕節",
-            "prompt": "christmas pine branches, golden fairy lights, red ornaments, snow frost, warm holiday"
+            "prompt": "elegant christmas holiday campaign backdrop, deep evergreen pine branches and frosted eucalyptus at the edges, warm golden fairy lights bokeh, classic red and gold ornaments, soft snow dust, cozy festive cinematic lighting, empty center for product placement, premium brand photography, 8K, no people"
         },
         "new_year": {
-            "name": "New Year",
-            "name_zh": "新年",
-            "prompt": "gold confetti, champagne, sparkling lights, black and gold, new year celebration"
+            "name": "Lunar New Year",
+            "name_zh": "農曆新年",
+            "prompt": "traditional chinese lunar new year backdrop, deep festive red and gold color palette, soft red silk fabric, hanging red paper lanterns and tassels, golden 福 fortune calligraphy and auspicious cloud motifs, plum blossom branches, gold ingot and red envelope props at the edges, warm cinematic studio lighting, empty center area for product placement, prosperity and celebration mood, premium brand campaign photography, 8K, no people, no text overlays on the product"
         }
     }
 }
@@ -3058,6 +3058,11 @@ Workflow for Virtual Try-On:
 
     args = parser.parse_args()
 
+    topic_filter = None
+    if args.topics:
+        topic_filter = [t.strip() for t in args.topics.split(',') if t.strip()]
+        logger.info(f"Topic filter: {topic_filter}")
+
     if args.clean and args.tool and not args.dry_run:
         tool_type_map = {
             "ai_avatar": ToolType.AI_AVATAR,
@@ -3075,16 +3080,14 @@ Workflow for Virtual Try-On:
         else:
             async with AsyncSessionLocal() as session:
                 from sqlalchemy import delete as sa_delete
-                res = await session.execute(
-                    sa_delete(Material).where(Material.tool_type == target)
-                )
+                stmt = sa_delete(Material).where(Material.tool_type == target)
+                if topic_filter:
+                    # Honor --topics: only wipe rows matching the requested topics
+                    stmt = stmt.where(Material.topic.in_(topic_filter))
+                res = await session.execute(stmt)
                 await session.commit()
-                logger.info(f"--clean: deleted {res.rowcount} existing {args.tool} rows")
-
-    topic_filter = None
-    if args.topics:
-        topic_filter = [t.strip() for t in args.topics.split(',') if t.strip()]
-        logger.info(f"Topic filter: {topic_filter}")
+                scope = f" (topics={topic_filter})" if topic_filter else ""
+                logger.info(f"--clean: deleted {res.rowcount} existing {args.tool} rows{scope}")
 
     generator = VidGoPreGenerator()
     await generator.run(

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAdminStore } from '@/stores/admin'
 import LineChart from '@/components/admin/charts/LineChart.vue'
 import BarChart from '@/components/admin/charts/BarChart.vue'
@@ -9,10 +10,16 @@ import type { DateRange } from '@/components/admin/DateRangeSelector.vue'
 import { exportToCsv } from '@/utils/exportCsv'
 
 const adminStore = useAdminStore()
+const { locale } = useI18n()
 
 const stats = computed(() => adminStore.dashboardStats)
 const lastRefreshed = ref<Date | null>(null)
 const refreshing = ref(false)
+const isZh = computed(() => locale.value === 'zh-TW')
+
+function localized(zh: string, en: string): string {
+  return isZh.value ? zh : en
+}
 const topCostApiMonth = computed(() => {
   const services = adminStore.apiCosts?.by_service || []
   if (!services.length) return null
@@ -49,13 +56,16 @@ const PROVIDER_LABELS: Record<string, string> = {
   vertex_ai: 'Vertex AI / Gemini',
   a2e: 'A2E.ai',
 }
-const PROVIDER_DETAILS: Record<string, string> = {
-  piapi_mcp: '圖片、影片、去背、放大與備援工具',
-  piapi: 'PiAPI REST 備援與特殊模型',
-  pollo_mcp: '主要影片生成與動態模型',
-  pollo: '影片模型 REST 備援',
-  vertex_ai: 'Gemini / Veo 最終備援與審核',
-  a2e: '數位人與口播影片備援',
+function providerDetail(key: string): string {
+  const details: Record<string, string> = {
+    piapi_mcp: localized('圖片、影片、去背、放大與備援工具', 'Image, video, background removal, upscaling, and fallback tools'),
+    piapi: localized('PiAPI REST 備援與特殊模型', 'PiAPI REST fallback and specialty models'),
+    pollo_mcp: localized('主要影片生成與動態模型', 'Primary video generation and motion models'),
+    pollo: localized('影片模型 REST 備援', 'Video model REST fallback'),
+    vertex_ai: localized('Gemini / Veo 最終備援與審核', 'Gemini / Veo final fallback and moderation'),
+    a2e: localized('數位人與口播影片備援', 'AI avatar and talking video fallback'),
+  }
+  return details[key] || localized('外部 AI 服務', 'External AI service')
 }
 const subscribedProviders = computed(() => {
   const services = adminStore.aiServices?.services || {}
@@ -70,7 +80,7 @@ const subscribedProviders = computed(() => {
     return {
       id: key,
       label: PROVIDER_LABELS[key] || key,
-      detail: PROVIDER_DETAILS[key] || '外部 AI 服務',
+      detail: providerDetail(key),
       status,
       statusLabel: providerStatusLabel(status),
       message: providerMessage(key, service?.status, service?.message, service?.error),
@@ -82,17 +92,6 @@ const subscribedProviders = computed(() => {
     }
   })
 })
-
-const TOOL_LABELS: Record<string, string> = {
-  background_removal: '智能去背',
-  product_scene: '商品情境',
-  try_on: '模特換裝',
-  room_redesign: '空間改造',
-  short_video: '短影音',
-  ai_avatar: '數位人',
-  pattern_generate: '圖案生成',
-  effect: '圖片特效',
-}
 
 const TOOL_COLORS: Record<string, string> = {
   background_removal: '#3b82f6',
@@ -106,7 +105,17 @@ const TOOL_COLORS: Record<string, string> = {
 }
 
 function toolLabel(key: string): string {
-  return TOOL_LABELS[key] || key
+  const labels: Record<string, string> = {
+    background_removal: localized('智能去背', 'Background Removal'),
+    product_scene: localized('商品情境', 'Product Scene'),
+    try_on: localized('模特換裝', 'Try-On'),
+    room_redesign: localized('空間改造', 'Room Redesign'),
+    short_video: localized('短影音', 'Short Video'),
+    ai_avatar: localized('數位人', 'AI Avatar'),
+    pattern_generate: localized('圖案生成', 'Pattern Generator'),
+    effect: localized('圖片特效', 'Image Effect'),
+  }
+  return labels[key] || key
 }
 
 function toolColor(key: string): string {
@@ -161,11 +170,12 @@ function formatTimeAgo(isoStr: string | null): string {
   if (!isoStr) return '-'
   const diff = Date.now() - new Date(isoStr).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return '剛剛'
-  if (mins < 60) return `${mins} 分鐘前`
+  if (mins < 1) return localized('剛剛', 'Just now')
+  if (mins < 60) return localized(`${mins} 分鐘前`, `${mins} min ago`)
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs} 小時前`
-  return `${Math.floor(hrs / 24)} 天前`
+  if (hrs < 24) return localized(`${hrs} 小時前`, `${hrs} hr ago`)
+  const days = Math.floor(hrs / 24)
+  return localized(`${days} 天前`, `${days} days ago`)
 }
 
 function formatLastRefreshed(): string {
@@ -193,15 +203,19 @@ function trendArrow(ratio: number): string {
 
 function trendLabel(ratio: number, period: 'week' | 'month' | 'year'): string {
   const direction = trendDirection(ratio)
-  const baseline = period === 'week' ? '上週' : period === 'month' ? '上月' : '去年'
-  if (direction === 'up') return `較${baseline}上升`
-  if (direction === 'down') return `較${baseline}下降`
-  return `較${baseline}持平`
+  const baseline = period === 'week'
+    ? localized('上週', 'last week')
+    : period === 'month'
+      ? localized('上月', 'last month')
+      : localized('去年', 'last year')
+  if (direction === 'up') return localized(`較${baseline}上升`, `Up vs ${baseline}`)
+  if (direction === 'down') return localized(`較${baseline}下降`, `Down vs ${baseline}`)
+  return localized(`較${baseline}持平`, `Flat vs ${baseline}`)
 }
 
 function trendDeltaText(current: number, previous: number): string {
   if (previous <= 0) {
-    return current > 0 ? '(新增)' : '(0.0%)'
+    return current > 0 ? localized('(新增)', '(new)') : '(0.0%)'
   }
   const deltaPercent = ((current - previous) / previous) * 100
   const sign = deltaPercent > 0 ? '+' : ''
@@ -216,9 +230,9 @@ function normalizeProviderStatus(status?: string): 'ok' | 'error' | 'unknown' {
 }
 
 function providerStatusLabel(status: 'ok' | 'error' | 'unknown'): string {
-  if (status === 'ok') return '已連線'
-  if (status === 'error') return '需檢查'
-  return '檢查中'
+  if (status === 'ok') return localized('已連線', 'Connected')
+  if (status === 'error') return localized('需檢查', 'Needs Check')
+  return localized('檢查中', 'Checking')
 }
 
 function providerStatusClass(status: 'ok' | 'error' | 'unknown'): string {
@@ -230,7 +244,7 @@ function providerStatusClass(status: 'ok' | 'error' | 'unknown'): string {
 }
 
 function formatProviderCredits(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '未提供'
+  if (value === null || value === undefined || value === '') return localized('未提供', 'Not provided')
   if (typeof value === 'number') return value.toLocaleString()
   const numeric = Number(String(value).replace(/,/g, ''))
   return Number.isFinite(numeric) ? numeric.toLocaleString() : String(value)
@@ -239,42 +253,42 @@ function formatProviderCredits(value: string | number | null | undefined): strin
 function providerSubscriptionLabel(status: string | null | undefined): string {
   const normalized = (status || 'unknown').toLowerCase()
   const labels: Record<string, string> = {
-    active: '訂閱中',
-    subscribed: '訂閱中',
-    paid: '已付費',
-    trial: '試用中',
-    free: '免費方案',
-    expired: '已到期',
-    cancelled: '已取消',
-    canceled: '已取消',
-    not_configured: '未設定',
-    unknown: '未提供',
+    active: localized('訂閱中', 'Subscribed'),
+    subscribed: localized('訂閱中', 'Subscribed'),
+    paid: localized('已付費', 'Paid'),
+    trial: localized('試用中', 'Trial'),
+    free: localized('免費方案', 'Free Plan'),
+    expired: localized('已到期', 'Expired'),
+    cancelled: localized('已取消', 'Cancelled'),
+    canceled: localized('已取消', 'Cancelled'),
+    not_configured: localized('未設定', 'Not configured'),
+    unknown: localized('未提供', 'Not provided'),
   }
-  return labels[normalized] || status || '未提供'
+  return labels[normalized] || status || localized('未提供', 'Not provided')
 }
 
 function providerConfiguredLabel(configured: boolean): string {
-  return configured ? 'API Key 已設定' : 'API Key 未設定'
+  return configured ? localized('API Key 已設定', 'API key configured') : localized('API Key 未設定', 'API key not configured')
 }
 
 function providerMessage(providerKey: string, status?: string, message?: string, error?: string): string {
-  if (error) return `錯誤：${error}`
+  if (error) return localized(`錯誤：${error}`, `Error: ${error}`)
   const normalizedStatus = (status || '').toLowerCase()
   const label = PROVIDER_LABELS[providerKey] || providerKey
   if (normalizedStatus === 'ok' || normalizedStatus === 'healthy' || normalizedStatus === 'configured') {
-    return `${label} 服務正常。`
+    return localized(`${label} 服務正常。`, `${label} is operating normally.`)
   }
   if (normalizedStatus === 'error' || normalizedStatus === 'unhealthy') {
-    return `${label} 服務異常，已通知管理員檢查。`
+    return localized(`${label} 服務異常，已通知管理員檢查。`, `${label} needs attention. Admins have been notified.`)
   }
-  return message || '尚未取得狀態'
+  return message || localized('尚未取得狀態', 'No status received yet')
 }
 
 // ── Chart Data (computed from store) ─────────────────────────────────────
 const generationChartData = computed(() => ({
   labels: adminStore.generationChart.map(p => p.date || p.month || ''),
   datasets: [{
-    label: '生成次數',
+    label: localized('生成次數', 'Generations'),
     data: adminStore.generationChart.map(p => p.count ?? p.revenue ?? 0),
     borderColor: '#6366f1',
     backgroundColor: 'rgba(99, 102, 241, 0.1)',
@@ -288,7 +302,7 @@ const generationChartData = computed(() => ({
 const revenueChartData = computed(() => ({
   labels: adminStore.revenueChart.map(p => p.month || p.date || ''),
   datasets: [{
-    label: '收入 (USD)',
+    label: localized('收入 (USD)', 'Revenue (USD)'),
     data: adminStore.revenueChart.map(p => p.revenue ?? p.count ?? 0),
     borderColor: '#10b981',
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -302,7 +316,7 @@ const revenueChartData = computed(() => ({
 const revenueDailyChartData = computed(() => ({
   labels: adminStore.revenueDailyChart.map(p => p.date || ''),
   datasets: [{
-    label: '每日收入 (USD)',
+    label: localized('每日收入 (USD)', 'Daily Revenue (USD)'),
     data: adminStore.revenueDailyChart.map(p => p.revenue ?? 0),
     borderColor: '#22d3ee',
     backgroundColor: 'rgba(34, 211, 238, 0.12)',
@@ -316,7 +330,7 @@ const revenueDailyChartData = computed(() => ({
 const userGrowthChartData = computed(() => ({
   labels: adminStore.userGrowthChart.map(p => p.date || p.month || ''),
   datasets: [{
-    label: '新使用者',
+    label: localized('新使用者', 'New Users'),
     data: adminStore.userGrowthChart.map(p => p.count ?? 0),
     borderColor: '#f59e0b',
     backgroundColor: 'rgba(245, 158, 11, 0.1)',
@@ -332,7 +346,7 @@ const toolUsageFrequencyData = computed(() => {
   return {
     labels: items.map(i => toolLabel(i.tool)),
     datasets: [{
-      label: '使用次數',
+      label: localized('使用次數', 'Usage Count'),
       data: items.map(i => i.count || 0),
       backgroundColor: items.map(i => toolColor(i.tool)),
       borderRadius: 6,
@@ -364,7 +378,15 @@ function exportApiCosts() {
     svc.year_calls, svc.year_cost.toFixed(4),
   ])
   exportToCsv('api_costs.csv',
-    ['服務', '週呼叫數', '週成本', '月呼叫數', '月成本', '年呼叫數', '年成本'],
+    [
+      localized('服務', 'Service'),
+      localized('週呼叫數', 'Week Calls'),
+      localized('週成本', 'Week Cost'),
+      localized('月呼叫數', 'Month Calls'),
+      localized('月成本', 'Month Cost'),
+      localized('年呼叫數', 'Year Calls'),
+      localized('年成本', 'Year Cost')
+    ],
     rows,
   )
 }
@@ -372,7 +394,7 @@ function exportApiCosts() {
 function exportToolUsage() {
   const freq = adminStore.toolUsage?.by_frequency || []
   const rows = freq.map(f => [toolLabel(f.tool), f.count || 0])
-  exportToCsv('tool_usage.csv', ['工具', '使用次數'], rows)
+  exportToCsv('tool_usage.csv', [localized('工具', 'Tool'), localized('使用次數', 'Usage Count')], rows)
 }
 </script>
 
@@ -381,8 +403,8 @@ function exportToolUsage() {
     <!-- ===== Header with Refresh ===== -->
     <header class="dashboard-header">
       <div>
-        <h1>管理後台</h1>
-        <p class="subtitle">平台營運總覽與數據分析</p>
+        <h1>{{ localized('管理後台', 'Admin Dashboard') }}</h1>
+        <p class="subtitle">{{ localized('平台營運總覽與數據分析', 'Platform operations overview and analytics') }}</p>
       </div>
       <div class="header-actions">
         <DateRangeSelector @change="handleDateRangeChange" />
@@ -395,9 +417,9 @@ function exportToolUsage() {
             <path d="M23 4v6h-6M1 20v-6h6"/>
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
           </svg>
-          {{ refreshing ? '更新中...' : '重新整理' }}
+          {{ refreshing ? localized('更新中...', 'Refreshing...') : localized('重新整理', 'Refresh') }}
         </button>
-        <span v-if="lastRefreshed" class="last-updated">更新時間 {{ formatLastRefreshed() }}</span>
+        <span v-if="lastRefreshed" class="last-updated">{{ localized(`更新時間 ${formatLastRefreshed()}`, `Updated ${formatLastRefreshed()}`) }}</span>
       </div>
     </header>
 
@@ -415,9 +437,9 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatNumber(adminStore.onlineCount) }}</span>
-          <span class="stat-label">目前在線</span>
+          <span class="stat-label">{{ localized('目前在線', 'Online Now') }}</span>
         </div>
-        <div class="stat-badge live">即時</div>
+        <div class="stat-badge live">{{ localized('即時', 'Live') }}</div>
       </div>
 
       <div class="stat-card active-gen">
@@ -426,9 +448,9 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatNumber(adminStore.activeGenerationsCount) }}</span>
-          <span class="stat-label">進行中的生成</span>
+          <span class="stat-label">{{ localized('進行中的生成', 'Active Generations') }}</span>
         </div>
-        <div class="stat-badge live">即時</div>
+        <div class="stat-badge live">{{ localized('即時', 'Live') }}</div>
       </div>
 
       <div class="stat-card users">
@@ -437,9 +459,9 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatNumber(adminStore.totalUsers) }}</span>
-          <span class="stat-label">總使用者</span>
+          <span class="stat-label">{{ localized('總使用者', 'Total Users') }}</span>
         </div>
-        <div class="stat-change positive" v-if="stats?.users?.new_today">今日 +{{ stats.users.new_today }}</div>
+        <div class="stat-change positive" v-if="stats?.users?.new_today">{{ localized(`今日 +${stats.users.new_today}`, `Today +${stats.users.new_today}`) }}</div>
       </div>
 
       <div class="stat-card paid-ratio" v-if="stats?.paid_stats">
@@ -449,11 +471,11 @@ function exportToolUsage() {
         <div class="stat-content">
           <span class="stat-value">{{ stats.paid_stats.paid_percent }}%</span>
           <span class="stat-label">
-            付費 · {{ formatNumber(stats.paid_stats.paid) }} / {{ formatNumber(stats.paid_stats.total) }}
+            {{ localized(`付費 · ${formatNumber(stats.paid_stats.paid)} / ${formatNumber(stats.paid_stats.total)}`, `Paid · ${formatNumber(stats.paid_stats.paid)} / ${formatNumber(stats.paid_stats.total)}`) }}
           </span>
         </div>
         <div class="stat-change" :class="stats.paid_stats.paid_percent >= 20 ? 'positive' : 'neutral'">
-          免費 {{ stats.paid_stats.free_percent }}%
+          {{ localized(`免費 ${stats.paid_stats.free_percent}%`, `Free ${stats.paid_stats.free_percent}%`) }}
         </div>
       </div>
 
@@ -463,9 +485,9 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatNumber(adminStore.promotionRegistrations) }}</span>
-          <span class="stat-label">推廣註冊</span>
+          <span class="stat-label">{{ localized('推廣註冊', 'Promotion Signups') }}</span>
         </div>
-        <div class="stat-change neutral">{{ formatNumber(adminStore.promotionAccounts) }} 個推廣帳號</div>
+        <div class="stat-change neutral">{{ localized(`${formatNumber(adminStore.promotionAccounts)} 個推廣帳號`, `${formatNumber(adminStore.promotionAccounts)} promoter accounts`) }}</div>
       </div>
 
       <div class="stat-card generations">
@@ -474,7 +496,7 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatNumber(adminStore.todayGenerations) }}</span>
-          <span class="stat-label">今日生成</span>
+          <span class="stat-label">{{ localized('今日生成', 'Generations Today') }}</span>
         </div>
       </div>
 
@@ -484,7 +506,7 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatCurrency(adminStore.monthRevenue) }}</span>
-          <span class="stat-label">本月收入</span>
+          <span class="stat-label">{{ localized('本月收入', 'Monthly Revenue') }}</span>
         </div>
       </div>
 
@@ -494,8 +516,8 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatCurrency(topCostApiMonth.month_cost) }}</span>
-          <span class="stat-label">最高成本 API（本月）</span>
-          <span class="stat-subvalue">{{ topCostApiMonth.display_name }} · {{ formatNumber(topCostApiMonth.month_calls) }} 次</span>
+          <span class="stat-label">{{ localized('最高成本 API（本月）', 'Highest-Cost API (Month)') }}</span>
+          <span class="stat-subvalue">{{ topCostApiMonth.display_name }} · {{ localized(`${formatNumber(topCostApiMonth.month_calls)} 次`, `${formatNumber(topCostApiMonth.month_calls)} calls`) }}</span>
           <span class="stat-trend" :class="trendDirection(topCostMonthTrendRatio)">
             {{ trendArrow(topCostMonthTrendRatio) }}
             {{ trendLabel(topCostMonthTrendRatio, 'month') }}
@@ -510,8 +532,8 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatCurrency(topCostApiWeek.week_cost) }}</span>
-          <span class="stat-label">最高成本 API（本週）</span>
-          <span class="stat-subvalue">{{ topCostApiWeek.display_name }} · {{ formatNumber(topCostApiWeek.week_calls) }} 次</span>
+          <span class="stat-label">{{ localized('最高成本 API（本週）', 'Highest-Cost API (Week)') }}</span>
+          <span class="stat-subvalue">{{ topCostApiWeek.display_name }} · {{ localized(`${formatNumber(topCostApiWeek.week_calls)} 次`, `${formatNumber(topCostApiWeek.week_calls)} calls`) }}</span>
           <span class="stat-trend" :class="trendDirection(topCostWeekTrendRatio)">
             {{ trendArrow(topCostWeekTrendRatio) }}
             {{ trendLabel(topCostWeekTrendRatio, 'week') }}
@@ -526,8 +548,8 @@ function exportToolUsage() {
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ formatCurrency(topCostApiYear.year_cost) }}</span>
-          <span class="stat-label">最高成本 API（今年）</span>
-          <span class="stat-subvalue">{{ topCostApiYear.display_name }} · {{ formatNumber(topCostApiYear.year_calls) }} 次</span>
+          <span class="stat-label">{{ localized('最高成本 API（今年）', 'Highest-Cost API (Year)') }}</span>
+          <span class="stat-subvalue">{{ topCostApiYear.display_name }} · {{ localized(`${formatNumber(topCostApiYear.year_calls)} 次`, `${formatNumber(topCostApiYear.year_calls)} calls`) }}</span>
           <span class="stat-trend" :class="trendDirection(topCostYearTrendRatio)">
             {{ trendArrow(topCostYearTrendRatio) }}
             {{ trendLabel(topCostYearTrendRatio, 'year') }}
@@ -540,54 +562,54 @@ function exportToolUsage() {
     <!-- ===== Charts: Generation Trend + Revenue Trend ===== -->
     <div class="two-col" v-if="adminStore.generationChart.length || adminStore.revenueChart.length">
       <section class="section">
-        <h2>生成趨勢</h2>
+        <h2>{{ localized('生成趨勢', 'Generation Trend') }}</h2>
         <LineChart v-if="adminStore.generationChart.length" :chart-data="generationChartData" :height="280" />
-        <p v-else class="empty-state">尚無生成資料。</p>
+        <p v-else class="empty-state">{{ localized('尚無生成資料。', 'No generation data yet.') }}</p>
       </section>
       <section class="section">
-        <h2>收入趨勢</h2>
+        <h2>{{ localized('收入趨勢', 'Revenue Trend') }}</h2>
         <LineChart v-if="adminStore.revenueChart.length" :chart-data="revenueChartData" :height="280" />
-        <p v-else class="empty-state">尚無收入資料。</p>
+        <p v-else class="empty-state">{{ localized('尚無收入資料。', 'No revenue data yet.') }}</p>
       </section>
     </div>
 
     <!-- ===== User Growth Chart ===== -->
     <section class="section" v-if="adminStore.userGrowthChart.length">
-      <h2>使用者成長</h2>
+      <h2>{{ localized('使用者成長', 'User Growth') }}</h2>
       <LineChart :chart-data="userGrowthChartData" :height="250" />
     </section>
 
     <!-- ===== Earnings: Week & Month ===== -->
     <section class="section" v-if="adminStore.earnings">
-      <h2>收入</h2>
+      <h2>{{ localized('收入', 'Revenue') }}</h2>
       <div class="earnings-grid">
         <div class="earnings-card week">
-          <span class="earnings-period">本週</span>
+          <span class="earnings-period">{{ localized('本週', 'This Week') }}</span>
           <span class="earnings-amount">{{ formatCurrency(adminStore.earnings.week) }}</span>
         </div>
         <div class="earnings-card month">
-          <span class="earnings-period">本月</span>
+          <span class="earnings-period">{{ localized('本月', 'This Month') }}</span>
           <span class="earnings-amount">{{ formatCurrency(adminStore.earnings.month) }}</span>
         </div>
         <div class="earnings-card year">
-          <span class="earnings-period">今年</span>
+          <span class="earnings-period">{{ localized('今年', 'This Year') }}</span>
           <span class="earnings-amount">{{ formatCurrency(adminStore.earnings.year) }}</span>
         </div>
       </div>
       <!-- Daily revenue line chart -->
       <div class="mt-4" v-if="adminStore.revenueDailyChart.length">
-        <h3>每日收入（近 30 天）</h3>
+        <h3>{{ localized('每日收入（近 30 天）', 'Daily Revenue (Last 30 Days)') }}</h3>
         <LineChart :chart-data="revenueDailyChartData" :height="220" />
       </div>
 
       <!-- Monthly breakdown as bar chart -->
       <div class="mt-4" v-if="adminStore.earnings.monthly_breakdown?.length">
-        <h3>月收入（近 6 個月）</h3>
+        <h3>{{ localized('月收入（近 6 個月）', 'Monthly Revenue (Last 6 Months)') }}</h3>
         <BarChart
           :chart-data="{
             labels: adminStore.earnings.monthly_breakdown.map(m => m.month),
             datasets: [{
-              label: '收入',
+              label: localized('收入', 'Revenue'),
               data: adminStore.earnings.monthly_breakdown.map(m => m.revenue),
               backgroundColor: 'rgba(99, 102, 241, 0.7)',
               borderRadius: 6,
@@ -601,47 +623,47 @@ function exportToolUsage() {
 
     <!-- ===== Profit Summary ===== -->
     <section class="section" v-if="adminStore.earnings && adminStore.apiCosts">
-      <h2>獲利總覽</h2>
+      <h2>{{ localized('獲利總覽', 'Profit Overview') }}</h2>
       <div class="profit-grid">
         <div class="profit-row">
           <div class="profit-card earn">
-            <span class="profit-label">本週收入</span>
+            <span class="profit-label">{{ localized('本週收入', 'Weekly Revenue') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.earnings.week) }}</span>
           </div>
           <div class="profit-card cost">
-            <span class="profit-label">本週 API 成本</span>
+            <span class="profit-label">{{ localized('本週 API 成本', 'Weekly API Cost') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.apiCosts.week_total) }}</span>
           </div>
           <div class="profit-card" :class="adminStore.earnings.week - adminStore.apiCosts.week_total >= 0 ? 'profit' : 'loss'">
-            <span class="profit-label">本週淨利</span>
+            <span class="profit-label">{{ localized('本週淨利', 'Weekly Net Profit') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.earnings.week - adminStore.apiCosts.week_total) }}</span>
           </div>
         </div>
         <div class="profit-row">
           <div class="profit-card earn">
-            <span class="profit-label">本月收入</span>
+            <span class="profit-label">{{ localized('本月收入', 'Monthly Revenue') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.earnings.month) }}</span>
           </div>
           <div class="profit-card cost">
-            <span class="profit-label">本月 API 成本</span>
+            <span class="profit-label">{{ localized('本月 API 成本', 'Monthly API Cost') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.apiCosts.month_total) }}</span>
           </div>
           <div class="profit-card" :class="adminStore.earnings.month - adminStore.apiCosts.month_total >= 0 ? 'profit' : 'loss'">
-            <span class="profit-label">本月淨利</span>
+            <span class="profit-label">{{ localized('本月淨利', 'Monthly Net Profit') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.earnings.month - adminStore.apiCosts.month_total) }}</span>
           </div>
         </div>
         <div class="profit-row">
           <div class="profit-card earn">
-            <span class="profit-label">今年收入</span>
+            <span class="profit-label">{{ localized('今年收入', 'Yearly Revenue') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.earnings.year) }}</span>
           </div>
           <div class="profit-card cost">
-            <span class="profit-label">今年 API 成本</span>
+            <span class="profit-label">{{ localized('今年 API 成本', 'Yearly API Cost') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.apiCosts.year_total) }}</span>
           </div>
           <div class="profit-card" :class="adminStore.earnings.year - adminStore.apiCosts.year_total >= 0 ? 'profit' : 'loss'">
-            <span class="profit-label">今年淨利</span>
+            <span class="profit-label">{{ localized('今年淨利', 'Yearly Net Profit') }}</span>
             <span class="profit-value">{{ formatCurrency(adminStore.earnings.year - adminStore.apiCosts.year_total) }}</span>
           </div>
         </div>
@@ -651,8 +673,8 @@ function exportToolUsage() {
     <!-- ===== API Cost Breakdown ===== -->
     <section class="section" v-if="adminStore.apiCosts">
       <div class="section-header">
-        <h2>API 成本明細</h2>
-        <button v-if="adminStore.apiCosts.by_service.length" @click="exportApiCosts" class="export-btn">匯出 CSV</button>
+        <h2>{{ localized('API 成本明細', 'API Cost Breakdown') }}</h2>
+        <button v-if="adminStore.apiCosts.by_service.length" @click="exportApiCosts" class="export-btn">{{ localized('匯出 CSV', 'Export CSV') }}</button>
       </div>
       <div class="provider-status-grid">
         <article
@@ -671,11 +693,11 @@ function exportToolUsage() {
           <p class="provider-message">{{ provider.message }}</p>
           <div class="provider-account-grid">
             <div>
-              <span>剩餘額度</span>
+              <span>{{ localized('剩餘額度', 'Remaining Credits') }}</span>
               <strong>{{ formatProviderCredits(provider.remainingCredits) }}</strong>
             </div>
             <div>
-              <span>訂閱狀態</span>
+              <span>{{ localized('訂閱狀態', 'Subscription') }}</span>
               <strong>{{ providerSubscriptionLabel(provider.subscriptionStatus) }}</strong>
             </div>
           </div>
@@ -687,13 +709,13 @@ function exportToolUsage() {
         <table class="cost-table">
           <thead>
             <tr>
-              <th>服務</th>
-              <th class="num">週呼叫數</th>
-              <th class="num">週成本</th>
-              <th class="num">月呼叫數</th>
-              <th class="num">月成本</th>
-              <th class="num">年呼叫數</th>
-              <th class="num">年成本</th>
+              <th>{{ localized('服務', 'Service') }}</th>
+              <th class="num">{{ localized('週呼叫數', 'Week Calls') }}</th>
+              <th class="num">{{ localized('週成本', 'Week Cost') }}</th>
+              <th class="num">{{ localized('月呼叫數', 'Month Calls') }}</th>
+              <th class="num">{{ localized('月成本', 'Month Cost') }}</th>
+              <th class="num">{{ localized('年呼叫數', 'Year Calls') }}</th>
+              <th class="num">{{ localized('年成本', 'Year Cost') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -709,7 +731,7 @@ function exportToolUsage() {
           </tbody>
           <tfoot>
             <tr>
-              <td><strong>總計</strong></td>
+              <td><strong>{{ localized('總計', 'Total') }}</strong></td>
               <td class="num"><strong>{{ adminStore.apiCosts.by_service.reduce((s, r) => s + r.week_calls, 0) }}</strong></td>
               <td class="num"><strong>{{ formatCurrency(adminStore.apiCosts.week_total) }}</strong></td>
               <td class="num"><strong>{{ adminStore.apiCosts.by_service.reduce((s, r) => s + r.month_calls, 0) }}</strong></td>
@@ -720,15 +742,15 @@ function exportToolUsage() {
           </tfoot>
         </table>
       </div>
-      <p v-else class="empty-state">尚無 API 成本資料。</p>
+      <p v-else class="empty-state">{{ localized('尚無 API 成本資料。', 'No API cost data yet.') }}</p>
     </section>
 
     <!-- ===== Tool Usage: Charts ===== -->
     <div class="two-col" v-if="adminStore.toolUsage">
       <section class="section">
         <div class="section-header">
-          <h2>最常使用工具（依次數）</h2>
-          <button @click="exportToolUsage" class="export-btn">匯出 CSV</button>
+          <h2>{{ localized('最常使用工具（依次數）', 'Most Used Tools (By Count)') }}</h2>
+          <button @click="exportToolUsage" class="export-btn">{{ localized('匯出 CSV', 'Export CSV') }}</button>
         </div>
         <BarChart
           v-if="adminStore.toolUsage.by_frequency.length"
@@ -736,18 +758,18 @@ function exportToolUsage() {
           :horizontal="true"
           :height="300"
         />
-        <p v-else class="empty-state">尚無工具使用資料。</p>
+        <p v-else class="empty-state">{{ localized('尚無工具使用資料。', 'No tool usage data yet.') }}</p>
       </section>
 
     </div>
 
     <!-- ===== Active Sessions ===== -->
     <section class="section" v-if="adminStore.activeUsers">
-      <h2>在線工作階段（{{ adminStore.activeUsers.online_count }} 人在線）</h2>
+      <h2>{{ localized(`在線工作階段（${adminStore.activeUsers.online_count} 人在線）`, `Online Sessions (${adminStore.activeUsers.online_count} online)`) }}</h2>
       <div class="cost-table-wrap" v-if="adminStore.activeUsers.online_sessions.length">
         <table class="cost-table sessions-table">
           <thead>
-            <tr><th>使用者 ID</th><th>方案</th><th>最後活動</th></tr>
+            <tr><th>{{ localized('使用者 ID', 'User ID') }}</th><th>{{ localized('方案', 'Plan') }}</th><th>{{ localized('最後活動', 'Last Seen') }}</th></tr>
           </thead>
           <tbody>
             <tr v-for="session in adminStore.activeUsers.online_sessions" :key="session.user_id">
@@ -758,16 +780,16 @@ function exportToolUsage() {
           </tbody>
         </table>
       </div>
-      <p v-else class="empty-state">目前沒有在線工作階段。</p>
+      <p v-else class="empty-state">{{ localized('目前沒有在線工作階段。', 'No online sessions right now.') }}</p>
     </section>
 
     <!-- ===== Active Generations ===== -->
     <section class="section" v-if="adminStore.activeUsers && adminStore.activeUsers.active_generations.length">
-      <h2>進行中的生成（{{ adminStore.activeUsers.active_generations_count }} 個）</h2>
+      <h2>{{ localized(`進行中的生成（${adminStore.activeUsers.active_generations_count} 個）`, `Active Generations (${adminStore.activeUsers.active_generations_count})`) }}</h2>
       <div class="cost-table-wrap">
         <table class="cost-table">
           <thead>
-            <tr><th>使用者 ID</th><th>工具 / 服務</th><th>開始時間</th></tr>
+            <tr><th>{{ localized('使用者 ID', 'User ID') }}</th><th>{{ localized('工具 / 服務', 'Tool / Service') }}</th><th>{{ localized('開始時間', 'Started') }}</th></tr>
           </thead>
           <tbody>
             <tr v-for="(gen, idx) in adminStore.activeUsers.active_generations" :key="idx">
@@ -782,7 +804,7 @@ function exportToolUsage() {
 
     <!-- ===== Users by Plan (Doughnut) ===== -->
     <section class="section" v-if="stats?.users?.by_plan && Object.keys(stats.users.by_plan).length">
-      <h2>各方案使用者</h2>
+      <h2>{{ localized('各方案使用者', 'Users by Plan') }}</h2>
       <div style="max-width: 400px; margin: 0 auto;">
         <DoughnutChart :chart-data="planChartData" :height="300" />
       </div>
@@ -790,12 +812,12 @@ function exportToolUsage() {
 
     <!-- ===== Quick Links ===== -->
     <section class="section">
-      <h2>快速操作</h2>
+      <h2>{{ localized('快速操作', 'Quick Actions') }}</h2>
       <div class="quick-links">
-        <router-link to="/admin/users" class="quick-link"><span>使用者</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/materials" class="quick-link"><span>素材</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/revenue" class="quick-link"><span>收入</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/system" class="quick-link"><span>系統</span><span>&rarr;</span></router-link>
+        <router-link to="/admin/users" class="quick-link"><span>{{ localized('使用者', 'Users') }}</span><span>&rarr;</span></router-link>
+        <router-link to="/admin/materials" class="quick-link"><span>{{ localized('素材', 'Materials') }}</span><span>&rarr;</span></router-link>
+        <router-link to="/admin/revenue" class="quick-link"><span>{{ localized('收入', 'Revenue') }}</span><span>&rarr;</span></router-link>
+        <router-link to="/admin/system" class="quick-link"><span>{{ localized('系統', 'System') }}</span><span>&rarr;</span></router-link>
       </div>
     </section>
 

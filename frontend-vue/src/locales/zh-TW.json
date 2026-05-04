@@ -11,6 +11,8 @@
     "register": "註冊",
     "logout": "登出",
     "dashboard": "控制台",
+    "adminDashboard": "管理後台",
+    "toggleMenu": "切換選單",
     "myWorks": "我的作品",
     "tools": "工具",
     "credits": "點數"
@@ -293,7 +295,11 @@
       },
       "aiVideo": {
         "title": "AI視頻創作",
-        "desc": "從圖片和文字生成視頻"
+        "desc": "從圖片生成動態影片",
+        "longDesc": "專注圖生影片，使用單張圖片穩定生成商品動態廣告",
+        "styleTransform": "圖生影片",
+        "stylesDesc": "上傳一張圖片，即可生成適合 IG 與 TikTok 的短影音素材",
+        "ctaDesc": "一張圖片輸入，穩定輸出商品動態影片"
       },
       "ecommerce": {
         "title": "產品電商",
@@ -393,6 +399,7 @@
     "success": "成功",
     "error": "錯誤",
     "dragDrop": "拖放檔案到此處或點擊上傳",
+    "dropFilesHere": "將檔案放在這裡",
     "supportedFormats": "支援格式：JPG、PNG、WEBP",
     "supportedVideoFormats": "支援格式：MP4、MOV、WEBM",
     "maxSize": "最大檔案：10MB",
@@ -654,6 +661,18 @@
         "a": "您可以在訂閱後 7 天內申請全額退款。7 天後仍可取消訂閱，但將保留存取權限直到計費週期結束。"
       }
     }
+  },
+  "subscription": {
+    "paymentSuccess": "付款成功",
+    "paymentSuccessDesc": "您的訂閱已啟用，可以開始使用所有功能。",
+    "goToDashboard": "前往控制台",
+    "viewPlans": "查看方案",
+    "paymentCancelled": "付款已取消",
+    "paymentCancelledDesc": "您已取消付款，未產生任何費用。",
+    "backToPricing": "返回定價方案",
+    "mockComplete": "示範付款完成",
+    "redirecting": "正在前往控制台...",
+    "goNow": "立即前往"
   },
   "footer": {
     "tagline": "VidGo AI — 讓影片與視覺創作變得簡單、高效、有創意。",
@@ -988,7 +1007,20 @@
       "valentines": "情人節",
       "blackFriday": "黑色星期五",
       "christmas": "聖誕節",
-      "newYear": "新年"
+      "newYear": "農曆新年"
+    },
+    "seasonsTagline": {
+      "spring": "薄荷綠與粉嫩色調棚拍背景，適合春季新品上市與季節特賣主視覺。",
+      "valentines": "玫瑰粉與酒紅色編輯風格，最適合禮品組、飾品與美妝節慶檔。",
+      "blackFriday": "霧黑搭配金屬金色，營造限時搶購的高級促銷氛圍。",
+      "christmas": "松枝、暖色燈串與紅金色裝飾，打造高端聖誕禮贈活動。",
+      "newYear": "紅燈籠、燙金「福」字與梅花枝條，呈現喜氣濃厚的農曆新年送禮場景。"
+    },
+    "productNames": {
+      "Bubble Tea": "手搖珍珠奶茶",
+      "Canvas Tote Bag": "帆布托特包",
+      "Handmade Jewelry": "手工銀飾組合",
+      "Skincare Serum": "保養精華液"
     },
     "imageTranslation": {
       "title": "圖片翻譯",

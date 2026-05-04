@@ -1333,3 +1333,93 @@ async def delete_demo_example(
     await DemoCacheService(db, redis).invalidate_cache(m.tool_type, m.topic)
 
     return {"success": True, "deleted": material_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Example Preset Cache Management
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/examples/cache-status")
+async def get_example_cache_status(
+    admin: User = Depends(require_admin),
+):
+    """Check how many example presets are cached in Redis. Admin only."""
+    from app.services.example_cache_service import ExampleCacheService
+    redis = await get_redis()
+    service = ExampleCacheService(redis)
+    status = await service.get_cache_status()
+    return {"success": True, "cache_status": status}
+
+
+@router.post("/examples/invalidate")
+async def invalidate_example_cache(
+    tool_type: Optional[str] = None,
+    preset_id: Optional[str] = None,
+    admin: User = Depends(require_admin),
+):
+    """
+    Invalidate example preset cache entries.
+    - No params: clears all tools
+    - tool_type only: clears all presets for that tool
+    - tool_type + preset_id: clears one preset
+    Admin only.
+    """
+    from app.services.example_cache_service import ExampleCacheService
+    from app.config.example_presets import get_all_tool_types, get_presets
+    redis = await get_redis()
+    service = ExampleCacheService(redis)
+
+    if tool_type and preset_id:
+        deleted = await service.invalidate(tool_type, preset_id)
+        return {"success": True, "deleted": deleted, "scope": f"{tool_type}/{preset_id}"}
+    elif tool_type:
+        deleted = await service.invalidate(tool_type)
+        return {"success": True, "deleted": deleted, "scope": tool_type}
+    else:
+        total = 0
+        for t in get_all_tool_types():
+            total += await service.invalidate(t)
+        return {"success": True, "deleted": total, "scope": "all"}
+
+
+@router.post("/examples/prewarm")
+async def prewarm_example_cache(
+    tool_type: Optional[str] = None,
+    admin: User = Depends(require_admin),
+):
+    """
+    Pre-warm example presets by generating results for uncached presets.
+    Returns immediately — generation happens in background tasks.
+    Admin only.
+    """
+    import asyncio
+    from app.services.example_cache_service import ExampleCacheService
+    from app.config.example_presets import get_all_tool_types, get_presets
+    redis = await get_redis()
+    service = ExampleCacheService(redis)
+
+    tools = [tool_type] if tool_type else get_all_tool_types()
+    triggered = []
+    errors = []
+
+    for t in tools:
+        for preset in get_presets(t):
+            pid = preset["id"]
+            try:
+                result = await service.generate_or_cache(t, pid)
+                triggered.append({
+                    "tool": t, "preset": pid,
+                    "from_cache": result.get("from_cache", False),
+                    "has_image": bool(result.get("image_url")),
+                    "has_video": bool(result.get("video_url")),
+                })
+            except Exception as exc:
+                errors.append({"tool": t, "preset": pid, "error": str(exc)})
+
+    return {
+        "success": True,
+        "generated": len(triggered),
+        "errors": len(errors),
+        "results": triggered,
+        "error_details": errors,
+    }

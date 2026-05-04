@@ -156,17 +156,19 @@ class ExampleCacheService:
 
         key = _cache_key(tool_type, preset_id)
 
-        # 1. Redis GET — cache hit?
+        # 1. Redis GET — cache hit? (only accept non-empty cached results)
         cached = await self.redis.get(key)
         if cached:
-            logger.info(f"[ExampleCache] HIT: {key}")
             data = json.loads(cached)
-            return {
-                "success": True,
-                "from_cache": True,
-                "preset_id": preset_id,
-                **data,
-            }
+            if data:  # skip empty-dict cache entries from past failed generations
+                logger.info(f"[ExampleCache] HIT: {key}")
+                return {
+                    "success": True,
+                    "from_cache": True,
+                    "preset_id": preset_id,
+                    **data,
+                }
+            logger.info(f"[ExampleCache] STALE EMPTY CACHE: {key} — re-generating")
 
         # 2. Cache miss — call provider
         logger.info(f"[ExampleCache] MISS: {key} — calling provider")
@@ -185,10 +187,13 @@ class ExampleCacheService:
                 f"{result.get('error', 'unknown error')}"
             )
 
-        # 3. Extract URLs and store in Redis (no TTL = forever)
+        # 3. Extract URLs — only cache if we actually got output URLs
         urls = _extract_result_urls(result)
-        await self.redis.set(key, json.dumps(urls))
-        logger.info(f"[ExampleCache] STORED: {key} → {list(urls.keys())}")
+        if urls:
+            await self.redis.set(key, json.dumps(urls))
+            logger.info(f"[ExampleCache] STORED: {key} → {list(urls.keys())}")
+        else:
+            logger.warning(f"[ExampleCache] NO URLs extracted for {key} — not caching empty result")
 
         return {
             "success": True,

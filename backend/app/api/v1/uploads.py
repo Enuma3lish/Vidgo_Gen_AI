@@ -158,6 +158,7 @@ class UploadStatusResponse(BaseModel):
     status: str
     selected_model: Optional[str]
     credits_used: int
+    file_url: Optional[str] = None
     result_url: Optional[str] = None
     result_video_url: Optional[str] = None
     error_message: Optional[str] = None
@@ -744,6 +745,7 @@ async def list_my_uploads(
             status=u.status.value,
             selected_model=u.selected_model,
             credits_used=u.credits_used or 0,
+            file_url=u.file_url,
             result_url=u.result_url,
             result_video_url=u.result_video_url,
             error_message=u.error_message,
@@ -777,6 +779,7 @@ async def get_upload_status(
         status=upload.status.value,
         selected_model=upload.selected_model,
         credits_used=upload.credits_used or 0,
+        file_url=upload.file_url,
         result_url=upload.result_url,
         result_video_url=upload.result_video_url,
         error_message=upload.error_message,

@@ -143,8 +143,19 @@ class A2EAvatarService:
                     logger.info(f"A2E character list: {len(data.get('data', []))} anchors found")
                     return {"success": True, "anchors": data.get("data", [])}
                 else:
-                    logger.error(f"A2E character list failed: {response.status_code}")
-                    return {"success": False, "error": f"HTTP {response.status_code}"}
+                    # Surface upstream account/plan errors clearly so the admin
+                    # dashboard reports something actionable instead of a bare
+                    # 'not responding' message.
+                    detail = ""
+                    try:
+                        detail = response.json().get("msg") or response.text[:200]
+                    except Exception:
+                        detail = response.text[:200] if response.text else ""
+                    logger.error(f"A2E character list failed: {response.status_code} {detail}")
+                    return {
+                        "success": False,
+                        "error": f"HTTP {response.status_code}{f': {detail}' if detail else ''}",
+                    }
 
         except Exception as e:
             logger.error(f"A2E character list error: {e}")

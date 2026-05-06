@@ -180,6 +180,12 @@ async function downloadWork() {
   }
   const url = selectedWork.value.result_video_url || selectedWork.value.result_image_url
   if (!url) return
+  try {
+    await userApi.downloadGeneration(selectedWork.value.id)
+  } catch (err: any) {
+    alert(err?.response?.data?.detail || t('dashboard.myWorks.downloadExpired'))
+    return
+  }
   const link = document.createElement('a')
   link.href = url
   link.download = `${selectedWork.value.tool_type}-${selectedWork.value.id}.${isVideo(selectedWork.value) ? 'mp4' : 'png'}`

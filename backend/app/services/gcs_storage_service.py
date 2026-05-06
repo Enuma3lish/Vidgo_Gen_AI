@@ -161,6 +161,8 @@ class GCSStorageService:
         self,
         url: Optional[str],
         expiration_hours: int = 24,
+        download_filename: Optional[str] = None,
+        response_type: Optional[str] = None,
     ) -> Optional[str]:
         """
         If `url` points at our GCS bucket, return a fresh V4 signed URL.
@@ -168,6 +170,9 @@ class GCSStorageService:
 
         Use this on read paths (e.g. preset download / use-preset response)
         because long-stored signed URLs from `persist_url` expire after 7 days.
+
+        When `download_filename` is set, the signed URL forces the browser to
+        save the file as an attachment with that name (Content-Disposition).
         """
         if not url or not self.enabled:
             return url
@@ -182,16 +187,29 @@ class GCSStorageService:
                 return url
             blob = self.bucket.blob(blob_name)
 
+            sign_kwargs = {
+                "version": "v4",
+                "expiration": timedelta(hours=expiration_hours),
+                "method": "GET",
+            }
+            if download_filename:
+                # RFC 6266: quote the filename and provide UTF-8 fallback so
+                # non-ASCII names (e.g. Chinese tool names) survive download.
+                safe_ascii = download_filename.encode("ascii", "ignore").decode("ascii") or "vidgo-download"
+                from urllib.parse import quote
+                sign_kwargs["response_disposition"] = (
+                    f'attachment; filename="{safe_ascii}"; '
+                    f"filename*=UTF-8''{quote(download_filename)}"
+                )
+            if response_type:
+                sign_kwargs["response_type"] = response_type
+
             # On Cloud Run the default credentials are GCE metadata tokens
             # which cannot sign locally. Fall back to IAM signBlob via the
             # service-account email + an OAuth access token so signed URLs
             # work without a private-key JSON file.
             try:
-                return blob.generate_signed_url(
-                    version="v4",
-                    expiration=timedelta(hours=expiration_hours),
-                    method="GET",
-                )
+                return blob.generate_signed_url(**sign_kwargs)
             except Exception:
                 import google.auth
                 from google.auth.transport.requests import Request as AuthRequest
@@ -207,9 +225,7 @@ class GCSStorageService:
                 if not sa_email:
                     raise
                 return blob.generate_signed_url(
-                    version="v4",
-                    expiration=timedelta(hours=expiration_hours),
-                    method="GET",
+                    **sign_kwargs,
                     service_account_email=sa_email,
                     access_token=creds.token,
                 )

@@ -51,6 +51,7 @@ from app.services.credit_service import CreditService
 from app.services.demo_cache_service import DemoCacheService
 from app.services.gcs_storage_service import get_gcs_storage
 from app.services.email_service import send_admin_tool_failure_email
+from app.services.prompt_refinement_service import get_prompt_refinement_service
 import logging
 import os
 import hashlib
@@ -91,6 +92,45 @@ def _notify_admin_of_tool_failure(
             logger.error("No running loop to schedule admin alert for %s", tool_name)
     except Exception as alert_exc:  # pragma: no cover - defensive
         logger.error("Failed to schedule admin alert for %s: %s", tool_name, alert_exc)
+
+
+def _provider_failure_response(
+    tool_name: str,
+    result: Dict[str, Any],
+    user=None,
+):
+    provider_error = result.get("error") or result.get("message") or "Provider returned success=false"
+    logger.error("%s provider failure: %s", tool_name, provider_error)
+    _notify_admin_of_tool_failure(
+        tool_name,
+        RuntimeError(str(provider_error)),
+        user,
+        extra_context={"provider_result": result},
+    )
+    return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+async def _refine_generation_prompt(
+    prompt: str,
+    tool_name: str,
+    prompt_role: str,
+    user_prompt: bool = False,
+    context: Optional[Dict[str, Any]] = None,
+) -> tuple[str, Dict[str, Any]]:
+    """Refine a provider prompt with Gemini, falling back to the original text."""
+    service = get_prompt_refinement_service()
+    result = await service.refine_for_tool(
+        prompt=prompt,
+        tool_name=tool_name,
+        prompt_role=prompt_role,
+        user_prompt=user_prompt,
+        context=context or {},
+    )
+    if result.changed:
+        logger.info("Gemini refined %s %s", tool_name, prompt_role)
+    elif result.error:
+        logger.warning("Gemini prompt refinement skipped for %s: %s", tool_name, result.error)
+    return result.refined_prompt, result.to_metadata()
 
 PRODUCT_SCENE_MAX_DIMENSION = 1536
 PRODUCT_SCENE_CUSTOM_PROMPT_MAX_CHARS = 300
@@ -369,13 +409,22 @@ async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str
             )
             return
         credit_svc = CreditService(db)
-        await credit_svc.add_credits(
-            user_id=str(user.id),
-            amount=amount,
-            credit_type="subscription",
-            transaction_type="refund",
-            description=f"Refund: {service_type} failed",
-        )
+        deduction = getattr(user, "_last_credit_deduction", None) or {}
+        if not deduction:
+            deduction = {"subscription": amount}
+
+        for credit_type in ("bonus", "subscription", "purchased"):
+            bucket_amount = int(deduction.get(credit_type) or 0)
+            if bucket_amount <= 0:
+                continue
+            await credit_svc.add_credits(
+                user_id=str(user.id),
+                amount=bucket_amount,
+                credit_type=credit_type,
+                transaction_type="refund",
+                description=f"Refund: {service_type} failed",
+                metadata={"refund_source": credit_type},
+            )
         logger.info(f"Refunded {amount} credits to user {user.id} for failed {service_type}")
     except Exception as e:
         logger.error(f"Failed to refund {amount} credits to user {user.id}: {e}")
@@ -463,6 +512,16 @@ async def _check_and_deduct_credits(
     if not ok:
         return False, err
 
+    try:
+        from app.services.abuse_prevention_service import AbusePreventionService
+        rate_redis = redis_client or await get_redis()
+        abuse = AbusePreventionService(rate_redis)
+        rate = await abuse.check_generation_user(str(user.id))
+        if not rate.allowed:
+            return False, rate.message
+    except Exception as exc:
+        logger.warning("Generation abuse check skipped for user %s: %s", user.id, exc)
+
     credit_svc = CreditService(db, redis_client)
     has_enough = await credit_svc.check_sufficient(str(user.id), amount)
     if not has_enough:
@@ -474,6 +533,7 @@ async def _check_and_deduct_credits(
     )
     if not success:
         return False, result.get("error", "Credit deduction failed")
+    setattr(user, "_last_credit_deduction", result.get("deducted", {}))
     return True, None
 
 
@@ -759,7 +819,7 @@ async def remove_background(
     """
     Remove background from product image.
     Returns transparent PNG or white background.
-    
+
     USER TIER LOGIC:
     - Demo users: Return pre-generated result from Material DB
     - Subscribers: Real-time background removal + save to UserGeneration
@@ -794,7 +854,7 @@ async def remove_background(
         if result.get("success"):
             output = result.get("output", {})
             result_url = output.get("image_url")
-            
+
             # Save to UserGeneration
             user_gen = UserGeneration(
                 user_id=current_user.id,
@@ -825,10 +885,7 @@ async def remove_background(
             )
         else:
             await _refund_credits(db, current_user, CREDIT_COST, "background_removal")
-            return ToolResponse(
-                success=False,
-                message=result.get("error", "Background removal failed")
-            )
+            return _provider_failure_response("background_removal", result, current_user)
     except Exception as e:
         logger.error(f"Background removal error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "background_removal")
@@ -923,11 +980,11 @@ async def generate_product_scene(
 ):
     """
     Generate product in a professional scene/background.
-    
+
     USER TIER LOGIC:
     - Demo users: Return pre-generated result from Material DB (with watermark)
     - Subscribers: Real-time I2I generation (no watermark, can download)
-    
+
     3-Step I2I Process (for subscribers):
     1. Remove background from product image (rembg)
     2. Generate scene background (T2I)
@@ -998,7 +1055,7 @@ async def generate_product_scene(
             status_code=400,
             detail="Custom scene requires custom_prompt or template_id.",
         )
-    
+
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
         user_product_url = None
@@ -1023,10 +1080,21 @@ async def generate_product_scene(
         return ToolResponse(success=False, message=err)
 
     logger.info(f"Subscriber: Starting 3-step I2I generation for {request.product_image_url}")
-    
+
     try:
         provider_router = get_provider_router()
         product_url = str(request.get_product_url())
+        base_full_prompt = (
+            f"{scene_prompt}, scene background only with clear open area for product compositing, "
+            "no product or object in center, photorealistic high-resolution commercial photography"
+        )
+        full_prompt, prompt_refinement = await _refine_generation_prompt(
+            base_full_prompt,
+            "product_scene",
+            "scene background prompt",
+            user_prompt=bool(request.custom_prompt or request.template_id),
+            context={"scene_type": request.scene_type, "template_id": request.template_id},
+        )
 
         # Step 1: Remove background
         logger.info("Step 1: Removing product background...")
@@ -1036,22 +1104,21 @@ async def generate_product_scene(
         )
         if not rembg_result.get("success"):
             raise Exception(f"Background removal failed: {rembg_result.get('error')}")
-        
+
         product_no_bg_url = rembg_result["output"]["image_url"]
 
         # Step 2: Generate scene background
         logger.info("Step 2: Generating scene background...")
-        full_prompt = f"{scene_prompt}, scene background only with clear open area for product compositing, no product or object in center, photorealistic high-resolution commercial photography"
-        
+
         t2i_result = await provider_router.route(
             TaskType.T2I,
             {"prompt": full_prompt}
         )
         if not t2i_result.get("success"):
             raise Exception(f"Scene generation failed: {t2i_result.get('error')}")
-            
+
         scene_url = t2i_result["output"]["image_url"]
-        
+
         # Step 3: Composite with bounded memory usage so large provider outputs
         # do not OOM the Cloud Run instance.
         logger.info("Step 3: Compositing...")
@@ -1066,7 +1133,11 @@ async def generate_product_scene(
             user_id=current_user.id,
             tool_type=ToolType.PRODUCT_SCENE,
             input_image_url=str(request.get_product_url()),
-            input_params={"scene_type": request.scene_type, "custom_prompt": request.custom_prompt},
+            input_params={
+                "scene_type": request.scene_type,
+                "custom_prompt": request.custom_prompt,
+                "prompt_refinement": prompt_refinement,
+            },
             input_text=full_prompt,
             result_image_url=result_url,
             credits_used=10,
@@ -1081,7 +1152,7 @@ async def generate_product_scene(
             prompt=full_prompt,
             input_image_url=str(request.get_product_url()),
             result_image_url=result_url,
-            input_params={"scene_type": request.scene_type},
+            input_params={"scene_type": request.scene_type, "prompt_refinement": prompt_refinement},
         )
 
         await db.commit()
@@ -1092,7 +1163,7 @@ async def generate_product_scene(
             credits_used=10,
             message="Product scene generated successfully (subscriber)"
         )
-        
+
     except Exception as e:
         logger.error(f"Product scene error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "product_scene")
@@ -1106,11 +1177,11 @@ async def generate_product_scene(
 async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> dict:
     """
     Composite a transparent product image onto a scene background.
-    
+
     Args:
         product_no_bg_url: URL/path to product image with transparent background
         scene_url: URL/path to scene background image
-        
+
     Returns:
         {"success": True, "image_url": str} or {"success": False, "error": str}
     """
@@ -1140,31 +1211,31 @@ async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> di
         scene_img = await _load_image(scene_url, "RGB")
         product_resized: Image.Image | None = None
         upload_buffer: BytesIO | None = None
-        
+
         # Resize product to fit nicely in scene (60% of scene width, centered)
         scene_w, scene_h = scene_img.size
         target_w = int(scene_w * 0.6)
-        
+
         prod_w, prod_h = product_img.size
         scale = target_w / prod_w
         new_w = target_w
         new_h = int(prod_h * scale)
-        
+
         # Ensure product doesn't exceed scene height
         if new_h > scene_h * 0.8:
             scale = (scene_h * 0.8) / prod_h
             new_h = int(prod_h * scale)
             new_w = int(prod_w * scale)
-        
+
         product_resized = product_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        
+
         # Center product on scene
         x_offset = (scene_w - new_w) // 2
         y_offset = (scene_h - new_h) // 2
-        
+
         # Composite onto the RGB scene using the product alpha channel.
         scene_img.paste(product_resized, (x_offset, y_offset), product_resized)
-        
+
         filename = f"product_scene_{uuid.uuid4().hex[:8]}.png"
         from app.services.gcs_storage_service import get_gcs_storage
         gcs = get_gcs_storage()
@@ -1186,7 +1257,7 @@ async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> di
 
         logger.info(f"[Composite] Saved: {result_url}")
         return {"success": True, "image_url": result_url}
-        
+
     except Exception as e:
         logger.error(f"[Composite] Error: {e}")
         return {"success": False, "error": str(e)}
@@ -1213,7 +1284,7 @@ async def ai_try_on(
 ):
     """
     Virtual try-on - place garment on model.
-    
+
     USER TIER LOGIC:
     - Demo users: Return pre-generated result from Material DB
     - Subscribers: Real-time try-on generation + save to UserGeneration
@@ -1317,16 +1388,16 @@ async def ai_try_on(
         # Route via PIAPI Client directly for specialized Try-On
         from scripts.services.piapi_client import PiAPIClient
         piapi = PiAPIClient(api_key=os.getenv("PIAPI_KEY", ""))
-        
+
         result = await piapi.virtual_try_on(
              model_image_url=model_url,
              garment_image_url=garment_url
         )
-        
+
         if not result.get("success"):
              # Fallback to T2I? No, Try-On is specific.
              raise Exception(result.get("error", "Try-on failed"))
-             
+
         # Extract result URL
         result_url = result.get("image_url") or result.get("output", {}).get("image_url")
         if not result_url:
@@ -1334,7 +1405,7 @@ async def ai_try_on(
               images = result.get("output", {}).get("images", [])
               if images:
                    result_url = images[0].get("url") if isinstance(images[0], dict) else images[0]
-        
+
         if not result_url:
              raise Exception("No result URL returned from Try-On service")
 
@@ -1395,7 +1466,7 @@ async def room_redesign(
 ):
     """
     Transform room interior style.
-    
+
     USER TIER LOGIC:
     - Demo users: Return pre-generated result from Material DB
     - Subscribers: Real-time interior design + save to UserGeneration
@@ -1439,6 +1510,13 @@ async def room_redesign(
         interior = INTERIOR_STYLES[0]
 
     style_prompt = request.custom_prompt or interior["prompt"]
+    style_prompt, prompt_refinement = await _refine_generation_prompt(
+        style_prompt,
+        "room_redesign",
+        "interior redesign prompt",
+        user_prompt=bool(request.custom_prompt),
+        context={"style": request.style, "preserve_structure": request.preserve_structure},
+    )
 
     try:
         router = get_provider_router()
@@ -1453,7 +1531,7 @@ async def room_redesign(
         )
 
         output_url = result.get("image_url") or result.get("output_url") or (result.get("output", {}).get("image_url") if isinstance(result.get("output"), dict) else None)
-        
+
         if output_url:
             # Save to UserGeneration
             user_gen = UserGeneration(
@@ -1463,8 +1541,10 @@ async def room_redesign(
                 input_params={
                     "style": request.style,
                     "custom_prompt": request.custom_prompt,
-                    "preserve_structure": request.preserve_structure
+                    "preserve_structure": request.preserve_structure,
+                    "prompt_refinement": prompt_refinement,
                 },
+                input_text=style_prompt,
                 result_image_url=output_url,
                 credits_used=20,
             )
@@ -1475,10 +1555,10 @@ async def room_redesign(
             await _maybe_recycle_for_demo(
                 db, user_gen, ToolType.ROOM_REDESIGN,
                 topic=request.style or "modern",
-                prompt=f"Room redesign: {request.style}",
+                prompt=style_prompt,
                 input_image_url=str(request.get_room_url()),
                 result_image_url=output_url,
-                input_params={"style": request.style},
+                input_params={"style": request.style, "prompt_refinement": prompt_refinement},
             )
 
             await db.commit()
@@ -1491,10 +1571,7 @@ async def room_redesign(
             )
         else:
             await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
-            return ToolResponse(
-                success=False,
-                message=result.get("error", "Room redesign failed")
-            )
+            return _provider_failure_response("room_redesign", result, current_user)
     except Exception as e:
         logger.error(f"Room Redesign error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
@@ -1517,7 +1594,7 @@ async def generate_short_video(
 ):
     """
     Generate short video from image.
-    
+
     USER TIER LOGIC:
     - Demo users: Return pre-generated result from Material DB
     - Subscribers: Real-time video generation + save to UserGeneration
@@ -1554,7 +1631,7 @@ async def generate_short_video(
 
     try:
         credits_used = CREDIT_COST
-        
+
         # Use Provider Router for I2V
         # motion_strength (1-10) maps to PiAPI prompt intensity description
         provider_router = get_provider_router()
@@ -1583,10 +1660,22 @@ async def generate_short_video(
                 "with flowing fabrics and dramatic wind effect, dynamic lighting with lens flare accents, "
                 "high-energy fashion commercial or product launch campaign feel, 60fps smooth slow-motion"
             )
+        style_hint = get_style_prompt(request.style) if request.style else None
+        motion_prompt_base = (
+            f"{motion_desc}. Visual style guidance: {style_hint or request.style}"
+            if request.style else motion_desc
+        )
+        motion_prompt, prompt_refinement = await _refine_generation_prompt(
+            motion_prompt_base,
+            "short_video",
+            "image-to-video motion prompt",
+            user_prompt=bool(request.style),
+            context={"motion_strength": strength, "style": request.style},
+        )
 
         task_params = {
             "image_url": _resolve_public_url(str(request.image_url)),
-            "prompt": motion_desc,
+            "prompt": motion_prompt,
             "duration": 5
         }
 
@@ -1600,16 +1689,14 @@ async def generate_short_video(
 
         if not result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "short_video")
-            return ToolResponse(
-                success=False,
-                message=result.get("error", "Video generation failed")
-            )
+            return _provider_failure_response("short_video", result, current_user)
 
         video_url = result.get("video_url") or result.get("output", {}).get("video_url") or result.get("output_url")
 
         # Optional: Apply style transformation (Video-to-Video)
         # Requires can_use_effects plan feature
         apply_style = False
+        style_prompt_refinement = None
         if request.style and video_url:
             effects_ok, _, _ = await _check_plan_feature(
                 db, current_user, "can_use_effects", "video style effects"
@@ -1619,6 +1706,13 @@ async def generate_short_video(
         if apply_style and request.style and video_url:
             style_prompt = get_style_prompt(request.style)
             if style_prompt:
+                style_prompt, style_prompt_refinement = await _refine_generation_prompt(
+                    style_prompt,
+                    "video_transform",
+                    "short video style transfer prompt",
+                    user_prompt=True,
+                    context={"style": request.style, "source_tool": "short_video"},
+                )
                 style_result = await provider_router.route(
                     TaskType.V2V,
                     {"video_url": video_url, "prompt": style_prompt}
@@ -1637,7 +1731,14 @@ async def generate_short_video(
                 user_id=current_user.id,
                 tool_type=ToolType.SHORT_VIDEO,
                 input_image_url=str(request.image_url),
-                input_params={"motion_strength": request.motion_strength, "style": request.style, "model_id": request.model_id},
+                input_params={
+                    "motion_strength": request.motion_strength,
+                    "style": request.style,
+                    "model_id": request.model_id,
+                    "motion_prompt": motion_prompt,
+                    "prompt_refinement": prompt_refinement,
+                    "style_prompt_refinement": style_prompt_refinement,
+                },
                 result_video_url=video_url,
                 credits_used=credits_used,
             )
@@ -1647,7 +1748,7 @@ async def generate_short_video(
             # Recycle for demo gallery
             await _maybe_recycle_for_demo(
                 db, user_gen, ToolType.SHORT_VIDEO,
-                topic="product_showcase", prompt="User short video",
+                topic="product_showcase", prompt=motion_prompt,
                 input_image_url=str(request.image_url),
                 result_video_url=video_url,
             )
@@ -1722,11 +1823,18 @@ async def video_transform(
 
     try:
         router_instance = get_provider_router()
+        refined_prompt, prompt_refinement = await _refine_generation_prompt(
+            request.prompt,
+            "video_transform",
+            "video-to-video style prompt",
+            user_prompt=True,
+            context={"style": request.style},
+        )
         result = await router_instance.route(
             TaskType.V2V,
             {
                 "video_url": request.video_url,
-                "prompt": request.prompt,
+                "prompt": refined_prompt,
                 "style": request.style,
             }
         )
@@ -1739,7 +1847,13 @@ async def video_transform(
                 user_id=current_user.id,
                 tool_type=ToolType.SHORT_VIDEO,
                 input_video_url=request.video_url,
-                input_params={"prompt": request.prompt, "style": request.style},
+                input_text=refined_prompt,
+                input_params={
+                    "prompt": request.prompt,
+                    "refined_prompt": refined_prompt,
+                    "style": request.style,
+                    "prompt_refinement": prompt_refinement,
+                },
                 result_video_url=video_url,
                 credits_used=CREDIT_COST,
             )
@@ -1755,7 +1869,7 @@ async def video_transform(
             )
         else:
             await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
-            return ToolResponse(success=False, message=result.get("error", "Video transform failed"))
+            return _provider_failure_response("video_transform", result, current_user)
     except Exception as e:
         logger.error(f"Video transform error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
@@ -1842,7 +1956,7 @@ async def upscale_image(
             )
         else:
             await _refund_credits(db, current_user, CREDIT_COST, "upscale")
-            return ToolResponse(success=False, message=result.get("error", "Upscale failed"))
+            return _provider_failure_response("upscale", result, current_user)
     except Exception as e:
         logger.error(f"Upscale error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "upscale")
@@ -1862,7 +1976,7 @@ async def generate_avatar_video(
 ):
     """
     Generate AI Avatar video from photo with lip sync.
-    
+
     USER TIER LOGIC:
     - Demo users: Return pre-generated result from Material DB
     - Subscribers: Real-time avatar generation + save to UserGeneration
@@ -2092,11 +2206,18 @@ async def image_transform(
 
     try:
         provider_router = get_provider_router()
+        refined_prompt, prompt_refinement = await _refine_generation_prompt(
+            request.prompt,
+            "image_transform",
+            "image-to-image edit prompt",
+            user_prompt=True,
+            context={"strength": request.strength},
+        )
         result = await provider_router.route(
             TaskType.I2I,
             {
                 "image_url": _resolve_public_url(str(request.image_url)),
-                "prompt": request.prompt,
+                "prompt": refined_prompt,
                 "strength": request.strength,
                 "negative_prompt": request.negative_prompt or "",
             },
@@ -2112,11 +2233,13 @@ async def image_transform(
                 user_id=current_user.id,
                 tool_type=ToolType.EFFECT,
                 input_image_url=str(request.image_url),
-                input_text=request.prompt,
+                input_text=refined_prompt,
                 input_params={
                     "strength": request.strength,
                     "negative_prompt": request.negative_prompt,
                     "mode": "i2i_transform",
+                    "original_prompt": request.prompt,
+                    "prompt_refinement": prompt_refinement,
                 },
                 result_image_url=result_url,
                 credits_used=cost,
@@ -2216,6 +2339,18 @@ async def image_translate(
 
     try:
         router_instance = get_provider_router()
+        original_translation_prompt = prompt
+        prompt, prompt_refinement = await _refine_generation_prompt(
+            prompt,
+            "image_translation",
+            "image translation edit prompt",
+            user_prompt=bool(request.instructions),
+            context={
+                "target_language": request.target_language,
+                "source_language": request.source_language,
+                "has_user_instructions": bool(request.instructions),
+            },
+        )
         result = await router_instance.route(
             TaskType.I2I,
             {
@@ -2229,7 +2364,7 @@ async def image_translate(
 
         if not result.get("success"):
             await _refund_credits(db, current_user, cost, "image_translation")
-            return ToolResponse(success=False, message=result.get("error", "Image translation failed"))
+            return _provider_failure_response("image_translation", result, current_user)
 
         output = result.get("output", {})
         result_url = output.get("image_url") or result.get("image_url")
@@ -2247,6 +2382,8 @@ async def image_translate(
                 "target_language": request.target_language,
                 "source_language": request.source_language,
                 "instructions": request.instructions,
+                "original_prompt": original_translation_prompt,
+                "prompt_refinement": prompt_refinement,
             },
             result_image_url=result_url,
             result_metadata={"action": "image_translation", "provider_task": "i2i"},
@@ -2335,7 +2472,7 @@ async def video_dubbing(
         )
         if not speech_result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "video_dubbing")
-            return ToolResponse(success=False, message=speech_result.get("error", "Speech generation failed"))
+            return _provider_failure_response("video_dubbing", speech_result, current_user)
 
         speech_output = speech_result.get("output", {})
         audio_url = speech_output.get("audio_url") or speech_output.get("url") or speech_result.get("audio_url")

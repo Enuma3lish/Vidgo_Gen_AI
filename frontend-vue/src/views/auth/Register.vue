@@ -4,12 +4,14 @@ import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
 import { useUIStore } from '@/stores'
+import { useRecaptcha } from '@/composables/useRecaptcha'
 
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const uiStore = useUIStore()
+const { execute: executeRecaptcha } = useRecaptcha()
 
 const email = ref('')
 const password = ref('')
@@ -25,7 +27,8 @@ async function handleSubmit() {
   isLoading.value = true
   try {
     const referralCode = promotionCode.value.trim().toUpperCase() || undefined
-    await authStore.register({ email: email.value, password: password.value, referral_code: referralCode })
+    const recaptcha_token = await executeRecaptcha('register')
+    await authStore.register({ email: email.value, password: password.value, referral_code: referralCode, recaptcha_token })
     router.push({ path: '/auth/verify', query: { email: email.value } })
   } catch (error) {
     // Error handled in store

@@ -4,7 +4,7 @@ Authentication API endpoints with email verification support.
 from datetime import datetime, timedelta, timezone
 from typing import Any
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -30,11 +30,30 @@ from app.schemas.user import (
 )
 from app.services.email_service import email_service
 from app.services.email_verify import EmailVerificationService
+from app.services.abuse_prevention_service import AbusePreventionService, get_client_ip
 import redis.asyncio as redis
 
 settings = get_settings()
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _preferred_language(request: Request, explicit_language: str | None = None) -> str:
+    lang = (explicit_language or request.headers.get("Accept-Language") or "en").strip()
+    return "zh-TW" if lang.lower().startswith("zh") else "en"
+
+
+async def _enforce_abuse_check(check_result) -> None:
+    if check_result.allowed:
+        return
+    headers = {}
+    if check_result.retry_after_seconds:
+        headers["Retry-After"] = str(check_result.retry_after_seconds)
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=check_result.message,
+        headers=headers,
+    )
 
 
 # Redis client for verification service
@@ -53,10 +72,12 @@ class LoginRequest(BaseModel):
     """Login request body."""
     email: EmailStr
     password: str
+    recaptcha_token: str | None = None
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
+    request: Request,
     db: AsyncSession = Depends(deps.get_db),
     login_data: LoginRequest = Body(...)
 ) -> Any:
@@ -64,6 +85,16 @@ async def login(
     Login with email and password.
     Returns user info and token pair (access + refresh).
     """
+    redis_client = await get_redis_client()
+    abuse = AbusePreventionService(redis_client)
+    client_ip = get_client_ip(request)
+    await _enforce_abuse_check(await abuse.check_login_ip(client_ip))
+    recaptcha = await abuse.verify_recaptcha_token(login_data.recaptcha_token, client_ip)
+    if redis_client:
+        await redis_client.close()
+    if not recaptcha.allowed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=recaptcha.message)
+
     # Find user by email
     result = await db.execute(select(User).where(User.email == login_data.email))
     user = result.scalars().first()
@@ -134,6 +165,7 @@ async def login(
 
 @router.post("/login/form", response_model=LoginResponse)
 async def login_form(
+    request: Request,
     db: AsyncSession = Depends(deps.get_db),
     form_data: OAuth2PasswordRequestForm = Depends()
 ) -> Any:
@@ -142,7 +174,7 @@ async def login_form(
     Username field accepts email.
     """
     login_request = LoginRequest(email=form_data.username, password=form_data.password)
-    return await login(db=db, login_data=login_request)
+    return await login(request=request, db=db, login_data=login_request)
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -203,6 +235,7 @@ async def refresh_token(
 
 @router.post("/register", response_model=MessageResponse)
 async def register(
+    request: Request,
     db: AsyncSession = Depends(deps.get_db),
     user_in: UserCreate = Body(...)
 ) -> Any:
@@ -210,6 +243,18 @@ async def register(
     Register a new user.
     Sends 6-digit verification code - user must verify before logging in.
     """
+    redis_client = await get_redis_client()
+    abuse = AbusePreventionService(redis_client)
+    client_ip = get_client_ip(request)
+    await _enforce_abuse_check(await abuse.check_registration_ip(client_ip))
+    recaptcha = await abuse.verify_recaptcha_token(user_in.recaptcha_token, client_ip)
+    if not recaptcha.allowed:
+        if redis_client:
+            await redis_client.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=recaptcha.message)
+
+    language = _preferred_language(request, user_in.language)
+
     # Check password confirmation if provided
     if user_in.password_confirm and user_in.password != user_in.password_confirm:
         raise HTTPException(
@@ -238,11 +283,11 @@ async def register(
             )
         else:
             # Resend verification code for unverified account
-            redis_client = await get_redis_client()
             verify_service = EmailVerificationService(db, redis_client, email_service)
             success, message = await verify_service.send_verification_code(
                 existing_user.email,
-                str(existing_user.id)
+                str(existing_user.id),
+                language=language,
             )
             if redis_client:
                 await redis_client.close()
@@ -289,12 +334,12 @@ async def register(
     # login enforces email_verified, so they become a zombie account. Log
     # the failure loudly server-side and surface it in the response so the
     # frontend can prompt "try resend" instead of just "check your email".
-    redis_client = await get_redis_client()
     verify_service = EmailVerificationService(db, redis_client, email_service)
     try:
         email_success, email_message = await verify_service.send_verification_code(
             user.email,
-            str(user.id)
+            str(user.id),
+            language=language,
         )
     except Exception as e:
         logger.exception(f"[register] verification email send crashed for {user.email}: {e}")
@@ -325,6 +370,7 @@ async def register(
 
 @router.post("/verify-email", response_model=MessageResponse)
 async def verify_email(
+    request: Request,
     db: AsyncSession = Depends(deps.get_db),
     verification: EmailVerificationRequest = Body(...)
 ) -> Any:
@@ -365,7 +411,8 @@ async def verify_email(
     # Send welcome email
     await email_service.send_welcome_email(
         to_email=user.email,
-        username=user.username
+        username=user.username,
+        language=_preferred_language(request),
     )
 
     return MessageResponse(message="Email verified successfully! You can now log in.")
@@ -373,6 +420,7 @@ async def verify_email(
 
 @router.post("/resend-verification", response_model=MessageResponse)
 async def resend_verification(
+    request_scope: Request,
     db: AsyncSession = Depends(deps.get_db),
     request: ResendVerificationRequest = Body(...)
 ) -> Any:
@@ -409,7 +457,8 @@ async def resend_verification(
     verify_service = EmailVerificationService(db, redis_client, email_service)
     success, message = await verify_service.send_verification_code(
         user.email,
-        str(user.id)
+        str(user.id),
+        language=_preferred_language(request_scope),
     )
     if redis_client:
         await redis_client.close()
@@ -427,6 +476,7 @@ class PasswordResetRequest(BaseModel):
 
 @router.post("/forgot-password", response_model=MessageResponse)
 async def forgot_password(
+    request_scope: Request,
     db: AsyncSession = Depends(deps.get_db),
     request: PasswordResetRequest = Body(...)
 ) -> Any:
@@ -461,7 +511,8 @@ async def forgot_password(
     await email_service.send_password_reset_email(
         to_email=user.email,
         token=reset_token,
-        username=user.username
+        username=user.username,
+        language=_preferred_language(request_scope),
     )
 
     return MessageResponse(
@@ -765,6 +816,7 @@ async def verify_email_code(
 
 @router.post("/resend-code", response_model=MessageResponse)
 async def resend_verification_code(
+    request_scope: Request,
     db: AsyncSession = Depends(deps.get_db),
     request: ResendCodeRequest = Body(...)
 ) -> Any:
@@ -776,7 +828,7 @@ async def resend_verification_code(
     redis_client = await get_redis_client()
     verify_service = EmailVerificationService(db, redis_client, email_service)
 
-    success, message = await verify_service.resend_code(request.email)
+    success, message = await verify_service.resend_code(request.email, language=_preferred_language(request_scope))
 
     if redis_client:
         await redis_client.close()

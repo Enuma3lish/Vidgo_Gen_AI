@@ -18,7 +18,7 @@ from uuid import UUID
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, and_
-                        
+
 
 from app.core.config import get_settings
 from app.models.user import User
@@ -183,6 +183,7 @@ class CreditService:
             return False, {"error": "Insufficient credits", "balance": balance}
 
         remaining = amount
+        deducted = {"bonus": 0, "subscription": 0, "purchased": 0}
 
         # 1. Deduct from bonus first (expiring soonest)
         if user.bonus_credits and user.bonus_credits > 0 and remaining > 0:
@@ -190,18 +191,21 @@ class CreditService:
             if not user.bonus_credits_expiry or user.bonus_credits_expiry >= datetime.now(timezone.utc):
                 deduct = min(user.bonus_credits, remaining)
                 user.bonus_credits -= deduct
+                deducted["bonus"] += deduct
                 remaining -= deduct
 
         # 2. Deduct from subscription
         if user.subscription_credits and user.subscription_credits > 0 and remaining > 0:
             deduct = min(user.subscription_credits, remaining)
             user.subscription_credits -= deduct
+            deducted["subscription"] += deduct
             remaining -= deduct
 
         # 3. Deduct from purchased
         if user.purchased_credits and user.purchased_credits > 0 and remaining > 0:
             deduct = min(user.purchased_credits, remaining)
             user.purchased_credits -= deduct
+            deducted["purchased"] += deduct
             remaining -= deduct
 
         # Get new balance
@@ -216,12 +220,12 @@ class CreditService:
             service_type=service_type,
             generation_id=UUID(generation_id) if generation_id else None,
             description=description or f"Generation using {service_type}",
-            extra_data=metadata
+            extra_data={**(metadata or {}), "deducted": deducted}
         )
         self.db.add(transaction)
         await self.db.commit()
 
-        return True, new_balance
+        return True, {**new_balance, "deducted": deducted}
 
     async def add_credits(
         self,
@@ -470,15 +474,25 @@ class CreditService:
             select(User, Plan).join(Plan, User.current_plan_id == Plan.id).where(User.id == user_id)
         )
         row = result.first()
-        
+
         if not row:
             return False, "User or plan not found"
-        
+
         user, plan = row
 
-        # Check if service requires specific plan
-        if pricing.min_plan:
-            plan_order = {"basic": 1, "pro": 2, "premium": 3, "enterprise": 4}
+        # Check if paid services require a specific plan. Free/zero-credit
+        # services must remain available when their credit price is 0.
+        if pricing.min_plan and (pricing.credit_cost or 0) > 0:
+            plan_order = {
+                "free": 0,
+                "basic": 1,
+                "starter": 1,
+                "pro": 2,
+                "pro_plus": 3,
+                "test_pro_usd_1": 3,
+                "premium": 3,
+                "enterprise": 4,
+            }
             user_plan_level = plan_order.get(plan.name, 0)
             required_level = plan_order.get(pricing.min_plan, 0)
             if user_plan_level < required_level:
@@ -505,10 +519,10 @@ class CreditService:
             select(User, Plan).join(Plan, User.current_plan_id == Plan.id).where(User.id == user_id)
         )
         row = result.first()
-        
+
         if not row:
             return False, "User or plan not found"
-        
+
         user, plan = row
 
         max_concurrent = plan.max_concurrent_generations or 1
@@ -539,10 +553,10 @@ class CreditService:
             raise ValueError("User not found")
 
         expired_credits = user.subscription_credits or 0
-        
+
         if expired_credits > 0:
             user.subscription_credits = 0
-            
+
             new_balance = await self.get_balance(user_id)
 
             # Record expiry transaction
@@ -685,7 +699,7 @@ class CreditService:
         # Update user's plan
         user.current_plan_id = new_plan_id
         user.plan_started_at = datetime.now(timezone.utc)
-        
+
         # Set expiration to end of current month
         now = datetime.now(timezone.utc)
         if now.month == 12:

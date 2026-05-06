@@ -597,9 +597,9 @@ function dataURItoBlob(dataURI: string): Blob | null {
             <!-- Subscriber Interface: Upload Zone -->
             <div v-if="!isDemoUser && !isVideoTransformMode" class="mb-6">
                <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳圖片 (.jpg, .png)' : 'Upload Image (.jpg, .png)' }}</h4>
-               <ImageUploader 
+               <ImageUploader
                  tool-type="short_video"
-                 v-model="uploadedImage" 
+                 v-model="uploadedImage"
                  :label="isZh ? '點擊上傳或拖放起始圖片' : 'Drop starting image here'"
                  class="mb-4"
                  @update:model-value="selectedDemoImageId = null"
@@ -619,7 +619,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
               </div>
 
               <div v-if="uploadedVideoPreview" class="space-y-3">
-                <video :src="uploadedVideoPreview" controls class="w-full rounded-xl" />
+                <video :src="uploadedVideoPreview" controls playsinline preload="metadata" class="w-full rounded-xl" />
                 <button @click="clearUploadedVideo" class="btn-ghost text-sm w-full">
                   {{ isZh ? '移除影片' : 'Remove Video' }}
                 </button>
@@ -845,7 +845,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
               >
                 {{ isVideoTransformMode
                   ? (isZh ? '開始轉換' : 'Start Transform')
-                  : (isZh ? '查看結果' : 'View Result') }}
+                  : (isSubscribed ? (isZh ? '確認生成' : 'Confirm Generate') : (isZh ? '查看結果' : 'View Result')) }}
               </button>
             </div>
           </div>

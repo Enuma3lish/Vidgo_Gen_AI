@@ -4,12 +4,14 @@ import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
 import { useUIStore } from '@/stores'
+import { useRecaptcha } from '@/composables/useRecaptcha'
 
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const uiStore = useUIStore()
+const { execute: executeRecaptcha } = useRecaptcha()
 
 const email = ref('')
 const password = ref('')
@@ -23,7 +25,8 @@ async function handleSubmit() {
   }
   isLoading.value = true
   try {
-    await authStore.login({ email: email.value, password: password.value })
+    const recaptcha_token = await executeRecaptcha('login')
+    await authStore.login({ email: email.value, password: password.value, recaptcha_token })
     const redirect = route.query.redirect as string | undefined
     const fallback = authStore.isAdmin ? '/admin/dashboard' : '/dashboard/my-works'
     const target = redirect

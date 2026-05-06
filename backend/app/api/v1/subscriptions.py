@@ -290,10 +290,14 @@ async def subscribe_to_plan(
     # If neither payment provider is configured, force mock/direct mode
     force_skip = False
     if paddle.is_mock and not ecpay_configured:
-        logger.info("No payment providers configured — activating subscription in mock mode")
+        if not settings.PAYMENT_MOCK_COMPLETION_ENABLED:
+            raise HTTPException(status_code=503, detail="Payment checkout is temporarily unavailable")
+        logger.info("No payment providers configured — activating subscription in explicit mock mode")
         force_skip = True
     elif request.payment_method == 'ecpay' and not ecpay_configured:
-        logger.info("ECPay not configured — falling back to mock mode")
+        if not settings.PAYMENT_MOCK_COMPLETION_ENABLED:
+            raise HTTPException(status_code=503, detail="ECPay checkout is temporarily unavailable")
+        logger.info("ECPay not configured — falling back to explicit mock mode")
         force_skip = True
 
     # Admin override: superusers always activate directly. Without this, an
@@ -342,6 +346,9 @@ async def subscribe_directly(
     This endpoint always activates the subscription immediately
     regardless of Paddle configuration.
     """
+    if not getattr(current_user, "is_superuser", False) and not settings.PAYMENT_MOCK_COMPLETION_ENABLED:
+        raise HTTPException(status_code=403, detail="Direct subscription activation is disabled")
+
     subscription_service = get_subscription_service()
 
     try:

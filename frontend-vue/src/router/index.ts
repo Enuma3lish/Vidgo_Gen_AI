@@ -162,6 +162,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/ForgotPassword.vue'),
     meta: { guestOnly: true }
   },
+  {
+    path: '/auth/reset-password',
+    name: 'reset-password',
+    component: () => import('@/views/auth/ResetPassword.vue'),
+    meta: { guestOnly: true }
+  },
 
   // Dashboard routes
   {
@@ -212,6 +218,11 @@ const routes: RouteRecordRaw[] = [
     path: '/gallery',
     name: 'gallery',
     component: () => import('@/views/InspirationGallery.vue')
+  },
+  {
+    path: '/:slug(about|contact|blog|affiliate|terms|privacy|cookies|refunds)',
+    name: 'static-info',
+    component: () => import('@/views/StaticInfoPage.vue')
   },
 
   // Subscription payment results

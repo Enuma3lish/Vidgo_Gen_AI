@@ -45,7 +45,7 @@ class EmailVerificationService:
         """Hash code for storage."""
         return hashlib.sha256(code.encode()).hexdigest()
 
-    async def send_verification_code(self, email: str, user_id: str) -> Tuple[bool, str]:
+    async def send_verification_code(self, email: str, user_id: str, language: str = "en") -> Tuple[bool, str]:
         """
         Send verification code to email.
 
@@ -56,7 +56,7 @@ class EmailVerificationService:
             # Fallback without Redis - generate code without rate limiting
             code = self._generate_code()
             if self.email_service:
-                delivered = await self.email_service.send_verification_code_email(email, code)
+                delivered = await self.email_service.send_verification_code_email(email, code, language=language)
                 if not delivered:
                     return False, "Failed to send verification code email"
             return True, "Verification code sent"
@@ -101,7 +101,7 @@ class EmailVerificationService:
 
         # Send email with 6-digit code
         if self.email_service:
-            delivered = await self.email_service.send_verification_code_email(email, code)
+            delivered = await self.email_service.send_verification_code_email(email, code, language=language)
             if not delivered:
                 return False, "Failed to send verification code email"
 
@@ -181,7 +181,7 @@ class EmailVerificationService:
 
         return False, f"Invalid code. {remaining} attempts remaining."
 
-    async def resend_code(self, email: str) -> Tuple[bool, str]:
+    async def resend_code(self, email: str, language: str = "en") -> Tuple[bool, str]:
         """
         Resend verification code.
 
@@ -200,7 +200,7 @@ class EmailVerificationService:
         if user.email_verified:
             return False, "Email already verified"
 
-        return await self.send_verification_code(email, str(user.id))
+        return await self.send_verification_code(email, str(user.id), language=language)
 
     async def is_email_verified(self, email: str) -> bool:
         """Check if email is verified."""

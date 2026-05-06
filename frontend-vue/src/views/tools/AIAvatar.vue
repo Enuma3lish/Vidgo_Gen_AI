@@ -27,7 +27,6 @@ const {
   loadDemoTemplates,
   demoTemplates,
   resolveDemoTemplateResultUrl,
-  generateOnDemand,
   loadInputLibrary,
   loadEffectCatalog,
 } = useDemoMode()
@@ -192,6 +191,85 @@ const currentPreGeneratedTemplateId = computed(() => {
   return preGeneratedTemplateIds.value[currentResultKey.value] || null
 })
 
+function templateParams(template: any) {
+  return template?.input_params || {}
+}
+
+const demoTemplatesForLanguage = computed(() => {
+  return demoTemplates.value.filter(template => {
+    const params = templateParams(template)
+    return !params.language || params.language === selectedLanguage.value
+  })
+})
+
+const availableDemoScriptIds = computed(() => {
+  return new Set(
+    demoTemplatesForLanguage.value
+      .map(template => templateParams(template).script_id)
+      .filter(Boolean)
+  )
+})
+
+const visibleScripts = computed(() => {
+  if (!isDemoUser.value || availableDemoScriptIds.value.size === 0) return defaultScripts
+  return defaultScripts.filter(scriptItem => availableDemoScriptIds.value.has(scriptItem.id))
+})
+
+const availableDemoAvatarIds = computed(() => {
+  return new Set(
+    demoTemplatesForLanguage.value
+      .filter(template => {
+        const params = templateParams(template)
+        return !selectedDefaultScriptId.value || params.script_id === selectedDefaultScriptId.value
+      })
+      .map(template => templateParams(template).avatar_id)
+      .filter(Boolean)
+  )
+})
+
+const visibleFemaleAvatars = computed(() => {
+  if (!isDemoUser.value || availableDemoAvatarIds.value.size === 0) return femaleAvatars
+  return femaleAvatars.filter(avatar => availableDemoAvatarIds.value.has(avatar.id))
+})
+
+const visibleMaleAvatars = computed(() => {
+  if (!isDemoUser.value || availableDemoAvatarIds.value.size === 0) return maleAvatars
+  return maleAvatars.filter(avatar => availableDemoAvatarIds.value.has(avatar.id))
+})
+
+function findDemoTemplate(language = selectedLanguage.value, avatarId = selectedAvatarId.value, scriptId = selectedDefaultScriptId.value) {
+  if (!avatarId || !scriptId) return null
+  return demoTemplates.value.find(template => {
+    const params = templateParams(template)
+    return params.avatar_id === avatarId && params.script_id === scriptId && (!params.language || params.language === language)
+  }) || null
+}
+
+function findFirstDemoTemplate(language = selectedLanguage.value, scriptId?: string | null) {
+  return demoTemplates.value.find(template => {
+    const params = templateParams(template)
+    return (!params.language || params.language === language) && (!scriptId || params.script_id === scriptId)
+  }) || demoTemplates.value[0] || null
+}
+
+function applyDemoTemplateSelection(template: any) {
+  const params = templateParams(template)
+  const templateLanguage = params.language || selectedLanguage.value
+  const avatar = defaultAvatars.find(item => item.id === params.avatar_id)
+  const scriptItem = defaultScripts.find(item => item.id === params.script_id)
+  if (!avatar || !scriptItem) return false
+
+  selectedLanguage.value = templateLanguage
+  selectedAvatarId.value = avatar.id
+  uploadedImage.value = avatar.url
+  selectedDefaultScriptId.value = scriptItem.id
+  script.value = templateLanguage === 'zh-TW' ? scriptItem.text_zh : scriptItem.text_en
+  resultVideo.value = null
+  demoEmptyState.value = false
+  selectMatchingVoice()
+  return true
+}
+
 // Selected avatar info
 const selectedAvatar = computed(() => {
   return defaultAvatars.find(a => a.id === selectedAvatarId.value) || null
@@ -272,6 +350,10 @@ function selectDefaultScript(scriptItem: typeof defaultScripts[0]) {
   script.value = selectedLanguage.value === 'zh-TW' ? scriptItem.text_zh : scriptItem.text_en
   resultVideo.value = null
   demoEmptyState.value = false
+  if (isDemoUser.value && !findDemoTemplate()) {
+    const matchingTemplate = findFirstDemoTemplate(selectedLanguage.value, scriptItem.id)
+    if (matchingTemplate) applyDemoTemplateSelection(matchingTemplate)
+  }
 }
 
 async function generateAvatar() {
@@ -338,24 +420,8 @@ async function generateAvatar() {
         }
       }
 
-      // Cache-through on demand. Pass avatar_id + language + script category
-      // so the backend honors the visitor's choices instead of falling back
-      // to a random hardcoded seed.
-      const scriptCategory = defaultScripts.find(s => s.id === selectedDefaultScriptId.value)?.category
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成（約 3-5 分鐘）...' : 'Generating in real-time (3-5 min)...')
-      const onDemandUrl = await generateOnDemand('ai_avatar', scriptCategory, {
-        product_id: selectedAvatarId.value || undefined,
-        language: selectedLanguage.value,
-        input_image_url: uploadedImage.value || undefined,
-        effect_prompt: script.value || undefined,
-      })
-      if (onDemandUrl) {
-        resultVideo.value = onDemandUrl
-        uiStore.showSuccess(isZh.value ? '頭像生成成功' : 'Avatar generated successfully')
-      } else {
-        demoEmptyState.value = true
-        uiStore.showError(isZh.value ? '頭像服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Avatar service temporarily unavailable. Please try again later or subscribe.')
-      }
+      demoEmptyState.value = true
+      uiStore.showError(isZh.value ? '此示範組合尚未預生成，請選擇可用的範例組合。' : 'This demo combination is not pre-generated yet. Please choose an available preset example.')
     } finally {
       isProcessing.value = false
     }
@@ -418,14 +484,10 @@ onMounted(async () => {
     }
   })
 
-  // Auto-select first avatar and first script for demo users
+  // Auto-select the first preset-backed combination for demo users.
   if (isDemoUser.value) {
-    if (defaultAvatars.length > 0) {
-      selectAvatar(defaultAvatars[0])
-    }
-    if (defaultScripts.length > 0) {
-      selectDefaultScript(defaultScripts[0])
-    }
+    const firstTemplate = findFirstDemoTemplate(selectedLanguage.value)
+    if (firstTemplate) applyDemoTemplateSelection(firstTemplate)
   }
 })
 
@@ -439,6 +501,13 @@ watch(locale, () => {
 
 watch(selectedLanguage, () => {
   loadVoices()
+  if (isDemoUser.value) {
+    const firstTemplate = findFirstDemoTemplate(selectedLanguage.value)
+    if (firstTemplate) {
+      applyDemoTemplateSelection(firstTemplate)
+      return
+    }
+  }
   // Update script text to match the new voice language.
   if (selectedDefaultScriptId.value) {
     const scriptItem = defaultScripts.find(s => s.id === selectedDefaultScriptId.value)
@@ -533,7 +602,7 @@ watch(selectedAvatarId, () => {
               <p class="text-sm text-dark-300 mb-2">{{ isZh ? '選擇預設腳本' : 'Select Script' }}</p>
               <div class="space-y-2 max-h-48 overflow-y-auto">
                 <button
-                  v-for="scriptItem in defaultScripts"
+                  v-for="scriptItem in visibleScripts"
                   :key="scriptItem.id"
                   @click="selectDefaultScript(scriptItem)"
                   class="w-full text-left p-3 rounded-lg border-2 transition-all text-sm"
@@ -566,7 +635,7 @@ watch(selectedAvatarId, () => {
               <p class="text-sm text-dark-300 mb-2">{{ isZh ? '女性頭像' : 'Female Avatars' }}</p>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
-                  v-for="avatar in femaleAvatars"
+                  v-for="avatar in visibleFemaleAvatars"
                   :key="avatar.id"
                   @click="selectAvatar(avatar)"
                   class="relative aspect-square rounded-xl overflow-hidden border-2 transition-all"
@@ -593,7 +662,7 @@ watch(selectedAvatarId, () => {
               <p class="text-sm text-dark-300 mb-2">{{ isZh ? '男性頭像' : 'Male Avatars' }}</p>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
-                  v-for="avatar in maleAvatars"
+                  v-for="avatar in visibleMaleAvatars"
                   :key="avatar.id"
                   @click="selectAvatar(avatar)"
                   class="relative aspect-square rounded-xl overflow-hidden border-2 transition-all"

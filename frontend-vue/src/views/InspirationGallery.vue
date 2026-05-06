@@ -35,6 +35,39 @@ function displayPrompt(item: GalleryItem): string {
   return item.prompt
 }
 
+const placeholderMarkers = ['vidgo readiness', 'vidgo landing']
+
+function containsPlaceholderText(value?: string): boolean {
+  const text = (value || '').toLowerCase()
+  return placeholderMarkers.some(marker => text.includes(marker))
+}
+
+function isPlaceholderItem(item: GalleryItem): boolean {
+  return [item.title, item.prompt, item.title_zh, item.prompt_zh].some(containsPlaceholderText)
+}
+
+function isPlaceholderWork(work: any): boolean {
+  const params = work?.input_params || {}
+  return Boolean(params.readiness_seed || params.reused_generated_media) ||
+    [work?.title, work?.prompt].some(containsPlaceholderText)
+}
+
+function isVideoUrl(url?: string): boolean {
+  return /\.(mp4|webm|mov)(\?|$)/i.test(url || '')
+}
+
+function playableVideoUrl(item: GalleryItem): string | undefined {
+  if (item.video_url) return item.video_url
+  if (isVideoUrl(item.image_url)) return item.image_url
+  if (isVideoUrl(item.thumbnail_url)) return item.thumbnail_url
+  return undefined
+}
+
+function posterImageUrl(item: GalleryItem): string | undefined {
+  const candidate = item.image_url || item.thumbnail_url
+  return candidate && !isVideoUrl(candidate) ? candidate : undefined
+}
+
 type SettledResult<T> = {
   ok: boolean
   value?: T
@@ -337,8 +370,8 @@ async function loadGalleryData() {
     }
 
     const [inspirationRes, worksRes] = await Promise.all([
-      safeJson<any>(`/api/v1/demo/inspiration?count=50&language=${apiLanguage.value}`),
-      safeJson<any>(`/api/v1/demo/landing/works?limit=50&language=${apiLanguage.value}`)
+      safeJson<any>(`/api/v1/demo/inspiration?count=48&language=${apiLanguage.value}`),
+      safeJson<any>(`/api/v1/demo/landing/works?limit=48&language=${apiLanguage.value}`)
     ])
 
     const items: GalleryItem[] = []
@@ -365,12 +398,14 @@ async function loadGalleryData() {
     if (worksRes.ok && worksRes.value?.success) {
       const works = worksRes.value.items || []
       works.forEach((work: any) => {
+        if (isPlaceholderWork(work)) return
         items.push({
           id: work.id,
           title: work.title,
           prompt: work.prompt,
-          image_url: work.thumb || work.result_image_url,
+          image_url: work.result_image_url || work.thumb,
           video_url: work.video_url,
+          thumbnail_url: work.thumb,
           tool_type: work.tool_type,
           topic: work.topic,
           tags: [work.tool_type, work.topic],
@@ -379,7 +414,7 @@ async function loadGalleryData() {
       })
     }
 
-    galleryItems.value = withFallbackItems(items)
+    galleryItems.value = withFallbackItems(items.filter(item => !isPlaceholderItem(item)))
 
     const nextCounts: Record<string, number> = {}
     categoryDefinitions.forEach((cat) => {
@@ -607,6 +642,21 @@ watch(locale, () => {
               <!-- Video poster -->
               <div v-else-if="item.type === 'video'" class="relative w-full h-full">
                 <img
+                  v-if="posterImageUrl(item)"
+                  :src="posterImageUrl(item)"
+                  :alt="displayTitle(item)"
+                  class="w-full h-full object-cover"
+                />
+                <video
+                  v-else-if="playableVideoUrl(item)"
+                  :src="playableVideoUrl(item)"
+                  muted
+                  playsinline
+                  preload="metadata"
+                  class="w-full h-full object-cover"
+                />
+                <img
+                  v-else
                   :src="item.image_url || item.thumbnail_url"
                   :alt="displayTitle(item)"
                   class="w-full h-full object-cover"

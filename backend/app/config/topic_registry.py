@@ -81,13 +81,16 @@ TOOL_TOPICS: Dict[str, List[TopicInfo]] = {
     ],
     
     # -------------------------------------------------------------------------
-    # Room Redesign - Interior design styles
+    # Room Redesign - Interior room types
     # -------------------------------------------------------------------------
     "room_redesign": [
         {"id": "living_room", "name_en": "Living Room", "name_zh": "客廳"},
         {"id": "bedroom", "name_en": "Bedroom", "name_zh": "臥室"},
         {"id": "kitchen", "name_en": "Kitchen", "name_zh": "廚房"},
         {"id": "bathroom", "name_en": "Bathroom", "name_zh": "浴室"},
+        {"id": "dining_room", "name_en": "Dining Room", "name_zh": "餐廳"},
+        {"id": "home_office", "name_en": "Home Office", "name_zh": "書房"},
+        {"id": "balcony", "name_en": "Balcony", "name_zh": "陽台"},
     ],
     
     # -------------------------------------------------------------------------

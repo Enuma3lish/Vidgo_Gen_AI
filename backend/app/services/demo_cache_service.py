@@ -162,6 +162,7 @@ class DemoCacheService:
             input_image_url=input_image_url,
             input_video_url=input_video_url,
             effect_prompt=effect_prompt,
+            input_params=input_params,
         )
         if generated:
             return generated
@@ -247,6 +248,7 @@ class DemoCacheService:
         input_image_url: Optional[str] = None,
         input_video_url: Optional[str] = None,
         effect_prompt: Optional[str] = None,
+        input_params: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Generate a demo example on-the-fly using provider_router.
@@ -600,6 +602,9 @@ class DemoCacheService:
             "bedroom": "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800",
             "kitchen": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800",
             "bathroom": "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800",
+            "dining_room": "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=800",
+            "home_office": "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800",
+            "balcony": "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=800",
         }
         request_params = input_params or {}
         style_id = request_params.get("style_id") or (topic if topic not in room_urls else None)

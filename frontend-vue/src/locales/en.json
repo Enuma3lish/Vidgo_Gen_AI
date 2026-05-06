@@ -135,9 +135,9 @@
       "longDesc": "Built-in model and scene templates for high-conversion fashion e-commerce visuals."
     },
     "roomRedesign": {
-      "name": "Raw Space / Sketch Instant Render",
-      "desc": "Upload raw spaces or line sketches and render photorealistic interiors instantly",
-      "longDesc": "Convert empty-room photos and sketch-like drafts into high-fidelity interior renders. Image transform workflows are merged here."
+      "name": "Interior Rendering & Proposals",
+      "desc": "Generate proposal-ready photorealistic interiors from photos, empty rooms, sketches, and floor plans",
+      "longDesc": "Convert space photos, raw rooms, design sketches, or floor plans into proposal-grade interior visuals with style transfer, commercial scene output, and 3D presentation workflows."
     },
     "shortVideo": {
       "name": "Product Dynamic Shorts (Image-to-Video)",
@@ -691,9 +691,9 @@
     "copyright": "© 2025 VidGo AI. All rights reserved."
   },
   "interior": {
-    "badge": "Interior Design Gallery",
-    "title": "Interior Design Inspiration",
-    "subtitle": "Browse AI-generated interior design examples. Free users can view curated examples. Subscribe to upload your own room photos for custom designs.",
+    "badge": "AI Interior Design Studio",
+    "title": "Interior Rendering and Proposal Tool",
+    "subtitle": "Create deliverable photorealistic interior renders from room photos, empty spaces, sketches, or floor plans. Free users can view curated examples. Subscribers can upload their own spaces for custom design and 3D extension.",
     "processing": "Loading examples...",
     "tabs": {
       "redesign": "Browse Examples",
@@ -987,7 +987,7 @@
       "aiTemplates": { "name": "AI Templates", "desc": "E-commerce ad templates powered by AI" },
       "imageTranslator": { "name": "Image Translator", "desc": "Accurately translate image text" },
       "aiShadows": { "name": "AI Shadows", "desc": "Add natural shadows to any object" },
-      "roomRedesign": { "name": "Room Redesign", "desc": "Upload a sketch or empty room, get a stunning interior design in seconds" },
+      "roomRedesign": { "name": "Interior Rendering", "desc": "Turn photos, empty rooms, sketches, and floor plans into polished interior proposal visuals" },
       "bgRemoval": { "name": "Background Removal", "desc": "Remove product backgrounds in one click — no design skills needed" },
       "hdUpscale": { "name": "Commercial HD Upscale", "desc": "Sharpen and enlarge product images to 4K — perfect for stores and print" },
       "imageTransform": { "name": "Image Transform (Merged)", "desc": "Merged into Raw Space / Sketch Instant Render" },

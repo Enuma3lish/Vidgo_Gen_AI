@@ -127,6 +127,7 @@ NEW_CREDIT_PACKAGE_DATA = [
         "price": 299.0,
         "price_twd": Decimal("299"),
         "price_usd": Decimal("10"),
+        "currency": "TWD",
         "min_plan": "basic",
         "bonus_credits": 0,
         "is_popular": False,
@@ -142,6 +143,7 @@ NEW_CREDIT_PACKAGE_DATA = [
         "price": 499.0,
         "price_twd": Decimal("499"),
         "price_usd": Decimal("16"),
+        "currency": "TWD",
         "min_plan": "basic",
         "bonus_credits": 500,  # 10% bonus included in 5500
         "is_popular": True,
@@ -157,6 +159,7 @@ NEW_CREDIT_PACKAGE_DATA = [
         "price": 999.0,
         "price_twd": Decimal("999"),
         "price_usd": Decimal("32"),
+        "currency": "TWD",
         "min_plan": "pro",
         "bonus_credits": 2000,  # 20% bonus included in 12000
         "is_popular": False,
@@ -349,9 +352,15 @@ async def seed_new_plans():
 
 
 async def seed_new_credit_packages():
-    """Seed new credit package data from specification."""
+    """Seed new credit package data from specification.
+
+    Deactivates legacy package rows so public pricing and authenticated
+    purchases only expose the current light/standard/heavy TWD packages.
+    """
     async with AsyncSessionLocal() as session:
         print("\nSeeding new credit packages...")
+
+        new_package_names = {data["name"] for data in NEW_CREDIT_PACKAGE_DATA}
 
         for data in NEW_CREDIT_PACKAGE_DATA:
             # Check if already exists
@@ -375,6 +384,24 @@ async def seed_new_credit_packages():
             except Exception as e:
                 await session.rollback()
                 print(f"  Warning: Could not save package {data['name']}: {e}")
+
+        print("\nDeactivating legacy credit packages not in NEW_CREDIT_PACKAGE_DATA...")
+        all_result = await session.execute(select(CreditPackage))
+        all_packages = all_result.scalars().all()
+        deactivated = 0
+        for package in all_packages:
+            if package.name not in new_package_names and package.is_active:
+                print(f"  Deactivating legacy package: {package.name} ({package.display_name})")
+                package.is_active = False
+                deactivated += 1
+            elif package.name in new_package_names and not package.is_active:
+                package.is_active = True
+        try:
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            print(f"  Warning: Could not normalize credit packages: {e}")
+        print(f"  Deactivated {deactivated} legacy package(s)")
 
         print(f"Seeded {len(NEW_CREDIT_PACKAGE_DATA)} new credit packages.")
 

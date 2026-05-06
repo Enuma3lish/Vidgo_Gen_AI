@@ -969,17 +969,21 @@ class PiAPIProvider(BaseProvider):
         if script and not audio_url:
             voice_ref = params.get("voice_id", "")
             logger.info("[PiAPI] Avatar: generating speech with F5-TTS...")
-            tts_result = await self.text_to_speech({
-                "text": script,
-                "ref_audio": voice_ref,  # Empty string uses default voice
-            })
+            try:
+                tts_result = await self.text_to_speech({
+                    "text": script,
+                    "ref_audio": voice_ref,  # Empty string uses default voice
+                })
+            except Exception as e:
+                logger.warning("[PiAPI] Avatar: TTS raised, using visual fallback: %s", e)
+                return await self._fallback_avatar_video(image_url, "", script)
             if tts_result.get("success"):
                 audio_url = tts_result.get("output", {}).get("audio_url")
                 logger.info(f"[PiAPI] Avatar: TTS audio ready: {audio_url[:80] if audio_url else 'None'}")
             else:
                 tts_error = tts_result.get("error", "TTS failed")
-                logger.error(f"[PiAPI] Avatar: TTS failed: {tts_error}")
-                return {"success": False, "error": f"Speech generation failed: {tts_error}"}
+                logger.warning("[PiAPI] Avatar: TTS failed, using visual fallback: %s", tts_error)
+                return await self._fallback_avatar_video(image_url, "", script)
 
         if not audio_url:
             return {"success": False, "error": "Audio generation failed. Please provide an audio URL or script text."}

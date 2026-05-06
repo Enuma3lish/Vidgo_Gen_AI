@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 
 from app.api.deps import get_db, get_current_user, get_current_active_user, get_redis
-from app.services.credit_service import CreditService
+from app.services.credit_service import CreditService, OFFICIAL_CREDIT_PACKAGE_NAMES
 from app.models.user import User
+from app.core.config import settings
+from app.services.ecpay.client import ECPayClient
 from app.schemas.credit import (
     CreditBalance,
     CreditEstimate,
@@ -169,7 +171,8 @@ async def purchase_credits(
     result = await db.execute(
         select(CreditPackage).where(
             CreditPackage.id == purchase.package_id,
-            CreditPackage.is_active == True
+            CreditPackage.is_active == True,
+            CreditPackage.name.in_(OFFICIAL_CREDIT_PACKAGE_NAMES),
         )
     )
     package = result.scalar_one_or_none()
@@ -204,31 +207,57 @@ async def purchase_credits(
         payment_method=purchase.payment_method,
         payment_data={
             "package_id": str(package.id),
+            "package_name": package.name,
             "credits": package.credits,
-            "bonus_credits": package.bonus_credits
+            "bonus_credits": package.bonus_credits,
+            "currency": currency,
         }
     )
     db.add(order)
     await db.commit()
     await db.refresh(order)
 
-    # Generate payment URL based on method
     payment_url = None
+    ecpay_form = None
     if purchase.payment_method == "ecpay":
-        # ECPay integration would generate payment URL here
-        # For now, return a placeholder
-        payment_url = f"/api/v1/payments/ecpay/checkout/{order.order_number}"
+        if not settings.ECPAY_MERCHANT_ID or not settings.ECPAY_HASH_KEY or not settings.ECPAY_HASH_IV:
+            raise HTTPException(status_code=500, detail="ECPay payment not configured")
+
+        from datetime import datetime
+
+        ecpay_client = ECPayClient(
+            merchant_id=settings.ECPAY_MERCHANT_ID,
+            hash_key=settings.ECPAY_HASH_KEY,
+            hash_iv=settings.ECPAY_HASH_IV,
+            payment_url=settings.ECPAY_PAYMENT_URL,
+        )
+        payment_url = settings.ECPAY_PAYMENT_URL
+        ecpay_form = ecpay_client.create_payment(
+            merchant_trade_no=order.order_number,
+            merchant_trade_date=datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
+            total_amount=int(amount),
+            trade_desc=f"VidGo {package.display_name or package.name} credits",
+            item_name=f"VidGo {package.display_name or package.name} {package.credits} credits",
+            return_url=f"{settings.BACKEND_URL}/api/v1/payments/ecpay/callback",
+            order_result_url=f"{settings.BACKEND_URL}/api/v1/payments/ecpay/result-redirect?order={order.order_number}",
+            client_back_url=f"{settings.FRONTEND_URL}/pricing",
+            choose_payment="Credit",
+        )
     else:
-        # Paddle integration would generate payment URL here
+        # Paddle credit checkout is not implemented yet; keep the legacy URL
+        # placeholder so existing clients do not break.
         payment_url = f"/api/v1/payments/paddle/checkout/{order.order_number}"
 
     return CreditPurchaseResponse(
         order_id=order.id,
         package_id=package.id,
-        credits=package.credits + package.bonus_credits,
+        credits=package.credits,
         amount=amount,
         currency=currency,
         payment_url=payment_url,
+        payment_method=purchase.payment_method,
+        ecpay_form=ecpay_form,
+        is_mock=False,
         status="pending"
     )
 

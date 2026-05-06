@@ -227,6 +227,46 @@ const activeSeasonItems = computed(() => {
   return seasonData.value[activeSeason.value] || []
 })
 
+const isZhLocale = computed(() => locale.value.startsWith('zh'))
+
+const interiorWorkflows = computed(() => isZhLocale.value
+  ? [
+      { label: '照片改造', text: '上傳空屋、現況照或家具空間，保留房型比例並快速換成指定設計風格。' },
+      { label: '草圖提案', text: '把手繪概念、參考圖與設計描述整理成可給客戶看的視覺稿。' },
+      { label: '平面圖到渲染', text: '用平面圖或配置方向生成更接近建築與室內設計提案的空間效果。' },
+      { label: '3D 延伸', text: '訂閱用戶可把完成的空間圖延伸為可旋轉、可展示的 3D 模型流程。' },
+    ]
+  : [
+      { label: 'Photo Redesign', text: 'Upload an empty room, existing space, or furniture context and restyle it while preserving spatial proportion.' },
+      { label: 'Sketch Proposal', text: 'Turn sketches, references, and design notes into client-ready visual directions.' },
+      { label: 'Plan to Render', text: 'Use floor plans or layout direction to create interior visuals closer to architecture proposal workflows.' },
+      { label: '3D Extension', text: 'Subscribers can extend finished room renders into rotatable 3D model workflows.' },
+    ])
+
+const interiorStats = computed(() => isZhLocale.value
+  ? [
+      { value: '4 種', label: '照片 / 草圖 / 平面圖 / 3D 流程' },
+      { value: '20+', label: '室內風格與空間類型' },
+      { value: '商用', label: '房仲、設計師、家具品牌可用' },
+    ]
+  : [
+      { value: '4 modes', label: 'photo, sketch, plan, and 3D workflows' },
+      { value: '20+', label: 'interior styles and room types' },
+      { value: 'Commercial', label: 'for real estate, designers, and furniture brands' },
+    ])
+
+const creditPackHighlights = computed(() => isZhLocale.value
+  ? [
+      { name: '輕量包', price: 'NT$299', credits: '3,000 點' },
+      { name: '標準包', price: 'NT$499', credits: '5,500 點' },
+      { name: '重度包', price: 'NT$999', credits: '12,000 點' },
+    ]
+  : [
+      { name: 'Light Pack', price: 'NT$299', credits: '3,000 credits' },
+      { name: 'Standard Pack', price: 'NT$499', credits: '5,500 credits' },
+      { name: 'Heavy Pack', price: 'NT$999', credits: '12,000 credits' },
+    ])
+
 // ── Before/After deep dives ──
 const deepDiveDefs = [
   { key: 'tryOn',      route: '/tools/try-on',            cat: 'try_on',            accentColor: '#eb2f96' },
@@ -512,6 +552,85 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 4B — INTERIOR DESIGN STUDIO
+    ============================================================= -->
+    <section class="section-padding" style="background: var(--bg-section);">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
+          <div class="lg:col-span-6">
+            <div class="grid grid-cols-2 gap-3 rounded-2xl overflow-hidden" style="box-shadow: 0 10px 48px rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08);">
+              <div class="relative overflow-hidden" style="aspect-ratio: 4/5; background: #141420;">
+                <img :src="demo('room_redesign', 'before') || FALLBACK.room_redesign.before"
+                  alt="Interior before" class="w-full h-full object-cover" @error="fallbackImg($event, 'room_redesign', 'before')" />
+                <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: rgba(0,0,0,0.62); color: #ffffff;">{{ isZhLocale ? '原始空間' : 'ROOM PHOTO' }}</div>
+              </div>
+              <div class="relative overflow-hidden" style="aspect-ratio: 4/5; background: #141420;">
+                <img :src="demo('room_redesign', 'after') || FALLBACK.room_redesign.after"
+                  alt="Interior render" class="w-full h-full object-cover" @error="fallbackImg($event, 'room_redesign', 'after')" />
+                <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: #52c41a; color: #06120a;">{{ isZhLocale ? 'AI 渲染' : 'AI RENDER' }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-6">
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-4" style="background: rgba(82,196,26,0.12); color: #95de64; border: 1px solid rgba(82,196,26,0.28);">
+              {{ isZhLocale ? '室內設計工作室' : 'Interior Design Studio' }}
+            </div>
+            <h2 class="text-3xl md:text-4xl font-black mb-4" style="color: #f5f5fa;">
+              {{ isZhLocale ? '從房間照片、草圖和平面圖，生成可提案的室內渲染' : 'Create proposal-ready interior renders from photos, sketches, and floor plans' }}
+            </h2>
+            <p class="text-base leading-relaxed mb-8" style="color: #9494b0;">
+              {{ isZhLocale ? '參考專業室內渲染與商務修圖產品的工作流，VidGo 把空間改造做成一個完整工具：快速換風格、保留空間感、輸出適合房仲刊登、設計提案與家具情境圖的高質感視覺。' : 'VidGo brings professional interior rendering and commerce-photo workflows into one tool: restyle rooms fast, preserve spatial intent, and export polished visuals for listings, design proposals, and furniture scenes.' }}
+            </p>
+
+            <div class="grid sm:grid-cols-2 gap-3 mb-8">
+              <div v-for="item in interiorWorkflows" :key="item.label" class="rounded-xl p-4" style="background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);">
+                <div class="font-semibold mb-1" style="color: #f5f5fa;">{{ item.label }}</div>
+                <p class="text-sm leading-relaxed" style="color: #9494b0;">{{ item.text }}</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+              <div v-for="stat in interiorStats" :key="stat.value" class="text-center rounded-xl px-3 py-4" style="background: rgba(82,196,26,0.08); border: 1px solid rgba(82,196,26,0.18);">
+                <div class="text-lg font-black" style="color: #95de64;">{{ stat.value }}</div>
+                <div class="text-xs mt-1 leading-snug" style="color: #b7b7cc;">{{ stat.label }}</div>
+              </div>
+            </div>
+
+            <div class="rounded-xl p-4 mb-8" style="background: rgba(22,119,255,0.07); border: 1px solid rgba(22,119,255,0.18);">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                <div>
+                  <div class="text-sm font-semibold" style="color: #f5f5fa;">{{ isZhLocale ? '單買點數收費' : 'One-time credit pricing' }}</div>
+                  <p class="text-xs mt-1" style="color: #9494b0;">{{ isZhLocale ? '不訂閱也可用點數包補量，適合臨時提案與批次渲染。' : 'Top up without subscribing, ideal for ad hoc proposals and render batches.' }}</p>
+                </div>
+                <RouterLink to="/pricing#credit-packs" class="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg" style="background: #1677ff; color: #ffffff;">
+                  {{ isZhLocale ? '查看價格' : 'View Pricing' }}
+                </RouterLink>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div v-for="pkg in creditPackHighlights" :key="pkg.name" class="rounded-lg px-3 py-2" style="background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.06);">
+                  <div class="text-xs" style="color: #b7b7cc;">{{ pkg.name }}</div>
+                  <div class="font-black" style="color: #f5f5fa;">{{ pkg.price }}</div>
+                  <div class="text-xs" style="color: #9494b0;">{{ pkg.credits }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3">
+              <RouterLink to="/tools/room-redesign" class="inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 hover:opacity-90" style="background: #52c41a; color: #06120a; box-shadow: 0 4px 16px rgba(82,196,26,0.26);">
+                {{ isZhLocale ? '開始室內設計' : 'Start Interior Design' }}
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              </RouterLink>
+              <RouterLink to="/pricing" class="inline-flex items-center justify-center px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200" style="color: #c4c4d8; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.035);">
+                {{ isZhLocale ? '查看點數包' : 'View Credit Packs' }}
+              </RouterLink>
             </div>
           </div>
         </div>

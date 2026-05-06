@@ -184,13 +184,14 @@ export function useDemoMode() {
    * Uses /api/v1/demo/presets/{tool_type} which returns Material IDs
    * When DB is empty, backend also returns try_prompts for fixed prompt display
    */
-  async function loadDemoTemplates(toolType: string, topic?: string, locale?: string) {
+  async function loadDemoTemplates(toolType: string, topic?: string, locale?: string, limit?: number) {
     isLoadingTemplates.value = true
     tryPrompts.value = []
     dbEmpty.value = false
     try {
       const params: Record<string, string> = {}
       if (topic) params.topic = topic
+      if (limit) params.limit = String(limit)
       params.language = resolveSelectedLanguage(locale)
 
       const response = await apiClient.get(`/api/v1/demo/presets/${toolType}`, { params })

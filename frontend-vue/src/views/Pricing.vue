@@ -4,12 +4,26 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { subscriptionApi } from '@/api'
+import apiClient from '@/api/client'
 import ConfirmModal from '@/components/molecules/ConfirmModal.vue'
 import type { PlanInfo, SubscriptionStatus } from '@/api'
 
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
+
+interface CreditTopUpPackage {
+  id: string
+  name: string
+  displayName: string
+  credits: number
+  price: number
+  currency: string
+  bonusCredits: number
+  bonusPct: number
+  isPopular: boolean
+  isBestValue: boolean
+}
 
 const billingPeriod = ref<'monthly' | 'yearly'>('monthly')
 const plans = ref<PlanInfo[]>([])
@@ -22,9 +36,13 @@ const successMessage = ref<string | null>(null)
 const showCancelModal = ref(false)
 const cancelWithRefund = ref(false)
 const TEST_PRO_PLAN_NAME = 'test_pro_usd_1'
+const officialCreditPackageNames = ['light_pack', 'standard_pack', 'heavy_pack']
+const creditPackages = ref<CreditTopUpPackage[]>([])
+const creditPackagesLoading = ref(false)
 
 // Computed
 const isLoggedIn = computed(() => authStore.isAuthenticated)
+const isZh = computed(() => locale.value.startsWith('zh'))
 const visiblePlans = computed(() => plans.value.filter(plan => !isHiddenDisplayPlan(plan)))
 const currentPlanId = computed(() => subscriptionStatus.value?.plan?.id)
 const isRefundEligible = computed(() => subscriptionStatus.value?.refund_eligible ?? false)
@@ -49,6 +67,87 @@ const planDisplayNames: Record<string, string> = {
   'Pro': 'pro',
   'Premium': 'premium',
   'Enterprise': 'enterprise'
+}
+
+function fallbackCreditPackages(): CreditTopUpPackage[] {
+  return [
+    {
+      id: 'light_pack',
+      name: 'light_pack',
+      displayName: isZh.value ? '輕量包' : 'Light Pack',
+      credits: 3000,
+      price: 299,
+      currency: 'TWD',
+      bonusCredits: 0,
+      bonusPct: 0,
+      isPopular: false,
+      isBestValue: false,
+    },
+    {
+      id: 'standard_pack',
+      name: 'standard_pack',
+      displayName: isZh.value ? '標準包' : 'Standard Pack',
+      credits: 5500,
+      price: 499,
+      currency: 'TWD',
+      bonusCredits: 500,
+      bonusPct: 10,
+      isPopular: true,
+      isBestValue: false,
+    },
+    {
+      id: 'heavy_pack',
+      name: 'heavy_pack',
+      displayName: isZh.value ? '重度包' : 'Heavy Pack',
+      credits: 12000,
+      price: 999,
+      currency: 'TWD',
+      bonusCredits: 2000,
+      bonusPct: 20,
+      isPopular: false,
+      isBestValue: true,
+    },
+  ]
+}
+
+function normalizeCreditPackage(raw: any): CreditTopUpPackage {
+  const fallback = fallbackCreditPackages().find(pkg => pkg.name === raw.name)
+  const price = Number(raw.price_twd ?? raw.price ?? raw.price_usd ?? fallback?.price ?? 0)
+  const credits = Number(raw.credits ?? fallback?.credits ?? 0)
+  return {
+    id: String(raw.id ?? raw.name),
+    name: String(raw.name),
+    displayName: isZh.value
+      ? (raw.name_zh ?? fallback?.displayName ?? raw.display_name ?? raw.name)
+      : (raw.name_en ?? fallback?.displayName ?? raw.display_name ?? raw.name),
+    credits,
+    price,
+    currency: 'TWD',
+    bonusCredits: Number(raw.bonus_credits ?? fallback?.bonusCredits ?? 0),
+    bonusPct: raw.name === 'heavy_pack' ? 20 : raw.name === 'standard_pack' ? 10 : 0,
+    isPopular: Boolean(raw.is_popular ?? fallback?.isPopular),
+    isBestValue: Boolean(raw.is_best_value ?? fallback?.isBestValue),
+  }
+}
+
+async function fetchCreditPackages() {
+  try {
+    creditPackagesLoading.value = true
+    const response = await apiClient.get('/api/v1/promotions/packages')
+    const items: any[] = response.data.packages ?? response.data ?? []
+    const normalized = items
+      .filter(pkg => officialCreditPackageNames.includes(pkg.name))
+      .map(normalizeCreditPackage)
+      .sort((a, b) => officialCreditPackageNames.indexOf(a.name) - officialCreditPackageNames.indexOf(b.name))
+    creditPackages.value = normalized.length === officialCreditPackageNames.length
+      ? normalized
+      : fallbackCreditPackages()
+  } catch (err) {
+    console.error('Failed to fetch credit packages:', err)
+    creditPackages.value = fallbackCreditPackages()
+  } finally {
+    creditPackagesLoading.value = false
+  }
 }
 
 // Fetch plans from API
@@ -124,6 +223,47 @@ function submitECPayForm(ecpayForm: { action_url: string; params: Record<string,
   })
   document.body.appendChild(form)
   form.submit()
+}
+
+async function handleCreditPurchase(pkg: CreditTopUpPackage) {
+  if (!isLoggedIn.value) {
+    router.push('/auth/login')
+    return
+  }
+
+  try {
+    subscribing.value = `credit:${pkg.id}`
+    error.value = null
+    successMessage.value = null
+    let packageId = pkg.id
+    if (officialCreditPackageNames.includes(packageId)) {
+      const packageResponse = await apiClient.get('/api/v1/credits/packages')
+      const packages: any[] = packageResponse.data.packages ?? packageResponse.data ?? []
+      const matched = packages.find(item => item.name === pkg.name)
+      if (!matched?.id) {
+        throw new Error('Credit package is not available for this account')
+      }
+      packageId = matched.id
+    }
+    const response = await apiClient.post('/api/v1/credits/purchase', {
+      package_id: packageId,
+      payment_method: 'ecpay',
+    })
+    const result = response.data
+    if (result.ecpay_form) {
+      successMessage.value = t('pricing.redirectingToPayment')
+      setTimeout(() => submitECPayForm(result.ecpay_form), 500)
+    } else if (result.payment_url) {
+      window.location.href = result.payment_url
+    } else {
+      successMessage.value = isZh.value ? '訂單已建立' : 'Order created'
+    }
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { detail?: string } } }
+    error.value = e.response?.data?.detail || (isZh.value ? '點數包購買失敗，請稍後再試。' : 'Credit package purchase failed. Please try again.')
+  } finally {
+    subscribing.value = null
+  }
 }
 
 // Subscribe to a plan
@@ -258,6 +398,14 @@ function getCurrencySymbol(plan: PlanInfo): string {
   return plan.currency?.toUpperCase() === 'USD' || isTestPlan(plan) ? 'US$' : 'NT$'
 }
 
+function formatPackagePrice(pkg: CreditTopUpPackage): string {
+  return `${pkg.currency === 'TWD' ? 'NT$' : 'US$'}${pkg.price}`
+}
+
+function formatCredits(value: number): string {
+  return value.toLocaleString(isZh.value ? 'zh-TW' : 'en-US')
+}
+
 function formatPlanPrice(plan: PlanInfo): string {
   return `${getCurrencySymbol(plan)}${getPrice(plan)}`
 }
@@ -306,7 +454,8 @@ function isCurrentPlan(planId: string): boolean {
 onMounted(async () => {
   await Promise.all([
     fetchPlans(),
-    fetchSubscriptionStatus()
+    fetchSubscriptionStatus(),
+    fetchCreditPackages()
   ])
 })
 </script>
@@ -404,6 +553,104 @@ onMounted(async () => {
       <div v-if="error" class="mb-6 p-4 rounded-lg text-center text-sm font-medium" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #ef4444;">
         {{ error }}
       </div>
+
+      <!-- Credit Top-Up Packages -->
+      <section id="credit-packs" class="mb-12">
+        <div class="rounded-xl p-5 md:p-6" style="background: #11111b; border: 1px solid rgba(22,119,255,0.18); box-shadow: 0 16px 48px rgba(0,0,0,0.22);">
+          <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+            <div>
+              <span
+                class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold mb-3"
+                style="background: rgba(22,119,255,0.12); color: #69b1ff; border: 1px solid rgba(22,119,255,0.25);"
+              >
+                {{ isZh ? '單買點數收費' : 'One-time Credit Pricing' }}
+              </span>
+              <h2 class="text-2xl md:text-3xl font-bold mb-2" style="color: #f5f5fa;">
+                {{ isZh ? '不訂閱也可以直接購買點數' : 'Buy credits directly without a subscription' }}
+              </h2>
+              <p class="max-w-2xl text-sm md:text-base" style="color: #9494b0;">
+                {{ isZh ? '三個正式 TWD 點數包已固定，適合臨時提案、室內設計渲染、批次商品圖與影片補量。購買點數不會在每月週期重置。' : 'Three official TWD packs are available for ad hoc proposals, interior renders, batch product images, and extra video runs. Purchased credits do not reset with monthly billing.' }}
+              </p>
+            </div>
+            <div class="text-sm" style="color: #b7b7cc;">
+              {{ isZh ? '台灣 ECPay 金流付款' : 'Taiwan ECPay checkout' }}
+            </div>
+          </div>
+
+          <div v-if="creditPackagesLoading && !creditPackages.length" class="flex justify-center py-10">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2" style="border-color: #1677ff;"></div>
+          </div>
+          <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <article
+              v-for="pkg in creditPackages"
+              :key="pkg.name"
+              class="relative rounded-xl p-6 transition-all duration-300 hover:-translate-y-1"
+              :style="pkg.isPopular
+                ? 'background: #141420; border: 2px solid #1677ff; box-shadow: 0 0 36px rgba(22,119,255,0.14);'
+                : pkg.isBestValue
+                  ? 'background: #141420; border: 2px solid #10b981; box-shadow: 0 0 36px rgba(16,185,129,0.14);'
+                  : 'background: #141420; border: 1px solid rgba(255,255,255,0.06);'"
+            >
+              <span
+                v-if="pkg.isPopular || pkg.isBestValue"
+                class="absolute -top-3 left-6 text-xs font-semibold px-3 py-1 rounded-full text-white"
+                :style="pkg.isBestValue ? 'background: #10b981;' : 'background: #1677ff;'"
+              >
+                {{ pkg.isBestValue ? (isZh ? '最划算' : 'Best Value') : (isZh ? '熱門' : 'Popular') }}
+              </span>
+
+              <div class="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <h3 class="text-xl font-semibold mb-1" style="color: #f5f5fa;">{{ pkg.displayName }}</h3>
+                  <p class="text-sm" style="color: #9494b0;">
+                    {{ pkg.bonusPct > 0 ? (isZh ? `多送 ${pkg.bonusPct}%` : `${pkg.bonusPct}% bonus included`) : (isZh ? '彈性補量' : 'Flexible top-up') }}
+                  </p>
+                </div>
+                <div class="text-right">
+                  <div class="text-3xl font-bold" style="color: #f5f5fa;">{{ formatPackagePrice(pkg) }}</div>
+                  <div class="text-xs" style="color: #6b6b8a;">{{ isZh ? '一次購買' : 'one-time' }}</div>
+                </div>
+              </div>
+
+              <div class="rounded-lg px-4 py-3 mb-5" style="background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);">
+                <div class="text-2xl font-bold" style="color: #f5f5fa;">
+                  {{ formatCredits(pkg.credits) }} {{ isZh ? '點' : 'credits' }}
+                </div>
+                <div class="text-xs mt-1" style="color: #9494b0;">
+                  {{ pkg.bonusCredits > 0 ? (isZh ? `內含 ${formatCredits(pkg.bonusCredits)} 點加贈額度` : `Includes ${formatCredits(pkg.bonusCredits)} bonus credits`) : (isZh ? '無加贈，適合小量測試' : 'No bonus, best for light testing') }}
+                </div>
+              </div>
+
+              <ul class="space-y-2 mb-6 text-sm" style="color: #9494b0;">
+                <li class="flex items-start gap-2">
+                  <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                  {{ isZh ? '可用於圖片、影片、室內設計與商品場景生成' : 'Works across images, video, interiors, and product scenes' }}
+                </li>
+                <li class="flex items-start gap-2">
+                  <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                  {{ isZh ? '購買點數不會每月歸零，適合專案補量' : 'Purchased credits do not reset monthly, ideal for project bursts' }}
+                </li>
+              </ul>
+
+              <button
+                @click="handleCreditPurchase(pkg)"
+                :disabled="subscribing === `credit:${pkg.id}`"
+                class="w-full py-3 rounded font-medium transition-all duration-200 disabled:opacity-50 text-white"
+                style="background: #1677ff;"
+              >
+                <span v-if="subscribing === `credit:${pkg.id}`" class="flex items-center justify-center gap-2">
+                  <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  {{ t('pricing.processing') }}
+                </span>
+                <span v-else>{{ isLoggedIn ? (isZh ? '購買點數' : 'Buy Credits') : (isZh ? '登入後購買' : 'Sign In to Buy') }}</span>
+              </button>
+            </article>
+          </div>
+        </div>
+      </section>
 
       <!-- Loading State -->
       <div v-if="loading" class="flex justify-center py-12">

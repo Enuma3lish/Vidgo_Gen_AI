@@ -86,7 +86,7 @@ TOOL_LIMITS = {
     "effect": 15,              # 1 API call each (I2I), cheap → 3 sources × 5 styles
     "product_scene": 18,       # 1 API call (RemBG) + local composite → 6 products × 3 scenes
     "pattern_generate": 10,    # 1 API call each (T2I only), cheapest → 5 styles × 2
-    "room_redesign": 20,       # 1 API call each (I2I), cheap → 4 rooms × 5 styles
+    "room_redesign": 42,       # 1 API call each (I2I), cheap → 7 rooms × 6 styles
     "try_on": 12,              # Kling API, medium cost → 3 models × 4 clothing
     "short_video": 8,          # I2V API, expensive → 2 per topic × 4 topics
     "ai_avatar": 8,            # A2E API, most expensive → 2 per category × 4 categories
@@ -341,6 +341,15 @@ BACKGROUND_REMOVAL_MAPPING = {
 
 # Room redesign: use same room IDs/URLs as frontend defaultRooms and same style IDs as /api/v1/interior/styles (DESIGN_STYLES)
 # so demo matching (room_id + room_type + style_id) works.
+ROOM_REDESIGN_DEMO_STYLE_IDS = (
+    "modern_minimalist",
+    "scandinavian",
+    "japanese",
+    "industrial",
+    "mediterranean",
+    "mid_century_modern",
+)
+
 ROOM_REDESIGN_MAPPING = {
     "room_types": {
         "room-1": {
@@ -366,6 +375,24 @@ ROOM_REDESIGN_MAPPING = {
             "name_zh": "浴室",
             "url": "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800",
             "room_type": "bathroom"
+        },
+        "room-5": {
+            "name": "Dining Room",
+            "name_zh": "餐廳",
+            "url": "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=800",
+            "room_type": "dining_room"
+        },
+        "room-6": {
+            "name": "Home Office",
+            "name_zh": "書房",
+            "url": "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800",
+            "room_type": "home_office"
+        },
+        "room-7": {
+            "name": "Balcony",
+            "name_zh": "陽台",
+            "url": "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=800",
+            "room_type": "balcony"
         }
     },
     # Style IDs must match DESIGN_STYLES in interior_design_service (frontend /api/v1/interior/styles)
@@ -1401,7 +1428,7 @@ class VidGoPreGenerator:
 
         Combinations: Room × Style (style IDs match DESIGN_STYLES from interior API
         so frontend room+roomType+style matching works).
-        Total: 4 rooms × N styles (from DESIGN_STYLES)
+        Minimum production set: 7 rooms × 6 proposal styles = 42 examples.
         """
         from app.services.interior_design_service import DESIGN_STYLES
 
@@ -1415,15 +1442,27 @@ class VidGoPreGenerator:
         topic_counts: Dict[str, int] = {}
 
         room_types = ROOM_REDESIGN_MAPPING["room_types"]
-        # Use DESIGN_STYLES so stored style_id matches frontend /api/v1/interior/styles
-        styles = {sid: {"name": s["name"], "prompt": s["prompt_suffix"]} for sid, s in DESIGN_STYLES.items()}
+        # Use the same six proposal styles shown on the frontend so each room
+        # type has at least six ready examples and demo clicks stay preset-only.
+        styles = {
+            sid: {
+                "name": DESIGN_STYLES[sid]["name"],
+                "name_zh": DESIGN_STYLES[sid].get("name_zh", DESIGN_STYLES[sid]["name"]),
+                "prompt": DESIGN_STYLES[sid]["prompt_suffix"],
+            }
+            for sid in ROOM_REDESIGN_DEMO_STYLE_IDS
+            if sid in DESIGN_STYLES
+        }
 
         for room_id, room_data in room_types.items():
             if self.per_topic_limit is None and count >= limit:
                 break
+            room_type = room_data["room_type"]
+            if self.topic_filter and room_type not in self.topic_filter:
+                continue
 
             for style_id, style_data in styles.items():
-                if not self._topic_can_generate(style_id, topic_counts, limit, count):
+                if not self._topic_can_generate(room_type, topic_counts, limit, count):
                     break
 
                 logger.info(f"[{count+1}] Room: {room_data['name']} -> Style: {style_data['name']}")
@@ -1461,8 +1500,12 @@ class VidGoPreGenerator:
                     continue
 
                 local_entry = {
-                    "topic": room_data["room_type"],  # so topic matches selectedRoomType in frontend
+                    "topic": room_type,  # so topic matches selectedRoomType in frontend
                     "prompt": style_prompt,
+                    "prompt_en": f"Redesign this {room_data['name'].lower()} as a {style_data['name']} proposal render while preserving the core layout, daylight, and spatial proportion.",
+                    "prompt_zh": f"將{room_data['name_zh']}改造成{style_data['name_zh']}提案渲染，保留主要格局、採光與空間比例。",
+                    "title_en": f"{room_data['name']} x {style_data['name']} Proposal",
+                    "title_zh": f"{room_data['name_zh']} × {style_data['name_zh']}提案",
                     "input_image_url": room_data["url"],  # actual room photo passed to I2I
                     "result_image_url": result_image_url,  # I2I output derived from input photo
                     "generation_steps": [
@@ -1471,7 +1514,7 @@ class VidGoPreGenerator:
                     "input_params": {
                         "room_id": room_id,
                         "style_id": style_id,  # matches DESIGN_STYLES e.g. modern_minimalist, scandinavian
-                        "room_type": room_data["room_type"]
+                        "room_type": room_type
                     },
                     "generation_cost": 0.005
                 }
@@ -1481,7 +1524,7 @@ class VidGoPreGenerator:
                 self.stats["success"] += 1
                 self.stats["by_tool"]["room_redesign"]["success"] += 1
                 count += 1
-                self._topic_mark_generated(style_id, topic_counts)
+                self._topic_mark_generated(room_type, topic_counts)
                 await asyncio.sleep(2)
 
         await self._store_local_to_db("room_redesign")
@@ -2851,6 +2894,10 @@ class VidGoPreGenerator:
                     existing_material.result_watermarked_url = result_watermarked_url
                     if input_image_url:
                         existing_material.input_image_url = input_image_url
+                    existing_material.prompt_en = entry.get("prompt_en") or existing_material.prompt_en
+                    existing_material.prompt_zh = entry.get("prompt_zh") or existing_material.prompt_zh
+                    existing_material.title_en = entry.get("title_en") or existing_material.title_en
+                    existing_material.title_zh = entry.get("title_zh") or existing_material.title_zh
                     existing_material.status = MaterialStatus.APPROVED
                     existing_material.is_active = True
                     existing_material.is_featured = True
@@ -2865,9 +2912,12 @@ class VidGoPreGenerator:
                     source=MaterialSource.SEED,
                     status=MaterialStatus.APPROVED,
                     prompt=entry["prompt"],
+                    prompt_en=entry.get("prompt_en"),
                     prompt_zh=entry.get("prompt_zh"),
                     effect_prompt=entry.get("effect_prompt"),
                     effect_prompt_zh=entry.get("effect_prompt_zh"),
+                    title_en=entry.get("title_en"),
+                    title_zh=entry.get("title_zh"),
                     input_image_url=input_image_url,
                     input_params=input_params,
                     generation_steps=entry.get("generation_steps", []),

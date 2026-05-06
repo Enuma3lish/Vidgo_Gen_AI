@@ -1220,6 +1220,23 @@ class SubscriptionService:
                                 description=f"Subscription credits for {plan.name}"
                             )
                             db.add(transaction)
+        else:
+            package_id = payment_data.get("package_id")
+            purchased_credits = int(payment_data.get("credits") or 0)
+            if package_id and purchased_credits > 0:
+                user = await db.get(User, order.user_id)
+                if user:
+                    user.purchased_credits = (user.purchased_credits or 0) + purchased_credits
+                    transaction = CreditTransaction(
+                        user_id=user.id,
+                        amount=purchased_credits,
+                        balance_after=user.total_credits,
+                        transaction_type="purchase",
+                        package_id=UUID(str(package_id)),
+                        payment_id=payment_data.get("ecpay_trade_no") or payment_data.get("paddle_transaction_id"),
+                        description=f"Purchased {purchased_credits} credits",
+                    )
+                    db.add(transaction)
 
         await db.commit()
 

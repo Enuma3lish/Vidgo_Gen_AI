@@ -81,6 +81,7 @@ const tools = computed(() => [
 ])
 
 const selectedTool = ref('patternGenerate')
+const examples = ref<any[]>([])
 
 function scrollToQuickGenerate() {
   const el = document.getElementById('quick-generate')
@@ -91,6 +92,22 @@ function scrollToQuickGenerate() {
 
 // Current tool's example prompts
 const currentToolExamples = computed(() => {
+  if (selectedTool.value === 'patternGenerate') {
+    const presetPrompts = examples.value
+      .filter(example => example.presetId && example.prompt)
+      .map(example => ({
+        en: example.prompt,
+        zh: example.prompt_zh || example.prompt,
+        presetId: example.presetId,
+        style: example.style,
+      }))
+      .slice(0, 12)
+
+    if (presetPrompts.length > 0) {
+      return presetPrompts
+    }
+  }
+
   const tool = tools.value.find(t => t.key === selectedTool.value)
   return tool?.examples || []
 })
@@ -111,7 +128,6 @@ const selectedStyle = ref('seamless')
 const prompt = ref('')
 const isGenerating = ref(false)
 const result = ref<string | null>(null)
-const examples = ref<any[]>([])
 const selectedDemoPromptId = ref<string | null>(null)
 
 
@@ -172,6 +188,43 @@ const fallbackExamples = [
 
 async function loadExamples() {
   try {
+    if (demoTemplates.value.length === 0) {
+      await loadDemoTemplates('pattern_generate', undefined, locale.value, 100)
+    }
+
+    const materialExamples = demoTemplates.value
+      .filter(template => {
+        const anyTemplate = template as any
+        const resultUrl = template.result_watermarked_url || template.result_image_url || template.thumbnail_url
+        const promptText = template.prompt_zh || template.prompt || ''
+        const titleText = anyTemplate.title_zh || anyTemplate.title_en || ''
+        return Boolean(resultUrl) && !`${promptText} ${titleText}`.includes('VidGo readiness')
+      })
+      .map((template, index) => {
+        const anyTemplate = template as any
+        const topicLabel = t(`styles.${template.topic || 'seamless'}`)
+        const titleFallback = topicLabel && !topicLabel.startsWith('styles.')
+          ? `${topicLabel}${isZh.value ? '範例' : ' Example'}`
+          : (isZh.value ? '圖案範例' : 'Pattern Example')
+
+        return {
+          id: template.id || index + 1,
+          presetId: template.id,
+          title: anyTemplate.title_en || titleFallback,
+          title_zh: anyTemplate.title_zh || titleFallback,
+          prompt: template.prompt || template.prompt_zh || '',
+          prompt_zh: template.prompt_zh || template.prompt || '',
+          after: template.result_watermarked_url || template.result_image_url || template.thumbnail_url,
+          tool: 'pattern_generate',
+          style: template.topic || anyTemplate.input_params?.style_id || 'seamless',
+        }
+      })
+
+    if (materialExamples.length > 0) {
+      examples.value = materialExamples
+      return
+    }
+
     const response = await generationApi.getExamples('pattern')
     examples.value = response.examples?.length > 0 ? response.examples : fallbackExamples
   } catch (error) {
@@ -180,9 +233,19 @@ async function loadExamples() {
   }
 }
 
-function useExamplePrompt(example: { en: string; zh: string }) {
+function useExamplePrompt(example: { en: string; zh: string; presetId?: string; style?: string }) {
   prompt.value = isZh.value ? example.zh : example.en
-  selectedDemoPromptId.value = null
+  selectedDemoPromptId.value = example.presetId || null
+  if (example.style) selectedStyle.value = example.style
+  result.value = null
+}
+
+function useGalleryExample(example: any) {
+  prompt.value = getLocalizedField(example, 'prompt') || example.prompt || ''
+  selectedDemoPromptId.value = example.presetId || null
+  if (example.style) selectedStyle.value = example.style
+  result.value = null
+  scrollToQuickGenerate()
 }
 
 async function generatePattern() {
@@ -246,7 +309,6 @@ async function generatePattern() {
 
 onMounted(() => {
   loadExamples()
-  loadDemoTemplates('pattern_generate')
 })
 </script>
 
@@ -456,7 +518,11 @@ onMounted(() => {
           <div
             v-for="example in examples"
             :key="example.id"
-            class="card overflow-hidden"
+            class="card overflow-hidden cursor-pointer transition-transform hover:-translate-y-1"
+            role="button"
+            tabindex="0"
+            @click="useGalleryExample(example)"
+            @keydown.enter.prevent="useGalleryExample(example)"
           >
             <h4 class="text-lg font-semibold text-white mb-4">{{ getLocalizedField(example, 'title') }}</h4>
 
@@ -470,13 +536,27 @@ onMounted(() => {
               />
             </div>
             <div v-else-if="example.after" class="rounded-xl overflow-hidden">
-              <img :src="example.after" :alt="getLocalizedField(example, 'title')" class="w-full" />
+              <img :src="example.after" :alt="getLocalizedField(example, 'title')" class="w-full aspect-square object-cover" />
             </div>
 
             <!-- Prompt -->
             <p v-if="example.prompt" class="mt-3 text-sm text-gray-500 italic">
               "{{ getLocalizedField(example, 'prompt') }}"
             </p>
+
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <span v-if="example.style" class="text-xs px-2 py-1 rounded-full bg-dark-700 text-gray-400">
+                {{ t(`styles.${example.style}`) }}
+              </span>
+              <button
+                v-if="example.presetId"
+                type="button"
+                class="ml-auto text-sm font-medium text-primary-500 hover:text-primary-400"
+                @click.stop="useGalleryExample(example)"
+              >
+                {{ isZh ? '使用此範例' : 'Use Example' }}
+              </button>
+            </div>
           </div>
         </div>
 

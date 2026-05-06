@@ -28,7 +28,7 @@ import os
 from pathlib import Path
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_, or_
 
 from app.api.deps import get_db, get_current_user_optional, is_subscribed_user
 from app.models.demo import ImageDemo, DemoCategory, DemoVideo, DemoExample, PromptCache, ToolShowcase
@@ -61,6 +61,187 @@ from app.config.topic_registry import (
 )
 
 router = APIRouter()
+
+
+def _public_material_filters(Material):
+    return [
+        or_(Material.input_params["readiness_seed"].astext.is_(None), Material.input_params["readiness_seed"].astext != "true"),
+        or_(Material.input_params["reused_generated_media"].astext.is_(None), Material.input_params["reused_generated_media"].astext != "true"),
+        or_(
+            Material.prompt.is_(None),
+            and_(
+                ~Material.prompt.ilike("VidGo readiness%"),
+                ~Material.prompt.ilike("VidGo landing%"),
+            ),
+        ),
+        or_(
+            Material.prompt_zh.is_(None),
+            and_(
+                ~Material.prompt_zh.ilike("VidGo readiness%"),
+                ~Material.prompt_zh.ilike("VidGo landing%"),
+            ),
+        ),
+    ]
+
+
+def _landing_work_copy(material, tool_type: str, language: str, fallback_name: str):
+    is_zh = language.startswith("zh")
+    params = material.input_params or {}
+
+    def _clean_label(value: str | None) -> str:
+        return (value or "").replace("_", " ").replace("-", " ").strip()
+
+    if tool_type == "product_scene":
+        product = params.get("product_name_zh" if is_zh else "product_name")
+        scene = params.get("scene_name_zh" if is_zh else "scene_name")
+        if product and scene:
+            if is_zh:
+                return (
+                    f"{product} × {scene}",
+                    f"以{scene}打造{product}的商業情境圖，適合電商主圖、活動頁與社群廣告。",
+                )
+            return (
+                f"{product} x {scene}",
+                f"A polished {scene} campaign scene for {product}, ready for e-commerce listings, landing pages, and social ads.",
+            )
+
+        raw_prompt = (material.prompt_zh if is_zh else material.prompt_en) or material.prompt or ""
+        product_candidate = raw_prompt.split(" | ", 1)[0] if " | " in raw_prompt else ""
+        generic_titles = {"", "商品場景", "Product Scene", "product scene"}
+        title_candidate = (material.title_zh if is_zh else material.title_en) or ""
+        product_label = _clean_label(product_candidate or ("" if title_candidate in generic_titles else title_candidate))
+        scene_labels = {
+            "nature": ("自然生活風格", "natural lifestyle"),
+            "lifestyle": ("日常生活情境", "lifestyle"),
+            "luxury": ("精品質感棚拍", "premium studio"),
+            "studio": ("商業棚拍", "commercial studio"),
+            "holiday": ("節慶活動", "holiday campaign"),
+            "black_friday": ("黑色星期五", "Black Friday"),
+            "valentines": ("情人節", "Valentine's Day"),
+            "christmas": ("聖誕節", "Christmas"),
+            "new_year": ("農曆新年", "Lunar New Year"),
+            "spring_sale": ("春季特賣", "spring sale"),
+        }
+        zh_scene, en_scene = scene_labels.get(material.topic or "", ("品牌情境", "brand campaign"))
+        if is_zh:
+            product_label = product_label or "商品"
+            return (
+                f"{product_label} × {zh_scene}",
+                f"以{zh_scene}呈現{product_label}的商業情境圖，適合商品頁、活動頁、廣告素材與社群貼文。",
+            )
+        product_label = product_label or "product"
+        return (
+            f"{product_label} x {en_scene}",
+            f"A polished {en_scene} scene for {product_label}, ready for product pages, campaign creatives, ads, and social posts.",
+        )
+
+    if tool_type == "ai_avatar":
+        topic_labels = {
+            "spokesperson": ("Brand Story Presenter", "品牌故事數位人"),
+            "product_intro": ("Product Demo Presenter", "產品開箱數位人"),
+            "customer_service": ("Customer Service Presenter", "客服說明數位人"),
+            "social_media": ("Social Commerce Presenter", "社群導購數位人"),
+        }
+        en_label, zh_label = topic_labels.get(material.topic or "", ("AI Avatar Presenter", "AI 數位人導購"))
+        title = zh_label if is_zh else en_label
+        prompt = (material.prompt_zh if is_zh else material.prompt_en) or material.prompt or ""
+        if prompt:
+            return title, prompt[:120] + "..." if len(prompt) > 120 else prompt
+
+    if tool_type == "room_redesign":
+        room_type = params.get("room_type") or (material.topic if material.topic in {
+            "living_room", "bedroom", "kitchen", "bathroom", "dining_room", "home_office", "balcony"
+        } else None)
+        style_id = params.get("style_id") or (material.topic if material.topic in {
+            "modern_minimalist", "scandinavian", "japanese", "industrial", "mediterranean", "mid_century_modern", "bohemian", "coastal", "farmhouse", "art_deco"
+        } else None)
+
+        room_labels = {
+            "living_room": ("Living Room", "客廳"),
+            "bedroom": ("Bedroom", "臥室"),
+            "kitchen": ("Kitchen", "廚房"),
+            "bathroom": ("Bathroom", "浴室"),
+            "dining_room": ("Dining Room", "餐廳"),
+            "home_office": ("Home Office", "書房"),
+            "balcony": ("Balcony", "陽台"),
+        }
+        style_labels = {
+            "modern_minimalist": ("Modern Minimalist", "現代極簡"),
+            "scandinavian": ("Scandinavian", "北歐風格"),
+            "japanese": ("Japanese Zen", "日式禪風"),
+            "industrial": ("Industrial", "工業風"),
+            "mediterranean": ("Mediterranean", "地中海風格"),
+            "mid_century_modern": ("Mid-Century Modern", "中世紀現代"),
+            "bohemian": ("Bohemian", "波西米亞"),
+            "coastal": ("Coastal", "海岸風格"),
+            "farmhouse": ("Farmhouse", "農舍風格"),
+            "art_deco": ("Art Deco", "裝飾藝術"),
+        }
+        en_room, zh_room = room_labels.get(room_type or "", ("Interior Space", "室內空間"))
+        en_style, zh_style = style_labels.get(style_id or "", ("Proposal Render", "提案渲染"))
+        if is_zh:
+            return (
+                f"{zh_room} × {zh_style}提案",
+                f"將{zh_room}現況照轉成{zh_style}方向的寫實室內渲染，保留主要格局、採光與空間比例，適合設計提案、房仲刊登與家具情境圖。",
+            )
+        return (
+            f"{en_room} x {en_style} Proposal",
+            f"A photorealistic {en_style} redesign for a {en_room.lower()}, preserving the core layout, daylight, and spatial proportion for proposals, listings, and furniture scenes.",
+        )
+
+    if tool_type == "effect":
+        raw_text = " ".join(
+            str(value or "")
+            for value in (
+                params.get("style_id"),
+                params.get("style"),
+                params.get("effect_id"),
+                material.effect_prompt,
+                material.effect_prompt_zh,
+                material.prompt,
+                material.prompt_en,
+                material.prompt_zh,
+                material.topic,
+            )
+        ).lower()
+        effect_labels = {
+            "upscale_2x": (
+                "HD Image Enhancement",
+                "高解析圖片增強",
+                "An HD-enhanced source image with cleaner detail, sharper edges, and production-ready clarity.",
+                "提升原始圖片的清晰度、細節與銳利度，適合商品頁、廣告素材與社群內容。",
+            ),
+            "realistic": (
+                "Realistic Photo Polish",
+                "寫實照片優化",
+                "A realistic photo refinement with cleaner lighting, richer texture, and commercial-grade detail.",
+                "以寫實質感優化光線、紋理與細節，讓圖片更適合商業展示。",
+            ),
+            "cinematic": (
+                "Cinematic Image Effect",
+                "電影質感圖片特效",
+                "A cinematic visual treatment with refined color, dramatic contrast, and campaign-ready mood.",
+                "以電影感色調與對比強化畫面氛圍，適合活動頁與廣告素材。",
+            ),
+            "anime": (
+                "Anime Style Conversion",
+                "動漫風格轉換",
+                "An anime-style transformation that keeps the subject recognizable while adding bold illustrated character.",
+                "將原圖轉換為動漫風格，同時保留主體辨識度與畫面重點。",
+            ),
+        }
+        for marker, (en_title, zh_title, en_prompt, zh_prompt) in effect_labels.items():
+            if marker in raw_text:
+                return (zh_title, zh_prompt) if is_zh else (en_title, en_prompt)
+        return (
+            ("圖片風格優化", "以專業圖片特效提升原圖質感，適合商品頁、活動頁與社群素材。")
+            if is_zh else
+            ("Professional Image Effect", "A polished image effect that turns the source visual into a cleaner, campaign-ready creative asset.")
+        )
+
+    title = (material.title_zh if is_zh else material.title_en) or fallback_name
+    prompt = (material.prompt_zh if is_zh else material.prompt_en) or material.prompt or ""
+    return title, prompt[:120] + "..." if len(prompt) > 120 else prompt
 
 
 # =============================================================================
@@ -2849,7 +3030,7 @@ async def get_landing_examples(
 async def get_landing_works(
     language: str = Query("en", description="Language code"),
     limit: int = Query(24, ge=8, le=48, description="Number of works to return"),
-    tool_type: Optional[str] = Query(None, description="Filter by tool: product_scene, effect, background_removal, short_video, ai_avatar"),
+    tool_type: Optional[str] = Query(None, description="Filter by tool: product_scene, effect, background_removal, room_redesign, short_video, ai_avatar"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -2860,12 +3041,13 @@ async def get_landing_works(
     from sqlalchemy import func
     from app.models.material import Material, ToolType
 
-    # Tool types for 產品增強 + 廣告特效 + video content
-    valid_tool_types = ("product_scene", "effect", "background_removal", "short_video", "ai_avatar")
+    # Tool types for product visuals, interiors, image effects, and video content
+    valid_tool_types = ("product_scene", "effect", "background_removal", "room_redesign", "short_video", "ai_avatar")
     works_tool_types = [
         ToolType.PRODUCT_SCENE,
         ToolType.EFFECT,
         ToolType.BACKGROUND_REMOVAL,
+        ToolType.ROOM_REDESIGN,
         ToolType.SHORT_VIDEO,
         ToolType.AI_AVATAR,
     ]
@@ -2882,7 +3064,8 @@ async def get_landing_works(
                 Material.result_image_url.isnot(None)
                 | Material.result_watermarked_url.isnot(None)
                 | Material.result_video_url.isnot(None)
-            )
+            ),
+            *_public_material_filters(Material),
         )
         .order_by(func.random())
         .limit(limit)
@@ -2894,6 +3077,7 @@ async def get_landing_works(
         "product_scene": {"name_en": "Product Scene", "name_zh": "商品場景", "route": "/tools/product-scene"},
         "effect": {"name_en": "Image Effects", "name_zh": "圖片風格", "route": "/tools/effects"},
         "background_removal": {"name_en": "Background Removal", "name_zh": "一鍵白底", "route": "/tools/background-removal"},
+        "room_redesign": {"name_en": "Interior Proposal Render", "name_zh": "室內設計渲染", "route": "/tools/room-redesign"},
         "short_video": {"name_en": "Short Video", "name_zh": "短影片", "route": "/tools/short-video"},
         "ai_avatar": {"name_en": "AI Avatar", "name_zh": "AI 數位人", "route": "/tools/avatar"},
     }
@@ -2907,20 +3091,25 @@ async def get_landing_works(
         thumb = m.result_watermarked_url or m.result_image_url or m.result_thumbnail_url or m.input_image_url
         if not thumb and not video_url:
             continue
-        title = (m.title_zh if language.startswith("zh") else m.title_en) or info["name_zh" if language.startswith("zh") else "name_en"]
-        prompt = (m.prompt_zh if language.startswith("zh") else m.prompt) or m.prompt or ""
+        title, prompt = _landing_work_copy(
+            m,
+            tt,
+            language,
+            info["name_zh"] if language.startswith("zh") else info["name_en"],
+        )
         items.append({
             "id": str(m.id),
             "tool_type": tt,
             "tool_name": info["name_zh"] if language.startswith("zh") else info["name_en"],
             "route": info["route"],
             "title": title,
-            "prompt": prompt[:120] + "..." if len(prompt) > 120 else prompt,
+            "prompt": prompt,
             "thumb": thumb,
             "video_url": video_url,
             "input_image_url": m.input_image_url,  # For effect before/after
             "result_image_url": m.result_watermarked_url or m.result_image_url,
             "topic": m.topic,
+            "input_params": m.input_params or {},
         })
 
     return {

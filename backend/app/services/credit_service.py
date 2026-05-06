@@ -26,6 +26,8 @@ from app.models.billing import CreditTransaction, ServicePricing, CreditPackage,
 
 settings = get_settings()
 
+OFFICIAL_CREDIT_PACKAGE_NAMES = ("light_pack", "standard_pack", "heavy_pack")
+
 
 class CreditService:
     """Service for managing user credits with distributed locking and new features."""
@@ -348,13 +350,28 @@ class CreditService:
             if plan:
                 user_plan = plan.name
 
-        # Get all active packages
-        query = select(CreditPackage).where(CreditPackage.is_active == True)
+        # Get the official top-up packages only. Older small/medium/large rows
+        # may still exist in production DBs from previous seeds, but they should
+        # not be purchasable or displayed.
+        query = select(CreditPackage).where(
+            CreditPackage.is_active == True,
+            CreditPackage.name.in_(OFFICIAL_CREDIT_PACKAGE_NAMES),
+        ).order_by(CreditPackage.sort_order, CreditPackage.credits)
         result = await self.db.execute(query)
         all_packages = result.scalars().all()
 
         # Filter packages based on user's plan
-        plan_order = {"demo": 0, "starter": 1, "pro": 2, "pro_plus": 3}
+        plan_order = {
+            "demo": 0,
+            "free": 0,
+            "basic": 1,
+            "starter": 1,
+            "standard": 1,
+            "pro": 2,
+            "premium": 3,
+            "pro_plus": 3,
+            "enterprise": 4,
+        }
         user_plan_level = plan_order.get(user_plan, 0)
 
         available_packages = []

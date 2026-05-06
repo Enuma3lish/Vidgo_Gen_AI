@@ -168,38 +168,37 @@ AI_AVATAR_TRY_PROMPTS: List[Dict[str, Any]] = [
     },
 ]
 
-# Room Redesign: room type x design style
+# Room Redesign: 7 room topics × 6 proposal styles, matching the public tool.
+_ROOM_REDESIGN_ROOMS = [
+    ("living_room", "Living Room", "客廳"),
+    ("bedroom", "Bedroom", "臥室"),
+    ("kitchen", "Kitchen", "廚房"),
+    ("bathroom", "Bathroom", "浴室"),
+    ("dining_room", "Dining Room", "餐廳"),
+    ("home_office", "Home Office", "書房"),
+    ("balcony", "Balcony", "陽台"),
+]
+
+_ROOM_REDESIGN_STYLES = [
+    ("modern_minimalist", "Modern Minimalist", "現代極簡"),
+    ("scandinavian", "Scandinavian", "北歐風格"),
+    ("japanese", "Japanese Zen", "日式禪風"),
+    ("industrial", "Industrial", "工業風"),
+    ("mediterranean", "Mediterranean", "地中海風格"),
+    ("mid_century_modern", "Mid-Century Modern", "中世紀現代"),
+]
+
 ROOM_REDESIGN_TRY_PROMPTS: List[Dict[str, Any]] = [
     {
-        "id": "living-modern-1", "topic": "living_room",
-        "prompt_en": "Modern minimalist living room with warm lighting",
-        "prompt_zh": "現代極簡客廳，暖色燈光",
-        "room_type": "living_room", "style": "modern",
-    },
-    {
-        "id": "bedroom-nordic-1", "topic": "bedroom",
-        "prompt_en": "Nordic style bedroom with natural wood",
-        "prompt_zh": "北歐風臥室，自然木質",
-        "room_type": "bedroom", "style": "nordic",
-    },
-    {
-        "id": "kitchen-industrial-1", "topic": "kitchen",
-        "prompt_en": "Industrial style kitchen for cafe",
-        "prompt_zh": "工業風廚房，咖啡廳風格",
-        "room_type": "kitchen", "style": "industrial",
-    },
-    {
-        "id": "bathroom-zen-1", "topic": "bathroom",
-        "prompt_en": "Zen style bathroom with stone accents",
-        "prompt_zh": "禪風浴室，石材點綴",
-        "room_type": "bathroom", "style": "zen",
-    },
-    {
-        "id": "living-japanese-1", "topic": "living_room",
-        "prompt_en": "Japanese style living room with tatami",
-        "prompt_zh": "日式客廳，榻榻米風格",
-        "room_type": "living_room", "style": "japanese",
-    },
+        "id": f"{room_id}-{style_id}-1",
+        "topic": room_id,
+        "prompt_en": f"{style_en} {room_en.lower()} proposal render, preserve layout, daylight, and spatial proportion",
+        "prompt_zh": f"{style_zh}{room_zh}提案渲染，保留格局、採光與空間比例",
+        "room_type": room_id,
+        "style": style_id,
+    }
+    for room_id, room_en, room_zh in _ROOM_REDESIGN_ROOMS
+    for style_id, style_en, style_zh in _ROOM_REDESIGN_STYLES
 ]
 
 # Short Video: video content type x product

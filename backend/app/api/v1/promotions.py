@@ -19,6 +19,7 @@ from app.schemas.promotion import (
     ValidatePromotionRequest, ValidatePromotionResponse,
     ActivePromotionsResponse, CreditPackagesWithPromotionsResponse
 )
+from app.services.credit_service import OFFICIAL_CREDIT_PACKAGE_NAMES
 
 router = APIRouter()
 
@@ -109,9 +110,14 @@ async def get_credit_packages_with_promotions(db: AsyncSession = Depends(get_db)
     """
     Get all active credit packages with current promotion pricing.
     """
-    # Get active packages
+    # Get active official packages. Legacy seeded packages can remain in older
+    # databases, but the public pricing surface should only show the current
+    # light/standard/heavy top-up set.
     result = await db.execute(
-        select(CreditPackage).where(CreditPackage.is_active == True)
+        select(CreditPackage).where(
+            CreditPackage.is_active == True,
+            CreditPackage.name.in_(OFFICIAL_CREDIT_PACKAGE_NAMES),
+        )
         .order_by(CreditPackage.sort_order, CreditPackage.credits)
     )
     packages = result.scalars().all()

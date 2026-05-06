@@ -19,6 +19,8 @@ export interface CreditPackage {
   price: number
   currency: string
   is_popular: boolean
+  is_best_value?: boolean
+  bonus_credits?: number
 }
 
 export interface ServicePricing {
@@ -60,9 +62,11 @@ export const creditsApi = {
       id: String(p.id),
       name: p.display_name ?? p.name,
       credits: p.credits,
-      price: p.price_usd ?? p.price_twd ?? 0,
-      currency: p.price_usd != null ? 'USD' : 'TWD',
+      price: p.price_twd ?? p.price ?? p.price_usd ?? 0,
+      currency: p.price_twd != null || p.price != null ? 'TWD' : 'USD',
       is_popular: p.is_popular ?? false,
+      is_best_value: p.is_best_value ?? false,
+      bonus_credits: p.bonus_credits ?? 0,
     }))
   },
 

@@ -110,6 +110,9 @@ class CreditPurchaseResponse(BaseModel):
     amount: Decimal
     currency: str
     payment_url: Optional[str] = None
+    payment_method: Optional[str] = None
+    ecpay_form: Optional[dict] = None
+    is_mock: bool = False
     status: str = "pending"
 
 

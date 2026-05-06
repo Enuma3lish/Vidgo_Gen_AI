@@ -299,10 +299,24 @@
       "Bash(tee /tmp/vidgo-deploy-resume.log)",
       "Bash(gcloud artifacts *)",
       "Bash(/usr/bin/curl -sS -X POST https://api.vidgo.co/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"vidgo168@gmail.com\",\"password\":\"Vidgo96003146\"}' --max-time 15 -w '\\\\nHTTP: %{http_code}\\\\n')",
-      "Bash(/usr/bin/curl -sS -X POST https://api.vidgo.co/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"qaz0978005418@gmail.com\",\"password\":\"qaz129946858\"}' --max-time 15 -w '\\\\nHTTP: %{http_code}\\\\n')"
+      "Bash(/usr/bin/curl -sS -X POST https://api.vidgo.co/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"qaz0978005418@gmail.com\",\"password\":\"qaz129946858\"}' --max-time 15 -w '\\\\nHTTP: %{http_code}\\\\n')",
+      "Bash(git config *)",
+      "Bash(gh auth *)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(ssh-keyscan github.com)",
+      "Skill(update-config)",
+      "Bash(npm run *)",
+      "Read(//Users/mlw/.volta/bin/**)",
+      "Bash(command -v node npm)",
+      "Bash(git -C /Users/mlw/Desktop/Vidgo_Gen_AI diff --stat HEAD)",
+      "Read(//Users/mlw/Downloads/**)",
+      "Bash(git -C /Users/mlw/Desktop/Vidgo_Gen_AI status --short)",
+      "Bash(git *)",
+      "Bash(gsutil cp *)"
     ],
     "additionalDirectories": [
       "/private/tmp"
     ]
-  }
+  },
+  "model": "claude-opus-4-7"
 }

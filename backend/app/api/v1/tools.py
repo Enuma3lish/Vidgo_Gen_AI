@@ -555,7 +555,7 @@ class RoomRedesignRequest(BaseModel):
     """Room Redesign - transform room style"""
     room_image_url: Optional[str] = Field(None, description="Source room image URL. Use this or image_url.")
     image_url: Optional[str] = Field(None, description="Alias for room_image_url for client compatibility.")
-    style: str = Field("modern", description="Preset redesign style. Common values include modern, nordic, japanese, industrial, minimalist, and luxury.")
+    style: str = Field("modern_minimalist", description="Preset redesign style ID such as modern_minimalist, scandinavian, japanese, industrial, mediterranean, or mid_century_modern.")
     custom_prompt: Optional[str] = Field(None, description="Optional detailed redesign instruction that supplements or overrides the preset style description.")
     preserve_structure: bool = Field(True, description="Keep the original room layout and architectural structure while changing the design style.")
 
@@ -729,8 +729,8 @@ AVAILABLE_TOOLS = [
      "description": "Place products in professional AI-generated scenes with cinematic lighting"},
     {"id": "try_on", "name": "AI Model Try-On", "name_zh": "AI 模特換裝", "endpoint": "/tools/try-on", "method": "POST",
      "description": "Virtual try-on with AI models for clothing showcases"},
-    {"id": "room_redesign", "name": "Raw Space / Sketch Instant Render", "name_zh": "毛胚屋/線稿秒渲染", "endpoint": "/tools/room-redesign", "method": "POST",
-     "description": "Transform raw spaces or sketches into photorealistic interior renders"},
+    {"id": "room_redesign", "name": "Interior Render & Proposal Studio", "name_zh": "室內設計渲染與提案工具", "endpoint": "/tools/room-redesign", "method": "POST",
+     "description": "Transform room photos, empty spaces, sketches, or plans into proposal-ready photorealistic interior renders"},
     {"id": "short_video", "name": "Product Dynamic Video (I2V)", "name_zh": "商品動態短影音（圖生影片）", "endpoint": "/tools/short-video", "method": "POST",
      "description": "Turn product images into dynamic short videos for ads"},
     {"id": "hd_upscale", "name": "Commercial HD Upscale", "name_zh": "商用無損放大", "endpoint": "/tools/upscale", "method": "POST",

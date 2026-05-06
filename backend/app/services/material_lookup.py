@@ -11,7 +11,7 @@ In preset-only mode:
 import logging
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 from app.models.material import Material, ToolType, MaterialStatus
 
 logger = logging.getLogger(__name__)
@@ -126,8 +126,6 @@ class MaterialLookupService:
         Returns:
             List of Material presets with results (watermarked preferred, fallback to original)
         """
-        from sqlalchemy import or_
-
         try:
             tool_enum = ToolType(tool_type)
         except ValueError:
@@ -147,6 +145,22 @@ class MaterialLookupService:
                 _has_url(Material.result_watermarked_url),
                 _has_url(Material.result_video_url),
                 _has_url(Material.result_image_url),
+            ),
+            or_(Material.input_params["readiness_seed"].astext.is_(None), Material.input_params["readiness_seed"].astext != "true"),
+            or_(Material.input_params["reused_generated_media"].astext.is_(None), Material.input_params["reused_generated_media"].astext != "true"),
+            or_(
+                Material.prompt.is_(None),
+                and_(
+                    ~Material.prompt.ilike("VidGo readiness%"),
+                    ~Material.prompt.ilike("VidGo landing%"),
+                ),
+            ),
+            or_(
+                Material.prompt_zh.is_(None),
+                and_(
+                    ~Material.prompt_zh.ilike("VidGo readiness%"),
+                    ~Material.prompt_zh.ilike("VidGo landing%"),
+                ),
             ),
         ]
 

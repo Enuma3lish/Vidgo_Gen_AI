@@ -23,13 +23,10 @@ const {
   loadDemoTemplates,
   demoTemplates,
   resolveDemoTemplateResultUrl,
-  generateOnDemand,
   checkSubscription,
   subscriptionChecked,
   loadInputLibrary,
   inputLibrary,
-  loadEffectCatalog,
-  effectCatalog,
 } = useDemoMode()
 
 // Data
@@ -50,6 +47,60 @@ const visibleTabs = computed(() => {
   ]
   return all.filter(tab => !(tab.subOnly && isDemoUser.value))
 })
+
+const studioCapabilities = computed(() => isZh.value
+  ? [
+      { icon: '📷', title: '照片 / 空屋改造', text: '從現況照、空屋照或家具空間開始，保留房型比例並生成可比較的改造視覺。', proof: '房仲刊登、出租物件、裝修前後對照' },
+      { icon: '✏️', title: '草圖到提案圖', text: '把手繪概念、參考圖與設計描述整理成客戶看得懂的視覺方向。', proof: '初步簡報、風格溝通、提案比稿' },
+      { icon: '📐', title: '平面圖到渲染', text: '先鎖定空間類型、採光與材質語言，再建立寫實室內視角並延伸 3D 流程。', proof: '建案簡報、空間配置、3D 展示素材' },
+      { icon: '✨', title: '提案級輸出', text: '以材質、燈光、鏡頭、比例與品牌調性檢查結果，降低粗糙 AI 感。', proof: '設計提案、家具情境圖、社群素材' },
+    ]
+  : [
+      { icon: '📷', title: 'Photo / Empty-room Redesign', text: 'Start from room photos, empty spaces, or furniture contexts and create comparable redesign visuals while preserving spatial proportion.', proof: 'Listings, rental visuals, before/after renovation' },
+      { icon: '✏️', title: 'Sketch to Proposal', text: 'Turn sketches, references, and design notes into client-readable visual directions.', proof: 'Pitch decks, style alignment, concept options' },
+      { icon: '📐', title: 'Plan to Render', text: 'Lock room type, daylight, and material language before creating realistic interior views and extending into 3D.', proof: 'Architecture decks, layouts, 3D presentation assets' },
+      { icon: '✨', title: 'Proposal-grade Output', text: 'Review material realism, lighting, camera language, proportion, and brand tone to reduce the AI look.', proof: 'Design proposals, furniture scenes, social content' },
+    ])
+
+const proposalWorkflow = computed(() => isZh.value
+  ? [
+      { step: '01', title: '輸入空間', text: '照片、空屋、草圖或平面圖都能作為起點。' },
+      { step: '02', title: '鎖定風格', text: '選擇空間類型、設計風格與材質/燈光描述。' },
+      { step: '03', title: '生成提案圖', text: '輸出可放進簡報、刊登頁或客戶溝通的寫實視覺。' },
+      { step: '04', title: '延伸 3D', text: '訂閱用戶可把完成圖延伸為 GLB 3D 展示素材。' },
+    ]
+  : [
+      { step: '01', title: 'Bring a Space', text: 'Start from a photo, empty room, sketch, or floor plan.' },
+      { step: '02', title: 'Lock the Direction', text: 'Choose room type, design style, materials, and lighting notes.' },
+      { step: '03', title: 'Generate Proposal Visuals', text: 'Create realistic visuals for decks, listings, and client alignment.' },
+      { step: '04', title: 'Extend to 3D', text: 'Subscribers can turn approved renders into GLB presentation assets.' },
+    ])
+
+const deliverableStandards = computed(() => isZh.value
+  ? [
+      '保留主要房型、窗戶位置與空間比例',
+      '強化材質細節、自然光、陰影與鏡頭透視',
+      '適合房仲刊登、室內設計提案與家具情境圖',
+      '可搭配 3D 模型與批次素材製作流程',
+    ]
+  : [
+      'Preserve core layout, windows, and spatial proportion',
+      'Improve material detail, natural light, shadow, and camera perspective',
+      'Useful for real estate listings, design proposals, and furniture scenes',
+      'Works with 3D model and batch content workflows',
+    ])
+
+const roomCreditPackages = computed(() => isZh.value
+  ? [
+      { name: '輕量包', price: 'NT$299', credits: '3,000 點', note: '小量測試' },
+      { name: '標準包', price: 'NT$499', credits: '5,500 點', note: '多送 10%' },
+      { name: '重度包', price: 'NT$999', credits: '12,000 點', note: '多送 20%' },
+    ]
+  : [
+      { name: 'Light Pack', price: 'NT$299', credits: '3,000 credits', note: 'Light testing' },
+      { name: 'Standard Pack', price: 'NT$499', credits: '5,500 credits', note: '10% bonus' },
+      { name: 'Heavy Pack', price: 'NT$999', credits: '12,000 credits', note: '20% bonus' },
+    ])
 const uploadedImage = ref<string | undefined>(undefined)
 // True when a demo user clicked Generate but the selected tile isn't backed
 // by a real Material DB preset (db_empty fallback or missing preset id).
@@ -120,6 +171,9 @@ const STATIC_ROOM_FALLBACKS: Record<string, string> = {
   bedroom: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800',
   kitchen: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800',
   bathroom: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800',
+  dining_room: 'https://images.unsplash.com/photo-1617806118233-18e1de247200?w=800',
+  home_office: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800',
+  balcony: 'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=800',
 }
 
 const STATIC_ROOM_DEFS: Array<{ id: string; type_id: string; name: string; nameZh: string }> = [
@@ -127,6 +181,9 @@ const STATIC_ROOM_DEFS: Array<{ id: string; type_id: string; name: string; nameZ
   { id: 'room-2', type_id: 'bedroom',     name: 'Bedroom',     nameZh: '臥室' },
   { id: 'room-3', type_id: 'kitchen',     name: 'Kitchen',     nameZh: '廚房' },
   { id: 'room-4', type_id: 'bathroom',    name: 'Bathroom',    nameZh: '浴室' },
+  { id: 'room-5', type_id: 'dining_room', name: 'Dining Room', nameZh: '餐廳' },
+  { id: 'room-6', type_id: 'home_office', name: 'Home Office', nameZh: '書房' },
+  { id: 'room-7', type_id: 'balcony',     name: 'Balcony',     nameZh: '陽台' },
 ]
 
 // Room picker list — the pregenerated Vertex input library wins when rows
@@ -151,6 +208,7 @@ const allowedDemoStyleIds = [
   'scandinavian',
   'japanese',
   'industrial',
+  'mediterranean',
   'mid_century_modern'
 ]
 
@@ -184,6 +242,38 @@ const styleName = computed(() => {
 
 const roomTypeName = computed(() => {
   return (room: RoomType) => locale.value === 'zh-TW' ? room.name_zh : room.name
+})
+
+const selectedRoomLabel = computed(() => {
+  const room = roomTypes.value.find(r => r.id === selectedRoomType.value)
+  if (room) return roomTypeName.value(room)
+  const fallback = defaultRooms.value.find(r => r.type_id === selectedRoomType.value)
+  return isZh.value ? (fallback?.nameZh || '空間') : (fallback?.name || 'Space')
+})
+
+const proposalExamples = computed(() => {
+  return allowedDemoStyleIds.map(styleId => {
+    const style = styles.value.find(s => s.id === styleId)
+    const template = demoTemplates.value.find(t => {
+      const params = (t as any).input_params || {}
+      const templateRoomType = params.room_type || t.topic
+      return templateRoomType === selectedRoomType.value && params.style_id === styleId
+    })
+    const fallbackRoom = defaultRooms.value.find(r => r.type_id === selectedRoomType.value)
+    const image = template?.thumbnail_url
+      || template?.result_watermarked_url
+      || template?.result_image_url
+      || fallbackRoom?.input
+      || ''
+
+    return {
+      styleId,
+      templateId: template?.id || null,
+      image,
+      styleName: style ? styleName.value(style) : styleId.replace(/_/g, ' '),
+      ready: Boolean(template?.id),
+    }
+  })
 })
 
 const showCustomPrompt = computed(() => !isDemoUser.value && ['redesign', 'generate', 'styleTransfer'].includes(activeTab.value))
@@ -250,12 +340,10 @@ onMounted(async () => {
     roomTypes.value = roomTypesData
 
     // Load demo templates for demo users plus the Vertex-pregenerated room
-    // input library and the interior-style effect catalog (its `prompt`
-    // strings are what the runtime hashes as part of the cache key).
+    // input library. Demo clicks resolve real Material presets only.
     await Promise.all([
       loadDemoTemplates('room_redesign'),
       loadInputLibrary('room_redesign'),
-      loadEffectCatalog('room_redesign', locale.value),
     ])
 
     // For demo users, auto-select first default room
@@ -345,31 +433,8 @@ async function handleRedesign() {
         }
       }
 
-      // VG-BUG-010 fix: cache-through on demand.
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
-      // Prefer the Vertex-pregenerated room input when the user picked one
-      // from the library, then the finished-example input, finally the
-      // user-uploaded file. The effect_prompt is resolved from the catalog
-      // (full interior style prompt) so it matches the cache key the
-      // /tools/room-redesign endpoint uses.
-      const libRoom = (defaultRooms.value.find(r => r.id === selectedDemoRoomId.value) as any)?.input
-      const pickedRoom = libRoom || (template as any)?.input_image_url || uploadedImage.value || undefined
-      const stylePrompt = effectCatalog.value.find((e: any) => e.id === selectedStyle.value)?.prompt
-      const onDemandUrl = await generateOnDemand('room_redesign', selectedRoomType.value || undefined, {
-        input_image_url: pickedRoom,
-        room_id: selectedDemoRoomId.value || undefined,
-        room_type: selectedRoomType.value || undefined,
-        style_id: selectedStyle.value || undefined,
-        effect_prompt: (prompt.value as any) || stylePrompt || undefined,
-      })
-      if (onDemandUrl) {
-        resultImage.value = onDemandUrl
-        resultDescription.value = ''
-        uiStore.showSuccess(isZh.value ? '生成成功' : 'Generated successfully')
-      } else {
-        demoEmptyState.value = true
-        uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
-      }
+      demoEmptyState.value = true
+      uiStore.showError(isZh.value ? '此組合尚未預生成，請先選擇有範例的空間與風格。' : 'This combination is not pre-generated yet. Please pick an available room and style example.')
     } finally {
       isProcessing.value = false
     }
@@ -492,31 +557,8 @@ async function handleStyleTransfer() {
         }
       }
 
-      // VG-BUG-010 fix: cache-through on demand for the style transfer path.
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
-      // Prefer the Vertex-pregenerated room input when the user picked one
-      // from the library, then the finished-example input, finally the
-      // user-uploaded file. The effect_prompt is resolved from the catalog
-      // (full interior style prompt) so it matches the cache key the
-      // /tools/room-redesign endpoint uses.
-      const libRoom = (defaultRooms.value.find(r => r.id === selectedDemoRoomId.value) as any)?.input
-      const pickedRoom = libRoom || (template as any)?.input_image_url || uploadedImage.value || undefined
-      const stylePrompt = effectCatalog.value.find((e: any) => e.id === selectedStyle.value)?.prompt
-      const onDemandUrl = await generateOnDemand('room_redesign', selectedRoomType.value || undefined, {
-        input_image_url: pickedRoom,
-        room_id: selectedDemoRoomId.value || undefined,
-        room_type: selectedRoomType.value || undefined,
-        style_id: selectedStyle.value || undefined,
-        effect_prompt: (prompt.value as any) || stylePrompt || undefined,
-      })
-      if (onDemandUrl) {
-        resultImage.value = onDemandUrl
-        resultDescription.value = ''
-        uiStore.showSuccess(isZh.value ? '風格轉換成功' : 'Style applied successfully')
-      } else {
-        demoEmptyState.value = true
-        uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
-      }
+      demoEmptyState.value = true
+      uiStore.showError(isZh.value ? '此組合尚未預生成，請先選擇有範例的空間與風格。' : 'This combination is not pre-generated yet. Please pick an available room and style example.')
     } finally {
       isProcessing.value = false
     }
@@ -693,6 +735,24 @@ function handleSubmit() {
   }
 }
 
+async function selectProposalExample(example: { styleId: string; templateId: string | null }) {
+  selectedStyle.value = example.styleId
+  clearGeneratedResult()
+
+  if (!example.templateId) return
+
+  isProcessing.value = true
+  try {
+    const demoResultUrl = await resolveDemoTemplateResultUrl(example.templateId)
+    if (demoResultUrl) {
+      resultImage.value = demoResultUrl
+      uiStore.showSuccess(isZh.value ? '已套用示範範例' : 'Example applied')
+    }
+  } finally {
+    isProcessing.value = false
+  }
+}
+
 function reset() {
   uploadedImage.value = undefined
   uploadedFile.value = null
@@ -716,8 +776,6 @@ function reset() {
 
 
 // Update demo room pattern when room type changes
-watch(locale, () => loadEffectCatalog('room_redesign', locale.value))
-
 watch(selectedRoomType, (newType) => {
   if (isDemoUser.value) {
     const matchingRoom = defaultRooms.value.find(r => r.type_id === newType)
@@ -772,6 +830,11 @@ watch(selectedRoomType, (newType) => {
         <p class="text-xl text-dark-300 max-w-2xl mx-auto">
           {{ t('interior.subtitle') }}
         </p>
+        <p class="mt-3 text-sm md:text-base text-dark-400 max-w-3xl mx-auto">
+          {{ isZh
+            ? '把房間照片、空屋、草圖與平面圖轉成可交付的寫實渲染，適合室內設計提案、房仲刊登、家具品牌情境圖與 3D 展示素材。'
+            : 'Turn room photos, empty spaces, sketches, and floor plans into deliverable photorealistic renders for interior proposals, real estate listings, furniture scenes, and 3D presentation assets.' }}
+        </p>
 
         <!-- Subscribe Notice for Demo Users -->
         <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
@@ -779,6 +842,74 @@ watch(selectedRoomType, (newType) => {
             {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
           </RouterLink>
         </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div
+          v-for="item in studioCapabilities"
+          :key="item.title"
+          class="rounded-xl p-4"
+          style="background: #141420; border: 1px solid rgba(255,255,255,0.06);"
+        >
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-xl">{{ item.icon }}</span>
+            <div class="text-sm font-semibold text-dark-50">{{ item.title }}</div>
+          </div>
+          <p class="text-xs leading-relaxed text-dark-300 mb-3">{{ item.text }}</p>
+          <p class="text-[11px] leading-relaxed text-dark-500">{{ item.proof }}</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+        <section class="rounded-2xl p-5" style="background: #11111b; border: 1px solid rgba(82,196,26,0.18);">
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide" style="color: #95de64;">
+                {{ isZh ? '專業提案流程' : 'Professional Proposal Flow' }}
+              </p>
+              <h2 class="text-xl font-bold text-dark-50 mt-1">
+                {{ isZh ? '像室內設計團隊一樣交付視覺方向' : 'Deliver visual direction like an interior team' }}
+              </h2>
+            </div>
+            <RouterLink to="/tools/room-redesign" class="hidden sm:inline-flex text-xs font-semibold px-3 py-2 rounded-lg" style="background: rgba(82,196,26,0.1); color: #95de64; border: 1px solid rgba(82,196,26,0.22);">
+              {{ isZh ? '開始試用' : 'Start' }}
+            </RouterLink>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div v-for="step in proposalWorkflow" :key="step.step" class="rounded-xl p-3" style="background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);">
+              <div class="text-xs font-bold mb-2" style="color: #95de64;">{{ step.step }}</div>
+              <div class="text-sm font-semibold text-dark-50 mb-1">{{ step.title }}</div>
+              <p class="text-xs leading-relaxed text-dark-400">{{ step.text }}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="rounded-2xl p-5" style="background: #11111b; border: 1px solid rgba(22,119,255,0.18);">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide" style="color: #69b1ff;">
+                {{ isZh ? '單買點數收費' : 'One-time Credit Pricing' }}
+              </p>
+              <h2 class="text-xl font-bold text-dark-50 mt-1">
+                {{ isZh ? '不用訂閱，也能為專案補點數' : 'Top up credits for project work' }}
+              </h2>
+              <p class="text-xs leading-relaxed text-dark-400 mt-2">
+                {{ isZh ? '點數包適合臨時室內提案、批次渲染、房仲素材與家具情境圖補量。' : 'Credit packs are ideal for ad hoc proposals, batch renders, listing visuals, and furniture scene production.' }}
+              </p>
+            </div>
+            <RouterLink to="/pricing#credit-packs" class="inline-flex justify-center text-xs font-semibold px-3 py-2 rounded-lg" style="background: #1677ff; color: white;">
+              {{ isZh ? '查看與購買' : 'View Packs' }}
+            </RouterLink>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div v-for="pkg in roomCreditPackages" :key="pkg.name" class="rounded-xl p-3" style="background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);">
+              <div class="text-sm font-semibold text-dark-50">{{ pkg.name }}</div>
+              <div class="text-xl font-bold mt-1" style="color: #f5f5fa;">{{ pkg.price }}</div>
+              <div class="text-xs text-dark-300 mt-1">{{ pkg.credits }}</div>
+              <div class="text-[11px] text-dark-500 mt-2">{{ pkg.note }}</div>
+            </div>
+          </div>
+        </section>
       </div>
 
       <HowToUseHint
@@ -824,7 +955,8 @@ watch(selectedRoomType, (newType) => {
                 class="p-3 rounded-xl border-2 transition-all text-center"
                 :class="selectedRoomType === room.id
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
+                  : 'hover:border-dark-500'"
+                style="border-color: rgba(255,255,255,0.08);"
               >
                 <span class="text-2xl block">{{ roomTypeIcons[room.id] || '🏠' }}</span>
                 <p class="text-xs text-dark-300 mt-1 truncate">{{ roomTypeName(room) }}</p>
@@ -852,7 +984,7 @@ watch(selectedRoomType, (newType) => {
               <div v-else class="flex flex-col items-center justify-center p-8 rounded-lg text-dark-400" style="background: #141420;">
                 <span class="text-4xl mb-2">📷</span>
                 <p class="text-sm text-center">
-                  {{ isZh ? '目前所選擇的空間類型尚未有示範圖片，請切換至客廳、臥室、廚房或浴室。' : 'No demo image available for this space type. Please select Living Room, Bedroom, Kitchen, or Bathroom.' }}
+                  {{ isZh ? '目前所選擇的空間類型尚未有示範圖片，請切換至其他空間類型。' : 'No demo image available for this space type. Please select another room type.' }}
                 </p>
               </div>
             </div>
@@ -887,11 +1019,51 @@ watch(selectedRoomType, (newType) => {
                 class="p-4 rounded-xl border-2 transition-all text-left"
                 :class="selectedStyle === style.id
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'hover:border-dark-500'" style="border-color: rgba(255,255,255,0.08);">
+                  : 'hover:border-dark-500'"
+                style="border-color: rgba(255,255,255,0.08);"
               >
                 <span class="text-2xl">{{ styleIcons[style.id] || '🏠' }}</span>
                 <p class="font-medium text-dark-50 mt-2">{{ styleName(style) }}</p>
                 <p class="text-xs text-dark-400 line-clamp-2">{{ style.description }}</p>
+              </button>
+            </div>
+          </div>
+
+          <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <div class="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 class="text-lg font-semibold text-dark-50 flex items-center gap-2">
+                  <span>🧩</span>
+                  {{ isZh ? `${selectedRoomLabel}示範提案` : `${selectedRoomLabel} Proposal Examples` }}
+                </h3>
+                <p class="text-xs text-dark-400 mt-1">
+                  {{ isZh ? '每個空間類型提供 6 種常用室內風格，方便比較方向。' : 'Each room type includes 6 common interior style examples for quick direction comparison.' }}
+                </p>
+              </div>
+              <span class="text-xs font-semibold px-2 py-1 rounded-lg" style="background: rgba(82,196,26,0.12); color: #95de64;">
+                {{ proposalExamples.filter(item => item.ready).length }}/6
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <button
+                v-for="example in proposalExamples"
+                :key="example.styleId"
+                type="button"
+                @click="selectProposalExample(example)"
+                class="text-left rounded-xl overflow-hidden border transition-all"
+                :class="selectedStyle === example.styleId ? 'border-primary-500 bg-primary-500/10' : 'hover:border-dark-500'"
+                style="border-color: rgba(255,255,255,0.08);"
+              >
+                <div class="aspect-[4/3] bg-dark-900 overflow-hidden">
+                  <img v-if="example.image" :src="example.image" :alt="example.styleName" class="w-full h-full object-cover" />
+                </div>
+                <div class="p-2">
+                  <p class="text-xs font-semibold text-dark-50 truncate">{{ example.styleName }}</p>
+                  <p class="text-[11px] mt-0.5" :class="example.ready ? 'text-primary-400' : 'text-dark-500'">
+                    {{ example.ready ? (isZh ? '可預覽範例' : 'Ready example') : (isZh ? '預生成中' : 'Preparing') }}
+                  </p>
+                </div>
               </button>
             </div>
           </div>
@@ -906,7 +1078,8 @@ watch(selectedRoomType, (newType) => {
                v-model="prompt"
                rows="3"
                :placeholder="customPromptPlaceholder"
-               class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
+               class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500"
+               style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
              ></textarea>
           </div>
 
@@ -1046,7 +1219,8 @@ watch(selectedRoomType, (newType) => {
                 </label>
                 <select
                   v-model.number="textureSize"
-                  class="w-full rounded-lg px-3 py-2 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
+                  class="w-full rounded-lg px-3 py-2 focus:outline-none focus:border-primary-500"
+                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
                 >
                   <option :value="512">512px ({{ isZh ? '較快' : 'Faster' }})</option>
                   <option :value="1024">1024px ({{ isZh ? '高品質' : 'High Quality' }})</option>
@@ -1283,25 +1457,13 @@ watch(selectedRoomType, (newType) => {
           <!-- Features Info -->
           <div class="card bg-gradient-to-br from-primary-500/10 to-purple-500/10 border border-primary-500/20">
             <h4 class="font-semibold text-dark-50 mb-3 flex items-center gap-2">
-              <span>💡</span>
-              {{ t('interior.features.title') }}
+              <span>✓</span>
+              {{ isZh ? '提案級輸出標準' : 'Proposal-grade output standards' }}
             </h4>
             <ul class="space-y-2 text-sm text-dark-300">
-              <li class="flex items-start gap-2">
+              <li v-for="item in deliverableStandards" :key="item" class="flex items-start gap-2">
                 <span class="text-primary-400">✓</span>
-                {{ t('interior.features.imageText') }}
-              </li>
-              <li class="flex items-start gap-2">
-                <span class="text-primary-400">✓</span>
-                {{ t('interior.features.textOnly') }}
-              </li>
-              <li class="flex items-start gap-2">
-                <span class="text-primary-400">✓</span>
-                {{ t('interior.features.multiStyle') }}
-              </li>
-              <li class="flex items-start gap-2">
-                <span class="text-primary-400">✓</span>
-                {{ t('interior.features.keepLayout') }}
+                {{ item }}
               </li>
             </ul>
           </div>

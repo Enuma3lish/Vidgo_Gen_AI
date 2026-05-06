@@ -1,0 +1,167 @@
+{
+  "schema_version": "2026-04-28",
+  "feature": "work_link_social_share",
+  "purpose": "Input examples for sharing a VidGo work link to social platforms without connecting social accounts.",
+  "local_test_asset": {
+    "repo_path": "static_assets/social_share_sample_work.svg",
+    "frontend_public_path": "frontend-vue/public/static_assets/social_share_sample_work.svg",
+    "docker_compose_url": "http://localhost:8501/static_assets/social_share_sample_work.svg",
+    "vite_dev_url": "http://localhost:5173/static_assets/social_share_sample_work.svg",
+    "notes": "Use docker_compose_url when running the repo with docker-compose. Use vite_dev_url only if running Vite directly. Social platforms cannot fetch localhost URLs, but this is enough to test the VidGo copy/open flow locally."
+  },
+  "work_link_contract": {
+    "work_url": "Publicly reachable URL for the generated work media. Prefer result_video_url for video work, otherwise result_image_url.",
+    "generation_id": "VidGo user generation id, used only as fallback context inside VidGo.",
+    "caption": "User-editable text shown in social composers when the platform supports prefilled text.",
+    "media_type": "image or video",
+    "redirect_behavior": "Open the platform share/composer/upload destination in a new browser tab. No VidGo social account connection is required."
+  },
+  "sample_work": {
+    "generation_id": "7a8b9c10-1112-4345-8678-90abcdef1234",
+    "tool_type": "product_scene",
+    "media_type": "image",
+    "work_url": "http://localhost:8501/static_assets/social_share_sample_work.svg",
+    "caption": "Created with VidGo AI product scene studio."
+  },
+  "cases": [
+    {
+      "case_id": "copy_link_only",
+      "platform": "Any app",
+      "mode": "copy_only",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "work_url": "http://localhost:8501/static_assets/social_share_sample_work.svg"
+      },
+      "redirect_url_template": null,
+      "expected_action": "Copy work_url to clipboard so the user can paste it anywhere."
+    },
+    {
+      "case_id": "native_system_share",
+      "platform": "System share sheet",
+      "mode": "native_share_or_copy_fallback",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "title": "VidGo AI",
+        "text": "Created with VidGo AI product scene studio.",
+        "url": "http://localhost:8501/static_assets/social_share_sample_work.svg"
+      },
+      "redirect_url_template": "navigator.share({ title, text, url })",
+      "expected_action": "Use the browser or mobile OS share sheet when available; otherwise copy the work URL."
+    },
+    {
+      "case_id": "facebook_share_link",
+      "platform": "Facebook",
+      "mode": "direct_share_url",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "work_url": "http://localhost:8501/static_assets/social_share_sample_work.svg"
+      },
+      "redirect_url_template": "https://www.facebook.com/sharer/sharer.php?u={encoded_work_url}",
+      "expected_action": "Open Facebook share dialog with the VidGo work link."
+    },
+    {
+      "case_id": "x_tweet_link",
+      "platform": "X",
+      "mode": "direct_share_url",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "work_url": "http://localhost:8501/static_assets/social_share_sample_work.svg",
+        "caption": "New product image created with VidGo AI."
+      },
+      "redirect_url_template": "https://twitter.com/intent/tweet?url={encoded_work_url}&text={encoded_caption}",
+      "expected_action": "Open X composer with caption and work link."
+    },
+    {
+      "case_id": "threads_post_link",
+      "platform": "Threads",
+      "mode": "direct_share_url",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "caption_plus_url": "Created with VidGo AI product scene studio. http://localhost:8501/static_assets/social_share_sample_work.svg"
+      },
+      "redirect_url_template": "https://www.threads.net/intent/post?text={encoded_caption_plus_url}",
+      "expected_action": "Open Threads composer with text containing caption and work link."
+    },
+    {
+      "case_id": "linkedin_share_link",
+      "platform": "LinkedIn",
+      "mode": "direct_share_url",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "work_url": "http://localhost:8501/static_assets/social_share_sample_work.svg"
+      },
+      "redirect_url_template": "https://www.linkedin.com/sharing/share-offsite/?url={encoded_work_url}",
+      "expected_action": "Open LinkedIn share dialog with the VidGo work link."
+    },
+    {
+      "case_id": "line_share_link",
+      "platform": "LINE",
+      "mode": "direct_share_url",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "work_url": "http://localhost:8501/static_assets/social_share_sample_work.svg"
+      },
+      "redirect_url_template": "https://social-plugins.line.me/lineit/share?url={encoded_work_url}",
+      "expected_action": "Open LINE share dialog with the VidGo work link."
+    },
+    {
+      "case_id": "whatsapp_share_link",
+      "platform": "WhatsApp",
+      "mode": "direct_share_url",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "caption_plus_url": "Created with VidGo AI product scene studio. http://localhost:8501/static_assets/social_share_sample_work.svg"
+      },
+      "redirect_url_template": "https://api.whatsapp.com/send?text={encoded_caption_plus_url}",
+      "expected_action": "Open WhatsApp with text containing caption and work link."
+    },
+    {
+      "case_id": "telegram_share_link",
+      "platform": "Telegram",
+      "mode": "direct_share_url",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "work_url": "http://localhost:8501/static_assets/social_share_sample_work.svg",
+        "caption": "AI product image generated in VidGo."
+      },
+      "redirect_url_template": "https://t.me/share/url?url={encoded_work_url}&text={encoded_caption}",
+      "expected_action": "Open Telegram share with caption and work link."
+    },
+    {
+      "case_id": "instagram_copy_then_open",
+      "platform": "Instagram",
+      "mode": "copy_first_destination",
+      "supported_media_types": ["image", "video"],
+      "input_example": {
+        "work_url": "http://localhost:8501/static_assets/social_share_sample_work.svg",
+        "caption": "Created with VidGo AI. Paste this link in the post, story, or bio."
+      },
+      "redirect_url_template": "https://www.instagram.com/",
+      "expected_action": "Copy work_url first, then open Instagram because Instagram does not provide a universal web URL prefill for posts."
+    },
+    {
+      "case_id": "tiktok_video_copy_then_upload",
+      "platform": "TikTok",
+      "mode": "copy_first_destination",
+      "supported_media_types": ["video"],
+      "input_example": {
+        "work_url": "https://storage.googleapis.com/vidgo-generated/sample/product-scene-hero.mp4",
+        "caption": "Generated with VidGo AI. Paste this link in the TikTok caption if needed."
+      },
+      "redirect_url_template": "https://www.tiktok.com/upload",
+      "expected_action": "Copy work_url first, then open TikTok upload for video publishing."
+    },
+    {
+      "case_id": "youtube_video_copy_then_studio",
+      "platform": "YouTube",
+      "mode": "copy_first_destination",
+      "supported_media_types": ["video"],
+      "input_example": {
+        "work_url": "https://storage.googleapis.com/vidgo-generated/sample/product-scene-hero.mp4",
+        "caption": "Generated with VidGo AI. Paste this link in the YouTube description if needed."
+      },
+      "redirect_url_template": "https://studio.youtube.com/",
+      "expected_action": "Copy work_url first, then open YouTube Studio for video upload."
+    }
+  ]
+}

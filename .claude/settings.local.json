@@ -312,7 +312,23 @@
       "Read(//Users/mlw/Downloads/**)",
       "Bash(git -C /Users/mlw/Desktop/Vidgo_Gen_AI status --short)",
       "Bash(git *)",
-      "Bash(gsutil cp *)"
+      "Bash(gsutil cp *)",
+      "Bash(backend/.venv/bin/python -c ' *)",
+      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/backend/.venv/bin/python -c ' *)",
+      "Bash(python3.12 -c ' *)",
+      "Read(//usr/local/bin/**)",
+      "Read(//Users/mlw/.nvm/**)",
+      "Bash(/usr/bin/curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8501/auth/login)",
+      "Bash(/usr/bin/curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8501/auth/register)",
+      "Bash(/usr/bin/curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8501/auth/reset-password?token=abc)",
+      "Bash(/usr/local/bin/docker compose *)",
+      "Bash(/usr/bin/curl *)",
+      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/playwright --version)",
+      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/python -c \"import playwright; print\\(playwright.__file__\\)\")",
+      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/python *)",
+      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/playwright install *)",
+      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/python3 *)",
+      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/pip install *)"
     ],
     "additionalDirectories": [
       "/private/tmp"

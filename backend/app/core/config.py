@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""             # Gemini API key (preferred; get from aistudio.google.com)
     GEMINI_MODEL: str = "gemini-2.5-pro"  # gemini-2.5-pro is more capable than flash
     GEMINI_IMAGE_MODEL: str = "gemini-2.5-flash-image"
+    GEMINI_PROMPT_REFINEMENT_ENABLED: bool = True
 
     # Vertex AI (GCP) — Imagen for image generation, Veo for video (not available via Gemini API)
     VERTEX_AI_PROJECT: str = ""          # GCP project ID (required for Imagen/Veo only)
@@ -149,6 +150,16 @@ class Settings(BaseSettings):
     # Registration System
     REGISTRATION_BONUS_CREDITS: int = 40   # Credits awarded to new user upon registration
     REGISTRATION_BONUS_DAYS: int = 30      # Days until registration bonus credits expire
+
+    # Abuse prevention / reCAPTCHA
+    RECAPTCHA_SECRET_KEY: str = ""
+    RECAPTCHA_REQUIRED: bool = False
+    ABUSE_REGISTRATION_IP_DAILY_LIMIT: int = 5
+    ABUSE_LOGIN_IP_HOURLY_LIMIT: int = 10
+    ABUSE_GENERATION_USER_PER_MINUTE_LIMIT: int = 10
+
+    # Mock payment completion must never be accidentally available in production.
+    PAYMENT_MOCK_COMPLETION_ENABLED: bool = False
 
     # Referral System
     REFERRAL_BONUS_CREDITS: int = 50       # Credits awarded to referrer per successful referral

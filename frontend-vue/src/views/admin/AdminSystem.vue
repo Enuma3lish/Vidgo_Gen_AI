@@ -103,6 +103,7 @@ function getServiceMessage(key: string, service: { status: string; message?: str
   const status = (service.status || '').toLowerCase()
   const name = getServiceDisplayName(key)
   if (status === 'ok' || status === 'healthy' || status === 'configured') return localized(`${name} 服務正常。`, `${name} is operating normally.`)
+  if (status === 'disabled') return localized(`${name} 已停用（備援用途，可選擇性啟用）。`, `${name} is disabled (optional fallback provider).`)
   if (status === 'error' || status === 'unhealthy') return localized(`${name} 服務異常，已通知管理員檢查。`, `${name} needs attention. Admins have been notified.`)
   return service.message || localized('尚未取得狀態。', 'No status received yet.')
 }

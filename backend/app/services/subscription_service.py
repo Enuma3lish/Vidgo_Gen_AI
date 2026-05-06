@@ -139,14 +139,16 @@ class SubscriptionService:
         # For upgrade or new subscription: cancel existing and activate new
         await self._cancel_existing_subscriptions(db, user_id)
 
-        # Determine if we should use mock mode
-        # Also treat as mock when Paddle keys exist but no price IDs are configured
+        # Determine if we should use explicit direct activation mode.
         paddle_prices_configured = bool(settings.PADDLE_PRICE_IDS)
-        use_mock = skip_payment or (
-            self.paddle.is_mock and payment_method != 'ecpay'
-        ) or (
-            payment_method == 'paddle' and not paddle_prices_configured
-        )
+        use_mock = skip_payment
+
+        if payment_method == 'paddle' and not paddle_prices_configured and not use_mock:
+            logger.error("Paddle checkout requested but PADDLE_PRICE_IDS is not configured")
+            return {
+                "success": False,
+                "error": "Payment checkout is temporarily unavailable"
+            }
 
         if use_mock:
             # Direct activation without payment
@@ -581,8 +583,14 @@ class SubscriptionService:
         price_key = f"{plan.slug or plan.name}_{billing_cycle}"
         price_id = price_map.get(price_key)
         if not price_id:
-            logger.warning(f"No Paddle price ID for {price_key} — falling back to direct activation")
-            return await self._activate_subscription_directly(db, user, plan, billing_cycle)
+            logger.error("No Paddle price ID for %s", price_key)
+            order.status = "failed"
+            order.payment_data["failure_reason"] = "missing_paddle_price_id"
+            await db.commit()
+            return {
+                "success": False,
+                "error": "Payment checkout is temporarily unavailable"
+            }
 
         paddle_result = await self.paddle.create_checkout_session(
             user_id=user.id,
@@ -773,34 +781,10 @@ class SubscriptionService:
                 }
 
             if refund_result.get("success"):
-                # Revoke ALL credits on refund — subscription, purchased,
-                # and bonus credits are all forfeited when the user gets
-                # their money back.
+                # Revoke only subscription credits tied to the refunded
+                # subscription. Purchased and registration/bonus buckets are
+                # separate balances and must not be zeroed by cancellation.
                 await self._revoke_subscription_credits(db, user)
-
-                if user.purchased_credits > 0:
-                    revoked_purchased = user.purchased_credits
-                    db.add(CreditTransaction(
-                        user_id=user.id,
-                        amount=-revoked_purchased,
-                        balance_after=user.total_credits - revoked_purchased,
-                        transaction_type="refund",
-                        description="Purchased credits revoked due to subscription refund",
-                    ))
-                    user.purchased_credits = 0
-                    logger.info(f"Revoked {revoked_purchased} purchased credits from user {user.id}")
-
-                if user.bonus_credits > 0:
-                    revoked_bonus = user.bonus_credits
-                    db.add(CreditTransaction(
-                        user_id=user.id,
-                        amount=-revoked_bonus,
-                        balance_after=user.total_credits - revoked_bonus,
-                        transaction_type="refund",
-                        description="Bonus credits revoked due to subscription refund",
-                    ))
-                    user.bonus_credits = 0
-                    logger.info(f"Revoked {revoked_bonus} bonus credits from user {user.id}")
 
                 # Void the e-invoice associated with this order (if any).
                 # Must be within the current bimonthly tax period; if not,
@@ -1223,20 +1207,35 @@ class SubscriptionService:
         else:
             package_id = payment_data.get("package_id")
             purchased_credits = int(payment_data.get("credits") or 0)
-            if package_id and purchased_credits > 0:
+            bonus_credits = int(payment_data.get("bonus_credits") or 0)
+            if package_id and (purchased_credits > 0 or bonus_credits > 0):
                 user = await db.get(User, order.user_id)
                 if user:
-                    user.purchased_credits = (user.purchased_credits or 0) + purchased_credits
-                    transaction = CreditTransaction(
-                        user_id=user.id,
-                        amount=purchased_credits,
-                        balance_after=user.total_credits,
-                        transaction_type="purchase",
-                        package_id=UUID(str(package_id)),
-                        payment_id=payment_data.get("ecpay_trade_no") or payment_data.get("paddle_transaction_id"),
-                        description=f"Purchased {purchased_credits} credits",
-                    )
-                    db.add(transaction)
+                    payment_id = payment_data.get("ecpay_trade_no") or payment_data.get("paddle_transaction_id")
+                    if purchased_credits > 0:
+                        user.purchased_credits = (user.purchased_credits or 0) + purchased_credits
+                        transaction = CreditTransaction(
+                            user_id=user.id,
+                            amount=purchased_credits,
+                            balance_after=user.total_credits,
+                            transaction_type="purchase",
+                            package_id=UUID(str(package_id)),
+                            payment_id=payment_id,
+                            description=f"Purchased {purchased_credits} credits",
+                        )
+                        db.add(transaction)
+                    if bonus_credits > 0:
+                        user.bonus_credits = (user.bonus_credits or 0) + bonus_credits
+                        transaction = CreditTransaction(
+                            user_id=user.id,
+                            amount=bonus_credits,
+                            balance_after=user.total_credits,
+                            transaction_type="bonus",
+                            package_id=UUID(str(package_id)),
+                            payment_id=payment_id,
+                            description=f"Credit package bonus {bonus_credits} credits",
+                        )
+                        db.add(transaction)
 
         await db.commit()
 

@@ -3,12 +3,15 @@ import apiClient from './client'
 export interface LoginRequest {
   email: string
   password: string
+  recaptcha_token?: string
 }
 
 export interface RegisterRequest {
   email: string
   password: string
   referral_code?: string
+  language?: string
+  recaptcha_token?: string
 }
 
 export interface VerifyCodeRequest {

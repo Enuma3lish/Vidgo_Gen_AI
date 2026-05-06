@@ -31,6 +31,10 @@ class EmailService:
         self.smtp_timeout = settings.SMTP_TIMEOUT_SECONDS
         self.frontend_url = settings.FRONTEND_URL
 
+    def _normalize_language(self, language: Optional[str] = None) -> str:
+        lang = (language or "en").split(",", 1)[0].strip().lower()
+        return "zh-TW" if lang.startswith("zh") else "en"
+
     def _is_configured(self) -> bool:
         """Check if SMTP is configured."""
         # Only require host - user/password optional for local dev (Mailpit)
@@ -298,11 +302,25 @@ If you didn't create an account with VidGo, please ignore this email.
 
         return await self.send_email(to_email, subject, html_content, text_content)
 
-    async def send_verification_code_email(self, to_email: str, code: str, username: Optional[str] = None) -> bool:
+    async def send_verification_code_email(
+        self,
+        to_email: str,
+        code: str,
+        username: Optional[str] = None,
+        language: str = "en",
+    ) -> bool:
         """Send 6-digit verification code email."""
-        subject = "Your VidGo verification code"
+        lang = self._normalize_language(language)
+        is_zh = lang.startswith("zh")
+        subject = "VidGo 電子郵件驗證碼" if is_zh else "Your VidGo verification code"
 
-        greeting = f"Hi {username}," if username else "Hi,"
+        greeting = f"{username} 您好：" if (is_zh and username) else ("您好：" if is_zh else (f"Hi {username}," if username else "Hi,"))
+        header = "VidGo 驗證碼" if is_zh else "VidGo Verification Code"
+        intro = "感謝您註冊 VidGo AI 視覺生成平台。" if is_zh else "Thank you for registering with VidGo - AI Video Generation Platform!"
+        code_label = "您的驗證碼是：" if is_zh else "Your verification code is:"
+        instruction = "請在 VidGo 輸入此驗證碼完成電子郵件驗證。" if is_zh else "Enter this code in the app to verify your email address."
+        expiry = "此驗證碼將於 15 分鐘後失效。" if is_zh else "This code will expire in 15 minutes."
+        ignore = "如果您沒有建立 VidGo 帳戶，請忽略此信。" if is_zh else "If you didn't create an account with VidGo, please ignore this email."
 
         html_content = f"""
         <!DOCTYPE html>
@@ -320,16 +338,16 @@ If you didn't create an account with VidGo, please ignore this email.
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🎬 VidGo Verification Code</h1>
+                    <h1>{header}</h1>
                 </div>
                 <div class="content">
                     <p>{greeting}</p>
-                    <p>Thank you for registering with VidGo - AI Video Generation Platform!</p>
-                    <p>Your verification code is:</p>
+                    <p>{intro}</p>
+                    <p>{code_label}</p>
                     <div class="code-box">{code}</div>
-                    <p style="text-align: center; color: #6b7280;">Enter this code in the app to verify your email address.</p>
-                    <p style="color: #ef4444; font-size: 14px;">⏰ This code will expire in 15 minutes.</p>
-                    <p>If you didn't create an account with VidGo, please ignore this email.</p>
+                    <p style="text-align: center; color: #6b7280;">{instruction}</p>
+                    <p style="color: #ef4444; font-size: 14px;">{expiry}</p>
+                    <p>{ignore}</p>
                 </div>
                 <div class="footer">
                     <p>© 2024 VidGo. All rights reserved.</p>
@@ -342,28 +360,43 @@ If you didn't create an account with VidGo, please ignore this email.
         text_content = f"""
 {greeting}
 
-Thank you for registering with VidGo - AI Video Generation Platform!
+{intro}
 
-Your verification code is: {code}
+{code_label} {code}
 
-Enter this code in the app to verify your email address.
+{instruction}
 
-This code will expire in 15 minutes.
+{expiry}
 
-If you didn't create an account with VidGo, please ignore this email.
+{ignore}
 
 © 2024 VidGo. All rights reserved.
         """
 
         return await self.send_email(to_email, subject, html_content, text_content)
 
-    async def send_password_reset_email(self, to_email: str, token: str, username: Optional[str] = None) -> bool:
+    async def send_password_reset_email(
+        self,
+        to_email: str,
+        token: str,
+        username: Optional[str] = None,
+        language: str = "en",
+    ) -> bool:
         """Send password reset link."""
-        reset_url = f"{self.frontend_url}?reset_password={token}"
+        reset_url = f"{self.frontend_url.rstrip('/')}/auth/reset-password?token={token}"
 
-        subject = "Reset your VidGo password"
+        lang = self._normalize_language(language)
+        is_zh = lang.startswith("zh")
+        subject = "重設您的 VidGo 密碼" if is_zh else "Reset your VidGo password"
 
-        greeting = f"Hi {username}," if username else "Hi,"
+        greeting = f"{username} 您好：" if (is_zh and username) else ("您好：" if is_zh else (f"Hi {username}," if username else "Hi,"))
+        header = "密碼重設" if is_zh else "Password Reset"
+        intro = "我們收到重設您 VidGo 帳戶密碼的請求。" if is_zh else "We received a request to reset your VidGo account password."
+        action = "重設密碼" if is_zh else "Reset Password"
+        copy = "請點擊下方按鈕重設密碼：" if is_zh else "Click the button below to reset your password:"
+        paste = "或複製以下連結並貼到瀏覽器：" if is_zh else "Or copy and paste this link in your browser:"
+        expiry = "此連結將於 1 小時後失效。" if is_zh else "This link will expire in 1 hour."
+        ignore = "如果您沒有要求重設密碼，請忽略此信；若有疑慮請聯絡客服。" if is_zh else "If you didn't request a password reset, please ignore this email or contact support if you have concerns."
 
         html_content = f"""
         <!DOCTYPE html>
@@ -381,19 +414,19 @@ If you didn't create an account with VidGo, please ignore this email.
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🔐 Password Reset</h1>
+                    <h1>{header}</h1>
                 </div>
                 <div class="content">
                     <p>{greeting}</p>
-                    <p>We received a request to reset your VidGo account password.</p>
-                    <p>Click the button below to reset your password:</p>
+                    <p>{intro}</p>
+                    <p>{copy}</p>
                     <p style="text-align: center;">
-                        <a href="{reset_url}" class="button">Reset Password</a>
+                        <a href="{reset_url}" class="button">{action}</a>
                     </p>
-                    <p>Or copy and paste this link in your browser:</p>
+                    <p>{paste}</p>
                     <p style="word-break: break-all; color: #6366f1;">{reset_url}</p>
-                    <p>This link will expire in 1 hour.</p>
-                    <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
+                    <p>{expiry}</p>
+                    <p>{ignore}</p>
                 </div>
                 <div class="footer">
                     <p>© 2024 VidGo. All rights reserved.</p>
@@ -406,25 +439,30 @@ If you didn't create an account with VidGo, please ignore this email.
         text_content = f"""
 {greeting}
 
-We received a request to reset your VidGo account password.
+{intro}
 
-Click the link below to reset your password:
+{copy}
 {reset_url}
 
-This link will expire in 1 hour.
+{expiry}
 
-If you didn't request a password reset, please ignore this email.
+{ignore}
 
 © 2024 VidGo. All rights reserved.
         """
 
         return await self.send_email(to_email, subject, html_content, text_content)
 
-    async def send_welcome_email(self, to_email: str, username: Optional[str] = None) -> bool:
+    async def send_welcome_email(self, to_email: str, username: Optional[str] = None, language: str = "en") -> bool:
         """Send welcome email after successful verification."""
-        subject = "Welcome to VidGo! 🎬"
+        lang = self._normalize_language(language)
+        is_zh = lang.startswith("zh")
+        subject = "歡迎使用 VidGo" if is_zh else "Welcome to VidGo!"
 
-        greeting = f"Hi {username}!" if username else "Hi there!"
+        greeting = f"{username} 您好！" if (is_zh and username) else ("您好！" if is_zh else (f"Hi {username}!" if username else "Hi there!"))
+        header = "歡迎使用 VidGo" if is_zh else "Welcome to VidGo!"
+        activated = "您的電子郵件已驗證完成，帳戶已啟用。" if is_zh else "Your email has been verified and your account is now active!"
+        start_label = "開始創作" if is_zh else "Start Creating"
 
         html_content = f"""
         <!DOCTYPE html>
@@ -443,26 +481,26 @@ If you didn't request a password reset, please ignore this email.
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🎉 Welcome to VidGo!</h1>
+                    <h1>{header}</h1>
                 </div>
                 <div class="content">
                     <p>{greeting}</p>
-                    <p>Your email has been verified and your account is now active!</p>
-                    <p>Here's what you can do with VidGo:</p>
+                    <p>{activated}</p>
+                    <p>{'您可以使用 VidGo 完成以下工作：' if is_zh else "Here's what you can do with VidGo:"}</p>
                     <div class="feature">
-                        <strong>👗 AI Clothing Transform</strong><br>
-                        Transform your photos with stunning AI-generated clothing styles.
+                        <strong>{'AI 商品與服飾視覺' if is_zh else 'AI Product and Fashion Visuals'}</strong><br>
+                        {'用 AI 製作商品場景、模特試穿與商業素材。' if is_zh else 'Create product scenes, try-on visuals, and commercial assets with AI.'}
                     </div>
                     <div class="feature">
-                        <strong>✨ Special Effects</strong><br>
-                        Enhance your images with professional-grade AI effects.
+                        <strong>{'去背與高清放大' if is_zh else 'Background Removal and HD Upscale'}</strong><br>
+                        {'快速整理商品圖並輸出可下載素材。' if is_zh else 'Clean product images quickly and export downloadable assets.'}
                     </div>
                     <div class="feature">
-                        <strong>🎬 Video Generation</strong><br>
-                        Create amazing videos from your images with AI.
+                        <strong>{'短影音與數位人' if is_zh else 'Short Video and Avatar'}</strong><br>
+                        {'把圖片變成短影片，或製作可用於行銷的數位人影片。' if is_zh else 'Turn images into short videos or create marketing-ready avatar clips.'}
                     </div>
                     <p style="text-align: center;">
-                        <a href="{self.frontend_url}" class="button">Start Creating</a>
+                        <a href="{self.frontend_url}" class="button">{start_label}</a>
                     </p>
                 </div>
                 <div class="footer">
@@ -476,13 +514,13 @@ If you didn't request a password reset, please ignore this email.
         text_content = f"""
 {greeting}
 
-Your email has been verified and your account is now active!
+{activated}
 
-Here's what you can do with VidGo:
+{'您可以使用 VidGo 完成以下工作：' if is_zh else "Here's what you can do with VidGo:"}
 
-- AI Clothing Transform: Transform your photos with stunning AI-generated clothing styles.
-- Special Effects: Enhance your images with professional-grade AI effects.
-- Video Generation: Create amazing videos from your images with AI.
+- {'AI 商品與服飾視覺：製作商品場景、模特試穿與商業素材。' if is_zh else 'AI Product and Fashion Visuals: Create product scenes, try-on visuals, and commercial assets.'}
+- {'去背與高清放大：快速整理商品圖並輸出可下載素材。' if is_zh else 'Background Removal and HD Upscale: Clean product images and export downloadable assets.'}
+- {'短影音與數位人：把圖片變成短影片，或製作行銷數位人影片。' if is_zh else 'Short Video and Avatar: Turn images into short videos or create avatar clips.'}
 
 Get started at: {self.frontend_url}
 
@@ -591,7 +629,7 @@ You can view your referral stats from your VidGo dashboard.
                 <div class="content">
                     <p>{greeting}</p>
                     <p>Thank you for your subscription to VidGo!</p>
-                    
+
                     <div class="invoice-box">
                         <div class="invoice-row">
                             <span>Invoice Number</span>
@@ -606,7 +644,7 @@ You can view your referral stats from your VidGo dashboard.
                             <span class="invoice-total">{currency} {amount:.2f}</span>
                         </div>
                     </div>
-                    
+
                     <p style="text-align: center;">
                         <a href="{pdf_url}" class="button">📄 Download PDF Invoice</a>
                     </p>

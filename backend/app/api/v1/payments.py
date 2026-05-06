@@ -57,6 +57,7 @@ async def _ecpay_query_confirms_paid(ecpay_client: ECPayClient, order_number: st
 # PADDLE ENDPOINTS
 # =============================================================================
 
+@router.post("/paddle/checkout/{order_number}")
 @router.post("/paddle/checkout")
 async def create_paddle_checkout(
     order_number: str,
@@ -82,12 +83,17 @@ async def create_paddle_checkout(
     if order.status == "paid":
         raise HTTPException(status_code=400, detail="Order already paid")
 
+    price_id = order.payment_data.get("paddle_price_id")
+    if not paddle_service.is_mock and not price_id:
+        logger.error("Paddle checkout requested for %s without paddle_price_id", order.order_number)
+        raise HTTPException(status_code=503, detail="Payment checkout is temporarily unavailable")
+
     # Create Paddle checkout
     paddle_result = await paddle_service.create_checkout_session(
         user_id=current_user.id,
         user_email=current_user.email,
         plan_id=str(order.payment_data.get("plan_id", "")),
-        price_id=f"pri_{order.order_number}",  # Would be real Paddle price ID
+        price_id=price_id or f"pri_{order.order_number}",
         billing_cycle=order.payment_data.get("billing_cycle", "monthly"),
         success_url=f"{settings.FRONTEND_URL}/payment/success?order={order.order_number}",
         cancel_url=f"{settings.FRONTEND_URL}/payment/cancelled"
@@ -104,6 +110,62 @@ async def create_paddle_checkout(
         "success": True,
         "checkout_url": paddle_result.get("checkout_url"),
         "is_mock": paddle_result.get("is_mock", False)
+    }
+
+
+# =============================================================================
+# ECPAY CHECKOUT ENDPOINTS
+# =============================================================================
+
+@router.post("/ecpay/checkout/{order_number}")
+@router.post("/ecpay/checkout")
+async def create_ecpay_checkout(
+    order_number: str,
+    current_user: User = Depends(deps.get_current_active_user),
+    db: AsyncSession = Depends(deps.get_db),
+):
+    """Create or recreate the ECPay payment form for a pending order."""
+    result = await db.execute(select(Order).where(Order.order_number == order_number))
+    order = result.scalars().first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if order.status == "paid":
+        raise HTTPException(status_code=400, detail="Order already paid")
+    if order.status not in {"pending", "failed"}:
+        raise HTTPException(status_code=400, detail=f"Order cannot be paid from status '{order.status}'")
+
+    if not (settings.ECPAY_MERCHANT_ID and settings.ECPAY_HASH_KEY and settings.ECPAY_HASH_IV):
+        raise HTTPException(status_code=503, detail="ECPay checkout is temporarily unavailable")
+
+    ecpay_client = ECPayClient(
+        merchant_id=settings.ECPAY_MERCHANT_ID,
+        hash_key=settings.ECPAY_HASH_KEY,
+        hash_iv=settings.ECPAY_HASH_IV,
+        payment_url=settings.ECPAY_PAYMENT_URL,
+    )
+    trade_date = (order.created_at or datetime.now()).strftime("%Y/%m/%d %H:%M:%S")
+    frontend_result_url = f"{settings.FRONTEND_URL}/subscription/ecpay-result?order={order.order_number}"
+    form = ecpay_client.create_payment_form(
+        merchant_trade_no=order.order_number,
+        merchant_trade_date=trade_date,
+        total_amount=int(order.amount),
+        trade_desc="VidGo credit purchase" if not order.subscription_id else "VidGo subscription",
+        item_name=order.payment_data.get("item_name") or order.payment_data.get("package_name") or "VidGo order",
+        return_url=f"{settings.BACKEND_URL}/api/v1/payments/ecpay/callback",
+        order_result_url=f"{settings.BACKEND_URL}/api/v1/payments/ecpay/result-redirect",
+        client_back_url=frontend_result_url,
+    )
+    order.payment_method = "ecpay"
+    order.payment_data["ecpay_form_generated_at"] = datetime.now().isoformat()
+    await db.commit()
+
+    return {
+        "success": True,
+        "order_number": order.order_number,
+        "ecpay_form": form,
     }
 
 
@@ -512,12 +574,13 @@ async def mock_complete_payment(
     """
     Mock payment completion for development/testing.
 
-    Only works when Paddle is in mock mode (no API key configured).
+    Only works when Paddle is in mock mode and mock completion has been
+    explicitly enabled.
     """
-    if not paddle_service.is_mock:
+    if not paddle_service.is_mock or not settings.PAYMENT_MOCK_COMPLETION_ENABLED:
         raise HTTPException(
-            status_code=400,
-            detail="Mock payment only available in development mode"
+            status_code=403,
+            detail="Mock payment completion is disabled"
         )
 
     result = await db.execute(

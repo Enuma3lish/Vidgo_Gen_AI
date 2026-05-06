@@ -27,6 +27,12 @@ export const useUIStore = defineStore('ui', () => {
   // Actions
   function setLocale(newLocale: string) {
     locale.value = persistLocale(newLocale)
+    document.documentElement.lang = locale.value
+  }
+
+  function changeLanguageAndSync(newLocale: string) {
+    setLocale(newLocale)
+    window.dispatchEvent(new CustomEvent('vidgo:locale-changed', { detail: { locale: locale.value } }))
   }
 
   function setTheme(newTheme: 'dark' | 'light') {
@@ -88,6 +94,7 @@ export const useUIStore = defineStore('ui', () => {
     toasts,
     // Actions
     setLocale,
+    changeLanguageAndSync,
     setTheme,
     toggleSidebar,
     setGlobalLoading,

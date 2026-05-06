@@ -14,6 +14,8 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=8)
     password_confirm: Optional[str] = None
     referral_code: Optional[str] = None
+    language: Optional[str] = None
+    recaptcha_token: Optional[str] = None
 
 
 class UserUpdate(BaseModel):

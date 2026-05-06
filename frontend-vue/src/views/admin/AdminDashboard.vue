@@ -278,6 +278,9 @@ function providerMessage(providerKey: string, status?: string, message?: string,
   if (normalizedStatus === 'ok' || normalizedStatus === 'healthy' || normalizedStatus === 'configured') {
     return localized(`${label} 服務正常。`, `${label} is operating normally.`)
   }
+  if (normalizedStatus === 'disabled') {
+    return localized(`${label} 已停用（備援用途，可選擇性啟用）。`, `${label} is disabled (optional fallback provider).`)
+  }
   if (normalizedStatus === 'error' || normalizedStatus === 'unhealthy') {
     return localized(`${label} 服務異常，已通知管理員檢查。`, `${label} needs attention. Admins have been notified.`)
   }

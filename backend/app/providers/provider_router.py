@@ -825,7 +825,20 @@ class ProviderRouter:
             ("pollo", self.pollo),
             ("a2e", self.a2e),
         ]
+        # Treat MCP providers as 'disabled' (not an error) when their
+        # underlying MCP server is intentionally not started — this avoids
+        # spamming admin alerts for a deliberately-off optional provider.
+        mcp_disabled = {
+            "piapi_mcp": os.getenv("PIAPI_MCP_ENABLED", "false").lower() not in {"1", "true", "yes", "on"},
+            "pollo_mcp": not os.getenv("POLLO_API_KEY", ""),
+        }
         for name, provider in all_providers:
+            if mcp_disabled.get(name):
+                status[name] = {
+                    "status": "disabled",
+                    "message": f"{name} is disabled (MCP server not enabled)",
+                }
+                continue
             try:
                 is_healthy = await provider.health_check()
                 status[name] = {

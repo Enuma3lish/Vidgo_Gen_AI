@@ -61,10 +61,14 @@ export const userApi = {
   },
 
   downloadGeneration(id: string) {
-    return apiClient.get<string>(`/api/v1/user/generations/${id}/download`, {
+    return apiClient.get<string>(`/api/v1/downloads/${id}`, {
       maxRedirects: 0,
       validateStatus: (status: number) => status >= 200 && status < 400,
     })
+  },
+
+  getDownloadUrl(id: string) {
+    return `/api/v1/downloads/${id}`
   },
 
   getStats() {

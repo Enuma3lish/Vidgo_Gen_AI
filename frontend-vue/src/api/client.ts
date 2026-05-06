@@ -19,6 +19,10 @@ apiClient.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    const locale = localStorage.getItem('locale') || localStorage.getItem('vidgo-locale') || navigator.language || 'en'
+    if (config.headers) {
+      config.headers['Accept-Language'] = locale
+    }
     return config
   },
   (error: AxiosError) => {

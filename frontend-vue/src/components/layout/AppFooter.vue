@@ -29,20 +29,20 @@ const cols: FooterCol[] = [
   {
     titleKey: 'footer.company',
     links: [
-      { href: '#',         key: 'footer.about' },
+      { to: '/about',      key: 'footer.about' },
       { to: '/pricing',    key: 'footer.pricing' },
-      { href: '#',         key: 'footer.contact' },
-      { href: '#',         key: 'footer.blog' },
-      { href: '#',         key: 'footer.affiliate' },
+      { to: '/contact',    key: 'footer.contact' },
+      { to: '/blog',       key: 'footer.blog' },
+      { to: '/affiliate',  key: 'footer.affiliate' },
     ],
   },
   {
     titleKey: 'footer.legal',
     links: [
-      { href: '#', key: 'footer.terms' },
-      { href: '#', key: 'footer.privacy' },
-      { href: '#', key: 'footer.cookies' },
-      { href: '#', key: 'footer.refunds' },
+      { to: '/terms', key: 'footer.terms' },
+      { to: '/privacy', key: 'footer.privacy' },
+      { to: '/cookies', key: 'footer.cookies' },
+      { to: '/refunds', key: 'footer.refunds' },
     ],
   },
 ]
@@ -71,14 +71,14 @@ const visibleCols = computed(() =>
           </RouterLink>
           <p class="text-sm leading-relaxed max-w-xs mb-6 text-secondary">{{ t('footer.tagline') }}</p>
           <div class="flex items-center gap-2">
-            <a href="#" aria-label="Twitter"
+            <a href="https://twitter.com/intent/tweet?url=https%3A%2F%2Fvidgo.ai" target="_blank" rel="noopener noreferrer" aria-label="Twitter"
                class="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200"
                style="background: rgba(255,255,255,0.04); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.06);"
                @mouseenter="($event.currentTarget as HTMLElement).style.background='rgba(245,158,11,0.12)'; ($event.currentTarget as HTMLElement).style.color='#fbbf24'; ($event.currentTarget as HTMLElement).style.borderColor='rgba(245,158,11,0.30)'"
                @mouseleave="($event.currentTarget as HTMLElement).style.background='rgba(255,255,255,0.04)'; ($event.currentTarget as HTMLElement).style.color='var(--text-secondary)'; ($event.currentTarget as HTMLElement).style.borderColor='rgba(255,255,255,0.06)'">
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84"/></svg>
             </a>
-            <a href="#" aria-label="Instagram"
+            <a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer" aria-label="Instagram"
                class="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200"
                style="background: rgba(255,255,255,0.04); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.06);"
                @mouseenter="($event.currentTarget as HTMLElement).style.background='rgba(245,158,11,0.12)'; ($event.currentTarget as HTMLElement).style.color='#fbbf24'; ($event.currentTarget as HTMLElement).style.borderColor='rgba(245,158,11,0.30)'"

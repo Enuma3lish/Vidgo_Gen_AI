@@ -168,9 +168,9 @@ class PromptCache(Base):
     prompt_embedding = Column(JSONB, nullable=True)  # Vector embedding for similarity
 
     # Generated results
-    image_url = Column(String(500), nullable=True)
-    video_url = Column(String(500), nullable=True)
-    video_url_watermarked = Column(String(500), nullable=True)
+    image_url = Column(Text, nullable=True)
+    video_url = Column(Text, nullable=True)
+    video_url_watermarked = Column(Text, nullable=True)
 
     # Matching keywords
     keywords = Column(ARRAY(String), default=[])
@@ -213,10 +213,10 @@ class DemoExample(Base):
     prompt_enhanced = Column(Text, nullable=True)  # Enhanced version
 
     # Generated content
-    image_url = Column(String(500), nullable=False)
-    video_url = Column(String(500), nullable=True)
-    video_url_watermarked = Column(String(500), nullable=True)
-    thumbnail_url = Column(String(500), nullable=True)
+    image_url = Column(Text, nullable=False)
+    video_url = Column(Text, nullable=True)
+    video_url_watermarked = Column(Text, nullable=True)
+    thumbnail_url = Column(Text, nullable=True)
 
     # Metadata
     duration_seconds = Column(Float, default=5.0)
@@ -273,17 +273,17 @@ class ToolShowcase(Base):
 
     # Source content (before)
     # NOTE: nullable=True for TEXT-TO-IMAGE tools (e.g., pattern_generate) that don't need source
-    source_image_url = Column(String(500), nullable=True)  # Original input image (None for text-to-image)
-    source_thumbnail_url = Column(String(500), nullable=True)
+    source_image_url = Column(Text, nullable=True)  # Original input image (None for text-to-image)
+    source_thumbnail_url = Column(Text, nullable=True)
 
     # Prompt used for generation
     prompt = Column(Text, nullable=False)
     prompt_zh = Column(Text, nullable=True)  # Chinese prompt
 
     # Result content (after)
-    result_image_url = Column(String(500), nullable=True)  # For image transformation tools
-    result_video_url = Column(String(500), nullable=True)  # For video generation tools
-    result_thumbnail_url = Column(String(500), nullable=True)
+    result_image_url = Column(Text, nullable=True)  # For image transformation tools
+    result_video_url = Column(Text, nullable=True)  # For video generation tools
+    result_thumbnail_url = Column(Text, nullable=True)
 
     # Display info
     title = Column(String(255), nullable=True)

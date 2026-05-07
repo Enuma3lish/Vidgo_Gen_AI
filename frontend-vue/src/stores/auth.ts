@@ -79,6 +79,20 @@ export const useAuthStore = defineStore('auth', () => {
       if (access && refresh) setTokens(access, refresh)
       user.value = response.user
       pendingEmail.value = null
+      // Fetch the freshly-granted signup bonus credits so the UI shows
+      // the correct balance immediately after email verification (without
+      // requiring a page refresh or password reset).
+      if (user.value && !isAdmin.value) {
+        try {
+          const { useCreditsStore } = await import('./credits')
+          await useCreditsStore().fetchBalance()
+        } catch (e) {
+          console.warn('[auth.verifyCode] credits fetch failed (non-fatal):', e)
+        }
+      } else if (user.value && isAdmin.value) {
+        const { useCreditsStore } = await import('./credits')
+        useCreditsStore().clearBalance()
+      }
       return response
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } }

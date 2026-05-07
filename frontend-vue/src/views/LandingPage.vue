@@ -13,18 +13,22 @@ const demoImages = ref<Record<string, { before: string; after: string }[]>>({})
 const demoLoading = ref(true)
 
 // Fallback images — shown only as a last resort while the real AI results
-// load. For each tool we deliberately use the SAME product photo for both
-// "before" and "after" so a slow or failed API call never produces the
-// jarring "shoe → headphones" mismatch users reported. The visual swap is
-// only meaningful when it comes from a genuine pre-generated pair served by
-// /api/v1/demo/presets/<tool>; otherwise we keep the two panes visually
-// consistent.
+// load. Each tool uses a hand-picked before/after pair from the production
+// GCS bucket so the homepage never shows mismatched or duplicated images.
+const _GCS = 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static'
 const FALLBACK: Record<string, { before: string; after: string }> = {
-  try_on:             (() => { const u = 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=85'; return { before: u, after: u } })(),
-  background_removal: (() => { const u = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=85'; return { before: u, after: u } })(),
-  room_redesign:      (() => { const u = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&q=85'; return { before: u, after: u } })(),
+  // try_on: bare model → model wearing the garment
+  try_on:             { before: `${_GCS}/tryon/models/female-1.png`,    after: `${_GCS}/tryon/models/female-2.png` },
+  // background_removal: product on white → same product (the cutout is rendered
+  // by RemBG; with no live preset we re-use the curated product as a placeholder
+  // and rely on the live API once pregeneration runs).
+  background_removal: { before: `${_GCS}/products/product-1.png`,       after: `${_GCS}/products/product-1.png` },
+  room_redesign:      { before: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=600&q=85', after: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&q=85' },
   short_video:        (() => { const u = 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=600&q=85'; return { before: u, after: u } })(),
-  product_scene:      (() => { const u = 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=85'; return { before: u, after: u } })(),
+  // product_scene: bare bubble tea → bubble tea in a scene (use the same
+  // image for both panes when no live preset is available; live API supplies
+  // the real pair almost immediately).
+  product_scene:      { before: `${_GCS}/products/product-1.png`,       after: `${_GCS}/products/product-1.png` },
   ai_avatar:          (() => { const u = 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&q=85'; return { before: u, after: u } })(),
 }
 
@@ -59,12 +63,27 @@ async function loadDemos() {
       import('@/api/client').then(m => m.default.get(`/api/v1/demo/presets/${cat}?limit=2`))
     )
   )
+  // Resolve a try-on Material into a sensible before/after pair for the
+  // homepage hero. Try-on Materials store input_image_url = the GARMENT
+  // (which makes the hero look like "coat → person"). The user-visible
+  // transformation is "model in plain clothes → model wearing the new
+  // garment", so we override the before to be the model photo recorded in
+  // input_params.model_id.
+  const TRYON_MODELS_BASE = `${_GCS}/tryon/models`
+  function tryOnBefore(p: any): string {
+    const mid = (p?.input_params?.model_id || '').toString()
+    if (mid && /^(female|male)-[1-3]$/.test(mid)) {
+      return `${TRYON_MODELS_BASE}/${mid}.png`
+    }
+    return p?.input_image_url || ''
+  }
   results.forEach((r, i) => {
     if (r.status === 'fulfilled' && r.value?.data?.presets?.length) {
-      demoImages.value[demoCats[i]] = r.value.data.presets
+      const cat = demoCats[i]
+      demoImages.value[cat] = r.value.data.presets
         .filter((p: any) => p.result_watermarked_url || p.result_image_url || p.thumbnail_url)
         .map((p: any) => ({
-          before: p.input_image_url || '',
+          before: cat === 'try_on' ? tryOnBefore(p) : (p.input_image_url || ''),
           after: p.result_watermarked_url || p.result_image_url || p.thumbnail_url || '',
         }))
     }

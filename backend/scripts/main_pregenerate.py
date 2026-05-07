@@ -419,105 +419,117 @@ ROOM_REDESIGN_MAPPING = {
 # PRODUCT SCENE MAPPING
 # ============================================================================
 
+# Product prompt CONTRACT (locked):
+#   [Subject one product] + [Eye-level / 3/4 angle, centered] + [Pure #FFFFFF seamless backdrop]
+#   + [Diffused softbox key light + soft fill, no hot spots, no harsh shadows]
+#   + [Premium e-commerce / commercial advertising photography]
+#   + [Sharp focus, true color, fine surface texture, 8K]
+# Negative anchors: no people, no hands, no text, no watermark, no extra props.
 PRODUCT_SCENE_MAPPING = {
     "products": {
         "product-1": {
             "name": "Bubble Tea",
             "name_zh": "珍珠奶茶",
             "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-1.png",
-            "prompt": "Studio product photo of a clear cup of bubble milk tea with tapioca pearls, centered, clean white background, soft shadows, commercial photography, 8K",
-            "prompt_zh": "棚拍產品照：透明杯珍珠奶茶與黑色珍珠，置中構圖，乾淨白底，柔和陰影，商業攝影，8K"
+            "prompt": "Hero product photograph of a single tall transparent plastic cup of bubble milk tea with glossy black tapioca pearls and condensation droplets, eye-level 3/4 angle, centered composition, pure #FFFFFF seamless backdrop, large diffused softbox key light from upper-left with soft fill, no harsh shadows, no people, no hands, no text, no logos, true color, sharp focus on the pearls, premium beverage e-commerce photography, 8K",
+            "prompt_zh": "極致產品照：單杯透明珍珠奶茶，黑色亮面珍珠與杯壁水珠，3/4 視角置中，純 #FFFFFF 無縫白底，左上柔光箱主光與柔和補光，無硬陰影，無人物、無手、無文字、無 logo，真實色彩、銳利對焦，飲品電商攝影，8K"
         },
         "product-2": {
             "name": "Canvas Tote Bag",
             "name_zh": "帆布托特包",
             "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-2.png",
-            "prompt": "Studio product photo of a natural canvas tote bag with minimalist design, standing upright, clean white background, soft shadows, commercial photography, 8K",
-            "prompt_zh": "棚拍產品照：自然色帆布托特包，簡約設計，直立擺放，乾淨白底，柔和陰影，商業攝影，8K"
+            "prompt": "Hero product photograph of a single natural beige canvas tote bag with minimalist construction, standing upright with handles softly arched, eye-level 3/4 angle, centered composition, pure #FFFFFF seamless backdrop, diffused softbox key light with soft fill, visible canvas weave texture, no people, no hands, no text, no logos, no extra props, premium fashion e-commerce photography, sharp focus, 8K",
+            "prompt_zh": "極致產品照：單個自然米色帆布托特包，提把柔和拱起直立擺放，3/4 視角置中，純 #FFFFFF 無縫白底，柔光箱主光與補光，可見帆布紋理，無人物、無手、無文字、無 logo、無多餘道具，時尚電商攝影，銳利對焦，8K"
         },
         "product-3": {
             "name": "Handmade Jewelry",
             "name_zh": "手工飾品",
             "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-3.png",
-            "prompt": "Studio product photo of handmade silver earrings and bracelet set on velvet display, centered, clean white background, jewelry photography, 8K",
-            "prompt_zh": "棚拍產品照：手工銀耳環與手鍊組合，絨布展示台，置中構圖，乾淨白底，飾品攝影，8K"
+            "prompt": "Hero product photograph of one handmade sterling silver earring and bracelet set arranged on a thin matte ivory display, top-down 45° view, centered composition, pure #FFFFFF seamless backdrop, soft top key light plus rim light revealing fine engraving, no people, no hands, no text, jewelry e-commerce macro photography, true silver tone, ultra-sharp focus on the metal facets, 8K",
+            "prompt_zh": "極致產品照：一組手工純銀耳環與手鍊置於薄象牙色展示墊，45° 俯角置中，純 #FFFFFF 無縫白底，柔頂主光加邊緣光襯出雕花，無人物、無手、無文字，珠寶電商微距攝影，真實銀色，金屬切面極致銳利，8K"
         },
         "product-4": {
             "name": "Skincare Serum",
             "name_zh": "保養精華液",
             "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-4.png",
-            "prompt": "Studio product photo of a glass skincare serum bottle with dropper, clean cosmetics product style, white background, soft glow, 8K",
-            "prompt_zh": "棚拍產品照：玻璃滴管保養精華液瓶，清新保養品風格，乾淨白底，柔光氛圍，8K"
+            "prompt": "Hero product photograph of a single transparent glass skincare serum bottle with glass pipette dropper, label-free, eye-level straight-on view, centered composition, pure #FFFFFF seamless backdrop, large diffused softbox with subtle backlight to enhance liquid translucency, no people, no hands, no text, no logos, premium beauty e-commerce photography, true glass refraction, sharp focus, 8K",
+            "prompt_zh": "極致產品照：單瓶透明玻璃保養精華液附玻璃滴管，無標籤，正面平視置中，純 #FFFFFF 無縫白底，柔光箱主光加微背光提升液體通透感，無人物、無手、無文字、無 logo，美妝電商攝影，真實玻璃折射，銳利對焦，8K"
         },
         "product-5": {
             "name": "Coffee Beans",
             "name_zh": "咖啡豆",
             "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-5.png",
-            "prompt": "Studio product photo of a kraft paper bag of roasted coffee beans with some beans scattered around, centered, clean white background, food product photography, 8K",
-            "prompt_zh": "棚拍產品照：牛皮紙袋裝烘焙咖啡豆，周圍散落數顆咖啡豆，置中構圖，乾淨白底，食品攝影，8K"
+            "prompt": "Hero product photograph of one kraft paper bag of dark-roast coffee beans standing upright with the bag opened, a small spill of glossy whole beans tightly grouped at the base, eye-level 3/4 angle, centered composition, pure #FFFFFF seamless backdrop, soft diffused key light, visible bean oil sheen, no people, no hands, no text, no logos, premium specialty-coffee e-commerce photography, 8K",
+            "prompt_zh": "極致產品照：一袋深焙咖啡豆牛皮紙袋直立微開口，瓶口前緊湊一小堆亮面整顆咖啡豆，3/4 視角置中，純 #FFFFFF 無縫白底，柔和擴散主光，可見豆面油亮光澤，無人物、無手、無文字、無 logo，精品咖啡電商攝影，8K"
         },
         "product-6": {
             "name": "Espresso Machine",
             "name_zh": "義式咖啡機",
             "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-6.png",
-            "prompt": "Studio product photo of a compact stainless steel espresso machine, front angle, clean white background, professional appliance advertising, 8K",
-            "prompt_zh": "棚拍產品照：小型不鏽鋼義式咖啡機，正面角度，乾淨白底，家電廣告風格，8K"
+            "prompt": "Hero product photograph of one compact polished stainless-steel home espresso machine, front-facing eye-level view, centered composition, pure #FFFFFF seamless backdrop, large softbox key light with rim light revealing brushed-metal grain, no people, no hands, no text, no logos, premium small-appliance advertising photography, true metallic reflection, sharp focus, 8K",
+            "prompt_zh": "極致產品照：單台緊湊型亮面不鏽鋼家用義式咖啡機，正面平視置中，純 #FFFFFF 無縫白底，柔光箱主光加邊緣光襯出髮絲紋金屬，無人物、無手、無文字、無 logo，高階小家電廣告攝影，真實金屬反射，銳利對焦，8K"
         },
         "product-7": {
             "name": "Handmade Candle",
             "name_zh": "手工蠟燭",
             "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-7.png",
-            "prompt": "Studio product photo of a handmade soy wax candle in glass jar, centered, clean white background, cozy product advertising, 8K",
-            "prompt_zh": "棚拍產品照：玻璃罐手工大豆蠟燭，置中構圖，乾淨白底，溫馨產品廣告風格，8K"
+            "prompt": "Hero product photograph of one handmade ivory soy candle in a clear thick-walled glass jar, wick visible and unlit, eye-level 3/4 angle, centered composition, pure #FFFFFF seamless backdrop, soft diffused side light revealing wax surface texture and glass thickness, no people, no hands, no text, no logos, premium home-fragrance e-commerce photography, 8K",
+            "prompt_zh": "極致產品照：單個象牙色手工大豆蠟燭裝在厚壁透明玻璃罐，燭芯可見未點燃，3/4 視角置中，純 #FFFFFF 無縫白底，柔和側光襯出蠟面質感與玻璃厚度，無人物、無手、無文字、無 logo，居家香氛電商攝影，8K"
         },
         "product-8": {
             "name": "Gift Box Set",
             "name_zh": "禮盒組合",
             "url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/products/product-8.png",
-            "prompt": "Studio product photo of an elegant gift box set with ribbon bow, assorted small items inside, centered, clean white background, gift product advertising, 8K",
-            "prompt_zh": "棚拍產品照：精美禮盒組合附蝴蝶結緞帶，內含多樣小物，置中構圖，乾淨白底，禮品廣告風格，8K"
+            "prompt": "Hero product photograph of one elegant matte cream gift box tied with a satin ribbon bow, lid slightly ajar to hint at contents, eye-level 3/4 angle, centered composition, pure #FFFFFF seamless backdrop, soft diffused key light from above with gentle fill, no people, no hands, no text, no logos, premium giftware e-commerce photography, sharp focus on ribbon and paper texture, 8K",
+            "prompt_zh": "極致產品照：單個優雅啞光乳白禮盒繫緞帶蝴蝶結，盒蓋微啟暗示內容，3/4 視角置中，純 #FFFFFF 無縫白底，上方柔光主光加柔和補光，無人物、無手、無文字、無 logo，高端禮品電商攝影，緞帶與紙質銳利對焦，8K"
         }
     },
+    # Scene CONTRACT: each scene must describe ONLY the BACKDROP. The product
+    # is composited on top by PIL — so the prompt must end with an explicit
+    # "empty center area for product placement" anchor and forbid props/text
+    # that would overlap the product. Lighting/style language is borrowed from
+    # commercial product-photography references (softbox key + rim/back fill,
+    # premium brand campaign).
     "scenes": {
         "studio": {
             "name": "Studio",
             "name_zh": "攝影棚",
-            "prompt": "professional studio lighting, solid color background, product photography"
+            "prompt": "clean professional photo studio backdrop, smooth pastel grey seamless paper sweep, large softbox key light from upper-left with subtle rim light, soft graduated shadow on the floor, empty center area for product placement, no props, no text, premium commercial product photography, 8K"
         },
         "nature": {
             "name": "Nature",
             "name_zh": "自然",
-            "prompt": "outdoor nature setting, sunlight, leaves, natural environment"
+            "prompt": "outdoor natural backdrop with soft out-of-focus green foliage and warm dappled golden-hour sunlight, shallow depth of field bokeh, clean wooden surface in foreground, empty center area for product placement, no people, no hands, no text, premium lifestyle product photography, 8K"
         },
         "elegant": {
             "name": "Elegant",
             "name_zh": "質感",
-            "prompt": "warm elegant background, cozy lighting, refined atmosphere"
+            "prompt": "refined editorial backdrop in warm taupe and champagne tones, smooth marble surface in foreground, soft directional warm key light with gentle vignette, empty center area for product placement, no props touching the center, no text, luxury brand campaign photography, 8K"
         },
         "minimal": {
             "name": "Minimal",
             "name_zh": "極簡",
-            "prompt": "minimalist abstract background, soft shadows, clean composition"
+            "prompt": "minimalist abstract backdrop with smooth pastel gradient and a single soft architectural shadow, large negative space, diffused even lighting, empty center area for product placement, no props, no text, modern commercial product photography, 8K"
         },
         "lifestyle": {
             "name": "Lifestyle",
             "name_zh": "生活風格",
-            "prompt": "lifestyle home setting, cozy atmosphere, everyday context"
+            "prompt": "warm scandinavian lifestyle home interior backdrop, soft beige linen texture, blurred kitchen background bokeh, gentle morning window light, empty center area on a light wood surface for product placement, no people, no text, premium lifestyle photography, 8K"
         },
         "urban": {
             "name": "Urban",
             "name_zh": "都市",
-            "prompt": "urban city backdrop, modern architecture, street style"
+            "prompt": "out-of-focus modern city street backdrop with soft neon and tungsten bokeh at blue hour, polished concrete surface in foreground, cinematic teal-and-orange color grade, empty center area for product placement, no people, no text, premium urban brand photography, 8K"
         },
         "seasonal": {
             "name": "Seasonal",
             "name_zh": "季節",
-            "prompt": "seasonal autumn leaves background, warm colors, cozy feeling"
+            "prompt": "warm autumn seasonal backdrop with blurred golden maple leaves at the edges, soft warm side light, cozy amber color palette, empty center area on a wooden surface for product placement, no props in the center, no text, premium seasonal campaign photography, 8K"
         },
         "holiday": {
             "name": "Holiday",
             "name_zh": "節日",
-            "prompt": "festive holiday decoration background, christmas lights, celebration"
+            "prompt": "festive holiday backdrop with soft golden fairy-light bokeh and a hint of evergreen at the edges, warm cinematic glow, empty center area for product placement, no people, no text overlays, premium holiday campaign photography, 8K"
         },
         "spring": {
             "name": "Spring Sale",
@@ -559,34 +571,41 @@ PRODUCT_SCENE_MAPPING = {
 # Topics MUST match topic_registry.py:
 # product_showcase, brand_intro, tutorial, promo
 
+# SHORT VIDEO PROMPT CONTRACT (I2V models — Pollo / Kling / Seedance):
+#   [Subject + product context] + [ONE clear motion/action] + [Camera language]
+#   + [Lighting] + [Style + duration] + [Quality: 4K cinematic, 8s]
+# Camera vocabulary: slow push-in, smooth dolly, 360° orbit, top-down reveal,
+# handheld follow, macro close-up. Lighting: golden hour, soft diffused window
+# light, warm tungsten glow, neon rim, dramatic spotlight. Keep ONE motion per
+# clip — multi-shot text confuses I2V models.
 SHORT_VIDEO_MAPPING = {
     "product_showcase": {
         "name": "Product Showcase",
         "name_zh": "產品展示",
         "prompts": [
             {
-                "en": "Cinematic close-up of bubble milk tea being poured, tapioca pearls swirling, appetizing, 4K quality",
-                "zh": "電影級珍珠奶茶沖泡特寫，珍珠旋轉，令人垂涎，4K品質"
+                "en": "Cinematic macro close-up of bubble milk tea being poured into a clear cup, glossy black tapioca pearls swirling slowly while condensation forms on the glass, slow push-in camera, soft warm key light with subtle rim, shallow depth of field, appetizing beverage commercial style, 4K cinematic, 8s",
+                "zh": "電影級微距特寫：珍珠奶茶緩緩倒入透明杯，黑色亮面珍珠緩慢旋轉，杯壁凝結水珠，鏡頭緩緩推近，柔和暖色主光加微邊緣光，淺景深，令人垂涎的飲品廣告風格，4K 電影質感，8秒"
             },
             {
-                "en": "Fresh fried chicken cutlet being sliced open, steam rising, crispy golden crust, food commercial",
-                "zh": "新鮮炸雞排切開特寫，蒸氣上升，金黃酥脆外皮，美食廣告"
+                "en": "Slow-motion cinematic shot of a fresh fried Taiwanese chicken cutlet being sliced open, steam slowly rising into warm light, crispy golden crust glistening, side dolly camera, warm overhead key light, shallow depth of field, food commercial style, 4K cinematic, 8s",
+                "zh": "電影級慢動作:新鮮炸雞排被切開,蒸氣緩緩升入暖光,金黃酥脆外皮閃亮,鏡頭側面推移,上方暖色主光,淺景深,美食廣告風格,4K 電影質感,8秒"
             },
             {
-                "en": "Colorful fruit tea with ice cubes and fresh fruits, condensation drops on cup, refreshing drink ad",
-                "zh": "色彩繽紛水果茶加冰塊和新鮮水果，杯身水珠，清涼飲料廣告"
+                "en": "Cinematic close-up of a colorful fruit tea cup with ice cubes and fresh lemon slices, water droplets sliding down the glass, slow 30° orbit camera, bright daylight from a window with cool fill, refreshing beverage commercial mood, 4K cinematic, 8s",
+                "zh": "電影級特寫:色彩繽紛水果茶杯,裝有冰塊與鮮檸檬片,杯壁水珠滑落,鏡頭 30° 緩慢環繞,明亮窗光加冷調補光,清涼飲品廣告氛圍,4K 電影質感,8秒"
             },
             {
-                "en": "Smartphone rotating on a clean pedestal, studio lighting, tech product showcase",
-                "zh": "智慧型手機在底座上旋轉，攝影棚打光，科技產品展示"
+                "en": "Sleek tech product reveal of a smartphone on a polished pedestal, slow 360° orbit camera, dramatic single key spotlight from above with cool rim light, deep matte-black backdrop, premium tech commercial style, 4K cinematic, 8s",
+                "zh": "科技產品揭幕:智慧型手機置於亮面底座,鏡頭 360° 緩慢環繞,上方單一聚光加冷調邊緣光,深黑啞光背景,高階科技廣告風格,4K 電影質感,8秒"
             },
             {
-                "en": "Running sneakers on clean studio floor, dynamic spotlight, sporty product commercial",
-                "zh": "跑步運動鞋在乾淨棚拍地面上，動感聚光，運動產品廣告"
+                "en": "Dynamic side-tracking shot of running sneakers on a clean studio floor, fine dust slowly lifting around the soles, dramatic top spotlight with subtle haze, energetic sport-brand commercial style, shallow depth of field, 4K cinematic, 8s",
+                "zh": "動感側跟拍:跑步運動鞋置於乾淨棚內地面,鞋底周圍緩慢揚起微塵,上方聚光加一絲霧感,動感運動品牌廣告風格,淺景深,4K 電影質感,8秒"
             },
             {
-                "en": "Glass skincare serum bottle with soft glow, clean beauty product showcase, small business",
-                "zh": "玻璃保養精華瓶柔光呈現，美妝產品展示，小店風格"
+                "en": "Beauty commercial close-up of a clear glass skincare serum bottle with pipette dropper releasing one slow droplet of golden serum, slow push-in camera, soft diffused side light with subtle backlight on glass, clean cosmetic shop style, 4K cinematic, 8s",
+                "zh": "美妝廣告特寫:透明玻璃保養精華液瓶加滴管,釋出一滴金色精華緩緩墜落,鏡頭緩緩推近,柔化側光加玻璃背光,乾淨小店美妝風格,4K 電影質感,8秒"
             }
         ]
     },
@@ -595,28 +614,28 @@ SHORT_VIDEO_MAPPING = {
         "name_zh": "品牌介紹",
         "prompts": [
             {
-                "en": "Cozy drink shop interior, barista preparing beverage behind counter, warm lighting, brand story",
-                "zh": "溫馨飲料店內景，店員在吧台準備飲品，溫暖光線，品牌故事"
+                "en": "Cozy drink shop interior at golden hour, smiling barista preparing a beverage behind a wooden counter, slow handheld dolly toward the counter, warm tungsten key light with soft window backlight, shallow depth of field, authentic small-shop brand-story style, 4K cinematic, 8s",
+                "zh": "黃昏溫馨飲料店內景:微笑店員在木質吧台後調製飲品,手持鏡頭緩慢推向吧台,暖色鎢絲主光加柔和窗光背光,淺景深,真實小店品牌故事風格,4K 電影質感,8秒"
             },
             {
-                "en": "Night market food stall, chef cooking with wok fire, authentic street food atmosphere, brand video",
-                "zh": "夜市小吃攤，廚師鍋火翻炒，道地街頭美食氛圍，品牌影片"
+                "en": "Bustling Taiwanese night-market food stall at night, chef tossing ingredients in a flaming wok, smooth side-tracking camera, neon sign and warm flame as key light, slight motion blur on flames, authentic street-food brand video, 4K cinematic, 8s",
+                "zh": "夜間熱鬧的台灣夜市小吃攤:廚師在火焰鐵鍋中翻炒,鏡頭平穩側跟,霓虹招牌與火焰為主光,火焰微輕動態模糊,道地街頭美食品牌影片,4K 電影質感,8秒"
             },
             {
-                "en": "Small bakery kitchen, fresh bread coming out of oven, artisan craftsmanship, warm atmosphere",
-                "zh": "小型烘焙廚房，新鮮麵包出爐，手工匠心，溫暖氛圍"
+                "en": "Warm bakery kitchen at sunrise, a baker pulling a tray of fresh bread out of an oven, steam rising softly, slow push-in camera at chest level, golden window light with warm tungsten fill, artisan craft brand-story style, 4K cinematic, 8s",
+                "zh": "日出時的溫馨烘焙廚房,麵包師僅出一盤鮮烘麵包,蒸氣緩緩升起,胸口高度鏡頭推近,金色窗光加暖色鎢絲補光,手工匠心品牌故事風格,4K 電影質感,8秒"
             },
             {
-                "en": "Modern tech startup office, team collaborating around prototypes, clean minimal brand intro",
-                "zh": "現代科技新創辦公室，團隊圍繞原型協作，清爽極簡品牌介紹"
+                "en": "Modern minimal tech startup office, a small team gathered around a glowing prototype on a clean desk, slow horizontal slider camera, bright soft daylight with cool fill, clean corporate brand intro style, 4K cinematic, 8s",
+                "zh": "現代極簡科技新創辦公室,小型團隊圍繞桌上發光原型,鏡頭水平緩推,明亮柔和日光加冷調補光,乾淨企業品牌介紹風格,4K 電影質感,8秒"
             },
             {
-                "en": "Cosmetics studio with glass bottles and soft light, small business beauty brand introduction",
-                "zh": "美妝工作室玻璃瓶與柔光氛圍，美妝小店品牌介紹"
+                "en": "Cosmetics studio with rows of glass serum bottles on a marble shelf, slow lateral dolly camera revealing the product line, soft diffused key with subtle backlight on glass, premium small-business beauty brand intro, 4K cinematic, 8s",
+                "zh": "美妝工作室內大理石架上排列玻璃精華瓶,鏡頭緩慢橫推揭示全系列,柔化主光加玻璃背光,高階小店美妝品牌介紹,4K 電影質感,8秒"
             },
             {
-                "en": "Furniture showroom with modern sofa and warm lighting, lifestyle brand introduction",
-                "zh": "家具展示間現代沙發與暖光氛圍，生活風格品牌介紹"
+                "en": "Modern furniture showroom with a stylish sofa under a tall window, slow wide-angle dolly-in camera, warm golden afternoon light with long soft shadows on the floor, premium lifestyle brand intro style, 4K cinematic, 8s",
+                "zh": "現代家具展示廳,高窗下的設計感沙發,鏡頭廣角緩慢推入,下午金色陽光與地面柔長陰影,高階生活品牌介紹風格,4K 電影質感,8秒"
             }
         ]
     },
@@ -625,24 +644,24 @@ SHORT_VIDEO_MAPPING = {
         "name_zh": "教學影片",
         "prompts": [
             {
-                "en": "Step by step bubble tea preparation, adding tapioca and milk, clear instruction video style",
-                "zh": "珍珠奶茶製作步驟，加入珍珠和牛奶，清晰教學影片風格"
+                "en": "Top-down overhead tutorial shot of bubble tea preparation on a clean wood counter, hands adding tapioca pearls and pouring milk into a clear cup, fixed overhead camera, soft even daylight, clear instructional style, 4K cinematic, 8s",
+                "zh": "頂部俯拍教學鏡頭:乾淨木桌上製作珍珠奶茶,雙手加入珍珠並倒入牛奶至透明杯,鏡頭固定俯拍,柔和均勻日光,清晰教學風格,4K 電影質感,8秒"
             },
             {
-                "en": "Cooking tutorial, stir frying noodles in wok, step by step food preparation video",
-                "zh": "烹飪教學，鍋中翻炒麵條，步驟式食物準備影片"
+                "en": "Cooking tutorial macro shot of stir-frying noodles in a hot wok, ingredients tossing in mid-air with steam, slow side push-in camera, warm overhead kitchen light, appetizing instructional style, 4K cinematic, 8s",
+                "zh": "烹飪教學微距鏡頭:熱鐵鍋中翻炒麵條,食材與蒸氣縱身中空,鏡頭側面緩推,上方暖色廚房光,令人垂涎的教學風格,4K 電影質感,8秒"
             },
             {
-                "en": "Cake decorating tutorial, piping cream on dessert, close-up bakery tutorial video",
-                "zh": "蛋糕裝飾教學，在甜點上擠奶油，特寫烘焙教學影片"
+                "en": "Top-down close-up of cake decorating, hands piping a smooth swirl of cream onto a dessert, slow downward push-in camera, soft diffused overhead light, clean bakery tutorial style, 4K cinematic, 8s",
+                "zh": "蛋糕裝飾頂部特寫:雙手在甜點上擠出平滑奶油旋漿,鏡頭緩緩向下推近,柔和擴散頂光,乾淨烘焙教學風格,4K 電影質感,8秒"
             },
             {
-                "en": "Skincare routine tutorial, applying serum and moisturizer, clean bathroom counter, step by step",
-                "zh": "保養步驟教學，塗抹精華與乳霜，乾淨洗手台，逐步示範"
+                "en": "Skincare tutorial close-up on a clean bathroom counter, hands applying serum to fingertips and dabbing onto skin, slow lateral push-in camera, soft window daylight, clean beauty instructional style, 4K cinematic, 8s",
+                "zh": "保養教學特寫:乾淨洗手台上,雙手將精華液萃於指尖並輕點於肌膚,鏡頭緩慢側面推近,柔和窗光,乾淨美妝教學風格,4K 電影質感,8秒"
             },
             {
-                "en": "New gadget unboxing tutorial, hands opening smart device box, close-up product setup",
-                "zh": "新品開箱教學，雙手拆開智慧裝置包裝，產品設定特寫"
+                "en": "Top-down unboxing tutorial of a smart device, hands lifting the lid and unfolding accessories, slow downward push-in camera, bright soft daylight, clean tech tutorial style, 4K cinematic, 8s",
+                "zh": "智慧裝置頂部開箱教學,雙手掠開盒蓋並展開配件,鏡頭緩緩向下推近,明亮柔和日光,乾淨科技教學風格,4K 電影質感,8秒"
             }
         ]
     },
@@ -651,24 +670,24 @@ SHORT_VIDEO_MAPPING = {
         "name_zh": "促銷廣告",
         "prompts": [
             {
-                "en": "Buy one get one free drink promotion, two cups of colorful beverages, festive discount graphics",
-                "zh": "買一送一飲料促銷，兩杯色彩繽紛飲品，節慶折扣圖形"
+                "en": "Bright cheerful buy-one-get-one drink promotion, two colorful beverages clinking together with a small splash, slow push-in camera, soft pastel background with confetti bokeh, festive sale commercial style, 4K cinematic, 8s",
+                "zh": "明亮歡樂的買一送一飲料促銷:兩杯色彩飲品輕碰並濺起小水花,鏡頭緩緩推近,柔和粉彩背景加彩餘背光虛焦,節慶特賣廣告風格,4K 電影質感,8秒"
             },
             {
-                "en": "New menu item launch, delicious food reveal with spotlight, appetizing anticipation",
-                "zh": "新菜單品項上市，聚光燈下美食揭幕，令人期待的美味"
+                "en": "New menu item launch reveal, a covered plate slowly lifted to reveal a steaming new dish, slow push-in camera, dramatic single overhead spotlight with warm rim, anticipation-building food commercial style, 4K cinematic, 8s",
+                "zh": "新菜單品項上市揭幕:一個有蓋的盤子緩緩揭起露出冒煙新菜,鏡頭緩推,上方單一聚光加暖色邊緣光,思令人期待的美食廣告風格,4K 電影質感,8秒"
             },
             {
-                "en": "Summer special cold drinks promotion, ice and fruits splashing, refreshing seasonal offer",
-                "zh": "夏季特飲促銷，冰塊和水果飛濺，清涼季節性優惠"
+                "en": "Summer special cold drink promotion, ice cubes and fruit slices splashing into a tall glass in slow motion, slow side push-in camera, bright cool daylight with strong rim, refreshing seasonal sale style, 4K cinematic, 8s",
+                "zh": "夏日冷飲特品促銷:冰塊與水果片慢動作濺入高杯,鏡頭側面緩推,明亮冷調日光加強邊緣光,清涼季節特賣風格,4K 電影質感,8秒"
             },
             {
-                "en": "Limited-time sneaker sale, dynamic motion graphics, sporty lifestyle promotion",
-                "zh": "限時運動鞋特賣，動感圖形，運動生活風促銷"
+                "en": "Limited-time sneaker sale promotion, a pair of sneakers spinning on a glowing platform with subtle motion lines, slow 360° orbit camera, dynamic spotlights with cool rim, energetic sport-promo style, 4K cinematic, 8s",
+                "zh": "限時運動鞋特賣促銷:一雙運動鞋在發光平台上旋轉並伴隨微動態線條,鏡頭 360° 緩慢環繞,動感聚光加冷調邊緣光,活力充沛的運動促銷風格,4K 電影質感,8秒"
             },
             {
-                "en": "Home appliance discount event, modern espresso machine in spotlight, limited-time offer",
-                "zh": "家電折扣活動，現代義式咖啡機聚光展示，限時優惠"
+                "en": "Home appliance discount event reveal, a polished espresso machine on a pedestal slowly rotating, slow 360° orbit camera, dramatic single key spotlight with cool rim on metal, premium limited-time promo style, 4K cinematic, 8s",
+                "zh": "家電折扣活動揭幕:亮面義式咖啡機在底座上緩緩旋轉,鏡頭 360° 緩慢環繞,上方單一聚光加金屬冷調邊緣光,高階限時促銷風格,4K 電影質感,8秒"
             }
         ]
     }
@@ -851,6 +870,11 @@ TRYON_MAPPING = {
 # ============================================================================
 
 # Pattern designs for common business use: packaging, branding, textiles, menus, social media
+# Pattern PROMPT CONTRACT: [pattern type] + [motif vocabulary] + [color palette]
+# + [stroke / texture quality] + [layout: seamless / centered / mosaic]
+# + [use case: packaging / menu / social] + [quality tail: 8K, vector-clean].
+# Always anchor with "flat 2D pattern" or "seamless tile" so the model does not
+# hallucinate a 3D scene.
 PATTERN_GENERATE_MAPPING = {
     "styles": {
         "seamless": {
@@ -858,12 +882,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "無縫圖案",
             "prompts": [
                 {
-                    "en": "Elegant floral pattern for packaging and gift wrap, rose and navy, brand-friendly, seamless tile",
-                    "zh": "禮品包裝與品牌用優雅花卉圖案，玫瑰與深藍色，無縫磁磚"
+                    "en": "Flat 2D seamless tile pattern, elegant rose and peony floral motif with thin gold linework, deep navy and dusty rose palette, evenly distributed repeating layout, packaging and gift-wrap ready, vector-clean, 8K",
+                    "zh": "平面 2D 無縫磁磚圖案，玫瑰與牡丹花卉紋飾配細金線，深藍與粉藕配色，均勻分布重複排版，適用於禮品包裝與品牌，向量清晰，8K"
                 },
                 {
-                    "en": "Japanese wave pattern for menu border and restaurant branding, navy and white, seamless",
-                    "zh": "菜單邊框與餐飲品牌用日式波浪紋，深藍與白，無縫重複"
+                    "en": "Flat 2D seamless tile pattern, traditional Japanese seigaiha wave motif with crisp uniform arcs, deep indigo and white palette, perfectly tiling repeat, restaurant menu and branding ready, vector-clean, 8K",
+                    "zh": "平面 2D 無縫磁磚圖案，傳統日式青海波紋，弧線銳利統一，深藍與白配色，完美無縫重複，適用於餐飲菜單與品牌，向量清晰，8K"
                 }
             ]
         },
@@ -872,12 +896,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "花卉圖案",
             "prompts": [
                 {
-                    "en": "Cherry blossom pattern for cafe and bakery branding, soft pink and white, social media ready",
-                    "zh": "咖啡廳與烘焙品牌用水彩櫻花圖案，粉白色，適合社群貼文"
+                    "en": "Flat 2D watercolor cherry-blossom pattern, soft loose petal brushwork with visible paper texture, blush pink and ivory palette, scattered organic layout, cafe and bakery branding, social-post ready, 8K",
+                    "zh": "平面 2D 水彩櫻花圖案，鬆散花瓣筆觸帶紙張紋理，粉嫩與象牙白配色，散落式有機排版，咖啡廳與烘焙品牌，適用社群貼文，8K"
                 },
                 {
-                    "en": "Tropical palm pattern for beverage and summer promo, green and gold, packaging and ads",
-                    "zh": "飲料與夏季促銷用熱帶棕櫚無縫圖案，綠金配色，包裝與廣告"
+                    "en": "Flat 2D tropical palm pattern, crisp dark-green monstera and palm fronds with thin gold outline accents, jungle green and champagne gold palette, dense repeat layout, beverage and summer-promo packaging, vector-clean, 8K",
+                    "zh": "平面 2D 熱帶棕櫚圖案，清晰深綠龜背芋與棕櫚葉配細金線點綴，叢林綠與香檳金配色，密集重複排版，飲料與夏季促銷包裝，向量清晰，8K"
                 }
             ]
         },
@@ -886,12 +910,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "幾何圖案",
             "prompts": [
                 {
-                    "en": "Modern geometric pattern for tech and retail branding, triangles black and gold, professional look",
-                    "zh": "科技與零售品牌用現代幾何圖案，黑金三角形，高級感"
+                    "en": "Flat 2D modern geometric pattern, interlocking equilateral triangles with metallic gold-foil accents, matte black and gold palette, mathematically precise tiling, premium tech and retail branding, vector-clean, 8K",
+                    "zh": "平面 2D 現代幾何圖案，等邊三角形交錯配金箔點綴，啞光黑與金配色，數學精準鋪排，高階科技與零售品牌，向量清晰，8K"
                 },
                 {
-                    "en": "Art deco golden lines for shop product packaging and decor, hexagonal, seamless",
-                    "zh": "商品包裝與店面裝飾用裝飾藝術金線圖案，六角形，無縫"
+                    "en": "Flat 2D art-deco hexagon pattern, slim gold linework with sunburst details, ivory and champagne-gold palette, perfectly tiling honeycomb layout, luxury packaging and decor, vector-clean, 8K",
+                    "zh": "平面 2D 裝飾藝術六角圖案，細金線配旭日紋細節，象牙與香檳金配色，完美鋪排蜂巢佈局，高階包裝與裝飾，向量清晰，8K"
                 }
             ]
         },
@@ -900,12 +924,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "抽象圖案",
             "prompts": [
                 {
-                    "en": "Marble texture pattern for cosmetics and skincare packaging, gold veins, professional brand",
-                    "zh": "美妝保養品包裝用大理石紋理圖案，金色紋路，品牌感"
+                    "en": "Flat 2D marble texture pattern, organic flowing veins with thin metallic gold streaks, ivory white and warm gold palette, large-scale luxury surface, cosmetics and skincare packaging, vector-clean, 8K",
+                    "zh": "平面 2D 大理石紋理圖案，有機流動紋理配細金屬金線，象牙白與暖金配色，大尺度奢華表面，美妝保養品包裝，向量清晰，8K"
                 },
                 {
-                    "en": "Vibrant abstract pattern for social media posts and flyers, watercolor style, small business",
-                    "zh": "社群貼文與傳單用鮮豔抽象圖案，水彩風格，小商家適用"
+                    "en": "Flat 2D vibrant abstract watercolor pattern, soft splashes and ink bleeds with visible paper grain, coral pink teal and mustard palette, organic scattered layout, social-media posts and flyers for small business, 8K",
+                    "zh": "平面 2D 鮮豔抽象水彩圖案，柔和潑墨與墨色暈染帶紙張紋理，珊瑚粉湖藍與芥末黃配色，有機散落排版，小商家社群貼文與傳單，8K"
                 }
             ]
         },
@@ -914,12 +938,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "傳統紋樣",
             "prompts": [
                 {
-                    "en": "Chinese cloud pattern for restaurant and festival branding, red and gold, auspicious",
-                    "zh": "餐飲與節慶品牌用中國雲紋，紅金配色，吉祥設計"
+                    "en": "Flat 2D traditional Chinese auspicious cloud (xiangyun) pattern with bat and longevity motifs, crimson red and metallic gold palette, evenly tiled symmetrical layout, restaurant and Lunar New Year branding, vector-clean, 8K",
+                    "zh": "平面 2D 中國傳統祥雲圖案搭配蝙蝠與壽字紋，朱紅與金屬金配色，均勻對稱鋪排，餐飲與農曆新年品牌，向量清晰，8K"
                 },
                 {
-                    "en": "Japanese wave pattern for tea and beverage packaging, blue gradient, traditional motif",
-                    "zh": "茶飲與飲料包裝用日式青海波紋，藍色漸層，傳統紋樣"
+                    "en": "Flat 2D Japanese seigaiha wave pattern, soft indigo gradient arcs on rice-paper texture, traditional motif with calm rhythmic tiling, tea and beverage packaging, vector-clean, 8K",
+                    "zh": "平面 2D 日式青海波紋圖案，柔和藍靛漸層弧線於宣紙紋理上，傳統紋樣帶平靜韻律鋪排，茶飲與飲料包裝，向量清晰，8K"
                 }
             ]
         },
@@ -928,12 +952,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "3D圖案",
             "prompts": [
                 {
-                    "en": "3D embossed pattern for gift box and bakery packaging, raised geometric shapes, metallic finish, polished small-business brand",
-                    "zh": "禮盒與烘焙包裝用3D浮雕圖案，凸起幾何形狀，金屬光澤，精緻小品牌風格"
+                    "en": "3D-rendered embossed pattern, raised geometric diamond shapes on a soft champagne-gold metallic surface, soft directional lighting revealing depth and bevel, premium gift-box and bakery packaging surface, ultra-detailed, 8K",
+                    "zh": "3D 浮雕圖案，凸起幾何菱形於柔和香檳金金屬表面，方向性柔光呈現深度與斜角，高階禮盒與烘焙包裝表面，超精細，8K"
                 },
                 {
-                    "en": "3D isometric pattern for tech product branding, cubes and blocks, modern digital aesthetic",
-                    "zh": "科技產品品牌用3D等角圖案，立方體與方塊，現代數位美學"
+                    "en": "3D isometric pattern of pastel-tone cubes and stacked blocks, soft global illumination with subtle shadows, mint pink and lavender palette, modern digital tech-brand aesthetic, ultra-clean render, 8K",
+                    "zh": "3D 等角圖案：粉彩立方與堆疊方塊，柔和全局光與細微陰影，薄荷粉與薰衣草配色，現代數位科技品牌美學，超乾淨渲染，8K"
                 }
             ]
         },
@@ -942,12 +966,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "室內裝飾圖案",
             "prompts": [
                 {
-                    "en": "Wallpaper pattern for cafe and restaurant interior, botanical leaves, earthy tones, cozy atmosphere",
-                    "zh": "咖啡廳與餐廳室內壁紙圖案，植物葉片，大地色系，溫馨氛圍"
+                    "en": "Flat 2D botanical wallpaper pattern, hand-illustrated monstera and fern leaves with thin organic linework, sage green and warm terracotta palette, evenly tiling layout, cafe and restaurant interior surface, 8K",
+                    "zh": "平面 2D 植物壁紙圖案，手繪龜背芋與蕨葉配細有機線條，鼠尾草綠與暖陶土配色，均勻鋪排，咖啡廳與餐廳室內表面，8K"
                 },
                 {
-                    "en": "Tile pattern for bakery and dessert shop floor, geometric mosaic, pastel colors, vintage charm",
-                    "zh": "烘焙與甜點店地板磁磚圖案，幾何馬賽克，粉彩色系，復古魅力"
+                    "en": "Flat 2D vintage encaustic floor-tile pattern, geometric mosaic with soft pastel terrazzo flecks, mint pink and cream palette, perfectly tiling 4×4 layout, bakery and dessert-shop floor design, 8K",
+                    "zh": "平面 2D 復古花磚圖案，幾何馬賽克配柔粉彩水磨石點綴，薄荷粉與奶油色配色，完美 4×4 鋪排，烘焙與甜點店地板設計，8K"
                 }
             ]
         },
@@ -956,12 +980,12 @@ PATTERN_GENERATE_MAPPING = {
             "name_zh": "產品展示圖案",
             "prompts": [
                 {
-                    "en": "Product packaging mockup pattern for gift box and shopping bag, elegant brand identity, clean design",
-                    "zh": "禮盒與購物袋產品包裝展示圖案，優雅品牌識別，乾淨設計"
+                    "en": "Flat 2D packaging surface pattern, elegant blank label silhouettes (gift box and shopping bag) on a soft cream backdrop, minimalist brand identity layout with thin gold accent lines, clean printable mockup, 8K",
+                    "zh": "平面 2D 包裝表面圖案：奶油色背景上的優雅空白標籤輪廓（禮盒與購物袋），極簡品牌識別排版配細金點綴，乾淨可印製樣板，8K"
                 },
                 {
-                    "en": "Label and sticker mockup pattern for food and beverage products, round and rectangular shapes, craft style",
-                    "zh": "食品與飲料產品標籤貼紙展示圖案，圓形與矩形，手作風格"
+                    "en": "Flat 2D label and sticker mockup pattern, rounded and rectangular blank tags arranged in a grid, kraft paper texture with hand-stamped craft accents, food and beverage labelling layout, 8K",
+                    "zh": "平面 2D 標籤與貼紙樣板圖案：圓形與矩形空白標籤格狀排列，牛皮紙紋理配手作印戳點綴，食品與飲料標籤排版，8K"
                 }
             ]
         }
@@ -994,19 +1018,22 @@ EFFECT_MAPPING = {
         {"product_id": "product-7", "name": "Handmade Candle",  "name_zh": "手工蠟燭",  "url": f"{_GCS_PRODUCTS}/product-7.png", "topic": "handmade"},
         {"product_id": "product-8", "name": "Gift Box Set",     "name_zh": "禮盒組合",  "url": f"{_GCS_PRODUCTS}/product-8.png", "topic": "gifts"},
     ],
-    # Style IDs must match backend/app/services/effects_service.py VIDGO_STYLES
+    # Style prompts describe ONLY the art style applied to the source image —
+    # they MUST NOT mention products. Each prompt is a JSON-style aesthetics
+    # block: [medium / technique] + [color palette] + [line / brush quality]
+    # + [lighting] + [mood]. Strength is the I2I influence.
     "styles": {
-        "anime":         {"name": "Anime",          "name_zh": "動漫風格", "prompt": "anime style illustration for social media and ads",                            "strength": 0.65},
-        "ghibli":        {"name": "Ghibli",         "name_zh": "吉卜力風格", "prompt": "studio ghibli anime style for menu and cafe branding, hayao miyazaki",       "strength": 0.65},
-        "cartoon":       {"name": "Cartoon",        "name_zh": "卡通風格", "prompt": "cartoon pixar 3d style for product ads and flyers",                           "strength": 0.60},
-        "clay":          {"name": "Clay",           "name_zh": "黏土動畫", "prompt": "claymation stop motion clay style for product and food ads",                  "strength": 0.65},
-        "cute_anime":    {"name": "Cute Anime",     "name_zh": "可愛動漫", "prompt": "cute kawaii anime style for social media and shop ads",                        "strength": 0.65},
-        "oil_painting":  {"name": "Oil Painting",   "name_zh": "油畫風格", "prompt": "oil painting artistic style for brand and restaurant marketing",               "strength": 0.70},
-        "watercolor":    {"name": "Watercolor",     "name_zh": "水彩風格", "prompt": "watercolor soft style for menu design and boutique branding",                  "strength": 0.65},
-        "cyberpunk":     {"name": "Cyberpunk",      "name_zh": "賽博朋克", "prompt": "cyberpunk neon futuristic style for tech product ads",                         "strength": 0.65},
-        "realistic":     {"name": "Realistic",      "name_zh": "寫實風格", "prompt": "realistic photorealistic style for product and food ads",                      "strength": 0.55},
-        "cinematic":     {"name": "Cinematic",      "name_zh": "電影質感", "prompt": "cinematic movie style for brand and product video ads",                        "strength": 0.60},
-        "anime_classic": {"name": "Anime Classic",  "name_zh": "經典動漫", "prompt": "classic anime style for menu and product marketing",                           "strength": 0.65},
+        "anime":         {"name": "Anime",          "name_zh": "動漫風格", "prompt": "modern Japanese anime illustration, clean cel-shading with soft gradients, vibrant saturated palette, crisp ink outlines, bright key light with subtle rim, energetic commercial mood",                  "strength": 0.65},
+        "ghibli":        {"name": "Ghibli",         "name_zh": "吉卜力風格", "prompt": "Studio Ghibli hand-painted anime style, soft warm pastel palette, gentle watercolor brushwork on backgrounds, golden afternoon natural lighting, nostalgic peaceful mood, Hayao Miyazaki aesthetics",                "strength": 0.65},
+        "cartoon":       {"name": "Cartoon",        "name_zh": "卡通風格", "prompt": "Pixar-style 3D cartoon render, smooth subsurface-scattering shading, bright cheerful palette, soft global illumination, friendly playful family-commercial mood",                                            "strength": 0.60},
+        "clay":          {"name": "Clay",           "name_zh": "黏土動畫", "prompt": "stop-motion claymation style, visible fingerprints and tool marks on plasticine, matte sculpted surfaces, soft tabletop studio lighting, charming handmade Aardman aesthetic",                          "strength": 0.65},
+        "cute_anime":    {"name": "Cute Anime",     "name_zh": "可愛動漫", "prompt": "chibi kawaii anime style, soft pastel palette of mint pink and cream, rounded shapes with thick clean outlines, sparkles and tiny stars, bright soft lighting, adorable playful mood",                       "strength": 0.65},
+        "oil_painting":  {"name": "Oil Painting",   "name_zh": "油畫風格", "prompt": "classical oil painting, thick visible impasto brushstrokes, rich warm earthy palette, chiaroscuro lighting with deep shadows, museum-quality artistic mood, Rembrandt-inspired",                          "strength": 0.70},
+        "watercolor":    {"name": "Watercolor",     "name_zh": "水彩風格", "prompt": "loose watercolor illustration on cold-press paper, soft wet-on-wet color washes with visible paper grain, light pastel palette with gentle bleeds, airy diffused light, delicate boutique mood",     "strength": 0.65},
+        "cyberpunk":     {"name": "Cyberpunk",      "name_zh": "賽博朋克", "prompt": "cyberpunk neon-noir style, saturated electric magenta and cyan palette against deep black, holographic glitch overlays, volumetric neon rim lighting, rain-slick reflections, futuristic moody atmosphere",        "strength": 0.65},
+        "realistic":     {"name": "Realistic",      "name_zh": "寫實風格", "prompt": "hyper-realistic photographic style, true-color rendering with fine surface microtexture, soft diffused softbox key with subtle rim, neutral commercial photography mood, sharp focus, 8K",          "strength": 0.55},
+        "cinematic":     {"name": "Cinematic",      "name_zh": "電影質感", "prompt": "cinematic film-still style, teal-and-orange color grade with subtle film grain, anamorphic shallow depth of field, dramatic side key light with rim, premium movie-trailer mood, IMAX quality",      "strength": 0.60},
+        "anime_classic": {"name": "Anime Classic",  "name_zh": "經典動漫", "prompt": "classic 1990s cel-painted anime style, flat hand-painted shading with hard cel shadows, muted retro color palette, slight film grain, nostalgic shōnen poster mood",                                       "strength": 0.65},
     },
 }
 

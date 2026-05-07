@@ -299,8 +299,11 @@ watch(prompt, (value) => {
 })
 
 function buildStableProductScenePrompt(sceneDescription: string): string {
-  const cleanScene = sceneDescription.replace(/\s+/g, ' ').trim().slice(0, 180)
-  return [
+  // Backend caps product_scene prompt at 500 chars. The boilerplate below
+  // runs ~340 chars, so leave the scene description at most ~140 chars and
+  // hard-cap the final string at 490 to give a small safety buffer.
+  const cleanScene = sceneDescription.replace(/\s+/g, ' ').trim().slice(0, 140)
+  const built = [
     'E-commerce product photo.',
     `Scene: ${cleanScene || 'clean professional studio background'}.`,
     'Keep the uploaded product unchanged: shape, label, color, material.',
@@ -308,6 +311,7 @@ function buildStableProductScenePrompt(sceneDescription: string): string {
     'Lighting: soft diffused studio light, natural reflections, high clarity.',
     'Avoid duplicate products, warped text or logos, watermark, and clutter covering the product.'
   ].join(' ')
+  return built.length > 490 ? built.slice(0, 490) : built
 }
 
 function resolveSubscriberScenePrompt(): string {

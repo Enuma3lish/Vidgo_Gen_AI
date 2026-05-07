@@ -60,6 +60,7 @@ def _request_cache_hash(
     tool_type: str,
     effect_or_topic: Optional[str],
     input_url: Optional[str],
+    extra_context: str = "",
 ) -> str:
     """
     Canonical cache key for the demo flow: the identity of a request is the
@@ -67,8 +68,16 @@ def _request_cache_hash(
     as the input). Decorative wording in the human-facing prompt column is NOT
     part of the key, so a cache hit is possible whenever the same user
     selection is repeated.
+
+    `extra_context` lets callers add tool-specific disambiguators not captured
+    by the input URL alone — for try_on this is the model_id, otherwise two
+    different model selections on the same garment collide on the same cached
+    result and the user sees the wrong model (e.g. selecting an Asian female
+    model and getting a male foreign model back).
     """
-    content = f"v2|{tool_type}|{effect_or_topic or ''}|{input_url or ''}"
+    content = (
+        f"v2|{tool_type}|{effect_or_topic or ''}|{input_url or ''}|{extra_context}"
+    )
     return hashlib.sha256(content.encode()).hexdigest()[:64]
 
 
@@ -123,10 +132,22 @@ class DemoCacheService:
         tt_key = tool_type.value if hasattr(tool_type, "value") else str(tool_type)
         user_input = input_image_url or input_video_url
 
+        # For try_on the user picks BOTH a model and a garment; the input URL
+        # the demo flow keys on is the garment, so we have to fold model_id
+        # (passed in as product_id) into the cache key. Otherwise picking a
+        # different model on the same garment hits the previously-cached
+        # result and the user sees the wrong model. Other tools either don't
+        # have a separate selector (background_removal) or already encode
+        # the selection in the input URL itself.
+        extra_context = ""
+        if tt_key == "try_on" and product_id:
+            extra_context = f"model={product_id}"
+
         # 1. Exact-pair lookup (user picked a specific input + effect).
         if user_input:
             hashed = await self._get_from_db_by_hash(
-                tt_key, effect_prompt or topic, user_input
+                tt_key, effect_prompt or topic, user_input,
+                extra_context=extra_context,
             )
             if hashed:
                 return hashed
@@ -134,7 +155,12 @@ class DemoCacheService:
         # 2. Generic DB lookup (back-compat) — only runs when the caller did
         # NOT pick a specific input; otherwise the exact-pair path above is
         # authoritative and a generic match could return the wrong result.
-        if not user_input:
+        # Exception: for try_on the exact-pair miss is common (different
+        # garment image hosts, signed-URL drift) so we still want to honor
+        # the model_id selector via the generic lookup before resorting to
+        # expensive on-demand generation that could still pick the wrong
+        # model.
+        if not user_input or (tt_key == "try_on" and product_id):
             demo = await self._get_from_db(
                 tool_type, topic, product_id=product_id, language=language
             )
@@ -433,14 +459,14 @@ class DemoCacheService:
     ) -> Optional[Dict]:
         """Generate a background removal example on-demand."""
         prompts_by_topic = {
-            "drinks": "A cup of bubble milk tea with tapioca pearls on white background, food photography",
-            "snacks": "Crispy fried chicken cutlet on white background, Taiwanese street food, food photography",
-            "desserts": "Mango shaved ice dessert on white background, colorful toppings, food photography",
-            "meals": "Braised pork rice bento box on white background, Taiwanese comfort food",
-            "packaging": "Eco-friendly drink cup with straw on white background, beverage packaging",
-            "equipment": "Commercial blender on white background, restaurant equipment, product shot",
-            "signage": "LED menu board display on white background, restaurant signage",
-            "ingredients": "Fresh tapioca pearls in bowl on white background, bubble tea ingredient",
+            "drinks": "Single subject only: a tall clear plastic cup of bubble milk tea with black tapioca pearls, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "snacks": "Single subject only: one piece of crispy fried Taiwanese chicken cutlet, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "desserts": "Single subject only: one bowl of mango shaved ice with mango cubes on top, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "meals": "Single subject only: one closed paper bento box of braised pork rice, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "packaging": "Single subject only: one eco-friendly drink cup with reusable straw, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, no logos, 8K e-commerce product photography",
+            "equipment": "Single subject only: one chrome commercial blender with clear pitcher, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "signage": "Single subject only: one rectangular LED menu board display, screen turned off, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "ingredients": "Single subject only: one small white bowl of black tapioca pearls, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
         }
         prompt = prompts_by_topic.get(topic, random.choice(list(prompts_by_topic.values())))
 
@@ -529,19 +555,19 @@ class DemoCacheService:
             product_label = product_labels[resolved_pid]
 
         scene_prompts = {
-            "studio": "professional studio lighting, solid color background, product photography",
-            "nature": "outdoor nature setting, sunlight, leaves, natural environment",
-            "elegant": "warm elegant background, cozy lighting, refined atmosphere",
-            "minimal": "minimalist abstract background, soft shadows, clean composition",
-            "lifestyle": "lifestyle home setting, cozy atmosphere, everyday context",
-            "urban": "urban city backdrop, modern architecture, street style",
-            "seasonal": "seasonal autumn leaves background, warm golden colors, cozy seasonal mood",
-            "holiday": "festive holiday decoration background, warm holiday lights, celebration",
-            "spring": "fresh cherry blossom petals, bright spring sunlight, pastel pink and green, spring campaign",
-            "valentines": "romantic rose petals, warm candlelight, red and pink hearts, satin ribbons, valentine campaign",
-            "black_friday": "sleek black surface, dramatic spotlight, neon sale tags, black and gold, retail promotion",
-            "christmas": "christmas pine branches, golden fairy lights, red ornaments, snow frost, warm holiday",
-            "new_year": "gold confetti, champagne, sparkling lights, black and gold, new year celebration",
+            "studio": "clean professional photo studio backdrop, smooth pastel grey seamless paper sweep, large softbox key light from upper-left with subtle rim light, soft graduated shadow on the floor, empty center area for product placement, no props, no text, premium commercial product photography, 8K",
+            "nature": "outdoor natural backdrop with soft out-of-focus green foliage and warm dappled golden-hour sunlight, shallow depth of field bokeh, clean wooden surface in foreground, empty center area for product placement, no people, no hands, no text, premium lifestyle product photography, 8K",
+            "elegant": "refined editorial backdrop in warm taupe and champagne tones, smooth marble surface in foreground, soft directional warm key light with gentle vignette, empty center area for product placement, no props touching the center, no text, luxury brand campaign photography, 8K",
+            "minimal": "minimalist abstract backdrop with smooth pastel gradient and a single soft architectural shadow, large negative space, diffused even lighting, empty center area for product placement, no props, no text, modern commercial product photography, 8K",
+            "lifestyle": "warm scandinavian lifestyle home interior backdrop, soft beige linen texture, blurred kitchen background bokeh, gentle morning window light, empty center area on a light wood surface for product placement, no people, no text, premium lifestyle photography, 8K",
+            "urban": "out-of-focus modern city street backdrop with soft neon and tungsten bokeh at blue hour, polished concrete surface in foreground, cinematic teal-and-orange color grade, empty center area for product placement, no people, no text, premium urban brand photography, 8K",
+            "seasonal": "warm autumn seasonal backdrop with blurred golden maple leaves at the edges, soft warm side light, cozy amber color palette, empty center area on a wooden surface for product placement, no props in the center, no text, premium seasonal campaign photography, 8K",
+            "holiday": "festive holiday backdrop with soft golden fairy-light bokeh and a hint of evergreen at the edges, warm cinematic glow, empty center area for product placement, no people, no text overlays, premium holiday campaign photography, 8K",
+            "spring": "clean seasonal retail sale campaign backdrop, soft daylight, airy pastel mint and blush studio display, large SALE typography and subtle discount tag shapes in the background, clean product placement, keep the original product unchanged, no flowers, no petals, no plants, no botanical props",
+            "valentines": "romantic valentine's day campaign backdrop, soft blush pink and burgundy color palette, scattered fresh red rose petals at the edges, satin ribbon swirls, faint heart bokeh in the background, warm candle glow, premium fashion editorial lighting, empty center for product placement, no text overlays on the product, 8K commercial photography",
+            "black_friday": "premium black friday retail campaign backdrop, matte black surface with subtle gold metallic accents, dramatic single key spotlight from above, faint 'SALE' typography in deep background, no neon, sleek luxury promotion mood, empty center for product placement, commercial photography, 8K",
+            "christmas": "elegant christmas holiday campaign backdrop, deep evergreen pine branches and frosted eucalyptus at the edges, warm golden fairy lights bokeh, classic red and gold ornaments, soft snow dust, cozy festive cinematic lighting, empty center for product placement, premium brand photography, 8K, no people",
+            "new_year": "traditional chinese lunar new year backdrop, deep festive red and gold color palette, soft red silk fabric, hanging red paper lanterns and tassels, golden fortune calligraphy and auspicious cloud motifs, plum blossom branches, gold ingot and red envelope props at the edges, warm cinematic studio lighting, empty center area for product placement, prosperity and celebration mood, premium brand campaign photography, 8K, no people, no text overlays on the product",
         }
         scene_prompt = effect_prompt or scene_prompts.get(topic, scene_prompts["studio"])
 
@@ -660,19 +686,43 @@ class DemoCacheService:
         to I2V on the user-picked pregenerated frame. `effect_prompt` becomes
         the motion/style prompt passed to the I2V provider.
         """
-        prompts = {
-            "product_showcase": "Cinematic close-up of bubble milk tea being poured, tapioca pearls swirling, 4K",
-            "brand_intro": "Cozy drink shop interior, barista preparing beverage, warm lighting, brand story",
-            "tutorial": "Step by step bubble tea preparation, adding tapioca and milk, instruction video",
-            "promo": "Buy one get one free drink promotion, two colorful beverages, festive graphics",
+        # CONTENT prompts — only used as the source description when we have
+        # no user image (T2I fallback path). They MUST NOT be used as the I2V
+        # prompt when an image is supplied: most I2V models follow the prompt
+        # rather than the input frame, so feeding "bubble milk tea being
+        # poured" while uploading a makeup-brush photo produces a bubble-tea
+        # video over the wrong frame (VG-BUG: makeup brush → coffee video).
+        content_prompts = {
+            "product_showcase": "Cinematic macro close-up of bubble milk tea being poured into a clear cup, glossy black tapioca pearls swirling slowly, slow push-in camera, soft warm key light, shallow depth of field, appetizing beverage commercial style, 4K cinematic, 8s",
+            "brand_intro": "Cozy drink shop interior at golden hour, smiling barista preparing a beverage behind a wooden counter, slow handheld dolly toward the counter, warm tungsten key light with soft window backlight, authentic small-shop brand-story style, 4K cinematic, 8s",
+            "tutorial": "Top-down overhead tutorial shot of bubble tea preparation on a clean wood counter, hands adding tapioca pearls and pouring milk into a clear cup, fixed overhead camera, soft even daylight, clear instructional style, 4K cinematic, 8s",
+            "promo": "Bright cheerful buy-one-get-one drink promotion, two colorful beverages clinking together with a small splash, slow push-in camera, soft pastel background with confetti bokeh, festive sale commercial style, 4K cinematic, 8s",
         }
-        prompt = effect_prompt or prompts.get(topic, random.choice(list(prompts.values())))
+        # MOTION prompts — content-agnostic camera/animation hints used as the
+        # default when the user gave us an image but didn't pick a motion.
+        # Keep these descriptive of CAMERA work only; they must not name any
+        # subject matter.
+        motion_default = (
+            "Subtle cinematic motion of the subject in the frame: slow push-in "
+            "camera, gentle parallax, soft natural lighting, shallow depth of "
+            "field, product commercial style, 4K, 8s. Preserve the original "
+            "subject, composition, colors, and labels exactly as in the input "
+            "image."
+        )
 
         # Step 1: Source frame — reuse the user-picked pregenerated frame when
         # present; otherwise T2I a showcase frame from the preset prompt.
         if input_image_url:
             source_url = input_image_url
+            # Honor the user's chosen motion prompt; otherwise fall back to a
+            # SAFE content-agnostic motion prompt so the I2V provider animates
+            # the supplied frame instead of regenerating its content.
+            i2v_prompt = effect_prompt or motion_default
+            # `prompt` (stored alongside the Material row) is the descriptive
+            # text shown in the UI / library; keep it tied to the motion.
+            prompt = effect_prompt or motion_default
         else:
+            prompt = effect_prompt or content_prompts.get(topic, random.choice(list(content_prompts.values())))
             logger.info(f"[DemoCache] Short video: generating source image...")
             t2i = await provider.route(TaskType.T2I, {"prompt": prompt, "width": 1024, "height": 1024})
             if not t2i.get("success"):
@@ -680,10 +730,11 @@ class DemoCacheService:
             source_url = t2i.get("output", {}).get("image_url")
             if not source_url:
                 return {"success": False}
+            i2v_prompt = prompt
 
         # Step 2: I2V — animate the chosen frame with the chosen motion prompt.
         logger.info(f"[DemoCache] Short video: I2V on {'user frame' if input_image_url else 'T2I frame'}...")
-        i2v = await provider.route(TaskType.I2V, {"image_url": source_url, "prompt": prompt})
+        i2v = await provider.route(TaskType.I2V, {"image_url": source_url, "prompt": i2v_prompt})
         if not i2v.get("success"):
             return {"success": False}
 
@@ -695,7 +746,7 @@ class DemoCacheService:
             "success": True,
             "topic": topic or "product_showcase",
             "prompt": prompt,
-            "effect_prompt": prompt,
+            "effect_prompt": i2v_prompt,
             "input_image_url": source_url,
             "result_video_url": video_url,
         }
@@ -1053,19 +1104,33 @@ class DemoCacheService:
         tool_type_key: str,
         effect_or_topic: Optional[str],
         input_url: str,
+        extra_context: str = "",
     ) -> Optional[Dict[str, Any]]:
-        """Exact-pair lookup: returns the cached Material for (tool, effect|topic, input)."""
+        """Exact-pair lookup: returns the cached Material for (tool, effect|topic, input).
+
+        When `extra_context` is supplied (e.g. ``model=female-1`` for try_on),
+        the lookup first tries the disambiguated hash and only then falls back
+        to the legacy hash without the extra context. This keeps backwards
+        compatibility with rows that were stored before disambiguation while
+        still preferring the model-specific row when one exists.
+        """
         if not input_url:
             return None
-        lookup_hash = _request_cache_hash(tool_type_key, effect_or_topic, input_url)
-        result = await self.db.execute(
-            select(Material).where(
-                Material.lookup_hash == lookup_hash,
-                Material.is_active == True,
+        candidates = []
+        if extra_context:
+            candidates.append(_request_cache_hash(tool_type_key, effect_or_topic, input_url, extra_context))
+        candidates.append(_request_cache_hash(tool_type_key, effect_or_topic, input_url))
+        for lookup_hash in candidates:
+            result = await self.db.execute(
+                select(Material).where(
+                    Material.lookup_hash == lookup_hash,
+                    Material.is_active == True,
+                )
             )
-        )
-        m = result.scalars().first()
-        return self._material_to_dict(m) if m else None
+            m = result.scalars().first()
+            if m:
+                return self._material_to_dict(m)
+        return None
 
     @staticmethod
     def _has_result_url():
@@ -1092,12 +1157,18 @@ class DemoCacheService:
         if topic:
             query = query.where(Material.topic == topic)
         if product_id:
-            # For ai_avatar the input_params key is avatar_id; for other tools it's product_id.
-            is_avatar = (
-                tool_type == "ai_avatar"
-                or (hasattr(tool_type, "value") and tool_type.value == "ai_avatar")
-            )
-            key = "avatar_id" if is_avatar else "product_id"
+            # Each tool stores its primary selector under a different key in
+            # input_params. Get this wrong and the WHERE clause matches no
+            # rows, so we fall through to a random Material — which is how
+            # selecting an Asian female try-on model could return a male
+            # foreign one.
+            tt = tool_type.value if hasattr(tool_type, "value") else str(tool_type)
+            if tt == "ai_avatar":
+                key = "avatar_id"
+            elif tt == "try_on":
+                key = "model_id"
+            else:
+                key = "product_id"
             query = query.where(Material.input_params[key].astext == product_id)
         if language:
             query = query.where(Material.language == language)

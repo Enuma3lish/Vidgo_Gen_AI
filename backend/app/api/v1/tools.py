@@ -399,35 +399,62 @@ async def _translate_text_for_dubbing(text: str, target_language: str, source_la
 
 
 async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str):
-    """Refund credits on operation failure."""
+    """Refund credits on operation failure.
+
+    Hardened against a session that may already be in a failed/rolled-back
+    state from the caller's primary error path. We snapshot the user
+    attributes BEFORE issuing any DB operation so even if the session was
+    invalidated (e.g. by a prior StringDataRightTruncationError raising
+    PendingRollbackError on the next access) we can still log meaningfully
+    and won't crash this finalizer with a secondary 500.
+    """
+    # Snapshot identity before any await touches the session.
     try:
-        if getattr(user, "is_superuser", False):
+        user_id_str = str(getattr(user, "id", "unknown"))
+        is_super = bool(getattr(user, "is_superuser", False))
+        deduction_snapshot = dict(getattr(user, "_last_credit_deduction", None) or {})
+    except Exception as snap_exc:  # pragma: no cover - defensive
+        logger.error("Refund snapshot failed for %s: %s", service_type, snap_exc)
+        return
+
+    try:
+        if is_super:
             logger.info(
                 "Skipping refund for superuser %s on failed %s; no credits were deducted",
-                user.id,
+                user_id_str,
                 service_type,
             )
             return
+
+        # Ensure the session is usable. If a prior statement failed we MUST
+        # rollback before issuing any further DB work or asyncpg will raise
+        # InvalidRequestError("This Session's transaction has been rolled back").
+        try:
+            await db.rollback()
+        except Exception:
+            # Best effort: if rollback itself fails the underlying connection
+            # is unusable; we still want to log and exit cleanly.
+            logger.warning("Refund: db.rollback() failed before refund for user %s", user_id_str)
+            return
+
         credit_svc = CreditService(db)
-        deduction = getattr(user, "_last_credit_deduction", None) or {}
-        if not deduction:
-            deduction = {"subscription": amount}
+        deduction = deduction_snapshot or {"subscription": amount}
 
         for credit_type in ("bonus", "subscription", "purchased"):
             bucket_amount = int(deduction.get(credit_type) or 0)
             if bucket_amount <= 0:
                 continue
             await credit_svc.add_credits(
-                user_id=str(user.id),
+                user_id=user_id_str,
                 amount=bucket_amount,
                 credit_type=credit_type,
                 transaction_type="refund",
                 description=f"Refund: {service_type} failed",
                 metadata={"refund_source": credit_type},
             )
-        logger.info(f"Refunded {amount} credits to user {user.id} for failed {service_type}")
+        logger.info(f"Refunded {amount} credits to user {user_id_str} for failed {service_type}")
     except Exception as e:
-        logger.error(f"Failed to refund {amount} credits to user {user.id}: {e}")
+        logger.error(f"Failed to refund {amount} credits to user {user_id_str}: {e}")
 
 
 async def _check_plan_feature(
@@ -1697,6 +1724,7 @@ async def generate_short_video(
         # Requires can_use_effects plan feature
         apply_style = False
         style_prompt_refinement = None
+        style_transfer_error = None
         if request.style and video_url:
             effects_ok, _, _ = await _check_plan_feature(
                 db, current_user, "can_use_effects", "video style effects"
@@ -1713,17 +1741,33 @@ async def generate_short_video(
                     user_prompt=True,
                     context={"style": request.style, "source_tool": "short_video"},
                 )
-                style_result = await provider_router.route(
-                    TaskType.V2V,
-                    {"video_url": video_url, "prompt": style_prompt}
-                )
-                output_url = style_result.get("video_url") or style_result.get("output_url") or style_result.get("output", {}).get("video_url")
-                if output_url:
-                    video_url = output_url
-                    # Deduct extra 5 credits for style transfer
-                    extra_ok, _ = await _check_and_deduct_credits(db, current_user, 5, "short_video_style")
-                    if extra_ok:
-                        credits_used += 5
+                try:
+                    source_frame_url = _resolve_public_url(str(request.image_url))
+                    style_result = await provider_router.route(
+                        TaskType.V2V,
+                        {
+                            "video_url": video_url,
+                            "image_url": source_frame_url,
+                            "first_frame_url": source_frame_url,
+                            "prompt": style_prompt,
+                            "model": request.model_id,
+                            "duration": 5,
+                        }
+                    )
+                    output_url = style_result.get("video_url") or style_result.get("output_url") or style_result.get("output", {}).get("video_url")
+                    if output_url:
+                        video_url = output_url
+                        # Deduct extra 5 credits for style transfer
+                        extra_ok, _ = await _check_and_deduct_credits(db, current_user, 5, "short_video_style")
+                        if extra_ok:
+                            credits_used += 5
+                except Exception as exc:
+                    style_transfer_error = str(exc)
+                    logger.warning(
+                        "Short video style transfer failed; returning base I2V result: %s",
+                        exc,
+                        exc_info=True,
+                    )
 
         if video_url:
             # Save to UserGeneration
@@ -1738,6 +1782,7 @@ async def generate_short_video(
                     "motion_prompt": motion_prompt,
                     "prompt_refinement": prompt_refinement,
                     "style_prompt_refinement": style_prompt_refinement,
+                    "style_transfer_error": style_transfer_error,
                 },
                 result_video_url=video_url,
                 credits_used=credits_used,
@@ -1759,7 +1804,11 @@ async def generate_short_video(
                 success=True,
                 result_url=video_url,
                 credits_used=credits_used,
-                message="Short video generated successfully"
+                message=(
+                    "Short video generated successfully"
+                    if not style_transfer_error
+                    else "Short video generated successfully. Style transfer is temporarily unavailable, so the base video was returned."
+                )
             )
         else:
             await _refund_credits(db, current_user, CREDIT_COST, "short_video")

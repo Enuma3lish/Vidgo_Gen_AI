@@ -735,6 +735,64 @@
       "textOnly": "Text Only: Generate design from description",
       "multiStyle": "10 design styles: Modern, Nordic, Japanese, and more",
       "keepLayout": "Preserves room layout and window positions"
+    },
+    "studio": {
+      "beforeLabel": "ROOM PHOTO",
+      "afterLabel": "AI RENDER",
+      "badge": "Interior Design Studio",
+      "title": "Create proposal-ready interior renders from photos, sketches, and floor plans",
+      "description": "VidGo brings professional interior rendering and commerce-photo workflows into one tool: restyle rooms fast, preserve spatial intent, and export polished visuals for listings, design proposals, and furniture scenes.",
+      "creditPricingTitle": "One-time credit pricing",
+      "creditPricingBody": "Top up without subscribing, ideal for ad hoc proposals and render batches.",
+      "viewPricing": "View Pricing",
+      "startCta": "Start Interior Design",
+      "viewCreditPacks": "View Credit Packs",
+      "workflows": [
+        {
+          "label": "Photo Redesign",
+          "text": "Upload an empty room, existing space, or furniture context and restyle it while preserving spatial proportion."
+        },
+        {
+          "label": "Sketch Proposal",
+          "text": "Turn sketches, references, and design notes into client-ready visual directions."
+        },
+        {
+          "label": "Plan to Render",
+          "text": "Use floor plans or layout direction to create interior visuals closer to architecture proposal workflows."
+        },
+        {
+          "label": "3D Extension",
+          "text": "Subscribers can extend finished room renders into rotatable 3D model workflows."
+        }
+      ],
+      "stats": [
+        {
+          "value": "4 modes",
+          "label": "photo, sketch, plan, and 3D workflows"
+        },
+        {
+          "value": "20+",
+          "label": "interior styles and room types"
+        },
+        {
+          "value": "Commercial",
+          "label": "for real estate, designers, and furniture brands"
+        }
+      ],
+      "creditPacks": [
+        {
+          "name": "Light Pack",
+          "credits": "3,000 credits"
+        },
+        {
+          "name": "Standard Pack",
+          "credits": "5,500 credits"
+        },
+        {
+          "name": "Heavy Pack",
+          "credits": "12,000 credits"
+        }
+      ]
     }
   },
   "landing": {
@@ -955,6 +1013,18 @@
     "trust2": "No credit card required",
     "trust3": "Cancel anytime",
     "trustBrands": "A stable visual workflow for e-commerce, food, fashion, and lifestyle brands",
+    "heroDemo": {
+      "tabs": {
+        "product_scene": "Studio Scene",
+        "background_removal": "Cutout",
+        "try_on": "Try-On",
+        "room_redesign": "Room"
+      },
+      "before": "BEFORE",
+      "after": "AFTER · AI",
+      "generatedIn": "Generated in seconds",
+      "poweredBy": "Powered by VidGo AI"
+    },
     "tryNow": "Try Now",
     "readStory": "Read Story",
     "seasonShowcase": "AI Generated",
@@ -976,23 +1046,74 @@
     "ctaFinalBtn": "Start Creating Now",
     "ctaFinalNote": "No credit card · Ready immediately · Cancel anytime",
     "allTools": {
-      "tryOn": { "name": "AI Model Try-On", "desc": "Virtual try-on with AI models for clothing showcases" },
-      "aiModelSwap": { "name": "AI Model Swap", "desc": "Swap models in product photos" },
-      "fashionReels": { "name": "Product Dynamic Video", "desc": "Turn still product photos into scroll-stopping short videos in seconds" },
-      "productAvatars": { "name": "Product Avatars", "desc": "Create talking product spokesperson videos" },
-      "productAnyshoot": { "name": "AI Product Scene Studio", "desc": "Professional AI-generated product photography scenes" },
-      "tryOnAccessories": { "name": "Virtual Try On Accessories", "desc": "Try on jewelry, watches & accessories" },
-      "aiBackgrounds": { "name": "AI Backgrounds", "desc": "Instant professional backgrounds for products" },
-      "removeWatermark": { "name": "Remove Watermark", "desc": "Clean up watermarks from any image" },
-      "aiTemplates": { "name": "AI Templates", "desc": "E-commerce ad templates powered by AI" },
-      "imageTranslator": { "name": "Image Translator", "desc": "Accurately translate image text" },
-      "aiShadows": { "name": "AI Shadows", "desc": "Add natural shadows to any object" },
-      "roomRedesign": { "name": "Interior Rendering", "desc": "Turn photos, empty rooms, sketches, and floor plans into polished interior proposal visuals" },
-      "bgRemoval": { "name": "Background Removal", "desc": "Remove product backgrounds in one click — no design skills needed" },
-      "hdUpscale": { "name": "Commercial HD Upscale", "desc": "Sharpen and enlarge product images to 4K — perfect for stores and print" },
-      "imageTransform": { "name": "Image Transform (Merged)", "desc": "Merged into Raw Space / Sketch Instant Render" },
-      "videoTransform": { "name": "Video Transform", "desc": "AI-powered video style transformation" },
-      "patternGenerate": { "name": "Pattern Design", "desc": "Generate seamless patterns for branding" }
+      "tryOn": {
+        "name": "AI Model Try-On",
+        "desc": "Virtual try-on with AI models for clothing showcases"
+      },
+      "aiModelSwap": {
+        "name": "AI Model Swap",
+        "desc": "Swap models in product photos"
+      },
+      "fashionReels": {
+        "name": "Product Dynamic Video",
+        "desc": "Turn still product photos into scroll-stopping short videos in seconds"
+      },
+      "productAvatars": {
+        "name": "Product Avatars",
+        "desc": "Create talking product spokesperson videos"
+      },
+      "productAnyshoot": {
+        "name": "AI Product Scene Studio",
+        "desc": "Professional AI-generated product photography scenes"
+      },
+      "tryOnAccessories": {
+        "name": "Virtual Try On Accessories",
+        "desc": "Try on jewelry, watches & accessories"
+      },
+      "aiBackgrounds": {
+        "name": "AI Backgrounds",
+        "desc": "Instant professional backgrounds for products"
+      },
+      "removeWatermark": {
+        "name": "Remove Watermark",
+        "desc": "Clean up watermarks from any image"
+      },
+      "aiTemplates": {
+        "name": "AI Templates",
+        "desc": "E-commerce ad templates powered by AI"
+      },
+      "imageTranslator": {
+        "name": "Image Translator",
+        "desc": "Accurately translate image text"
+      },
+      "aiShadows": {
+        "name": "AI Shadows",
+        "desc": "Add natural shadows to any object"
+      },
+      "roomRedesign": {
+        "name": "Interior Rendering",
+        "desc": "Turn photos, empty rooms, sketches, and floor plans into polished interior proposal visuals"
+      },
+      "bgRemoval": {
+        "name": "Background Removal",
+        "desc": "Remove product backgrounds in one click — no design skills needed"
+      },
+      "hdUpscale": {
+        "name": "Commercial HD Upscale",
+        "desc": "Sharpen and enlarge product images to 4K — perfect for stores and print"
+      },
+      "imageTransform": {
+        "name": "Image Transform (Merged)",
+        "desc": "Merged into Raw Space / Sketch Instant Render"
+      },
+      "videoTransform": {
+        "name": "Video Transform",
+        "desc": "AI-powered video style transformation"
+      },
+      "patternGenerate": {
+        "name": "Pattern Design",
+        "desc": "Generate seamless patterns for branding"
+      }
     },
     "categories": {
       "fashionAI": "Fashion AI",
@@ -1099,10 +1220,22 @@
       }
     ],
     "stats": [
-      { "value": "54.7%", "label": "Click-Through Rate Boost" },
-      { "value": "79%", "label": "Marketing Design Cost Saved" },
-      { "value": "57%", "label": "Purchase Conversion Boost" },
-      { "value": "90%", "label": "Time Cost Saved" }
+      {
+        "value": "54.7%",
+        "label": "Click-Through Rate Boost"
+      },
+      {
+        "value": "79%",
+        "label": "Marketing Design Cost Saved"
+      },
+      {
+        "value": "57%",
+        "label": "Purchase Conversion Boost"
+      },
+      {
+        "value": "90%",
+        "label": "Time Cost Saved"
+      }
     ]
   },
   "gallery": {

@@ -4,6 +4,14 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Allow image/video uploads up to 50 MB. Frontend caps raw images at
+    # 20 MB but ImageUploader sends them as base64 data URLs inside JSON
+    # bodies (1.33x inflation), so a 20 MB photo becomes ~27 MB on the wire.
+    # 50m gives headroom for short videos and base64 overhead and stops the
+    # `Request failed with status code 413` users were seeing on /tools/upscale,
+    # /tools/product-scene, /tools/background-removal, etc.
+    client_max_body_size 50m;
+
     # Gzip compression
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;

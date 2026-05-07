@@ -105,8 +105,8 @@ class Material(Base):
     prompt_enhanced = Column(Text, nullable=True)  # LLM-enhanced version
     effect_prompt = Column(Text, nullable=True)  # Effect/enhancement prompt (for V2V, style transfer)
     effect_prompt_zh = Column(Text, nullable=True)  # Chinese translation
-    input_image_url = Column(String(500), nullable=True)  # Source image
-    input_video_url = Column(String(500), nullable=True)  # Source video (for V2V)
+    input_image_url = Column(Text, nullable=True)  # Source image
+    input_video_url = Column(Text, nullable=True)  # Source video (for V2V)
     input_params = Column(JSONB, default={})  # Parameters used for generation
 
     # === Generation Pipeline ===
@@ -139,10 +139,10 @@ class Material(Base):
     """
 
     # === Output Data ===
-    result_image_url = Column(String(500), nullable=True)
-    result_video_url = Column(String(500), nullable=True)
-    result_thumbnail_url = Column(String(500), nullable=True)
-    result_watermarked_url = Column(String(500), nullable=True)  # For demo users
+    result_image_url = Column(Text, nullable=True)
+    result_video_url = Column(Text, nullable=True)
+    result_thumbnail_url = Column(Text, nullable=True)
+    result_watermarked_url = Column(Text, nullable=True)  # For demo users
 
     # === Multi-language Titles ===
     title_en = Column(String(255), nullable=True)

@@ -386,12 +386,12 @@ class Generation(Base):
     # Input
     prompt_original = Column(Text, nullable=False)
     prompt_enhanced = Column(Text, nullable=True)
-    input_image_url = Column(String(500), nullable=True)
+    input_image_url = Column(Text, nullable=True)
 
     # Output
-    image_url = Column(String(500), nullable=True)
-    video_url = Column(String(500), nullable=True)
-    thumbnail_url = Column(String(500), nullable=True)
+    image_url = Column(Text, nullable=True)
+    video_url = Column(Text, nullable=True)
+    thumbnail_url = Column(Text, nullable=True)
 
     # Service Info
     service_type = Column(String(50), nullable=False)  # leonardo_video_720p, pollo_basic, etc.

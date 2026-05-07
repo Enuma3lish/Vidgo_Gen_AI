@@ -808,13 +808,15 @@ class PiAPIProvider(BaseProvider):
         # Calls PiAPI image-toolkit background-remove — higher quality on
         # complex subjects (hair, fine edges) than local rembg. Router falls
         # through to Vertex's rembg fallback on 500.
+        # NOTE: PiAPI image-toolkit expects the input key `image` (URL or
+        # base64), NOT `image_url`. The wrong key returns HTTP 500.
         self._log_request("background_removal", params)
 
         payload = {
             "model": "Qubico/image-toolkit",
             "task_type": "background-remove",
             "input": {
-                "image_url": self._resolve_image_url(params["image_url"]),
+                "image": self._resolve_image_url(params["image_url"]),
             },
         }
 

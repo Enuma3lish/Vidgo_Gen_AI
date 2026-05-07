@@ -127,6 +127,26 @@ VIDEO_UPLOAD_TOOLS = {"video_transform"}
 UPLOAD_DIR = "/app/static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+DOWNLOAD_MEDIA_TYPES_BY_EXTENSION = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".m4v": "video/mp4",
+}
+DOWNLOAD_EXTENSIONS_BY_CONTENT_TYPE = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+}
+
 
 # ─────────────────────────────────────────
 # Schemas
@@ -830,7 +850,7 @@ async def download_result(
         local_path = result_url.replace("/static/", "/app/static/")
         if os.path.exists(local_path):
             ext = os.path.splitext(local_path)[1].lower()
-            media_type = "video/mp4" if ext == ".mp4" else "image/jpeg"
+            media_type = DOWNLOAD_MEDIA_TYPES_BY_EXTENSION.get(ext, "application/octet-stream")
             filename = f"vidgo_result_{upload_id[:8]}{ext}"
 
             def iterfile():
@@ -850,7 +870,10 @@ async def download_result(
             raise HTTPException(status_code=502, detail="Could not fetch result from storage")
 
         content_type = response.headers.get("content-type", "application/octet-stream")
-        ext = ".mp4" if "video" in content_type else ".jpg"
+        normalized_content_type = content_type.split(";", 1)[0].strip().lower()
+        ext = DOWNLOAD_EXTENSIONS_BY_CONTENT_TYPE.get(normalized_content_type)
+        if not ext:
+            ext = os.path.splitext(result_url.split("?", 1)[0])[1].lower() or ".bin"
         filename = f"vidgo_result_{upload_id[:8]}{ext}"
 
         return StreamingResponse(

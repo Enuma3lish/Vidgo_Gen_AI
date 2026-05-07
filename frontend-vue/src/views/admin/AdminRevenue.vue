@@ -268,7 +268,7 @@ function trendDeltaText(current: number, previous: number): string {
 
 <style scoped>
 .admin-revenue {
-  padding: 2rem;
+  padding: 6rem 2rem 2rem;
   max-width: 1200px;
   margin: 0 auto;
 }

@@ -140,16 +140,16 @@ class PromptTemplate(Base):
 
     # === Input Data (Before) ===
     input_description = Column(Text, nullable=True)  # Description of input
-    input_image_url = Column(String(500), nullable=True)  # Source image (before)
-    input_video_url = Column(String(500), nullable=True)  # Source video (before)
+    input_image_url = Column(Text, nullable=True)  # Source image (before)
+    input_video_url = Column(Text, nullable=True)  # Source video (before)
     input_params = Column(JSONB, default={})  # Parameters used for generation
 
     # === Output Data (After) ===
     result_description = Column(Text, nullable=True)  # Description of result
-    result_image_url = Column(String(500), nullable=True)  # Generated image (after)
-    result_video_url = Column(String(500), nullable=True)  # Generated video (after)
-    result_thumbnail_url = Column(String(500), nullable=True)
-    result_watermarked_url = Column(String(500), nullable=True)  # For demo users
+    result_image_url = Column(Text, nullable=True)  # Generated image (after)
+    result_video_url = Column(Text, nullable=True)  # Generated video (after)
+    result_thumbnail_url = Column(Text, nullable=True)
+    result_watermarked_url = Column(Text, nullable=True)  # For demo users
     result_params = Column(JSONB, default={})  # Generation result metadata
 
     # === API Information ===

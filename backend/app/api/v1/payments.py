@@ -148,7 +148,7 @@ async def create_ecpay_checkout(
     )
     trade_date = (order.created_at or datetime.now()).strftime("%Y/%m/%d %H:%M:%S")
     frontend_result_url = f"{settings.FRONTEND_URL}/subscription/ecpay-result?order={order.order_number}"
-    form = ecpay_client.create_payment_form(
+    form = ecpay_client.create_payment(
         merchant_trade_no=order.order_number,
         merchant_trade_date=trade_date,
         total_amount=int(order.amount),

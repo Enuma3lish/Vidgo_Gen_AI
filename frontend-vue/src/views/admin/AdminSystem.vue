@@ -74,15 +74,22 @@ function getServiceDisplayName(key: string): string {
   return names[key] || key
 }
 
-function formatProviderCredits(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return localized('未提供', 'Not provided')
+function formatProviderCredits(value: string | number | null | undefined, source?: string | null): string {
+  if (value === null || value === undefined || value === '') {
+    return source === 'not_available'
+      ? localized('供應商未提供', 'Not exposed by provider')
+      : localized('未提供', 'Not provided')
+  }
   if (typeof value === 'number') return value.toLocaleString()
   const numeric = Number(String(value).replace(/,/g, ''))
   return Number.isFinite(numeric) ? numeric.toLocaleString() : String(value)
 }
 
-function getSubscriptionLabel(status: string | null | undefined): string {
+function getSubscriptionLabel(status: string | null | undefined, source?: string | null): string {
   const normalized = (status || 'unknown').toLowerCase()
+  if (normalized === 'unknown' && source === 'not_available') {
+    return localized('供應商未提供', 'Not exposed by provider')
+  }
   const labels: Record<string, string> = {
     active: localized('訂閱中', 'Subscribed'),
     subscribed: localized('訂閱中', 'Subscribed'),
@@ -211,8 +218,8 @@ function getRescueLabel(config: RescueConfig): string {
             <p class="service-message">{{ getServiceMessage(key as string, service) }}</p>
             <p v-if="service.error" class="service-error">{{ service.error }}</p>
             <div class="service-account">
-              <span>{{ localized(`剩餘額度：${formatProviderCredits(service.remaining_credits_label || service.remaining_credits)}`, `Remaining credits: ${formatProviderCredits(service.remaining_credits_label || service.remaining_credits)}`) }}</span>
-              <span>{{ localized(`訂閱狀態：${getSubscriptionLabel(service.subscription_status)}`, `Subscription: ${getSubscriptionLabel(service.subscription_status)}`) }}</span>
+              <span>{{ localized(`剩餘額度：${formatProviderCredits(service.remaining_credits_label || service.remaining_credits, service.account_status_source)}`, `Remaining credits: ${formatProviderCredits(service.remaining_credits_label || service.remaining_credits, service.account_status_source)}`) }}</span>
+              <span>{{ localized(`訂閱狀態：${getSubscriptionLabel(service.subscription_status, service.account_status_source)}`, `Subscription: ${getSubscriptionLabel(service.subscription_status, service.account_status_source)}`) }}</span>
               <span>{{ service.configured ? localized('API Key 已設定', 'API key configured') : localized('API Key 未設定', 'API key not configured') }}</span>
             </div>
           </div>
@@ -307,7 +314,7 @@ function getRescueLabel(config: RescueConfig): string {
 
 <style scoped>
 .admin-system {
-  padding: 2rem;
+  padding: 6rem 2rem 2rem;
   max-width: 1200px;
   margin: 0 auto;
 }

@@ -524,7 +524,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
 </script>
 
 <template>
-  <div class="commerce-tool-page min-h-screen pt-24 pb-20" style="background: #f8fafc; color: #0f172a;">
+  <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
     <LoadingOverlay
       :show="isProcessing"
       icon="📦"
@@ -837,54 +837,6 @@ function dataURItoBlob(dataURI: string): Blob | null {
 </template>
 
 <style scoped>
-.commerce-tool-page :deep(.card) {
-  background: #ffffff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
-  color: #0f172a;
-}
-
-.commerce-tool-page :deep(.text-dark-50),
-.commerce-tool-page :deep(.text-dark-100),
-.commerce-tool-page :deep(.text-dark-200),
-.commerce-tool-page :deep(h1.text-white),
-.commerce-tool-page :deep(h2.text-white),
-.commerce-tool-page :deep(h3.text-white),
-.commerce-tool-page :deep(h4.text-white) {
-  color: #0f172a !important;
-}
-
-.commerce-tool-page :deep(.text-dark-300),
-.commerce-tool-page :deep(.text-dark-400),
-.commerce-tool-page :deep(.text-gray-400),
-.commerce-tool-page :deep(.text-gray-500) {
-  color: #64748b !important;
-}
-
-.commerce-tool-page :deep(.bg-dark-700),
-.commerce-tool-page :deep(.bg-dark-800),
-.commerce-tool-page [style^="background: #141420"],
-.commerce-tool-page [style^="background: #1a1a2e"] {
-  background: #f8fafc !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
-}
-
-.commerce-tool-page [style*="color: #f5f5fa"] {
-  color: #0f172a !important;
-}
-
-.commerce-tool-page textarea,
-.commerce-tool-page input {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  border-color: rgba(15, 23, 42, 0.14) !important;
-}
-
-.commerce-tool-page textarea::placeholder,
-.commerce-tool-page input::placeholder {
-  color: #94a3b8;
-}
-
 .prompt-stability-row {
   display: flex;
   flex-wrap: wrap;
@@ -893,9 +845,9 @@ function dataURItoBlob(dataURI: string): Blob | null {
 
 .prompt-stability-row span {
   border-radius: 999px;
-  background: #eff6ff;
-  color: #0958d9;
-  border: 1px solid rgba(22, 119, 255, 0.14);
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.25);
   padding: 4px 8px;
   font-size: 11px;
   font-weight: 600;

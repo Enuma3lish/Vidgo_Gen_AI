@@ -3,8 +3,8 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   imageDimensionRuleForTool,
-  validateImageFileDimensions,
-  ALLOWED_IMAGE_MIME,
+  isAllowedImageFile,
+  normalizeImageFileForUpload,
   ALLOWED_IMAGE_EXT_LABEL,
   MAX_IMAGE_SIZE_MB,
 } from '@/utils/mediaValidation'
@@ -66,34 +66,27 @@ const uploadError = ref('')
 async function processFile(file: File): Promise<boolean> {
   uploadError.value = ''
 
-  if (!ALLOWED_IMAGE_MIME.includes(file.type)) {
+  if (!isAllowedImageFile(file)) {
     uploadError.value = isZh
       ? `不支援的圖片格式（${file.type || '未知'}），請改用 ${ALLOWED_IMAGE_EXT_LABEL} 格式重新上傳。`
       : `Unsupported image format (${file.type || 'unknown'}). Please re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`
     return false
   }
 
-  if (file.size > MAX_SIZE_BYTES) {
-    const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+  let uploadFile = file
+  try {
+    uploadFile = await normalizeImageFileForUpload(file, rule.value, { maxSizeMb: MAX_IMAGE_SIZE_MB })
+  } catch (error: any) {
     uploadError.value = isZh
-      ? `檔案大小 ${sizeMB}MB 超過上限 ${MAX_IMAGE_SIZE_MB}MB，請壓縮或裁剪後重新上傳 ${ALLOWED_IMAGE_EXT_LABEL}。`
-      : `File size ${sizeMB}MB exceeds the ${MAX_IMAGE_SIZE_MB}MB limit. Please compress or resize and re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`
+      ? '無法處理圖片尺寸或壓縮，請改用 JPG / PNG / WebP 重新上傳。'
+      : (error?.message || 'Image could not be resized or compressed. Please re-upload as JPG, PNG, or WebP.')
     return false
   }
 
-  try {
-    const dimensionError = await validateImageFileDimensions(file, rule.value, isZh)
-    if (dimensionError) {
-      // Always tell the user explicitly to re-upload with the correct format.
-      uploadError.value = isZh
-        ? `${dimensionError} 請依上述要求重新上傳。`
-        : `${dimensionError} Please re-upload an image that meets the requirements.`
-      return false
-    }
-  } catch {
+  if (uploadFile.size > MAX_SIZE_BYTES) {
     uploadError.value = isZh
-      ? '無法讀取圖片尺寸，請改用 JPG / PNG / WebP 重新上傳。'
-      : 'Image dimensions could not be read. Please re-upload as JPG, PNG, or WebP.'
+      ? `圖片壓縮後仍超過 ${MAX_IMAGE_SIZE_MB}MB，請改用 ${ALLOWED_IMAGE_EXT_LABEL} 格式重新上傳。`
+      : `Image is still over ${MAX_IMAGE_SIZE_MB}MB after compression. Please re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`
     return false
   }
 
@@ -101,9 +94,9 @@ async function processFile(file: File): Promise<boolean> {
   reader.onload = (e) => {
     const result = e.target?.result as string
     emit('update:modelValue', result)
-    emit('file-selected', file)
+    emit('file-selected', uploadFile)
   }
-  reader.readAsDataURL(file)
+  reader.readAsDataURL(uploadFile)
   return true
 }
 </script>
@@ -147,10 +140,7 @@ async function processFile(file: File): Promise<boolean> {
         {{ label || (isZh ? '點擊或拖放圖片' : 'Click or drop image here') }}
       </p>
       <p class="text-xs text-gray-500 mt-1">
-        JPG, PNG, WebP {{ isZh ? '最大' : 'up to' }} {{ MAX_IMAGE_SIZE_MB }}MB
-        <span v-if="toolType">·
-          {{ rule.minWidth }}–{{ rule.maxWidth }}px
-        </span>
+        JPG, PNG, WebP · {{ isZh ? '自動調整尺寸與壓縮' : 'auto resize and compression' }}
       </p>
     </div>
 

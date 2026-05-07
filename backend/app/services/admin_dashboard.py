@@ -11,7 +11,7 @@ Provides:
 """
 import logging
 from typing import Optional, Dict, Any, List, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import String, cast, select, func, and_, or_, desc
 from sqlalchemy.orm import selectinload
@@ -638,6 +638,8 @@ class AdminDashboardService:
         from app.models.user_generation import UserGeneration
         from app.models.user_upload import UserUpload, UploadStatus
 
+        active_cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
+
         # Active generations (processing status) from UserUpload
         try:
             active_gen_result = await self.db.execute(
@@ -646,7 +648,8 @@ class AdminDashboardService:
                     UserUpload.tool_type,
                     UserUpload.created_at
                 ).where(
-                    UserUpload.status == UploadStatus.PROCESSING.value
+                    UserUpload.status == UploadStatus.PROCESSING.value,
+                    UserUpload.created_at >= active_cutoff,
                 ).order_by(desc(UserUpload.created_at))
                 .limit(50)
             )
@@ -672,7 +675,8 @@ class AdminDashboardService:
                     Generation.started_at,
                     Generation.created_at
                 ).where(
-                    Generation.status.in_(["pending", "processing"])
+                    Generation.status.in_(["pending", "processing"]),
+                    Generation.created_at >= active_cutoff,
                 ).order_by(desc(Generation.created_at))
                 .limit(50)
             )

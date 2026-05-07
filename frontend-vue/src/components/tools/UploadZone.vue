@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { commonImageDimensionRule, validateImageFileDimensions } from '@/utils/mediaValidation'
+import { commonImageDimensionRule, isAllowedImageFile, normalizeImageFileForUpload } from '@/utils/mediaValidation'
 
 const { t, locale } = useI18n()
 
@@ -64,7 +64,7 @@ async function processFiles(files: File[]): Promise<boolean> {
   const validFiles: File[] = []
 
   for (const file of files) {
-    if (!allowed.includes(file.type)) {
+    if (allowed === AI_IMAGE_TYPES ? !isAllowedImageFile(file) : !allowed.includes(file.type)) {
       const label = allowed === AI_VIDEO_TYPES
         ? (isZh ? 'MP4、WebM 或 MOV 影片' : 'MP4, WebM, or MOV video')
         : (isZh ? 'JPG、PNG 或 WebP 圖片' : 'JPG, PNG, or WebP image')
@@ -73,25 +73,28 @@ async function processFiles(files: File[]): Promise<boolean> {
         : `File ${file.name} is not supported. Please choose a ${label}.`)
       continue
     }
-    if (file.size > maxSize) {
+    if (allowed === AI_VIDEO_TYPES && file.size > maxSize) {
       emit('error', isZh
         ? `檔案 ${file.name} 超過 ${maxSize / 1024 / 1024}MB，請選擇較小的檔案。`
         : `File ${file.name} exceeds maximum size of ${maxSize / 1024 / 1024}MB. Please choose a smaller file.`)
       continue
     }
-    if (file.type.startsWith('image/')) {
+    let uploadFile = file
+    if (allowed === AI_IMAGE_TYPES) {
       try {
-        const dimensionError = await validateImageFileDimensions(file, commonImageDimensionRule, isZh)
-        if (dimensionError) {
-          emit('error', dimensionError)
-          continue
-        }
+        uploadFile = await normalizeImageFileForUpload(file, commonImageDimensionRule, { maxSizeMb: maxSize / 1024 / 1024 })
       } catch {
-        emit('error', isZh ? '無法讀取圖片尺寸，請重新選擇圖片。' : 'Image dimensions could not be read. Please choose a different image.')
+        emit('error', isZh ? '無法處理圖片尺寸或壓縮，請重新選擇圖片。' : 'Image could not be resized or compressed. Please choose a different image.')
+        continue
+      }
+      if (uploadFile.size > maxSize) {
+        emit('error', isZh
+          ? `圖片 ${file.name} 壓縮後仍超過 ${maxSize / 1024 / 1024}MB，請選擇其他圖片。`
+          : `Image ${file.name} is still over ${maxSize / 1024 / 1024}MB after compression. Please choose a different image.`)
         continue
       }
     }
-    validFiles.push(file)
+    validFiles.push(uploadFile)
   }
 
   if (validFiles.length > 0) {

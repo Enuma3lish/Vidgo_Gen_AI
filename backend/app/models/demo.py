@@ -51,9 +51,9 @@ class ImageDemo(Base):
     category_slug = Column(String(50), index=True)  # Denormalized for fast queries
 
     # Image URLs
-    image_url_before = Column(String(500), nullable=False)  # Original source image
-    image_url_after = Column(String(500), nullable=True)  # Transformed image
-    thumbnail_url = Column(String(500), nullable=True)
+    image_url_before = Column(Text, nullable=False)  # Original source image
+    image_url_after = Column(Text, nullable=True)  # Transformed image
+    thumbnail_url = Column(Text, nullable=True)
 
     # Style information
     style_id = Column(Integer, nullable=True)  # GoEnhance model ID
@@ -107,10 +107,10 @@ class DemoVideo(Base):
     category_slug = Column(String(50), index=True)  # Denormalized for fast queries
 
     # Image and Video URLs
-    image_url = Column(String(500), nullable=True)  # Source image
-    video_url = Column(String(500), nullable=False)
-    video_url_watermarked = Column(String(500), nullable=True)
-    thumbnail_url = Column(String(500), nullable=True)
+    image_url = Column(Text, nullable=True)  # Source image
+    video_url = Column(Text, nullable=False)
+    video_url_watermarked = Column(Text, nullable=True)
+    thumbnail_url = Column(Text, nullable=True)
 
     duration_seconds = Column(Float, default=5.0)
     resolution = Column(String(20), default="720p")

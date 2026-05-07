@@ -192,6 +192,15 @@ class ProviderRouter:
         providers_to_try = self._get_providers_for_task(task_type, params)
         candidate_providers, skipped_providers = self._route_candidates(providers_to_try)
 
+        if not candidate_providers:
+            error_msg = self._get_user_friendly_error(
+                task_type,
+                providers_to_try[0],
+                providers_to_try[1] if len(providers_to_try) > 1 else None,
+                "No configured providers available",
+            )
+            raise Exception(error_msg)
+
         last_error = None
         for provider_name in candidate_providers:
             provider_index = providers_to_try.index(provider_name)
@@ -304,14 +313,16 @@ class ProviderRouter:
         return ordered
 
     def _route_candidates(self, providers: list[str]) -> tuple[list[str], list[str]]:
-        """Skip providers with open circuits when another candidate is available."""
-        if len(providers) <= 1:
-            return providers, []
+        """Skip disabled providers and providers with open circuits."""
+        if not providers:
+            return [], []
 
         candidates = []
         skipped = []
         for provider_name in providers:
-            if self._is_provider_circuit_open(provider_name):
+            if self._is_provider_disabled_by_config(provider_name):
+                skipped.append(provider_name)
+            elif self._is_provider_circuit_open(provider_name):
                 skipped.append(provider_name)
             else:
                 candidates.append(provider_name)
@@ -319,12 +330,20 @@ class ProviderRouter:
         if candidates:
             return candidates, skipped
 
-        logger.warning(
-            "All provider circuits are open for route %s; probing primary provider %s",
-            providers,
-            providers[0],
-        )
-        return [providers[0]], providers[1:]
+        logger.warning("No provider candidates available for route %s; skipped=%s", providers, skipped)
+        return [], skipped
+
+    def _is_provider_disabled_by_config(self, provider: str) -> bool:
+        if provider == "piapi_mcp":
+            enabled = os.getenv("PIAPI_MCP_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+            return not enabled or not os.getenv("PIAPI_KEY", "")
+        if provider == "piapi":
+            return not os.getenv("PIAPI_KEY", "")
+        if provider in {"pollo", "pollo_mcp"}:
+            return not os.getenv("POLLO_API_KEY", "")
+        if provider == "a2e":
+            return not os.getenv("A2E_API_KEY", "")
+        return False
 
     def _next_candidate_provider(self, candidates: list[str], current_provider: str) -> Optional[str]:
         try:

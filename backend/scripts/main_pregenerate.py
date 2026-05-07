@@ -276,60 +276,75 @@ SCRIPT_MAPPING = {
 # ============================================================================
 
 BACKGROUND_REMOVAL_MAPPING = {
+    # NOTE: every prompt below MUST produce a single, isolated subject on a
+    # pure white seamless backdrop with no surrounding props, hands, or text.
+    # That is the ONLY way the downstream RemBG step can produce a clean
+    # transparent PNG that visually pairs with the input. Earlier prompts
+    # like "appetizing food photography, studio lighting" allowed slight
+    # ambient gradients and tabletop reflections, which made the after-cutout
+    # look like a different product than the before. Lock it down.
+    #
+    # Required modifiers (do not remove):
+    #   - "single subject only"
+    #   - "centered composition"
+    #   - "pure #FFFFFF seamless background"
+    #   - "soft top-down studio lighting, no harsh shadows"
+    #   - "no props, no hands, no text, no logos, no captions"
+    #   - "8K e-commerce product photography"
     "drinks": {
         "prompts": [
-            "A cup of bubble milk tea with tapioca pearls on white background, food photography, appetizing, studio lighting",
-            "Fresh fruit tea with lemon and passion fruit in clear cup on white background, drink photography",
-            "Iced coffee latte with cream swirl in transparent cup on white background, beverage product shot"
+            "Single subject only: a tall clear plastic cup of bubble milk tea with black tapioca pearls, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: a clear glass of fresh fruit tea with lemon slice and passion fruit, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: an iced coffee latte with cream swirl in a transparent cup, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography"
         ]
     },
     "snacks": {
         "prompts": [
-            "Crispy fried chicken cutlet on white background, Taiwanese street food, appetizing food photography",
-            "Grilled squid skewer on white background, night market snack, food product shot",
-            "Scallion pancake on white background, golden crispy, traditional Taiwanese snack photography"
+            "Single subject only: one piece of crispy fried Taiwanese chicken cutlet, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one grilled squid skewer, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one golden crispy scallion pancake, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography"
         ]
     },
     "desserts": {
         "prompts": [
-            "Mango shaved ice dessert on white background, colorful toppings, food photography",
-            "Egg tart pastry on white background, golden crust, bakery product photography",
-            "Pineapple cake on white background, traditional Taiwanese pastry, product shot"
+            "Single subject only: one bowl of mango shaved ice with mango cubes on top, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one Portuguese-style egg tart with golden flaky crust, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one square pineapple cake pastry, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography"
         ]
     },
     "meals": {
         "prompts": [
-            "Braised pork rice bento box on white background, Taiwanese comfort food, appetizing",
-            "Beef noodle soup bowl on white background, food photography, steaming hot",
-            "Fried rice plate on white background, Chinese restaurant style, food product shot"
+            "Single subject only: one closed paper bento box of braised pork rice, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one bowl of Taiwanese beef noodle soup with beef chunks, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one plate of egg fried rice, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography"
         ]
     },
     "packaging": {
         "prompts": [
-            "Takeout paper bag with logo on white background, food delivery packaging, product shot",
-            "Eco-friendly drink cup with straw on white background, beverage packaging photography",
-            "Food container lunch box on white background, takeout packaging, clean product photo"
+            "Single subject only: one blank kraft paper takeout bag with handles standing upright, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, no logos, 8K e-commerce product photography",
+            "Single subject only: one eco-friendly drink cup with reusable straw, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, no logos, 8K e-commerce product photography",
+            "Single subject only: one rectangular paper food container lunch box, closed lid, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, no logos, 8K e-commerce product photography"
         ]
     },
     "equipment": {
         "prompts": [
-            "Bubble tea sealing machine on white background, drink shop equipment, product photography",
-            "Commercial blender on white background, restaurant kitchen equipment, clean product shot",
-            "Point of sale tablet register on white background, shop equipment photography"
+            "Single subject only: one stainless-steel cup-sealing machine, three-quarter view, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one chrome commercial blender with clear pitcher, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one black point-of-sale tablet register on a small stand, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography"
         ]
     },
     "signage": {
         "prompts": [
-            "LED menu board display on white background, restaurant signage, product photography",
-            "Wooden A-frame chalkboard sign on white background, cafe menu board, product shot",
-            "Neon open sign on white background, shop signage, glowing product photography"
+            "Single subject only: one rectangular LED menu board display, screen turned off, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one wooden A-frame chalkboard sign, blank chalk surface, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one neon 'OPEN' sign, glowing red and blue, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no caption, 8K e-commerce product photography"
         ]
     },
     "ingredients": {
         "prompts": [
-            "Fresh tapioca pearls in bowl on white background, bubble tea ingredient, food photography",
-            "Assorted tea leaves in wooden scoop on white background, tea ingredient product shot",
-            "Fresh fruits arranged on white background, mango strawberry kiwi, food ingredient shot"
+            "Single subject only: one small white bowl of black tapioca pearls, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: one wooden scoop of loose tea leaves, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography",
+            "Single subject only: a flat-lay arrangement of one mango, one strawberry and one kiwi, tightly grouped, centered composition, pure #FFFFFF seamless background, soft top-down studio lighting, no harsh shadows, no props, no hands, no text, 8K e-commerce product photography"
         ]
     }
 }

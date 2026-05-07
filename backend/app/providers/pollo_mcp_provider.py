@@ -90,13 +90,15 @@ class PolloMCPProvider(VideoGenerationProvider):
         model_alias = _resolve_model_alias(params.get("model"))
         tool_name = self._resolve_tool_name(model_alias, "t2v")
 
+        # pollo-v1-6 (and most Pollo t2v models) declare `resolution` and
+        # `length` as REQUIRED in their per-model mcp_config.json schemas.
+        # Provide safe defaults so callers that only supply `prompt` don't
+        # get a hard schema-validation failure inside the MCP server.
         arguments: Dict[str, Any] = {
             "prompt": params["prompt"],
+            "length": int(params.get("duration") or 5),
+            "resolution": params.get("resolution") or "720p",
         }
-        if params.get("duration"):
-            arguments["length"] = params["duration"]
-        if params.get("resolution"):
-            arguments["resolution"] = params["resolution"]
         if params.get("aspect_ratio"):
             arguments["aspectRatio"] = params["aspect_ratio"]
 
@@ -136,7 +138,7 @@ class PolloMCPProvider(VideoGenerationProvider):
         """
         self._log_request("video_style_transfer", params)
 
-        image_url = params.get("image_url") or params.get("video_url")
+        image_url = params.get("image_url") or params.get("first_frame_url") or params.get("video_url")
         if not image_url:
             raise ValueError("image_url or video_url required for style transfer")
 

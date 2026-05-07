@@ -615,13 +615,22 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         if img_resp.status_code != 200:
             raise Exception(f"Failed to fetch image: HTTP {img_resp.status_code}")
         image_b64 = base64.b64encode(img_resp.content).decode()
+        # Veo I2V expects `mimeType` alongside `bytesBase64Encoded` — it is
+        # marked required in the public schema and Veo 3 rejects payloads
+        # without it (HTTP 400 "image.mimeType is required").
+        content_type = img_resp.headers.get("content-type", "").split(";")[0].strip().lower()
+        if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+            content_type = "image/jpeg"
 
         duration = params.get("duration", 6)
         if duration not in (4, 6, 8):
             duration = min((4, 6, 8), key=lambda x: abs(x - duration))
 
         instance: Dict[str, Any] = {
-            "image": {"bytesBase64Encoded": image_b64},
+            "image": {
+                "bytesBase64Encoded": image_b64,
+                "mimeType": content_type,
+            },
         }
         if params.get("prompt"):
             instance["prompt"] = params["prompt"]
@@ -648,7 +657,7 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         """
         self._log_request("video_style_transfer", params)
 
-        image_url = params.get("image_url") or params.get("video_url")
+        image_url = params.get("image_url") or params.get("first_frame_url") or params.get("video_url")
         if not image_url:
             raise ValueError("image_url or video_url required for style transfer")
 

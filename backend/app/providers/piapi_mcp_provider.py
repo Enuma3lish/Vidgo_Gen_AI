@@ -206,7 +206,7 @@ class PiAPIMCPProvider(BaseProvider):
     async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Video style transfer via Wan — use referenceImage + style prompt."""
         self._log_request("video_style_transfer", params)
-        image_url = params.get("image_url") or params.get("video_url", "")
+        image_url = params.get("image_url") or params.get("first_frame_url") or params.get("video_url", "")
         arguments: Dict[str, Any] = {
             "prompt": params.get("prompt", "stylized video"),
             "referenceImage": self._resolve_image_url(image_url),

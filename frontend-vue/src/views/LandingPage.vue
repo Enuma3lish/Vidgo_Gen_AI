@@ -12,15 +12,20 @@ const authStore = useAuthStore()
 const demoImages = ref<Record<string, { before: string; after: string }[]>>({})
 const demoLoading = ref(true)
 
-// Fallback images — shown while real AI results load or as error fallback.
-// "before" = realistic input state; "after" = compelling AI-transformed result.
+// Fallback images — shown only as a last resort while the real AI results
+// load. For each tool we deliberately use the SAME product photo for both
+// "before" and "after" so a slow or failed API call never produces the
+// jarring "shoe → headphones" mismatch users reported. The visual swap is
+// only meaningful when it comes from a genuine pre-generated pair served by
+// /api/v1/demo/presets/<tool>; otherwise we keep the two panes visually
+// consistent.
 const FALLBACK: Record<string, { before: string; after: string }> = {
-  try_on:            { before: 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=600&q=85', after: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=85' },
-  background_removal:{ before: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&q=85', after: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&q=85&bg=ffffff' },
-  room_redesign:     { before: 'https://images.unsplash.com/photo-1560185893-a55cbc8c57e8?w=600&q=85', after: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&q=85' },
-  short_video:       { before: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=600&q=85', after: 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?w=600&q=85' },
-  product_scene:     { before: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=85', after: 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=85' },
-  ai_avatar:         { before: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=85', after: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&q=85' },
+  try_on:             (() => { const u = 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=85'; return { before: u, after: u } })(),
+  background_removal: (() => { const u = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=85'; return { before: u, after: u } })(),
+  room_redesign:      (() => { const u = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&q=85'; return { before: u, after: u } })(),
+  short_video:        (() => { const u = 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=600&q=85'; return { before: u, after: u } })(),
+  product_scene:      (() => { const u = 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600&q=85'; return { before: u, after: u } })(),
+  ai_avatar:          (() => { const u = 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&q=85'; return { before: u, after: u } })(),
 }
 
 function demo(cat: string, idx: 'before' | 'after') {
@@ -38,12 +43,12 @@ function fallbackImg(e: Event, cat: string, type: 'before' | 'after') {
 const demoCats = ['try_on', 'background_removal', 'room_redesign', 'short_video', 'product_scene']
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
-// Hero interactive demo tabs
+// Hero interactive demo tabs (label resolved via i18n at render time)
 const heroDemoTabs = [
-  { key: 'product_scene',     label: 'Studio Scene' },
-  { key: 'background_removal',label: 'Cutout' },
-  { key: 'try_on',            label: 'Try-On' },
-  { key: 'room_redesign',     label: 'Room' },
+  { key: 'product_scene' },
+  { key: 'background_removal' },
+  { key: 'try_on' },
+  { key: 'room_redesign' },
 ] as const
 const activeDemoTab = ref<typeof heroDemoTabs[number]['key']>('product_scene')
 let heroTabTimer: ReturnType<typeof setInterval> | null = null
@@ -227,45 +232,14 @@ const activeSeasonItems = computed(() => {
   return seasonData.value[activeSeason.value] || []
 })
 
-const isZhLocale = computed(() => locale.value.startsWith('zh'))
-
-const interiorWorkflows = computed(() => isZhLocale.value
-  ? [
-      { label: '照片改造', text: '上傳空屋、現況照或家具空間，保留房型比例並快速換成指定設計風格。' },
-      { label: '草圖提案', text: '把手繪概念、參考圖與設計描述整理成可給客戶看的視覺稿。' },
-      { label: '平面圖到渲染', text: '用平面圖或配置方向生成更接近建築與室內設計提案的空間效果。' },
-      { label: '3D 延伸', text: '訂閱用戶可把完成的空間圖延伸為可旋轉、可展示的 3D 模型流程。' },
-    ]
-  : [
-      { label: 'Photo Redesign', text: 'Upload an empty room, existing space, or furniture context and restyle it while preserving spatial proportion.' },
-      { label: 'Sketch Proposal', text: 'Turn sketches, references, and design notes into client-ready visual directions.' },
-      { label: 'Plan to Render', text: 'Use floor plans or layout direction to create interior visuals closer to architecture proposal workflows.' },
-      { label: '3D Extension', text: 'Subscribers can extend finished room renders into rotatable 3D model workflows.' },
-    ])
-
-const interiorStats = computed(() => isZhLocale.value
-  ? [
-      { value: '4 種', label: '照片 / 草圖 / 平面圖 / 3D 流程' },
-      { value: '20+', label: '室內風格與空間類型' },
-      { value: '商用', label: '房仲、設計師、家具品牌可用' },
-    ]
-  : [
-      { value: '4 modes', label: 'photo, sketch, plan, and 3D workflows' },
-      { value: '20+', label: 'interior styles and room types' },
-      { value: 'Commercial', label: 'for real estate, designers, and furniture brands' },
-    ])
-
-const creditPackHighlights = computed(() => isZhLocale.value
-  ? [
-      { name: '輕量包', price: 'NT$299', credits: '3,000 點' },
-      { name: '標準包', price: 'NT$499', credits: '5,500 點' },
-      { name: '重度包', price: 'NT$999', credits: '12,000 點' },
-    ]
-  : [
-      { name: 'Light Pack', price: 'NT$299', credits: '3,000 credits' },
-      { name: 'Standard Pack', price: 'NT$499', credits: '5,500 credits' },
-      { name: 'Heavy Pack', price: 'NT$999', credits: '12,000 credits' },
-    ])
+const interiorWorkflows = computed(() => tm('interior.studio.workflows') as Array<{ label: string; text: string }>)
+const interiorStats = computed(() => tm('interior.studio.stats') as Array<{ value: string; label: string }>)
+// Price stays universal (NT$); name + credits localised.
+const creditPackHighlights = computed(() => {
+  const prices = ['NT$299', 'NT$499', 'NT$999']
+  const items = tm('interior.studio.creditPacks') as Array<{ name: string; credits: string }>
+  return items.map((it, i) => ({ ...it, price: prices[i] }))
+})
 
 // ── Before/After deep dives ──
 const deepDiveDefs = [
@@ -361,26 +335,26 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
                 <button v-for="cat in heroDemoTabs" :key="cat.key"
                   class="hero-demo-tab" :class="{ 'is-active': activeDemoTab === cat.key }"
                   @click="activeDemoTab = cat.key">
-                  {{ cat.label }}
+                  {{ t(`lp.heroDemo.tabs.${cat.key}`) }}
                 </button>
               </div>
               <div class="hero-demo-stage">
                 <div class="hero-demo-pane">
                   <img :src="demo(activeDemoTab, 'before') || FALLBACK[activeDemoTab]?.before" alt="Before" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'before')" />
-                  <span class="hero-demo-badge hero-demo-badge-before">BEFORE</span>
+                  <span class="hero-demo-badge hero-demo-badge-before">{{ t('lp.heroDemo.before') }}</span>
                 </div>
                 <div class="hero-demo-pane">
                   <img :src="demo(activeDemoTab, 'after') || FALLBACK[activeDemoTab]?.after" alt="After" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'after')" />
-                  <span class="hero-demo-badge hero-demo-badge-after">AFTER · AI</span>
+                  <span class="hero-demo-badge hero-demo-badge-after">{{ t('lp.heroDemo.after') }}</span>
                 </div>
               </div>
               <div class="hero-demo-meta">
                 <div class="hero-demo-meta-left">
                   <span class="hero-demo-dot"></span>
-                  Generated in seconds
+                  {{ t('lp.heroDemo.generatedIn') }}
                 </div>
                 <div class="hero-demo-meta-right">
-                  Powered by VidGo AI
+                  {{ t('lp.heroDemo.poweredBy') }}
                 </div>
               </div>
             </div>
@@ -569,25 +543,25 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
               <div class="relative overflow-hidden" style="aspect-ratio: 4/5; background: #141420;">
                 <img :src="demo('room_redesign', 'before') || FALLBACK.room_redesign.before"
                   alt="Interior before" class="w-full h-full object-cover" @error="fallbackImg($event, 'room_redesign', 'before')" />
-                <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: rgba(0,0,0,0.62); color: #ffffff;">{{ isZhLocale ? '原始空間' : 'ROOM PHOTO' }}</div>
+                <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: rgba(0,0,0,0.62); color: #ffffff;">{{ t('interior.studio.beforeLabel') }}</div>
               </div>
               <div class="relative overflow-hidden" style="aspect-ratio: 4/5; background: #141420;">
                 <img :src="demo('room_redesign', 'after') || FALLBACK.room_redesign.after"
                   alt="Interior render" class="w-full h-full object-cover" @error="fallbackImg($event, 'room_redesign', 'after')" />
-                <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: #52c41a; color: #06120a;">{{ isZhLocale ? 'AI 渲染' : 'AI RENDER' }}</div>
+                <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: #52c41a; color: #06120a;">{{ t('interior.studio.afterLabel') }}</div>
               </div>
             </div>
           </div>
 
           <div class="lg:col-span-6">
             <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-4" style="background: rgba(82,196,26,0.12); color: #95de64; border: 1px solid rgba(82,196,26,0.28);">
-              {{ isZhLocale ? '室內設計工作室' : 'Interior Design Studio' }}
+              {{ t('interior.studio.badge') }}
             </div>
             <h2 class="text-3xl md:text-4xl font-black mb-4" style="color: #f5f5fa;">
-              {{ isZhLocale ? '從房間照片、草圖和平面圖，生成可提案的室內渲染' : 'Create proposal-ready interior renders from photos, sketches, and floor plans' }}
+              {{ t('interior.studio.title') }}
             </h2>
             <p class="text-base leading-relaxed mb-8" style="color: #9494b0;">
-              {{ isZhLocale ? '參考專業室內渲染與商務修圖產品的工作流，VidGo 把空間改造做成一個完整工具：快速換風格、保留空間感、輸出適合房仲刊登、設計提案與家具情境圖的高質感視覺。' : 'VidGo brings professional interior rendering and commerce-photo workflows into one tool: restyle rooms fast, preserve spatial intent, and export polished visuals for listings, design proposals, and furniture scenes.' }}
+              {{ t('interior.studio.description') }}
             </p>
 
             <div class="grid sm:grid-cols-2 gap-3 mb-8">
@@ -607,11 +581,11 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             <div class="rounded-xl p-4 mb-8" style="background: rgba(22,119,255,0.07); border: 1px solid rgba(22,119,255,0.18);">
               <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                 <div>
-                  <div class="text-sm font-semibold" style="color: #f5f5fa;">{{ isZhLocale ? '單買點數收費' : 'One-time credit pricing' }}</div>
-                  <p class="text-xs mt-1" style="color: #9494b0;">{{ isZhLocale ? '不訂閱也可用點數包補量，適合臨時提案與批次渲染。' : 'Top up without subscribing, ideal for ad hoc proposals and render batches.' }}</p>
+                  <div class="text-sm font-semibold" style="color: #f5f5fa;">{{ t('interior.studio.creditPricingTitle') }}</div>
+                  <p class="text-xs mt-1" style="color: #9494b0;">{{ t('interior.studio.creditPricingBody') }}</p>
                 </div>
                 <RouterLink to="/pricing#credit-packs" class="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg" style="background: #1677ff; color: #ffffff;">
-                  {{ isZhLocale ? '查看價格' : 'View Pricing' }}
+                  {{ t('interior.studio.viewPricing') }}
                 </RouterLink>
               </div>
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -625,11 +599,11 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
 
             <div class="flex flex-col sm:flex-row gap-3">
               <RouterLink to="/tools/room-redesign" class="inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 hover:opacity-90" style="background: #52c41a; color: #06120a; box-shadow: 0 4px 16px rgba(82,196,26,0.26);">
-                {{ isZhLocale ? '開始室內設計' : 'Start Interior Design' }}
+                {{ t('interior.studio.startCta') }}
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
               </RouterLink>
               <RouterLink to="/pricing" class="inline-flex items-center justify-center px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200" style="color: #c4c4d8; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.035);">
-                {{ isZhLocale ? '查看點數包' : 'View Credit Packs' }}
+                {{ t('interior.studio.viewCreditPacks') }}
               </RouterLink>
             </div>
           </div>

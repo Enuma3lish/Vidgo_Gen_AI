@@ -203,7 +203,7 @@ import { useI18n } from 'vue-i18n'
 import { uploadsApi } from '@/api/uploads'
 import type { ModelInfo, UploadStatusResponse } from '@/api/uploads'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
-import { imageDimensionRuleForTool, validateImageFileDimensions } from '@/utils/mediaValidation'
+import { imageDimensionRuleForTool, isAllowedImageFile, normalizeImageFileForUpload } from '@/utils/mediaValidation'
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -302,7 +302,7 @@ async function setFile(file: File): Promise<boolean> {
   const allowedTypes = expectsVideo
     ? ['video/mp4', 'video/webm', 'video/quicktime']
     : ['image/jpeg', 'image/png', 'image/webp']
-  if (!allowedTypes.includes(file.type)) {
+  if (expectsVideo ? !allowedTypes.includes(file.type) : !isAllowedImageFile(file)) {
     setStatus(
       'error',
       expectsVideo
@@ -311,25 +311,26 @@ async function setFile(file: File): Promise<boolean> {
     )
     return false
   }
-  if (file.size > 20 * 1024 * 1024) {
+  if (expectsVideo && file.size > 20 * 1024 * 1024) {
     setStatus('error', isZh.value ? '檔案需小於 20MB，請重新選擇' : 'File must be under 20MB. Please choose a smaller file.')
     return false
   }
-  if (file.type.startsWith('image/')) {
+  let uploadFile = file
+  if (!expectsVideo) {
     try {
-      const dimensionError = await validateImageFileDimensions(file, imageDimensionRuleForTool(props.toolType), isZh.value)
-      if (dimensionError) {
-        setStatus('error', dimensionError)
-        return false
-      }
+      uploadFile = await normalizeImageFileForUpload(file, imageDimensionRuleForTool(props.toolType), { maxSizeMb: 20 })
     } catch {
-      setStatus('error', isZh.value ? '無法讀取圖片尺寸，請重新選擇圖片' : 'Image dimensions could not be read. Please choose a different image.')
+      setStatus('error', isZh.value ? '無法處理圖片尺寸或壓縮，請重新選擇圖片' : 'Image could not be resized or compressed. Please choose a different image.')
+      return false
+    }
+    if (uploadFile.size > 20 * 1024 * 1024) {
+      setStatus('error', isZh.value ? '圖片壓縮後仍超過 20MB，請重新選擇圖片' : 'Image is still over 20MB after compression. Please choose a different image.')
       return false
     }
   }
-  selectedFile.value = file
-  if (file.type.startsWith('image/')) {
-    previewUrl.value = URL.createObjectURL(file)
+  selectedFile.value = uploadFile
+  if (!expectsVideo) {
+    previewUrl.value = URL.createObjectURL(uploadFile)
   } else {
     previewUrl.value = null
   }

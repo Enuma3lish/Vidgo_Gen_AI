@@ -100,6 +100,183 @@ export function imageDimensions(file: File): Promise<{ width: number; height: nu
   })
 }
 
+function imageTypeFromFile(file: File): string | null {
+  const type = (file.type || '').toLowerCase()
+  if (ALLOWED_IMAGE_MIME.includes(type)) return type
+
+  const lowerName = (file.name || '').toLowerCase()
+  if (/\.(jpe?g)$/.test(lowerName)) return 'image/jpeg'
+  if (/\.png$/.test(lowerName)) return 'image/png'
+  if (/\.webp$/.test(lowerName)) return 'image/webp'
+  return null
+}
+
+export function isAllowedImageFile(file: File): boolean {
+  return Boolean(imageTypeFromFile(file))
+}
+
+function dimensionsAreWithinRule(width: number, height: number, rule: ImageDimensionRule): boolean {
+  if (width < rule.minWidth || height < rule.minHeight) return false
+  if (width > rule.maxWidth || height > rule.maxHeight) return false
+  if ((width * height) / 1_000_000 > rule.maxMegapixels) return false
+
+  const aspectRatio = width / height
+  return aspectRatio >= rule.minAspectRatio && aspectRatio <= rule.maxAspectRatio
+}
+
+function normalizedImageName(name: string, mimeType: string): string {
+  const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg'
+  const baseName = (name || 'vidgo-upload').replace(/\.[^/.]+$/, '') || 'vidgo-upload'
+  return `${baseName}.${extension}`
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality?: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (blob) resolve(blob)
+      else reject(new Error('Image could not be compressed.'))
+    }, mimeType, quality)
+  })
+}
+
+function downscaleCanvas(source: HTMLCanvasElement, ratio: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(source.width * ratio))
+  canvas.height = Math.max(1, Math.round(source.height * ratio))
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Image could not be processed.')
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(source, 0, 0, canvas.width, canvas.height)
+  return canvas
+}
+
+async function encodeCanvasWithinLimit(
+  sourceCanvas: HTMLCanvasElement,
+  preferredType: string,
+  maxBytes: number,
+): Promise<{ blob: Blob; mimeType: string }> {
+  let canvas = sourceCanvas
+  let mimeType = preferredType
+  const qualityTypes = new Set(['image/jpeg', 'image/webp'])
+  const qualities = qualityTypes.has(mimeType) ? [0.9, 0.82, 0.74, 0.66] : [undefined]
+  let blob = await canvasToBlob(canvas, mimeType, qualities[0])
+
+  for (const quality of qualities.slice(1)) {
+    if (blob.size <= maxBytes) break
+    blob = await canvasToBlob(canvas, mimeType, quality)
+  }
+
+  if (blob.size > maxBytes && mimeType === 'image/png') {
+    mimeType = 'image/webp'
+    for (const quality of [0.9, 0.82, 0.74, 0.66]) {
+      blob = await canvasToBlob(canvas, mimeType, quality)
+      if (blob.size <= maxBytes) break
+    }
+  }
+
+  for (let attempt = 0; blob.size > maxBytes && attempt < 5; attempt += 1) {
+    const ratio = Math.max(0.5, Math.sqrt(maxBytes / blob.size) * 0.92)
+    canvas = downscaleCanvas(canvas, ratio)
+    const retryQualities = qualityTypes.has(mimeType) ? [0.82, 0.74, 0.66] : [undefined]
+    for (const quality of retryQualities) {
+      blob = await canvasToBlob(canvas, mimeType, quality)
+      if (blob.size <= maxBytes) break
+    }
+  }
+
+  if (blob.size > maxBytes) {
+    throw new Error('Image could not be compressed below the upload limit.')
+  }
+
+  return { blob, mimeType }
+}
+
+function targetFrameForRule(width: number, height: number, rule: ImageDimensionRule) {
+  const sourceAspect = width / height
+  let frameWidth = width
+  let frameHeight = height
+
+  if (sourceAspect < rule.minAspectRatio) {
+    frameWidth = height * rule.minAspectRatio
+  } else if (sourceAspect > rule.maxAspectRatio) {
+    frameHeight = width / rule.maxAspectRatio
+  }
+
+  let scale = 1
+  const minScale = Math.max(rule.minWidth / frameWidth, rule.minHeight / frameHeight)
+  if (minScale > 1) scale = minScale
+
+  const maxScale = Math.min(
+    rule.maxWidth / frameWidth,
+    rule.maxHeight / frameHeight,
+    Math.sqrt((rule.maxMegapixels * 1_000_000) / (frameWidth * frameHeight)),
+  )
+  if (maxScale < scale || maxScale < 1) scale = maxScale
+
+  const targetWidth = Math.max(1, Math.round(frameWidth * scale))
+  const targetHeight = Math.max(1, Math.round(frameHeight * scale))
+  const drawWidth = Math.max(1, Math.round(width * scale))
+  const drawHeight = Math.max(1, Math.round(height * scale))
+
+  return { targetWidth, targetHeight, drawWidth, drawHeight }
+}
+
+export async function normalizeImageFileForUpload(
+  file: File,
+  rule: ImageDimensionRule = commonImageDimensionRule,
+  options: { maxSizeMb?: number } = {},
+): Promise<File> {
+  const preferredType = imageTypeFromFile(file)
+  if (!preferredType) throw new Error(`Unsupported image format. Please re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`)
+
+  const maxBytes = (options.maxSizeMb ?? MAX_IMAGE_SIZE_MB) * 1024 * 1024
+  const url = URL.createObjectURL(file)
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image()
+      element.onload = () => resolve(element)
+      element.onerror = () => reject(new Error('Image dimensions could not be read.'))
+      element.src = url
+    })
+
+    const width = image.naturalWidth
+    const height = image.naturalHeight
+    if (dimensionsAreWithinRule(width, height, rule) && file.size <= maxBytes) {
+      return file
+    }
+
+    const { targetWidth, targetHeight, drawWidth, drawHeight } = targetFrameForRule(width, height, rule)
+    const canvas = document.createElement('canvas')
+    canvas.width = targetWidth
+    canvas.height = targetHeight
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Image could not be processed.')
+
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
+    if (preferredType === 'image/jpeg') {
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, targetWidth, targetHeight)
+    } else {
+      context.clearRect(0, 0, targetWidth, targetHeight)
+    }
+
+    const drawX = Math.round((targetWidth - drawWidth) / 2)
+    const drawY = Math.round((targetHeight - drawHeight) / 2)
+    context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+
+    const { blob, mimeType } = await encodeCanvasWithinLimit(canvas, preferredType, maxBytes)
+    return new File([blob], normalizedImageName(file.name, mimeType), {
+      type: mimeType,
+      lastModified: Date.now(),
+    })
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
 export async function validateImageFileDimensions(
   file: File,
   rule: ImageDimensionRule = commonImageDimensionRule,
@@ -198,11 +375,10 @@ export function validateVideoFile(
  * the format requirements before they pick a file.
  */
 export function imageHintForTool(toolType: string | undefined, isZh = false): string {
-  const rule = imageDimensionRuleForTool(toolType)
-  const guidance = isZh ? rule.guidanceZh : rule.guidance
+  imageDimensionRuleForTool(toolType)
   return isZh
-    ? `${ALLOWED_IMAGE_EXT_LABEL}，最大 ${MAX_IMAGE_SIZE_MB}MB。${guidance}`
-    : `${ALLOWED_IMAGE_EXT_LABEL}, up to ${MAX_IMAGE_SIZE_MB}MB. ${guidance}`
+    ? `${ALLOWED_IMAGE_EXT_LABEL}。系統會自動調整尺寸與壓縮後再送出。`
+    : `${ALLOWED_IMAGE_EXT_LABEL}. Images are resized and compressed automatically before upload.`
 }
 
 export function videoHintForTool(_toolType: string | undefined, isZh = false): string {

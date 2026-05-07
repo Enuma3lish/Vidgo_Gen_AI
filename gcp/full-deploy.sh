@@ -205,8 +205,8 @@ seed_admin() {
   if [[ -f backend/.env ]]; then
     admin_account="$(grep -E '^ADMIN_ACCOUNT=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
     admin_password="$(grep -E '^ADMIN_PASSWORD=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
-    admin_extra="$(grep -E '^ADMIN_EXTRA_ACCOUNTS=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
-    test_accounts="$(grep -E '^TEST_ACCOUNTS=' backend/.env | head -1 | cut -d= -f2- | tr -d '"'"'"' ')"
+    admin_extra="$(sed -n 's/^ADMIN_EXTRA_ACCOUNTS=//p' backend/.env | head -1 | tr -d '" ')"
+    test_accounts="$(sed -n 's/^TEST_ACCOUNTS=//p' backend/.env | head -1 | tr -d '" ')"
     if [[ -n "${admin_account}" && -n "${admin_password}" ]]; then
       ok "found ADMIN_ACCOUNT + ADMIN_PASSWORD in backend/.env"
     fi

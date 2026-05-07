@@ -29,8 +29,8 @@ const isZh = computed(() => locale.value.startsWith('zh'))
 const headingTitle = computed(() => isZh.value ? '使用方法' : 'How to use')
 const formatTitle = computed(() => isZh.value ? '上傳檔案要求' : 'Upload requirements')
 const reuploadNote = computed(() => isZh.value
-  ? '若上傳格式或尺寸不符，系統會提示您依正確格式重新上傳。'
-  : 'If the file does not match these requirements, you will be asked to re-upload in the correct format.')
+  ? '若格式不支援，系統會提示您改用正確格式重新上傳。'
+  : 'If the format is not supported, you will be asked to re-upload in a supported format.')
 
 const formatHint = computed(() => {
   if (props.formatHintEn || props.formatHintZh) {

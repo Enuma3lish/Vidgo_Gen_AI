@@ -735,6 +735,64 @@
       "textOnly": "純文字：從描述生成設計",
       "multiStyle": "10 種設計風格：現代、北歐、日式等",
       "keepLayout": "保留房間佈局和窗戶位置"
+    },
+    "studio": {
+      "beforeLabel": "原始空間",
+      "afterLabel": "AI 渲染",
+      "badge": "室內設計工作室",
+      "title": "從房間照片、草圖和平面圖，生成可提案的室內渲染",
+      "description": "參考專業室內渲染與商務修圖產品的工作流，VidGo 把空間改造做成一個完整工具：快速換風格、保留空間感、輸出適合房仲刊登、設計提案與家具情境圖的高質感視覺。",
+      "creditPricingTitle": "單買點數收費",
+      "creditPricingBody": "不訂閱也可用點數包補量，適合臨時提案與批次渲染。",
+      "viewPricing": "查看價格",
+      "startCta": "開始室內設計",
+      "viewCreditPacks": "查看點數包",
+      "workflows": [
+        {
+          "label": "照片改造",
+          "text": "上傳空屋、現況照或家具空間，保留房型比例並快速換成指定設計風格。"
+        },
+        {
+          "label": "草圖提案",
+          "text": "把手繪概念、參考圖與設計描述整理成可給客戶看的視覺稿。"
+        },
+        {
+          "label": "平面圖到渲染",
+          "text": "用平面圖或配置方向生成更接近建築與室內設計提案的空間效果。"
+        },
+        {
+          "label": "3D 延伸",
+          "text": "訂閱用戶可把完成的空間圖延伸為可旋轉、可展示的 3D 模型流程。"
+        }
+      ],
+      "stats": [
+        {
+          "value": "4 種",
+          "label": "照片 / 草圖 / 平面圖 / 3D 流程"
+        },
+        {
+          "value": "20+",
+          "label": "室內風格與空間類型"
+        },
+        {
+          "value": "商用",
+          "label": "房仲、設計師、家具品牌可用"
+        }
+      ],
+      "creditPacks": [
+        {
+          "name": "輕量包",
+          "credits": "3,000 點"
+        },
+        {
+          "name": "標準包",
+          "credits": "5,500 點"
+        },
+        {
+          "name": "重度包",
+          "credits": "12,000 點"
+        }
+      ]
     }
   },
   "landing": {
@@ -955,6 +1013,18 @@
     "trust2": "無需信用卡",
     "trust3": "隨時取消",
     "trustBrands": "為電商、餐飲、服飾與生活品牌打造穩定視覺工作流",
+    "heroDemo": {
+      "tabs": {
+        "product_scene": "商品情境",
+        "background_removal": "商品去背",
+        "try_on": "模特試穿",
+        "room_redesign": "室內設計"
+      },
+      "before": "原圖",
+      "after": "AI 生成",
+      "generatedIn": "幾秒內生成",
+      "poweredBy": "由 VidGo AI 提供"
+    },
     "tryNow": "立即體驗",
     "readStory": "閱讀故事",
     "seasonShowcase": "AI 生成",
@@ -976,23 +1046,74 @@
     "ctaFinalBtn": "立即開始創作",
     "ctaFinalNote": "無需信用卡 · 立即可用 · 隨時取消",
     "allTools": {
-      "tryOn": { "name": "AI 模特換裝", "desc": "AI 虛擬模特展示服裝穿搭效果" },
-      "aiModelSwap": { "name": "AI 換模特", "desc": "為產品圖替換模特" },
-      "fashionReels": { "name": "商品動態短影音", "desc": "將商品靜態照片轉為吸睛短影片，秒速完成" },
-      "productAvatars": { "name": "產品代言人", "desc": "創建會說話的產品代言人影片" },
-      "productAnyshoot": { "name": "AI 商品情境攝影棚", "desc": "AI 為商品拍攝專業場景照片" },
-      "tryOnAccessories": { "name": "虛擬試戴配飾", "desc": "試戴珠寶、手錶等配飾" },
-      "aiBackgrounds": { "name": "AI 背景", "desc": "即時專業產品背景" },
-      "removeWatermark": { "name": "去除浮水印", "desc": "清除任何圖片中的浮水印" },
-      "aiTemplates": { "name": "AI 模板", "desc": "AI 驅動的電商廣告模板" },
-      "imageTranslator": { "name": "圖片翻譯", "desc": "準確翻譯圖片中的文字" },
-      "aiShadows": { "name": "AI 陰影", "desc": "為任何物體添加自然陰影" },
-      "roomRedesign": { "name": "室內設計渲染", "desc": "照片、空屋、草圖與平面圖到高質感室內設計提案圖" },
-      "bgRemoval": { "name": "智能去背", "desc": "一鍵去除商品背景，無需任何設計技能" },
-      "hdUpscale": { "name": "商用無損放大", "desc": "將圖片無損放大至 4K，適用於電商上架與印刷" },
-      "imageTransform": { "name": "空間風格轉換（已整合）", "desc": "已整合至「毛胚屋/線稿秒渲染」流程" },
-      "videoTransform": { "name": "影片變換", "desc": "AI 驅動的影片風格轉換" },
-      "patternGenerate": { "name": "花紋設計", "desc": "為品牌生成無縫圖案設計" }
+      "tryOn": {
+        "name": "AI 模特換裝",
+        "desc": "AI 虛擬模特展示服裝穿搭效果"
+      },
+      "aiModelSwap": {
+        "name": "AI 換模特",
+        "desc": "為產品圖替換模特"
+      },
+      "fashionReels": {
+        "name": "商品動態短影音",
+        "desc": "將商品靜態照片轉為吸睛短影片，秒速完成"
+      },
+      "productAvatars": {
+        "name": "產品代言人",
+        "desc": "創建會說話的產品代言人影片"
+      },
+      "productAnyshoot": {
+        "name": "AI 商品情境攝影棚",
+        "desc": "AI 為商品拍攝專業場景照片"
+      },
+      "tryOnAccessories": {
+        "name": "虛擬試戴配飾",
+        "desc": "試戴珠寶、手錶等配飾"
+      },
+      "aiBackgrounds": {
+        "name": "AI 背景",
+        "desc": "即時專業產品背景"
+      },
+      "removeWatermark": {
+        "name": "去除浮水印",
+        "desc": "清除任何圖片中的浮水印"
+      },
+      "aiTemplates": {
+        "name": "AI 模板",
+        "desc": "AI 驅動的電商廣告模板"
+      },
+      "imageTranslator": {
+        "name": "圖片翻譯",
+        "desc": "準確翻譯圖片中的文字"
+      },
+      "aiShadows": {
+        "name": "AI 陰影",
+        "desc": "為任何物體添加自然陰影"
+      },
+      "roomRedesign": {
+        "name": "室內設計渲染",
+        "desc": "照片、空屋、草圖與平面圖到高質感室內設計提案圖"
+      },
+      "bgRemoval": {
+        "name": "智能去背",
+        "desc": "一鍵去除商品背景，無需任何設計技能"
+      },
+      "hdUpscale": {
+        "name": "商用無損放大",
+        "desc": "將圖片無損放大至 4K，適用於電商上架與印刷"
+      },
+      "imageTransform": {
+        "name": "空間風格轉換（已整合）",
+        "desc": "已整合至「毛胚屋/線稿秒渲染」流程"
+      },
+      "videoTransform": {
+        "name": "影片變換",
+        "desc": "AI 驅動的影片風格轉換"
+      },
+      "patternGenerate": {
+        "name": "花紋設計",
+        "desc": "為品牌生成無縫圖案設計"
+      }
     },
     "categories": {
       "fashionAI": "時尚 AI",
@@ -1099,10 +1220,22 @@
       }
     ],
     "stats": [
-      { "value": "54.7%", "label": "提升產品點擊率" },
-      { "value": "79%", "label": "節省行銷設計成本" },
-      { "value": "57%", "label": "提高購買轉化率" },
-      { "value": "90%", "label": "節省時間成本" }
+      {
+        "value": "54.7%",
+        "label": "提升產品點擊率"
+      },
+      {
+        "value": "79%",
+        "label": "節省行銷設計成本"
+      },
+      {
+        "value": "57%",
+        "label": "提高購買轉化率"
+      },
+      {
+        "value": "90%",
+        "label": "節省時間成本"
+      }
     ]
   },
   "gallery": {

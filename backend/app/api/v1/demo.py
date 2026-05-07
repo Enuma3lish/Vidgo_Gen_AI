@@ -974,6 +974,40 @@ async def get_presets(
 
     from app.services.gcs_storage_service import get_gcs_storage
     gcs = get_gcs_storage()
+
+    # Drop Material rows whose primary result blob no longer exists in GCS.
+    # Stale rows (deleted by lifecycle, failed pregenerate uploads, etc.) sign
+    # successfully but the URL 404s on the browser, which makes the LandingPage
+    # hero fall back to placeholder images. We use a 5-minute cached blob
+    # listing so hot read paths stay fast.
+    if gcs.enabled and presets:
+        existing = gcs.list_blob_names_cached("generated/", ttl_seconds=300)
+        if existing:
+            def _row_has_live_blob(p) -> bool:
+                # A row is keepable if at least one of its result URLs either
+                # points outside our bucket (external CDN) or references a
+                # blob we just listed.
+                for url_attr in ("result_image_url", "result_watermarked_url", "result_video_url"):
+                    u = getattr(p, url_attr, None)
+                    if not u:
+                        continue
+                    blob_name = gcs.extract_blob_name(u, gcs.bucket_name)
+                    if blob_name is None:
+                        # External URL — assume reachable.
+                        return True
+                    if blob_name in existing:
+                        return True
+                return False
+            before = len(presets)
+            presets = [p for p in presets if _row_has_live_blob(p)]
+            dropped = before - len(presets)
+            if dropped:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "[presets/%s] Dropped %d/%d Material rows with missing GCS blobs (topic=%s).",
+                    tool_type, dropped, before, topic,
+                )
+
     def _r(u):
         return gcs.refresh_signed_url(u) if u else u
 

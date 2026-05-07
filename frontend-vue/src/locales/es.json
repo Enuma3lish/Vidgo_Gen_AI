@@ -574,6 +574,64 @@
       "textOnly": "Solo Texto: Genera diseño desde descripción",
       "multiStyle": "10 estilos de diseño: Moderno, Nórdico, Japonés y más",
       "keepLayout": "Preserva el diseño de la habitación y posiciones de ventanas"
+    },
+    "studio": {
+      "beforeLabel": "FOTO ORIGINAL",
+      "afterLabel": "RENDER IA",
+      "badge": "Estudio de Diseño Interior",
+      "title": "Crea renders de interiores listos para presentar desde fotos, bocetos y planos",
+      "description": "VidGo unifica los flujos profesionales de renderizado interior y de fotografía de producto en una sola herramienta: cambia estilos al vuelo, mantén la intención espacial y exporta visuales pulidos para listados, propuestas de diseño y escenas de mobiliario.",
+      "creditPricingTitle": "Pago puntual por créditos",
+      "creditPricingBody": "Recarga sin suscribirte, ideal para propuestas puntuales y lotes de renderizado.",
+      "viewPricing": "Ver precios",
+      "startCta": "Iniciar Diseño Interior",
+      "viewCreditPacks": "Ver Paquetes de Créditos",
+      "workflows": [
+        {
+          "label": "Rediseño con Foto",
+          "text": "Sube una habitación vacía, un espacio existente o con mobiliario y cámbiale el estilo manteniendo la proporción espacial."
+        },
+        {
+          "label": "Propuesta con Boceto",
+          "text": "Convierte bocetos, referencias y notas de diseño en propuestas visuales listas para el cliente."
+        },
+        {
+          "label": "Plano a Render",
+          "text": "Usa planos o dirección de layout para crear visuales de interior cercanos a un flujo de propuesta arquitectónica."
+        },
+        {
+          "label": "Extensión 3D",
+          "text": "Los suscriptores pueden extender los renders finalizados a flujos de modelo 3D rotable."
+        }
+      ],
+      "stats": [
+        {
+          "value": "4 modos",
+          "label": "flujos foto, boceto, plano y 3D"
+        },
+        {
+          "value": "20+",
+          "label": "estilos de interior y tipos de habitación"
+        },
+        {
+          "value": "Comercial",
+          "label": "para inmobiliarias, diseñadores y marcas de muebles"
+        }
+      ],
+      "creditPacks": [
+        {
+          "name": "Pack Ligero",
+          "credits": "3,000 créditos"
+        },
+        {
+          "name": "Pack Estándar",
+          "credits": "5,500 créditos"
+        },
+        {
+          "name": "Pack Pesado",
+          "credits": "12,000 créditos"
+        }
+      ]
     }
   },
   "landing": {
@@ -736,6 +794,18 @@
     "trust2": "No se requiere tarjeta de crédito",
     "trust3": "Cancela en cualquier momento",
     "trustBrands": "Confianza de <b>1,000,000+</b> Marcas de Moda y E-Commerce",
+    "heroDemo": {
+      "tabs": {
+        "product_scene": "Escena de Estudio",
+        "background_removal": "Recorte",
+        "try_on": "Prueba Virtual",
+        "room_redesign": "Habitación"
+      },
+      "before": "ANTES",
+      "after": "DESPUÉS · IA",
+      "generatedIn": "Generado en segundos",
+      "poweredBy": "Impulsado por VidGo AI"
+    },
     "tryNow": "Probar Ahora",
     "readStory": "Leer Historia",
     "seasonShowcase": "Generado por IA",
@@ -757,23 +827,74 @@
     "ctaFinalBtn": "Empieza a Crear Ahora",
     "ctaFinalNote": "Sin tarjeta de crédito · Listo inmediatamente · Cancela en cualquier momento",
     "allTools": {
-      "tryOn": { "name": "Prueba de Modelo IA", "desc": "Prueba virtual de ropa con modelos IA" },
-      "aiModelSwap": { "name": "Intercambio de Modelo IA", "desc": "Intercambia modelos en fotos de productos" },
-      "fashionReels": { "name": "Video Dinámico de Producto", "desc": "Convierte imágenes de productos en videos cortos dinámicos" },
-      "productAvatars": { "name": "Avatares de Producto", "desc": "Crea videos de portavoces de productos" },
-      "productAnyshoot": { "name": "Estudio de Escenas IA", "desc": "Escenas profesionales de fotografía de producto con IA" },
-      "tryOnAccessories": { "name": "Prueba Virtual de Accesorios", "desc": "Prueba joyas, relojes y accesorios" },
-      "aiBackgrounds": { "name": "Fondos IA", "desc": "Fondos profesionales instantáneos para productos" },
-      "removeWatermark": { "name": "Eliminar Marca de Agua", "desc": "Limpia marcas de agua de cualquier imagen" },
-      "aiTemplates": { "name": "Plantillas IA", "desc": "Plantillas de anuncios de e-commerce impulsadas por IA" },
-      "imageTranslator": { "name": "Traductor de Imágenes", "desc": "Traduce con precisión el texto de imágenes" },
-      "aiShadows": { "name": "Sombras IA", "desc": "Añade sombras naturales a cualquier objeto" },
-      "roomRedesign": { "name": "Renderizado Instantáneo", "desc": "Sube espacios vacíos o bocetos, renderiza interiores fotorrealistas al instante" },
-      "bgRemoval": { "name": "Eliminación Inteligente de Fondo", "desc": "Elimina fondos de imágenes gratis" },
-      "hdUpscale": { "name": "Escalado HD Comercial", "desc": "Escala imágenes a 4K para e-commerce e impresión" },
-      "imageTransform": { "name": "Transformar Imagen", "desc": "Transformación de estilo de imagen con IA" },
-      "videoTransform": { "name": "Transformar Video", "desc": "Transformación de estilo de video con IA" },
-      "patternGenerate": { "name": "Diseño de Patrones", "desc": "Genera patrones sin costuras para branding" }
+      "tryOn": {
+        "name": "Prueba de Modelo IA",
+        "desc": "Prueba virtual de ropa con modelos IA"
+      },
+      "aiModelSwap": {
+        "name": "Intercambio de Modelo IA",
+        "desc": "Intercambia modelos en fotos de productos"
+      },
+      "fashionReels": {
+        "name": "Video Dinámico de Producto",
+        "desc": "Convierte imágenes de productos en videos cortos dinámicos"
+      },
+      "productAvatars": {
+        "name": "Avatares de Producto",
+        "desc": "Crea videos de portavoces de productos"
+      },
+      "productAnyshoot": {
+        "name": "Estudio de Escenas IA",
+        "desc": "Escenas profesionales de fotografía de producto con IA"
+      },
+      "tryOnAccessories": {
+        "name": "Prueba Virtual de Accesorios",
+        "desc": "Prueba joyas, relojes y accesorios"
+      },
+      "aiBackgrounds": {
+        "name": "Fondos IA",
+        "desc": "Fondos profesionales instantáneos para productos"
+      },
+      "removeWatermark": {
+        "name": "Eliminar Marca de Agua",
+        "desc": "Limpia marcas de agua de cualquier imagen"
+      },
+      "aiTemplates": {
+        "name": "Plantillas IA",
+        "desc": "Plantillas de anuncios de e-commerce impulsadas por IA"
+      },
+      "imageTranslator": {
+        "name": "Traductor de Imágenes",
+        "desc": "Traduce con precisión el texto de imágenes"
+      },
+      "aiShadows": {
+        "name": "Sombras IA",
+        "desc": "Añade sombras naturales a cualquier objeto"
+      },
+      "roomRedesign": {
+        "name": "Renderizado Instantáneo",
+        "desc": "Sube espacios vacíos o bocetos, renderiza interiores fotorrealistas al instante"
+      },
+      "bgRemoval": {
+        "name": "Eliminación Inteligente de Fondo",
+        "desc": "Elimina fondos de imágenes gratis"
+      },
+      "hdUpscale": {
+        "name": "Escalado HD Comercial",
+        "desc": "Escala imágenes a 4K para e-commerce e impresión"
+      },
+      "imageTransform": {
+        "name": "Transformar Imagen",
+        "desc": "Transformación de estilo de imagen con IA"
+      },
+      "videoTransform": {
+        "name": "Transformar Video",
+        "desc": "Transformación de estilo de video con IA"
+      },
+      "patternGenerate": {
+        "name": "Diseño de Patrones",
+        "desc": "Genera patrones sin costuras para branding"
+      }
     },
     "categories": {
       "fashionAI": "IA de Moda",
@@ -858,16 +979,44 @@
       }
     },
     "testimonials": [
-      { "name": "Ryan Chen", "role": "Fundador de Marca de E-bike", "text": "Desde que usamos las herramientas de video e imágenes de marketing de VidGo AI, nuestro CTR de anuncios aumentó 50%, el ROAS mejoró 40%." },
-      { "name": "Lisa Wang", "role": "Minorista de Moda", "text": "VidGo AI ha sido un cambio radical para mi tienda. Solo sube una imagen plana de la ropa y al instante obtienes una foto realista de prueba virtual con modelo." },
-      { "name": "Mark Thompson", "role": "Productor de Video", "text": "El Doblaje IA de VidGo AI ha transformado nuestra forma de crear contenido." },
-      { "name": "Sarah Kim", "role": "Creadora de Contenido", "text": "La Traducción de Imágenes de VidGo AI es una obra maestra para el e-commerce global." }
+      {
+        "name": "Ryan Chen",
+        "role": "Fundador de Marca de E-bike",
+        "text": "Desde que usamos las herramientas de video e imágenes de marketing de VidGo AI, nuestro CTR de anuncios aumentó 50%, el ROAS mejoró 40%."
+      },
+      {
+        "name": "Lisa Wang",
+        "role": "Minorista de Moda",
+        "text": "VidGo AI ha sido un cambio radical para mi tienda. Solo sube una imagen plana de la ropa y al instante obtienes una foto realista de prueba virtual con modelo."
+      },
+      {
+        "name": "Mark Thompson",
+        "role": "Productor de Video",
+        "text": "El Doblaje IA de VidGo AI ha transformado nuestra forma de crear contenido."
+      },
+      {
+        "name": "Sarah Kim",
+        "role": "Creadora de Contenido",
+        "text": "La Traducción de Imágenes de VidGo AI es una obra maestra para el e-commerce global."
+      }
     ],
     "stats": [
-      { "value": "54.7%", "label": "Aumento de Tasa de Clics" },
-      { "value": "79%", "label": "Ahorro en Costos de Diseño de Marketing" },
-      { "value": "57%", "label": "Aumento de Conversión de Compra" },
-      { "value": "90%", "label": "Ahorro de Tiempo" }
+      {
+        "value": "54.7%",
+        "label": "Aumento de Tasa de Clics"
+      },
+      {
+        "value": "79%",
+        "label": "Ahorro en Costos de Diseño de Marketing"
+      },
+      {
+        "value": "57%",
+        "label": "Aumento de Conversión de Compra"
+      },
+      {
+        "value": "90%",
+        "label": "Ahorro de Tiempo"
+      }
     ]
   },
   "einvoice": {

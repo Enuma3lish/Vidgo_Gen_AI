@@ -574,6 +574,64 @@
       "textOnly": "テキストのみ：説明からデザインを生成",
       "multiStyle": "10種類のデザインスタイル：モダン、北欧、和風など",
       "keepLayout": "部屋のレイアウトと窓の位置を保持"
+    },
+    "studio": {
+      "beforeLabel": "元の空間",
+      "afterLabel": "AI レンダリング",
+      "badge": "インテリアデザインスタジオ",
+      "title": "部屋の写真・スケッチ・平面図から、提案できるインテリアレンダリングを生成",
+      "description": "プロのインテリアレンダリングと商品撮影のワークフローを一つに。素早くスタイル変換、空間の意図を保ったまま、物件掲載・設計提案・家具シーン向けの高品質ビジュアルを出力します。",
+      "creditPricingTitle": "クレジット単発購入",
+      "creditPricingBody": "サブスクなしでもクレジットパックで補充可能。単発の提案や一括レンダリングに最適。",
+      "viewPricing": "料金を見る",
+      "startCta": "インテリアデザインを始める",
+      "viewCreditPacks": "クレジットパックを見る",
+      "workflows": [
+        {
+          "label": "写真リデザイン",
+          "text": "空き部屋、現況、家具のある空間を取り込み、比率を保ったまま指定スタイルへ素早く転換。"
+        },
+        {
+          "label": "スケッチ提案",
+          "text": "手描きスケッチ、参考画像、設計メモをクライアント向けのビジュアル提案にまとめます。"
+        },
+        {
+          "label": "平面図からレンダー",
+          "text": "平面図やレイアウト方針から、建築・インテリア提案に近い空間ビジュアルを生成。"
+        },
+        {
+          "label": "3D 拡張",
+          "text": "サブスクユーザーは完成した部屋レンダーを回転可能な 3D モデルへ拡張できます。"
+        }
+      ],
+      "stats": [
+        {
+          "value": "4 モード",
+          "label": "写真 / スケッチ / 平面図 / 3D ワークフロー"
+        },
+        {
+          "value": "20+",
+          "label": "インテリアスタイルと部屋タイプ"
+        },
+        {
+          "value": "商用",
+          "label": "不動産・デザイナー・家具ブランドで利用可"
+        }
+      ],
+      "creditPacks": [
+        {
+          "name": "ライトパック",
+          "credits": "3,000 クレジット"
+        },
+        {
+          "name": "スタンダードパック",
+          "credits": "5,500 クレジット"
+        },
+        {
+          "name": "ヘビーパック",
+          "credits": "12,000 クレジット"
+        }
+      ]
     }
   },
   "landing": {
@@ -736,6 +794,18 @@
     "trust2": "クレジットカード不要",
     "trust3": "いつでもキャンセル可能",
     "trustBrands": "<b>1,000,000+</b>のファッション・Eコマースブランドに信頼",
+    "heroDemo": {
+      "tabs": {
+        "product_scene": "スタジオシーン",
+        "background_removal": "背景除去",
+        "try_on": "試着",
+        "room_redesign": "ルームデザイン"
+      },
+      "before": "BEFORE",
+      "after": "AFTER · AI",
+      "generatedIn": "数秒で生成",
+      "poweredBy": "Powered by VidGo AI"
+    },
     "tryNow": "今すぐ試す",
     "readStory": "ストーリーを読む",
     "seasonShowcase": "AI生成",
@@ -757,23 +827,74 @@
     "ctaFinalBtn": "今すぐ作成開始",
     "ctaFinalNote": "クレジットカード不要 · すぐに利用可能 · いつでもキャンセル",
     "allTools": {
-      "tryOn": { "name": "AIモデル着せ替え", "desc": "AIモデルで衣類のバーチャル試着" },
-      "aiModelSwap": { "name": "AIモデルチェンジ", "desc": "商品写真のモデルを入れ替え" },
-      "fashionReels": { "name": "商品ダイナミック動画", "desc": "商品画像からダイナミックショート動画を生成" },
-      "productAvatars": { "name": "商品アバター", "desc": "商品スポークスパーソン動画を作成" },
-      "productAnyshoot": { "name": "AI商品シーンスタジオ", "desc": "プロフェッショナルなAI商品撮影シーン" },
-      "tryOnAccessories": { "name": "アクセサリー試着", "desc": "ジュエリー、時計、アクセサリーを試着" },
-      "aiBackgrounds": { "name": "AI背景", "desc": "商品に即座にプロフェッショナル背景" },
-      "removeWatermark": { "name": "ウォーターマーク除去", "desc": "画像からウォーターマークをクリーンアップ" },
-      "aiTemplates": { "name": "AIテンプレート", "desc": "AIパワードのEコマース広告テンプレート" },
-      "imageTranslator": { "name": "画像翻訳", "desc": "画像テキストを正確に翻訳" },
-      "aiShadows": { "name": "AIシャドウ", "desc": "任意のオブジェクトに自然な影を追加" },
-      "roomRedesign": { "name": "スケッチ即時レンダー", "desc": "空き部屋やスケッチをアップロードして即座にフォトリアルなインテリアを生成" },
-      "bgRemoval": { "name": "スマート背景除去", "desc": "画像背景を無料で除去" },
-      "hdUpscale": { "name": "商用HDアップスケール", "desc": "ECサイトや印刷用に画像を4Kに拡大" },
-      "imageTransform": { "name": "画像変換", "desc": "AIパワードの画像スタイル変換" },
-      "videoTransform": { "name": "動画変換", "desc": "AIパワードの動画スタイル変換" },
-      "patternGenerate": { "name": "パターンデザイン", "desc": "ブランド向けシームレスパターン生成" }
+      "tryOn": {
+        "name": "AIモデル着せ替え",
+        "desc": "AIモデルで衣類のバーチャル試着"
+      },
+      "aiModelSwap": {
+        "name": "AIモデルチェンジ",
+        "desc": "商品写真のモデルを入れ替え"
+      },
+      "fashionReels": {
+        "name": "商品ダイナミック動画",
+        "desc": "商品画像からダイナミックショート動画を生成"
+      },
+      "productAvatars": {
+        "name": "商品アバター",
+        "desc": "商品スポークスパーソン動画を作成"
+      },
+      "productAnyshoot": {
+        "name": "AI商品シーンスタジオ",
+        "desc": "プロフェッショナルなAI商品撮影シーン"
+      },
+      "tryOnAccessories": {
+        "name": "アクセサリー試着",
+        "desc": "ジュエリー、時計、アクセサリーを試着"
+      },
+      "aiBackgrounds": {
+        "name": "AI背景",
+        "desc": "商品に即座にプロフェッショナル背景"
+      },
+      "removeWatermark": {
+        "name": "ウォーターマーク除去",
+        "desc": "画像からウォーターマークをクリーンアップ"
+      },
+      "aiTemplates": {
+        "name": "AIテンプレート",
+        "desc": "AIパワードのEコマース広告テンプレート"
+      },
+      "imageTranslator": {
+        "name": "画像翻訳",
+        "desc": "画像テキストを正確に翻訳"
+      },
+      "aiShadows": {
+        "name": "AIシャドウ",
+        "desc": "任意のオブジェクトに自然な影を追加"
+      },
+      "roomRedesign": {
+        "name": "スケッチ即時レンダー",
+        "desc": "空き部屋やスケッチをアップロードして即座にフォトリアルなインテリアを生成"
+      },
+      "bgRemoval": {
+        "name": "スマート背景除去",
+        "desc": "画像背景を無料で除去"
+      },
+      "hdUpscale": {
+        "name": "商用HDアップスケール",
+        "desc": "ECサイトや印刷用に画像を4Kに拡大"
+      },
+      "imageTransform": {
+        "name": "画像変換",
+        "desc": "AIパワードの画像スタイル変換"
+      },
+      "videoTransform": {
+        "name": "動画変換",
+        "desc": "AIパワードの動画スタイル変換"
+      },
+      "patternGenerate": {
+        "name": "パターンデザイン",
+        "desc": "ブランド向けシームレスパターン生成"
+      }
     },
     "categories": {
       "fashionAI": "ファッションAI",
@@ -858,16 +979,44 @@
       }
     },
     "testimonials": [
-      { "name": "Ryan Chen", "role": "電動バイクブランド創業者", "text": "VidGo AIの動画・マーケティング画像ツールを使用して以来、広告CTRは50%増加、ROASは40%改善。" },
-      { "name": "Lisa Wang", "role": "ファッション小売業者", "text": "VidGo AIは私の店舗のゲームチェンジャーです。衣服のフラット画像をアップロードするだけで、即座にリアルなモデル試着写真が得られます。" },
-      { "name": "Mark Thompson", "role": "動画プロデューサー", "text": "VidGo AIのAI吹き替えは、コンテンツ制作の方法を変えました。" },
-      { "name": "Sarah Kim", "role": "コンテンツクリエイター", "text": "VidGo AIの画像翻訳は、グローバルEコマースの傑作です。" }
+      {
+        "name": "Ryan Chen",
+        "role": "電動バイクブランド創業者",
+        "text": "VidGo AIの動画・マーケティング画像ツールを使用して以来、広告CTRは50%増加、ROASは40%改善。"
+      },
+      {
+        "name": "Lisa Wang",
+        "role": "ファッション小売業者",
+        "text": "VidGo AIは私の店舗のゲームチェンジャーです。衣服のフラット画像をアップロードするだけで、即座にリアルなモデル試着写真が得られます。"
+      },
+      {
+        "name": "Mark Thompson",
+        "role": "動画プロデューサー",
+        "text": "VidGo AIのAI吹き替えは、コンテンツ制作の方法を変えました。"
+      },
+      {
+        "name": "Sarah Kim",
+        "role": "コンテンツクリエイター",
+        "text": "VidGo AIの画像翻訳は、グローバルEコマースの傑作です。"
+      }
     ],
     "stats": [
-      { "value": "54.7%", "label": "クリック率向上" },
-      { "value": "79%", "label": "マーケティングデザインコスト節約" },
-      { "value": "57%", "label": "購入コンバージョン向上" },
-      { "value": "90%", "label": "時間コスト節約" }
+      {
+        "value": "54.7%",
+        "label": "クリック率向上"
+      },
+      {
+        "value": "79%",
+        "label": "マーケティングデザインコスト節約"
+      },
+      {
+        "value": "57%",
+        "label": "購入コンバージョン向上"
+      },
+      {
+        "value": "90%",
+        "label": "時間コスト節約"
+      }
     ]
   },
   "einvoice": {

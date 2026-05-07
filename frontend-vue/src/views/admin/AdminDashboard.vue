@@ -243,15 +243,22 @@ function providerStatusClass(status: 'ok' | 'error' | 'unknown'): string {
   }[status]
 }
 
-function formatProviderCredits(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return localized('未提供', 'Not provided')
+function formatProviderCredits(value: string | number | null | undefined, source?: string | null): string {
+  if (value === null || value === undefined || value === '') {
+    return source === 'not_available'
+      ? localized('供應商未提供', 'Not exposed by provider')
+      : localized('未提供', 'Not provided')
+  }
   if (typeof value === 'number') return value.toLocaleString()
   const numeric = Number(String(value).replace(/,/g, ''))
   return Number.isFinite(numeric) ? numeric.toLocaleString() : String(value)
 }
 
-function providerSubscriptionLabel(status: string | null | undefined): string {
+function providerSubscriptionLabel(status: string | null | undefined, source?: string | null): string {
   const normalized = (status || 'unknown').toLowerCase()
+  if (normalized === 'unknown' && source === 'not_available') {
+    return localized('供應商未提供', 'Not exposed by provider')
+  }
   const labels: Record<string, string> = {
     active: localized('訂閱中', 'Subscribed'),
     subscribed: localized('訂閱中', 'Subscribed'),
@@ -697,11 +704,11 @@ function exportToolUsage() {
           <div class="provider-account-grid">
             <div>
               <span>{{ localized('剩餘額度', 'Remaining Credits') }}</span>
-              <strong>{{ formatProviderCredits(provider.remainingCredits) }}</strong>
+              <strong>{{ formatProviderCredits(provider.remainingCredits, provider.accountStatusSource) }}</strong>
             </div>
             <div>
               <span>{{ localized('訂閱狀態', 'Subscription') }}</span>
-              <strong>{{ providerSubscriptionLabel(provider.subscriptionStatus) }}</strong>
+              <strong>{{ providerSubscriptionLabel(provider.subscriptionStatus, provider.accountStatusSource) }}</strong>
             </div>
           </div>
           <p class="provider-config">{{ providerConfiguredLabel(provider.configured) }}</p>
@@ -832,7 +839,7 @@ function exportToolUsage() {
 </template>
 
 <style scoped>
-.admin-dashboard { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+.admin-dashboard { padding: 6rem 2rem 2rem; max-width: 1400px; margin: 0 auto; }
 
 .dashboard-header { margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
 .dashboard-header h1 { font-size: 2rem; font-weight: 700; color: #f5f5fa; margin: 0; }

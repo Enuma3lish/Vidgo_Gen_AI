@@ -157,6 +157,49 @@ class GCSStorageService:
             logger.warning(f"[GCS] list_blob_names failed: {e}")
             return set()
 
+    # Module-level cache of {prefix: (set, expires_at_ts)} for short-lived
+    # existence checks. Populated lazily by `list_blob_names_cached`.
+    _blob_listing_cache: dict = {}
+
+    def list_blob_names_cached(self, prefix: str = "generated/", ttl_seconds: int = 300) -> set:
+        """Cached variant of `list_blob_names` for hot read paths.
+
+        Production discovered stale Material rows pointing at GCS objects that
+        no longer exist (deleted by lifecycle, failed pregenerate uploads, etc.)
+        — signing succeeds but the resulting URL 404s, breaking the LandingPage
+        hero. The presets endpoint uses this set to drop dead rows from the
+        response without paying GCS list cost on every request.
+        """
+        import time
+        now = time.time()
+        cached = self._blob_listing_cache.get(prefix)
+        if cached and cached[1] > now:
+            return cached[0]
+        names = self.list_blob_names(prefix)
+        # Only cache non-empty results — an empty set might mean GCS error or
+        # genuine empty prefix; we don't want to mask transient errors.
+        if names:
+            self._blob_listing_cache[prefix] = (names, now + ttl_seconds)
+        return names
+
+    @staticmethod
+    def extract_blob_name(url: Optional[str], bucket_name: str) -> Optional[str]:
+        """Pull the bucket-relative blob name out of a (possibly signed) URL.
+
+        Returns None if the URL doesn't reference our bucket so callers can
+        skip existence checks for external URLs (Unsplash fallbacks, etc.).
+        """
+        if not url or not bucket_name:
+            return None
+        marker = f"/{bucket_name}/"
+        if marker not in url:
+            return None
+        clean = url.split("?", 1)[0].split("#", 1)[0]
+        try:
+            return clean.split(marker, 1)[1] or None
+        except IndexError:
+            return None
+
     def refresh_signed_url(
         self,
         url: Optional[str],

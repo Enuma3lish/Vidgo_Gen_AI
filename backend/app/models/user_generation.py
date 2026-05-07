@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum, Boolean
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum, Boolean, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -26,14 +26,14 @@ class UserGeneration(Base):
     )
 
     # Input Data (kept permanently for generation history)
-    input_image_url = Column(String(500), nullable=True)   # Main input (product, model, room, photo)
-    input_video_url = Column(String(500), nullable=True)   # Video input
-    input_text = Column(String, nullable=True)             # Text input (script, prompt)
+    input_image_url = Column(Text, nullable=True)   # Main input (product, model, room, photo)
+    input_video_url = Column(Text, nullable=True)   # Video input
+    input_text = Column(Text, nullable=True)        # Text input (script, prompt)
     input_params = Column(JSONB, default={})               # Config: prompt, style, model, settings
 
     # Output Data (cleared after 14 days, no watermark for subscribers)
-    result_image_url = Column(String(500), nullable=True)
-    result_video_url = Column(String(500), nullable=True)
+    result_image_url = Column(Text, nullable=True)
+    result_video_url = Column(Text, nullable=True)
     result_metadata = Column(JSONB, default={})            # Extra generation info (kept permanently)
 
     # Metadata

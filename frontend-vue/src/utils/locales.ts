@@ -1,4 +1,10 @@
-export const SUPPORTED_LOCALES = ['en', 'zh-TW', 'ja', 'ko', 'es'] as const
+// NOTE: ja / ko / es locale files are currently incomplete (256 keys missing
+// vs en.json) which makes the UI render in mixed languages — keys that exist
+// only in en fall back to English mid-sentence. Until those locales are fully
+// translated we restrict the picker to the two complete locales (en, zh-TW)
+// so users never see a half-translated screen. Add the locale back here once
+// its messages reach parity with en.json.
+export const SUPPORTED_LOCALES = ['en', 'zh-TW'] as const
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
@@ -11,9 +17,8 @@ export function normalizeLocale(value?: string | null): SupportedLocale {
 
   if (lowerLocale.startsWith('zh')) return 'zh-TW'
   if (lowerLocale.startsWith('en')) return 'en'
-  if (lowerLocale.startsWith('ja')) return 'ja'
-  if (lowerLocale.startsWith('ko')) return 'ko'
-  if (lowerLocale.startsWith('es')) return 'es'
+  // ja / ko / es fall back to the default until those locale files are
+  // fully translated; see SUPPORTED_LOCALES note above.
 
   return DEFAULT_LOCALE
 }

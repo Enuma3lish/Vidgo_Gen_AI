@@ -2,19 +2,25 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore } from '@/stores'
-import { normalizeLocale } from '@/utils/locales'
+import { normalizeLocale, SUPPORTED_LOCALES } from '@/utils/locales'
 
 const { locale } = useI18n()
 const uiStore = useUIStore()
 const isOpen = ref(false)
 
-const languages = [
+// Master list of every language we have UI strings for. The dropdown is
+// filtered down to SUPPORTED_LOCALES so users can never pick a locale whose
+// translation file is incomplete (which previously rendered a half-Japanese,
+// half-English page on /pricing).
+const ALL_LANGUAGES = [
   { code: 'en', name: 'English', flag: '🇺🇸' },
   { code: 'zh-TW', name: '繁體中文', flag: '🇹🇼' },
   { code: 'ja', name: '日本語', flag: '🇯🇵' },
   { code: 'ko', name: '한국어', flag: '🇰🇷' },
   { code: 'es', name: 'Español', flag: '🇪🇸' }
 ]
+const supported = SUPPORTED_LOCALES as readonly string[]
+const languages = ALL_LANGUAGES.filter(l => supported.includes(l.code))
 
 const currentLanguage = computed(() =>
   languages.find(l => l.code === normalizeLocale(locale.value)) || languages[1]

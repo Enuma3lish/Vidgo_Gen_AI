@@ -168,7 +168,18 @@ class MaterialLookupService:
             conditions.append(Material.topic == topic)
 
         if product_id:
-            conditions.append(Material.input_params["product_id"].astext == product_id)
+            # Each tool stores its primary selector under a different key in
+            # input_params. Get this wrong and the WHERE clause matches no
+            # rows, so callers fall back to a random preset — which is how
+            # selecting an Asian female try-on model could surface a male
+            # foreign one. Keep this in sync with DemoCacheService._get_from_db.
+            if tool_enum == ToolType.AI_AVATAR:
+                selector_key = "avatar_id"
+            elif tool_enum == ToolType.TRY_ON:
+                selector_key = "model_id"
+            else:
+                selector_key = "product_id"
+            conditions.append(Material.input_params[selector_key].astext == product_id)
 
         from sqlalchemy import case as sa_case
         featured_first = sa_case(

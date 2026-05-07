@@ -34,7 +34,7 @@ class UserUpload(Base):
     # Upload metadata
     tool_type = Column(String(50), nullable=False, index=True)      # e.g. "background_removal"
     original_filename = Column(String(255), nullable=True)
-    file_url = Column(String(500), nullable=False)                   # Stored path / URL of upload
+    file_url = Column(Text, nullable=False)                          # Stored path / URL of upload
     file_size = Column(Integer, nullable=True)                       # bytes
     content_type = Column(String(100), nullable=True)                # MIME type
 
@@ -55,8 +55,8 @@ class UserUpload(Base):
       index=True,
     )
     task_id = Column(String(200), nullable=True)                     # External API task id
-    result_url = Column(String(500), nullable=True)                  # Result image URL (no watermark)
-    result_video_url = Column(String(500), nullable=True)            # Result video URL (no watermark)
+    result_url = Column(Text, nullable=True)                         # Result image URL (no watermark)
+    result_video_url = Column(Text, nullable=True)                   # Result video URL (no watermark)
     error_message = Column(Text, nullable=True)
 
     # Credits deducted for this generation

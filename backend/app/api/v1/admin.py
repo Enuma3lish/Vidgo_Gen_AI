@@ -700,6 +700,62 @@ async def get_material_readiness_status(
     }
 
 
+@router.post("/materials/deactivate-stale-selectors")
+async def deactivate_stale_selector_materials(
+    dry_run: bool = Query(default=True, description="If true, only count without modifying"),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """One-shot repair: deactivate try_on / ai_avatar Material rows whose
+    `input_params` is missing the per-tool selector key (`model_id` for try_on,
+    `avatar_id` for ai_avatar).
+
+    These legacy rows were created before the demo cache started disambiguating
+    by model/avatar, so they have no way to be matched against a specific user
+    selection. Leaving them is_active=True lets random fallbacks surface the
+    wrong model (e.g. Asian female request → foreign male result).
+
+    Set `dry_run=false` to actually deactivate. The rows are kept (not deleted)
+    so future re-pregeneration can overwrite them in place.
+    """
+    from app.models.material import Material, ToolType
+
+    targets = [
+        (ToolType.TRY_ON, "model_id"),
+        (ToolType.AI_AVATAR, "avatar_id"),
+    ]
+
+    summary: Dict[str, Any] = {"dry_run": dry_run, "tools": {}}
+
+    for tool_enum, selector_key in targets:
+        # NULL on a JSONB key (`->>`) means either the key is absent or the
+        # whole input_params column is NULL — both indicate the row predates
+        # our selector-aware cache.
+        result = await db.execute(
+            select(Material).where(
+                Material.tool_type == tool_enum,
+                Material.is_active == True,
+                Material.input_params[selector_key].astext.is_(None),
+            )
+        )
+        rows = list(result.scalars().all())
+        sample_ids = [str(r.id) for r in rows[:5]]
+
+        if not dry_run and rows:
+            for r in rows:
+                r.is_active = False
+            await db.commit()
+
+        summary["tools"][tool_enum.value] = {
+            "selector_key": selector_key,
+            "matched": len(rows),
+            "sample_ids": sample_ids,
+            "deactivated": (not dry_run) * len(rows),
+        }
+
+    return summary
+
+
 @router.post("/materials/seed-readiness")
 async def seed_material_readiness(
     admin: User = Depends(require_admin)

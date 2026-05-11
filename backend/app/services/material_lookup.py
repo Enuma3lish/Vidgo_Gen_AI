@@ -113,6 +113,8 @@ class MaterialLookupService:
         topic: Optional[str] = None,
         limit: int = 20,
         product_id: Optional[str] = None,
+        platform: Optional[str] = None,
+        role: Optional[str] = None,
     ) -> List[Material]:
         """
         Get available presets for a tool.
@@ -122,6 +124,8 @@ class MaterialLookupService:
             topic: Optional topic filter
             limit: Maximum number of presets to return
             product_id: Optional product_id filter (matches input_params->>'product_id')
+            platform: Optional Material.platform filter (e.g. 'instagram')
+            role: Optional Material.role filter (e.g. 'creator')
 
         Returns:
             List of Material presets with results (watermarked preferred, fallback to original)
@@ -166,6 +170,11 @@ class MaterialLookupService:
 
         if topic:
             conditions.append(Material.topic == topic)
+
+        if platform:
+            conditions.append(Material.platform == platform)
+        if role:
+            conditions.append(Material.role == role)
 
         if product_id:
             # Each tool stores its primary selector under a different key in

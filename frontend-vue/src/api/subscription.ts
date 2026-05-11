@@ -29,7 +29,7 @@ export interface PlanInfo {
 export interface SubscribeRequest {
   plan_id: string
   billing_cycle: 'monthly' | 'yearly'
-  payment_method: 'paddle' | 'ecpay'
+  payment_method: 'paypal' | 'ecpay'
 }
 
 export interface SubscribeResponse {

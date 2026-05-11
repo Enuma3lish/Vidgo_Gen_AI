@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useLocalized } from '@/composables'
 import { useAuthStore, useCreditsStore } from '@/stores'
 import { userApi } from '@/api/user'
 import type { UserGeneration, UserStatsResponse } from '@/api/user'
@@ -16,9 +17,11 @@ const userStats = ref<UserStatsResponse | null>(null)
 const loadingWorks = ref(false)
 
 const isZh = computed(() => locale.value.startsWith('zh'))
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 const displayName = computed(() => {
-  return authStore.user?.email?.split('@')[0] || (isZh.value ? '使用者' : 'creator')
+  return authStore.user?.email?.split('@')[0] || L('使用者', 'creator', 'ユーザー', '사용자', 'usuario')
 })
 
 const currentPlanKey = computed(() => {
@@ -101,7 +104,7 @@ onMounted(async () => {
       <!-- Page Header -->
       <div class="py-8">
         <h1 class="text-2xl font-bold mb-1" style="color: #f5f5fa;">
-          {{ t('dashboard.welcome') }}{{ isZh ? '，' : ', ' }}{{ displayName }}{{ isZh ? '！' : '!' }}
+          {{ t('dashboard.welcome') }}{{ L('，', ', ', '、', ', ', ', ') }}{{ displayName }}{{ L('！', '!', '！', '!', '!') }}
         </h1>
         <p class="text-sm" style="color: #6b6b8a;">{{ t('dashboard.subtitle') }}</p>
       </div>

@@ -1,0 +1,1386 @@
+{
+  "_meta": {
+    "model": "vidgo_handcrafted_v2",
+    "generated_at": 1778327890,
+    "version": "bf56e22b",
+    "schema": "v2 — adds per-prompt label{en,zh,ja,ko,es}; en/zh remain the canonical full prompt sent to the model.",
+    "note": "Hand-curated for VidGo (premium TW e-commerce). Anti-hallucination structure baked in. Mirrored to backend/app/data/."
+  },
+  "tools": {
+    "product_scene": {
+      "label": {
+        "en": "Product Scene",
+        "zh": "商品場景",
+        "ja": "プロダクトシーン",
+        "ko": "프로덕트 신",
+        "es": "Escena de producto"
+      },
+      "prompts": [
+        {
+          "id": "ps_001",
+          "label": {
+            "en": "White studio backdrop",
+            "zh": "純白棚拍",
+            "ja": "純白スタジオ",
+            "ko": "순백 스튜디오",
+            "es": "Estudio blanco puro"
+          },
+          "en": "Pure white seamless paper backdrop with soft contact shadow. Lighting: large softbox top-left at 45°, 5500K daylight, gentle fill from right. Camera: 3/4 front, eye-level, medium shot. Mood: clean, premium, e-commerce ready. Keep the product's shape, label, color, and proportions identical to the input.",
+          "zh": "純白無縫紙背景，產品下方留有柔和的接地陰影。打光：大型柔光箱在左上 45°，5500K 日光色溫，右側淡淡補光。鏡頭：3/4 正面、與產品同高、中景。氛圍：乾淨、高級、適合電商主圖。產品的形狀、標籤、顏色與比例必須與原圖完全一致。"
+        },
+        {
+          "id": "ps_002",
+          "label": {
+            "en": "Light oak with linen",
+            "zh": "淺橡木與亞麻",
+            "ja": "オーク × リネン",
+            "ko": "오크와 리넨",
+            "es": "Roble claro y lino"
+          },
+          "en": "Light oak wooden tabletop with natural grain, soft cream linen runner under the product. Lighting: north-window daylight, 6000K, slight haze. Camera: 30° overhead, medium shot. Mood: airy, Japanese-modern. Keep the product unchanged. Avoid second products, hands, food spills.",
+          "zh": "淺色橡木桌面、原木紋理，產品下方鋪奶油色亞麻桌旗。打光：北面窗自然光、6000K、輕微霧感。鏡頭：30° 俯拍、中景。氛圍：通透、日式現代。產品保持原樣。避免出現第二件商品、手、灑出的食物。"
+        },
+        {
+          "id": "ps_003",
+          "label": {
+            "en": "Warm beige micro-cement",
+            "zh": "暖米微水泥",
+            "ja": "暖ベージュ微セメント",
+            "ko": "베이지 마이크로시멘트",
+            "es": "Microcemento beige cálido"
+          },
+          "en": "Warm beige micro-cement surface with subtle textured floor. Lighting: single softbox front-right, 4500K, controlled soft shadow. Camera: front view, slight low angle 10°, close-up. Mood: warm minimal. Product silhouette, label and material preserved exactly.",
+          "zh": "暖米色微水泥檯面、地面有輕微紋理。打光：右前單顆柔光燈、4500K、可控的柔和陰影。鏡頭：正面、輕微仰拍 10°、特寫。氛圍：溫暖極簡。產品輪廓、標籤、材質完全保留。"
+        },
+        {
+          "id": "ps_004",
+          "label": {
+            "en": "White marble + brass",
+            "zh": "白大理石 + 銅",
+            "ja": "白大理石とブラス",
+            "ko": "화이트 마블 + 황동",
+            "es": "Mármol blanco y latón"
+          },
+          "en": "Polished off-white marble (Calacatta Gold pattern) tabletop, brushed brass tray under the product. Lighting: window light from left, 5500K, soft reflections on marble. Camera: 3/4 front, medium shot. Mood: quiet luxury. Do not change the product's text, logo, or color.",
+          "zh": "白色拋光大理石（Calacatta Gold 紋理）檯面，產品下方擺放仿銅金屬托盤。打光：左側窗光、5500K，大理石上有柔和反光。鏡頭：3/4 正面、中景。氛圍：低調奢華。不可改動產品上的任何文字、商標或顏色。"
+        },
+        {
+          "id": "ps_005",
+          "label": {
+            "en": "Specialty café table",
+            "zh": "精品咖啡店",
+            "ja": "スペシャルティカフェ",
+            "ko": "스페셜티 카페",
+            "es": "Café de especialidad"
+          },
+          "en": "Modern Taipei specialty café table: light oak surface, ceramic latte with leaf art beside the product, dried eucalyptus in glass jar. Lighting: window daylight, 5500K, gentle bokeh background. Camera: 45° overhead, shallow depth of field f/2.8 feel. Mood: cozy daytime café. Keep the product label and shape identical.",
+          "zh": "現代台北精品咖啡店桌面：淺色橡木檯面、產品旁有一杯陶瓷拉花拿鐵、玻璃罐中插乾燥尤加利。打光：窗邊日光、5500K、背景輕微散景。鏡頭：45° 俯拍、淺景深 f/2.8 感。氛圍：白日咖啡店、溫馨。產品標籤與外型保持一致。"
+        },
+        {
+          "id": "ps_006",
+          "label": {
+            "en": "Lunar New Year red",
+            "zh": "農曆新年紅",
+            "ja": "春節レッド",
+            "ko": "설날 레드",
+            "es": "Año Nuevo Lunar rojo"
+          },
+          "en": "Lunar New Year still life: red wax-paper backdrop, brass tea tray, dried persimmon and pine sprig as accents. Lighting: warm 3200K key from above, subtle gold rim light. Camera: front view, medium shot. Mood: festive, refined. Product unchanged.",
+          "zh": "農曆新年靜物：紅色蠟紙背景、黃銅茶盤、乾柿與松枝點綴。打光：上方暖色 3200K 主光、輕微金色側補光。鏡頭：正面、中景。氛圍：節慶、精緻。產品保持原樣。"
+        },
+        {
+          "id": "ps_007",
+          "label": {
+            "en": "Mid-Autumn ink",
+            "zh": "中秋水墨",
+            "ja": "中秋墨絵",
+            "ko": "추석 수묵",
+            "es": "Tinta Mid-Autumn"
+          },
+          "en": "Mid-Autumn Festival flat-lay: dark teal silk fabric backdrop, ink-painted moon-rabbit motif paper, osmanthus sprig. Lighting: overhead softbox 4000K, gentle shadow. Camera: top-down 90°, full product visible. Mood: elegant Chinese heritage. Preserve the product's pattern and label exactly.",
+          "zh": "中秋節俯拍：墨綠色絲綢布背景、繪有玉兔圖樣的水墨紙、桂花一枝。打光：頂部柔光箱 4000K、淡淡陰影。鏡頭：正俯 90°、完整呈現產品。氛圍：典雅、東方文化感。產品圖案與標籤完整保留。"
+        },
+        {
+          "id": "ps_008",
+          "label": {
+            "en": "Mother's Day pastel",
+            "zh": "母親節粉嫩",
+            "ja": "母の日パステル",
+            "ko": "어버이날 파스텔",
+            "es": "Pastel Día de la Madre"
+          },
+          "en": "Mother's Day pastel scene: pale pink cotton fabric backdrop, white peony bouquet half-out of frame, soft satin ribbon. Lighting: large diffuser, 5500K, very soft. Camera: 3/4, medium close. Mood: tender, gift-ready. Do not modify the product itself.",
+          "zh": "母親節粉嫩場景：淡粉棉布背景、白色芍藥花束從畫面邊緣探入、柔和緞帶。打光：大型柔光屏、5500K、非常柔和。鏡頭：3/4、中近景。氛圍：溫柔、適合送禮。產品本身不可改動。"
+        },
+        {
+          "id": "ps_009",
+          "label": {
+            "en": "Father's Day walnut",
+            "zh": "父親節胡桃",
+            "ja": "父の日ウォルナット",
+            "ko": "아버지의 날 월넛",
+            "es": "Día del Padre nogal"
+          },
+          "en": "Father's Day calm scene: dark walnut wood panel, charcoal grey wool throw, single brass desk lamp glow. Lighting: 3200K warm key from left, subtle ambient. Camera: 30° overhead, medium. Mood: mature, considered. Keep product label and color unchanged.",
+          "zh": "父親節沉穩場景：深胡桃木板、炭灰色羊毛披毯、一盞黃銅桌燈微亮。打光：3200K 暖色主光從左、淡淡環境光。鏡頭：30° 俯拍、中景。氛圍：成熟、深思。產品標籤與顏色不可變。"
+        },
+        {
+          "id": "ps_010",
+          "label": {
+            "en": "Skincare flat-lay",
+            "zh": "保養品俯拍",
+            "ja": "スキンケア俯瞰",
+            "ko": "스킨케어 플랫레이",
+            "es": "Skincare flat-lay"
+          },
+          "en": "Skincare flat-lay: matte ivory ceramic tile, glycerin water droplets nearby (NOT on the product), single fresh green leaf. Lighting: overhead diffused 6000K, no harsh shadows. Camera: 75° overhead, medium close. Mood: fresh clinical clean. Do not alter the bottle, dropper, or label text.",
+          "zh": "保養品俯拍：霧面象牙白磁磚、旁邊散落甘油水珠（不可沾到瓶身）、一片新鮮綠葉。打光：頂部漫射光 6000K、無強烈陰影。鏡頭：75° 俯拍、中近景。氛圍：清新、專業。瓶身、滴管、標籤文字不可改動。"
+        },
+        {
+          "id": "ps_011",
+          "label": {
+            "en": "Skincare luxe",
+            "zh": "保養品奢華",
+            "ja": "スキンケア・ラグジュアリー",
+            "ko": "스킨케어 럭셔리",
+            "es": "Skincare lujo"
+          },
+          "en": "Skincare luxe: smoked glass shelf, brushed gold accents, single dried magnolia petal. Lighting: low-angle warm 3200K key from right, soft falloff. Camera: front, eye-level, close. Mood: high-end. Preserve product packaging exactly.",
+          "zh": "保養品奢華風：燻黑玻璃層板、霧面金屬配件、一片乾燥木蘭花瓣。打光：右側 3200K 暖光低角主光、柔和漸暗。鏡頭：正面、與瓶身同高、特寫。氛圍：高端。產品包裝完整保留。"
+        },
+        {
+          "id": "ps_012",
+          "label": {
+            "en": "Cold drink summer",
+            "zh": "夏日冰飲",
+            "ja": "夏のコールドドリンク",
+            "ko": "여름 차가운 음료",
+            "es": "Bebida fría verano"
+          },
+          "en": "F&B drink scene: condensation-frosted ice cubes scattered around the cup, light blue ceramic surface, mint sprig out of focus. Lighting: 5500K side key, slight backlight to highlight liquid. Camera: 20° front, medium. Mood: refreshing, summer. Keep the cup, lid, label and beverage color identical to the input.",
+          "zh": "飲料場景：杯子周圍散落結霜冰塊、淺藍陶瓷檯面、薄荷枝散景。打光：5500K 側主光、輕微逆光凸顯飲料。鏡頭：略前 20°、中景。氛圍：清涼、夏日。杯型、杯蓋、標籤、飲料顏色與原圖一致。"
+        },
+        {
+          "id": "ps_013",
+          "label": {
+            "en": "Snack craft-paper",
+            "zh": "零食牛皮紙",
+            "ja": "スナック × クラフト紙",
+            "ko": "간식 크라프트지",
+            "es": "Snack papel kraft"
+          },
+          "en": "F&B snack scene: warm beige craft-paper backdrop, scattered raw whole-bean ingredients matching the product (NO loose food touching the package). Lighting: window light from upper-left 4500K, gentle shadow. Camera: 45° overhead, medium. Mood: artisanal. Product label and shape preserved.",
+          "zh": "零食場景：暖米色牛皮紙背景、散落呼應產品的整顆原料（不可有散食碰到包裝）。打光：左上窗光 4500K、淡淡陰影。鏡頭：45° 俯拍、中景。氛圍：手作感。產品標籤與形狀保留。"
+        },
+        {
+          "id": "ps_014",
+          "label": {
+            "en": "Tea ceremony slate",
+            "zh": "茶席板岩",
+            "ja": "茶道スレート",
+            "ko": "다도 슬레이트",
+            "es": "Ceremonia del té"
+          },
+          "en": "Tea ceremony still life: dark slate stone tray, single celadon tea bowl with steam wisp, raw linen napkin. Lighting: 3500K side key, contemplative shadow. Camera: 30° overhead, medium. Mood: serene, traditional. Do not change product.",
+          "zh": "茶席靜物：深灰板岩茶盤、青瓷茶碗一只並有蒸氣絲縷、生亞麻巾。打光：3500K 側主光、沉靜陰影。鏡頭：30° 俯拍、中景。氛圍：靜謐、傳統。產品不可改動。"
+        },
+        {
+          "id": "ps_015",
+          "label": {
+            "en": "Fashion marble pedestal",
+            "zh": "時尚大理石平台",
+            "ja": "ファッション大理石台",
+            "ko": "패션 대리석 단",
+            "es": "Pedestal de mármol"
+          },
+          "en": "Fashion accessory scene: cream marble pedestal, soft satin drape, single dried palm leaf shadow on the wall behind. Lighting: 5500K key from front-left, subtle backlight halo. Camera: front, eye-level, medium. Mood: editorial. Preserve all product text, stitching, hardware.",
+          "zh": "時尚配件場景：奶白大理石平台、柔和緞布、後方牆面投有乾燥棕櫚葉陰影。打光：5500K 主光由左前打、輕微逆光光環。鏡頭：正面、平視、中景。氛圍：編輯雜誌風。所有文字、車線與五金保留。"
+        },
+        {
+          "id": "ps_016",
+          "label": {
+            "en": "Spring celadon",
+            "zh": "春日青瓷綠",
+            "ja": "春のセラドン",
+            "ko": "봄 청자색",
+            "es": "Celadón primaveral"
+          },
+          "en": "Spring fresh scene: pale celadon green linen, single sprig of cherry blossom in glass bottle, light dappled shadows. Lighting: 5500K, dappled daylight pattern. Camera: 30° overhead, medium. Mood: fresh, gentle. Product unchanged.",
+          "zh": "春日清新：淡青綠亞麻布、玻璃瓶插一枝櫻花、地面有斑駁光影。打光：5500K、斑駁日光。鏡頭：30° 俯拍、中景。氛圍：清新、柔和。產品保留原樣。"
+        },
+        {
+          "id": "ps_017",
+          "label": {
+            "en": "Night market warm bokeh",
+            "zh": "夜市暖燈散景",
+            "ja": "夜市の暖光ボケ",
+            "ko": "야시장 따스한 보케",
+            "es": "Mercado nocturno cálido"
+          },
+          "en": "Summer night-market vibe: warm string lights bokeh, dark wood counter, single red plastic basket softly out of focus behind. Lighting: 3000K warm key, golden bokeh. Camera: front 3/4, medium close. Mood: nostalgic Taiwan night market. Do not change product.",
+          "zh": "夏夜夜市風：暖色燈串散景、深色木檯、後方柔焦紅色塑膠籃。打光：3000K 暖主光、金色散景。鏡頭：3/4 正面、中近景。氛圍：懷舊台灣夜市。產品不可改動。"
+        },
+        {
+          "id": "ps_018",
+          "label": {
+            "en": "Autumn rust",
+            "zh": "秋日鐵鏽",
+            "ja": "秋のラスト",
+            "ko": "가을 러스트",
+            "es": "Otoño herrumbre"
+          },
+          "en": "Autumn earthy scene: rust-brown linen, dried wheat stalks, terracotta plate. Lighting: 4000K from above, longer warm shadows. Camera: 45° overhead, medium. Mood: harvest, grounded. Preserve product exactly.",
+          "zh": "秋日大地系：鐵鏽棕亞麻布、乾燥麥穗、陶土色盤。打光：頂光 4000K、較長的暖色陰影。鏡頭：45° 俯拍、中景。氛圍：豐收、紮實。產品完全保留。"
+        },
+        {
+          "id": "ps_019",
+          "label": {
+            "en": "Winter quiet",
+            "zh": "冬日靜謐",
+            "ja": "冬の静寂",
+            "ko": "겨울 정적",
+            "es": "Invierno tranquilo"
+          },
+          "en": "Winter quiet scene: white marble surface, single eucalyptus sprig, frosted glass vase. Lighting: 6000K cool daylight, soft snow-like shadow. Camera: 3/4 front, medium. Mood: clean winter. Keep product material, label and color identical.",
+          "zh": "冬日靜謐：白色大理石檯面、一枝尤加利、霧面玻璃瓶。打光：6000K 冷色日光、宛如積雪般的柔和陰影。鏡頭：3/4 正面、中景。氛圍：純淨冬季。產品材質、標籤、顏色完全保留。"
+        },
+        {
+          "id": "ps_020",
+          "label": {
+            "en": "Minimal gallery",
+            "zh": "極簡藝廊",
+            "ja": "ミニマル・ギャラリー",
+            "ko": "미니멀 갤러리",
+            "es": "Galería minimalista"
+          },
+          "en": "Modern minimalist gallery scene: micro-cement floor, single sculptural shadow on a flat wall, no other props. Lighting: single hard 5500K key from above-left, well-defined shadow. Camera: front, eye-level, medium. Mood: museum. Preserve the product's exact silhouette and finish.",
+          "zh": "現代極簡藝廊：微水泥地面、平整牆面投出單一雕塑感陰影、無其他道具。打光：左上單顆 5500K 硬光主燈、陰影清晰。鏡頭：正面、平視、中景。氛圍：美術館。產品輪廓與表面材質完全保留。"
+        },
+        {
+          "id": "ps_021",
+          "label": {
+            "en": "Tech anthracite",
+            "zh": "科技炭灰",
+            "ja": "テック・アンスラサイト",
+            "ko": "테크 안트라사이트",
+            "es": "Tech antracita"
+          },
+          "en": "Tech / electronic scene: dark anthracite acrylic surface, soft LED strip glow (cool white 6500K) along the back edge, no neon colors. Lighting: cool 6500K diffused, controlled reflection. Camera: 20° front, medium close. Mood: clean tech. Do not modify device color, ports, or branding.",
+          "zh": "3C/科技場景：深炭灰色壓克力檯面、後方邊緣有柔和 LED 光帶（冷白 6500K）、無霓虹色。打光：6500K 冷色漫射、受控反光。鏡頭：略前 20°、中近景。氛圍：科技、簡潔。裝置顏色、接孔、商標不可變動。"
+        },
+        {
+          "id": "ps_022",
+          "label": {
+            "en": "Outdoor Mediterranean",
+            "zh": "戶外地中海",
+            "ja": "屋外地中海",
+            "ko": "아웃도어 지중해",
+            "es": "Mediterráneo exterior"
+          },
+          "en": "Outdoor living scene: pale sandstone tile patio, white linen lounge cushion partially out of frame, single olive branch. Lighting: 5500K natural daylight, mild golden afternoon tone. Camera: 30° overhead, medium. Mood: relaxed Mediterranean. Product label, shape and color preserved.",
+          "zh": "戶外生活場景：淡砂岩磁磚露台、白色亞麻坐墊在畫面邊緣、一枝橄欖。打光：5500K 自然光、午後微金色調。鏡頭：30° 俯拍、中景。氛圍：放鬆地中海。產品標籤、外型、顏色完整保留。"
+        }
+      ]
+    },
+    "room_redesign": {
+      "label": {
+        "en": "Room Redesign",
+        "zh": "房間重新設計",
+        "ja": "ルームデザイン",
+        "ko": "룸 리디자인",
+        "es": "Rediseño de sala"
+      },
+      "prompts": [
+        {
+          "id": "rr_001",
+          "label": {
+            "en": "Modern minimalist",
+            "zh": "現代極簡",
+            "ja": "モダン・ミニマル",
+            "ko": "모던 미니멀",
+            "es": "Minimalista moderno"
+          },
+          "en": "Modern minimalist style: warm white walls, light oak flooring, low-profile fabric sofa in oatmeal, glass-and-iron coffee table, recessed downlights at 3000K. Keep the room's original walls, windows, doors and ceiling height unchanged. Mood: calm, breathable.",
+          "zh": "現代極簡風：暖白色牆面、淺色橡木地板、低座椅高度的燕麥色布沙發、玻璃鐵件茶几、3000K 嵌燈。原本的牆面、窗戶、門和天花板高度都不可變動。氛圍：平靜、通透。"
+        },
+        {
+          "id": "rr_002",
+          "label": {
+            "en": "Japandi",
+            "zh": "日式 Japandi",
+            "ja": "ジャパンディ",
+            "ko": "재팬디",
+            "es": "Japandi"
+          },
+          "en": "Japandi style: matte off-white walls, light oak flooring, low oak coffee table, beige linen sofa, single ceramic vase with dried pampas, paper-shade pendant lamp. Preserve the original room layout, windows and ceiling. Mood: restrained, warm.",
+          "zh": "日式 Japandi 風：霧面米白牆、淺橡木地板、低矮橡木茶几、米色亞麻沙發、單個陶瓷花瓶插乾燥蒲葦、和紙吊燈。保留原本房間格局、窗戶和天花板。氛圍：克制、溫潤。"
+        },
+        {
+          "id": "rr_003",
+          "label": {
+            "en": "Muji warm minimal",
+            "zh": "無印暖系",
+            "ja": "無印良品テイスト",
+            "ko": "무지 미니멀",
+            "es": "Estilo Muji"
+          },
+          "en": "Muji-inspired warm minimal: cream-white walls, light beech flooring, beige cotton-linen sofa, low solid-wood TV bench, soft pleated paper pendants, no patterned wallpaper. Keep walls, windows and doors unchanged. Mood: tidy, gentle daytime.",
+          "zh": "無印風 / 暖系極簡：奶白牆、淺色山毛櫸地板、米色棉麻沙發、低矮實木電視櫃、柔和褶紙吊燈，不使用印花壁紙。牆、窗、門保持原樣。氛圍：整齊、白日柔和。"
+        },
+        {
+          "id": "rr_004",
+          "label": {
+            "en": "Log / cabin warm wood",
+            "zh": "原木山屋",
+            "ja": "ログハウス",
+            "ko": "로그 캐빈",
+            "es": "Cabaña de madera"
+          },
+          "en": "Log / cabin warm wood style: full-coverage natural pine plank walls and ceiling, dark walnut flooring, brown leather sofa, plaid wool throw, brass-shade pendant. Preserve original architectural lines. Mood: cozy retreat.",
+          "zh": "原木 / 山屋風：原色松木板牆與天花板、深胡桃木地板、咖啡色皮沙發、格紋羊毛披毯、黃銅吊燈罩。原本的建築線條保留。氛圍：溫暖、避世。"
+        },
+        {
+          "id": "rr_005",
+          "label": {
+            "en": "Scandinavian",
+            "zh": "北歐",
+            "ja": "スカンジナビアン",
+            "ko": "스칸디나비안",
+            "es": "Escandinavo"
+          },
+          "en": "Scandinavian style: bright white walls, ash oak flooring, white cotton sofa with grey throw, slim black floor lamp, single potted fiddle-leaf fig. Preserve room layout, walls, window frames, ceiling. Mood: bright, airy.",
+          "zh": "北歐風：亮白牆面、白橡木地板、白色棉沙發配灰色披毯、纖細黑色立燈、一盆琴葉榕。房間格局、牆、窗框、天花板保留。氛圍：明亮、通透。"
+        },
+        {
+          "id": "rr_006",
+          "label": {
+            "en": "Industrial loft",
+            "zh": "工業 Loft",
+            "ja": "インダストリアル",
+            "ko": "인더스트리얼 로프트",
+            "es": "Loft industrial"
+          },
+          "en": "Industrial loft style: exposed concrete wall (one feature wall only), reclaimed oak flooring, black iron-framed glazing, charcoal leather sofa, Edison-bulb track lighting. Keep original window positions and ceiling height. Mood: urban, masculine.",
+          "zh": "工業 Loft 風：單一主牆裸露水泥、回收橡木地板、黑色鐵件玻璃隔間、炭灰色皮沙發、愛迪生燈泡軌道燈。原本窗戶位置與天花板高度保留。氛圍：都會、陽剛。"
+        },
+        {
+          "id": "rr_007",
+          "label": {
+            "en": "Modern luxury",
+            "zh": "現代輕奢",
+            "ja": "モダン・ラグジュアリー",
+            "ko": "모던 럭셔리",
+            "es": "Lujo moderno"
+          },
+          "en": "Modern luxury (TW high-rise): smoke-grey microcement walls, herringbone walnut flooring, deep navy velvet sofa, brushed-brass details, marble side table, 2700K cove lighting. Preserve walls, windows, ceiling. Mood: refined evening.",
+          "zh": "現代輕奢（台灣大樓型）：煙灰微水泥牆、人字拼胡桃木地板、深海軍藍絲絨沙發、霧面金色細節、大理石邊几、2700K 線燈帶。牆、窗、天花板保留。氛圍：細緻夜晚。"
+        },
+        {
+          "id": "rr_008",
+          "label": {
+            "en": "Mid-century modern",
+            "zh": "中世紀現代",
+            "ja": "ミッドセンチュリー",
+            "ko": "미드센추리 모던",
+            "es": "Mid-century moderno"
+          },
+          "en": "Mid-century modern: walnut panel feature wall, brass pendant, mustard-yellow tweed sofa with tapered teak legs, geometric beige rug. Preserve room layout. Mood: warm 60s editorial.",
+          "zh": "中世紀現代風：胡桃木面板主牆、黃銅吊燈、芥末黃花呢沙發配柚木錐形腳、米色幾何地毯。房間格局保留。氛圍：60 年代編輯風、溫暖。"
+        },
+        {
+          "id": "rr_009",
+          "label": {
+            "en": "Bohemian",
+            "zh": "波希米亞",
+            "ja": "ボヘミアン",
+            "ko": "보헤미안",
+            "es": "Bohemio"
+          },
+          "en": "Bohemian style: terracotta-orange textured wall accent, layered Berber rug, low rattan sofa with cream cushions, hanging macramé planter, terracotta pots. Preserve walls, windows, ceiling structure. Mood: warm, eclectic, sun-soaked.",
+          "zh": "波希米亞風：陶土橘紋理主牆、層疊柏柏爾地毯、低矮藤編沙發配奶白抱枕、編織麻繩吊籃、陶土盆栽。牆、窗、天花板結構保留。氛圍：溫暖、多層次、日光感。"
+        },
+        {
+          "id": "rr_010",
+          "label": {
+            "en": "Coastal",
+            "zh": "海岸風",
+            "ja": "コースタル",
+            "ko": "코스털",
+            "es": "Costero"
+          },
+          "en": "Coastal style: white shiplap walls, whitewashed oak flooring, pale linen sofa, navy-and-cream stripe throw, woven jute rug, brass marine-style sconce. Preserve original architecture. Mood: breezy seaside cottage.",
+          "zh": "海岸風：白色護牆板、漂白橡木地板、淡亞麻沙發、海軍藍奶白條紋披毯、麻繩編織地毯、黃銅航海風壁燈。建築結構保留。氛圍：海邊小屋、清爽。"
+        },
+        {
+          "id": "rr_011",
+          "label": {
+            "en": "Wabi-sabi",
+            "zh": "侘寂",
+            "ja": "侘寂",
+            "ko": "와비사비",
+            "es": "Wabi-sabi"
+          },
+          "en": "Wabi-sabi: rough lime-plaster walls, raw oak floor with imperfections, low-slung futon sofa in raw cotton, single ceramic vessel with bare branch, paper screen lamp. Preserve room architecture. Mood: quiet imperfect.",
+          "zh": "侘寂：粗礪石灰塗料牆、帶有瑕疵感的原色橡木地板、低矮原色棉布墊沙發、單只陶器插一枝枯枝、和紙屏燈。建築結構保留。氛圍：靜謐、留白。"
+        },
+        {
+          "id": "rr_012",
+          "label": {
+            "en": "Mediterranean",
+            "zh": "地中海",
+            "ja": "地中海スタイル",
+            "ko": "메디터레니언",
+            "es": "Mediterráneo"
+          },
+          "en": "Mediterranean style: lime-washed white walls with arched accent niche, terracotta tile flooring, raw oak ceiling beams, cream linen sofa with rust-red pillows, woven wood pendants. Preserve walls and openings. Mood: sun-drenched.",
+          "zh": "地中海風：石灰白牆並有拱形主牆凹龕、陶土磚地板、原色橡木天花樑、奶色亞麻沙發配磚紅抱枕、編織木吊燈。牆面與開口保留。氛圍：日光浸潤。"
+        },
+        {
+          "id": "rr_013",
+          "label": {
+            "en": "French country",
+            "zh": "法式鄉村",
+            "ja": "フレンチカントリー",
+            "ko": "프렌치 컨트리",
+            "es": "Provenzal francés"
+          },
+          "en": "French country: soft cream walls, vintage parquet flooring, distressed oak coffee table, slip-cover linen sofa, dried lavender, wrought-iron chandelier with cream shades. Preserve room layout. Mood: gentle countryside.",
+          "zh": "法式鄉村：柔和奶白牆、復古拼花地板、做舊橡木茶几、亞麻沙發布套、乾燥薰衣草、米色燈罩鍛鐵吊燈。房間格局保留。氛圍：柔和田園。"
+        },
+        {
+          "id": "rr_014",
+          "label": {
+            "en": "New Chinese",
+            "zh": "新中式",
+            "ja": "ニューチャイニーズ",
+            "ko": "뉴 차이니즈",
+            "es": "Chino contemporáneo"
+          },
+          "en": "Traditional Chinese contemporary: ivory walls with dark walnut moulding accents, dark wood plank flooring, low celadon-blue sofa, single ink-painting scroll, paper-and-bamboo pendant. Preserve original walls and windows. Mood: refined heritage.",
+          "zh": "新中式：象牙白牆配深胡桃木線板、深色木地板、低矮青瓷藍沙發、一幅水墨掛軸、紙竹吊燈。原牆面與窗戶保留。氛圍：典雅、傳承。"
+        },
+        {
+          "id": "rr_015",
+          "label": {
+            "en": "Biophilic green",
+            "zh": "綠意自然",
+            "ja": "ビオフィリック",
+            "ko": "바이오필릭",
+            "es": "Biofílico"
+          },
+          "en": "Biophilic green: matte sage-green feature wall, light oak flooring, light cream linen sofa, three large potted plants (monstera, fiddle-leaf, snake plant), woven cane pendant, full-spectrum 5500K daylight. Preserve room structure. Mood: living, restorative.",
+          "zh": "綠意自然風：霧面鼠尾草綠主牆、淺色橡木地板、奶白亞麻沙發、三盆大型植物（龜背芋、琴葉榕、虎尾蘭）、藤編吊燈、5500K 全光譜自然光。房間結構保留。氛圍：生氣、療癒。"
+        },
+        {
+          "id": "rr_016",
+          "label": {
+            "en": "Tropical resort",
+            "zh": "熱帶度假",
+            "ja": "トロピカル・リゾート",
+            "ko": "트로피컬 리조트",
+            "es": "Resort tropical"
+          },
+          "en": "Tropical resort: full-coverage white walls, polished travertine flooring, rattan loveseat with white cushions, palm-leaf prints, ceiling fan, sheer linen curtains. Preserve room geometry. Mood: vacation calm.",
+          "zh": "熱帶度假風：全室白牆、拋光石灰華地板、藤編雙人沙發配白抱枕、棕櫚葉印花、吊扇、薄亞麻窗簾。房間幾何保留。氛圍：度假、放鬆。"
+        },
+        {
+          "id": "rr_017",
+          "label": {
+            "en": "Korean modern",
+            "zh": "韓系現代",
+            "ja": "韓国モダン",
+            "ko": "코리안 모던",
+            "es": "Coreano moderno"
+          },
+          "en": "Korean modern: bright off-white walls, herringbone light oak flooring, low cream boucle sofa, slim white-marble round side table, oversized framed minimalist art, soft 4000K cove light. Preserve original walls and windows. Mood: cafe-clean, photogenic.",
+          "zh": "韓系現代：亮米白牆、人字拼淺橡木地板、低矮奶色羊圈毛沙發、纖細白大理石圓邊几、大尺寸極簡裝飾畫、4000K 柔和線燈。原牆與窗戶保留。氛圍：咖啡店感、適合拍照。"
+        },
+        {
+          "id": "rr_018",
+          "label": {
+            "en": "Art Deco",
+            "zh": "新裝飾藝術",
+            "ja": "アール・デコ",
+            "ko": "아르데코",
+            "es": "Art Decó"
+          },
+          "en": "Art Deco contemporary: emerald-green velvet feature wall, herringbone parquet, brass-fluted bar cabinet, geometric brass chandelier, jewel-tone velvet armchair. Preserve walls, windows, ceiling. Mood: theatrical evening.",
+          "zh": "新裝飾藝術：祖母綠絲絨主牆、人字拼地板、帶溝紋黃銅櫃、幾何黃銅吊燈、寶石色絲絨單椅。牆、窗、天花板保留。氛圍：戲劇感夜晚。"
+        },
+        {
+          "id": "rr_019",
+          "label": {
+            "en": "Farmhouse modern",
+            "zh": "現代農舍",
+            "ja": "モダン・ファームハウス",
+            "ko": "모던 팜하우스",
+            "es": "Granja moderna"
+          },
+          "en": "Farmhouse modern: shiplap white walls, wide-plank weathered oak flooring, slip-cover linen sofa, distressed wood beams across ceiling, black iron pendant. Preserve original architecture. Mood: heartfelt, lived-in.",
+          "zh": "現代農舍風：白色護牆板、寬版做舊橡木地板、亞麻沙發布套、天花板裸露做舊木樑、黑色鐵件吊燈。建築結構保留。氛圍：質樸、有生活感。"
+        },
+        {
+          "id": "rr_020",
+          "label": {
+            "en": "Loft style",
+            "zh": "Loft 風",
+            "ja": "ロフトスタイル",
+            "ko": "로프트 스타일",
+            "es": "Estilo loft"
+          },
+          "en": "Loft style: brick-textured feature wall, polished concrete floor, modular grey sofa, black steel-frame coffee table, exposed black ductwork. Preserve original window positions and ceiling height. Mood: gallery loft.",
+          "zh": "Loft 風：磚紋主牆、拋光水泥地、灰色模組沙發、黑鋼框茶几、外露黑色管路。原本窗戶位置與天花板高度保留。氛圍：畫廊型 Loft。"
+        },
+        {
+          "id": "rr_021",
+          "label": {
+            "en": "Tasteful maximalist",
+            "zh": "品味極繁",
+            "ja": "テイストフル・マキシマリスト",
+            "ko": "테이스트풀 맥시멀",
+            "es": "Maximalista refinado"
+          },
+          "en": "Maximalist tasteful: deep teal walls, layered patterned rugs, plush jewel-tone velvet sofa, gallery-wall of framed prints, brass arc lamp. Preserve room layout. Mood: confident curated.",
+          "zh": "品味極繁主義：深松綠牆、多層次圖騰地毯、寶石色絲絨沙發、整面畫框畫作牆、黃銅弧形落地燈。房間格局保留。氛圍：自信、收藏感。"
+        },
+        {
+          "id": "rr_022",
+          "label": {
+            "en": "Quiet luxury",
+            "zh": "靜奢風",
+            "ja": "クワイエット・ラグジュアリー",
+            "ko": "콰이엇 럭셔리",
+            "es": "Lujo silencioso"
+          },
+          "en": "Quiet luxury hotel suite: soft taupe walls, woven wool carpet, deep camel leather sofa, brushed-bronze coffee table, single sculptural floor lamp, 2700K layered lighting. Preserve room layout, windows and ceiling. Mood: refined, hushed.",
+          "zh": "靜奢酒店套房：柔和灰褐牆、羊毛編織地毯、深駝色皮沙發、霧面青銅茶几、雕塑感落地燈、2700K 多層次照明。房間格局、窗戶、天花板保留。氛圍：細緻、靜謐。"
+        }
+      ]
+    },
+    "short_video": {
+      "label": {
+        "en": "Short Video Effect",
+        "zh": "短影片效果",
+        "ja": "ショート動画演出",
+        "ko": "쇼트영상 효과",
+        "es": "Efecto vídeo corto"
+      },
+      "prompts": [
+        {
+          "id": "sv_001",
+          "label": {
+            "en": "Cinematic dolly-in",
+            "zh": "電影感推鏡",
+            "ja": "シネマティック・ドリーイン",
+            "ko": "시네마틱 돌리인",
+            "es": "Dolly-in cinemático"
+          },
+          "en": "Slow cinematic dolly-in toward the product over 5 s. Camera path: straight forward, no rotation. Subtle dust motes in a single soft sunbeam. Keep the subject's shape, label, color and proportions exactly the same.",
+          "zh": "5 秒緩慢電影感推鏡。鏡頭軌跡：直線前進、不旋轉。單束柔和陽光中有細小塵粒。主體的形狀、標籤、顏色與比例完全保持不變。"
+        },
+        {
+          "id": "sv_002",
+          "label": {
+            "en": "360° turntable",
+            "zh": "360° 轉盤",
+            "ja": "360° 回転",
+            "ko": "360° 턴테이블",
+            "es": "Plato giratorio 360°"
+          },
+          "en": "Slow 360° turntable rotation of the product over 8 s, fixed camera, soft top key light. Background remains static. Do not deform or relabel the product.",
+          "zh": "8 秒主體 360° 緩慢轉盤旋轉、鏡頭固定、柔和頂光。背景不動。不可變形、不可改動標籤。"
+        },
+        {
+          "id": "sv_003",
+          "label": {
+            "en": "Subtle parallax",
+            "zh": "輕微視差",
+            "ja": "微パララックス",
+            "ko": "서틀 패럴럭스",
+            "es": "Parallax sutil"
+          },
+          "en": "Subtle parallax: foreground shadow drifts slowly across the floor, midground subject stays fixed, background slightly pans 2 px/frame. 6 s. Keep the subject identical.",
+          "zh": "輕微視差：前景陰影在地面緩慢移動、中景主體固定、背景每幀輕微平移 2 px。6 秒。主體保持完全一致。"
+        },
+        {
+          "id": "sv_004",
+          "label": {
+            "en": "Slow tilt-up",
+            "zh": "緩慢仰拍",
+            "ja": "スロー・チルトアップ",
+            "ko": "슬로우 틸트업",
+            "es": "Tilt-up lento"
+          },
+          "en": "Slow tilt-up reveal: camera starts at table level, tilts up to eye-level over 6 s, ending centered on the product. Keep product fidelity 100%.",
+          "zh": "緩慢仰拍：鏡頭由桌面高度於 6 秒內仰起至與產品同高，最後置中於產品。產品 100% 還原。"
+        },
+        {
+          "id": "sv_005",
+          "label": {
+            "en": "Steam wisps",
+            "zh": "蒸氣絲縷",
+            "ja": "スチームの揺らぎ",
+            "ko": "스팀 자락",
+            "es": "Vapor sutil"
+          },
+          "en": "Steam wisps gently rise behind a hot beverage and dissipate. 6 s loop. Cup, lid, label and beverage color stay identical.",
+          "zh": "熱飲後方有蒸氣絲縷緩緩升起並消散。6 秒循環。杯體、杯蓋、標籤、飲料顏色完全相同。"
+        },
+        {
+          "id": "sv_006",
+          "label": {
+            "en": "Cold-drink condensation",
+            "zh": "冷飲水珠",
+            "ja": "冷飲の結露",
+            "ko": "차가운 음료 응결",
+            "es": "Condensación bebida fría"
+          },
+          "en": "Soft condensation droplets slowly form on a cold-drink surface over 5 s. Background unchanged. Preserve the product's branding and shape.",
+          "zh": "5 秒內冷飲杯身緩慢凝結水珠。背景不變。產品的商標與外型保留。"
+        },
+        {
+          "id": "sv_007",
+          "label": {
+            "en": "Golden bokeh fade-in",
+            "zh": "金色散景漸入",
+            "ja": "ゴールデンボケ",
+            "ko": "골든 보케",
+            "es": "Bokeh dorado"
+          },
+          "en": "Soft golden bokeh fades in behind the subject over 4 s, then holds. Subject is locked center, no scaling. Do not alter the subject.",
+          "zh": "4 秒內主體後方柔和金色散景漸入後保持。主體置中、不縮放。不可改動主體。"
+        },
+        {
+          "id": "sv_008",
+          "label": {
+            "en": "Cherry blossom petals",
+            "zh": "櫻花瓣飄落",
+            "ja": "桜の花びら",
+            "ko": "벚꽃잎 낙하",
+            "es": "Pétalos de cerezo"
+          },
+          "en": "Light cherry-blossom petals fall diagonally from upper-right at gentle pace over 7 s. Subject fixed, no warping. Keep brand and label visible.",
+          "zh": "7 秒內輕柔櫻花瓣由右上斜向下飄落。主體固定、無變形。品牌與標籤須清楚可見。"
+        },
+        {
+          "id": "sv_009",
+          "label": {
+            "en": "Spotlight sweep",
+            "zh": "聚光燈掃過",
+            "ja": "スポット・スイープ",
+            "ko": "스포트라이트 스윕",
+            "es": "Barrido focal"
+          },
+          "en": "Single soft spotlight slowly sweeps left-to-right across the subject over 6 s, revealing material details. Subject does not move.",
+          "zh": "6 秒內單顆柔和聚光燈由左至右緩緩掃過主體、凸顯材質細節。主體不動。"
+        },
+        {
+          "id": "sv_010",
+          "label": {
+            "en": "Rim light buildup",
+            "zh": "輪廓光增強",
+            "ja": "リムライト形成",
+            "ko": "림라이트 빌드업",
+            "es": "Luz de contorno"
+          },
+          "en": "Subtle rim light builds up behind the subject over 4 s, peaks, then settles. No motion of the subject itself.",
+          "zh": "4 秒內主體後方輪廓光逐漸增強、達峰、回穩。主體本身不動。"
+        },
+        {
+          "id": "sv_011",
+          "label": {
+            "en": "Pull-out reveal",
+            "zh": "拉鏡揭露",
+            "ja": "プルアウト・リビール",
+            "ko": "풀아웃 리빌",
+            "es": "Pull-out revelador"
+          },
+          "en": "Slow pull-out from close-up to medium shot over 6 s, revealing the surrounding scene. Subject stays sharply in focus.",
+          "zh": "6 秒內鏡頭由特寫拉至中景、揭露周邊場景。主體始終清晰對焦。"
+        },
+        {
+          "id": "sv_012",
+          "label": {
+            "en": "Crane up to overhead",
+            "zh": "升鏡至俯角",
+            "ja": "クレーンアップ",
+            "ko": "크레인 업",
+            "es": "Grúa a cenital"
+          },
+          "en": "Smooth crane-up from front view to 30° overhead over 7 s. Subject remains centered and undeformed.",
+          "zh": "7 秒內鏡頭由正面平視升至 30° 俯角。主體置中、不變形。"
+        },
+        {
+          "id": "sv_013",
+          "label": {
+            "en": "Warm color grade",
+            "zh": "暖色調色",
+            "ja": "暖色グレーディング",
+            "ko": "웜 컬러 그레이드",
+            "es": "Color cálido"
+          },
+          "en": "Gentle film-grain and 2700K warm-color-grade fade in over 3 s, then steady. Subject identity preserved exactly.",
+          "zh": "3 秒內加入細微底片顆粒與 2700K 暖色調，之後保持。主體完全保留。"
+        },
+        {
+          "id": "sv_014",
+          "label": {
+            "en": "Floating particles",
+            "zh": "浮粒飄過",
+            "ja": "フローティング粒子",
+            "ko": "플로팅 파티클",
+            "es": "Partículas flotantes"
+          },
+          "en": "Floating particles (very soft, sparse) drift right-to-left across the background over 8 s. Subject fixed.",
+          "zh": "8 秒內背景有非常柔和、稀疏的浮粒由右向左飄過。主體固定。"
+        },
+        {
+          "id": "sv_015",
+          "label": {
+            "en": "Cool→warm light shift",
+            "zh": "冷暖光漸變",
+            "ja": "冷→暖光シフト",
+            "ko": "쿨→웜 라이트",
+            "es": "Frío→cálido"
+          },
+          "en": "Background gradient lighting slowly shifts from cool 6500K to warm 3000K over 6 s. Subject stays color-accurate.",
+          "zh": "6 秒內背景漸層光由冷色 6500K 慢慢轉為暖色 3000K。主體顏色準確不變。"
+        },
+        {
+          "id": "sv_016",
+          "label": {
+            "en": "Background fabric drift",
+            "zh": "背景布幔飄",
+            "ja": "背景ファブリック揺れ",
+            "ko": "배경 패브릭 흔들림",
+            "es": "Tela al fondo"
+          },
+          "en": "Light fabric drape sways subtly in the background over 6 s. No motion on the subject.",
+          "zh": "6 秒內背景輕薄布幔輕微飄動。主體無動作。"
+        },
+        {
+          "id": "sv_017",
+          "label": {
+            "en": "Lengthening shadow",
+            "zh": "陰影拉長",
+            "ja": "影が伸びる",
+            "ko": "그림자 길어짐",
+            "es": "Sombra alargándose"
+          },
+          "en": "Camera holds; subject shadow lengthens slowly across the floor as if a sun moved over 7 s. Subject identity unchanged.",
+          "zh": "鏡頭固定；7 秒內主體陰影宛如陽光移動般慢慢拉長。主體完全保留。"
+        },
+        {
+          "id": "sv_018",
+          "label": {
+            "en": "Fashion petal float",
+            "zh": "時尚花瓣飄",
+            "ja": "ファッション花びら",
+            "ko": "패션 꽃잎",
+            "es": "Pétalos moda"
+          },
+          "en": "Soft falling petals around a fashion item over 8 s. Item is locked, only background petals animate.",
+          "zh": "8 秒內時尚商品周圍柔和花瓣飄落。商品固定、僅背景花瓣動態。"
+        },
+        {
+          "id": "sv_019",
+          "label": {
+            "en": "Lateral pan",
+            "zh": "橫向平移",
+            "ja": "レターラル・パン",
+            "ko": "래터럴 팬",
+            "es": "Paneo lateral"
+          },
+          "en": "Slow lateral pan from left to right over 8 s, framing kept on the product. No zoom, no distortion.",
+          "zh": "8 秒內鏡頭由左向右緩慢平移、產品始終在構圖中。不縮放、不變形。"
+        },
+        {
+          "id": "sv_020",
+          "label": {
+            "en": "Out-of-focus halo",
+            "zh": "失焦光環",
+            "ja": "アウトフォーカス・ハロ",
+            "ko": "아웃포커스 헤일로",
+            "es": "Halo desenfocado"
+          },
+          "en": "Gentle out-of-focus ring of light slowly contracts toward the product over 6 s, ending in soft focus. Subject preserved.",
+          "zh": "6 秒內失焦光環朝產品緩慢收束、最終呈柔和對焦。主體保留。"
+        },
+        {
+          "id": "sv_021",
+          "label": {
+            "en": "Subtle camera arc",
+            "zh": "輕微弧線環繞",
+            "ja": "カメラ・アーク",
+            "ko": "카메라 아크",
+            "es": "Arco de cámara"
+          },
+          "en": "Two-second pause, then slow 5° camera arc around the product (8 s total). Lighting unchanged. Subject preserved exactly.",
+          "zh": "前 2 秒靜止、之後鏡頭以 5° 弧線繞行產品（共 8 秒）。光線不變。主體完全保留。"
+        },
+        {
+          "id": "sv_022",
+          "label": {
+            "en": "Breathing fill light",
+            "zh": "呼吸感補光",
+            "ja": "呼吸する補助光",
+            "ko": "브리딩 필 라이트",
+            "es": "Luz que respira"
+          },
+          "en": "Steady camera; very subtle 'breathing' fill light pulses every 4 s for 8 s. Subject does not deform.",
+          "zh": "鏡頭穩定；環境補光以每 4 秒一次的『呼吸感』輕微強弱、共 8 秒。主體不變形。"
+        }
+      ]
+    },
+    "ai_avatar": {
+      "label": {
+        "en": "AI Avatar Script",
+        "zh": "AI 代言人腳本",
+        "ja": "AIアバター台本",
+        "ko": "AI 아바타 스크립트",
+        "es": "Guion de avatar IA"
+      },
+      "prompts": [
+        {
+          "id": "av_001",
+          "label": {
+            "en": "New product launch",
+            "zh": "新品上架",
+            "ja": "新商品ローンチ",
+            "ko": "신상품 출시",
+            "es": "Lanzamiento de producto"
+          },
+          "en": "Hi, I'm here to introduce our brand-new product launching today. It's designed for everyday use, easy to clean, and built to last. The opening price for the first hundred buyers is on screen now — link in the description. See you in the comments.",
+          "zh": "嗨大家好！今天要為你介紹我們剛上架的新品。日常好用、好清洗、耐用度也很高。前一百名的開幕價就在畫面上，連結放在資訊欄，等你來留言！"
+        },
+        {
+          "id": "av_002",
+          "label": {
+            "en": "Best-seller refresh",
+            "zh": "長銷款升級",
+            "ja": "ベストセラー刷新",
+            "ko": "베스트셀러 리뉴얼",
+            "es": "Best-seller renovado"
+          },
+          "en": "This is our best-seller, and we just refreshed the formula. Same trusted feel, now with a smoother finish. If you tried our previous version, this one is the upgrade you've been asking for.",
+          "zh": "這是我們的長銷款，配方剛升級。一樣好用，使用感更滑順。如果你之前用過舊版，這就是你一直在等的升級版。"
+        },
+        {
+          "id": "av_003",
+          "label": {
+            "en": "Three things I love",
+            "zh": "我最愛的三件事",
+            "ja": "お気に入り3つ",
+            "ko": "내가 좋아하는 세 가지",
+            "es": "Tres cosas que me encantan"
+          },
+          "en": "Three things I love about this product: it's compact enough for everyday carry, the material doesn't fade, and it pairs with almost any outfit. Tap the link if you want to see all the colors.",
+          "zh": "這支商品我最喜歡的三件事：尺寸好攜帶、材質不掉色、跟什麼穿搭都好搭。想看所有顏色就點連結。"
+        },
+        {
+          "id": "av_004",
+          "label": {
+            "en": "Live opener",
+            "zh": "直播開場",
+            "ja": "ライブ開始",
+            "ko": "라이브 오프닝",
+            "es": "Apertura de live"
+          },
+          "en": "Hi everyone, welcome to today's live. Make sure to follow so you don't miss the limited-time prices we'll be releasing during the stream. Drop a hello in chat so I know you're here.",
+          "zh": "嗨大家好，歡迎來到今天的直播！記得按追蹤，等下會放限時優惠不要錯過。在聊天室打個招呼，讓我知道你來了。"
+        },
+        {
+          "id": "av_005",
+          "label": {
+            "en": "Live 30-min sale",
+            "zh": "30分鐘限定",
+            "ja": "30分限定セール",
+            "ko": "30분 한정 세일",
+            "es": "Venta 30 min"
+          },
+          "en": "We're live for the next thirty minutes only. Three exclusive bundles, limited stock, free domestic shipping over a certain amount. Watch the on-screen banner — it updates as items go.",
+          "zh": "今天直播只開三十分鐘。三組限時組合、數量有限、滿額免運。看畫面下方的字幕，賣完會即時更新。"
+        },
+        {
+          "id": "av_006",
+          "label": {
+            "en": "First-order discount",
+            "zh": "首購折扣",
+            "ja": "初回割引",
+            "ko": "첫 구매 할인",
+            "es": "Descuento primer pedido"
+          },
+          "en": "Use code at checkout for fifteen percent off your first order. Code is on screen and works on the full collection. Offer ends Sunday at midnight.",
+          "zh": "結帳輸入畫面上的優惠碼，首購享 85 折。全館適用，週日午夜截止。"
+        },
+        {
+          "id": "av_007",
+          "label": {
+            "en": "New-member gift",
+            "zh": "新會員首購禮",
+            "ja": "新規会員ギフト",
+            "ko": "신규 회원 선물",
+            "es": "Regalo nuevo miembro"
+          },
+          "en": "First-time member? You unlock a starter gift on us — automatically added to your cart on your first purchase. No code needed.",
+          "zh": "首次加入會員？首購自動贈送會員禮，購物車會直接幫你加好，不用輸入優惠碼。"
+        },
+        {
+          "id": "av_008",
+          "label": {
+            "en": "Free shipping reminder",
+            "zh": "滿額免運提醒",
+            "ja": "送料無料案内",
+            "ko": "무료배송 안내",
+            "es": "Envío gratis"
+          },
+          "en": "Free shipping island-wide on orders over a small minimum. We ship within one business day, with tracking sent straight to your phone.",
+          "zh": "全島滿額免運費。下單後一個工作天內出貨，物流追蹤碼會直接傳到你的手機。"
+        },
+        {
+          "id": "av_009",
+          "label": {
+            "en": "Customer service",
+            "zh": "客服協助",
+            "ja": "カスタマーサポート",
+            "ko": "고객 서비스",
+            "es": "Atención al cliente"
+          },
+          "en": "Hi, thanks for reaching out. I can help you with order tracking, sizing questions, or returns. Send me your order number in the chat and I'll take it from there.",
+          "zh": "嗨，謝謝你聯絡我們。訂單查詢、尺寸建議、退換貨我都能協助。請在對話框留下你的訂單編號，我會直接幫你處理。"
+        },
+        {
+          "id": "av_010",
+          "label": {
+            "en": "Small TW team",
+            "zh": "台灣小團隊",
+            "ja": "台湾の小さなチーム",
+            "ko": "대만 소규모 팀",
+            "es": "Equipo pequeño de Taiwán"
+          },
+          "en": "We're a small team based in Taiwan. Every order is checked, packed and shipped from our own studio. If anything's not perfect, message us and we'll make it right.",
+          "zh": "我們是一家位於台灣的小團隊。每一筆訂單都由我們親自檢查、包裝、出貨。如果有任何不滿意，私訊我們，我們會處理到你滿意為止。"
+        },
+        {
+          "id": "av_011",
+          "label": {
+            "en": "Brand origin",
+            "zh": "品牌起源",
+            "ja": "ブランドストーリー",
+            "ko": "브랜드 스토리",
+            "es": "Origen de la marca"
+          },
+          "en": "We started this brand because we couldn't find what we wanted at the price we wanted. Three years on, our community keeps us honest. Thanks for being part of it.",
+          "zh": "我們會開始這個品牌，是因為找不到我們想要、價格也合理的商品。三年下來，是大家一直給我們真實回饋。謝謝你們。"
+        },
+        {
+          "id": "av_012",
+          "label": {
+            "en": "Lunar New Year sets",
+            "zh": "新年禮盒",
+            "ja": "春節ギフトセット",
+            "ko": "설날 선물세트",
+            "es": "Set Año Nuevo Lunar"
+          },
+          "en": "Lunar New Year is here. We've prepared a small selection of red-packaging gift sets — limited quantity, ready to ship. If you're picking up presents for family, check the link in description.",
+          "zh": "農曆新年到了。我們特別準備了一系列紅色包裝禮盒，數量有限、現貨出貨。要送給家人的話，連結放在資訊欄。"
+        },
+        {
+          "id": "av_013",
+          "label": {
+            "en": "Mother's Day cards",
+            "zh": "母親節卡片",
+            "ja": "母の日カード",
+            "ko": "어버이날 카드",
+            "es": "Tarjeta Día de la Madre"
+          },
+          "en": "Mother's Day is around the corner. We're including a hand-written card with every order this week — just leave your message at checkout.",
+          "zh": "母親節快到了。這週每一筆訂單我們都會附上手寫卡片，結帳時留下你想說的話就好。"
+        },
+        {
+          "id": "av_014",
+          "label": {
+            "en": "Mid-Autumn gifts",
+            "zh": "中秋禮盒",
+            "ja": "中秋ギフト",
+            "ko": "추석 선물",
+            "es": "Regalo Mid-Autumn"
+          },
+          "en": "Mid-Autumn gift sets are now available. We pair our best-seller with a small accessory in a giftable box. Limited to two hundred sets only.",
+          "zh": "中秋禮盒上架囉！我們把熱銷商品搭配一個小配件，裝在送禮包裝裡。限量兩百組，售完為止。"
+        },
+        {
+          "id": "av_015",
+          "label": {
+            "en": "Long-weekend wishes",
+            "zh": "連假祝福",
+            "ja": "連休のご挨拶",
+            "ko": "연휴 인사",
+            "es": "Felices fiestas"
+          },
+          "en": "Wishing you a peaceful long weekend. Our store is still taking orders — we'll resume packing on the first working day. Thank you for your patience.",
+          "zh": "祝你連假愉快。商店持續接單，連假後的第一個工作天恢復出貨，感謝你的耐心。"
+        },
+        {
+          "id": "av_016",
+          "label": {
+            "en": "Quick usage tip",
+            "zh": "使用小提醒",
+            "ja": "使い方のヒント",
+            "ko": "사용 팁",
+            "es": "Consejo de uso"
+          },
+          "en": "Quick tip: shake before use, apply to clean skin, and store away from direct sunlight. Used this way, one bottle lasts about a month.",
+          "zh": "小提醒：使用前搖一搖，洗淨後再上臉，避免陽光直射。這樣用一瓶大約可以用一個月。"
+        },
+        {
+          "id": "av_017",
+          "label": {
+            "en": "30-second setup",
+            "zh": "30秒安裝",
+            "ja": "30秒セットアップ",
+            "ko": "30초 셋업",
+            "es": "Instalación 30 s"
+          },
+          "en": "Here's a thirty-second guide to setting it up: open the box, peel the protective film, plug in, press the power button once. That's it.",
+          "zh": "30 秒安裝教學：開箱、撕掉保護膜、插上電源、按一次開關。就這樣。"
+        },
+        {
+          "id": "av_018",
+          "label": {
+            "en": "Sizing guide",
+            "zh": "尺寸建議",
+            "ja": "サイズガイド",
+            "ko": "사이즈 가이드",
+            "es": "Guía de tallas"
+          },
+          "en": "If you're between sizes, size up. The fabric runs slightly slim and softens after the first wash. Detailed measurements are in the size chart.",
+          "zh": "如果尺寸介在中間，建議買大一號。布料偏修身，第一次洗後會變柔軟。詳細尺寸請看尺寸表。"
+        },
+        {
+          "id": "av_019",
+          "label": {
+            "en": "Restock alert",
+            "zh": "補貨通知",
+            "ja": "再入荷お知らせ",
+            "ko": "재입고 알림",
+            "es": "Reposición"
+          },
+          "en": "Restock alert: the colorway you've been asking about is back in stock today. Quantities are smaller than last time, so if you've been waiting, now's a good time.",
+          "zh": "補貨通知：大家敲碗的那個顏色，今天正式補貨。數量比上次少，等很久的朋友把握機會。"
+        },
+        {
+          "id": "av_020",
+          "label": {
+            "en": "New website launch",
+            "zh": "新站上線",
+            "ja": "新サイト公開",
+            "ko": "신규 웹사이트",
+            "es": "Nueva web"
+          },
+          "en": "We've moved to a new website, faster checkout, easier order tracking. Your previous account still works — just log in with the same email.",
+          "zh": "我們搬到全新網站，結帳更快、訂單追蹤更簡單。原本的帳號可以直接使用，用同一組信箱登入就好。"
+        },
+        {
+          "id": "av_021",
+          "label": {
+            "en": "Soft-launch thanks",
+            "zh": "先行販售感謝",
+            "ja": "プレローンチ感謝",
+            "ko": "소프트 런치 감사",
+            "es": "Gracias soft launch"
+          },
+          "en": "Thanks to everyone who supported our soft-launch — we sold through faster than we expected. The next drop is on the date shown. Sign up for the waitlist if you don't want to miss it.",
+          "zh": "謝謝參與我們先行販售的大家——比預期還快售完。下一批時間在畫面上，怕錯過的話記得加入等候名單。"
+        },
+        {
+          "id": "av_022",
+          "label": {
+            "en": "Tag us / repost",
+            "zh": "標記我們轉發",
+            "ja": "タグ付けで紹介",
+            "ko": "태그 후 리포스트",
+            "es": "Etiquétanos"
+          },
+          "en": "If you got something from us, we'd love to see how you use it. Tag us in your post and we'll repost the ones we love. See you in the comments.",
+          "zh": "如果你也買了我們的商品，歡迎標記我們，我們會選喜歡的轉發。留言區見！"
+        }
+      ]
+    },
+    "pattern_generate": {
+      "label": {
+        "en": "Pattern Generate",
+        "zh": "圖案生成",
+        "ja": "パターン生成",
+        "ko": "패턴 생성",
+        "es": "Generar patrón"
+      },
+      "prompts": [
+        {
+          "id": "pg_001",
+          "label": {
+            "en": "Cherry blossom washi",
+            "zh": "櫻花和紙",
+            "ja": "桜と和紙",
+            "ko": "벚꽃 와시",
+            "es": "Cerezo washi"
+          },
+          "en": "Cherry-blossom branches on cream background, soft pink (#F4C2C2) and warm grey (#A89C8E), Japanese washi watercolor, organic scattered repeat, seamless tile, no text or watermark.",
+          "zh": "奶白底上的櫻花枝、柔粉色 (#F4C2C2) 與暖灰色 (#A89C8E)、日本和紙水彩風、有機散佈排列、無縫貼圖、不可有任何文字或浮水印。"
+        },
+        {
+          "id": "pg_002",
+          "label": {
+            "en": "Single-line botanicals",
+            "zh": "單線植物",
+            "ja": "一筆書き植物",
+            "ko": "단선 보태니컬",
+            "es": "Botánica una línea"
+          },
+          "en": "Single-line botanical leaves, deep navy (#1F2A44) on ivory, minimalist line-art, evenly-spaced grid repeat, seamless tile, no text.",
+          "zh": "單線植物葉脈、深海軍藍 (#1F2A44) 印在象牙白上、極簡線畫、規律方格排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_003",
+          "label": {
+            "en": "Tropical monstera",
+            "zh": "熱帶龜背芋",
+            "ja": "モンステラ",
+            "ko": "몬스테라",
+            "es": "Monstera tropical"
+          },
+          "en": "Tropical monstera leaves, sage green (#7C8C5C) on warm cream, hand-painted gouache, organic overlapping repeat, seamless tile, no text.",
+          "zh": "熱帶龜背芋葉、鼠尾草綠 (#7C8C5C) 印在暖奶白上、手繪不透明水彩、有機交疊排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_004",
+          "label": {
+            "en": "Bauhaus geometric",
+            "zh": "包浩斯幾何",
+            "ja": "バウハウス幾何",
+            "ko": "바우하우스 기하",
+            "es": "Geométrico Bauhaus"
+          },
+          "en": "Geometric Bauhaus circles and triangles, primary palette (#E63946 red, #F1C453 yellow, #1D3557 navy) on off-white, flat vector, half-drop repeat, seamless tile.",
+          "zh": "包浩斯幾何圓與三角、主色 (#E63946 紅、#F1C453 黃、#1D3557 藏青) 印在米白上、平面向量、半落差排列、無縫貼圖。"
+        },
+        {
+          "id": "pg_005",
+          "label": {
+            "en": "TW oolong tea",
+            "zh": "台灣烏龍茶",
+            "ja": "台湾烏龍茶",
+            "ko": "대만 우롱차",
+            "es": "Oolong taiwanés"
+          },
+          "en": "Taiwan oolong tea leaves and small white tea blossoms, muted jade green (#6F8E7B) and ivory, ink-on-paper style, evenly-distributed repeat, seamless tile, no text.",
+          "zh": "台灣烏龍茶葉與小白茶花、霧色翡翠綠 (#6F8E7B) 與象牙白、宣紙墨韻風、均勻分布排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_006",
+          "label": {
+            "en": "Hakka florals",
+            "zh": "客家花布",
+            "ja": "客家花柄",
+            "ko": "하카 플로럴",
+            "es": "Floral Hakka"
+          },
+          "en": "Hakka-style florals (peonies, magnolias) reinterpreted in modern flat vector, deep crimson (#9B2A2A) and gold (#C49A4A) on cream, mid-drop repeat, seamless tile, no text.",
+          "zh": "客家花布主題（牡丹、玉蘭）以現代平面向量重新詮釋、深緋紅 (#9B2A2A) 與金色 (#C49A4A) 配奶白、中落差排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_007",
+          "label": {
+            "en": "Mid-Autumn moon",
+            "zh": "中秋月兔",
+            "ja": "中秋の月とウサギ",
+            "ko": "추석 달과 토끼",
+            "es": "Luna Mid-Autumn"
+          },
+          "en": "Mid-autumn moon and rabbits, navy (#0F1A3A) on parchment, line-engraving style, scattered organic repeat, seamless tile, no text.",
+          "zh": "中秋月與玉兔、深藏青 (#0F1A3A) 配米黃羊皮紙、銅版畫線雕風、有機散佈排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_008",
+          "label": {
+            "en": "Lunar New Year koi",
+            "zh": "新年錦鯉祥雲",
+            "ja": "春節の鯉と雲",
+            "ko": "설날 잉어와 구름",
+            "es": "Año Nuevo carpas"
+          },
+          "en": "Lunar New Year auspicious clouds and koi, vermillion (#C41E3A) and gold (#D4AF37) on cream, traditional brush ink with subtle gradients, regular grid repeat, seamless tile, no text.",
+          "zh": "農曆新年祥雲與錦鯉、朱紅 (#C41E3A) 與金 (#D4AF37) 配奶白、傳統毛筆暈染、規律方格排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_009",
+          "label": {
+            "en": "Scandinavian folk",
+            "zh": "北歐民俗",
+            "ja": "北欧フォーク",
+            "ko": "스칸디 포크",
+            "es": "Folk escandinavo"
+          },
+          "en": "Scandinavian folk reindeer and pine motif, charcoal (#2F2F2F) on cream, woodblock-print style, mid-drop repeat, seamless tile, no text.",
+          "zh": "北歐民俗馴鹿與松木紋、炭黑 (#2F2F2F) 印在奶白上、木刻版畫風、中落差排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_010",
+          "label": {
+            "en": "Moroccan zellige",
+            "zh": "摩洛哥馬賽克",
+            "ja": "モロッコのゼリージュ",
+            "ko": "모로칸 젤리지",
+            "es": "Zellige marroquí"
+          },
+          "en": "Moroccan zellige tiles, indigo (#1E3A5F), terracotta (#B5651D) and cream, ornate geometric tessellation, half-drop repeat, seamless tile.",
+          "zh": "摩洛哥馬賽克瓷磚、靛藍 (#1E3A5F)、磚橘 (#B5651D) 與奶白、繁複幾何鑲嵌、半落差排列、無縫貼圖。"
+        },
+        {
+          "id": "pg_011",
+          "label": {
+            "en": "Art Deco fans",
+            "zh": "Art Deco 扇形",
+            "ja": "アール・デコ扇",
+            "ko": "아르데코 팬",
+            "es": "Abanicos Art Decó"
+          },
+          "en": "Art Deco fans and rays, emerald (#046307) and brass (#B08D57) on black, vintage symmetric, evenly-spaced repeat, seamless tile, no text.",
+          "zh": "Art Deco 扇形與光線、祖母綠 (#046307) 與黃銅 (#B08D57) 配黑、復古對稱、均勻間距排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_012",
+          "label": {
+            "en": "Soft polka dots",
+            "zh": "柔和水玉點",
+            "ja": "優しい水玉",
+            "ko": "소프트 폴카닷",
+            "es": "Lunares suaves"
+          },
+          "en": "Soft polka dots, dusty pink (#E0A6A6) on warm cream, gentle hand-painted dots, regular dotted-grid repeat, seamless tile, no text.",
+          "zh": "柔和水玉點、霧粉 (#E0A6A6) 印在暖奶白上、手繪柔和圓點、規律點陣排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_013",
+          "label": {
+            "en": "Liberty pastel ditsy",
+            "zh": "Liberty 粉色碎花",
+            "ja": "リバティ柄",
+            "ko": "리버티 디지",
+            "es": "Liberty pastel"
+          },
+          "en": "Liberty-style ditsy florals, mixed pastel palette (#F4C2C2, #C2D8E4, #DDE3B0), gentle gouache, scattered all-over repeat, seamless tile, no text.",
+          "zh": "Liberty 風碎花、粉嫩混色 (#F4C2C2、#C2D8E4、#DDE3B0)、柔和不透明水彩、整體散佈排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_014",
+          "label": {
+            "en": "Minimal waves",
+            "zh": "極簡波紋",
+            "ja": "ミニマル波紋",
+            "ko": "미니멀 웨이브",
+            "es": "Olas minimalistas"
+          },
+          "en": "Minimalist abstract waves, ocean blue (#1B4965) and ivory, single continuous line, horizontal repeat, seamless tile, no text.",
+          "zh": "極簡抽象波紋、海洋藍 (#1B4965) 與象牙白、單一連續線條、水平排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_015",
+          "label": {
+            "en": "Citrus slices",
+            "zh": "柑橘切片",
+            "ja": "柑橘スライス",
+            "ko": "시트러스 슬라이스",
+            "es": "Cítricos"
+          },
+          "en": "Hand-drawn citrus slices (lemon, orange, pomelo), warm yellow (#F2C14E) and coral (#F08080) on cream, gouache illustration, scattered repeat, seamless tile, no text.",
+          "zh": "手繪柑橘切片（檸檬、柳橙、文旦）、暖黃 (#F2C14E) 與珊瑚紅 (#F08080) 配奶白、不透明水彩插畫、散佈排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_016",
+          "label": {
+            "en": "Mountain silhouettes",
+            "zh": "山稜剪影",
+            "ja": "山のシルエット",
+            "ko": "산 실루엣",
+            "es": "Siluetas montañas"
+          },
+          "en": "Mountain silhouettes (Yushan / Alishan inspiration), layered jade greens and grey-blues, flat-color block-print, horizontal half-drop, seamless tile, no text.",
+          "zh": "山稜線剪影（玉山／阿里山靈感）、層疊翡翠綠與灰藍、平塗版畫風、水平半落差排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_017",
+          "label": {
+            "en": "Abstract terrazzo",
+            "zh": "抽象水磨石",
+            "ja": "テラゾー",
+            "ko": "추상 테라조",
+            "es": "Terrazo abstracto"
+          },
+          "en": "Abstract terrazzo, neutral cream base with chips of sage, terracotta, charcoal, photo-real terrazzo material, organic random repeat, seamless tile, no text.",
+          "zh": "抽象水磨石、奶白底配鼠尾草綠、磚紅、炭黑碎片、寫實水磨石質感、有機隨機排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_018",
+          "label": {
+            "en": "Origami cranes",
+            "zh": "摺紙紙鶴",
+            "ja": "折り鶴",
+            "ko": "오리가미 학",
+            "es": "Grullas origami"
+          },
+          "en": "Origami cranes, ivory and warm grey, paper-fold flat illustration, mid-drop repeat, seamless tile, no text.",
+          "zh": "摺紙紙鶴、象牙白與暖灰、紙摺風平面插畫、中落差排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_019",
+          "label": {
+            "en": "Coastal coral",
+            "zh": "海岸珊瑚",
+            "ja": "コースタル珊瑚",
+            "ko": "코스털 코랄",
+            "es": "Coral costero"
+          },
+          "en": "Coastal coral and scallops, dusty coral (#E0997D) and sand cream, watercolor with soft edges, scattered repeat, seamless tile, no text.",
+          "zh": "海岸珊瑚與扇貝、霧珊瑚 (#E0997D) 與砂奶白、邊緣柔和水彩、散佈排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_020",
+          "label": {
+            "en": "Geometric herringbone",
+            "zh": "幾何人字",
+            "ja": "ヘリンボーン",
+            "ko": "헤링본",
+            "es": "Espina de pez"
+          },
+          "en": "Geometric herringbone, dusty terracotta and warm cream, two-tone flat, dense regular repeat, seamless tile.",
+          "zh": "幾何人字紋、霧磚紅與暖奶白、雙色平面、密集規律排列、無縫貼圖。"
+        },
+        {
+          "id": "pg_021",
+          "label": {
+            "en": "Ink wash bamboo",
+            "zh": "墨韻竹林",
+            "ja": "墨絵の竹",
+            "ko": "먹화 대나무",
+            "es": "Bambú tinta"
+          },
+          "en": "Ink wash bamboo grove, charcoal (#2C2C2C) on rice-paper cream, traditional brush style with negative space, vertical repeat, seamless tile, no text.",
+          "zh": "墨韻竹林、炭黑 (#2C2C2C) 印在米黃宣紙上、傳統毛筆風並有留白、垂直排列、無縫貼圖、無文字。"
+        },
+        {
+          "id": "pg_022",
+          "label": {
+            "en": "Modern half-circles",
+            "zh": "現代半圓",
+            "ja": "モダン半円",
+            "ko": "모던 반원",
+            "es": "Semicírculos modernos"
+          },
+          "en": "Modern geometric tiles, soft sage (#9CAF88) and cream, half-circle and quarter-arc shapes, half-drop repeat, seamless tile, no text.",
+          "zh": "現代幾何磁磚、柔和鼠尾草綠 (#9CAF88) 與奶白、半圓與四分之一弧、半落差排列、無縫貼圖、無文字。"
+        }
+      ]
+    }
+  }
+}

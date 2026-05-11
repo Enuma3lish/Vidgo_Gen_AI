@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useLocalized } from '@/composables'
 import { commonImageDimensionRule, isAllowedImageFile, normalizeImageFileForUpload } from '@/utils/mediaValidation'
 
 const { t, locale } = useI18n()
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 const props = defineProps<{
   accept?: string
@@ -66,8 +69,8 @@ async function processFiles(files: File[]): Promise<boolean> {
   for (const file of files) {
     if (allowed === AI_IMAGE_TYPES ? !isAllowedImageFile(file) : !allowed.includes(file.type)) {
       const label = allowed === AI_VIDEO_TYPES
-        ? (isZh ? 'MP4、WebM 或 MOV 影片' : 'MP4, WebM, or MOV video')
-        : (isZh ? 'JPG、PNG 或 WebP 圖片' : 'JPG, PNG, or WebP image')
+        ? L('MP4、WebM 或 MOV 影片', 'MP4, WebM, or MOV video', 'MP4、WebMまたはMOV動画', 'MP4, WebM 또는 MOV 동영상', 'Video MP4, WebM o MOV')
+        : L('JPG、PNG 或 WebP 圖片', 'JPG, PNG, or WebP image', 'JPG、PNGまたはWebP画像', 'JPG, PNG 또는 WebP 이미지', 'Imagen JPG, PNG o WebP')
       emit('error', isZh
         ? `檔案 ${file.name} 不支援，請選擇 ${label}。`
         : `File ${file.name} is not supported. Please choose a ${label}.`)
@@ -84,7 +87,7 @@ async function processFiles(files: File[]): Promise<boolean> {
       try {
         uploadFile = await normalizeImageFileForUpload(file, commonImageDimensionRule, { maxSizeMb: maxSize / 1024 / 1024 })
       } catch {
-        emit('error', isZh ? '無法處理圖片尺寸或壓縮，請重新選擇圖片。' : 'Image could not be resized or compressed. Please choose a different image.')
+        emit('error', L('無法處理圖片尺寸或壓縮，請重新選擇圖片。', 'Image could not be resized or compressed. Please choose a different image.', '画像のリサイズまたは圧縮ができません。別の画像を選んでください。', '이미지 리사이즈 또는 압축에 실패했습니다. 다른 이미지를 선택해 주세요.', 'No se pudo redimensionar o comprimir. Elige otra imagen.'))
         continue
       }
       if (uploadFile.size > maxSize) {

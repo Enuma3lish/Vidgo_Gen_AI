@@ -1,10 +1,9 @@
-// NOTE: ja / ko / es locale files are currently incomplete (256 keys missing
-// vs en.json) which makes the UI render in mixed languages — keys that exist
-// only in en fall back to English mid-sentence. Until those locales are fully
-// translated we restrict the picker to the two complete locales (en, zh-TW)
-// so users never see a half-translated screen. Add the locale back here once
-// its messages reach parity with en.json.
-export const SUPPORTED_LOCALES = ['en', 'zh-TW'] as const
+// All five locale files are at parity with en.json (1016 keys each as of
+// 2026-05-11). The 246 ja/ko/es keys that previously fell back to English
+// were patched via /tmp/patch_locales.py. If a future en-only key is added
+// without a matching ja/ko/es value, vue-i18n's missingHandler will fall
+// back to en — but that should be the exception, not the steady state.
+export const SUPPORTED_LOCALES = ['en', 'zh-TW', 'ja', 'ko', 'es'] as const
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
@@ -17,8 +16,9 @@ export function normalizeLocale(value?: string | null): SupportedLocale {
 
   if (lowerLocale.startsWith('zh')) return 'zh-TW'
   if (lowerLocale.startsWith('en')) return 'en'
-  // ja / ko / es fall back to the default until those locale files are
-  // fully translated; see SUPPORTED_LOCALES note above.
+  if (lowerLocale.startsWith('ja')) return 'ja'
+  if (lowerLocale.startsWith('ko')) return 'ko'
+  if (lowerLocale.startsWith('es')) return 'es'
 
   return DEFAULT_LOCALE
 }

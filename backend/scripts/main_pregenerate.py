@@ -1254,24 +1254,27 @@ class VidGoPreGenerator:
                 if self.per_topic_limit is None and count >= limit:
                     break
 
+                # Pick the avatar ONCE per script so that the zh-TW and en
+                # variants of the same script render with the same person.
+                # Mismatched portraits between language variants produced
+                # confusing pairs on the homepage (same script, different face).
+                script_gender = script.get("preferred_gender") or (
+                    "female" if (len(self.local_results["ai_avatar"]) // 2) % 2 == 0 else "male"
+                )
+                script_pool = female_portraits if script_gender == "female" else male_portraits
+                if not script_pool:
+                    script_pool = portraits
+                script_portrait_idx = portrait_idx_by_gender[script_gender] % max(len(script_pool), 1)
+                script_portrait = script_pool[script_portrait_idx]
+                portrait_idx_by_gender[script_gender] += 1
+
                 for language in lang_order:
                     topic_key = f"{topic}:{language}"
                     if not self._topic_can_generate(topic_key, topic_counts, limit, count):
                         break
 
-                    # Use script's preferred_gender if set (e.g. nail salon → female),
-                    # otherwise alternate male/female for variety
-                    avatar_gender = script.get("preferred_gender") or (
-                        "female" if count % 2 == 0 else "male"
-                    )
-                    pool = female_portraits if avatar_gender == "female" else male_portraits
-                    if not pool:
-                        # If we somehow have no portraits of the requested gender,
-                        # fall back to whatever we do have
-                        pool = portraits
-                    idx = portrait_idx_by_gender[avatar_gender] % max(len(pool), 1)
-                    portrait = pool[idx]
-                    portrait_idx_by_gender[avatar_gender] += 1
+                    avatar_gender = script_gender
+                    portrait = script_portrait
 
                     script_text = script["text_zh"] if language == "zh-TW" else script["text_en"]
 

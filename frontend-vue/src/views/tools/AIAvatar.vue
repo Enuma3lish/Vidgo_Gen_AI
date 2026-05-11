@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode } from '@/composables'
+import { useDemoMode, usePromptLibrary, useLocalized } from '@/composables'
 // PRESET-ONLY MODE: UploadZone removed - all users use presets
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
@@ -17,6 +17,8 @@ const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const isZh = computed(() => locale.value.startsWith('zh'))
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 // Demo mode. We call loadInputLibrary/loadEffectCatalog in onMounted so the
 // composable's shared state is warm for other code paths, but this view's
@@ -31,6 +33,11 @@ const {
   loadEffectCatalog,
 } = useDemoMode()
 
+// Curated TTS scripts — dropdown replaces the free-form textarea.
+const { options: scriptPromptOptions, promptFor: scriptTextFor } = usePromptLibrary('ai_avatar')
+// Locale-stable selection — text is re-derived when locale changes.
+const selectedScriptPromptId = ref('')
+
 const uploadedImage = ref<string | undefined>(undefined)
 const resultVideo = ref<string | null>(null)
 const isProcessing = ref(false)
@@ -39,6 +46,15 @@ const isProcessing = ref(false)
 // Surfaces a persistent in-block message instead of a silent no-op.
 const demoEmptyState = ref(false)
 const script = ref('')
+// Re-derive script text when the user picks a new prompt OR switches locale
+// so the script field always reflects the active language.
+watch([selectedScriptPromptId, locale], () => {
+  if (selectedScriptPromptId.value) {
+    script.value = scriptTextFor(selectedScriptPromptId.value)
+  } else {
+    script.value = ''
+  }
+})
 const selectedLanguage = ref(locale.value.startsWith('zh') ? 'zh-TW' : 'en')
 const selectedVoice = ref('')
 const voices = ref<any[]>([])
@@ -285,8 +301,8 @@ const filteredVoices = computed(() => {
 const pendingTitle = computed(() => isZh.value
   ? '我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。'
   : 'I am creating the requested video. This may take a few minutes, so please check back shortly.')
-const pendingDetail = computed(() => isZh.value ? '正在生成數位人影片...' : 'Generating avatar video...')
-const pendingDuration = computed(() => isZh.value ? '需要 3 至 5 分鐘' : 'Usually takes 3 to 5 minutes')
+const pendingDetail = computed(() => L('正在生成數位人影片...', 'Generating avatar video...', 'アバター動画を生成中...', '아바타 동영상 생성 중...', 'Generando video del avatar...'))
+const pendingDuration = computed(() => L('需要 3 至 5 分鐘', 'Usually takes 3 to 5 minutes', '通常3〜5分かかります', '보통 3-5분 소요', 'Suele tardar 3-5 minutos'))
 
 
 async function loadVoices() {
@@ -358,12 +374,12 @@ function selectDefaultScript(scriptItem: typeof defaultScripts[0]) {
 
 async function generateAvatar() {
   if (!uploadedImage.value) {
-    uiStore.showError(isZh.value ? '請選擇頭像照片' : 'Please select an avatar photo')
+    uiStore.showError(L('請選擇頭像照片', 'Please select an avatar photo', 'アバター写真を選択してください', '아바타 사진을 선택해 주세요', 'Selecciona una foto de avatar'))
     return
   }
 
   if (!script.value) {
-    uiStore.showError(isZh.value ? '請選擇或輸入腳本' : 'Please select or enter a script')
+    uiStore.showError(L('請選擇或輸入腳本', 'Please select or enter a script', 'スクリプトを選択または入力してください', '대본을 선택하거나 입력해 주세요', 'Selecciona o introduce un guion'))
     return
   }
 
@@ -371,13 +387,13 @@ async function generateAvatar() {
   if (isDemoUser.value) {
     // Must use default avatar (not custom upload)
     if (!selectedAvatarId.value) {
-      uiStore.showError(isZh.value ? '請選擇預設頭像' : 'Please select a default avatar')
+      uiStore.showError(L('請選擇預設頭像', 'Please select a default avatar', 'デフォルトアバターを選択してください', '기본 아바타를 선택해 주세요', 'Selecciona un avatar predeterminado'))
       return
     }
 
     // Must use default script
     if (!selectedDefaultScriptId.value) {
-      uiStore.showError(isZh.value ? '請選擇預設腳本' : 'Please select a default script')
+      uiStore.showError(L('請選擇預設腳本', 'Please select a default script', 'デフォルトスクリプトを選択してください', '기본 대본을 선택해 주세요', 'Selecciona un guion predeterminado'))
       return
     }
 
@@ -393,7 +409,7 @@ async function generateAvatar() {
         const demoResultUrl = await resolveDemoTemplateResultUrl(preGeneratedTemplateId)
         if (demoResultUrl) {
           resultVideo.value = demoResultUrl
-          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
           return
         }
       }
@@ -415,13 +431,13 @@ async function generateAvatar() {
           if (currentResultKey.value) {
             preGeneratedTemplateIds.value[currentResultKey.value] = template.id
           }
-          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
           return
         }
       }
 
       demoEmptyState.value = true
-      uiStore.showError(isZh.value ? '此示範組合尚未預生成，請選擇可用的範例組合。' : 'This demo combination is not pre-generated yet. Please choose an available preset example.')
+      uiStore.showError(L('此示範組合尚未預生成，請選擇可用的範例組合。', 'This demo combination is not pre-generated yet. Please choose an available preset example.', 'このデモ組み合わせはまだ事前生成されていません。利用可能なプリセット例を選んでください。', '이 데모 조합은 아직 사전 생성되지 않았습니다. 사용 가능한 프리셋 예시를 선택해 주세요.', 'Esta combinación demo aún no está pregenerada. Elige un ejemplo disponible.'))
     } finally {
       isProcessing.value = false
     }
@@ -445,13 +461,23 @@ async function generateAvatar() {
       voice_id: selectedVoice.value,
       duration: 30,
       aspect_ratio: '9:16',
-      resolution: '720p'
+      resolution: '720p',
+      prompt_id: selectedScriptPromptId.value || undefined,
+      locale: String(locale.value || ''),
     })
 
     if (response.data.success && response.data.result_url) {
       resultVideo.value = response.data.result_url
       creditsStore.deductCredits(response.data.credits_used || 15)
       uiStore.showSuccess(t('common.success'))
+      // Scroll the freshly-rendered result into view on small screens — the
+      // right-panel sticky video is offscreen on mobile/tablet, so users
+      // previously thought "nothing happened" and went to dashboard.
+      await nextTick()
+      const el = document.getElementById('avatar-result-panel')
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
     } else {
       uiStore.showError(response.data.message || 'Generation failed')
     }
@@ -557,7 +583,7 @@ watch(selectedAvatarId, () => {
         <!-- Subscribe Notice for Demo Users -->
         <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
           <RouterLink to="/pricing" class="hover:underline">
-            {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+            {{ L('訂閱以解鎖更多功能', 'Subscribe to unlock more features', 'サブスク登録で機能を解禁', '구독으로 더 많은 기능 잠금 해제', 'Suscríbete para desbloquear más funciones') }}
           </RouterLink>
         </div>
       </div>
@@ -565,10 +591,10 @@ watch(selectedAvatarId, () => {
       <HowToUseHint
         tool-type="ai_avatar"
         media-kind="image"
-        :steps="[
-          { en: 'Pick a default avatar or upload your own front-facing portrait.', zh: '選一個預設頭像，或上傳你自己的正面頭像照片。' },
-          { en: 'Pick a script category or paste your own script.', zh: '選擇腳本分類，或貼上你自己的腳本。' },
-          { en: 'Choose voice and language, then click Generate Video.', zh: '選擇語音與語言，再點擊生成影片。' },
+        :i18n-keys="[
+          'howTo.ai_avatar.step1',
+          'howTo.ai_avatar.step2',
+          'howTo.ai_avatar.step3',
         ]"
       />
 
@@ -577,7 +603,7 @@ watch(selectedAvatarId, () => {
         <div class="space-y-6">
           <!-- 1. Language & Script (present first so user chooses language and script) -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ isZh ? '選擇語言與腳本' : 'Choose Language & Script' }}</h3>
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ L('選擇語言與腳本', 'Choose Language & Script', '言語とスクリプトを選択', '언어 및 대본 선택', 'Elige idioma y guion') }}</h3>
             <!-- Language -->
             <div class="mb-6">
               <label class="label">{{ t('tools.avatar.language') }}</label>
@@ -599,7 +625,7 @@ watch(selectedAvatarId, () => {
             <!-- Script Selection -->
             <div>
               <label class="label">{{ t('tools.avatar.script') }}</label>
-              <p class="text-sm text-dark-300 mb-2">{{ isZh ? '選擇預設腳本' : 'Select Script' }}</p>
+              <p class="text-sm text-dark-300 mb-2">{{ L('選擇預設腳本', 'Select Script', 'スクリプトを選択', '대본 선택', 'Selecciona guion') }}</p>
               <div class="space-y-2 max-h-48 overflow-y-auto">
                 <button
                   v-for="scriptItem in visibleScripts"
@@ -632,7 +658,7 @@ watch(selectedAvatarId, () => {
 
             <!-- Female Avatars (Asian/Chinese) -->
             <div class="mb-4">
-              <p class="text-sm text-dark-300 mb-2">{{ isZh ? '女性頭像' : 'Female Avatars' }}</p>
+              <p class="text-sm text-dark-300 mb-2">{{ L('女性頭像', 'Female Avatars', '女性アバター', '여성 아바타', 'Avatares femeninos') }}</p>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
                   v-for="avatar in visibleFemaleAvatars"
@@ -659,7 +685,7 @@ watch(selectedAvatarId, () => {
 
             <!-- Male Avatars -->
             <div class="mb-4">
-              <p class="text-sm text-dark-300 mb-2">{{ isZh ? '男性頭像' : 'Male Avatars' }}</p>
+              <p class="text-sm text-dark-300 mb-2">{{ L('男性頭像', 'Male Avatars', '男性アバター', '남성 아바타', 'Avatares masculinos') }}</p>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
                   v-for="avatar in visibleMaleAvatars"
@@ -686,11 +712,11 @@ watch(selectedAvatarId, () => {
 
             <!-- Subscriber Interface: Upload Zone -->
             <div v-if="!isDemoUser" class="mb-6">
-               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳頭像 (正面人臉)' : 'Upload Portrait (Front-facing)' }}</h4>
+               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ L('上傳頭像 (正面人臉)', 'Upload Portrait (Front-facing)', 'ポートレートをアップロード（正面）', '인물 사진 업로드 (정면)', 'Sube un retrato (frontal)') }}</h4>
                <ImageUploader 
                  tool-type="ai_avatar"
                  v-model="uploadedImage" 
-                 :label="isZh ? '點擊上傳或拖放頭像照片' : 'Drop portrait photo here'"
+                 :label="L('點擊上傳或拖放頭像照片', 'Drop portrait photo here', 'クリックまたはポートレート写真をドロップ', '클릭 또는 인물 사진 드롭', 'Sube o arrastra el retrato')"
                  class="mb-4"
                  @update:model-value="selectedAvatarId = null"
                />
@@ -699,19 +725,33 @@ watch(selectedAvatarId, () => {
             <!-- PRESET-ONLY MODE: Custom upload REMOVED - all users use preset avatars -->
           </div>
 
-          <!-- Custom Script Textarea (subscribers only) -->
+          <!-- Curated dropdown + editable textarea. Subscribers can pick a
+               preset to prefill or type freely; both modes feed the same
+               `script` ref which is what the API receives. -->
           <div v-if="!isDemoUser" class="card">
             <label class="block text-sm font-medium text-dark-300 mb-2">
-              {{ isZh ? '自訂腳本' : 'Custom Script' }}
+              {{ L('選擇腳本範本（可選）', 'Pick a script template (optional)', 'スクリプトテンプレートを選択（任意）', '대본 템플릿 선택 (선택)', 'Elige una plantilla (opcional)') }}
+            </label>
+            <select
+              v-model="selectedScriptPromptId"
+              @change="selectedDefaultScriptId = null"
+              class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500"
+              style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
+            >
+              <option value="">{{ L('— 不使用範本 —', '— No template —', '— テンプレートなし —', '— 템플릿 없음 —', '— Sin plantilla —') }}</option>
+              <option v-for="opt in scriptPromptOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
+            </select>
+            <label class="block text-sm font-medium text-dark-300 mt-4 mb-2">
+              {{ L('腳本內容（可自行編輯）', 'Script (you can edit freely)', 'スクリプト内容（自由に編集可）', '대본 (자유 편집 가능)', 'Guion (puedes editarlo)') }}
             </label>
             <textarea
               v-model="script"
-              rows="4"
-              class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;">
-              :placeholder="isZh ? '輸入您的腳本內容 (建議 100 字以內)...' : 'Enter your script here (max 100 words)...'"
+              rows="5"
               maxlength="500"
-              @input="selectedDefaultScriptId = null"
-            ></textarea>
+              :placeholder="L('在此輸入或編輯腳本…', 'Type or edit your script here…', 'ここにスクリプトを入力／編集…', '여기에 대본을 입력하거나 편집…', 'Escribe o edita tu guion aquí…')"
+              class="w-full rounded-lg p-3 text-sm leading-relaxed focus:outline-none focus:border-primary-500 resize-y"
+              style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa; min-height: 120px;"
+            />
             <div class="text-right text-xs text-dark-400 mt-1">
               {{ script.length }} / 500
             </div>
@@ -719,9 +759,9 @@ watch(selectedAvatarId, () => {
 
           <!-- 3. Generate (voice is fixed per avatar – no user choice) -->
           <div class="card">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ isZh ? '產生影片' : 'Generate' }}</h3>
+            <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ L('產生影片', 'Generate', '動画を生成', '동영상 생성', 'Generar') }}</h3>
             <p class="text-xs text-dark-400 mb-4">
-              {{ isZh ? '每位頭像已固定對應專屬聲音，只需選擇頭像與腳本即可。' : 'Each avatar has a fixed voice. Just pick an avatar and a script.' }}
+              {{ L('每位頭像已固定對應專屬聲音，只需選擇頭像與腳本即可。', 'Each avatar has a fixed voice. Just pick an avatar and a script.', '各アバターには専用音声が固定されています。アバターとスクリプトを選ぶだけです。', '각 아바타에는 전용 음성이 고정되어 있습니다. 아바타와 대본만 선택하세요.', 'Cada avatar tiene una voz fija. Solo elige avatar y guion.') }}
             </p>
             <!-- Credit Cost & Generate -->
             <div class="pt-2">
@@ -738,7 +778,7 @@ watch(selectedAvatarId, () => {
         </div>
 
         <!-- Right Panel - Result -->
-        <div class="card h-fit sticky top-24">
+        <div id="avatar-result-panel" class="card h-fit sticky top-24">
           <h3 class="text-lg font-semibold text-dark-50 mb-4">{{ t('tools.avatar.generatedVideo') }}</h3>
 
           <div v-if="resultVideo" class="space-y-4">
@@ -765,7 +805,7 @@ watch(selectedAvatarId, () => {
                </a>
 
                <RouterLink v-else to="/pricing" class="btn-primary w-full text-center block">
-                 {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+                 {{ L('訂閱以獲得完整功能', 'Subscribe for Full Access', 'サブスクで全機能を解禁', '구독으로 전체 액세스', 'Suscríbete para acceso completo') }}
                </RouterLink>
             </div>
           </div>
@@ -773,10 +813,10 @@ watch(selectedAvatarId, () => {
           <div v-else-if="demoEmptyState" class="aspect-[9/16] max-h-96 flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
             <span class="text-2xl">🔒</span>
             <p class="text-sm text-dark-200">
-              {{ isZh ? '此範例尚未預生成結果' : 'No pre-generated result for this example yet' }}
+              {{ L('此範例尚未預生成結果', 'No pre-generated result for this example yet', 'この例はまだ事前生成されていません', '이 예시는 아직 사전 생성되지 않았습니다', 'Aún no hay resultado pregenerado') }}
             </p>
             <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
-              {{ isZh ? '訂閱以使用完整 AI 功能' : 'Subscribe to use the real AI' }}
+              {{ L('訂閱以使用完整 AI 功能', 'Subscribe to use the real AI', 'サブスクで実AI機能を解禁', '구독으로 실제 AI 사용', 'Suscríbete para usar la IA real') }}
             </RouterLink>
           </div>
 

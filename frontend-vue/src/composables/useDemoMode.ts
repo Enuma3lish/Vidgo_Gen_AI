@@ -116,6 +116,11 @@ export function useDemoMode() {
     const user = authStore.user
     if (!user) return true // No user = demo
 
+    // Admins/superusers always get the full subscriber flow so they can
+    // exercise the real generation pipeline (uploads + actual provider
+    // calls) end-to-end during testing/QA.
+    if (user.is_superuser || user.is_admin) return false
+
     // If subscription API confirmed active subscription, user is NOT demo
     if (hasSubscription.value) return false
 

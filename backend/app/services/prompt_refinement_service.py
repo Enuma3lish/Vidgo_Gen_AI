@@ -100,6 +100,45 @@ class PromptRefinementService:
             ],
             "max_words": 115,
         },
+        "try_on": {
+            "purpose": "Create a virtual try-on prompt for AI Kling Try-On (garment transferred onto a model).",
+            "constraints": [
+                "Preserve the model's identity, ethnicity, skin tone, age, hairstyle, body proportions, and pose exactly.",
+                "Preserve the garment's color, fabric, pattern, sleeve length, neckline, and overall silhouette exactly.",
+                "Describe only realistic studio lighting, fit, draping, and natural fabric physics.",
+                "Do not invent accessories, jewelry, brand logos, text, additional people, or background props.",
+            ],
+            "max_words": 80,
+        },
+        "ai_avatar": {
+            "purpose": "Create a talking-head avatar prompt for lip-synced spokesperson video.",
+            "constraints": [
+                "Preserve the headshot subject's exact facial identity, ethnicity, age, gender, hairstyle, eye color, and clothing.",
+                "Describe only natural micro-expression, subtle head movement, friendly presenter posture, and stable studio lighting.",
+                "Do not change face shape, skin tone, hair, or wardrobe; do not add second person, hands, gestures, captions, or background text.",
+                "Keep the script language and meaning intact when referenced; never paraphrase the script content.",
+            ],
+            "max_words": 70,
+        },
+        "pattern_generate": {
+            "purpose": "Create a tileable brand pattern prompt (Flux T2I) for packaging/fabric/wallpaper.",
+            "constraints": [
+                "Honor the requested style family (seamless, floral, geometric, abstract, traditional, 3d, interior, mockup) literally.",
+                "Specify color palette in concrete hex-or-name terms, motif scale, repeat structure, and surface texture.",
+                "Forbid readable text, logos, watermarks, recognizable real brands, faces, and product photography.",
+                "Keep composition flat or near-flat unless 3d style is explicitly requested; ensure tile-friendly edges for seamless style.",
+            ],
+            "max_words": 85,
+        },
+        "background_removal": {
+            "purpose": "Refine optional background-replacement prompts after subject cutout.",
+            "constraints": [
+                "Preserve the cut-out subject's exact silhouette, pose, color, lighting direction, and edge fidelity.",
+                "Describe only the new background scene, depth, and ambient lighting that matches the subject's existing illumination.",
+                "Do not add additional subjects, text, watermarks, or duplicate the foreground product.",
+            ],
+            "max_words": 60,
+        },
     }
 
     def __init__(self) -> None:
@@ -130,11 +169,14 @@ class PromptRefinementService:
         context = context or {}
 
         system_prompt = (
-            "You are a prompt engineer for commercial AI image and video generation. "
-            "Rewrite prompts to be precise, concrete, and less likely to hallucinate. "
-            "Keep the user's or preset's core intent exactly. Do not add facts, brands, text, logos, "
-            "people, objects, or scene elements that were not requested. Prefer clear preservation "
-            "constraints and realistic photographic/video language. Output only valid JSON."
+            "You are a senior prompt engineer for commercial AI image and video generation. "
+            "Rewrite prompts so the downstream model produces precise, on-brief output that "
+            "faithfully preserves the source subject (identity, count, color, proportions, pose, "
+            "and existing brand marks) while adding only the requested transformation. "
+            "NEVER invent subjects, brands, slogans, watermarks, on-image text, additional people, "
+            "hands, animals, props, or scene elements that were not requested. Use realistic "
+            "photographic/video language (lens, lighting direction, depth-of-field, materials, "
+            "camera motion, pacing) and respect every tool constraint exactly. Output ONLY valid JSON."
         )
         payload = {
             "tool": tool_name,
@@ -161,8 +203,8 @@ class PromptRefinementService:
                 client.models.generate_content,
                 model=getattr(gemini, "model_name", "gemini-2.5-pro"),
                 contents=[
-                    types.Content(role="user", parts=[types.Part.from_text(system_prompt)]),
-                    types.Content(role="user", parts=[types.Part.from_text(user_message)]),
+                    types.Content(role="user", parts=[types.Part.from_text(text=system_prompt)]),
+                    types.Content(role="user", parts=[types.Part.from_text(text=user_message)]),
                 ],
                 config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=500),
             )

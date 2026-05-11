@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useUIStore } from '@/stores'
@@ -13,6 +13,7 @@ const uiStore = useUIStore()
 const code = ref(['', '', '', '', '', ''])
 const isLoading = ref(false)
 const resendCooldown = ref(0)
+let cooldownTimer: number | null = null
 
 const inputRefs = ref<HTMLInputElement[]>([])
 
@@ -107,10 +108,16 @@ async function handleResend() {
 }
 
 function startCooldown() {
-  const timer = setInterval(() => {
+  // Always clear any previous timer first so rapid resends do not stack
+  // multiple intervals on top of each other.
+  if (cooldownTimer !== null) {
+    clearInterval(cooldownTimer)
+  }
+  cooldownTimer = window.setInterval(() => {
     resendCooldown.value--
-    if (resendCooldown.value <= 0) {
-      clearInterval(timer)
+    if (resendCooldown.value <= 0 && cooldownTimer !== null) {
+      clearInterval(cooldownTimer)
+      cooldownTimer = null
     }
   }, 1000)
 }
@@ -120,6 +127,13 @@ onMounted(() => {
     authStore.pendingEmail = emailForVerify.value
   }
   inputRefs.value[0]?.focus()
+})
+
+onBeforeUnmount(() => {
+  if (cooldownTimer !== null) {
+    clearInterval(cooldownTimer)
+    cooldownTimer = null
+  }
 })
 </script>
 

@@ -32,10 +32,16 @@ export interface VideoDubbingParams {
 }
 
 export const toolsApi = {
-  async removeBackground(imageUrl: string, outputFormat = 'png'): Promise<ToolResponse> {
+  async removeBackground(
+    imageUrl: string,
+    outputFormat: 'png' | 'white' | 'black' = 'png',
+    opts?: { backgroundColor?: string; backgroundImageUrl?: string },
+  ): Promise<ToolResponse> {
     const response = await apiClient.post('/api/v1/tools/remove-bg', {
       image_url: imageUrl,
       output_format: outputFormat,
+      background_color: opts?.backgroundColor,
+      background_image_url: opts?.backgroundImageUrl,
     })
     return response.data
   },
@@ -46,6 +52,8 @@ export const toolsApi = {
     customPrompt?: string,
     productId?: string,
     templateId?: string,
+    promptId?: string,
+    locale?: string,
   ): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/product-scene',
@@ -55,6 +63,8 @@ export const toolsApi = {
         custom_prompt: customPrompt,
         product_id: productId,
         template_id: templateId,
+        prompt_id: promptId,
+        locale,
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
@@ -76,13 +86,15 @@ export const toolsApi = {
     return response.data
   },
 
-  async roomRedesign(roomImageUrl: string, style = 'modern', customPrompt?: string): Promise<ToolResponse> {
+  async roomRedesign(roomImageUrl: string, style = 'modern', customPrompt?: string, promptId?: string, locale?: string): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/room-redesign',
       {
         room_image_url: roomImageUrl,
         style,
         custom_prompt: customPrompt,
+        prompt_id: promptId,
+        locale,
         preserve_structure: true,
       },
       { timeout: GENERATION_TIMEOUT_MS }
@@ -90,7 +102,7 @@ export const toolsApi = {
     return response.data
   },
 
-  async shortVideo(imageUrl: string, opts?: { motionStrength?: number; modelId?: string; style?: string; script?: string; voiceId?: string }): Promise<ToolResponse> {
+  async shortVideo(imageUrl: string, opts?: { motionStrength?: number; modelId?: string; style?: string; script?: string; voiceId?: string; promptId?: string; locale?: string }): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/short-video',
       {
@@ -100,13 +112,15 @@ export const toolsApi = {
         style: opts?.style,
         script: opts?.script,
         voice_id: opts?.voiceId,
+        prompt_id: opts?.promptId,
+        locale: opts?.locale,
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
     return response.data
   },
 
-  async avatar(params: { image_url: string; script: string; voice_id?: string; language?: string }): Promise<ToolResponse> {
+  async avatar(params: { image_url: string; script?: string; voice_id?: string; language?: string; prompt_id?: string; locale?: string }): Promise<ToolResponse> {
     const response = await apiClient.post('/api/v1/tools/avatar', params, {
       timeout: GENERATION_TIMEOUT_MS,
     })

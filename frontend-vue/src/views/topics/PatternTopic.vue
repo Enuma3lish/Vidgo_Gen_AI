@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import { generationApi } from '@/api/generation'
-import { useLocalized, useDemoMode } from '@/composables'
+import { useLocalized, useDemoMode, usePromptLibrary } from '@/composables'
 import { useUIStore } from '@/stores'
 
 const { t, locale } = useI18n()
-const { getLocalizedField } = useLocalized()
+// L is the 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { getLocalizedField, L } = useLocalized()
 const uiStore = useUIStore()
 const isZh = computed(() => locale.value.startsWith('zh'))
 
@@ -21,6 +22,11 @@ const {
   demoTemplates,
   resolveDemoTemplateResultUrl
 } = useDemoMode()
+
+// Curated prompt library — locked dropdown for the prompt input.
+const { options: patternPromptOptions, promptFor: patternPromptTextFor } = usePromptLibrary('pattern_generate')
+// Locale-stable selection so EN/ZH toggle re-derives the displayed prompt.
+const selectedPatternPromptId = ref('')
 
 // Example prompts for each tool (aligned with backend PATTERN_GENERATE_MAPPING, common business use)
 const toolExamplePrompts = {
@@ -90,28 +96,6 @@ function scrollToQuickGenerate() {
   }
 }
 
-// Current tool's example prompts
-const currentToolExamples = computed(() => {
-  if (selectedTool.value === 'patternGenerate') {
-    const presetPrompts = examples.value
-      .filter(example => example.presetId && example.prompt)
-      .map(example => ({
-        en: example.prompt,
-        zh: example.prompt_zh || example.prompt,
-        presetId: example.presetId,
-        style: example.style,
-      }))
-      .slice(0, 12)
-
-    if (presetPrompts.length > 0) {
-      return presetPrompts
-    }
-  }
-
-  const tool = tools.value.find(t => t.key === selectedTool.value)
-  return tool?.examples || []
-})
-
 // Pattern styles
 const styles = [
   { key: 'seamless', icon: '🔄' },
@@ -126,9 +110,25 @@ const styles = [
 
 const selectedStyle = ref('seamless')
 const prompt = ref('')
+watch([selectedPatternPromptId, locale], () => {
+  prompt.value = selectedPatternPromptId.value ? patternPromptTextFor(selectedPatternPromptId.value) : ''
+})
 const isGenerating = ref(false)
 const result = ref<string | null>(null)
 const selectedDemoPromptId = ref<string | null>(null)
+
+// Filter examples by the currently-selected style. When the user clicks
+// "🌸 花卉風格" we should only surface floral pattern examples, not the
+// full mixed gallery (previous behavior surfaced "3D 設計" cards under
+// every style choice because there was no filter).
+const filteredExamples = computed(() => {
+  const all = examples.value
+  if (!Array.isArray(all) || all.length === 0) return []
+  const sel = selectedStyle.value
+  if (!sel) return all
+  const matches = all.filter(ex => (ex.style || '').toLowerCase() === sel.toLowerCase())
+  return matches.length > 0 ? matches : all
+})
 
 
 
@@ -204,8 +204,8 @@ async function loadExamples() {
         const anyTemplate = template as any
         const topicLabel = t(`styles.${template.topic || 'seamless'}`)
         const titleFallback = topicLabel && !topicLabel.startsWith('styles.')
-          ? `${topicLabel}${isZh.value ? '範例' : ' Example'}`
-          : (isZh.value ? '圖案範例' : 'Pattern Example')
+          ? `${topicLabel}${L('範例', ' Example', '例', ' 예시', ' Ejemplo')}`
+          : L('圖案範例', 'Pattern Example', 'パターン例', '패턴 예시', 'Ejemplo de patrón')
 
         return {
           id: template.id || index + 1,
@@ -233,13 +233,6 @@ async function loadExamples() {
   }
 }
 
-function useExamplePrompt(example: { en: string; zh: string; presetId?: string; style?: string }) {
-  prompt.value = isZh.value ? example.zh : example.en
-  selectedDemoPromptId.value = example.presetId || null
-  if (example.style) selectedStyle.value = example.style
-  result.value = null
-}
-
 function useGalleryExample(example: any) {
   prompt.value = getLocalizedField(example, 'prompt') || example.prompt || ''
   selectedDemoPromptId.value = example.presetId || null
@@ -250,7 +243,7 @@ function useGalleryExample(example: any) {
 
 async function generatePattern() {
   if (!prompt.value.trim()) {
-    uiStore.showError(isZh.value ? '請輸入或選擇提示詞' : 'Please enter or select a prompt')
+    uiStore.showError(L('請輸入或選擇提示詞', 'Please enter or select a prompt', 'プロンプトを入力または選択してください', '프롬프트를 입력하거나 선택해 주세요', 'Introduce o selecciona un prompt'))
     return
   }
 
@@ -266,7 +259,7 @@ async function generatePattern() {
         const demoResultUrl = await resolveDemoTemplateResultUrl(selectedDemoPromptId.value)
         if (demoResultUrl) {
           result.value = demoResultUrl
-          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
           return
         }
       }
@@ -279,18 +272,20 @@ async function generatePattern() {
         const demoResultUrl = await resolveDemoTemplateResultUrl(matchingTemplate.id)
         if (demoResultUrl) {
           result.value = demoResultUrl
-          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
           return
         }
       }
 
-      uiStore.showInfo(isZh.value ? '此提示詞尚未生成，請訂閱以使用完整功能' : 'This prompt is not pre-generated. Subscribe for full features.')
+      uiStore.showInfo(L('此提示詞尚未生成，請訂閱以使用完整功能', 'This prompt is not pre-generated. Subscribe for full features.', 'このプロンプトはまだ生成されていません。フル機能を使うにはサブスク登録してください。', '이 프롬프트는 아직 생성되지 않았습니다. 전체 기능을 사용하려면 구독해 주세요.', 'Este prompt no está pregenerado. Suscríbete para acceso completo.'))
       return
     }
 
     // For subscribed users, call the API
     const response = await generationApi.generatePattern({
       prompt: prompt.value,
+      prompt_id: selectedPatternPromptId.value || undefined,
+      locale: String(locale.value || ''),
       style: selectedStyle.value,
       width: 1024,
       height: 1024
@@ -301,7 +296,7 @@ async function generatePattern() {
     }
   } catch (error) {
     console.error('Generation failed:', error)
-    uiStore.showError(isZh.value ? '生成失敗' : 'Generation failed')
+    uiStore.showError(L('生成失敗', 'Generation failed', '生成に失敗', '생성 실패', 'Falló la generación'))
   } finally {
     isGenerating.value = false
   }
@@ -313,7 +308,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="commerce-topic-page min-h-screen pt-20" style="background: #f8fafc;">
+  <div class="min-h-screen pt-20" style="background: #09090b;">
     <!-- Hero Section -->
     <section class="py-16 bg-gradient-to-b from-purple-500/10 to-transparent">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -329,7 +324,7 @@ onMounted(() => {
           <!-- Subscribe Notice for Demo Users -->
           <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
             <RouterLink to="/pricing" class="hover:underline">
-              {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+              {{ L('訂閱以解鎖更多功能', 'Subscribe to unlock more features', 'サブスク登録で機能を解禁', '구독으로 더 많은 기능 잠금 해제', 'Suscríbete para desbloquear más funciones') }}
             </RouterLink>
           </div>
         </div>
@@ -364,7 +359,7 @@ onMounted(() => {
 
             <!-- Example Prompts for this tool -->
             <div class="space-y-2">
-              <p class="text-xs text-gray-500 mb-1">{{ isZh ? '範例提示詞:' : 'Example prompts:' }}</p>
+              <p class="text-xs text-gray-500 mb-1">{{ L('範例提示詞:', 'Example prompts:', '例プロンプト：', '예시 프롬프트:', 'Prompts de ejemplo:') }}</p>
               <div class="flex flex-wrap gap-1">
                 <span
                   v-for="(ex, idx) in tool.examples.slice(0, 3)"
@@ -421,47 +416,28 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Example Prompts (Always visible) -->
+        <!-- Prompt Selection (locked dropdown — no free-form input) -->
+        <!-- The legacy "Example Prompts" pill row was removed: it submitted
+             free-form text that bypassed the curated prompt library and the
+             backend prompt_id validator. The curated dropdown below is now
+             the only path. -->
         <div class="mb-6">
-          <label class="block text-sm text-gray-400 mb-3">
-            {{ isZh ? '選擇範例提示詞' : 'Select Example Prompt' }}
-          </label>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="(ex, idx) in currentToolExamples"
-              :key="idx"
-              @click="useExamplePrompt(ex)"
-              class="px-3 py-2 rounded-lg text-sm transition-all"
-              :class="prompt === (isZh ? ex.zh : ex.en)
-                ? 'bg-primary-500 text-white'
-                : 'bg-dark-700 text-gray-400 hover:bg-dark-600 hover:text-white'"
-            >
-              {{ (isZh ? ex.zh : ex.en).slice(0, 25) }}{{ (isZh ? ex.zh : ex.en).length > 25 ? '...' : '' }}
-            </button>
-          </div>
-        </div>
+          <label class="block text-sm text-gray-400 mb-2">{{ L('選擇提示詞', 'Select a Prompt', 'プロンプトを選択', '프롬프트 선택', 'Selecciona un prompt') }}</label>
 
-        <!-- Prompt Input -->
-        <div class="mb-6">
-          <label class="block text-sm text-gray-400 mb-2">{{ t('common.enterPrompt') }}</label>
-
-          <!-- Demo user notice -->
-          <div v-if="isDemoUser" class="mb-2 p-2 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+          <div class="mb-2 p-2 bg-primary-500/10 border border-primary-500/20 rounded-lg">
             <p class="text-xs text-primary-400">
-              {{ isZh ? '請從上方選擇範例提示詞，或訂閱以自訂提示詞' : 'Select from example prompts above, or subscribe to use custom prompts' }}
+              {{ L('為確保品質與安全，提示詞由系統精選提供。', 'For quality and safety, prompts are curated by the system.', '品質と安全のため、プロンプトはシステムが厳選しています。', '품질과 안전을 위해 시스템이 프롬프트를 엄선합니다.', 'Por calidad y seguridad, los prompts están seleccionados.') }}
             </p>
           </div>
 
           <div class="flex gap-4">
-            <input
-              v-model="prompt"
-              type="text"
-              :disabled="isDemoUser && !prompt"
-              :placeholder="t('tools.patternGenerate.desc')"
-              class="flex-1 bg-dark-700 border border-dark-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 disabled:opacity-50"
-              :class="isDemoUser ? 'cursor-default' : ''"
-              :readonly="isDemoUser"
-            />
+            <select
+              v-model="selectedPatternPromptId"
+              class="flex-1 bg-dark-700 border border-dark-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary-500"
+            >
+              <option value="">{{ L('— 請選擇 —', '— Select —', '— 選択 —', '— 선택 —', '— Seleccionar —') }}</option>
+              <option v-for="opt in patternPromptOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
+            </select>
             <button
               @click="generatePattern"
               :disabled="isGenerating || !prompt.trim()"
@@ -490,7 +466,7 @@ onMounted(() => {
 
           <!-- Watermark Notice for Demo -->
           <div v-if="isDemoUser" class="mt-4 text-center text-sm text-yellow-400">
-            {{ isZh ? '示範結果帶有浮水印' : 'Demo result has watermark' }}
+            {{ L('示範結果帶有浮水印', 'Demo result has watermark', 'デモ結果にはウォーターマークが付いています', '데모 결과에는 워터마크가 있습니다', 'El resultado demo tiene marca de agua') }}
           </div>
 
           <div class="mt-4 flex justify-end gap-4">
@@ -499,7 +475,7 @@ onMounted(() => {
               to="/pricing"
               class="btn-primary"
             >
-              {{ isZh ? '訂閱以下載' : 'Subscribe to Download' }}
+              {{ L('訂閱以下載', 'Subscribe to Download', 'サブスクでダウンロード', '구독으로 다운로드', 'Suscríbete para descargar') }}
             </RouterLink>
             <button v-else class="btn-secondary">
               {{ t('common.download') }}
@@ -516,7 +492,7 @@ onMounted(() => {
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div
-            v-for="example in examples"
+            v-for="example in filteredExamples"
             :key="example.id"
             class="card overflow-hidden cursor-pointer transition-transform hover:-translate-y-1"
             role="button"
@@ -554,7 +530,7 @@ onMounted(() => {
                 class="ml-auto text-sm font-medium text-primary-500 hover:text-primary-400"
                 @click.stop="useGalleryExample(example)"
               >
-                {{ isZh ? '使用此範例' : 'Use Example' }}
+                {{ L('使用此範例', 'Use Example', 'この例を使用', '이 예시 사용', 'Usar ejemplo') }}
               </button>
             </div>
           </div>
@@ -578,7 +554,7 @@ onMounted(() => {
           {{ t('sections.freeToTry') }}
         </p>
         <RouterLink to="/pricing" class="btn-primary text-lg px-10 py-4">
-          {{ isZh ? '立即訂閱' : 'Subscribe Now' }}
+          {{ L('立即訂閱', 'Subscribe Now', 'いますぐサブスク', '지금 구독', 'Suscribirse ya') }}
         </RouterLink>
       </div>
     </section>
@@ -586,55 +562,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.commerce-topic-page {
-  color: #0f172a;
-}
-
-.commerce-topic-page section {
-  background: #f8fafc !important;
-}
-
-.commerce-topic-page section:nth-of-type(even) {
-  background: #ffffff !important;
-}
-
-.commerce-topic-page :deep(.section-title),
-.commerce-topic-page :deep(.text-dark-50),
-.commerce-topic-page :deep(h1.text-white),
-.commerce-topic-page :deep(h2.text-white),
-.commerce-topic-page :deep(h3.text-white),
-.commerce-topic-page :deep(h4.text-white) {
-  color: #0f172a !important;
-}
-
-.commerce-topic-page :deep(.text-gray-400),
-.commerce-topic-page :deep(.text-gray-500),
-.commerce-topic-page :deep(.text-dark-300),
-.commerce-topic-page :deep(.text-dark-400) {
-  color: #64748b !important;
-}
-
-.commerce-topic-page :deep(.card),
-.commerce-topic-page :deep(.card-gradient) {
-  background: #ffffff !important;
-  border: 1px solid rgba(15, 23, 42, 0.08) !important;
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
-  border-radius: 16px;
-}
-
-.commerce-topic-page :deep(.bg-dark-700),
-.commerce-topic-page :deep(.bg-dark-600) {
-  background: #f1f5f9 !important;
-  border-color: rgba(15, 23, 42, 0.1) !important;
-}
-
-.commerce-topic-page input {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  border-color: rgba(15, 23, 42, 0.14) !important;
-}
-
-.commerce-topic-page input::placeholder {
-  color: #94a3b8;
-}
+/* Pattern topic page inherits the global dark theme used by other tool topics
+   (ProductTopic, VideoTopic). The previous `.commerce-topic-page` light-theme
+   overrides were removed so the page is consistent with the rest of the app. */
 </style>

@@ -2,7 +2,7 @@
 Payment API Endpoints
 
 Supports:
-- Paddle: Subscription checkout, webhook handling, invoice PDF retrieval
+- PayPal: International subscription checkout, webhook handling, invoice retrieval
 - ECPay: Taiwan credit card payment, callback handling
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
@@ -19,15 +19,15 @@ from app.api import deps
 from app.core.config import get_settings
 from app.models.billing import Order, Subscription
 from app.models.user import User
-from app.services.paddle_service import get_paddle_service
+from app.services.paypal_service import get_paypal_service
 from app.services.ecpay.client import ECPayClient
 
 settings = get_settings()
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Initialize Paddle service
-paddle_service = get_paddle_service()
+# Initialize PayPal service
+paypal_service = get_paypal_service()
 
 
 async def _ecpay_query_confirms_paid(ecpay_client: ECPayClient, order_number: str) -> bool:
@@ -54,21 +54,49 @@ async def _ecpay_query_confirms_paid(ecpay_client: ECPayClient, order_number: st
 
 
 # =============================================================================
-# PADDLE ENDPOINTS
+# PUBLIC FEATURE FLAGS — let the SPA hide payment buttons that aren't wired up
 # =============================================================================
 
-@router.post("/paddle/checkout/{order_number}")
-@router.post("/paddle/checkout")
-async def create_paddle_checkout(
+@router.get("/methods")
+async def get_payment_methods():
+    """
+    Return which payment methods are actually configured in production.
+    The frontend calls this on /pricing render to decide whether to show the
+    PayPal button — when PAYPAL_CLIENT_ID is unset the button is hidden so
+    users don't click it and get a mock-mode 200 with no real checkout URL.
+    """
+    return {
+        "paypal": {
+            "enabled": bool(getattr(settings, "PAYPAL_CLIENT_ID", "")) and bool(
+                getattr(settings, "PAYPAL_CLIENT_SECRET", "")
+            ),
+            "is_sandbox": (getattr(settings, "PAYPAL_ENV", "sandbox") or "sandbox").lower() != "production",
+        },
+        "ecpay": {
+            "enabled": bool(getattr(settings, "ECPAY_MERCHANT_ID", "")) and bool(
+                getattr(settings, "ECPAY_HASH_KEY", "")
+            ),
+            "is_sandbox": (getattr(settings, "ECPAY_ENV", "production") or "production").lower() != "production",
+        },
+    }
+
+
+# =============================================================================
+# PAYPAL ENDPOINTS
+# =============================================================================
+
+@router.post("/paypal/checkout/{order_number}")
+@router.post("/paypal/checkout")
+async def create_paypal_checkout(
     order_number: str,
     current_user: User = Depends(deps.get_current_active_user),
     db: AsyncSession = Depends(deps.get_db)
 ):
     """
-    Create Paddle checkout session for an order.
+    Create PayPal checkout session for an order.
 
-    This is called when user clicks "Pay" for a pending order.
-    Returns checkout URL to redirect user to Paddle payment page.
+    Called when the user clicks "Pay" for a pending order.
+    Returns checkout URL to redirect user to the PayPal approval page.
     """
     # Find order
     result = await db.execute(
@@ -83,33 +111,34 @@ async def create_paddle_checkout(
     if order.status == "paid":
         raise HTTPException(status_code=400, detail="Order already paid")
 
-    price_id = order.payment_data.get("paddle_price_id")
-    if not paddle_service.is_mock and not price_id:
-        logger.error("Paddle checkout requested for %s without paddle_price_id", order.order_number)
+    price_id = order.payment_data.get("paypal_plan_id")
+    if not paypal_service.is_mock and not price_id:
+        logger.error("PayPal checkout requested for %s without paypal_plan_id", order.order_number)
         raise HTTPException(status_code=503, detail="Payment checkout is temporarily unavailable")
 
-    # Create Paddle checkout
-    paddle_result = await paddle_service.create_checkout_session(
+    # Create PayPal checkout
+    paypal_result = await paypal_service.create_checkout_session(
         user_id=current_user.id,
         user_email=current_user.email,
         plan_id=str(order.payment_data.get("plan_id", "")),
-        price_id=price_id or f"pri_{order.order_number}",
+        price_id=price_id or f"sku_{order.order_number}",
         billing_cycle=order.payment_data.get("billing_cycle", "monthly"),
         success_url=f"{settings.FRONTEND_URL}/payment/success?order={order.order_number}",
-        cancel_url=f"{settings.FRONTEND_URL}/payment/cancelled"
+        cancel_url=f"{settings.FRONTEND_URL}/payment/cancelled",
+        amount_usd=float(order.amount or 0),
     )
 
-    if not paddle_result.get("success"):
-        raise HTTPException(status_code=500, detail=paddle_result.get("error"))
+    if not paypal_result.get("success"):
+        raise HTTPException(status_code=500, detail=paypal_result.get("error"))
 
-    # Update order with Paddle transaction ID
-    order.payment_data["paddle_transaction_id"] = paddle_result.get("transaction_id")
+    # Update order with PayPal transaction ID
+    order.payment_data["paypal_transaction_id"] = paypal_result.get("transaction_id")
     await db.commit()
 
     return {
         "success": True,
-        "checkout_url": paddle_result.get("checkout_url"),
-        "is_mock": paddle_result.get("is_mock", False)
+        "checkout_url": paypal_result.get("checkout_url"),
+        "is_mock": paypal_result.get("is_mock", False)
     }
 
 
@@ -169,51 +198,51 @@ async def create_ecpay_checkout(
     }
 
 
-@router.post("/paddle/webhook")
-async def paddle_webhook(
+@router.post("/paypal/webhook")
+async def paypal_webhook(
     request: Request,
-    paddle_signature: Optional[str] = Header(None, alias="Paddle-Signature"),
+    paypal_signature: Optional[str] = Header(None, alias="Paypal-Transmission-Sig"),
     db: AsyncSession = Depends(deps.get_db)
 ):
     """
-    Handle Paddle webhooks.
+    Handle PayPal webhooks.
 
-    Paddle sends webhooks for:
-    - transaction.completed - Payment successful
-    - subscription.created - Subscription created
-    - subscription.updated - Subscription changed
-    - subscription.canceled - Subscription cancelled
+    PayPal sends webhooks for:
+    - PAYMENT.CAPTURE.COMPLETED  - Payment successful
+    - BILLING.SUBSCRIPTION.CREATED   - Subscription created
+    - BILLING.SUBSCRIPTION.UPDATED   - Subscription changed
+    - BILLING.SUBSCRIPTION.CANCELLED - Subscription cancelled
     """
     body = await request.body()
 
     # Verify webhook signature (skip in mock mode)
-    if not paddle_service.is_mock and not paddle_service.verify_webhook(body, paddle_signature or ""):
-        logger.warning("Invalid Paddle webhook signature")
+    if not paypal_service.is_mock and not paypal_service.verify_webhook(body, paypal_signature or ""):
+        logger.warning("Invalid PayPal webhook signature")
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     try:
         data = await request.json()
         event_type = data.get("event_type", "")
-        event_data = data.get("data", {})
+        event_data = data.get("resource", {}) or data.get("data", {})
 
-        logger.info(f"Paddle webhook received: {event_type}")
+        logger.info(f"PayPal webhook received: {event_type}")
 
-        if event_type == "transaction.completed":
+        if event_type in ("PAYMENT.CAPTURE.COMPLETED", "CHECKOUT.ORDER.APPROVED", "transaction.completed"):
             result = await handle_transaction_completed(db, event_data)
             if result and result.get("already_processed"):
-                logger.info(f"Paddle webhook duplicate ignored: {event_data.get('id')}")
-        elif event_type == "subscription.created":
+                logger.info(f"PayPal webhook duplicate ignored: {event_data.get('id')}")
+        elif event_type == "BILLING.SUBSCRIPTION.CREATED":
             await handle_subscription_created(db, event_data)
-        elif event_type == "subscription.updated":
+        elif event_type == "BILLING.SUBSCRIPTION.UPDATED":
             await handle_subscription_updated(db, event_data)
-        elif event_type == "subscription.canceled":
+        elif event_type in ("BILLING.SUBSCRIPTION.CANCELLED", "BILLING.SUBSCRIPTION.EXPIRED"):
             await handle_subscription_canceled(db, event_data)
 
         return {"success": True}
 
     except Exception as e:
-        logger.error(f"Paddle webhook error: {e}", exc_info=True)
-        # Return 200 to prevent Paddle from retrying indefinitely on app errors
+        logger.error(f"PayPal webhook error: {e}", exc_info=True)
+        # Return 200 to prevent PayPal from retrying indefinitely on app errors
         return {"success": False, "error": str(e)}
 
 
@@ -236,13 +265,13 @@ async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
     # Find order by transaction ID (normalize to string for JSONB comparison)
     result = await db.execute(
         select(Order).where(
-            Order.payment_data["paddle_transaction_id"].astext == transaction_id
+            Order.payment_data["paypal_transaction_id"].astext == transaction_id
         )
     )
     order = result.scalars().first()
 
     if not order:
-        logger.warning(f"No order found for Paddle transaction: {transaction_id}")
+        logger.warning(f"No order found for PayPal transaction: {transaction_id}")
         return {"success": False, "error": "order not found"}
 
     # Idempotency: skip if already paid (duplicate webhook)
@@ -264,13 +293,13 @@ async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
         user = user_result.scalars().first()
 
         if user:
-            # Get invoice PDF URL from Paddle
-            invoice_result = await paddle_service.get_invoice_pdf_url(transaction_id)
+            # Get invoice PDF URL from PayPal
+            invoice_result = await paypal_service.get_invoice_pdf_url(transaction_id)
             pdf_url = invoice_result.get("pdf_url", "")
 
             # Extract amount info
             totals = data.get("details", {}).get("totals", {})
-            amount = float(totals.get("grand_total", 0)) / 100  # Paddle uses cents
+            amount = float(totals.get("grand_total", 0)) / 100  # Provider returns cents
             currency = data.get("currency_code", "USD")
             plan_name = custom_data.get("plan_name", "VidGo Subscription")
 
@@ -296,25 +325,25 @@ async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
 
 
 async def handle_subscription_created(db: AsyncSession, data: dict):
-    """Handle subscription created event from Paddle."""
-    paddle_sub_id = data.get("id")
+    """Handle subscription created event from PayPal."""
+    paypal_sub_id = data.get("id")
     custom_data = data.get("custom_data", {})
     user_id = custom_data.get("user_id")
-    logger.info(f"Subscription created: {paddle_sub_id} for user {user_id}")
+    logger.info(f"Subscription created: {paypal_sub_id} for user {user_id}")
 
 
 async def handle_subscription_updated(db: AsyncSession, data: dict):
-    """Handle subscription updated event from Paddle (plan change, billing update)."""
-    paddle_sub_id = data.get("id")
+    """Handle subscription updated event from PayPal (plan change, billing update)."""
+    paypal_sub_id = data.get("id")
     status = data.get("status")
     custom_data = data.get("custom_data", {})
     user_id = custom_data.get("user_id")
-    logger.info(f"Subscription updated: {paddle_sub_id} status={status} user={user_id}")
+    logger.info(f"Subscription updated: {paypal_sub_id} status={status} user={user_id}")
 
 
 async def handle_subscription_canceled(db: AsyncSession, data: dict):
-    """Handle subscription cancelled event from Paddle."""
-    paddle_sub_id = data.get("id")
+    """Handle subscription cancelled event from PayPal."""
+    paypal_sub_id = data.get("id")
     custom_data = data.get("custom_data", {})
     user_id = custom_data.get("user_id")
 
@@ -328,27 +357,27 @@ async def handle_subscription_canceled(db: AsyncSession, data: dict):
                 user_id=UUID(user_id),
                 request_refund=False
             )
-            logger.info(f"Subscription canceled via webhook: {paddle_sub_id} user={user_id} result={result.get('success')}")
+            logger.info(f"Subscription canceled via webhook: {paypal_sub_id} user={user_id} result={result.get('success')}")
         except Exception as e:
             logger.error(f"Failed to cancel subscription via webhook: {e}")
     else:
-        logger.warning(f"Subscription canceled but no user_id in custom_data: {paddle_sub_id}")
+        logger.warning(f"Subscription canceled but no user_id in custom_data: {paypal_sub_id}")
 
 
-@router.get("/paddle/customer-portal")
-async def get_paddle_customer_portal(
+@router.get("/paypal/customer-portal")
+async def get_paypal_customer_portal(
     current_user: User = Depends(deps.get_current_active_user)
 ):
     """
-    Get Paddle customer portal URL for self-service billing management.
+    Get PayPal customer portal URL for self-service billing management.
 
     The portal allows users to:
     - View billing history
     - Update payment method
     - Download invoices
     """
-    # Get or create Paddle customer
-    customer_result = await paddle_service.get_or_create_customer(
+    # Get or create PayPal customer
+    customer_result = await paypal_service.get_or_create_customer(
         email=current_user.email,
         name=current_user.full_name
     )
@@ -357,7 +386,7 @@ async def get_paddle_customer_portal(
         raise HTTPException(status_code=500, detail=customer_result.get("error"))
 
     # Get portal URL
-    portal_result = await paddle_service.get_customer_portal_url(
+    portal_result = await paypal_service.get_customer_portal_url(
         customer_id=customer_result.get("customer_id")
     )
 
@@ -574,10 +603,10 @@ async def mock_complete_payment(
     """
     Mock payment completion for development/testing.
 
-    Only works when Paddle is in mock mode and mock completion has been
+    Only works when PayPal is in mock mode and mock completion has been
     explicitly enabled.
     """
-    if not paddle_service.is_mock or not settings.PAYMENT_MOCK_COMPLETION_ENABLED:
+    if not paypal_service.is_mock or not settings.PAYMENT_MOCK_COMPLETION_ENABLED:
         raise HTTPException(
             status_code=403,
             detail="Mock payment completion is disabled"

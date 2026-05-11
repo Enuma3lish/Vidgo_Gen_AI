@@ -3,15 +3,25 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { imageHintForTool, videoHintForTool } from '@/utils/mediaValidation'
 
-interface Step {
+// Steps can be provided in two shapes:
+//   1. As an `i18nKeys` prop — array of i18n keys; the component resolves
+//      each via `t(...)`. Preferred for new tool pages.
+//   2. As a `steps` prop — array of objects keyed by locale code:
+//      { en, zh, ja?, ko?, es? }. ja/ko/es fall back to `en` so older call
+//      sites keep working without breaking when locale switches.
+interface LocalizedStep {
   en: string
   zh: string
+  ja?: string
+  ko?: string
+  es?: string
 }
 
 const props = withDefaults(defineProps<{
   toolType?: string
   mediaKind?: 'image' | 'video' | 'none'
-  steps?: Step[]
+  steps?: LocalizedStep[]
+  i18nKeys?: string[]
   // Optional override hint when the tool requires something custom.
   formatHintEn?: string
   formatHintZh?: string
@@ -19,29 +29,41 @@ const props = withDefaults(defineProps<{
   toolType: '',
   mediaKind: 'image',
   steps: () => [],
+  i18nKeys: () => [],
   formatHintEn: '',
   formatHintZh: '',
 })
 
-const { locale } = useI18n()
-const isZh = computed(() => locale.value.startsWith('zh'))
+const { t, locale } = useI18n()
 
-const headingTitle = computed(() => isZh.value ? '使用方法' : 'How to use')
-const formatTitle = computed(() => isZh.value ? '上傳檔案要求' : 'Upload requirements')
-const reuploadNote = computed(() => isZh.value
-  ? '若格式不支援，系統會提示您改用正確格式重新上傳。'
-  : 'If the format is not supported, you will be asked to re-upload in a supported format.')
+const headingTitle = computed(() => t('howTo.heading'))
+const formatTitle = computed(() => t('howTo.formatTitle'))
+const reuploadNote = computed(() => t('howTo.reuploadNote'))
+
+function pickLocaleString(step: LocalizedStep): string {
+  const code = locale.value
+  if (code.startsWith('zh')) return step.zh
+  if (code.startsWith('ja') && step.ja) return step.ja
+  if (code.startsWith('ko') && step.ko) return step.ko
+  if (code.startsWith('es') && step.es) return step.es
+  return step.en
+}
 
 const formatHint = computed(() => {
   if (props.formatHintEn || props.formatHintZh) {
-    return isZh.value ? props.formatHintZh : props.formatHintEn
+    return locale.value.startsWith('zh') ? props.formatHintZh : props.formatHintEn
   }
-  if (props.mediaKind === 'video') return videoHintForTool(props.toolType, isZh.value)
+  if (props.mediaKind === 'video') return videoHintForTool(props.toolType, locale.value)
   if (props.mediaKind === 'none') return ''
-  return imageHintForTool(props.toolType, isZh.value)
+  return imageHintForTool(props.toolType, locale.value)
 })
 
-const renderedSteps = computed(() => props.steps.map(s => isZh.value ? s.zh : s.en))
+const renderedSteps = computed(() => {
+  if (props.i18nKeys.length) {
+    return props.i18nKeys.map(key => t(key))
+  }
+  return props.steps.map(pickLocaleString)
+})
 </script>
 
 <template>

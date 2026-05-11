@@ -373,16 +373,36 @@ export function validateVideoFile(
  * Build a short, human-readable hint string describing what kind of image
  * a given tool expects. Used in the "How to use" hint card so users know
  * the format requirements before they pick a file.
+ *
+ * Accepts either a locale code string ('en' | 'zh-TW' | 'ja' | 'ko' | 'es')
+ * or a boolean (legacy isZh). New callers should pass the locale code.
  */
-export function imageHintForTool(toolType: string | undefined, isZh = false): string {
-  imageDimensionRuleForTool(toolType)
-  return isZh
-    ? `${ALLOWED_IMAGE_EXT_LABEL}。系統會自動調整尺寸與壓縮後再送出。`
-    : `${ALLOWED_IMAGE_EXT_LABEL}. Images are resized and compressed automatically before upload.`
+type LocaleArg = string | boolean
+function toLocale(value: LocaleArg): 'en' | 'zh' | 'ja' | 'ko' | 'es' {
+  if (typeof value === 'boolean') return value ? 'zh' : 'en'
+  const v = (value || '').toLowerCase()
+  if (v.startsWith('zh')) return 'zh'
+  if (v.startsWith('ja')) return 'ja'
+  if (v.startsWith('ko')) return 'ko'
+  if (v.startsWith('es')) return 'es'
+  return 'en'
 }
 
-export function videoHintForTool(_toolType: string | undefined, isZh = false): string {
-  return isZh
-    ? `${ALLOWED_VIDEO_EXT_LABEL}，最大 ${MAX_VIDEO_SIZE_MB}MB。`
-    : `${ALLOWED_VIDEO_EXT_LABEL}, up to ${MAX_VIDEO_SIZE_MB}MB.`
+export function imageHintForTool(toolType: string | undefined, localeArg: LocaleArg = 'en'): string {
+  imageDimensionRuleForTool(toolType)
+  const loc = toLocale(localeArg)
+  if (loc === 'zh') return `${ALLOWED_IMAGE_EXT_LABEL}。系統會自動調整尺寸與壓縮後再送出。`
+  if (loc === 'ja') return `${ALLOWED_IMAGE_EXT_LABEL}。アップロード前に画像は自動でリサイズ・圧縮されます。`
+  if (loc === 'ko') return `${ALLOWED_IMAGE_EXT_LABEL}. 업로드 전에 이미지가 자동으로 크기 조정 및 압축됩니다.`
+  if (loc === 'es') return `${ALLOWED_IMAGE_EXT_LABEL}. Las imágenes se redimensionan y comprimen automáticamente antes de subirlas.`
+  return `${ALLOWED_IMAGE_EXT_LABEL}. Images are resized and compressed automatically before upload.`
+}
+
+export function videoHintForTool(_toolType: string | undefined, localeArg: LocaleArg = 'en'): string {
+  const loc = toLocale(localeArg)
+  if (loc === 'zh') return `${ALLOWED_VIDEO_EXT_LABEL}，最大 ${MAX_VIDEO_SIZE_MB}MB。`
+  if (loc === 'ja') return `${ALLOWED_VIDEO_EXT_LABEL}、最大 ${MAX_VIDEO_SIZE_MB}MB。`
+  if (loc === 'ko') return `${ALLOWED_VIDEO_EXT_LABEL}, 최대 ${MAX_VIDEO_SIZE_MB}MB.`
+  if (loc === 'es') return `${ALLOWED_VIDEO_EXT_LABEL}, hasta ${MAX_VIDEO_SIZE_MB}MB.`
+  return `${ALLOWED_VIDEO_EXT_LABEL}, up to ${MAX_VIDEO_SIZE_MB}MB.`
 }

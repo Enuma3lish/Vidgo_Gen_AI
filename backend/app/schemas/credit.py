@@ -99,7 +99,7 @@ class CreditPackageList(BaseModel):
 class CreditPurchaseRequest(BaseModel):
     """Request to purchase credits."""
     package_id: UUID
-    payment_method: str = Field(default="ecpay", description="Payment method: ecpay, paddle")
+    payment_method: str = Field(default="ecpay", description="Payment method: ecpay, paypal")
 
 
 class CreditPurchaseResponse(BaseModel):

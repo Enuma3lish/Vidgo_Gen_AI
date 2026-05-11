@@ -7,11 +7,11 @@ Handles subscription management:
 - Cancel subscription (with 7-day refund window)
 - Upgrade/downgrade plans
 
-When Paddle API key is not configured:
+When PayPal credentials are not configured:
 - Subscriptions are activated immediately without payment
 - Useful for development and testing
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -25,7 +25,8 @@ from app.core.config import get_settings
 from app.models.user import User
 from app.models.billing import Plan, Subscription, Order, Invoice
 from app.services.subscription_service import get_subscription_service, REFUND_ELIGIBILITY_DAYS
-from app.services.paddle_service import get_paddle_service
+from app.services.paypal_service import get_paypal_service
+from app.services.payment_routing import infer_payment_route
 from app.core.public_plans import can_list_public_plan, plan_monthly_price
 from app.core.test_plans import TEST_PRO_PLAN_DEFAULTS, can_access_test_pro_plan, is_test_pro_plan
 
@@ -43,7 +44,7 @@ class SubscribeRequest(BaseModel):
     """Request to subscribe to a plan."""
     plan_id: str = Field(..., description="UUID of the plan to subscribe to")
     billing_cycle: str = Field("monthly", description="'monthly' or 'yearly'")
-    payment_method: str = Field("paddle", description="'paddle' or 'ecpay'")
+    payment_method: str = Field("paypal", description="'paypal' or 'ecpay'")
     action: Optional[str] = Field(
         None,
         description=(
@@ -179,6 +180,26 @@ async def ensure_vidgo_plans(db: AsyncSession) -> None:
         await db.commit()
 
 
+@router.get("/payment-route")
+async def get_payment_route(request: Request):
+    """
+    Geo-based payment routing (VidGo 2.0 spec, Section 四).
+
+    Returns the recommended currency + payment gateway based on caller IP:
+      - 台灣 (TW)   → currency=TWD, gateway=ecpay (綠界)
+      - 海外 (其他) → currency=USD, gateway=paypal
+
+    Frontend uses this to pre-select the right checkout flow before the
+    user reaches the payment step.
+    """
+    route = infer_payment_route(request)
+    return {
+        "country": route.country,
+        "currency": route.currency,
+        "gateway": route.gateway,
+    }
+
+
 @router.get("/plans", response_model=List[PlanInfo])
 async def list_available_plans(
     db: AsyncSession = Depends(deps.get_db),
@@ -249,7 +270,7 @@ async def subscribe_to_plan(
     Subscribe to a plan.
 
     **Behavior:**
-    - If Paddle API key is configured: Returns checkout URL for payment
+    - If PayPal credentials are configured: Returns checkout URL for payment
     - If ECPay credentials are configured: Returns ECPay form data
     - If NEITHER is configured: Activates subscription immediately (mock mode)
 
@@ -261,7 +282,7 @@ async def subscribe_to_plan(
     **Args:**
     - plan_id: UUID of the plan to subscribe to
     - billing_cycle: 'monthly' or 'yearly'
-    - payment_method: 'paddle' (international) or 'ecpay' (Taiwan)
+    - payment_method: 'paypal' (international) or 'ecpay' (Taiwan)
 
     **Returns:**
     - For mock mode: Activated subscription details
@@ -282,14 +303,14 @@ async def subscribe_to_plan(
         raise HTTPException(status_code=400, detail="Test plan requires ECPay checkout")
 
     # Check if payment providers are actually configured
-    paddle = get_paddle_service()
+    paypal = get_paypal_service()
     ecpay_configured = bool(
         settings.ECPAY_MERCHANT_ID and settings.ECPAY_HASH_KEY and settings.ECPAY_HASH_IV
     )
 
     # If neither payment provider is configured, force mock/direct mode
     force_skip = False
-    if paddle.is_mock and not ecpay_configured:
+    if paypal.is_mock and not ecpay_configured:
         if not settings.PAYMENT_MOCK_COMPLETION_ENABLED:
             raise HTTPException(status_code=503, detail="Payment checkout is temporarily unavailable")
         logger.info("No payment providers configured — activating subscription in explicit mock mode")
@@ -302,7 +323,7 @@ async def subscribe_to_plan(
 
     # Admin override: superusers always activate directly. Without this, an
     # admin trying to change plans on prod gets stuck in the payment flow
-    # (ECPay/Paddle redirect) even though they never need to actually pay —
+    # (ECPay/PayPal redirect) even though they never need to actually pay —
     # which blocks all internal QA / plan experiments. The audit trail still
     # records the transaction via _activate_subscription_directly.
     if getattr(current_user, "is_superuser", False) and not is_test_pro_plan(plan_for_policy):
@@ -344,7 +365,7 @@ async def subscribe_directly(
     should be skipped.
 
     This endpoint always activates the subscription immediately
-    regardless of Paddle configuration.
+    regardless of PayPal configuration.
     """
     if not getattr(current_user, "is_superuser", False) and not settings.PAYMENT_MOCK_COMPLETION_ENABLED:
         raise HTTPException(status_code=403, detail="Direct subscription activation is disabled")
@@ -544,7 +565,7 @@ async def list_invoices(
     items = []
     for order in orders:
         inv = invoices_by_order.get(str(order.id))
-        transaction_id = (order.payment_data or {}).get("paddle_transaction_id") or (order.payment_data or {}).get("transaction_id")
+        transaction_id = (order.payment_data or {}).get("paypal_transaction_id") or (order.payment_data or {}).get("transaction_id")
         items.append(InvoiceItem(
             order_id=str(order.id),
             order_number=order.order_number or str(order.id),
@@ -568,7 +589,7 @@ async def get_invoice_pdf(
     """
     Get a temporary PDF URL for the invoice of a paid order.
 
-    The URL typically expires after 1 hour (Paddle). Open in new tab or download.
+    The URL typically expires after 1 hour (PayPal). Open in new tab or download.
     """
     try:
         order_uuid = UUID(order_id)
@@ -584,18 +605,18 @@ async def get_invoice_pdf(
     if order.status != "paid":
         raise HTTPException(status_code=400, detail="Invoice only available for paid orders")
 
-    # Prefer stored pdf_url (Invoice table), then Paddle
+    # Prefer stored pdf_url (Invoice table), then PayPal
     inv_result = await db.execute(select(Invoice).where(Invoice.order_id == order.id))
     inv = inv_result.scalar_one_or_none()
     if inv and inv.pdf_url:
         return InvoicePdfResponse(success=True, pdf_url=inv.pdf_url)
 
-    transaction_id = (order.payment_data or {}).get("paddle_transaction_id") or (order.payment_data or {}).get("transaction_id")
+    transaction_id = (order.payment_data or {}).get("paypal_transaction_id") or (order.payment_data or {}).get("transaction_id")
     if not transaction_id:
         return InvoicePdfResponse(success=False, error="No invoice PDF available for this order")
 
-    paddle = get_paddle_service()
-    pdf_result = await paddle.get_invoice_pdf_url(str(transaction_id))
+    paypal = get_paypal_service()
+    pdf_result = await paypal.get_invoice_pdf_url(str(transaction_id))
     if not pdf_result.get("success") or not pdf_result.get("pdf_url"):
         return InvoicePdfResponse(
             success=False,

@@ -220,7 +220,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/InspirationGallery.vue')
   },
   {
-    path: '/:slug(about|contact|blog|affiliate|terms|privacy|cookies|refunds)',
+    path: '/:slug(about|contact|blog|affiliate|terms|terms-of-service|terms-and-conditions|privacy|privacy-policy|cookies|refunds|refund|refund-policy)',
     name: 'static-info',
     component: () => import('@/views/StaticInfoPage.vue')
   },
@@ -290,6 +290,24 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/system',
     name: 'admin-system',
     component: () => import('@/views/admin/AdminSystem.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/plans',
+    name: 'admin-plans',
+    component: () => import('@/views/admin/AdminPlans.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/branding',
+    name: 'admin-branding',
+    component: () => import('@/views/admin/AdminBranding.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/costs',
+    name: 'admin-costs',
+    component: () => import('@/views/admin/AdminCosts.vue'),
     meta: { requiresAuth: true, requiresAdmin: true }
   },
 

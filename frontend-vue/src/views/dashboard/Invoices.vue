@@ -16,7 +16,7 @@ const toast = useToast()
 // Tab state
 const activeTab = ref<'list' | 'create'>('list')
 
-// Legacy invoices (Paddle)
+// Legacy invoices (PayPal)
 const invoices = ref<InvoiceItem[]>([])
 const loading = ref(true)
 const loadingPdf = ref<string | null>(null)
@@ -238,7 +238,7 @@ function statusBadgeClass(status: string) {
           </div>
         </div>
 
-        <!-- Legacy Invoices (Paddle) -->
+        <!-- Legacy Invoices (PayPal) -->
         <div v-if="invoices.length > 0">
           <h2 class="text-lg font-semibold mb-4" style="color: #f5f5fa;">{{ t('dashboard.invoices', 'Payment Invoices') }}</h2>
           <div class="card overflow-hidden p-0">

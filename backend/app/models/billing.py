@@ -67,6 +67,16 @@ class Plan(Base):
     # Legacy features JSON (for backward compat)
     features = Column(JSON, default={})
 
+    # Admin-editable plan copy: long-form bilingual feature list / marketing
+    # text rendered on the pricing card. One bullet per line is the
+    # convention so the frontend can split on "\n" without parsing markup.
+    features_text_zh = Column(Text, nullable=True)
+    features_text_en = Column(Text, nullable=True)
+
+    # Sort order on the pricing page (lower = earlier). NULL keeps legacy
+    # behavior (sorted by price_monthly ascending).
+    display_order = Column(Integer, nullable=True)
+
     # Status
     is_active = Column(Boolean, default=True)
     is_featured = Column(Boolean, default=False)
@@ -105,7 +115,7 @@ class Order(Base):
     amount = Column(DECIMAL(10, 2), nullable=False)
     status = Column(String, default="pending") # pending, paid, failed
     payment_method = Column(String, nullable=True)
-    payment_data = Column(JSON, default={}) # Store ECPay/Paddle return data
+    payment_data = Column(JSON, default={}) # Store ECPay/PayPal return data
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     paid_at = Column(DateTime(timezone=True), nullable=True)

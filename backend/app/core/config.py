@@ -91,15 +91,16 @@ class Settings(BaseSettings):
     GIVEME_IDNO: str = ""         # API account (from Giveme 系統設定→員工設定)
     GIVEME_PASSWORD: str = ""     # API password
 
-    # Payment - Paddle (International)
-    PADDLE_API_KEY: str = ""
-    PADDLE_PUBLIC_KEY: str = ""
-    PADDLE_WEBHOOK_SECRET: str = ""
-    PADDLE_ENV: str = "sandbox"  # "sandbox" or "production"
-    # Map plan_name+billing_cycle to Paddle price IDs (JSON string)
-    # Example: '{"starter_monthly":"pri_abc","starter_yearly":"pri_def"}'
-    # When empty, subscription flow activates directly without Paddle checkout.
-    PADDLE_PRICE_IDS: str = ""
+    # Payment - PayPal (International)
+    PAYPAL_CLIENT_ID: str = ""
+    PAYPAL_CLIENT_SECRET: str = ""
+    PAYPAL_WEBHOOK_ID: str = ""
+    PAYPAL_WEBHOOK_SECRET: str = ""
+    PAYPAL_ENV: str = "sandbox"  # "sandbox" or "production"
+    # Map plan_name+billing_cycle to PayPal Plan IDs (JSON string)
+    # Example: '{"starter_monthly":"P-XXXXXXXX","starter_yearly":"P-YYYYYYYY"}'
+    # When empty, subscription flow activates directly without PayPal checkout.
+    PAYPAL_PLAN_IDS: str = ""
 
     # Storage
     S3_BUCKET: str = ""

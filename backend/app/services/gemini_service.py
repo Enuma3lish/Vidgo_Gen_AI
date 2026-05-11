@@ -55,11 +55,24 @@ class GeminiService:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or getattr(settings, "GEMINI_API_KEY", "")
         self.project = os.getenv("VERTEX_AI_PROJECT", "")
-        self.location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+        # Vertex Gen AI text/image models live in us-central1 (Gemini 2.5
+        # flash is NOT published to asia-east1). The infra-side
+        # VERTEX_AI_LOCATION env var (set to asia-east1 to colocate the
+        # Cloud Run / Cloud SQL layout) does NOT apply to Gen AI calls.
+        # We override with VERTEX_AI_GENAI_LOCATION (defaulting to
+        # us-central1) so text-gen and image-gen both work without
+        # depending on which region runs the service.
+        self.location = os.getenv("VERTEX_AI_GENAI_LOCATION", "us-central1")
         self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
         self._genai_client = None
-        # API key takes priority; Vertex AI is a fallback when no key is configured
-        self._use_vertex = bool(self.project) and not bool(self.api_key)
+        # Vertex AI ADC takes priority when a project is configured. The
+        # standalone Gemini API key path is only used as a fallback for local
+        # dev where ADC isn't available — on Cloud Run we always have ADC via
+        # the service account, and our previous GEMINI_API_KEY was reported
+        # as leaked by Google so we must not send it. The legacy "API key
+        # wins" priority caused 403 PERMISSION_DENIED loops in
+        # prompt_refinement_service / video_dubbing translation. Flip it.
+        self._use_vertex = bool(self.project)
 
     def _get_genai_client(self):
         """Lazy-init the google-genai client (Gemini API preferred, Vertex AI fallback)."""
@@ -181,19 +194,19 @@ class GeminiService:
                 contents=[
                     types.Content(
                         role="user",
-                        parts=[types.Part.from_text(system_prompt)],
+                        parts=[types.Part.from_text(text=system_prompt)],
                     ),
                     types.Content(
                         role="model",
-                        parts=[types.Part.from_text(
+                        parts=[types.Part.from_text(text=(
                             "Understood. I'll enhance each prompt by refining subject specificity, "
                             "composition, lighting, atmosphere, and quality markers — keeping your "
                             "core intent intact. Ready."
-                        )],
+                        ))],
                     ),
                     types.Content(
                         role="user",
-                        parts=[types.Part.from_text(prompt)],
+                        parts=[types.Part.from_text(text=prompt)],
                     ),
                 ],
                 config=types.GenerateContentConfig(
@@ -359,7 +372,7 @@ class GeminiService:
                         )
                     )
 
-            parts.append(types.Part.from_text(analysis_prompt))
+            parts.append(types.Part.from_text(text=analysis_prompt))
 
             response = await asyncio.to_thread(
                 client.models.generate_content,
@@ -453,7 +466,7 @@ class GeminiService:
             if not parts:
                 return {"success": False, "effect_prompt": "", "error": "Could not load image"}
 
-            parts.append(types.Part.from_text(prompt))
+            parts.append(types.Part.from_text(text=prompt))
 
             response = await asyncio.to_thread(
                 client.models.generate_content,
@@ -530,7 +543,7 @@ class GeminiService:
                             types.Part.from_bytes(data=img_resp.content, mime_type=content_type)
                         )
 
-            parts.append(types.Part.from_text(moderation_prompt))
+            parts.append(types.Part.from_text(text=moderation_prompt))
 
             response = await asyncio.to_thread(
                 client.models.generate_content,

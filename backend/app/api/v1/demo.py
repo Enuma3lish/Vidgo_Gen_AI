@@ -731,6 +731,15 @@ async def get_input_library(
     """
     from app.models.material import Material, MaterialStatus
 
+    # Tools without a curated input library (paid-only operations or aliases)
+    # return an empty list so old SPA bundles don't 404.
+    _NO_INPUT_LIBRARY = {
+        "upscale", "image_upscale", "video_upscale",
+        "image_translate", "image_translation", "video_dubbing",
+    }
+    if tool_type in _NO_INPUT_LIBRARY:
+        return {"success": True, "tool_type": tool_type, "topic": topic, "inputs": [], "count": 0}
+
     valid_tool_types = get_all_tool_types()
     if tool_type not in valid_tool_types:
         raise HTTPException(
@@ -931,6 +940,8 @@ async def get_presets(
     tool_type: str,
     topic: Optional[str] = Query(None, description="Topic filter"),
     product_id: Optional[str] = Query(None, description="Product ID filter (input_params.product_id)"),
+    platform: Optional[str] = Query(None, max_length=40, description="Filter by Material.platform tag (e.g. 'instagram', 'tiktok', 'shopify')"),
+    role: Optional[str] = Query(None, max_length=40, description="Filter by Material.role tag (e.g. 'creator', 'seller', 'designer')"),
     limit: int = Query(100, ge=1, le=200, description="Maximum number of presets"),
     language: str = Query("en", description="Language for try_prompts when db_empty"),
     db: AsyncSession = Depends(get_db)
@@ -944,7 +955,43 @@ async def get_presets(
     Topic validation: If topic is provided, it must be a valid topic from Topic Registry.
     """
     from app.services.material_lookup import get_material_lookup_service
-    
+
+    # Normalize legacy / stale-client tool_type aliases so old SPA bundles
+    # cached in browsers do not 404 against the new ToolType enum names.
+    # Logged as a deprecation warning so we can track which clients still
+    # send the old names.
+    _LEGACY_TOOL_TYPE_ALIASES = {
+        "avatar": "ai_avatar",
+        "digital_human": "ai_avatar",
+    }
+    # Tool types that exist as features but have no Material presets in the
+    # DB (e.g. upscale is a paid-only operation, not a demo gallery). Return
+    # an empty preset list so the client renders gracefully instead of 404.
+    # `image_translation` was 404'ing because the frontend uses the long form
+    # while the registry uses `effect`; we accept both names and return empty.
+    _NO_PRESET_TOOL_TYPES = {
+        "upscale", "image_upscale", "video_upscale",
+        "image_translate", "image_translation", "video_dubbing",
+    }
+
+    if tool_type in _LEGACY_TOOL_TYPE_ALIASES:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "demo.presets: legacy tool_type alias '%s' -> '%s' (update client)",
+            tool_type, _LEGACY_TOOL_TYPE_ALIASES[tool_type],
+        )
+        tool_type = _LEGACY_TOOL_TYPE_ALIASES[tool_type]
+
+    if tool_type in _NO_PRESET_TOOL_TYPES:
+        return {
+            "success": True,
+            "presets": [],
+            "count": 0,
+            "db_empty": True,
+            "try_prompts": [],
+            "message": f"Tool '{tool_type}' has no demo presets.",
+        }
+
     # Validate tool_type
     valid_tool_types = get_all_tool_types()
     if tool_type not in valid_tool_types:
@@ -970,7 +1017,13 @@ async def get_presets(
         )
 
     lookup_service = get_material_lookup_service(db)
-    presets = await lookup_service.get_presets_for_tool(tool_type, topic, limit, product_id=product_id)
+    # Over-fetch: the GCS-existence post-filter below can drop rows whose
+    # signed-URL blobs were rotated/expired since the last cache refresh.
+    # If we asked the DB for exactly `limit` rows, and all of them happen to
+    # be stale, the endpoint returns 0 even though more matching rows exist.
+    # Pull a generous superset so the post-filter has material to work with.
+    fetch_limit = max(limit * 5, 50)
+    presets = await lookup_service.get_presets_for_tool(tool_type, topic, fetch_limit, product_id=product_id, platform=platform, role=role)
 
     from app.services.gcs_storage_service import get_gcs_storage
     gcs = get_gcs_storage()
@@ -981,7 +1034,15 @@ async def get_presets(
     # hero fall back to placeholder images. We use a 5-minute cached blob
     # listing so hot read paths stay fast.
     if gcs.enabled and presets:
-        existing = gcs.list_blob_names_cached("generated/", ttl_seconds=300)
+        # Combine blob listings for both prefixes we use:
+        #   • generated/  — pregen / runtime AI outputs (most rows)
+        #   • examples/   — curated bg/fx/ps/room/avatar pairs that the
+        #                   reseed_background_removal_inputs script remaps
+        #                   bg_removal rows onto. Without this prefix the
+        #                   filter dropped every reseeded row.
+        existing_gen = gcs.list_blob_names_cached("generated/", ttl_seconds=300)
+        existing_examples = gcs.list_blob_names_cached("examples/", ttl_seconds=300)
+        existing = (existing_gen or set()) | (existing_examples or set())
         if existing:
             def _row_has_live_blob(p) -> bool:
                 # A row is keepable if at least one of its result URLs either
@@ -1007,6 +1068,10 @@ async def get_presets(
                     "[presets/%s] Dropped %d/%d Material rows with missing GCS blobs (topic=%s).",
                     tool_type, dropped, before, topic,
                 )
+
+    # Apply the user-requested limit AFTER GCS filtering so a stale-blob
+    # streak in the first N DB rows can't starve the response.
+    presets = presets[:limit]
 
     def _r(u):
         return gcs.refresh_signed_url(u) if u else u

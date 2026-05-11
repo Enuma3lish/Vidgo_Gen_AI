@@ -4,9 +4,15 @@ import type { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConf
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 // Create axios instance
+// NOTE: Timeout is 6 minutes because subscriber-tier generation endpoints
+// (avatar / try_on / room_redesign / short_video) are synchronous and the
+// underlying providers (PiAPI Kling Avatar + F5-TTS, Pollo I2V, Vertex Veo)
+// regularly take 2-5 minutes per call. A 30s timeout cancels the request
+// from the client even though the backend keeps running, leaving the user
+// with a stuck "處理中..." UI that never resolves.
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 360000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -76,23 +82,12 @@ apiClient.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token')
       if (refreshToken) {
         try {
-          const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
-            refresh: refreshToken
-          })
-
-          const { access, refresh: newRefreshToken } = response.data
-          localStorage.setItem('access_token', access)
-          if (newRefreshToken) {
-            localStorage.setItem('refresh_token', newRefreshToken)
-          }
-
-          // Sync Pinia auth store with new tokens
-          try {
-            const { useAuthStore } = await import('@/stores/auth')
-            const authStore = useAuthStore()
-            authStore.accessToken = access
-            if (newRefreshToken) authStore.refreshToken = newRefreshToken
-          } catch { /* store not ready yet */ }
+          // Single in-flight refresh: when many requests fire in parallel and
+          // all 401, only the first should hit /auth/refresh; the others
+          // await the same promise. Without this, N parallel requests cause
+          // N refresh calls, and the refresh-token rotation on the backend
+          // invalidates earlier ones, logging the user out.
+          const access = await getOrStartTokenRefresh(refreshToken)
 
           // Retry original request with new token
           if (originalRequest.headers) {
@@ -112,5 +107,36 @@ apiClient.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// Shared in-flight refresh promise to coalesce concurrent 401s.
+let _refreshInFlight: Promise<string> | null = null
+
+async function getOrStartTokenRefresh(refreshToken: string): Promise<string> {
+  if (_refreshInFlight) return _refreshInFlight
+  _refreshInFlight = (async () => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
+        refresh: refreshToken,
+      })
+      const { access, refresh: newRefreshToken } = response.data
+      localStorage.setItem('access_token', access)
+      if (newRefreshToken) {
+        localStorage.setItem('refresh_token', newRefreshToken)
+      }
+      try {
+        const { useAuthStore } = await import('@/stores/auth')
+        const authStore = useAuthStore()
+        authStore.accessToken = access
+        if (newRefreshToken) authStore.refreshToken = newRefreshToken
+      } catch {
+        /* store not ready yet */
+      }
+      return access as string
+    } finally {
+      _refreshInFlight = null
+    }
+  })()
+  return _refreshInFlight
+}
 
 export default apiClient

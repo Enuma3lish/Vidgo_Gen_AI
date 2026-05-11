@@ -172,6 +172,18 @@ class Material(Base):
     is_featured = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
 
+    # === Audience targeting (optional library filters) ===
+    # `platform` and `role` let the public library / inspiration grid filter
+    # materials by the audience the seed was authored for. Both are nullable
+    # so legacy rows continue to work; queries that don't supply the filter
+    # match every row regardless of these columns.
+    platform = Column(String(40), nullable=True, index=True)
+    """Target platform tag, e.g. 'instagram', 'tiktok', 'shopify', 'youtube',
+    'web', 'print'. Null = unspecified / matches all."""
+    role = Column(String(40), nullable=True, index=True)
+    """Target user role tag, e.g. 'creator', 'seller', 'designer', 'marketer',
+    'agency'. Null = unspecified / matches all."""
+
     # === Timestamps ===
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -191,6 +203,7 @@ class Material(Base):
         Index('idx_material_source', 'source', 'source_user_id'),
         Index('idx_material_prompt_effect', 'prompt', 'effect_prompt'),  # For deduplication
         Index('idx_material_lookup_hash', 'lookup_hash'),  # For preset-only mode fast lookup
+        Index('idx_material_audience', 'platform', 'role', 'tool_type', 'is_active'),
     )
 
     @staticmethod

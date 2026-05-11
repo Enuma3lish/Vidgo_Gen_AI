@@ -204,6 +204,7 @@ class ProviderRouter:
         last_error = None
         for provider_name in candidate_providers:
             provider_index = providers_to_try.index(provider_name)
+            attempt_started = datetime.utcnow()
             try:
                 result = await self._execute_on_provider(
                     provider_name, task_type, params
@@ -226,6 +227,22 @@ class ProviderRouter:
                 # frontend can load results from a separate origin like vidgo.co.
                 result = self._absolutize_local_media_urls(result)
 
+                # Telemetry: which provider in the configured chain actually
+                # served this task and how long it took. Lets us spot when the
+                # primary (e.g. piapi_mcp) is consistently being skipped or
+                # falling through to the REST backup on Cloud Run.
+                elapsed_ms = int((datetime.utcnow() - attempt_started).total_seconds() * 1000)
+                logger.info(
+                    "provider_router.route ok task=%s primary=%s chain=%s used=%s rank=%d elapsed_ms=%d skipped=%s",
+                    task_type.value if hasattr(task_type, "value") else task_type,
+                    providers_to_try[0],
+                    "->".join(providers_to_try),
+                    provider_name,
+                    provider_index,
+                    elapsed_ms,
+                    skipped_providers or [],
+                )
+
                 return {
                     **result,
                     "used_backup": provider_index > 0,
@@ -235,7 +252,15 @@ class ProviderRouter:
                     **({"skipped_providers": skipped_providers} if skipped_providers else {}),
                 }
             except Exception as e:
-                logger.error(f"Provider {provider_name} failed for {task_type}: {e}")
+                elapsed_ms = int((datetime.utcnow() - attempt_started).total_seconds() * 1000)
+                logger.error(
+                    "provider_router.route fail task=%s provider=%s rank=%d elapsed_ms=%d error=%s",
+                    task_type.value if hasattr(task_type, "value") else task_type,
+                    provider_name,
+                    provider_index,
+                    elapsed_ms,
+                    e,
+                )
                 self._record_failure(provider_name, str(e))
                 await self._maybe_alert_provider_failure(
                     provider_name=provider_name,

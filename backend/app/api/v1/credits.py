@@ -161,7 +161,7 @@ async def purchase_credits(
 ):
     """
     Purchase credit package.
-    Returns payment URL for ECPay or Paddle.
+    Returns payment URL for ECPay or PayPal.
     """
     from sqlalchemy import select
     from app.models.billing import CreditPackage, Order
@@ -180,20 +180,37 @@ async def purchase_credits(
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
 
-    # Check if user's plan qualifies for this package
+    # Check if user's plan qualifies for this package. Return a structured
+    # 403 with the required plan + the user's current plan so the frontend
+    # can render an "Upgrade to <plan>" CTA instead of a generic error toast.
     service = CreditService(db)
     available_packages = await service.get_packages_for_user(str(current_user.id))
     if package not in available_packages:
+        user_plan_name = None
+        if current_user.current_plan_id:
+            from app.models.billing import Plan
+            plan_row = await db.execute(
+                select(Plan).where(Plan.id == current_user.current_plan_id)
+            )
+            plan_obj = plan_row.scalar_one_or_none()
+            if plan_obj:
+                user_plan_name = plan_obj.name
         raise HTTPException(
             status_code=403,
-            detail="Your current plan does not qualify for this package"
+            detail={
+                "error": "plan_upgrade_required",
+                "message": "Your current plan does not qualify for this package.",
+                "required_plan": package.min_plan,
+                "current_plan": user_plan_name or "free",
+                "package_name": package.name,
+            },
         )
 
     # Determine amount based on payment method
     if purchase.payment_method == "ecpay":
         amount = package.price_twd or package.price
         currency = "TWD"
-    else:  # paddle
+    else:  # paypal
         amount = package.price_usd or package.price
         currency = "USD"
 
@@ -244,9 +261,9 @@ async def purchase_credits(
             choose_payment="Credit",
         )
     else:
-        # Paddle credit checkout is not implemented yet; keep the legacy URL
+        # PayPal credit checkout is not implemented yet; keep the legacy URL
         # placeholder so existing clients do not break.
-        payment_url = f"/api/v1/payments/paddle/checkout/{order.order_number}"
+        payment_url = f"/api/v1/payments/paypal/checkout/{order.order_number}"
 
     return CreditPurchaseResponse(
         order_id=order.id,

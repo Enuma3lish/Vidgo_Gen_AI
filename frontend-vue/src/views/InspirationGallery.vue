@@ -25,7 +25,17 @@ type GalleryItem = {
 }
 
 const isZh = computed(() => locale.value.startsWith('zh'))
-const apiLanguage = computed(() => isZh.value ? 'zh-TW' : 'en')
+// Backend `language` query parameter — pass through the full locale code
+// for non-Chinese languages so ja/ko/es get their localized rows; legacy
+// 'en' / 'zh-TW' kept for backward-compat.
+const apiLanguage = computed(() => {
+  const l = locale.value || ''
+  if (l.startsWith('zh')) return 'zh-TW'
+  if (l.startsWith('ja')) return 'ja'
+  if (l.startsWith('ko')) return 'ko'
+  if (l.startsWith('es')) return 'es'
+  return 'en'
+})
 function displayTitle(item: GalleryItem): string {
   if (isZh.value && item.title_zh) return item.title_zh
   return item.title

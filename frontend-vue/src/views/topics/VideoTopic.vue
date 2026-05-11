@@ -11,7 +11,8 @@ import { useUIStore } from '@/stores'
 
 const { t, locale } = useI18n()
 const isZh = computed(() => locale.value.startsWith('zh'))
-const { getLocalizedField } = useLocalized()
+// L is the 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { getLocalizedField, L } = useLocalized()
 const router = useRouter()
 const uiStore = useUIStore()
 
@@ -125,7 +126,7 @@ function selectDemoImage(item: { id: string; preview?: string }) {
 
 function handleImageSelect(files: File[]) {
   if (!canUseCustomInputs.value) {
-    uiStore.showError(isZh.value ? '請訂閱以上傳自訂圖片' : 'Please subscribe to upload custom images')
+    uiStore.showError(L('請訂閱以上傳自訂圖片', 'Please subscribe to upload custom images', 'カスタム画像をアップロードするにはサブスク登録してください', '커스텀 이미지 업로드는 구독해 주세요', 'Suscríbete para subir imágenes personalizadas'))
     return
   }
 
@@ -151,11 +152,11 @@ async function generateVideo() {
       const demoResultUrl = await resolveDemoTemplateResultUrl(selectedDemoImageId.value)
       if (demoResultUrl) {
         result.value = demoResultUrl
-        uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+        uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
         return
       }
 
-      uiStore.showInfo(isZh.value ? '此影片範例尚未生成，請訂閱以使用完整功能' : 'This video example is not pre-generated. Subscribe for full features.')
+      uiStore.showInfo(L('此影片範例尚未生成，請訂閱以使用完整功能', 'This video example is not pre-generated. Subscribe for full features.', 'この動画例はまだ生成されていません。フル機能を使うにはサブスク登録してください。', '이 동영상 예시는 아직 생성되지 않았습니다. 전체 기능을 사용하려면 구독해 주세요.', 'Este ejemplo aún no está pregenerado. Suscríbete para acceso completo.'))
       return
     }
 
@@ -237,7 +238,7 @@ onMounted(() => {
         <div v-if="isDemoUser" class="flex justify-center mb-6">
           <div class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
             <RouterLink to="/pricing" class="hover:underline">
-              {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+              {{ L('訂閱以解鎖更多功能', 'Subscribe to unlock more features', 'サブスク登録で機能を解禁', '구독으로 더 많은 기능 잠금 해제', 'Suscríbete para desbloquear más funciones') }}
             </RouterLink>
           </div>
         </div>
@@ -259,7 +260,7 @@ onMounted(() => {
               <!-- Demo Images for demo users -->
               <div v-if="isDemoUser || demoImages.length > 0" class="mb-4">
                 <p class="text-sm text-gray-400 mb-3">
-                  {{ isZh ? '預設圖片（示範）' : 'Preset Images (Demo)' }}
+                  {{ L('預設圖片（示範）', 'Preset Images (Demo)', 'プリセット画像（デモ）', '프리셋 이미지 (데모)', 'Imágenes preestablecidas (demo)') }}
                 </p>
                 <div v-if="isLoadingTemplates" class="flex justify-center py-8">
                   <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
@@ -290,7 +291,7 @@ onMounted(() => {
               <!-- Custom Upload (Subscribed Users Only) -->
               <div v-if="canUseCustomInputs">
                 <p v-if="demoImages.length > 0" class="text-sm text-gray-400 mb-3">
-                  {{ isZh ? '或上傳自訂圖片' : 'Or upload custom image' }}
+                  {{ L('或上傳自訂圖片', 'Or upload custom image', 'またはカスタム画像をアップロード', '또는 커스텀 이미지 업로드', 'O sube imagen personalizada') }}
                 </p>
                 <UploadZone
                   accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"

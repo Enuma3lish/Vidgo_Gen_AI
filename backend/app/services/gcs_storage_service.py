@@ -146,6 +146,38 @@ class GCSStorageService:
             logger.error(f"[GCS] Failed to delete {blob_name}: {e}")
             return False
 
+    async def safe_persist_url(
+        self,
+        url: Optional[str],
+        media_type: str,
+        user_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """Idempotent wrapper around `persist_url` with safe short-circuits.
+
+        Returns the original URL when:
+          - URL is None / empty
+          - URL is already a GCS public URL or local /static/ path
+          - GCS is not configured
+        Catches any exception and returns the original URL so a persistence
+        failure never breaks the user-facing flow (provider CDN still serves
+        the file for 14 days).
+        """
+        if not url:
+            return url
+        if "storage.googleapis.com" in url or url.startswith("/static/"):
+            return url
+        if not self.enabled:
+            return url
+        try:
+            return await self.persist_url(
+                source_url=url,
+                media_type=media_type,
+                user_id=user_id,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("safe_persist_url failed (%s, %s): %s", media_type, url, exc)
+            return url
+
     def list_blob_names(self, prefix: str = "generated/") -> set:
         """List all blob names under a prefix. Returns set of blob names like 'generated/watermarked/foo.png'."""
         if not self.enabled:

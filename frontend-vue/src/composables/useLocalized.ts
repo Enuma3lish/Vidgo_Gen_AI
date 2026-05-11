@@ -66,12 +66,38 @@ export function useLocalized() {
    */
   const isEnglish = computed(() => locale.value === 'en')
 
+  /**
+   * Inline 5-language string picker.
+   *
+   * Replaces the legacy `isZh ? zh : en` ternary that broke ja/ko/es users
+   * (they always fell into the English branch — BUG-017). Pass the
+   * translations inline; ja/ko/es are optional and fall back to English
+   * when omitted so partial migrations work.
+   *
+   * NOT a reactive computed — call it inside a template binding (Vue
+   * re-renders on locale change because `locale` is a ref) or inside a
+   * `computed` if you need caching.
+   *
+   * Usage:
+   *   const { L } = useLocalized()
+   *   {{ L('訂閱以解鎖', 'Subscribe to unlock', 'サブスクで解禁', '구독으로 잠금 해제', 'Suscríbete') }}
+   */
+  function L(zh: string, en: string, ja?: string, ko?: string, es?: string): string {
+    const l = locale.value || ''
+    if (l.startsWith('zh')) return zh
+    if (l.startsWith('ja')) return ja ?? en
+    if (l.startsWith('ko')) return ko ?? en
+    if (l.startsWith('es')) return es ?? en
+    return en
+  }
+
   return {
     locale,
     languageSuffix,
     getLocalizedField,
     isChinese,
-    isEnglish
+    isEnglish,
+    L,
   }
 }
 

@@ -36,7 +36,7 @@ const successMessage = ref<string | null>(null)
 const showCancelModal = ref(false)
 const cancelWithRefund = ref(false)
 const TEST_PRO_PLAN_NAME = 'test_pro_usd_1'
-const officialCreditPackageNames = ['light_pack', 'standard_pack', 'heavy_pack']
+const officialCreditPackageNames = ['light_pack', 'standard_pack']
 const creditPackages = ref<CreditTopUpPackage[]>([])
 const creditPackagesLoading = ref(false)
 
@@ -74,7 +74,7 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
     {
       id: 'light_pack',
       name: 'light_pack',
-      displayName: isZh.value ? '輕量包' : 'Light Pack',
+      displayName: t('pricing.creditPacks.fallbackNames.light'),
       credits: 3000,
       price: 299,
       currency: 'TWD',
@@ -86,25 +86,13 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
     {
       id: 'standard_pack',
       name: 'standard_pack',
-      displayName: isZh.value ? '標準包' : 'Standard Pack',
+      displayName: t('pricing.creditPacks.fallbackNames.standard'),
       credits: 5500,
       price: 499,
       currency: 'TWD',
       bonusCredits: 500,
       bonusPct: 10,
       isPopular: true,
-      isBestValue: false,
-    },
-    {
-      id: 'heavy_pack',
-      name: 'heavy_pack',
-      displayName: isZh.value ? '重度包' : 'Heavy Pack',
-      credits: 12000,
-      price: 999,
-      currency: 'TWD',
-      bonusCredits: 2000,
-      bonusPct: 20,
-      isPopular: false,
       isBestValue: true,
     },
   ]
@@ -124,7 +112,7 @@ function normalizeCreditPackage(raw: any): CreditTopUpPackage {
     price,
     currency: 'TWD',
     bonusCredits: Number(raw.bonus_credits ?? fallback?.bonusCredits ?? 0),
-    bonusPct: raw.name === 'heavy_pack' ? 20 : raw.name === 'standard_pack' ? 10 : 0,
+    bonusPct: raw.name === 'standard_pack' ? 10 : 0,
     isPopular: Boolean(raw.is_popular ?? fallback?.isPopular),
     isBestValue: Boolean(raw.is_best_value ?? fallback?.isBestValue),
   }
@@ -256,18 +244,18 @@ async function handleCreditPurchase(pkg: CreditTopUpPackage) {
     } else if (result.payment_url) {
       window.location.href = result.payment_url
     } else {
-      successMessage.value = isZh.value ? '訂單已建立' : 'Order created'
+      successMessage.value = t('pricing.creditPacks.orderCreated')
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { detail?: string } } }
-    error.value = e.response?.data?.detail || (isZh.value ? '點數包購買失敗，請稍後再試。' : 'Credit package purchase failed. Please try again.')
+    error.value = e.response?.data?.detail || t('pricing.creditPacks.purchaseFailed')
   } finally {
     subscribing.value = null
   }
 }
 
 // Subscribe to a plan
-async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paddle' | 'ecpay' = 'ecpay') {
+async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paypal' | 'ecpay' = 'ecpay') {
   if (!isLoggedIn.value) {
     router.push('/auth/login')
     return
@@ -296,7 +284,7 @@ async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paddle' | 'ecpay'
         successMessage.value = t('pricing.redirectingToPayment')
         setTimeout(() => submitECPayForm(result.ecpay_form!), 500)
       } else if (result.checkout_url && !result.is_mock) {
-        // Paddle: redirect to checkout URL
+        // PayPal: redirect to checkout URL
         successMessage.value = t('pricing.redirectingToPayment')
         window.location.href = result.checkout_url
       } else {
@@ -403,7 +391,15 @@ function formatPackagePrice(pkg: CreditTopUpPackage): string {
 }
 
 function formatCredits(value: number): string {
-  return value.toLocaleString(isZh.value ? 'zh-TW' : 'en-US')
+  // Map the active i18n locale to an Intl-friendly tag so number grouping
+  // uses the right separators for ja/ko/es too (BUG-017 follow-through).
+  const l = locale.value || ''
+  const tag = l.startsWith('zh') ? 'zh-TW'
+    : l.startsWith('ja') ? 'ja-JP'
+    : l.startsWith('ko') ? 'ko-KR'
+    : l.startsWith('es') ? 'es-ES'
+    : 'en-US'
+  return value.toLocaleString(tag)
 }
 
 function formatPlanPrice(plan: PlanInfo): string {
@@ -451,11 +447,29 @@ function isCurrentPlan(planId: string): boolean {
   return currentPlanId.value === planId && subscriptionStatus.value?.status === 'active'
 }
 
+// Whether each payment gateway is wired up server-side. PayPal credentials
+// are unset in production right now (PAYPAL_CLIENT_ID empty in Secret
+// Manager), so the service is in MOCK mode and a real checkout cannot be
+// created — we therefore hide the PayPal button until the credentials are
+// configured.
+const paypalEnabled = ref(false)
+
+async function fetchPaymentMethods() {
+  try {
+    const { data } = await apiClient.get('/api/v1/payments/methods')
+    paypalEnabled.value = !!data?.paypal?.enabled
+  } catch {
+    // Network failure — default to hidden so users don't hit a broken button.
+    paypalEnabled.value = false
+  }
+}
+
 onMounted(async () => {
   await Promise.all([
     fetchPlans(),
     fetchSubscriptionStatus(),
-    fetchCreditPackages()
+    fetchCreditPackages(),
+    fetchPaymentMethods()
   ])
 })
 </script>
@@ -563,17 +577,17 @@ onMounted(async () => {
                 class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold mb-3"
                 style="background: rgba(22,119,255,0.12); color: #69b1ff; border: 1px solid rgba(22,119,255,0.25);"
               >
-                {{ isZh ? '單買點數收費' : 'One-time Credit Pricing' }}
+                {{ t('pricing.creditPacks.sectionBadge') }}
               </span>
               <h2 class="text-2xl md:text-3xl font-bold mb-2" style="color: #f5f5fa;">
-                {{ isZh ? '不訂閱也可以直接購買點數' : 'Buy credits directly without a subscription' }}
+                {{ t('pricing.creditPacks.title') }}
               </h2>
               <p class="max-w-2xl text-sm md:text-base" style="color: #9494b0;">
-                {{ isZh ? '三個正式 TWD 點數包已固定，適合臨時提案、室內設計渲染、批次商品圖與影片補量。購買點數不會在每月週期重置。' : 'Three official TWD packs are available for ad hoc proposals, interior renders, batch product images, and extra video runs. Purchased credits do not reset with monthly billing.' }}
+                {{ t('pricing.creditPacks.subtitle') }}
               </p>
             </div>
             <div class="text-sm" style="color: #b7b7cc;">
-              {{ isZh ? '台灣 ECPay 金流付款' : 'Taiwan ECPay checkout' }}
+              {{ t('pricing.creditPacks.checkoutNote') }}
             </div>
           </div>
 
@@ -596,39 +610,39 @@ onMounted(async () => {
                 class="absolute -top-3 left-6 text-xs font-semibold px-3 py-1 rounded-full text-white"
                 :style="pkg.isBestValue ? 'background: #10b981;' : 'background: #1677ff;'"
               >
-                {{ pkg.isBestValue ? (isZh ? '最划算' : 'Best Value') : (isZh ? '熱門' : 'Popular') }}
+                {{ pkg.isBestValue ? t('pricing.creditPacks.badges.bestValue') : t('pricing.creditPacks.badges.popular') }}
               </span>
 
               <div class="flex items-start justify-between gap-4 mb-5">
                 <div>
                   <h3 class="text-xl font-semibold mb-1" style="color: #f5f5fa;">{{ pkg.displayName }}</h3>
                   <p class="text-sm" style="color: #9494b0;">
-                    {{ pkg.bonusPct > 0 ? (isZh ? `多送 ${pkg.bonusPct}%` : `${pkg.bonusPct}% bonus included`) : (isZh ? '彈性補量' : 'Flexible top-up') }}
+                    {{ pkg.bonusPct > 0 ? t('pricing.creditPacks.bonusPct', { pct: pkg.bonusPct }) : t('pricing.creditPacks.flexibleTopup') }}
                   </p>
                 </div>
                 <div class="text-right">
                   <div class="text-3xl font-bold" style="color: #f5f5fa;">{{ formatPackagePrice(pkg) }}</div>
-                  <div class="text-xs" style="color: #6b6b8a;">{{ isZh ? '一次購買' : 'one-time' }}</div>
+                  <div class="text-xs" style="color: #6b6b8a;">{{ t('pricing.creditPacks.oneTime') }}</div>
                 </div>
               </div>
 
               <div class="rounded-lg px-4 py-3 mb-5" style="background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);">
                 <div class="text-2xl font-bold" style="color: #f5f5fa;">
-                  {{ formatCredits(pkg.credits) }} {{ isZh ? '點' : 'credits' }}
+                  {{ formatCredits(pkg.credits) }} {{ t('pricing.creditPacks.creditsUnit') }}
                 </div>
                 <div class="text-xs mt-1" style="color: #9494b0;">
-                  {{ pkg.bonusCredits > 0 ? (isZh ? `內含 ${formatCredits(pkg.bonusCredits)} 點加贈額度` : `Includes ${formatCredits(pkg.bonusCredits)} bonus credits`) : (isZh ? '無加贈，適合小量測試' : 'No bonus, best for light testing') }}
+                  {{ pkg.bonusCredits > 0 ? t('pricing.creditPacks.bonusInclusion', { bonus: formatCredits(pkg.bonusCredits) }) : t('pricing.creditPacks.noBonus') }}
                 </div>
               </div>
 
               <ul class="space-y-2 mb-6 text-sm" style="color: #9494b0;">
                 <li class="flex items-start gap-2">
                   <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-                  {{ isZh ? '可用於圖片、影片、室內設計與商品場景生成' : 'Works across images, video, interiors, and product scenes' }}
+                  {{ t('pricing.creditPacks.featureCrossTool') }}
                 </li>
                 <li class="flex items-start gap-2">
                   <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: #52c41a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-                  {{ isZh ? '購買點數不會每月歸零，適合專案補量' : 'Purchased credits do not reset monthly, ideal for project bursts' }}
+                  {{ t('pricing.creditPacks.featureNoReset') }}
                 </li>
               </ul>
 
@@ -645,9 +659,54 @@ onMounted(async () => {
                   </svg>
                   {{ t('pricing.processing') }}
                 </span>
-                <span v-else>{{ isLoggedIn ? (isZh ? '購買點數' : 'Buy Credits') : (isZh ? '登入後購買' : 'Sign In to Buy') }}</span>
+                <span v-else>{{ isLoggedIn ? t('pricing.creditPacks.cta.buy') : t('pricing.creditPacks.cta.signInToBuy') }}</span>
               </button>
             </article>
+          </div>
+
+          <div class="mt-8 rounded-xl p-5 md:p-6" style="background: #0f0f16; border: 1px solid rgba(255,255,255,0.12);">
+            <h3 class="text-lg md:text-xl font-semibold mb-4" style="color: #f5f5fa;">
+              {{ t('pricing.creditReference.title') }}
+            </h3>
+
+            <div class="overflow-x-auto mb-5">
+              <table class="w-full text-sm" style="border-collapse: collapse; color: #e8e8f0; min-width: 620px;">
+                <thead>
+                  <tr>
+                    <th class="px-3 py-2 text-left font-semibold" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.headers.featureType') }}</th>
+                    <th class="px-3 py-2 text-left font-semibold" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.headers.creditsPerRun') }}</th>
+                    <th class="px-3 py-2 text-left font-semibold" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.headers.outputFor100') }}</th>
+                    <th class="px-3 py-2 text-left font-semibold" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.headers.useCase') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.proLong.feature') }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.proLong.cost') }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.proLong.output') }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.proLong.useCase') }}</td>
+                  </tr>
+                  <tr>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.restore.feature') }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.restore.cost') }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.restore.output') }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.restore.useCase') }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4 class="text-base md:text-lg font-semibold mb-3" style="color: #fef08a;">
+              {{ t('pricing.creditReference.scenarios.title') }}
+            </h4>
+            <p class="text-sm mb-3" style="color: #b7b7cc;">
+              {{ t('pricing.creditReference.scenarios.intro') }}
+            </p>
+            <ul class="space-y-2 text-sm" style="color: #e8e8f0;">
+              <li>• {{ t('pricing.creditReference.scenarios.creatorStarter') }}</li>
+              <li>• {{ t('pricing.creditReference.scenarios.proDesigner') }}</li>
+              <li>• {{ t('pricing.creditReference.scenarios.imageSprint') }}</li>
+            </ul>
           </div>
         </div>
       </section>
@@ -755,8 +814,8 @@ onMounted(async () => {
               </span>
             </button>
             <button
-              v-if="plan.price_monthly > 0 && isLoggedIn && !isTestPlan(plan)"
-              @click="handleSubscribe(plan, 'paddle')"
+              v-if="paypalEnabled && plan.price_monthly > 0 && isLoggedIn && !isTestPlan(plan)"
+              @click="handleSubscribe(plan, 'paypal')"
               :disabled="subscribing === plan.id"
               class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 disabled:opacity-50"
               style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
@@ -765,9 +824,16 @@ onMounted(async () => {
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                 </svg>
-                {{ t('pricing.paddlePaymentLabel') }}
+                {{ t('pricing.paypalPaymentLabel') }}
               </span>
             </button>
+            <p
+              v-if="paypalEnabled && plan.price_monthly > 0 && !isTestPlan(plan)"
+              class="mb-2 rounded px-3 py-2 text-xs leading-relaxed"
+              style="background: #fef08a; color: #111827;"
+            >
+              {{ t('pricing.paypalPricingStrategy') }}
+            </p>
             <button
               v-if="!(plan.price_monthly > 0 && isLoggedIn)"
               @click="handleSubscribe(plan, 'ecpay')"

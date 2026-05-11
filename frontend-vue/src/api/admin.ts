@@ -374,7 +374,149 @@ export const adminApi = {
   async getActiveUsersStats(): Promise<ActiveUsersStats> {
     const response = await apiClient.get('/api/v1/admin/stats/active-users')
     return response.data
+  },
+
+  // ────────────────────────────────────────────────────────────────
+  // Plan Management (subscription plan pricing / credits / copy)
+  // ────────────────────────────────────────────────────────────────
+  async listPlans(includeInactive: boolean = true): Promise<{ plans: AdminPlan[] }> {
+    const response = await apiClient.get('/api/v1/admin/plans', {
+      params: { include_inactive: includeInactive }
+    })
+    return response.data
+  },
+
+  async createPlan(payload: Partial<AdminPlan>): Promise<{ success: boolean; plan: AdminPlan }> {
+    const response = await apiClient.post('/api/v1/admin/plans', payload)
+    return response.data
+  },
+
+  async updatePlan(planId: string, payload: Partial<AdminPlan>): Promise<{ success: boolean; plan: AdminPlan }> {
+    const response = await apiClient.patch(`/api/v1/admin/plans/${planId}`, payload)
+    return response.data
+  },
+
+  async deletePlan(planId: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.delete(`/api/v1/admin/plans/${planId}`)
+    return response.data
+  },
+
+  // ────────────────────────────────────────────────────────────────
+  // Branding (logo, brand strings, pricing-page intro copy)
+  // ────────────────────────────────────────────────────────────────
+  async getBranding(): Promise<{ settings: SiteBrandingSettings }> {
+    const response = await apiClient.get('/api/v1/admin/branding')
+    return response.data
+  },
+
+  async updateBranding(payload: Partial<SiteBrandingSettings>): Promise<{ success: boolean; settings: SiteBrandingSettings }> {
+    const response = await apiClient.patch('/api/v1/admin/branding', payload)
+    return response.data
+  },
+
+  async setLogoUrl(slot: 'logo_url' | 'logo_url_dark' | 'favicon_url', fileUrl: string): Promise<{ success: boolean; settings: SiteBrandingSettings }> {
+    const response = await apiClient.post('/api/v1/admin/branding/logo', null, {
+      params: { slot, file_url: fileUrl }
+    })
+    return response.data
+  },
+
+  // ────────────────────────────────────────────────────────────────
+  // Infrastructure cost dashboard (GCP + PiAPI + Pollo + A2E)
+  // ────────────────────────────────────────────────────────────────
+  async getInfrastructureCosts(): Promise<InfrastructureCosts> {
+    const response = await apiClient.get('/api/v1/admin/costs/infrastructure')
+    return response.data
+  },
+}
+
+// ============================================================================
+// New admin-feature types
+// ============================================================================
+
+export interface AdminPlan {
+  id: string
+  name: string
+  slug: string | null
+  display_name: string | null
+  plan_type: string | null
+  description: string | null
+  price_twd: number | null
+  price_usd: number | null
+  price_monthly: number | null
+  price_yearly: number | null
+  currency: string | null
+  billing_cycle: string | null
+  monthly_credits: number | null
+  weekly_credits: number | null
+  topup_discount_rate: number | null
+  allowed_models: string[] | null
+  can_use_effects: boolean | null
+  social_media_batch_posting: boolean | null
+  priority_queue: boolean | null
+  enterprise_features: boolean | null
+  api_access: boolean | null
+  max_video_length: number | null
+  max_resolution: string | null
+  max_concurrent_generations: number | null
+  has_watermark: boolean | null
+  watermark: boolean | null
+  pollo_limit: number | null
+  goenhance_limit: number | null
+  feature_clothing_transform: boolean | null
+  feature_goenhance: boolean | null
+  feature_video_gen: boolean | null
+  feature_batch_processing: boolean | null
+  feature_custom_styles: boolean | null
+  features: Record<string, unknown> | null
+  features_text_zh: string | null
+  features_text_en: string | null
+  display_order: number | null
+  is_active: boolean
+  is_featured: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface SiteBrandingSettings {
+  logo_url: string | null
+  logo_url_dark: string | null
+  favicon_url: string | null
+  brand_name: string | null
+  brand_tagline_zh: string | null
+  brand_tagline_en: string | null
+  pricing_intro_title_zh: string | null
+  pricing_intro_title_en: string | null
+  pricing_intro_body_zh: string | null
+  pricing_intro_body_en: string | null
+  pricing_footnote_zh: string | null
+  pricing_footnote_en: string | null
+  updated_at?: string | null
+}
+
+export interface InfrastructureProviderBucket {
+  label: string
+  calls: number
+  cost_usd: number
+  tools: Array<{ tool_type: string; calls: number; cost_usd: number }>
+}
+
+export interface InfrastructureCosts {
+  month: string
+  currency: string
+  gcp: {
+    total_usd: number
+    breakdown: Array<{ name: string; cost_usd: number }>
+    source: string
   }
+  providers: {
+    piapi: InfrastructureProviderBucket
+    pollo: InfrastructureProviderBucket
+    a2e: InfrastructureProviderBucket
+    other: InfrastructureProviderBucket
+  }
+  providers_total_usd: number
+  grand_total_usd: number
 }
 
 // ============================================================================

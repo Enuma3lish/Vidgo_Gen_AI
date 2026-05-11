@@ -8,7 +8,7 @@ import apiClient from '@/api/client'
 
 const route = useRoute()
 const router = useRouter()
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const uiStore = useUIStore()
 
 const password = ref('')
@@ -16,8 +16,8 @@ const passwordConfirm = ref('')
 const isLoading = ref(false)
 const isComplete = ref(false)
 const token = computed(() => String(route.query.token || route.query.reset_password || ''))
-const isZh = computed(() => locale.value.startsWith('zh'))
 // 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+// `isZh` was removed because every reference migrated to L().
 const { L } = useLocalized()
 
 async function handleSubmit() {

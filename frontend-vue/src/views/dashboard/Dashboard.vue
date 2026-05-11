@@ -7,7 +7,7 @@ import { useAuthStore, useCreditsStore } from '@/stores'
 import { userApi } from '@/api/user'
 import type { UserGeneration, UserStatsResponse } from '@/api/user'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const authStore = useAuthStore()
 const creditsStore = useCreditsStore()
 type DashboardUser = NonNullable<typeof authStore.user> & { plan?: string | null }
@@ -16,8 +16,8 @@ const recentWorks = ref<UserGeneration[]>([])
 const userStats = ref<UserStatsResponse | null>(null)
 const loadingWorks = ref(false)
 
-const isZh = computed(() => locale.value.startsWith('zh'))
 // 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+// `isZh` was removed because every reference migrated to L().
 const { L } = useLocalized()
 
 const displayName = computed(() => {

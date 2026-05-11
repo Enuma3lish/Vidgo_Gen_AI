@@ -598,7 +598,9 @@
     "mediaDownloaded": "檔案已下載。",
     "nativeShareWithImage": "分享圖片到 App",
     "captionAndMediaReady": "說明已複製、圖片已下載，請在 {platform} 貼上並上傳。",
-    "fallbackCaptionAndDownload": "說明已複製、圖片已下載，可貼到任何 App。"
+    "fallbackCaptionAndDownload": "說明已複製、圖片已下載，可貼到任何 App。",
+    "mobileShareHint": "開啟手機分享面板（Instagram、Threads、LINE、訊息…）並附上檔案。",
+    "desktopFallbackHint": "您的瀏覽器不支援原生分享 — 將為您複製文案並下載檔案。"
   },
   "pricing": {
     "title": "選擇您的方案",

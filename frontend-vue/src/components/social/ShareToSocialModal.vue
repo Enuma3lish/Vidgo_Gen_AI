@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   buildSocialShareUrl,
@@ -27,8 +27,36 @@ const nativeShareSupported = ref(false)
 const nativeFileShareSupported = ref(false)
 const lastOpenedPlatform = ref<string | null>(null)
 
-const directSharePlatforms = computed(() => socialSharePlatforms.filter(platform => platform.mode === 'direct_share'))
-const copyFirstPlatforms = computed(() => socialSharePlatforms.filter(platform => platform.mode === 'copy_first'))
+// Spec requires Instagram / Facebook / TikTok / LINE / Threads to be visible
+// and reachable from this modal. Pin them to the top of the platform grid so
+// they're always above the fold; everything else follows in original order.
+const PRIORITY_PLATFORM_IDS = ['instagram', 'facebook', 'tiktok', 'line', 'threads']
+function platformSortKey(id: string): number {
+  const idx = PRIORITY_PLATFORM_IDS.indexOf(id)
+  return idx === -1 ? 99 : idx
+}
+const directSharePlatforms = computed(() =>
+  socialSharePlatforms
+    .filter(platform => platform.mode === 'direct_share')
+    .slice()
+    .sort((a, b) => platformSortKey(a.id) - platformSortKey(b.id))
+)
+const copyFirstPlatforms = computed(() =>
+  socialSharePlatforms
+    .filter(platform => platform.mode === 'copy_first')
+    .slice()
+    .sort((a, b) => platformSortKey(a.id) - platformSortKey(b.id))
+)
+
+// Mobile detection — used to make the OS share sheet the hero CTA. We treat
+// "small viewport OR touch-primary" as mobile rather than UA sniffing, so
+// it stays accurate when the user resizes a desktop window.
+const isMobileViewport = ref(false)
+function updateViewportFlag() {
+  if (typeof window === 'undefined') return
+  isMobileViewport.value =
+    window.matchMedia('(max-width: 640px), (pointer: coarse)').matches
+}
 
 const workShareLink = computed(() => {
   if (props.mediaUrl) return props.mediaUrl
@@ -183,6 +211,16 @@ async function openPlatform(platform: SocialSharePlatform) {
   lastOpenedPlatform.value = platform.id
 }
 
+// Used to disable the hero button while we're fetching the media blob, so
+// the user doesn't double-tap and trigger two OS share sheets.
+const isPreparingShare = ref(false)
+
+// Hero CTA. Tries the share strategies in this exact order:
+//   1. navigator.share({files,text,url})  — OS share sheet with the image
+//      attached. iOS/Android. Lets user pick Instagram/Threads/LINE/Messages.
+//   2. navigator.share({text,url})        — same sheet but URL-only.
+//   3. copy caption + auto-download file  — works on any browser.
+// We never throw on AbortError (the user closed the sheet voluntarily).
 async function shareWithSystemDialog() {
   if (!caption.value.trim()) {
     caption.value = getDefaultCaption()
@@ -190,44 +228,49 @@ async function shareWithSystemDialog() {
 
   const text = caption.value.trim()
   const url = workShareLink.value
+  isPreparingShare.value = true
 
-  // Web Share API Level 2 (file sharing) — mobile-first. Try this first so
-  // the user can pick Instagram / Threads / LINE / Messages from the OS
-  // sheet with the actual image attached, not just a URL.
-  if (navigator.share && navigator.canShare && props.mediaUrl) {
-    const file = await fetchMediaAsFile()
-    if (file) {
-      try {
-        const payload: ShareData = { title: 'VidGo AI', text, url, files: [file] }
-        if (navigator.canShare(payload)) {
-          await navigator.share(payload)
-          return
+  try {
+    // Level 2: caption + file (what the spec asks for).
+    if (navigator.share && navigator.canShare && props.mediaUrl) {
+      const file = await fetchMediaAsFile()
+      if (file) {
+        try {
+          const payload: ShareData = { title: 'VidGo AI', text, url, files: [file] }
+          if (navigator.canShare(payload)) {
+            await navigator.share(payload)
+            return
+          }
+        } catch (error: any) {
+          if (error?.name === 'AbortError') return
+          // canShare returned true but share() rejected → fall through
         }
-      } catch (error: any) {
-        if (error?.name === 'AbortError') return
-        // fall through to URL-only share
       }
     }
-  }
 
-  // Web Share API Level 1 (URL/text only).
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: 'VidGo AI', text, url })
-      return
-    } catch (error: any) {
-      if (error?.name === 'AbortError') return
+    // Level 1: URL + caption only (no file).
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'VidGo AI', text, url })
+        return
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return
+      }
     }
-  }
 
-  // Final fallback (desktop / unsupported browsers): copy the caption AND
-  // auto-download the image so the user can manually post into any app.
-  await copyText(text || url)
-  const downloaded = await autoDownloadMedia()
-  showFeedback(
-    'success',
-    downloaded ? t('socialShare.fallbackCaptionAndDownload') : t('socialShare.nativeFallbackCopied'),
-  )
+    // Fallback: copy caption + auto-download file. Works everywhere.
+    const captionCopied = await copyText(text || url)
+    const downloaded = await autoDownloadMedia()
+    if (downloaded && captionCopied) {
+      showFeedback('success', t('socialShare.fallbackCaptionAndDownload'))
+    } else if (captionCopied) {
+      showFeedback('success', t('socialShare.nativeFallbackCopied'))
+    } else {
+      showFeedback('error', t('socialShare.copyFailed'))
+    }
+  } finally {
+    isPreparingShare.value = false
+  }
 }
 
 onMounted(() => {
@@ -235,7 +278,17 @@ onMounted(() => {
   // canShare({files: [...]}) requires at least one File to evaluate; treat
   // the presence of both APIs as best-effort capability.
   nativeFileShareSupported.value = nativeShareSupported.value && typeof navigator.canShare === 'function'
+  updateViewportFlag()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', updateViewportFlag)
+  }
   caption.value = getDefaultCaption()
+})
+
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updateViewportFlag)
+  }
 })
 </script>
 
@@ -342,29 +395,43 @@ onMounted(() => {
             </p>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              type="button"
-              @click="shareWithSystemDialog"
-              class="py-3 rounded-xl font-bold text-sm transition-all"
-              style="background: linear-gradient(135deg, #00b8e6, #0066cc); color: white;"
-            >
-              {{ nativeFileShareSupported && props.mediaUrl
-                ? t('socialShare.nativeShareWithImage')
-                : nativeShareSupported
-                  ? t('socialShare.nativeShare')
-                  : t('socialShare.copyForAnyApp') }}
-            </button>
-            <button
-              v-if="props.mediaUrl"
-              type="button"
-              @click="autoDownloadMedia().then(ok => showFeedback(ok ? 'success' : 'error', t(ok ? 'socialShare.mediaDownloaded' : 'socialShare.copyFailed')))"
-              class="py-3 rounded-xl font-medium text-sm transition-all"
-              style="background: rgba(255,255,255,0.06); color: #e8f4ff; border: 1px solid rgba(255,255,255,0.12);"
-            >
-              {{ props.isVideo ? t('socialShare.downloadVideo') : t('socialShare.downloadImage') }}
-            </button>
-          </div>
+          <!-- Hero CTA. On mobile, this is the OS share sheet (Web Share API
+               Level 2) which lets the user pick Instagram / Threads / LINE /
+               Messages with the actual media file attached. On desktop or
+               unsupported browsers, it copies the caption and auto-downloads
+               the file. Spec: navigator.share() preferred → fallback chain. -->
+          <button
+            type="button"
+            @click="shareWithSystemDialog"
+            :disabled="isPreparingShare"
+            class="w-full py-4 rounded-xl font-bold text-sm sm:text-base transition-all disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-2"
+            style="background: linear-gradient(135deg, #00b8e6, #0066cc); color: white; box-shadow: 0 4px 18px rgba(0,184,230,0.25);"
+          >
+            <span v-if="isPreparingShare" class="inline-block w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+            <span v-else>{{ nativeFileShareSupported && props.mediaUrl
+              ? t('socialShare.nativeShareWithImage')
+              : nativeShareSupported
+                ? t('socialShare.nativeShare')
+                : t('socialShare.copyForAnyApp') }}</span>
+          </button>
+          <p v-if="isMobileViewport && nativeFileShareSupported" class="text-[11px] -mt-3" style="color: #6b9ab8;">
+            {{ t('socialShare.mobileShareHint') }}
+          </p>
+          <p v-else-if="!nativeShareSupported" class="text-[11px] -mt-3" style="color: #6b9ab8;">
+            {{ t('socialShare.desktopFallbackHint') }}
+          </p>
+
+          <!-- Secondary "just download" button — useful when the user wants
+               the file on disk without engaging the share sheet. -->
+          <button
+            v-if="props.mediaUrl"
+            type="button"
+            @click="autoDownloadMedia().then(ok => showFeedback(ok ? 'success' : 'error', t(ok ? 'socialShare.mediaDownloaded' : 'socialShare.copyFailed')))"
+            class="w-full py-2.5 rounded-xl font-medium text-sm transition-all"
+            style="background: rgba(255,255,255,0.06); color: #e8f4ff; border: 1px solid rgba(255,255,255,0.12);"
+          >
+            ⬇ {{ props.isVideo ? t('socialShare.downloadVideo') : t('socialShare.downloadImage') }}
+          </button>
 
           <div>
             <h3 class="text-sm font-semibold mb-3" style="color: #a8c8e8;">

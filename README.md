@@ -280,11 +280,13 @@ Override locally via `.env`; in production these are seeded once into the databa
 ### Payment & Billing
 | Provider | Region | Status |
 |----------|--------|--------|
-| Paddle | International | **Primary** - credit card, PayPal |
-| ECPay | Taiwan | Legacy (optional, still in codebase) |
+| PayPal | International | **Primary** - card / PayPal checkout |
+| ECPay | Taiwan | **Primary** - local card checkout |
 | ECPay E-Invoice | Taiwan | B2C/B2B e-invoice issue + void |
 
 **Credit Packages**: Starter / Standard / Premium tiers. Gift codes and promotional discounts supported.
+
+**海外售價策略**: 直接採 `$19.9 / $49.9 / $99.9` 美金定價，用於抵銷 PayPal 的 `8.5%` 手續費與匯損。
 
 ---
 

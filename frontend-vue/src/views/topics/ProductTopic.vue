@@ -12,7 +12,8 @@ import { demoApi } from '@/api/demo'
 import { useLocalized } from '@/composables/useLocalized'
 
 const { t, locale } = useI18n()
-const { getLocalizedField } = useLocalized()
+// L is the 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { getLocalizedField, L } = useLocalized()
 const router = useRouter()
 const uiStore = useUIStore()
 const isZh = computed(() => locale.value.startsWith('zh'))
@@ -153,7 +154,7 @@ function selectDemoImage(item: { id: string; preview?: string; input_params?: an
 function handleFileSelect(files: File[]) {
   // Demo users cannot upload custom images
   if (!canUseCustomInputs.value) {
-    uiStore.showError(isZh.value ? '請訂閱以上傳自訂圖片' : 'Please subscribe to upload custom images')
+    uiStore.showError(L('請訂閱以上傳自訂圖片', 'Please subscribe to upload custom images', 'カスタム画像をアップロードするにはサブスク登録してください', '커스텀 이미지 업로드는 구독해 주세요', 'Suscríbete para subir imágenes personalizadas'))
     return
   }
 
@@ -205,20 +206,20 @@ async function generateScene() {
         const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
         if (demoResultUrl) {
           result.value = demoResultUrl
-          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
           return
         }
       }
 
       // No matching pre-generated result found
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，請訂閱以使用完整功能' : 'This combination is not pre-generated. Subscribe for full features.')
+      uiStore.showInfo(L('此組合尚未生成，請訂閱以使用完整功能', 'This combination is not pre-generated. Subscribe for full features.', 'この組み合わせはまだ生成されていません。フル機能を使うにはサブスク登録してください。', '이 조합은 아직 생성되지 않았습니다. 전체 기능을 사용하려면 구독해 주세요.', 'Esta combinación no está pregenerada. Suscríbete para acceso completo.'))
       return
     }
 
     // For subscribed users, upload and call API
     const imageUrl = await uploadImageFirst()
     if (!imageUrl) {
-      uiStore.showError(isZh.value ? '圖片上傳失敗' : 'Failed to upload image')
+      uiStore.showError(L('圖片上傳失敗', 'Failed to upload image', '画像のアップロードに失敗', '이미지 업로드 실패', 'Falló la subida de la imagen'))
       return
     }
 
@@ -233,7 +234,7 @@ async function generateScene() {
     }
   } catch (error) {
     console.error('Generation failed:', error)
-    uiStore.showError(isZh.value ? '生成失敗' : 'Generation failed')
+    uiStore.showError(L('生成失敗', 'Generation failed', '生成に失敗', '생성 실패', 'Falló la generación'))
   } finally {
     isProcessing.value = false
   }
@@ -251,18 +252,18 @@ async function removeBackground() {
       const demoResultUrl = await resolveDemoTemplateResultUrl(selectedDemoImageId.value)
       if (demoResultUrl) {
         result.value = demoResultUrl
-        uiStore.showSuccess(isZh.value ? '去背成功（示範）' : 'Background removed (Demo)')
+        uiStore.showSuccess(L('去背成功（示範）', 'Background removed (Demo)', '背景削除成功（デモ）', '배경 제거 성공 (데모)', 'Fondo eliminado (demo)'))
         return
       }
 
-      uiStore.showInfo(isZh.value ? '此範例尚未生成，請訂閱以使用完整功能' : 'This example is not pre-generated. Subscribe for full features.')
+      uiStore.showInfo(L('此範例尚未生成，請訂閱以使用完整功能', 'This example is not pre-generated. Subscribe for full features.', 'この例はまだ生成されていません。フル機能を使うにはサブスク登録してください。', '이 예시는 아직 생성되지 않았습니다. 전체 기능을 사용하려면 구독해 주세요.', 'Este ejemplo no está pregenerado. Suscríbete para acceso completo.'))
       return
     }
 
     // First upload the image to get an HTTP URL
     const imageUrl = await uploadImageFirst()
     if (!imageUrl) {
-      uiStore.showError(isZh.value ? '圖片上傳失敗' : 'Failed to upload image')
+      uiStore.showError(L('圖片上傳失敗', 'Failed to upload image', '画像のアップロードに失敗', '이미지 업로드 실패', 'Falló la subida de la imagen'))
       return
     }
 
@@ -276,7 +277,7 @@ async function removeBackground() {
     }
   } catch (error) {
     console.error('Background removal failed:', error)
-    uiStore.showError(isZh.value ? '去背失敗' : 'Background removal failed')
+    uiStore.showError(L('去背失敗', 'Background removal failed', '背景削除に失敗', '배경 제거 실패', 'Falló la eliminación de fondo'))
   } finally {
     isProcessing.value = false
   }
@@ -305,7 +306,7 @@ onMounted(async () => {
           <!-- Subscribe Notice for Demo Users -->
           <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
             <RouterLink to="/pricing" class="hover:underline">
-              {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+              {{ L('訂閱以解鎖更多功能', 'Subscribe to unlock more features', 'サブスク登録で機能を解禁', '구독으로 더 많은 기능 잠금 해제', 'Suscríbete para desbloquear más funciones') }}
             </RouterLink>
           </div>
         </div>
@@ -354,7 +355,7 @@ onMounted(async () => {
             <!-- Demo Images (for demo users) -->
             <div v-if="isDemoUser || demoImages.length > 0" class="mb-4">
               <p class="text-sm text-gray-400 mb-2">
-                {{ isZh ? '選擇產品圖片' : 'Select Product Image' }}
+                {{ L('選擇產品圖片', 'Select Product Image', '商品画像を選択', '제품 이미지 선택', 'Selecciona imagen del producto') }}
               </p>
               <div v-if="isLoadingTemplates" class="flex justify-center py-4">
                 <div class="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full"></div>
@@ -384,7 +385,7 @@ onMounted(async () => {
 
             <!-- Custom Upload (Subscribed Users Only) -->
             <div v-if="canUseCustomInputs">
-              <p class="text-sm text-gray-400 mb-2">{{ isZh ? '或上傳自訂圖片' : 'Or upload custom image' }}</p>
+              <p class="text-sm text-gray-400 mb-2">{{ L('或上傳自訂圖片', 'Or upload custom image', 'またはカスタム画像をアップロード', '또는 커스텀 이미지 업로드', 'O sube imagen personalizada') }}</p>
               <UploadZone
                 accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                 @files-selected="handleFileSelect"
@@ -400,7 +401,7 @@ onMounted(async () => {
                 @click="uploadedImage = null; uploadedFile = null; selectedDemoImageId = null"
                 class="btn-ghost text-sm w-full mt-2"
               >
-                {{ isZh ? '更換圖片' : 'Change Image' }}
+                {{ L('更換圖片', 'Change Image', '画像を変更', '이미지 변경', 'Cambiar imagen') }}
               </button>
             </div>
           </div>
@@ -464,7 +465,7 @@ onMounted(async () => {
 
               <!-- Watermark Notice for Demo -->
               <div v-if="isDemoUser" class="mt-3 text-center text-sm text-yellow-400">
-                {{ isZh ? '示範結果帶有浮水印' : 'Demo result has watermark' }}
+                {{ L('示範結果帶有浮水印', 'Demo result has watermark', 'デモ結果にはウォーターマークが付いています', '데모 결과에는 워터마크가 있습니다', 'El resultado demo tiene marca de agua') }}
               </div>
 
               <div class="mt-4 flex justify-end gap-4">
@@ -479,7 +480,7 @@ onMounted(async () => {
                   to="/pricing"
                   class="btn-primary"
                 >
-                  {{ isZh ? '訂閱以下載' : 'Subscribe to Download' }}
+                  {{ L('訂閱以下載', 'Subscribe to Download', 'サブスクでダウンロード', '구독으로 다운로드', 'Suscríbete para descargar') }}
                 </RouterLink>
               </div>
             </div>

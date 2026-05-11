@@ -4,7 +4,9 @@
 import apiClient from './client'
 
 export interface PatternGenerateRequest {
-  prompt: string
+  prompt?: string
+  prompt_id?: string
+  locale?: string
   style?: string
   width?: number
   height?: number

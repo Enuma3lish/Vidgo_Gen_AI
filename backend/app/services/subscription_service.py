@@ -8,7 +8,7 @@ Handles all subscription-related operations:
 - Credit allocation on subscription
 
 Supports both:
-1. Paddle payment integration (when keys configured)
+1. PayPal payment integration (when keys configured)
 2. Mock mode for development/testing (when keys not configured)
 """
 import logging
@@ -26,7 +26,7 @@ def utc_now() -> datetime:
 
 from app.models.user import User
 from app.models.billing import Plan, Subscription, Order, CreditTransaction, Invoice
-from app.services.paddle_service import get_paddle_service
+from app.services.paypal_service import get_paypal_service
 from app.services.ecpay.client import ECPayClient
 from app.core.config import get_settings
 from app.core.test_plans import can_access_test_pro_plan, is_test_pro_plan
@@ -54,7 +54,7 @@ class SubscriptionService:
     """
 
     def __init__(self):
-        self.paddle = get_paddle_service()
+        self.paypal = get_paypal_service()
 
     # =========================================================================
     # SUBSCRIBE TO PLAN
@@ -66,7 +66,7 @@ class SubscriptionService:
         user_id: UUID,
         plan_id: UUID,
         billing_cycle: str = "monthly",
-        payment_method: str = "paddle",
+        payment_method: str = "paypal",
         skip_payment: bool = False,
         action: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -85,7 +85,7 @@ class SubscriptionService:
             user_id: User's UUID
             plan_id: Plan's UUID
             billing_cycle: 'monthly' or 'yearly'
-            payment_method: 'paddle' or 'ecpay'
+            payment_method: 'paypal' or 'ecpay'
             skip_payment: Skip payment and activate directly (for dev/testing)
             action: Optional admin action flag. Set to "refresh" to explicitly
                 re-grant monthly credits on an already-subscribed plan.
@@ -136,32 +136,41 @@ class SubscriptionService:
             # Downgrade: schedule for end of current period
             return await self._schedule_downgrade(db, user, plan, billing_cycle)
 
-        # For upgrade or new subscription: cancel existing and activate new
-        await self._cancel_existing_subscriptions(db, user_id)
+        # BUG-014: previously we ran `_cancel_existing_subscriptions` here,
+        # BEFORE the user even reached the payment provider. If they then
+        # pressed Back without completing payment, the old subscription was
+        # already gone — the user effectively downgraded by abandoning a
+        # checkout. We now only cancel the existing subscription inside the
+        # zero-payment branch (`_activate_subscription_directly`) and in
+        # `handle_payment_success` after the webhook confirms the new
+        # payment. For checkout paths the cancellation is deferred.
 
         # Determine if we should use explicit direct activation mode.
-        paddle_prices_configured = bool(settings.PADDLE_PRICE_IDS)
+        paypal_plans_configured = bool(settings.PAYPAL_PLAN_IDS)
         use_mock = skip_payment
 
-        if payment_method == 'paddle' and not paddle_prices_configured and not use_mock:
-            logger.error("Paddle checkout requested but PADDLE_PRICE_IDS is not configured")
+        if payment_method == 'paypal' and not paypal_plans_configured and not use_mock:
+            logger.error("PayPal checkout requested but PAYPAL_PLAN_IDS is not configured")
             return {
                 "success": False,
                 "error": "Payment checkout is temporarily unavailable"
             }
 
         if use_mock:
-            # Direct activation without payment
+            # Direct activation without payment — safe to cancel previous sub
+            # immediately because there's no "back from payment" scenario.
             return await self._activate_subscription_directly(
                 db, user, plan, billing_cycle, is_upgrade=(change_type == "upgrade")
             )
         elif payment_method == 'ecpay':
-            # Create ECPay checkout (Taiwan credit card)
+            # Create ECPay checkout (Taiwan credit card). Existing subscription
+            # stays active until ECPay confirms payment via webhook.
             return await self._create_ecpay_checkout(
                 db, user, plan, billing_cycle
             )
         else:
-            # Create Paddle checkout
+            # Create PayPal checkout. Existing subscription stays active
+            # until PayPal webhook confirms payment.
             return await self._create_payment_checkout(
                 db, user, plan, billing_cycle
             )
@@ -295,7 +304,7 @@ class SubscriptionService:
         Activate subscription without payment (mock/dev mode).
 
         This is used when:
-        - Paddle API key is not configured
+        - PayPal API credentials are not configured
         - skip_payment=True (for testing)
         - Free plan subscription
 
@@ -427,16 +436,33 @@ class SubscriptionService:
             logger.error("ECPay credentials not configured")
             return {"success": False, "error": "ECPay payment not configured"}
 
-        # Get price in TWD (use price_twd if available, else convert from USD at ~32 TWD/USD)
+        # Get price in TWD. Plans store the discounted yearly TWD price
+        # directly in `plan.price_yearly` (e.g. 2990 for starter = 10 ×
+        # monthly with the 2-month yearly discount baked in). The earlier
+        # implementation always grabbed `plan.price_twd` (monthly only)
+        # regardless of cycle, so the annual checkout page charged the
+        # monthly amount (BUG-013). Use `price_yearly` for yearly billing
+        # and only fall back to USD-based conversion when neither field is
+        # populated.
         if billing_cycle == "yearly":
-            price_usd = float(plan.price_yearly or plan.price_usd or 0)
+            price_yearly_twd = int(float(plan.price_yearly or 0))
+            if price_yearly_twd > 0:
+                price_twd = price_yearly_twd
+                price_usd = price_yearly_twd / 32.0
+            else:
+                price_usd = float(plan.price_usd or 0)
+                # No yearly TWD on the plan — fall back to monthly × 12,
+                # never the bare monthly amount.
+                base_monthly_twd = int(float(plan.price_twd or 0))
+                if base_monthly_twd > 0:
+                    price_twd = base_monthly_twd * 12
+                else:
+                    price_twd = max(1, int(price_usd * 32))
         else:
             price_usd = float(plan.price_monthly or plan.price_usd or 0)
-
-        # Use TWD price if available, otherwise convert
-        price_twd = int(float(plan.price_twd or 0))
-        if price_twd == 0:
-            price_twd = max(1, int(price_usd * 32))  # Convert USD to TWD
+            price_twd = int(float(plan.price_twd or 0))
+            if price_twd == 0:
+                price_twd = max(1, int(price_usd * 32))
 
         # Create pending subscription record
         now = utc_now()
@@ -527,7 +553,7 @@ class SubscriptionService:
         plan: Plan,
         billing_cycle: str
     ) -> Dict[str, Any]:
-        """Create Paddle checkout session for payment."""
+        """Create PayPal checkout session for payment."""
         # Get price based on billing cycle
         if billing_cycle == "yearly":
             price = float(plan.price_yearly or plan.price_usd or 0)
@@ -561,7 +587,7 @@ class SubscriptionService:
             subscription_id=subscription.id,
             amount=price,
             status="pending",
-            payment_method="paddle",
+            payment_method="paypal",
             payment_data={
                 "plan_id": str(plan.id),
                 "plan_name": plan.name,
@@ -571,55 +597,56 @@ class SubscriptionService:
         db.add(order)
         await db.commit()
 
-        # Resolve Paddle price ID from config mapping
+        # Resolve PayPal Plan ID from config mapping
         import json as _json
         price_map = {}
-        if settings.PADDLE_PRICE_IDS:
+        if settings.PAYPAL_PLAN_IDS:
             try:
-                price_map = _json.loads(settings.PADDLE_PRICE_IDS)
+                price_map = _json.loads(settings.PAYPAL_PLAN_IDS)
             except Exception:
-                logger.error("Failed to parse PADDLE_PRICE_IDS config")
+                logger.error("Failed to parse PAYPAL_PLAN_IDS config")
 
         price_key = f"{plan.slug or plan.name}_{billing_cycle}"
         price_id = price_map.get(price_key)
         if not price_id:
-            logger.error("No Paddle price ID for %s", price_key)
+            logger.error("No PayPal Plan ID for %s", price_key)
             order.status = "failed"
-            order.payment_data["failure_reason"] = "missing_paddle_price_id"
+            order.payment_data["failure_reason"] = "missing_paypal_plan_id"
             await db.commit()
             return {
                 "success": False,
                 "error": "Payment checkout is temporarily unavailable"
             }
 
-        paddle_result = await self.paddle.create_checkout_session(
+        paypal_result = await self.paypal.create_checkout_session(
             user_id=user.id,
             user_email=user.email,
             plan_id=str(plan.id),
             price_id=price_id,
             billing_cycle=billing_cycle,
             success_url=f"{settings.FRONTEND_URL}/subscription/success?order={order.order_number}",
-            cancel_url=f"{settings.FRONTEND_URL}/subscription/cancelled"
+            cancel_url=f"{settings.FRONTEND_URL}/subscription/cancelled",
+            amount_usd=price,
         )
 
-        if not paddle_result.get("success"):
+        if not paypal_result.get("success"):
             # Rollback subscription and order
             subscription.status = "failed"
             order.status = "failed"
             await db.commit()
-            return paddle_result
+            return paypal_result
 
-        # Store Paddle transaction ID
-        order.payment_data["paddle_transaction_id"] = paddle_result.get("transaction_id")
+        # Store PayPal transaction ID
+        order.payment_data["paypal_transaction_id"] = paypal_result.get("transaction_id")
         await db.commit()
 
         return {
             "success": True,
             "subscription_id": str(subscription.id),
             "order_number": order.order_number,
-            "checkout_url": paddle_result.get("checkout_url"),
+            "checkout_url": paypal_result.get("checkout_url"),
             "status": "pending_payment",
-            "is_mock": paddle_result.get("is_mock", False)
+            "is_mock": paypal_result.get("is_mock", False)
         }
 
     # =========================================================================
@@ -725,7 +752,7 @@ class SubscriptionService:
         Cancel user's subscription.
 
         If request_refund=True and within 7 days:
-            - Processes full refund via Paddle
+            - Processes full refund via PayPal
             - Revokes subscription credits
 
         If request_refund=False or past 7 days:
@@ -856,10 +883,10 @@ class SubscriptionService:
             end = subscription.end_date or utc_now()
             user.work_retention_until = end + timedelta(days=WORK_RETENTION_DAYS)
 
-            # If using Paddle, notify them
-            if order and order.payment_data.get("paddle_subscription_id"):
-                await self.paddle.cancel_subscription(
-                    order.payment_data["paddle_subscription_id"],
+            # If using PayPal, notify them
+            if order and order.payment_data.get("paypal_subscription_id"):
+                await self.paypal.cancel_subscription(
+                    order.payment_data["paypal_subscription_id"],
                     effective_from="next_billing_period"
                 )
 
@@ -998,7 +1025,7 @@ class SubscriptionService:
 
         refund_amount = float(order.amount or 0)
 
-        if self.paddle.is_mock:
+        if self.paypal.is_mock:
             # Mock refund
             order.status = "refunded"
             payment_data = dict(order.payment_data or {})
@@ -1063,26 +1090,26 @@ class SubscriptionService:
                 "requires_manual": True,
             }
 
-        # Real Paddle refund
-        transaction_id = order.payment_data.get("paddle_transaction_id")
+        # Real PayPal refund
+        transaction_id = order.payment_data.get("paypal_transaction_id")
         if not transaction_id:
             return {
                 "success": False,
-                "error": "No Paddle transaction ID found"
+                "error": "No PayPal transaction ID found"
             }
 
-        paddle_result = await self.paddle.create_refund(
+        paypal_result = await self.paypal.create_refund(
             transaction_id=transaction_id,
             reason="customer_request",
             amount=None  # Full refund
         )
 
-        if paddle_result.get("success"):
+        if paypal_result.get("success"):
             order.status = "refunded"
             payment_data = dict(order.payment_data or {})
             payment_data["refund"] = {
                 "status": "completed",
-                "paddle_refund_id": paddle_result.get("refund_id"),
+                "paypal_refund_id": paypal_result.get("refund_id"),
                 "amount": refund_amount,
                 "processed_at": utc_now().isoformat()
             }
@@ -1106,10 +1133,10 @@ class SubscriptionService:
             await db.commit()
 
         return {
-            "success": paddle_result.get("success"),
-            "amount": refund_amount if paddle_result.get("success") else 0,
-            "refund_id": paddle_result.get("refund_id"),
-            "error": paddle_result.get("error")
+            "success": paypal_result.get("success"),
+            "amount": refund_amount if paypal_result.get("success") else 0,
+            "refund_id": paypal_result.get("refund_id"),
+            "error": paypal_result.get("error")
         }
 
     async def _revoke_subscription_credits(
@@ -1144,10 +1171,10 @@ class SubscriptionService:
         self,
         db: AsyncSession,
         order_number: str,
-        paddle_data: Dict[str, Any]
+        payment_payload: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Handle successful payment webhook from Paddle.
+        Handle successful payment webhook from PayPal or ECPay.
 
         Activates the subscription and allocates credits.
         """
@@ -1168,7 +1195,7 @@ class SubscriptionService:
         order.status = "paid"
         order.paid_at = utc_now()
         payment_data = dict(order.payment_data or {})
-        payment_data.update(paddle_data)
+        payment_data.update(payment_payload)
         order.payment_data = payment_data
 
         # Activate subscription
@@ -1179,6 +1206,26 @@ class SubscriptionService:
             subscription = result.scalar_one_or_none()
 
             if subscription:
+                # BUG-014 follow-up: cancel any OTHER active subscriptions
+                # for this user now that payment is confirmed. Previously
+                # the subscribe endpoint did this before checkout, so a
+                # user who pressed Back lost their old plan without ever
+                # paying. We now defer the cancellation until here, after
+                # the webhook proves the new payment went through.
+                other_subs_result = await db.execute(
+                    select(Subscription)
+                    .where(
+                        and_(
+                            Subscription.user_id == order.user_id,
+                            Subscription.id != subscription.id,
+                            Subscription.status.in_(["active", "pending"])
+                        )
+                    )
+                )
+                for other in other_subs_result.scalars().all():
+                    other.status = "cancelled"
+                    other.auto_renew = False
+
                 subscription.status = "active"
 
                 # Update user
@@ -1211,7 +1258,7 @@ class SubscriptionService:
             if package_id and (purchased_credits > 0 or bonus_credits > 0):
                 user = await db.get(User, order.user_id)
                 if user:
-                    payment_id = payment_data.get("ecpay_trade_no") or payment_data.get("paddle_transaction_id")
+                    payment_id = payment_data.get("ecpay_trade_no") or payment_data.get("paypal_transaction_id")
                     if purchased_credits > 0:
                         user.purchased_credits = (user.purchased_credits or 0) + purchased_credits
                         transaction = CreditTransaction(
@@ -1242,7 +1289,7 @@ class SubscriptionService:
         # Taiwan e-invoice: auto-issue (or create pending_issue record) right
         # after payment so we stay within the tax period. Runs when Giveme
         # is enabled OR the payment was made via ECPay (Taiwan local
-        # payments). International Paddle payments skip this branch.
+        # payments). International PayPal payments skip this branch.
         # Failures here MUST NOT roll back the payment — log and continue.
         from app.core.config import settings
         is_taiwan_payment = (

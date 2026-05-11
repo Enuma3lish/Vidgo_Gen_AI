@@ -13,7 +13,9 @@
     "dashboard": "Panel",
     "myWorks": "Mis trabajos",
     "tools": "Herramientas",
-    "credits": "Créditos"
+    "credits": "Créditos",
+    "adminDashboard": "Panel de Administrador",
+    "toggleMenu": "Alternar menú"
   },
   "hero": {
     "title": "Crea visuales impresionantes con IA",
@@ -140,7 +142,28 @@
     "shortVideo": {
       "name": "Video Corto",
       "desc": "Crea videos cortos atractivos",
-      "longDesc": "Genera videos cortos cautivadores a partir de descripciones de texto o imágenes"
+      "longDesc": "Genera videos cortos cautivadores a partir de descripciones de texto o imágenes",
+      "aiModelSelection": "Selección de Modelo IA",
+      "chooseAiModel": "Elige diferentes modelos de IA para distintos efectos de generación",
+      "clickToSee": "Haz clic para ver distintos efectos de movimiento",
+      "duration": "Duración",
+      "generatedVideo": "Video Generado",
+      "motionEffect": "Efecto de Movimiento",
+      "motionType": "Tipo de Movimiento",
+      "selectExample": "Selecciona un Ejemplo",
+      "selectExampleHint": "Selecciona un video de ejemplo arriba para ver el resultado",
+      "selectedExample": "Ejemplo Seleccionado",
+      "subscribeAdvanced": "Suscríbete para desbloquear ajustes avanzados y selección de modelo IA",
+      "subscribeToDuration": "Suscríbete para personalizar la duración del video",
+      "subscribeToMotion": "Suscríbete para elegir efectos de movimiento",
+      "subscribersOnly": "Solo Suscriptores",
+      "tryExamples": "Prueba nuestros increíbles ejemplos",
+      "upgradeSettings": "Actualiza para usar ajustes personalizados",
+      "upgradeToModel": "Actualiza para elegir distintos modelos IA",
+      "videoPlaceholder": "El video generado aparecerá aquí",
+      "videoSettings": "Ajustes de Video",
+      "viewPlans": "Ver Planes",
+      "viewResult": "Ver Resultado"
     },
     "common": {
       "uploadImage": "Subir Imagen",
@@ -272,7 +295,11 @@
       },
       "aiVideo": {
         "title": "Creación de Videos IA",
-        "desc": "Genera videos desde imágenes y texto"
+        "desc": "Genera videos desde imágenes y texto",
+        "ctaDesc": "Una imagen entra, sale un video estable con movimiento del producto",
+        "longDesc": "Centrado en Imagen-a-Video para anuncios estables de movimiento de producto a partir de una sola imagen",
+        "styleTransform": "Imagen-a-Video",
+        "stylesDesc": "Sube una imagen para generar contenido en movimiento para IG y TikTok"
       },
       "ecommerce": {
         "title": "Producto y E-commerce",
@@ -384,7 +411,9 @@
     "uploadVideo": "Subir Video",
     "result": "Resultado",
     "previewComingSoon": "Vista previa próximamente",
-    "startFree": "Empezar Gratis"
+    "startFree": "Empezar Gratis",
+    "dropFilesHere": "Suelta los archivos aquí",
+    "insufficient": "(Insuficiente)"
   },
   "auth": {
     "email": "Correo electrónico",
@@ -407,7 +436,32 @@
     "signIn": "Iniciar sesión",
     "promotionCode": "Código promocional",
     "promotionCodePlaceholder": "Ingresa un código para +40 créditos",
-    "promotionCodeHint": "Opcional. Los códigos válidos agregan 40 créditos tras verificar el correo."
+    "promotionCodeHint": "Opcional. Los códigos válidos agregan 40 créditos tras verificar el correo.",
+    "fillAllFields": "Por favor, completa todos los campos",
+    "freeCreditsDesc": "Prueba todas las herramientas de IA al instante",
+    "freeCreditsTitle": "Los nuevos usuarios obtienen 40 créditos gratis",
+    "loginBrandingDesc": "Únete a más de 1M de marcas y creadores. Desde generación de video hasta visuales para e-commerce, todo en un solo lugar.",
+    "loginBrandingTitle": "Crea de forma más inteligente y rápida con IA",
+    "loginFeature1Desc": "Escribe texto, genera videos profesionales",
+    "loginFeature1Name": "Video Corto IA",
+    "loginFeature2Desc": "Muestra ropa con modelos IA y aumenta las conversiones",
+    "loginFeature2Name": "Probador Virtual",
+    "loginFeature3Desc": "Generación inteligente de escenas de productos para e-commerce",
+    "loginFeature3Name": "Escena de Producto",
+    "loginSubtitle2": "Inicia sesión en tu cuenta para seguir creando",
+    "perk1": "40 créditos gratis, sin tarjeta de crédito",
+    "perk2": "6 herramientas de IA, listas para usar",
+    "perk3": "Factura electrónica de Taiwán, conforme a la fiscalidad",
+    "perk4": "Cancela cuando quieras, sin compromiso",
+    "registerBrandingDesc": "Sin tarjeta de crédito. Usa todas las herramientas de IA, incluyendo generación de video, visuales de e-commerce y diseño de interiores.",
+    "registerBrandingTitle": "Comienza tu viaje creativo con IA gratis",
+    "registerBtn": "Empieza gratis — Obtén 40 créditos",
+    "registerSubtitle2": "Obtén 40 créditos gratis al instante, sin tarjeta de crédito",
+    "setPassword": "Establecer Contraseña",
+    "signUpFree": "Regístrate gratis — Obtén 40 créditos",
+    "signingIn": "Iniciando sesión...",
+    "signingUp": "Registrando...",
+    "termsAgree": "Al hacer clic en \"Empieza gratis\" aceptas nuestros Términos y Política de Privacidad"
   },
   "dashboard": {
     "welcome": "Bienvenido de vuelta",
@@ -443,7 +497,75 @@
       "hoursAgo": "Hace {n} horas",
       "yesterday": "Ayer",
       "daysAgo": "Hace {n} días"
-    }
+    },
+    "myWorks": {
+      "clearedAfter": "Se borra después del {date}",
+      "createdAt": "Creado",
+      "createdOn": "Creado: {date}",
+      "creditsUsed": "Créditos usados",
+      "creditsUsedInline": "Créditos usados: {credits}",
+      "creditsUsedShort": "{credits} créditos",
+      "deleteConfirm": "¿Eliminar este trabajo? Esto no se puede deshacer e incluye el registro de generación.",
+      "deleteRecord": "Eliminar registro",
+      "deleting": "Eliminando...",
+      "downloadExpired": "Este archivo ha caducado tras 14 días y no se puede descargar.\nAún puedes ver el registro de generación.",
+      "emptyDesc": "Prueba con otro filtro o crea algo nuevo",
+      "emptyTitle": "Aún no hay trabajos",
+      "expiredDesc": "Este trabajo superó el período de retención de {days} días y se eliminó automáticamente. El registro de generación se conserva de forma permanente.",
+      "expiredTitle": "Archivo caducado",
+      "expiry": {
+        "days": "Caduca en {days} días",
+        "expired": "Caducado",
+        "hours": "Caduca en {hours} h",
+        "soon": "Caduca pronto"
+      },
+      "expiryTime": "Caducó el",
+      "filters": {
+        "ai_avatar": "Avatar IA",
+        "all": "Todo",
+        "background_removal": "Eliminación de fondo",
+        "effect": "Efectos de estilo",
+        "pattern_generate": "Diseño de patrón",
+        "product_scene": "Estudio de Escenas de Productos IA",
+        "room_redesign": "Renderizado de Habitación / Boceto",
+        "short_video": "Video Corto de Producto",
+        "try_on": "Prueba Virtual IA"
+      },
+      "generationRecord": "Registro de Generación",
+      "inputTextTitle": "Texto de entrada / prompt",
+      "loading": "Cargando trabajos...",
+      "mediaExpired": "Archivo caducado",
+      "mediaPolicyCopy": "Los archivos generados por IA (imágenes/videos) se conservan {days} días. Después, las URL se borran automáticamente, pero los registros (herramienta, parámetros, créditos usados, etc.) se conservan de forma permanente. Descarga tu trabajo antes de que caduque.",
+      "mediaPolicyTitle": "Política de Retención de Medios",
+      "mediaRetentionRemaining": "Tiempo restante de retención:",
+      "next": "Siguiente",
+      "params": {
+        "garmentType": "Tipo de prenda",
+        "model": "Modelo",
+        "prompt": "Prompt",
+        "roomType": "Tipo de habitación",
+        "scene": "Escena",
+        "style": "Estilo"
+      },
+      "paramsTitle": "Parámetros de generación",
+      "previous": "Anterior",
+      "publishShort": "Compartir",
+      "publishSocial": "Compartir enlace del trabajo",
+      "record": "Registro",
+      "recordKept": "Registro conservado",
+      "shareExpired": "Este trabajo ha caducado y no se puede compartir.",
+      "showHistory": "Mostrar historial",
+      "socialAccounts": "Enlaces para compartir",
+      "subtitle": "Explora y gestiona tus creaciones IA · Los archivos se conservan 14 días",
+      "title": "Mi Biblioteca de Trabajos",
+      "tool": "Herramienta",
+      "upgradeToPublish": "Actualiza para compartir",
+      "video": "Video",
+      "view": "Ver"
+    },
+    "backToDashboard": "Volver al Panel",
+    "noInvoices": "Aún no hay facturas",
+    "noInvoicesDesc": "Tus facturas aparecerán aquí después de suscribirte."
   },
   "pricing": {
     "title": "Elige tu plan",
@@ -472,7 +594,67 @@
     "creditsPerMonth": "{credits} créditos/mes",
     "ecpayPaymentLabel": "Pago con tarjeta (ECPay)",
     "testPaymentLabel": "Pago de prueba (US$1 / aprox. NT$32)",
-    "paddlePaymentLabel": "Pago internacional (Paddle)",
+    "paypalPaymentLabel": "Pago internacional (PayPal)",
+    "paypalPricingStrategy": "Para pagos internacionales con PayPal, usa precios en USD: Standard US$19.99, Pro US$49.99, Pro+ US$99.99. Compensa las comisiones de PayPal y la diferencia cambiaria.",
+    "creditReference": {
+      "title": "Referencia de conversión (100 créditos)",
+      "headers": {
+        "featureType": "Tipo de función",
+        "creditsPerRun": "Créditos / ejecución",
+        "outputFor100": "Salida con 100 créditos",
+        "useCase": "Casos de uso recomendados"
+      },
+      "rows": {
+        "proLong": {
+          "feature": "Video largo profesional (10s+)",
+          "cost": "35 créditos",
+          "output": "aprox. 3 videos",
+          "useCase": "Calidad cinematográfica, Luma/Kling de alta calidad"
+        },
+        "restore": {
+          "feature": "Restauración / mejora de video",
+          "cost": "15 créditos",
+          "output": "aprox. 6 videos",
+          "useCase": "Renovar material antiguo, pasar de baja resolución a HD"
+        }
+      },
+      "scenarios": {
+        "title": "🚀 ¿Qué puedes hacer con 100 créditos? (Ejemplos)",
+        "intro": "Para que el valor sea más claro para los usuarios, puedes añadir estos paquetes de escenario:",
+        "creatorStarter": "\"Starter de Creadores\": 5 videos cortos estándar + 50 imágenes de portada.",
+        "proDesigner": "\"Diseñador Pro\": 2 videos profesionales en alta calidad + 6 imágenes comerciales.",
+        "imageSprint": "\"Sprint solo imágenes\": 100 imágenes AI estándar."
+      }
+    },
+    "creditPacks": {
+      "sectionBadge": "Compra única de créditos",
+      "title": "Compra créditos directamente, sin suscripción",
+      "subtitle": "Tres paquetes oficiales en TWD para propuestas puntuales, renders de interiores, imágenes de producto por lotes y videos adicionales. Los créditos comprados no se reinician mensualmente.",
+      "checkoutNote": "Pago con ECPay (Taiwán)",
+      "badges": {
+        "bestValue": "Mejor valor",
+        "popular": "Popular"
+      },
+      "bonusPct": "{pct}% de bonificación incluida",
+      "flexibleTopup": "Recarga flexible",
+      "oneTime": "compra única",
+      "creditsUnit": "créditos",
+      "bonusInclusion": "Incluye {bonus} créditos de bonificación",
+      "noBonus": "Sin bonificación, ideal para pruebas ligeras",
+      "featureCrossTool": "Funciona con imágenes, video, interiores y escenas de producto",
+      "featureNoReset": "Los créditos comprados no se reinician mensualmente, ideal para picos de proyecto",
+      "cta": {
+        "buy": "Comprar créditos",
+        "signInToBuy": "Inicia sesión para comprar"
+      },
+      "purchaseFailed": "No se pudo comprar el paquete de créditos. Inténtalo de nuevo.",
+      "orderCreated": "Pedido creado",
+      "fallbackNames": {
+        "light": "Paquete Ligero",
+        "standard": "Paquete Estándar",
+        "heavy": "Paquete Intenso"
+      }
+    },
     "qualityFeature": "Calidad {resolution}",
     "priorityQueueFeature": "Cola prioritaria",
     "apiAccessFeature": "Acceso API",
@@ -511,7 +693,13 @@
         "q": "¿Cuál es la política de reembolso?",
         "a": "Puedes solicitar un reembolso completo dentro de los 7 días de la suscripción. Después de 7 días, aún puedes cancelar pero mantendrás acceso hasta el final de tu período de facturación."
       }
-    }
+    },
+    "confirmCancel": "Sí, cancelar suscripción",
+    "confirmCancelMessage": "Tu suscripción se mantendrá activa hasta el final del período de facturación actual. No se te cobrará de nuevo. Puedes volver a suscribirte cuando quieras.",
+    "confirmCancelTitle": "¿Cancelar suscripción?",
+    "confirmRefund": "Sí, cancelar y reembolsar",
+    "confirmRefundMessage": "Recibirás un reembolso completo. Tu suscripción terminará inmediatamente y los créditos de suscripción serán revocados. Esto no se puede deshacer.",
+    "confirmRefundTitle": "¿Cancelar y solicitar reembolso?"
   },
   "footer": {
     "tagline": "Plataforma Creativa con IA",
@@ -537,7 +725,7 @@
     "tabs": {
       "redesign": "Rediseñar Habitación",
       "generate": "Generar Diseño",
-      "styleTransfer": "Transferir Estilo"
+      "styleTransfer": "Transferencia de Estilo"
     },
     "uploadTitle": "Subir Foto de Habitación",
     "roomType": "Tipo de Habitación",
@@ -1057,6 +1245,254 @@
     "amount": "Monto",
     "status": "Estado",
     "actions": "Acciones",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "addItem": "Añadir Artículo",
+    "buyerCompanyPlaceholder": "Introduce el nombre de la empresa",
+    "citizenCert": "Certificado Ciudadano",
+    "goToList": "Ir a Lista de Facturas",
+    "issueFailed": "Error al crear la factura",
+    "issueSuccess": "Factura creada con éxito",
+    "issuedAt": "Fecha de Emisión",
+    "loveCodeHint": "3-7 dígitos, verifícalos con el Ministerio de Finanzas",
+    "mobileBarcode": "Código de Barras Móvil",
+    "periodError": "Solo se pueden anular facturas del período fiscal actual",
+    "receiptMethod": "Método de Recepción",
+    "selectOrderFirst": "Selecciona un pedido de la lista para emitir una factura",
+    "taxIdError": "El ID fiscal debe tener exactamente 8 dígitos",
+    "type": "Tipo",
+    "voidFailed": "Anulación fallida",
+    "voidReasonPlaceholder": "Introduce el motivo de la anulación",
+    "voidSuccess": "Factura anulada"
+  },
+  "upscale": {
+    "title": "Ampliación HD de imagen",
+    "subtitle": "Amplía imágenes a 2x o 4x de resolución con IA",
+    "demoCta": "Suscríbete para subir tus propias imágenes y descargar resultados HD",
+    "tryDemo": "Prueba una imagen de demostración",
+    "uploadOwn": "O sube tu propia imagen",
+    "original": "Original",
+    "scaleFactor": "Factor de ampliación",
+    "processing": "Ampliando...",
+    "action": "Ampliar {scale}x",
+    "loading": "Ampliando imagen...",
+    "resultLabel": "Resultado ampliado ({scale}x)",
+    "downloadHd": "Descargar imagen HD",
+    "subscribeDownload": "Suscríbete para descargar HD",
+    "placeholderDemo": "Elige una imagen demo y haz clic en Ampliar",
+    "placeholderPaid": "Sube una imagen para ampliar",
+    "warnings": {
+      "selectImage": "Selecciona o sube una imagen primero"
+    },
+    "errors": {
+      "generic": "La ampliación falló"
+    },
+    "toasts": {
+      "success": "¡Imagen ampliada {scale}x con éxito!",
+      "demoReady": "Vista previa demo lista. Suscríbete para ampliar tus propias imágenes a {scale}x HD."
+    },
+    "demoLabels": {
+      "landscape": "Paisaje",
+      "forest": "Bosque",
+      "interior": "Interior",
+      "ocean": "Océano"
+    }
+  },
+  "gallery": {
+    "categories": {
+      "ai_avatar": "Avatar IA",
+      "all": "Todos los Ejemplos",
+      "background_removal": "Eliminación de fondo",
+      "effect": "Efectos de Imagen",
+      "pattern_generate": "Generar Patrón",
+      "product_scene": "Escena de Producto",
+      "room_redesign": "Rediseño de Habitación",
+      "short_video": "Video Corto",
+      "try_on": "Prueba Virtual"
+    },
+    "clearFilters": "Borrar filtros",
+    "ctaButtonPrimary": "Regístrate Gratis",
+    "ctaButtonSecondary": "Ver Precios",
+    "ctaSubtitle": "Suscríbete para subir tus propias imágenes y generar resultados personalizados sin marca de agua.",
+    "ctaTitle": "¿Listo para crear el tuyo?",
+    "filterByIndustry": "Filtrar por Industria",
+    "filterByTool": "Filtrar por Herramienta",
+    "industries": {
+      "all": "Todas las Industrias",
+      "ecommerce": "E-commerce",
+      "fashion": "Moda y Ropa",
+      "food_beverage": "Alimentos y Bebidas",
+      "interior_design": "Diseño de Interiores",
+      "marketing": "Marketing y Publicidad",
+      "small_business": "Pequeña Empresa"
+    },
+    "noResults": "No se encontraron ejemplos",
+    "noResultsHint": "Prueba a cambiar los filtros o los términos de búsqueda",
+    "searchPlaceholder": "Busca ejemplos por palabra clave, estilo o industria...",
+    "showingResults": "Mostrando {count} de {total} ejemplos",
+    "subtitle": "Explora ideas de fotografía de producto generadas por IA. Los usuarios gratuitos pueden ver ejemplos curados; suscríbete para subir tus propios productos y generar escenas personalizadas.",
+    "title": "Biblioteca de Inspiración de Fotografía de Producto",
+    "tryThis": "Prueba Este Ejemplo",
+    "video": "Video",
+    "viewAllExamples": "Ver todos los ejemplos"
+  },
+  "referrals": {
+    "applyCode": {
+      "description": "Introduce un código para añadir 20 créditos extra a tu cuenta.",
+      "error": "No se pudo aplicar el código. Inténtalo de nuevo.",
+      "placeholder": "Introduce el código de referido (ej. ABC12345)",
+      "submit": "Aplicar",
+      "title": "¿Tienes un Código de Referido?"
+    },
+    "copied": "¡Copiado!",
+    "copy": "Copiar",
+    "howItWorks": {
+      "step1": "Comparte tu enlace de referido único con amigos o en redes sociales.",
+      "step2": "Tu amigo se registra usando tu enlace y verifica su correo.",
+      "step3": "¡Tú recibes 50 créditos extra y tu amigo recibe 20 créditos de bienvenida!",
+      "title": "Cómo Funciona"
+    },
+    "leaderboard": {
+      "empty": "Aún no hay referidos. ¡Sé el primero!",
+      "referrals": "referidos",
+      "title": "Mejores Recomendadores"
+    },
+    "linkDescription": "Comparte este enlace para invitar amigos. Ganas 50 créditos por cada persona que se registre.",
+    "share": {
+      "copyLink": "Copiar Enlace"
+    },
+    "shareText": "¡Únete a VidGo AI y obtén 20 créditos gratis al registrarte!",
+    "stats": {
+      "creditsEarned": "Créditos Ganados",
+      "invited": "Personas Invitadas",
+      "none": "—",
+      "referredBy": "Invitado Por"
+    },
+    "subtitle": "Invita amigos y gana créditos gratis",
+    "title": "Programa de Referidos",
+    "yourLink": "Tu Enlace de Referido"
+  },
+  "socialShare": {
+    "caption": "Pie de foto",
+    "captionAndMediaReady": "Pie de foto copiado y archivo descargado. Pega y sube en {platform}.",
+    "captionCopied": "Pie de foto copiado.",
+    "captionPlaceholder": "Añade un pie de foto para la publicación...",
+    "charCount": "{count} caracteres",
+    "close": "Cerrar",
+    "copied": "Enlace copiado.",
+    "copyBeforeOpen": "Enlace copiado. Pégalo después de que se abra {platform}.",
+    "copyCaption": "Copiar pie de foto",
+    "copyFailed": "No se pudo copiar el enlace.",
+    "copyFirstPlatforms": "Copia el enlace y luego abre la plataforma",
+    "copyForAnyApp": "Copiar para cualquier app",
+    "copyLink": "Copiar enlace",
+    "defaultCaptionGeneric": "Creado con VidGo AI #AICreation #VidGoAI",
+    "defaultCaptionTool": "Creado con VidGo AI {tool} #AICreation #VidGoAI",
+    "directPlatforms": "Abrir Compositor de Compartir",
+    "downloadImage": "Descargar imagen",
+    "downloadVideo": "Descargar video",
+    "fallbackCaptionAndDownload": "Pie de foto copiado y archivo descargado. Pega en cualquier aplicación.",
+    "imageUnsupported": "Solo video",
+    "mediaDownloaded": "Archivo descargado.",
+    "nativeFallbackCopied": "Enlace copiado. Pégalo en cualquier aplicación.",
+    "nativeShare": "Compartir con el dispositivo",
+    "nativeShareWithImage": "Compartir imagen a apps",
+    "openPlatform": "Abrir plataforma",
+    "openShare": "Abrir compartir",
+    "popupBlocked": "El navegador bloqueó la página de la plataforma.",
+    "subtitle": "Crea un enlace del trabajo y abre la página para compartir en la plataforma. No es necesario conectar cuentas sociales.",
+    "title": "Compartir Enlace del Trabajo",
+    "videoUnsupported": "Video no soportado",
+    "workLink": "Enlace del trabajo"
+  },
+  "subscription": {
+    "backToPricing": "Volver a Precios",
+    "goNow": "Ir ahora",
+    "goToDashboard": "Ir al Panel",
+    "mockComplete": "Pago de demostración completado",
+    "paymentCancelled": "Pago cancelado",
+    "paymentCancelledDesc": "Cancelaste el pago. No se realizó ningún cargo.",
+    "paymentSuccess": "Pago exitoso",
+    "paymentSuccessDesc": "Tu suscripción está ahora activa. Puedes empezar a usar todas las funciones.",
+    "redirecting": "Redirigiendo al panel...",
+    "viewPlans": "Ver planes"
+  },
+  "upload": {
+    "credits": "créditos",
+    "download": "Descargar",
+    "downloading": "Descargando...",
+    "dropzone": {
+      "hint": "JPEG, PNG, WebP — máx. 20 MB",
+      "title": "Arrastra tu imagen aquí o haz clic para buscar"
+    },
+    "gate": {
+      "cta": "Ver Planes",
+      "description": "Sube tus propias imágenes y obtén resultados generados por IA sin marca de agua. Suscríbete para desbloquear.",
+      "title": "Función para Suscriptores"
+    },
+    "generate": "Generar",
+    "generating": "Generando...",
+    "promptLabel": "Describe lo que quieres (opcional)",
+    "promptPlaceholder": "ej. estilo anime, colores vibrantes...",
+    "resultReady": "Resultado Listo",
+    "selectModel": "Seleccionar Modelo IA",
+    "startOver": "Empezar de Nuevo",
+    "uploading": "Subiendo..."
+  },
+  "howTo": {
+    "heading": "Cómo usar",
+    "formatTitle": "Requisitos de carga",
+    "reuploadNote": "Si el formato no es compatible, se te pedirá volver a subir el archivo en un formato compatible.",
+    "background_removal": {
+      "step1": "Elige una de las imágenes de demostración o sube tu propia foto.",
+      "step2": "Haz clic en «Eliminar fondo» para obtener un PNG transparente.",
+      "step3": "Descarga el resultado o envíalo directamente a otras herramientas."
+    },
+    "product_scene": {
+      "step1": "Selecciona o sube una foto de producto limpia (fondo blanco o transparente funciona mejor).",
+      "step2": "Elige un preajuste de escena o descríbela tú mismo (suscriptores).",
+      "step3": "Haz clic en «Generar» para obtener una foto de escena lista para e-commerce."
+    },
+    "try_on": {
+      "step1": "Sube una foto clara de la prenda (mejor si es plana o de la ficha de producto).",
+      "step2": "Elige un modelo predeterminado o sube una foto de modelo de cuerpo entero.",
+      "step3": "Haz clic en «Probar» para ver la prenda en el modelo elegido."
+    },
+    "room_redesign": {
+      "step1": "Sube una foto de la habitación o usa una de las habitaciones de demostración a continuación.",
+      "step2": "Elige el tipo de habitación, el estilo de diseño y notas adicionales (opcional).",
+      "step3": "Haz clic en «Generar» para obtener una imagen 2D rediseñada; los suscriptores también pueden crear un recorrido 3D."
+    },
+    "short_video": {
+      "v2v": {
+        "step1": "Sube un video MP4, WebM o MOV de hasta 100 MB.",
+        "step2": "Elige una transformación de estilo del catálogo.",
+        "step3": "Haz clic en «Generar» para aplicar la transformación de estilo IA."
+      },
+      "i2v": {
+        "step1": "Elige una imagen de demostración o sube tu propia imagen de producto o escena.",
+        "step2": "Elige un movimiento o efecto del catálogo.",
+        "step3": "Haz clic en «Generar» para crear un videoclip corto."
+      }
+    },
+    "ai_avatar": {
+      "step1": "Elige un avatar predeterminado o sube tu propio retrato frontal.",
+      "step2": "Elige una categoría de guion o pega el tuyo.",
+      "step3": "Elige voz e idioma, luego haz clic en «Generar Video»."
+    },
+    "image_translator": {
+      "step1": "Elige una imagen de demostración o sube tu póster, packshot o banner.",
+      "step2": "Elige el idioma de origen y el de destino.",
+      "step3": "Haz clic en «Traducir» para mantener el diseño y reemplazar el texto."
+    },
+    "video_dubbing": {
+      "step1": "Elige un video de muestra para previsualizar el flujo de doblaje.",
+      "step2": "Los suscriptores pueden subir sus propios MP4 / WebM / MOV.",
+      "step3": "Elige idioma de origen y destino, y haz clic en «Generar doblaje»."
+    },
+    "upscale": {
+      "step1": "Elige una imagen de demostración o sube tu propia imagen de baja resolución.",
+      "step2": "Elige el factor de escala 2x o 4x.",
+      "step3": "Haz clic en «Ampliar» y descarga el resultado en alta definición."
+    }
   }
 }

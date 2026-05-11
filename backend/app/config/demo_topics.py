@@ -554,6 +554,35 @@ AVATAR_TOPICS: List[TopicDefinition] = [
         },
         tags=["avatar", "lifestyle", "chinese", "influencer", "taiwanese"]
     ),
+    # Added to balance gender distribution in the AI Avatar gallery (was 5F/3M).
+    TopicDefinition(
+        id="fitness_presenter_zh_male",
+        category=TopicCategory.AVATAR,
+        output_type=OutputType.VIDEO,
+        subject="台灣健身教練",
+        mood="活力, 熱血, 鼓舞人心",
+        image_prompt_template=ASIAN_AVATAR_IMAGES["male_young"],
+        language="zh-TW",
+        metadata={
+            "script": "嗨大家好！我是你的健身教練。今天教你三個在家就能做的核心訓練，每天五分鐘，一個月看見改變！跟我一起動起來！",
+            "avatar_url": ASIAN_AVATAR_IMAGES["male_young"]
+        },
+        tags=["avatar", "fitness", "chinese", "coach", "taiwanese"]
+    ),
+    TopicDefinition(
+        id="finance_presenter_en_male",
+        category=TopicCategory.AVATAR,
+        output_type=OutputType.VIDEO,
+        subject="Asian male financial advisor",
+        mood="trustworthy, calm, knowledgeable",
+        image_prompt_template=ASIAN_AVATAR_IMAGES["male_business"],
+        language="en",
+        metadata={
+            "script": "Smart investing is not about timing the market—it is about time in the market. Let me show you three simple strategies to grow your savings over the next ten years.",
+            "avatar_url": ASIAN_AVATAR_IMAGES["male_business"]
+        },
+        tags=["avatar", "finance", "english", "advisor", "asian"]
+    ),
 ]
 
 

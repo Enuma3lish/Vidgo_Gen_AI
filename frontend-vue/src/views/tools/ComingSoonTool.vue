@@ -2,19 +2,22 @@
 import { computed } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useLocalized } from '@/composables'
 
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
 
 const isZh = computed(() => locale.value.startsWith('zh'))
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 const titleKey = computed(() => String(route.meta.titleKey || 'nav.tools'))
 const descKey = computed(() => String(route.meta.descKey || 'lp.sec3Sub'))
 const suggestedRoute = computed(() => String(route.meta.suggestedRoute || '/'))
 const suggestedLabelKey = computed(() => route.meta.suggestedLabelKey ? String(route.meta.suggestedLabelKey) : '')
 const suggestedLabel = computed(() => suggestedLabelKey.value
   ? t(suggestedLabelKey.value)
-  : (isZh.value ? '先使用相近工具' : 'Try a related tool'))
+  : L('先使用相近工具', 'Try a related tool', '関連ツールを試す', '관련 도구 사용해 보기', 'Prueba una herramienta similar'))
 </script>
 
 <template>
@@ -32,7 +35,7 @@ const suggestedLabel = computed(() => suggestedLabelKey.value
       </button>
 
       <section class="coming-panel">
-        <span class="coming-pill">{{ isZh ? '準備中' : 'Coming soon' }}</span>
+        <span class="coming-pill">{{ L('準備中', 'Coming soon', '準備中', '준비 중', 'Próximamente') }}</span>
         <h1>{{ t(titleKey) }}</h1>
         <p>{{ t(descKey) }}</p>
         <div class="coming-actions">
@@ -40,7 +43,7 @@ const suggestedLabel = computed(() => suggestedLabelKey.value
             {{ suggestedLabel }}
           </RouterLink>
           <RouterLink to="/" class="secondary-action">
-            {{ isZh ? '回到工具總覽' : 'Back to tools' }}
+            {{ L('回到工具總覽', 'Back to tools', 'ツール一覧に戻る', '도구 목록으로 돌아가기', 'Volver a herramientas') }}
           </RouterLink>
         </div>
       </section>

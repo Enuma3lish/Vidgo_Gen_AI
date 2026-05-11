@@ -124,6 +124,8 @@ class PolloMCPProvider(VideoGenerationProvider):
         }
         if params.get("prompt"):
             arguments["prompt"] = params["prompt"]
+        if params.get("negative_prompt"):
+            arguments["negativePrompt"] = params["negative_prompt"]
         if params.get("duration"):
             arguments["length"] = params["duration"]
         if params.get("aspect_ratio"):

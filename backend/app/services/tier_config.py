@@ -6,11 +6,12 @@ This module provides:
 2. get_credit_cost() - Dynamic credit cost lookup by tool + user plan
 3. get_user_tier() - Determine user's tier string from their plan
 
-Pricing Reference (from spec):
-- 文生圖 (Flux) / 去背: 20 credits (default model, Basic+)
-- 圖生影片 (Wan 5s) / AI 試穿: 250 credits (wan_pro, Pro+)
-- AI 虛擬人物 / 唇形同步: 300 credits (gemini_pro, Pro+)
-- 超高畫質影片 (Sora): 2,500 credits (premium+, future)
+Pricing Reference (VidGo 2.0 Credit Spec — 2026-05):
+- 標準圖片 (SD/SDXL/Flux):              1  credit  (~$0.5  cost)
+- 高畫質圖片 (MJ/DALL-E/Midjourney):    3  credits (~$1.5  cost, range 3-5)
+- 標準影片 (5-10s, 5s/720p):            10 credits (~$5    cost)
+- 專業影片 (Luma/Kling, 10s/4K):        30 credits (~$15   cost, range 30-50)
+- 影片擴展/修補 (Extend):               15 credits (~$7.5  cost)
 """
 from typing import Optional
 
@@ -75,37 +76,46 @@ PAID_TIER = {
 # ─────────────────────────────────────────────────────────────────────────────
 # CREDIT COST TABLE (tool_type → model_type → credits)
 #
-# Matches spec Section 三「AI 工具扣點對照表」
-# PiAPI 漲價時只需改此表，前端月費不變。
+# VidGo 2.0 spec (2026-05): point-based pricing aligned with internal cost.
+# Standard image=1, High-quality image=3, Standard video=10, Pro video=30,
+# Video extend/repair=15. PiAPI cost shifts → adjust this table only.
 # ─────────────────────────────────────────────────────────────────────────────
 
 CREDIT_COSTS = {
-    # Static generation — default model (Basic+)
-    "text_to_image":        {"default": 20},
-    "background_removal":   {"default": 20},
-    "product_scene":        {"default": 20},
-    "pattern_gen":          {"default": 20},
-    "room_redesign":        {"default": 20},
-    "i2i":                  {"default": 20},
-    "style_transfer":       {"default": 20},
-    "upscale":              {"default": 20},
+    # Standard image (SD/SDXL/Flux) = 1, High-quality (MJ/DALL-E) = 3
+    "text_to_image":        {"default": 1,  "midjourney": 3, "wan_pro": 3},
+    "background_removal":   {"default": 1},
+    "product_scene":        {"default": 1,  "wan_pro": 3},
+    "pattern_gen":          {"default": 1,  "wan_pro": 3},
+    "pattern_generate":     {"default": 1,  "wan_pro": 3},
+    "room_redesign":        {"default": 1,  "wan_pro": 3},
+    "i2i":                  {"default": 1,  "wan_pro": 3},
+    "style_transfer":       {"default": 1,  "wan_pro": 3},
+    "upscale":              {"default": 1},
+    "image_translator":     {"default": 1,  "wan_pro": 3},
 
-    # Dynamic generation — wan_pro / gemini_pro (Pro+)
-    "image_to_video":       {"default": 50,  "wan_pro": 250},
-    "text_to_video":        {"default": 50,  "wan_pro": 250},
-    "short_video":          {"default": 50,  "wan_pro": 250},
-    "video_style_transfer": {"default": 50,  "wan_pro": 250},
-    "ai_try_on":            {"default": 50,  "wan_pro": 250, "gemini_pro": 250},
-    "interior_design":      {"default": 20,  "wan_pro": 250},
-    "effect":               {"default": 20,  "wan_pro": 250},
+    # Standard video (5-10s) = 10, Pro video (Luma/Kling 10s/4K) = 30
+    "image_to_video":       {"default": 10, "wan_pro": 30},
+    "text_to_video":        {"default": 10, "wan_pro": 30},
+    "short_video":          {"default": 10, "wan_pro": 30},
+    "video_style_transfer": {"default": 10, "wan_pro": 30},
+    "ai_try_on":            {"default": 10, "wan_pro": 30, "gemini_pro": 30},
+    "try_on":               {"default": 10, "wan_pro": 30, "gemini_pro": 30},
+    "interior_design":      {"default": 1,  "wan_pro": 3},
+    "effect":               {"default": 1,  "wan_pro": 3},
 
-    # Avatar / lip-sync — gemini_pro (Pro+)
-    "ai_avatar":            {"gemini_pro": 300},
-    "avatar":               {"default": 300, "gemini_pro": 300},
-    "lip_sync":             {"gemini_pro": 300},
+    # Avatar / lip-sync — pro video tier
+    "ai_avatar":            {"default": 30, "gemini_pro": 30},
+    "avatar":               {"default": 30, "gemini_pro": 30},
+    "lip_sync":             {"default": 30, "gemini_pro": 30},
+    "video_dubbing":        {"default": 30, "gemini_pro": 30},
 
-    # Premium — future expansion
-    "ultra_hd_video":       {"sora": 2500},
+    # Video extend / repair = 15
+    "video_extend":         {"default": 15},
+    "video_transform":      {"default": 15},
+
+    # Premium — future expansion (Sora-tier)
+    "ultra_hd_video":       {"sora": 50},
 }
 
 # Map plan names → tier strings
@@ -181,8 +191,8 @@ def get_credit_cost(tool_type: str, user=None, model_type: Optional[str] = None)
     """
     costs = CREDIT_COSTS.get(tool_type)
     if not costs:
-        # Fallback: 20 credits for unknown tools
-        return 20
+        # Fallback for unknown tools (VidGo 2.0: standard-video tier)
+        return 10
 
     # If explicit model_type provided, use it
     if model_type and model_type in costs:
@@ -194,7 +204,7 @@ def get_credit_cost(tool_type: str, user=None, model_type: Optional[str] = None)
         allowed = TIER_ALLOWED_MODELS.get(tier, ["default"])
 
         # Pick the most expensive allowed model (user pays for their tier's capability)
-        best_cost = costs.get("default", 20)
+        best_cost = costs.get("default", 10)
         for model in allowed:
             if model in costs:
                 best_cost = max(best_cost, costs[model])

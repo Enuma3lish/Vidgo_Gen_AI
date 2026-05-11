@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode } from '@/composables'
+import { useDemoMode, usePromptLibrary, useLocalized } from '@/composables'
 import { toolsApi, uploadsApi } from '@/api'
 import type { ModelInfo, UploadStatusResponse } from '@/api'
 // PRESET-ONLY MODE: UploadZone removed - all users use presets
@@ -30,6 +30,8 @@ const STATIC_PRODUCT_IMAGES: Record<string, string> = {
 }
 
 const isZh = computed(() => locale.value.startsWith('zh'))
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 // Demo mode
 const {
@@ -64,12 +66,19 @@ const productModels = ref<ModelInfo[]>([])
 const selectedProductModel = ref('default')
 const subscriberUploadId = ref<string | null>(null)
 const customScenePrompt = computed(() => prompt.value.trim().slice(0, CUSTOM_PROMPT_MAX_CHARS))
-const customPromptLength = computed(() => prompt.value.length)
+// Curated prompt library — users pick from a locked dropdown (no free-form
+// text). Re-run scripts/generate_prompt_library.py to refresh.
+const { options: promptOptions, promptFor: promptTextFor } = usePromptLibrary('product_scene')
+// Track which prompt the user picked by ID (locale-stable). The displayed
+// `prompt` text is re-derived from the current locale via the watcher below,
+// so toggling EN/ZH instantly swaps the visible prompt instead of stranding
+// the user with the previous language.
+const selectedPromptId = ref('')
 const pendingTitle = computed(() => isZh.value
   ? '我正在產生所需的圖片，這可能需要一些時間，請稍後再回來查看是否已完成。'
   : 'I am generating the requested image. This may take a little time, so please check back shortly.')
-const pendingDetail = computed(() => isZh.value ? '正在生成商品情境...' : 'Generating product scene...')
-const pendingDuration = computed(() => isZh.value ? '需要 1 至 2 分鐘' : 'Usually takes 1 to 2 minutes')
+const pendingDetail = computed(() => L('正在生成商品情境...', 'Generating product scene...', '商品シーンを生成中...', '제품 씬 생성 중...', 'Generando escena del producto...'))
+const pendingDuration = computed(() => L('需要 1 至 2 分鐘', 'Usually takes 1 to 2 minutes', '通常1〜2分かかります', '보통 1-2분 소요', 'Suele tardar 1-2 minutos'))
 
 // Style templates (curated prompts hidden from user)
 interface StyleTemplateItem {
@@ -92,9 +101,9 @@ const sceneTemplates = computed(() => [
   { id: 'elegant', icon: '✨', name: t('tools.scenes.elegant.name'), desc: t('tools.scenes.elegant.desc') },
   { id: 'minimal', icon: '⬜', name: t('tools.scenes.minimal.name'), desc: t('tools.scenes.minimal.desc') },
   { id: 'lifestyle', icon: '🏠', name: t('tools.scenes.lifestyle.name'), desc: t('tools.scenes.lifestyle.desc') },
-  { id: 'urban', icon: '🏙️', name: isZh.value ? '都市' : 'Urban', desc: isZh.value ? '現代都市背景' : 'Modern city backdrop' },
-  { id: 'seasonal', icon: '🍂', name: isZh.value ? '季節' : 'Seasonal', desc: isZh.value ? '季節性背景' : 'Seasonal backgrounds' },
-  { id: 'holiday', icon: '🎄', name: isZh.value ? '節日' : 'Holiday', desc: isZh.value ? '節日慶典氛圍' : 'Festive celebration' },
+  { id: 'urban', icon: '🏙️', name: L('都市', 'Urban', '都市', '도시', 'Urbano'), desc: L('現代都市背景', 'Modern city backdrop', '現代都市の背景', '현대 도시 배경', 'Fondo urbano moderno') },
+  { id: 'seasonal', icon: '🍂', name: L('季節', 'Seasonal', '季節', '계절', 'Estacional'), desc: L('季節性背景', 'Seasonal backgrounds', '季節の背景', '계절 배경', 'Fondos estacionales') },
+  { id: 'holiday', icon: '🎄', name: L('節日', 'Holiday', 'ホリデー', '휴일', 'Festivo'), desc: L('節日慶典氛圍', 'Festive celebration', 'ホリデーの雰囲気', '축제 분위기', 'Ambiente festivo') },
   { id: 'custom', icon: '🎨', name: t('tools.scenes.custom.name'), desc: t('tools.scenes.custom.desc'), proOnly: true }
 ])
 
@@ -270,7 +279,7 @@ function handleUploadedProductFile(file: File) {
 
 function selectScene(scene: { id: string; proOnly?: boolean }) {
   if (scene.proOnly && !canUseCustomInputs.value) {
-    uiStore.showError(isZh.value ? '請訂閱以使用此功能' : 'Please subscribe to use this feature')
+    uiStore.showError(L('請訂閱以使用此功能', 'Please subscribe to use this feature', 'この機能を使うにはサブスク登録してください', '이 기능을 사용하려면 구독해 주세요', 'Suscríbete para usar esta función'))
     return
   }
 
@@ -291,6 +300,12 @@ function selectStyleTemplate(templateId: string) {
   subscriberUploadId.value = null
   demoEmptyState.value = false
 }
+
+// Re-derive prompt text whenever the user picks a new preset OR switches
+// language; keeps the textarea/preview in sync with the active locale.
+watch([selectedPromptId, locale], () => {
+  prompt.value = selectedPromptId.value ? promptTextFor(selectedPromptId.value) : ''
+}, { immediate: false })
 
 watch(prompt, (value) => {
   if (value.length > CUSTOM_PROMPT_MAX_CHARS) {
@@ -358,7 +373,7 @@ async function downloadSubscriberResult() {
     URL.revokeObjectURL(objectUrl)
   } catch (error: any) {
     const detail = error?.response?.data?.detail || error?.message || ''
-    uiStore.showError(detail || (isZh.value ? '下載失敗，請稍後再試' : 'Download failed. Please try again.'))
+    uiStore.showError(detail || L('下載失敗，請稍後再試', 'Download failed. Please try again.', 'ダウンロードに失敗しました。後ほど再試行してください。', '다운로드에 실패했습니다. 나중에 다시 시도해 주세요.', 'Falló la descarga. Inténtalo de nuevo.'))
   }
 }
 
@@ -373,14 +388,14 @@ async function generateSubscriberUploadScene(): Promise<boolean> {
   )
   const status = await waitForUploadCompletion(upload.upload_id)
   if (status.status === 'pending' || status.status === 'processing') {
-    throw new Error(isZh.value ? '生成時間較長，已在背景繼續處理。請稍後到作品庫查看結果。' : 'Generation is taking longer than expected and is still processing in the background. Please check your library later.')
+    throw new Error(L('生成時間較長，已在背景繼續處理。請稍後到作品庫查看結果。', 'Generation is taking longer than expected and is still processing in the background. Please check your library later.', '生成に時間がかかっており、バックグラウンドで処理を継続中です。後ほど作品ライブラリで確認してください。', '생성에 시간이 더 걸리고 있으며 백그라운드에서 처리 중입니다. 나중에 작품 라이브러리에서 확인해 주세요.', 'La generación tarda más de lo esperado y sigue procesando en segundo plano. Revisa tu biblioteca más tarde.'))
   }
   if (status.status === 'failed') {
     throw new Error(status.error_message || 'Generation failed')
   }
   const resultUrl = status.result_url || status.result_video_url
   if (!resultUrl) {
-    throw new Error(isZh.value ? '生成完成但沒有返回結果' : 'Generation completed without a result URL')
+    throw new Error(L('生成完成但沒有返回結果', 'Generation completed without a result URL', '生成は完了しましたが結果URLが返されませんでした', '생성은 완료되었으나 결과 URL이 반환되지 않았습니다', 'Generación completada sin URL de resultado'))
   }
 
   resultImages.value = [resultUrl]
@@ -395,12 +410,12 @@ async function generateScenes() {
 
   // Demo users cannot use custom scene
   if (isDemoUser.value && selectedScene.value === 'custom') {
-    uiStore.showError(isZh.value ? '請訂閱以使用自訂場景' : 'Please subscribe to use custom scene')
+    uiStore.showError(L('請訂閱以使用自訂場景', 'Please subscribe to use custom scene', 'カスタムシーンを使うにはサブスク登録してください', '커스텀 씬을 사용하려면 구독해 주세요', 'Suscríbete para usar escena personalizada'))
     return
   }
 
   if (selectedScene.value === 'custom' && !selectedTemplateId.value && !customScenePrompt.value) {
-    uiStore.showError(isZh.value ? '請輸入 300 字內的自訂場景描述' : 'Please enter a custom scene prompt up to 300 characters')
+    uiStore.showError(L('請輸入 300 字內的自訂場景描述', 'Please enter a custom scene prompt up to 300 characters', '300文字以内のカスタムシーン説明を入力してください', '300자 이내의 커스텀 씬 설명을 입력해 주세요', 'Introduce un prompt de hasta 300 caracteres'))
     return
   }
 
@@ -419,7 +434,7 @@ async function generateScenes() {
         const demoResultUrl = await resolveDemoTemplateResultUrl(preGeneratedTemplateId)
         if (demoResultUrl) {
           resultImages.value = [demoResultUrl]
-          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
           return
         }
       }
@@ -439,7 +454,7 @@ async function generateScenes() {
         if (demoResultUrl) {
           resultImages.value = [demoResultUrl]
           preGeneratedTemplateIds.value[currentResultKey.value] = template.id
-          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
           return
         }
       }
@@ -447,7 +462,7 @@ async function generateScenes() {
       // VG-BUG-010 fix: no cached preset for this combo — call the backend
       // cache-through endpoint to generate one on demand via real provider.
       // The result is persisted to Material DB so the next click hits cache.
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成...' : 'Generating in real-time...')
+      uiStore.showInfo(L('此組合尚未生成，正在為您即時生成...', 'Generating in real-time...', 'リアルタイムで生成中...', '실시간으로 생성 중...', 'Generando en tiempo real...'))
       const selectedProductForGen = defaultProducts.value.find(p => p.id === selectedProductId.value)
       // Match the cache key the /tools/product-scene endpoint uses: pin the
       // effect_prompt to the full scene template prompt so both entry points
@@ -460,7 +475,7 @@ async function generateScenes() {
       })
       if (onDemandUrl) {
         resultImages.value = [onDemandUrl]
-        uiStore.showSuccess(isZh.value ? '生成成功' : 'Generated successfully')
+        uiStore.showSuccess(L('生成成功', 'Generated successfully', '生成成功', '생성 성공', 'Generado correctamente'))
         return
       }
 
@@ -468,7 +483,7 @@ async function generateScenes() {
       // backend cache-through doesn't support this tool yet, or all
       // providers are down).
       demoEmptyState.value = true
-      uiStore.showError(isZh.value ? '生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Generation service temporarily unavailable. Please try again later or subscribe.')
+      uiStore.showError(L('生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能', 'Generation service temporarily unavailable. Please try again later or subscribe.', '生成サービスは一時的に利用できません。後ほど再試行するか、サブスクで全機能を解禁してください。', '생성 서비스를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하거나 구독해 주세요.', 'Servicio temporalmente no disponible. Inténtalo más tarde o suscríbete.'))
       return
     }
 
@@ -481,7 +496,7 @@ async function generateScenes() {
     if (uploadedImage.value.startsWith('data:')) {
       const blob = dataURItoBlob(uploadedImage.value)
       if (!blob) {
-        uiStore.showError(isZh.value ? '圖片格式無效，請重新上傳' : 'Invalid image format. Please re-upload.')
+        uiStore.showError(L('圖片格式無效，請重新上傳', 'Invalid image format. Please re-upload.', '画像形式が無効です。再アップロードしてください。', '이미지 형식이 올바르지 않습니다. 다시 업로드해 주세요.', 'Formato de imagen inválido. Súbela de nuevo.'))
         return
       }
       const uploadResult = await toolsApi.uploadImage(blob as File)
@@ -494,6 +509,8 @@ async function generateScenes() {
       selectedScene.value === 'custom' ? customScenePrompt.value : undefined,
       selectedProductId.value || undefined,
       selectedTemplateId.value || undefined,
+      selectedPromptId.value || undefined,
+      String(locale.value || ''),
     )
 
     if (result.success && (result.image_url || result.result_url)) {
@@ -502,11 +519,11 @@ async function generateScenes() {
       creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success'))
     } else {
-      uiStore.showError(result.message || (result as any).error || (isZh.value ? '場景生成失敗，請稍後再試' : 'Scene generation failed. Please try again.'))
+      uiStore.showError(result.message || (result as any).error || L('場景生成失敗，請稍後再試', 'Scene generation failed. Please try again.', 'シーン生成に失敗しました。後ほど再試行してください。', '씬 생성에 실패했습니다. 나중에 다시 시도해 주세요.', 'Falló la generación de escena. Inténtalo de nuevo.'))
     }
   } catch (error: any) {
     const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || ''
-    uiStore.showError(detail || (isZh.value ? '生成失敗' : 'Generation failed'))
+    uiStore.showError(detail || L('生成失敗', 'Generation failed', '生成に失敗', '생성 실패', 'Falló la generación'))
   } finally {
     isProcessing.value = false
   }
@@ -561,14 +578,14 @@ function dataURItoBlob(dataURI: string): Blob | null {
         <!-- Subscribe Notice for Demo Users -->
         <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
           <RouterLink to="/pricing" class="hover:underline">
-            {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+            {{ L('訂閱以解鎖更多功能', 'Subscribe to unlock more features', 'サブスク登録で機能を解禁', '구독으로 더 많은 기능 잠금 해제', 'Suscríbete para desbloquear más funciones') }}
           </RouterLink>
         </div>
 
         <!-- DB Empty: Show try prompts (fixed prompts for try-play) -->
         <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-6 p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
           <p class="text-sm text-dark-200 mb-3">
-            {{ isZh ? '以下為可試玩的固定提示詞，資料庫尚未有預生成結果。訂閱者可上傳自訂圖片並即時生成。' : 'Try-play prompts below. DB has no pre-generated results yet. Subscribers can upload and generate.' }}
+            {{ L('以下為可試玩的固定提示詞，資料庫尚未有預生成結果。訂閱者可上傳自訂圖片並即時生成。', 'Try-play prompts below. DB has no pre-generated results yet. Subscribers can upload and generate.', '以下は試行用のプロンプトです。DBには事前生成結果がまだありません。サブスク登録者はアップロードして生成可能。', '아래는 시험용 프롬프트입니다. DB에 사전 생성 결과가 없습니다. 구독자는 업로드하여 생성 가능합니다.', 'Prompts de prueba abajo. La BD no tiene pregenerados. Los suscriptores pueden subir y generar.') }}
           </p>
           <div class="flex flex-wrap gap-2">
             <span
@@ -585,10 +602,10 @@ function dataURItoBlob(dataURI: string): Blob | null {
       <HowToUseHint
         tool-type="product_scene"
         media-kind="image"
-        :steps="[
-          { en: 'Pick or upload a clean product photo (white or transparent background works best).', zh: '選擇或上傳一張乾淨的商品圖片，白底或透明背景最佳。' },
-          { en: 'Pick a scene preset or describe your own (subscribers).', zh: '選擇一個場景預設，或訂閱後可自訂描述。' },
-          { en: 'Click Generate to get a polished commerce-ready scene shot.', zh: '點擊生成取得適合電商使用的場景圖。' },
+        :i18n-keys="[
+          'howTo.product_scene.step1',
+          'howTo.product_scene.step2',
+          'howTo.product_scene.step3',
         ]"
       />
 
@@ -600,7 +617,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <!-- PRESET-ONLY MODE: All users select from preset products -->
           <div class="mb-4">
             <p class="text-sm text-dark-300 mb-3">
-              {{ isZh ? '選擇產品圖片' : 'Select Product Image' }}
+              {{ L('選擇產品圖片', 'Select Product Image', '商品画像を選択', '제품 이미지 선택', 'Selecciona imagen del producto') }}
             </p>
             <div class="grid grid-cols-2 gap-2">
               <button
@@ -628,22 +645,22 @@ function dataURItoBlob(dataURI: string): Blob | null {
               </button>
             </div>
             <p class="text-xs text-dark-400 mt-2">
-              {{ isZh ? '8個產品 × 8個場景 = 64種組合' : '8 products × 8 scenes = 64 combinations' }}
+              {{ L('8個產品 × 8個場景 = 64種組合', '8 products × 8 scenes = 64 combinations', '8商品×8シーン=64通り', '제품 8개×씬 8개=64가지 조합', '8 productos × 8 escenas = 64 combinaciones') }}
             </p>
           </div>
 
           <!-- Subscriber Interface: Upload Zone -->
           <div v-if="!isDemoUser" class="mb-6">
-             <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳您的產品' : 'Upload Your Product' }}</h4>
+             <h4 class="text-sm font-medium text-dark-300 mb-2">{{ L('上傳您的產品', 'Upload Your Product', '商品をアップロード', '제품 업로드', 'Sube tu producto') }}</h4>
              <ImageUploader 
                tool-type="product_scene"
                v-model="uploadedImage" 
-               :label="isZh ? '點擊上傳或拖放產品圖片' : 'Drop product image here'"
+               :label="L('點擊上傳或拖放產品圖片', 'Drop product image here', 'クリックまたは商品画像をドロップ', '클릭 또는 제품 이미지 드롭', 'Sube o arrastra imagen del producto')"
                @file-selected="handleUploadedProductFile"
                class="mb-4"
              />
              <div v-if="productModels.length > 1" class="mt-4">
-               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? 'AI 模型' : 'AI Model' }}</h4>
+               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ L('AI 模型', 'AI Model', 'AIモデル', 'AI 모델', 'Modelo AI') }}</h4>
                <div class="space-y-2">
                  <button
                    v-for="model in productModels"
@@ -659,7 +676,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
                      {{ isZh ? model.name_zh : model.name }}
                    </span>
                    <span class="text-xs text-primary-400 ml-3 shrink-0">
-                     {{ model.credit_cost }} {{ isZh ? '點數' : 'credits' }}
+                     {{ model.credit_cost }} {{ L('點數', 'credits', 'ポイント', '포인트', 'créditos') }}
                    </span>
                  </button>
                </div>
@@ -702,14 +719,14 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <div v-if="!isDemoUser && styleTemplates.length > 0" class="mt-6">
             <div class="flex items-center justify-between mb-3">
               <h4 class="text-sm font-semibold text-dark-200">
-                {{ isZh ? '精選風格模版' : 'Curated Style Templates' }}
+                {{ L('精選風格模版', 'Curated Style Templates', '厳選スタイルテンプレート', '엄선된 스타일 템플릿', 'Plantillas de estilo seleccionadas') }}
               </h4>
               <button
                 v-if="selectedTemplateId"
                 @click="selectedTemplateId = null"
                 class="text-xs text-primary-400 hover:text-primary-300"
               >
-                {{ isZh ? '清除選擇' : 'Clear' }}
+                {{ L('清除選擇', 'Clear', 'クリア', '선택 제거', 'Limpiar') }}
               </button>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -739,31 +756,26 @@ function dataURItoBlob(dataURI: string): Blob | null {
               </button>
             </div>
             <p class="text-xs text-dark-400 mt-2">
-              {{ isZh ? '選擇模版後，AI 將自動套用專業攝影參數（光影、焦距、材質）' : 'Templates apply professional photography parameters automatically' }}
+              {{ L('選擇模版後，AI 將自動套用專業攝影參數（光影、焦距、材質）', 'Templates apply professional photography parameters automatically', 'テンプレート選択でプロ撮影パラメータ（光、焦点、素材）を自動適用', '템플릿을 선택하면 전문 촬영 파라미터(조명, 초점, 자재)가 자동 적용됩니다', 'Las plantillas aplican parámetros profesionales automáticamente') }}
             </p>
           </div>
 
-           <!-- Custom Prompt Input (Pro Only) -->
+           <!-- Curated Prompt Dropdown (replaces free-text in MVP) -->
            <div v-if="selectedScene === 'custom' && !selectedTemplateId" class="mt-4">
              <label class="block text-sm font-medium text-dark-300 mb-2">
-               {{ isZh ? '自訂場景描述' : 'Custom Scene Prompt' }}
+               {{ L('選擇場景提示詞', 'Choose a Scene Prompt', 'シーンプロンプトを選択', '씬 프롬프트 선택', 'Elige un prompt de escena') }}
              </label>
-             <textarea
-               v-model="prompt"
-               rows="3"
-               :maxlength="CUSTOM_PROMPT_MAX_CHARS"
-               :placeholder="isZh ? '例：白色保養品瓶，乾淨奶油色背景，柔和棚燈，45度商品攝影，保留包裝文字清晰' : 'Example: skincare bottle, warm cream background, soft studio light, 45-degree product shot, keep label text clear'"
-               class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500" style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
-             ></textarea>
-             <div class="prompt-stability-row mt-2">
-               <span>{{ isZh ? '主體不變' : 'Subject locked' }}</span>
-               <span>{{ isZh ? '光線' : 'Lighting' }}</span>
-               <span>{{ isZh ? '鏡頭角度' : 'Camera angle' }}</span>
-               <span>{{ isZh ? '乾淨背景' : 'Clean background' }}</span>
-             </div>
-             <div class="mt-1 flex justify-end text-xs text-dark-400">
-               <span>{{ customPromptLength }}/{{ CUSTOM_PROMPT_MAX_CHARS }}</span>
-             </div>
+             <select
+               v-model="selectedPromptId"
+               class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500"
+               style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
+             >
+               <option value="">{{ L('— 請選擇 —', '— Select —', '— 選択 —', '— 선택 —', '— Seleccionar —') }}</option>
+               <option v-for="opt in promptOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
+             </select>
+             <p class="mt-2 text-[11px] text-dark-500">
+               {{ L('為確保生成品質與安全，目前僅提供精選場景。', 'For quality and safety, only curated scenes are available.', '品質と安全のため、現在は厳選シーンのみ提供しています。', '품질과 안전을 위해 현재 엄선된 씬만 제공됩니다.', 'Por calidad y seguridad, solo escenas seleccionadas están disponibles.') }}
+             </p>
            </div>
 
           <!-- Credit Cost & Generate -->
@@ -815,17 +827,17 @@ function dataURItoBlob(dataURI: string): Blob | null {
                 to="/pricing"
                 class="btn-primary w-full text-center block"
               >
-                {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+                {{ L('訂閱以獲得完整功能', 'Subscribe for Full Access', 'サブスクで全機能を解禁', '구독으로 전체 액세스', 'Suscríbete para acceso completo') }}
               </RouterLink>
           </div>
 
           <div v-else-if="demoEmptyState" class="h-64 flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
             <span class="text-2xl">🔒</span>
             <p class="text-sm text-dark-200">
-              {{ isZh ? '此範例尚未預生成結果' : 'No pre-generated result for this example yet' }}
+              {{ L('此範例尚未預生成結果', 'No pre-generated result for this example yet', 'この例はまだ事前生成されていません', '이 예시는 아직 사전 생성되지 않았습니다', 'Aún no hay resultado pregenerado') }}
             </p>
             <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
-              {{ isZh ? '訂閱以使用完整 AI 功能' : 'Subscribe to use the real AI' }}
+              {{ L('訂閱以使用完整 AI 功能', 'Subscribe to use the real AI', 'サブスクで実AI機能を解禁', '구독으로 실제 AI 사용', 'Suscríbete para usar la IA real') }}
             </RouterLink>
           </div>
           <div v-else class="h-64 flex items-center justify-center text-dark-400">

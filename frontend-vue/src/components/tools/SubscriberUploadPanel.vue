@@ -200,6 +200,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useLocalized } from '@/composables'
 import { uploadsApi } from '@/api/uploads'
 import type { ModelInfo, UploadStatusResponse } from '@/api/uploads'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
@@ -242,6 +243,8 @@ const currentCreditCost = computed(() => {
   return m?.credit_cost ?? 0
 })
 const isZh = computed(() => locale.value.startsWith('zh'))
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 const isVideoTool = computed(() => props.toolType.includes('video') || props.toolType.includes('avatar'))
 const uploadAccept = computed(() => props.accept || (
   props.toolType === 'video_transform'
@@ -249,14 +252,14 @@ const uploadAccept = computed(() => props.accept || (
     : '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
 ))
 const pendingTitle = computed(() => isVideoTool.value
-  ? (isZh.value ? '我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。' : 'I am creating the requested video. This may take a few minutes, so please check back shortly.')
-  : (isZh.value ? '我正在產生所需的圖片，這可能需要一些時間，請稍後再回來查看是否已完成。' : 'I am generating the requested image. This may take a little time, so please check back shortly.'))
+  ? L('我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。', 'I am creating the requested video. This may take a few minutes, so please check back shortly.', 'リクエストされた動画を作成中です。数分かかる場合があるので、少ししてから再確認してください。', '요청하신 동영상을 생성 중입니다. 몇 분 소요될 수 있으니 잠시 후 다시 확인해 주세요.', 'Estamos creando el video solicitado. Puede tardar unos minutos; vuelve en un momento.')
+  : L('我正在產生所需的圖片，這可能需要一些時間，請稍後再回來查看是否已完成。', 'I am generating the requested image. This may take a little time, so please check back shortly.', 'リクエストされた画像を生成中です。少々お時間がかかる場合があるので、少ししてから再確認してください。', '요청하신 이미지를 생성 중입니다. 시간이 조금 걸릴 수 있으니 잠시 후 다시 확인해 주세요.', 'Estamos generando la imagen solicitada. Puede tardar un poco; vuelve en un momento.'))
 const pendingDetail = computed(() => isVideoTool.value
-  ? (isZh.value ? '正在生成影片...' : 'Generating video...')
-  : (isZh.value ? '正在生成圖片...' : 'Generating image...'))
+  ? L('正在生成影片...', 'Generating video...', '動画を生成中...', '동영상 생성 중...', 'Generando video...')
+  : L('正在生成圖片...', 'Generating image...', '画像を生成中...', '이미지 생성 중...', 'Generando imagen...'))
 const pendingDuration = computed(() => isVideoTool.value
-  ? (isZh.value ? '需要 1 至 5 分鐘' : 'Usually takes 1 to 5 minutes')
-  : (isZh.value ? '需要 1 至 2 分鐘' : 'Usually takes 1 to 2 minutes'))
+  ? L('需要 1 至 5 分鐘', 'Usually takes 1 to 5 minutes', '通常1〜5分かかります', '보통 1-5분 소요', 'Suele tardar 1-5 minutos')
+  : L('需要 1 至 2 分鐘', 'Usually takes 1 to 2 minutes', '通常1〜2分かかります', '보통 1-2분 소요', 'Suele tardar 1-2 minutos'))
 
 function localized(zh: string, en: string): string {
   return isZh.value ? zh : en
@@ -306,13 +309,13 @@ async function setFile(file: File): Promise<boolean> {
     setStatus(
       'error',
       expectsVideo
-        ? (isZh.value ? '僅支援 MP4、WebM、MOV 影片，請重新選擇' : 'Only MP4, WebM, or MOV videos are supported. Please choose again.')
-        : (isZh.value ? '僅支援 JPG、PNG、WebP 圖片，請重新選擇' : 'Only JPG, PNG, or WebP images are supported. Please choose again.'),
+        ? L('僅支援 MP4、WebM、MOV 影片，請重新選擇', 'Only MP4, WebM, or MOV videos are supported. Please choose again.', 'MP4、WebM、MOV動画のみ対応です。再選択してください。', 'MP4, WebM, MOV 동영상만 지원됩니다. 다시 선택해 주세요.', 'Solo se admiten videos MP4, WebM o MOV. Elige otro.')
+        : L('僅支援 JPG、PNG、WebP 圖片，請重新選擇', 'Only JPG, PNG, or WebP images are supported. Please choose again.', 'JPG、PNG、WebP画像のみ対応です。再選択してください。', 'JPG, PNG, WebP 이미지만 지원됩니다. 다시 선택해 주세요.', 'Solo se admiten imágenes JPG, PNG o WebP. Elige otra.'),
     )
     return false
   }
   if (expectsVideo && file.size > 20 * 1024 * 1024) {
-    setStatus('error', isZh.value ? '檔案需小於 20MB，請重新選擇' : 'File must be under 20MB. Please choose a smaller file.')
+    setStatus('error', L('檔案需小於 20MB，請重新選擇', 'File must be under 20MB. Please choose a smaller file.', 'ファイルは20MB未満にしてください。', '파일은 20MB 미만이어야 합니다. 다시 선택해 주세요.', 'El archivo debe ser menor de 20MB.'))
     return false
   }
   let uploadFile = file
@@ -320,11 +323,11 @@ async function setFile(file: File): Promise<boolean> {
     try {
       uploadFile = await normalizeImageFileForUpload(file, imageDimensionRuleForTool(props.toolType), { maxSizeMb: 20 })
     } catch {
-      setStatus('error', isZh.value ? '無法處理圖片尺寸或壓縮，請重新選擇圖片' : 'Image could not be resized or compressed. Please choose a different image.')
+      setStatus('error', L('無法處理圖片尺寸或壓縮，請重新選擇圖片', 'Image could not be resized or compressed. Please choose a different image.', '画像のリサイズまたは圧縮ができません。別の画像を選んでください。', '이미지 리사이즈 또는 압축에 실패했습니다. 다른 이미지를 선택해 주세요.', 'No se pudo redimensionar o comprimir. Elige otra imagen.'))
       return false
     }
     if (uploadFile.size > 20 * 1024 * 1024) {
-      setStatus('error', isZh.value ? '圖片壓縮後仍超過 20MB，請重新選擇圖片' : 'Image is still over 20MB after compression. Please choose a different image.')
+      setStatus('error', L('圖片壓縮後仍超過 20MB，請重新選擇圖片', 'Image is still over 20MB after compression. Please choose a different image.', '圧縮後も20MBを超えています。別の画像を選んでください。', '압축 후에도 20MB를 초과합니다. 다른 이미지를 선택해 주세요.', 'La imagen sigue siendo mayor de 20MB tras compresión. Elige otra.'))
       return false
     }
   }

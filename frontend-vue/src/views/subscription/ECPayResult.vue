@@ -37,7 +37,9 @@ async function checkOrderStatus(order: string) {
       }
     } else {
       status.value = 'unknown'
-      errorMsg.value = data.error || '無法查詢訂單狀態'
+      // Backend returns FastAPI-shaped { detail } on errors; fall back to
+      // legacy `error` field if any older proxy still sends it.
+      errorMsg.value = data.detail || data.error || '無法查詢訂單狀態'
       loading.value = false
     }
   } catch (err) {

@@ -52,11 +52,32 @@ from app.services.demo_cache_service import DemoCacheService
 from app.services.gcs_storage_service import get_gcs_storage
 from app.services.email_service import send_admin_tool_failure_email
 from app.services.prompt_refinement_service import get_prompt_refinement_service
+from app.services.prompt_library import lookup_prompt as _lookup_curated_prompt
 import logging
 import os
 import hashlib
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_curated_prompt(
+    tool_key: str,
+    prompt_id: Optional[str],
+    locale: Optional[str],
+) -> Optional[str]:
+    """Resolve a curated prompt id to canonical EN/ZH text.
+
+    Returns None if prompt_id is not set OR doesn't exist in the library.
+    Endpoints should call this at the top, then prefer the returned text
+    over any free-form `custom_prompt` / `script` / `prompt` field on the
+    request — that way the client cannot smuggle in arbitrary text.
+    """
+    if not prompt_id:
+        return None
+    text = _lookup_curated_prompt(tool_key, prompt_id, locale)
+    if text is None:
+        logger.warning("Unknown prompt_id %r for tool %s — falling back to free-form prompt", prompt_id, tool_key)
+    return text
 settings = get_settings()
 
 # Generic, user-facing message returned when an internal tool exception occurs.
@@ -98,6 +119,7 @@ def _provider_failure_response(
     tool_name: str,
     result: Dict[str, Any],
     user=None,
+    user_message: Optional[str] = None,
 ):
     provider_error = result.get("error") or result.get("message") or "Provider returned success=false"
     logger.error("%s provider failure: %s", tool_name, provider_error)
@@ -107,7 +129,19 @@ def _provider_failure_response(
         user,
         extra_context={"provider_result": result},
     )
-    return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+    return ToolResponse(success=False, message=user_message or GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+async def _persist_provider_url(
+    url: Optional[str],
+    media_type: str,
+    user,
+) -> Optional[str]:
+    """Persist a provider-returned (PiAPI / Pollo CDN) URL to GCS so it
+    survives past the upstream's 14-day expiry. Returns the original URL on
+    failure (14-day grace from CDN). See GCSStorageService.safe_persist_url."""
+    user_id = str(user.id) if user is not None and getattr(user, "id", None) else None
+    return await get_gcs_storage().safe_persist_url(url, media_type, user_id)
 
 
 async def _refine_generation_prompt(
@@ -363,6 +397,55 @@ async def _run_ffmpeg_voiceover_mux(video_url: str, audio_url: str, user_id: str
         return f"{public_base}{static_path}" if public_base else static_path
 
 
+async def _extract_first_frame_to_gcs(video_url: str, user_id: str | None) -> str:
+    """Extract the first frame of a video and persist it as a public JPEG.
+
+    Used by video_transform: every V2V provider in the chain (piapi_mcp's
+    Wan referenceImage, Pollo, Vertex AI) actually wants a still image — none
+    of them accept an MP4 URL — so we hand them a first-frame still and let
+    the prompt drive the style.
+    """
+    with tempfile.TemporaryDirectory(prefix="vidgo-firstframe-") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        input_video = tmp_path / "input_video"
+        output_image = tmp_path / "first_frame.jpg"
+
+        await _download_media_to_path(video_url, input_video)
+
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y",
+            "-i", str(input_video),
+            "-frames:v", "1",
+            "-q:v", "2",
+            str(output_image),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        if process.returncode != 0 or not output_image.exists():
+            detail = (stderr or b"").decode("utf-8", errors="replace")[-800:]
+            raise RuntimeError(f"ffmpeg first-frame extraction failed: {detail}")
+
+        data = output_image.read_bytes()
+        output_id = uuid.uuid4().hex[:12]
+        gcs = get_gcs_storage()
+        if gcs.enabled:
+            user_prefix = user_id or "anon"
+            return gcs.upload_public(
+                data=data,
+                blob_name=f"generated/image/firstframe/{user_prefix}/{output_id}.jpg",
+                content_type="image/jpeg",
+            )
+        output_dir = Path("/app/static/generated")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"first_frame_{output_id}.jpg"
+        local_output = output_dir / filename
+        local_output.write_bytes(data)
+        public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/") or settings.BACKEND_URL.rstrip("/")
+        static_path = f"/static/generated/{filename}"
+        return f"{public_base}{static_path}" if public_base else static_path
+
+
 async def _translate_text_for_dubbing(text: str, target_language: str, source_language: str | None = None) -> str:
     """Translate a spoken script with Gemini when available; fall back to source text."""
     cleaned = (text or "").strip()
@@ -569,15 +652,46 @@ async def _check_and_deduct_credits(
 # ============================================================================
 
 class RemoveBackgroundRequest(BaseModel):
-    """Remove background from image"""
+    """Remove background from image (with optional replacement background).
+
+    Three output modes, in priority order:
+      1. `background_image_url` set → composite the cutout onto that image
+         (the image is auto-resized to match the cutout's aspect ratio).
+      2. `background_color` set (hex `#RRGGBB`/`#RGB` or named) → composite
+         the cutout onto a solid color canvas.
+      3. `output_format` controls the no-replacement modes:
+            - `"png"`     → transparent PNG (default)
+            - `"white"`   → flatten onto white canvas
+            - `"black"`   → flatten onto black canvas
+    """
     image_url: str = Field(..., description="Publicly reachable image URL to process.")
-    output_format: str = Field("png", description="Output background mode: 'png' for transparent output or 'white' for a white backdrop.")
+    output_format: str = Field("png", description="Output background mode when no replacement is provided: 'png' (transparent), 'white', or 'black'.")
+    background_color: Optional[str] = Field(
+        None,
+        max_length=32,
+        description="Optional solid replacement background. Hex (#RRGGBB / #RGB) or a CSS color name (e.g. 'beige', 'navy'). Overrides output_format.",
+    )
+    background_image_url: Optional[str] = Field(
+        None,
+        max_length=2048,
+        description="Optional replacement background image URL (jpg/png/webp). The cutout is composited on top of this image. Overrides background_color and output_format.",
+    )
+
+    @field_validator("background_color")
+    @classmethod
+    def _validate_color(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return None
+        v = v.strip()
+        return v or None
 
 
 class RemoveBackgroundBatchRequest(BaseModel):
     """Batch remove background"""
     image_urls: List[str] = Field(..., description="List of publicly reachable image URLs to process. Maximum 10 per request.")
     output_format: str = Field("png", description="Output background mode for every image in the batch.")
+    background_color: Optional[str] = Field(None, max_length=32, description="Optional solid replacement background; same shape as the single endpoint.")
+    background_image_url: Optional[str] = Field(None, max_length=2048, description="Optional replacement background image URL; same shape as the single endpoint.")
 
 
 class ProductSceneRequest(BaseModel):
@@ -590,14 +704,33 @@ class ProductSceneRequest(BaseModel):
         max_length=40,
         description="Named preset scene. Valid values: studio, nature, elegant, minimal, lifestyle, urban, seasonal, holiday, spring, valentines, black_friday, christmas, new_year.",
     )
+    prompt_id: Optional[str] = Field(
+        None,
+        description="Curated prompt id from frontend-vue/src/data/prompt_library.json (e.g. 'ps_001'). When set, the server resolves the canonical prompt text and ignores `custom_prompt`.",
+    )
+    locale: Optional[str] = Field(
+        None,
+        max_length=10,
+        description="UI locale hint (e.g. 'zh-TW', 'en', 'ja'). Used only when prompt_id resolves: zh-* picks the Chinese variant, anything else picks the English variant.",
+    )
     custom_prompt: Optional[str] = Field(
         None,
         max_length=PRODUCT_SCENE_CUSTOM_PROMPT_MAX_CHARS,
-        description="Optional natural-language scene prompt. Accepted only when scene_type is 'custom', unless template_id is set.",
+        description="Optional natural-language scene prompt (legacy free-text path). Ignored when prompt_id is provided.",
     )
     template_id: Optional[str] = Field(
         None,
         description="Optional template identifier. Highest priority override for scene generation; takes precedence over both custom_prompt and scene_type.",
+    )
+    placement: Optional[str] = Field(
+        None,
+        pattern="^(center|left|right|foreground|background)$",
+        description=(
+            "Optional product placement hint within the new scene. One of "
+            "'center', 'left', 'right', 'foreground', 'background'. "
+            "When set, an explicit positioning clause is appended to the "
+            "edit prompt to bias the I2I composition."
+        ),
     )
 
     def get_product_url(self) -> str:
@@ -630,6 +763,16 @@ class TryOnRequest(BaseModel):
     angle: str = Field("front", description="Target garment view angle: front, side, or back.")
     background: str = Field("white", description="Requested background for the try-on result: white, transparent, or studio.")
     template_id: Optional[str] = Field(None, description="Optional style template that controls the try-on scene or background.")
+    category: str = Field(
+        "dress",
+        pattern="^(upper_body|lower_body|dress|full_body)$",
+        description=(
+            "Garment category controlling which input slot Kling uses: "
+            "'upper_body' → upper_input, 'lower_body' → lower_input, "
+            "'dress' / 'full_body' → dress_input (full-body or dress garment). "
+            "Defaults to 'dress' to preserve existing behavior."
+        ),
+    )
 
     def get_garment_url(self) -> str:
         url = self.garment_image_url or self.image_url
@@ -643,8 +786,14 @@ class RoomRedesignRequest(BaseModel):
     room_image_url: Optional[str] = Field(None, description="Source room image URL. Use this or image_url.")
     image_url: Optional[str] = Field(None, description="Alias for room_image_url for client compatibility.")
     style: str = Field("modern_minimalist", description="Preset redesign style ID such as modern_minimalist, scandinavian, japanese, industrial, mediterranean, or mid_century_modern.")
-    custom_prompt: Optional[str] = Field(None, description="Optional detailed redesign instruction that supplements or overrides the preset style description.")
+    prompt_id: Optional[str] = Field(
+        None,
+        description="Curated prompt id from prompt_library.json (e.g. 'rr_001'). When set, server resolves canonical text and ignores `custom_prompt`.",
+    )
+    locale: Optional[str] = Field(None, max_length=10, description="UI locale hint for prompt_id resolution.")
+    custom_prompt: Optional[str] = Field(None, description="Optional detailed redesign instruction (legacy free-text path). Ignored when prompt_id is provided.")
     preserve_structure: bool = Field(True, description="Keep the original room layout and architectural structure while changing the design style.")
+    style_strength: float = Field(0.7, ge=0.0, le=1.0, description="Stylization intensity, 0.0 (very faithful to source) to 1.0 (heavily restyled). Default 0.7 favors a clearly noticeable redesign while preserving room layout.")
 
     def get_room_url(self) -> str:
         url = self.room_image_url or self.image_url
@@ -659,8 +808,14 @@ class ShortVideoRequest(BaseModel):
     motion_strength: int = Field(5, ge=1, le=10, description="Motion intensity from 1 to 10. Higher values produce more camera or object movement.")
     model_id: Optional[str] = Field(None, description="Optional image-to-video model identifier such as pixverse_v4.5, pixverse_v5, kling_v2, kling_v1.5, or luma_ray2.")
     style: Optional[str] = Field(None, description="Optional visual style or effect hint to steer the motion result.")
+    prompt_id: Optional[str] = Field(
+        None,
+        description="Curated motion prompt id (e.g. 'sv_001'). Server resolves canonical text; supersedes free-form motion prompts.",
+    )
+    locale: Optional[str] = Field(None, max_length=10, description="UI locale hint for prompt_id resolution.")
     script: Optional[str] = Field(None, description="Optional narration script for text-to-speech voice-over.")
     voice_id: Optional[str] = Field(None, description="Optional voice identifier for TTS narration.")
+    negative_prompt: Optional[str] = Field(None, max_length=500, description="Optional things to avoid (e.g. 'extra arms, distorted face'). A product-safety baseline is always applied.")
 
 
 class ImageTranslateRequest(BaseModel):
@@ -701,7 +856,12 @@ class VideoDubbingRequest(BaseModel):
 class AvatarRequest(BaseModel):
     """AI Avatar - Photo-to-Avatar with lip sync"""
     image_url: str = Field(..., description="Clear frontal headshot URL used to generate the speaking avatar.")
-    script: str = Field(..., description="Exact speech content for the avatar to say. Write complete spoken sentences.")
+    script: Optional[str] = Field(None, description="Exact speech content. Optional when prompt_id is provided — the server resolves the canonical script text from the curated library.")
+    prompt_id: Optional[str] = Field(
+        None,
+        description="Curated avatar-script id from prompt_library.json (e.g. 'av_001'). Server resolves canonical script and overrides any free-form `script`.",
+    )
+    locale: Optional[str] = Field(None, max_length=10, description="UI locale hint for prompt_id resolution.")
     language: str = Field("en", description="Speech language code, for example 'en' or 'zh-TW'.")
     voice_id: Optional[str] = Field(None, description="Optional voice identifier. If omitted, the first supported voice for the selected language is used.")
     duration: int = Field(30, ge=1, le=120, description="Target video duration in seconds.")
@@ -837,6 +997,108 @@ async def list_tools():
 # Tool 1: Background Removal
 # ============================================================================
 
+async def _flatten_to_white_background(image_url: str, user_id) -> Optional[str]:
+    """Backwards-compat wrapper. New callers should use _composite_cutout_on_background."""
+    return await _composite_cutout_on_background(image_url, user_id, color=(255, 255, 255))
+
+
+def _parse_color(value: str) -> Optional[tuple[int, int, int]]:
+    """Parse a hex (`#RRGGBB`, `#RGB`) or named CSS color into an RGB tuple.
+
+    Falls back to PIL's ImageColor for the named-color path so we get the
+    full CSS palette (beige, navy, slategray, etc.) without maintaining our
+    own dictionary. Returns None if the input is malformed.
+    """
+    if not value:
+        return None
+    v = value.strip()
+    try:
+        from PIL import ImageColor
+        rgb = ImageColor.getrgb(v)  # raises ValueError on bad input
+        # ImageColor may return RGBA — drop alpha for the canvas fill.
+        return (rgb[0], rgb[1], rgb[2])
+    except Exception:
+        logger.warning("_parse_color: rejected color %r", v)
+        return None
+
+
+async def _composite_cutout_on_background(
+    cutout_url: str,
+    user_id,
+    *,
+    color: Optional[tuple[int, int, int]] = None,
+    background_image_url: Optional[str] = None,
+) -> Optional[str]:
+    """Composite a transparent cutout onto a replacement background.
+
+    Exactly one of `color` or `background_image_url` should be supplied.
+    The replacement background image is auto-resized + cropped (cover) to
+    match the cutout's dimensions so the result has no letterboxing. The
+    composite is uploaded as JPEG at 92% quality. Returns the new URL,
+    or None on any failure (caller falls back to the transparent PNG).
+    """
+    from io import BytesIO
+
+    # Download the cutout (transparent PNG from BG-removal upstream).
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            resp = await client.get(cutout_url)
+            resp.raise_for_status()
+            cutout_bytes = resp.content
+    except Exception as fetch_err:
+        logger.warning("composite: failed to download cutout %s: %s", cutout_url, fetch_err)
+        return None
+
+    cutout = Image.open(BytesIO(cutout_bytes))
+    if cutout.mode != "RGBA":
+        cutout = cutout.convert("RGBA")
+    width, height = cutout.size
+
+    # Build the replacement canvas.
+    if background_image_url:
+        try:
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                bg_resp = await client.get(background_image_url)
+                bg_resp.raise_for_status()
+                bg_bytes = bg_resp.content
+        except Exception as bg_err:
+            logger.warning("composite: failed to download replacement bg %s: %s", background_image_url, bg_err)
+            return None
+        try:
+            bg = Image.open(BytesIO(bg_bytes)).convert("RGB")
+        except Exception as bg_open_err:
+            logger.warning("composite: replacement bg not a valid image: %s", bg_open_err)
+            return None
+        # Cover-fit: scale so the bg covers the cutout dimensions, then center-crop.
+        bw, bh = bg.size
+        scale = max(width / bw, height / bh)
+        new_w, new_h = int(bw * scale + 0.5), int(bh * scale + 0.5)
+        bg = bg.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        left = (new_w - width) // 2
+        top = (new_h - height) // 2
+        canvas = bg.crop((left, top, left + width, top + height))
+    elif color is not None:
+        canvas = Image.new("RGB", (width, height), color)
+    else:
+        canvas = Image.new("RGB", (width, height), (255, 255, 255))
+
+    canvas.paste(cutout, mask=cutout.split()[-1])
+    buf = BytesIO()
+    canvas.save(buf, format="JPEG", quality=92)
+    out_bytes = buf.getvalue()
+
+    file_id = uuid.uuid4().hex[:12]
+    blob_name = f"generated/image/bg_replace/{user_id}/{file_id}.jpg"
+    gcs = get_gcs_storage()
+    if getattr(gcs, "enabled", False):
+        return gcs.upload_public(data=out_bytes, blob_name=blob_name, content_type="image/jpeg")
+    output_dir = Path("/app/static/generated")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    local_path = output_dir / f"bg_replace_{file_id}.jpg"
+    local_path.write_bytes(out_bytes)
+    return f"/static/generated/{local_path.name}"
+
+
 @router.post("/remove-bg", response_model=ToolResponse)
 async def remove_background(
     request: RemoveBackgroundRequest,
@@ -881,13 +1143,66 @@ async def remove_background(
         if result.get("success"):
             output = result.get("output", {})
             result_url = output.get("image_url")
+            # Persist PiAPI CDN result to GCS so it survives 14-day expiry.
+            result_url = await _persist_provider_url(result_url, "image", current_user)
+
+            # Replacement background: priority is replacement_image > color >
+            # output_format. Each path falls back to the transparent PNG on
+            # failure so the user always gets a usable result.
+            replacement_done = False
+            if result_url and request.background_image_url:
+                try:
+                    replaced = await _composite_cutout_on_background(
+                        result_url, current_user.id,
+                        background_image_url=str(request.background_image_url),
+                    )
+                    if replaced:
+                        result_url = replaced
+                        replacement_done = True
+                except Exception as bg_err:
+                    logger.warning("background_removal: bg-image composite failed: %s", bg_err)
+
+            if not replacement_done and result_url and request.background_color:
+                color_rgb = _parse_color(request.background_color)
+                if color_rgb is not None:
+                    try:
+                        replaced = await _composite_cutout_on_background(
+                            result_url, current_user.id, color=color_rgb,
+                        )
+                        if replaced:
+                            result_url = replaced
+                            replacement_done = True
+                    except Exception as bg_err:
+                        logger.warning("background_removal: bg-color composite failed: %s", bg_err)
+
+            # output_format="white" / "black" — only honored when no
+            # explicit replacement was supplied.
+            if not replacement_done and result_url:
+                fmt = (request.output_format or "png").lower()
+                if fmt in ("white", "black"):
+                    color_rgb = (255, 255, 255) if fmt == "white" else (0, 0, 0)
+                    try:
+                        flattened = await _composite_cutout_on_background(
+                            result_url, current_user.id, color=color_rgb,
+                        )
+                        if flattened:
+                            result_url = flattened
+                    except Exception as flatten_err:  # pragma: no cover - defensive
+                        logger.warning(
+                            "background_removal: %s-flatten post-process failed: %s",
+                            fmt, flatten_err,
+                        )
 
             # Save to UserGeneration
             user_gen = UserGeneration(
                 user_id=current_user.id,
                 tool_type=ToolType.BACKGROUND_REMOVAL,
                 input_image_url=str(request.image_url),
-                input_params={"output_format": request.output_format},
+                input_params={
+                    "output_format": request.output_format,
+                    "background_color": request.background_color,
+                    "background_image_url": request.background_image_url,
+                },
                 result_image_url=result_url,
                 credits_used=CREDIT_COST,
             )
@@ -1029,6 +1344,16 @@ async def generate_product_scene(
         validate_media_url_or_raise(product_media_url, "image", "Product scene input")
         await validate_image_url_dimensions_or_raise(product_media_url, PRODUCT_SCENE_IMAGE_DIMENSION_RULES)
 
+    # Resolve curated prompt server-side: when prompt_id is supplied, use the
+    # canonical text from prompt_library.json and switch to scene_type=custom
+    # so the existing custom-scene code path handles it. The client cannot
+    # smuggle arbitrary text via custom_prompt when prompt_id is present.
+    curated = _resolve_curated_prompt("product_scene", request.prompt_id, request.locale)
+    if curated:
+        request.custom_prompt = curated
+        request.scene_type = PRODUCT_SCENE_CUSTOM_SCENE_TYPE
+        request.template_id = None
+
     valid_scene_ids = {scene["id"] for scene in SCENE_TEMPLATES}
     valid_scene_options = ", ".join(scene["id"] for scene in SCENE_TEMPLATES)
     if request.scene_type not in valid_scene_ids and request.scene_type != PRODUCT_SCENE_CUSTOM_SCENE_TYPE:
@@ -1111,49 +1436,121 @@ async def generate_product_scene(
     try:
         provider_router = get_provider_router()
         product_url = str(request.get_product_url())
+        # Build a Kontext-style edit instruction. Kontext is a true I2I edit
+        # model that keeps the source product (shape, label, color, perspective)
+        # and rewrites only the surrounding scene. This replaces the previous
+        # 3-step rembg → T2I scene → PIL paste pipeline, which often produced
+        # results where the product was missing, distorted, or inconsistently
+        # lit because the new background was generated independently from the
+        # product photo.
+        placement_map = {
+            "center": " Position the product in the center of the frame.",
+            "left": " Position the product on the left third of the frame.",
+            "right": " Position the product on the right third of the frame.",
+            "foreground": " Position the product prominently in the foreground.",
+            "background": " Place the product slightly back in the scene with the surrounding scene more dominant.",
+        }
+        placement_clause = placement_map.get(request.placement or "", "")
         base_full_prompt = (
-            f"{scene_prompt}, scene background only with clear open area for product compositing, "
-            "no product or object in center, photorealistic high-resolution commercial photography"
+            "PRESERVE PRODUCT IDENTITY: do not alter the product's silhouette, "
+            "label position, brand colors, packaging shape, material reflectance, "
+            "logos, or any printed text. Composite the product unchanged into "
+            "the new scene as if photographed in place. "
+            f"Place THIS exact product, preserving every label, shape, color, "
+            f"material, proportion, and perspective, into the following scene: "
+            f"{scene_prompt}.{placement_clause} "
+            f"Photorealistic commercial product photography, "
+            f"natural studio-quality lighting that matches the new scene, "
+            f"realistic shadow and contact ground reflection under the product, "
+            f"high resolution, sharp focus, no extra products, no extra text, "
+            f"no logos other than what is already on the product, no people. "
+            "Negative: do not redesign, recolor, restyle, or replace the "
+            "product; do not modify packaging artwork or text; do not crop "
+            "the product."
         )
         full_prompt, prompt_refinement = await _refine_generation_prompt(
             base_full_prompt,
             "product_scene",
-            "scene background prompt",
+            "image-to-image product placement prompt",
             user_prompt=bool(request.custom_prompt or request.template_id),
             context={"scene_type": request.scene_type, "template_id": request.template_id},
         )
 
-        # Step 1: Remove background
-        logger.info("Step 1: Removing product background...")
-        rembg_result = await provider_router.route(
-            TaskType.BACKGROUND_REMOVAL,
-            {"image_url": product_url}
-        )
-        if not rembg_result.get("success"):
-            raise Exception(f"Background removal failed: {rembg_result.get('error')}")
+        # Single-step I2I edit (Flux Kontext via PiAPI). Kontext takes the
+        # product image as visual context and emits a new image where the
+        # product is preserved and only the background scene is rewritten.
+        logger.info("Kontext I2I: editing product into scene...")
+        i2i_params = {
+            "image_url": product_url,
+            "prompt": full_prompt,
+            "model": "flux_kontext",
+            "width": 1024,
+            "height": 768,
+        }
+        i2i_result = await provider_router.route(TaskType.I2I, i2i_params)
 
-        product_no_bg_url = rembg_result["output"]["image_url"]
+        result_url: Optional[str] = None
+        composite_fallback_used = False
+        if i2i_result.get("success"):
+            output = i2i_result.get("output") or {}
+            result_url = (
+                output.get("image_url")
+                or i2i_result.get("image_url")
+                or i2i_result.get("output_url")
+            )
 
-        # Step 2: Generate scene background
-        logger.info("Step 2: Generating scene background...")
+        # Defensive fallback: if Kontext is rate-limited or the active plan
+        # does not include it, fall back to the legacy 3-step composite so the
+        # subscriber still gets a deliverable instead of a refund spiral.
+        if not result_url:
+            logger.warning(
+                "Kontext I2I unavailable (%s) — falling back to legacy "
+                "rembg + T2I + composite pipeline.",
+                i2i_result.get("error"),
+            )
+            composite_fallback_used = True
 
-        t2i_result = await provider_router.route(
-            TaskType.T2I,
-            {"prompt": full_prompt}
-        )
-        if not t2i_result.get("success"):
-            raise Exception(f"Scene generation failed: {t2i_result.get('error')}")
+            # Step 1: Remove background
+            rembg_result = await provider_router.route(
+                TaskType.BACKGROUND_REMOVAL,
+                {"image_url": product_url}
+            )
+            if not rembg_result.get("success"):
+                raise Exception(f"Background removal failed: {rembg_result.get('error')}")
 
-        scene_url = t2i_result["output"]["image_url"]
+            product_no_bg_url = rembg_result["output"]["image_url"]
 
-        # Step 3: Composite with bounded memory usage so large provider outputs
-        # do not OOM the Cloud Run instance.
-        logger.info("Step 3: Compositing...")
-        composite_result = await _composite_product_scene(product_no_bg_url, scene_url)
-        if not composite_result.get("success"):
-            raise Exception(f"Product compositing failed: {composite_result.get('error')}")
+            # Step 2: Generate scene background
+            scene_only_prompt = (
+                f"{scene_prompt}, scene background only with clear open area for "
+                "product compositing, no product or object in center, "
+                "photorealistic high-resolution commercial photography"
+            )
+            scene_prompt_refined, _ = await _refine_generation_prompt(
+                scene_only_prompt,
+                "product_scene",
+                "scene background prompt",
+                user_prompt=bool(request.custom_prompt or request.template_id),
+                context={"scene_type": request.scene_type, "template_id": request.template_id},
+            )
+            t2i_result = await provider_router.route(
+                TaskType.T2I,
+                {"prompt": scene_prompt_refined}
+            )
+            if not t2i_result.get("success"):
+                raise Exception(f"Scene generation failed: {t2i_result.get('error')}")
 
-        result_url = composite_result["image_url"]
+            scene_url = t2i_result["output"]["image_url"]
+
+            # Step 3: Composite
+            composite_result = await _composite_product_scene(product_no_bg_url, scene_url)
+            if not composite_result.get("success"):
+                raise Exception(f"Product compositing failed: {composite_result.get('error')}")
+
+            result_url = composite_result["image_url"]
+
+        # Persist provider CDN result to GCS so it survives 14-day expiry.
+        result_url = await _persist_provider_url(result_url, "image", current_user)
 
         # Save to UserGeneration
         user_gen = UserGeneration(
@@ -1163,7 +1560,9 @@ async def generate_product_scene(
             input_params={
                 "scene_type": request.scene_type,
                 "custom_prompt": request.custom_prompt,
+                "placement": request.placement,
                 "prompt_refinement": prompt_refinement,
+                "pipeline": "composite_fallback" if composite_fallback_used else "kontext_i2i",
             },
             input_text=full_prompt,
             result_image_url=result_url,
@@ -1416,10 +1815,23 @@ async def ai_try_on(
         from scripts.services.piapi_client import PiAPIClient
         piapi = PiAPIClient(api_key=os.getenv("PIAPI_KEY", ""))
 
-        result = await piapi.virtual_try_on(
-             model_image_url=model_url,
-             garment_image_url=garment_url
-        )
+        # Map category → which Kling input slot to use.
+        # PiAPIClient.virtual_try_on() accepts dress_input (full body) or
+        # upper_input / lower_input. The category field on the request lets
+        # the caller pick the slot; "dress"/"full_body" send a single garment
+        # via dress_input, while "upper_body"/"lower_body" send via the
+        # corresponding split slot.
+        tryon_kwargs: Dict[str, Any] = {"model_image_url": model_url}
+        if request.category == "upper_body":
+            tryon_kwargs["garment_image_url"] = ""
+            tryon_kwargs["upper_garment_url"] = garment_url
+        elif request.category == "lower_body":
+            tryon_kwargs["garment_image_url"] = ""
+            tryon_kwargs["lower_garment_url"] = garment_url
+        else:
+            tryon_kwargs["garment_image_url"] = garment_url
+
+        result = await piapi.virtual_try_on(**tryon_kwargs)
 
         if not result.get("success"):
              # Fallback to T2I? No, Try-On is specific.
@@ -1436,6 +1848,9 @@ async def ai_try_on(
         if not result_url:
              raise Exception("No result URL returned from Try-On service")
 
+        # Persist PiAPI CDN result to GCS so it survives 14-day expiry.
+        result_url = await _persist_provider_url(result_url, "image", current_user)
+
         # Save to UserGeneration
         user_gen = UserGeneration(
             user_id=current_user.id,
@@ -1444,7 +1859,8 @@ async def ai_try_on(
             input_params={
                 "model_id": request.model_id,
                 "model_image_url": str(request.model_image_url) if request.model_image_url else None,
-                "angle": request.angle
+                "angle": request.angle,
+                "category": request.category,
             },
             result_image_url=result_url,
             credits_used=15,
@@ -1509,6 +1925,11 @@ async def room_redesign(
         validate_media_url_or_raise(room_media_url, "image", "Room redesign input")
         await validate_image_url_dimensions_or_raise(room_media_url, ROOM_REDESIGN_IMAGE_DIMENSION_RULES)
 
+    # Resolve curated prompt — overrides any free-form custom_prompt.
+    curated = _resolve_curated_prompt("room_redesign", request.prompt_id, request.locale)
+    if curated:
+        request.custom_prompt = curated
+
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
         try:
@@ -1537,27 +1958,48 @@ async def room_redesign(
         interior = INTERIOR_STYLES[0]
 
     style_prompt = request.custom_prompt or interior["prompt"]
+    # Inject style_strength as explicit intensity guidance into the prompt.
+    # Underlying Kontext / Gemini I2I has no native `strength` param, so we
+    # communicate intensity via natural language. The router still receives
+    # the numeric value for any provider that can use it.
+    if request.style_strength <= 0.35:
+        intensity_clause = "Apply the new style very subtly; keep most of the original room visible."
+    elif request.style_strength <= 0.65:
+        intensity_clause = "Apply the new style with balanced intensity; keep room layout and major furniture, restyle finishes, lighting, and decor."
+    elif request.style_strength <= 0.85:
+        intensity_clause = "Apply the new style strongly; restyle finishes, furniture, lighting and decor while preserving room layout, walls and windows."
+    else:
+        intensity_clause = "Apply the new style very aggressively; fully restyle finishes, furniture, lighting and decor while preserving room geometry, doorways and windows."
+    style_prompt = f"{style_prompt} {intensity_clause}"
     style_prompt, prompt_refinement = await _refine_generation_prompt(
         style_prompt,
         "room_redesign",
         "interior redesign prompt",
         user_prompt=bool(request.custom_prompt),
-        context={"style": request.style, "preserve_structure": request.preserve_structure},
+        context={"style": request.style, "preserve_structure": request.preserve_structure, "style_strength": request.style_strength},
     )
 
     try:
         router = get_provider_router()
+        # Map style_strength (0-1, UI slider) to denoising_strength.
+        # Floor at 0.6 because Kontext/Flux below ~0.55 often returns the
+        # original image with cosmetic-only deltas, defeating the redesign.
+        denoising_strength = max(0.6, min(0.85, 0.5 + request.style_strength * 0.4))
         result = await router.route(
             TaskType.INTERIOR,
             {
                 "image_url": str(request.get_room_url()),  # already resolved in get_room_url
                 "prompt": style_prompt,
                 "style": request.style,
-                "preserve_structure": request.preserve_structure
+                "preserve_structure": request.preserve_structure,
+                "strength": request.style_strength,
+                "denoising_strength": denoising_strength,
             }
         )
 
         output_url = result.get("image_url") or result.get("output_url") or (result.get("output", {}).get("image_url") if isinstance(result.get("output"), dict) else None)
+        # Persist PiAPI/Gemini CDN result to GCS so it survives 14-day expiry.
+        output_url = await _persist_provider_url(output_url, "image", current_user)
 
         if output_url:
             # Save to UserGeneration
@@ -1569,6 +2011,7 @@ async def room_redesign(
                     "style": request.style,
                     "custom_prompt": request.custom_prompt,
                     "preserve_structure": request.preserve_structure,
+                    "style_strength": request.style_strength,
                     "prompt_refinement": prompt_refinement,
                 },
                 input_text=style_prompt,
@@ -1630,6 +2073,12 @@ async def generate_short_video(
     """
     validate_media_url_or_raise(str(request.image_url), "image", "Short video input")
     await validate_image_url_dimensions_or_raise(str(request.image_url), IMAGE_TO_VIDEO_DIMENSION_RULES)
+
+    # Resolve curated motion prompt — pin the request.style to the canonical
+    # motion text so motion_prompt_base downstream uses it.
+    curated_motion = _resolve_curated_prompt("short_video", request.prompt_id, request.locale)
+    if curated_motion:
+        request.style = curated_motion
 
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
@@ -1703,7 +2152,21 @@ async def generate_short_video(
         task_params = {
             "image_url": _resolve_public_url(str(request.image_url)),
             "prompt": motion_prompt,
-            "duration": 5
+            "duration": 5,
+            # Anti-hallucination baseline: keep the input product/subject; suppress
+            # PiAPI Wan I2V's known tendency to insert unrelated food/drink props.
+            "negative_prompt": (
+                "food, drink, beverage, bubble tea, boba, coffee, tea, juice, alcohol, snacks, "
+                "extra hands, extra fingers, extra limbs, deformed, distorted, low quality, "
+                "blurry, watermark, text overlay, subtitles, brand logos not in source, "
+                "changed product shape, changed product color, changed packaging"
+                + (f". Also avoid: {request.negative_prompt}" if request.negative_prompt else "")
+            ),
+            # Strong product-identity preservation. Lower motion_strength implies
+            # we want the product even more locked-in, so push image_fidelity up
+            # and motion_bucket down for subtle motion settings.
+            "image_fidelity": 0.95 if strength <= 3 else 0.90 if strength <= 5 else 0.85 if strength <= 7 else 0.80,
+            "motion_bucket_id": 60 if strength <= 3 else 100 if strength <= 5 else 150 if strength <= 7 else 200,
         }
 
         if request.model_id:
@@ -1719,6 +2182,8 @@ async def generate_short_video(
             return _provider_failure_response("short_video", result, current_user)
 
         video_url = result.get("video_url") or result.get("output", {}).get("video_url") or result.get("output_url")
+        # Persist PiAPI/Pollo CDN video to GCS so it survives 14-day expiry.
+        video_url = await _persist_provider_url(video_url, "video", current_user)
 
         # Optional: Apply style transformation (Video-to-Video)
         # Requires can_use_effects plan feature
@@ -1879,10 +2344,30 @@ async def video_transform(
             user_prompt=True,
             context={"style": request.style},
         )
+
+        # All V2V providers in the chain (piapi_mcp's Wan referenceImage, Pollo,
+        # Vertex AI) reject MP4 URLs — they need a still image. Extract the
+        # first frame and pass it as image_url / first_frame_url so each
+        # provider gets the format it actually expects.
+        try:
+            first_frame_url = await _extract_first_frame_to_gcs(
+                str(request.video_url),
+                str(current_user.id) if current_user is not None and getattr(current_user, "id", None) else None,
+            )
+        except Exception as ff_exc:
+            logger.error("video_transform first-frame extraction failed: %s", ff_exc, exc_info=True)
+            await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
+            return ToolResponse(
+                success=False,
+                message="Could not read the input video. Please upload a standard MP4 (H.264) under 200 MB.",
+            )
+
         result = await router_instance.route(
             TaskType.V2V,
             {
                 "video_url": request.video_url,
+                "image_url": first_frame_url,
+                "first_frame_url": first_frame_url,
                 "prompt": refined_prompt,
                 "style": request.style,
             }
@@ -1891,6 +2376,8 @@ async def video_transform(
         if result.get("success"):
             output = result.get("output", {})
             video_url = output.get("video_url")
+            # Persist PiAPI/Pollo CDN video to GCS so it survives 14-day expiry.
+            video_url = await _persist_provider_url(video_url, "video", current_user)
 
             generation = UserGeneration(
                 user_id=current_user.id,
@@ -1984,6 +2471,8 @@ async def upscale_image(
         if result.get("success"):
             output = result.get("output", {})
             image_url = output.get("image_url")
+            # Persist PiAPI CDN result to GCS so it survives 14-day expiry.
+            image_url = await _persist_provider_url(image_url, "image", current_user)
 
             generation = UserGeneration(
                 user_id=current_user.id,
@@ -2037,6 +2526,17 @@ async def generate_avatar_video(
 
     validate_media_url_or_raise(str(request.image_url), "image", "AI avatar headshot")
     await validate_image_url_dimensions_or_raise(str(request.image_url), AVATAR_HEADSHOT_DIMENSION_RULES)
+
+    # Resolve curated avatar script. The avatar `language` field decides which
+    # canonical variant to use: zh-TW → ZH script; otherwise → EN script.
+    curated_script = _resolve_curated_prompt("ai_avatar", request.prompt_id, request.locale or request.language)
+    if curated_script:
+        request.script = curated_script
+    if not request.script or not request.script.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Either 'script' or 'prompt_id' is required for the avatar tool.",
+        )
 
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
@@ -2096,6 +2596,8 @@ async def generate_avatar_video(
         if result.get("success"):
             output = result.get("output", {})
             video_url = output.get("video_url") or result.get("video_url")
+            # Persist provider CDN video to GCS so it survives 14-day expiry.
+            video_url = await _persist_provider_url(video_url, "video", current_user)
 
             # Save to UserGeneration (for subscriber's personal gallery)
             user_gen = UserGeneration(
@@ -2420,6 +2922,8 @@ async def image_translate(
         if not result_url:
             await _refund_credits(db, current_user, cost, "image_translation")
             return ToolResponse(success=False, message="Image translation failed: no output URL")
+        # Persist provider CDN result to GCS so it survives 14-day expiry.
+        result_url = await _persist_provider_url(result_url, "image", current_user)
 
         user_gen = UserGeneration(
             user_id=current_user.id,
@@ -2505,10 +3009,23 @@ async def video_dubbing(
     if not allowed:
         return ToolResponse(success=False, message=err)
 
-    CREDIT_COST = 35
+    # 30 credits per tier_config.py video_dubbing default; UI hard-codes the
+    # same value on CreditCost so the displayed cost matches what we deduct.
+    CREDIT_COST = 30
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "video_dubbing")
     if not ok:
         return ToolResponse(success=False, message=err)
+
+    # Pick a sensible default tts-1 voice based on the target language.
+    # tts-1 is multilingual but each voice has a slightly different timbre;
+    # these picks are the most natural-sounding for each market.
+    def _pick_voice_for(lang: str) -> str:
+        l = (lang or "").lower()
+        if l.startswith("zh"): return "nova"      # clearer Mandarin diction
+        if l.startswith("ja"): return "nova"
+        if l.startswith("ko"): return "shimmer"
+        if l.startswith("es"): return "fable"
+        return "alloy"                             # default (en + others)
 
     try:
         router_instance = get_provider_router()
@@ -2517,11 +3034,28 @@ async def video_dubbing(
                 "text": translated_script,
                 "ref_audio": request.voice_reference_url or "",
                 "ref_text": request.voice_reference_text,
+                "voice": _pick_voice_for(request.target_language),
             }
         )
         if not speech_result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "video_dubbing")
-            return _provider_failure_response("video_dubbing", speech_result, current_user)
+            err_text = (speech_result.get("error") or speech_result.get("message") or "").lower()
+            # PiAPI's F5-TTS upstream is currently 500'ing on every call; surface
+            # an honest message instead of the generic "tool unavailable" so the
+            # user knows it's a voice-cloning service issue (not their video).
+            if "failed to get input audio" in err_text or "invalid request" in err_text:
+                friendly = (
+                    "The voice cloning service could not read the reference voice clip. "
+                    "Please upload a 16 kHz mono WAV/MP3 reference voice (5-15 s of clean speech) and try again."
+                )
+            elif "internal server error" in err_text or "failed to do request" in err_text or "500" in err_text:
+                friendly = (
+                    "The voice cloning service is temporarily down upstream (PiAPI F5-TTS). "
+                    "Please try again in a few minutes."
+                )
+            else:
+                friendly = GENERIC_TOOL_FAILURE_MESSAGE
+            return _provider_failure_response("video_dubbing", speech_result, current_user, user_message=friendly)
 
         speech_output = speech_result.get("output", {})
         audio_url = speech_output.get("audio_url") or speech_output.get("url") or speech_result.get("audio_url")
@@ -2534,6 +3068,13 @@ async def video_dubbing(
             audio_url,
             str(current_user.id),
         )
+
+        # Capture which TTS engine actually produced the audio so we can
+        # tell whether the user got their voice clone or a fallback voice.
+        speech_provider = "piapi_tts"
+        speech_meta = (speech_result.get("output") or {}) if isinstance(speech_result, dict) else {}
+        if speech_meta.get("model") == "tts-1":
+            speech_provider = f"piapi_tts_1:{speech_meta.get('voice') or 'alloy'}"
 
         user_gen = UserGeneration(
             user_id=current_user.id,
@@ -2550,7 +3091,7 @@ async def video_dubbing(
             result_metadata={
                 "action": "video_dubbing",
                 "audio_url": audio_url,
-                "speech_provider": "piapi_tts",
+                "speech_provider": speech_provider,
                 "mux": "ffmpeg",
             },
             credits_used=CREDIT_COST,
@@ -2583,6 +3124,53 @@ async def video_dubbing(
         logger.error("Video dubbing error: %s", exc, exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "video_dubbing")
         _notify_admin_of_tool_failure("video_dubbing", exc, current_user)
+
+        # Map the exception to an actionable user-facing message. Each branch
+        # corresponds to a specific failure mode we know happens in practice
+        # so the user can take the right next step instead of seeing the
+        # generic "tool unavailable" placeholder.
+        exc_text = str(exc).lower()
+        exc_type = type(exc).__name__
+
+        # 1. PiAPI F5-TTS upstream 500. Path A (with ref_audio) catches this
+        #    in text_to_speech() and falls back to tts-1, but if the user-
+        #    supplied ref returns an explicit auth error we still raise.
+        if "internal server error" in exc_text or "failed to do request" in exc_text or "failed to get input audio" in exc_text:
+            return ToolResponse(success=False, message=(
+                "The voice cloning service is temporarily down upstream. "
+                "Please try again in a few minutes, or remove the voice reference to use the standard voice."
+            ))
+        # 2. ffmpeg muxing failed (bad video container, missing audio stream,
+        #    encoder error). User needs a different input video.
+        if "ffmpeg dubbing mux failed" in exc_text or "ffmpeg" in exc_text:
+            return ToolResponse(success=False, message=(
+                "Could not combine the audio with your video. "
+                "Please use a standard MP4 (H.264) under 200 MB and try again."
+            ))
+        # 3. Input video URL not reachable from our backend (Cloud Run egress
+        #    blocked, signed URL expired, host returns 4xx/5xx).
+        if (
+            "filenotfounderror" in exc_text
+            or "client error '4" in exc_text
+            or "server error '5" in exc_text
+            or "could not download" in exc_text
+            or exc_type in ("HTTPStatusError", "TimeoutException", "ConnectError")
+        ):
+            return ToolResponse(success=False, message=(
+                "Could not read the input video. The URL may be unreachable, "
+                "private, or have expired. Please re-upload the video and try again."
+            ))
+        # 4. GCS upload failed at persist time.
+        if "upload" in exc_text and ("gcs" in exc_text or "storage" in exc_text):
+            return ToolResponse(success=False, message=(
+                "Could not save the dubbed video to storage. Please try again in a moment."
+            ))
+        # 5. tts-1 quota / rate-limit upstream.
+        if "tts-1 returned http 429" in exc_text or "rate" in exc_text and "limit" in exc_text:
+            return ToolResponse(success=False, message=(
+                "Voice generation is rate-limited right now. Please try again in a minute."
+            ))
+        # 6. Anything else.
         return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
 
 

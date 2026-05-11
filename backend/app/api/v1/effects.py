@@ -21,6 +21,7 @@ from app.models.material import Material, ToolType, MaterialSource, MaterialStat
 from app.models.user_generation import UserGeneration
 from app.services.effects_service import VidGoEffectsService, VIDGO_STYLES
 from app.services.demo_cache_service import DemoCacheService
+from app.services.gcs_storage_service import get_gcs_storage
 from sqlalchemy import select, func
 import logging
 import hashlib
@@ -202,6 +203,13 @@ async def apply_style_effect(
         else:
             code = status.HTTP_500_INTERNAL_SERVER_ERROR
         raise HTTPException(status_code=code, detail=error_msg)
+
+    # Persist provider CDN result to GCS so it survives 14-day expiry.
+    output_url_persisted = await get_gcs_storage().safe_persist_url(
+        result.get("output_url"), "image", str(current_user.id)
+    )
+    if output_url_persisted:
+        result["output_url"] = output_url_persisted
 
     # Save to UserGeneration
     generation = UserGeneration(

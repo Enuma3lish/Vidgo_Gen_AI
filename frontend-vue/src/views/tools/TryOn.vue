@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode } from '@/composables'
+import { useDemoMode, useLocalized } from '@/composables'
 import { toolsApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
@@ -15,6 +15,8 @@ const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const isZh = computed(() => locale.value.startsWith('zh'))
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 // Demo mode. `inputLibrary` backs the garment picker via
 // `inputLibraryClothingItems` below. `loadEffectCatalog` is called in mount
@@ -78,8 +80,8 @@ const isMaleModel = computed(() => selectedModel.value.startsWith('male'))
 const pendingTitle = computed(() => isZh.value
   ? '我正在為您生成試穿效果，這可能需要幾分鐘，請稍後再回來查看是否已完成。'
   : 'Generating your virtual try-on. This may take a minute — please check back shortly.')
-const pendingDetail = computed(() => isZh.value ? '正在生成試穿圖片...' : 'Generating try-on image...')
-const pendingDuration = computed(() => isZh.value ? '需要 1 至 2 分鐘' : 'Usually takes 1 to 2 minutes')
+const pendingDetail = computed(() => L('正在生成試穿圖片...', 'Generating try-on image...', '試着画像を生成中...', '시착 이미지 생성 중...', 'Generando imagen de prueba...'))
+const pendingDuration = computed(() => L('需要 1 至 2 分鐘', 'Usually takes 1 to 2 minutes', '通常1〜2分かかります', '보통 1-2분 소요', 'Suele tardar 1-2 minutos'))
 
 // Get unique clothing items from database (grouped by clothing_id)
 // Each clothing item may have multiple results for different models
@@ -288,7 +290,7 @@ async function generateTryOn() {
         const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
         if (demoResultUrl) {
           resultImage.value = demoResultUrl
-          uiStore.showSuccess(isZh.value ? '生成成功（示範）' : 'Generated successfully (Demo)')
+          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
           return
         }
       }
@@ -297,7 +299,7 @@ async function generateTryOn() {
       // Pass model_id via product_id (API only exposes one extra param) and
       // the garment category via topic so the backend picks the right pair.
       const garmentTopic = (demoTemplates.value.find(t => (t as any).input_params?.clothing_id === selectedClothingId.value) as any)?.topic
-      uiStore.showInfo(isZh.value ? '此組合尚未生成，正在為您即時生成（約 30-60 秒）...' : 'Generating in real-time (30-60s)...')
+      uiStore.showInfo(L('此組合尚未生成，正在為您即時生成（約 30-60 秒）...', 'Generating in real-time (30-60s)...', 'リアルタイム生成中（約30〜60秒）...', '실시간으로 생성 중 (약 30-60초)...', 'Generando en tiempo real (30-60s)...'))
       const pickedGarment = (demoTemplates.value.find((t: any) => t.input_params?.clothing_id === selectedClothingId.value) as any)?.input_image_url
       const onDemandUrl = await generateOnDemand('try_on', garmentTopic, {
         product_id: selectedModel.value,
@@ -305,11 +307,11 @@ async function generateTryOn() {
       })
       if (onDemandUrl) {
         resultImage.value = onDemandUrl
-        uiStore.showSuccess(isZh.value ? '試穿成功' : 'Try-on successful')
+        uiStore.showSuccess(L('試穿成功', 'Try-on successful', '試着成功', '시착 성공', 'Prueba exitosa'))
         return
       }
       demoEmptyState.value = true
-      uiStore.showError(isZh.value ? '試穿服務暫時無法使用，請稍後再試或訂閱解鎖完整功能' : 'Try-on service temporarily unavailable. Please try again later or subscribe.')
+      uiStore.showError(L('試穿服務暫時無法使用，請稍後再試或訂閱解鎖完整功能', 'Try-on service temporarily unavailable. Please try again later or subscribe.', '試着サービスは一時的に利用できません。後ほど再試行するか、サブスク登録してください。', '시착 서비스를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하거나 구독해 주세요.', 'Servicio temporalmente no disponible. Inténtalo más tarde o suscríbete.'))
       return
     }
 
@@ -320,7 +322,7 @@ async function generateTryOn() {
     if (clothingImage.value && clothingImage.value.startsWith('data:')) {
       const blob = dataURItoBlob(clothingImage.value)
       if (!blob) {
-        uiStore.showError(isZh.value ? '圖片格式無效，請重新上傳' : 'Invalid image format. Please re-upload.')
+        uiStore.showError(L('圖片格式無效，請重新上傳', 'Invalid image format. Please re-upload.', '画像形式が無効です。再アップロードしてください。', '이미지 형식이 올바르지 않습니다. 다시 업로드해 주세요.', 'Formato de imagen inválido. Súbela de nuevo.'))
         return
       }
       const uploadResult = await toolsApi.uploadImage(blob as File)
@@ -332,7 +334,7 @@ async function generateTryOn() {
       if (modelImage.value.startsWith('data:')) {
         const blob = dataURItoBlob(modelImage.value)
         if (!blob) {
-          uiStore.showError(isZh.value ? '模特圖片格式無效' : 'Invalid model image format.')
+          uiStore.showError(L('模特圖片格式無效', 'Invalid model image format.', 'モデル画像の形式が無効です。', '모델 이미지 형식이 올바르지 않습니다.', 'Formato de imagen del modelo inválido.'))
           return
         }
         const modelUpload = await toolsApi.uploadImage(blob as File)
@@ -355,12 +357,12 @@ async function generateTryOn() {
       }
       uiStore.showSuccess(t('common.success'))
     } else {
-      const errMsg = result.message || (result as any).error || (isZh.value ? '生成失敗，請稍後再試' : 'Generation failed. Please try again.')
+      const errMsg = result.message || (result as any).error || L('生成失敗，請稍後再試', 'Generation failed. Please try again.', '生成に失敗しました。後ほど再試行してください。', '생성에 실패했습니다. 나중에 다시 시도해 주세요.', 'Falló la generación. Inténtalo de nuevo.')
       uiStore.showError(errMsg)
     }
   } catch (error: any) {
     const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || ''
-    uiStore.showError(detail || (isZh.value ? '生成失敗' : 'Generation failed'))
+    uiStore.showError(detail || L('生成失敗', 'Generation failed', '生成に失敗', '생성 실패', 'Falló la generación'))
   } finally {
     isProcessing.value = false
   }
@@ -423,7 +425,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
         <!-- Subscribe Notice for Demo Users -->
         <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
           <RouterLink to="/pricing" class="hover:underline">
-            {{ isZh ? '訂閱以解鎖更多功能' : 'Subscribe to unlock more features' }}
+            {{ L('訂閱以解鎖更多功能', 'Subscribe to unlock more features', 'サブスク登録で機能を解禁', '구독으로 더 많은 기능 잠금 해제', 'Suscríbete para desbloquear más funciones') }}
           </RouterLink>
         </div>
       </div>
@@ -431,10 +433,10 @@ function dataURItoBlob(dataURI: string): Blob | null {
       <HowToUseHint
         tool-type="try_on"
         media-kind="image"
-        :steps="[
-          { en: 'Upload a clear garment photo (flat-lay or product page works best).', zh: '上傳服裝圖片，以平鋪或商品頁圖片最佳。' },
-          { en: 'Pick a default model or upload a full-body model photo.', zh: '選擇預設模特，或上傳你自己的全身模特照片。' },
-          { en: 'Click Try It On to preview the garment on the chosen model.', zh: '點擊試穿即可預覽服裝上身效果。' },
+        :i18n-keys="[
+          'howTo.try_on.step1',
+          'howTo.try_on.step2',
+          'howTo.try_on.step3',
         ]"
       />
 
@@ -442,7 +444,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
         <!-- Left Panel - Clothing Selection -->
         <div class="card">
           <h3 class="text-lg font-semibold text-dark-50 mb-4">
-            {{ isZh ? '選擇服裝' : 'Select Clothing' }}
+            {{ L('選擇服裝', 'Select Clothing', '服を選択', '의상 선택', 'Selecciona ropa') }}
           </h3>
 
           <!-- Kling AI limitation notice — try-on is trained on torso/body
@@ -451,7 +453,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <div class="mb-4 p-3 rounded-lg" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.24);">
             <p class="text-xs text-amber-400 leading-relaxed">
               <span class="font-semibold">
-                {{ isZh ? '⚠️ 提示：' : '⚠️ Note: ' }}
+                {{ L('⚠️ 提示：', '⚠️ Note: ', '⚠️ 注意：', '⚠️ 참고: ', '⚠️ Nota: ') }}
               </span>
               {{ isZh
                 ? 'AI 試穿適用於完整服裝（上衣、裙裝、外套等）。配件類如帽子、眼鏡、手錶、絲巾、珠寶、鞋子可能無法正確呈現。'
@@ -462,7 +464,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <!-- Demo Clothing Items -->
           <div v-if="isDemoUser || displayClothingItems.length > 0" class="mb-4">
             <p class="text-sm text-dark-300 mb-3">
-              {{ isZh ? '預設服裝（示範）' : 'Preset Clothing (Demo)' }}
+              {{ L('預設服裝（示範）', 'Preset Clothing (Demo)', 'プリセット服（デモ）', '프리셋 의상 (데모)', 'Ropa preestablecida (demo)') }}
             </p>
             <div v-if="isLoadingTemplates" class="flex justify-center py-8">
               <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
@@ -492,11 +494,11 @@ function dataURItoBlob(dataURI: string): Blob | null {
 
           <!-- Subscriber Interface: Upload Zone -->
           <div v-if="!isDemoUser" class="mb-4">
-             <h4 class="text-sm font-medium text-dark-300 mb-2">{{ isZh ? '上傳服裝' : 'Upload Clothing' }}</h4>
+             <h4 class="text-sm font-medium text-dark-300 mb-2">{{ L('上傳服裝', 'Upload Clothing', '服をアップロード', '의상 업로드', 'Subir ropa') }}</h4>
              <ImageUploader 
                tool-type="try_on"
                v-model="clothingImage" 
-               :label="isZh ? '點擊上傳或拖放服裝圖片' : 'Drop clothing image here'"
+               :label="L('點擊上傳或拖放服裝圖片', 'Drop clothing image here', 'クリックまたは服画像をドロップ', '클릭 또는 의상 이미지 드롭', 'Sube o arrastra imagen de ropa')"
                class="mb-4"
              />
           </div>
@@ -509,7 +511,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
                @click="clothingImage = undefined; selectedClothingId = null"
                class="btn-ghost text-sm w-full"
             >
-              {{ isZh ? '更換服裝' : 'Change Clothing' }}
+              {{ L('更換服裝', 'Change Clothing', '服を変更', '의상 변경', 'Cambiar ropa') }}
             </button>
           </div>
         </div>
@@ -517,7 +519,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
         <!-- Middle Panel - Model Selection -->
         <div class="card">
           <h3 class="text-lg font-semibold text-dark-50 mb-4">
-            {{ isZh ? '選擇模特' : 'Select Model' }}
+            {{ L('選擇模特', 'Select Model', 'モデルを選択', '모델 선택', 'Selecciona modelo') }}
           </h3>
 
           <div class="grid grid-cols-2 gap-3">
@@ -543,20 +545,20 @@ function dataURItoBlob(dataURI: string): Blob | null {
                  @click="selectedModel = 'custom'" 
                  class="w-full py-2 border-2 border-dashed rounded-xl hover:border-primary-500 hover:text-primary-500 transition-colors text-dark-300 text-sm flex items-center justify-center gap-2" style="border-color: rgba(255,255,255,0.12);">
                >
-                 <span>➕</span> {{ isZh ? '上傳自定義模特' : 'Upload Custom Model' }}
+                 <span>➕</span> {{ L('上傳自定義模特', 'Upload Custom Model', 'カスタムモデルをアップロード', '커스텀 모델 업로드', 'Subir modelo personalizado') }}
                </button>
 
                <div v-else class="space-y-2">
                  <div class="flex justify-between items-center mb-1">
-                   <span class="text-sm font-medium text-dark-50">{{ isZh ? '自定義模特' : 'Custom Model' }}</span>
+                   <span class="text-sm font-medium text-dark-50">{{ L('自定義模特', 'Custom Model', 'カスタムモデル', '커스텀 모델', 'Modelo personalizado') }}</span>
                    <button @click="selectedModel = 'female-1'; modelImage = undefined" class="text-xs text-dark-300 hover:text-dark-50">
-                     {{ isZh ? '取消' : 'Cancel' }}
+                     {{ L('取消', 'Cancel', 'キャンセル', '취소', 'Cancelar') }}
                    </button>
                  </div>
                  <ImageUploader 
                    tool-type="try_on"
                    v-model="modelImage" 
-                   :label="isZh ? '上傳全身模特照片' : 'Upload full-body model photo'"
+                   :label="L('上傳全身模特照片', 'Upload full-body model photo', '全身モデル写真をアップロード', '전신 모델 사진 업로드', 'Sube foto de cuerpo entero')"
                    height="h-48"
                  />
                </div>
@@ -567,14 +569,14 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <div v-if="!isDemoUser && styleTemplates.length > 0" class="mt-6">
             <div class="flex items-center justify-between mb-3">
               <h4 class="text-sm font-semibold text-dark-200">
-                {{ isZh ? '拍攝場景模版' : 'Scene Templates' }}
+                {{ L('拍攝場景模版', 'Scene Templates', 'シーンテンプレート', '씬 템플릿', 'Plantillas de escena') }}
               </h4>
               <button
                 v-if="selectedTemplateId"
                 @click="selectedTemplateId = null"
                 class="text-xs text-primary-400 hover:text-primary-300"
               >
-                {{ isZh ? '清除' : 'Clear' }}
+                {{ L('清除', 'Clear', 'クリア', '제거', 'Limpiar') }}
               </button>
             </div>
             <div class="grid grid-cols-3 gap-2">
@@ -603,7 +605,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
               </button>
             </div>
             <p class="text-xs text-dark-400 mt-2">
-              {{ isZh ? '選擇場景模版，AI 將在指定背景中展示穿搭效果' : 'Select a scene for the model background' }}
+              {{ L('選擇場景模版，AI 將在指定背景中展示穿搭效果', 'Select a scene for the model background', 'シーンを選択するとモデル背景に適用されます', '씬을 선택하면 모델 배경에 적용됩니다', 'Selecciona una escena para el fondo del modelo') }}
             </p>
           </div>
 
@@ -614,7 +616,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
             <!-- Warning message for invalid combination -->
             <div v-if="!isValidCombination" class="mt-3 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
               <p class="text-sm text-red-400">
-                {{ isZh ? '⚠️ 男性模特不能穿著裙子或洋裝' : '⚠️ Male models cannot wear dresses or skirts' }}
+                {{ L('⚠️ 男性模特不能穿著裙子或洋裝', '⚠️ Male models cannot wear dresses or skirts', '⚠️ 男性モデルはスカートやドレスを着用できません', '⚠️ 남성 모델은 스커트나 드레스를 입을 수 없습니다', '⚠️ Los modelos masculinos no pueden llevar vestidos o faldas') }}
               </p>
             </div>
 
@@ -632,7 +634,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
         <!-- Right Panel - Result -->
         <div class="card">
           <h3 class="text-lg font-semibold text-dark-50 mb-4">
-            {{ isZh ? '試穿結果' : 'Try-On Result' }}
+            {{ L('試穿結果', 'Try-On Result', '試着結果', '시착 결과', 'Resultado de la prueba') }}
           </h3>
 
           <div v-if="resultImage" class="space-y-4">
@@ -653,7 +655,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
                </a>
 
                <RouterLink v-else to="/pricing" class="btn-primary w-full text-center block">
-                 {{ isZh ? '訂閱以獲得完整功能' : 'Subscribe for Full Access' }}
+                 {{ L('訂閱以獲得完整功能', 'Subscribe for Full Access', 'サブスクで全機能を解禁', '구독으로 전체 액세스', 'Suscríbete para acceso completo') }}
                </RouterLink>
             </div>
           </div>
@@ -661,17 +663,17 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <div v-else-if="demoEmptyState" class="h-64 flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
             <span class="text-2xl">🔒</span>
             <p class="text-sm text-dark-200">
-              {{ isZh ? '此範例尚未預生成結果' : 'No pre-generated result for this example yet' }}
+              {{ L('此範例尚未預生成結果', 'No pre-generated result for this example yet', 'この例はまだ事前生成されていません', '이 예시는 아직 사전 생성되지 않았습니다', 'Aún no hay resultado pregenerado') }}
             </p>
             <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
-              {{ isZh ? '訂閱以使用完整 AI 功能' : 'Subscribe to use the real AI' }}
+              {{ L('訂閱以使用完整 AI 功能', 'Subscribe to use the real AI', 'サブスクで実AI機能を解禁', '구독으로 실제 AI 사용', 'Suscríbete para usar la IA real') }}
             </RouterLink>
           </div>
 
           <div v-else class="h-64 flex items-center justify-center text-dark-400">
             <div class="text-center">
               <span class="text-5xl block mb-4">👔</span>
-              <p>{{ isZh ? '試穿結果將在此顯示' : 'Try-on result will appear here' }}</p>
+              <p>{{ L('試穿結果將在此顯示', 'Try-on result will appear here', '試着結果がここに表示されます', '시착 결과가 여기에 표시됩니다', 'El resultado aparecerá aquí') }}</p>
             </div>
           </div>
         </div>

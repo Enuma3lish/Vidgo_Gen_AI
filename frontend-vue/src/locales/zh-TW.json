@@ -412,7 +412,8 @@
     "uploadVideo": "上傳影片",
     "result": "結果",
     "previewComingSoon": "預覽即將推出",
-    "startFree": "免費開始"
+    "startFree": "免費開始",
+    "insufficient": "（點數不足）"
   },
   "auth": {
     "email": "電子郵件",
@@ -561,7 +562,10 @@
         "roomType": "房型",
         "garmentType": "服裝類型"
       }
-    }
+    },
+    "backToDashboard": "返回儀表板",
+    "noInvoices": "尚未有發票",
+    "noInvoicesDesc": "訂閱後，您的付款發票會顯示在這裡。"
   },
   "socialShare": {
     "title": "分享作品連結",
@@ -586,7 +590,15 @@
     "charCount": "{count} 字",
     "close": "關閉",
     "defaultCaptionGeneric": "用 VidGo AI 創作 #AI創作 #VidGoAI",
-    "defaultCaptionTool": "用 VidGo AI 的 {tool} 功能創作 #AI創作 #VidGoAI"
+    "defaultCaptionTool": "用 VidGo AI 的 {tool} 功能創作 #AI創作 #VidGoAI",
+    "copyCaption": "複製說明文字",
+    "captionCopied": "說明文字已複製。",
+    "downloadImage": "下載圖片",
+    "downloadVideo": "下載影片",
+    "mediaDownloaded": "檔案已下載。",
+    "nativeShareWithImage": "分享圖片到 App",
+    "captionAndMediaReady": "說明已複製、圖片已下載，請在 {platform} 貼上並上傳。",
+    "fallbackCaptionAndDownload": "說明已複製、圖片已下載，可貼到任何 App。"
   },
   "pricing": {
     "title": "選擇您的方案",
@@ -615,7 +627,67 @@
     "creditsPerMonth": "{credits} 點數/月",
     "ecpayPaymentLabel": "信用卡付款 (ECPay)",
     "testPaymentLabel": "測試付款 (US$1 / 約 NT$32)",
-    "paddlePaymentLabel": "國際付款 (Paddle)",
+    "paypalPaymentLabel": "國際付款 (PayPal)",
+    "paypalPricingStrategy": "海外使用 PayPal 付款請改用美金定價：標準版 US$19.99、Pro 版 US$49.99、Pro+ 版 US$99.99，以抵銷 PayPal 手續費與匯差。",
+    "creditReference": {
+      "title": "點數換算參考（100 點）",
+      "headers": {
+        "featureType": "功能類別",
+        "creditsPerRun": "消耗點數 / 次",
+        "outputFor100": "100 點數可生成數",
+        "useCase": "建議適用場景"
+      },
+      "rows": {
+        "proLong": {
+          "feature": "專業級長影片 (10s+)",
+          "cost": "35 點",
+          "output": "約 3 支",
+          "useCase": "電影質感、高品質 Luma/Kling"
+        },
+        "restore": {
+          "feature": "影片畫質修復 / 增強",
+          "cost": "15 點",
+          "output": "約 6 支",
+          "useCase": "舊片翻新、低解析度轉 HD"
+        }
+      },
+      "scenarios": {
+        "title": "🚀 100 點數能為您做什麼？（情境舉例）",
+        "intro": "為了讓用戶更有感，您可以增加一個「情境套餐」說明：",
+        "creatorStarter": "「自媒體新手包」：生成 5 支 標準短影片 + 50 張 封面配圖。",
+        "proDesigner": "「專業設計師包」：生成 2 支 高畫質專業影片 + 6 張 商業級圖片。",
+        "imageSprint": "「純圖片創作季」：生成 100 張 標準 AI 圖片。"
+      }
+    },
+    "creditPacks": {
+      "sectionBadge": "單買點數收費",
+      "title": "不訂閱也可以直接購買點數",
+      "subtitle": "三個正式 TWD 點數包已固定，適合臨時提案、室內設計渲染、批次商品圖與影片補量。購買點數不會在每月週期重置。",
+      "checkoutNote": "台灣 ECPay 金流付款",
+      "badges": {
+        "bestValue": "最划算",
+        "popular": "熱門"
+      },
+      "bonusPct": "多送 {pct}%",
+      "flexibleTopup": "彈性補量",
+      "oneTime": "一次購買",
+      "creditsUnit": "點",
+      "bonusInclusion": "內含 {bonus} 點加贈額度",
+      "noBonus": "無加贈，適合小量測試",
+      "featureCrossTool": "可用於圖片、影片、室內設計與商品場景生成",
+      "featureNoReset": "購買點數不會每月歸零，適合專案補量",
+      "cta": {
+        "buy": "購買點數",
+        "signInToBuy": "登入後購買"
+      },
+      "purchaseFailed": "點數包購買失敗，請稍後再試。",
+      "orderCreated": "訂單已建立",
+      "fallbackNames": {
+        "light": "輕量包",
+        "standard": "標準包",
+        "heavy": "重度包"
+      }
+    },
     "qualityFeature": "{resolution} 畫質",
     "priorityQueueFeature": "優先佇列",
     "apiAccessFeature": "API 存取",
@@ -697,8 +769,8 @@
     "processing": "正在載入範例...",
     "tabs": {
       "redesign": "瀏覽範例",
-      "generate": "設計生成（需訂閱）",
-      "styleTransfer": "風格轉換（需訂閱）"
+      "generate": "生成設計",
+      "styleTransfer": "風格轉換"
     },
     "uploadTitle": "選擇參考範例",
     "roomType": "空間類型",
@@ -714,8 +786,8 @@
     "tryAnother": "查看其他範例",
     "actions": {
       "redesign": "查看範例",
-      "generate": "生成設計（需訂閱）",
-      "applyStyle": "套用風格（需訂閱）"
+      "generate": "生成設計",
+      "applyStyle": "套用風格"
     },
     "success": {
       "redesigned": "房間改造成功！",
@@ -1332,5 +1404,95 @@
     "selectOrderFirst": "請從列表中選擇訂單以開立發票",
     "goToList": "前往發票列表",
     "cancel": "取消"
+  },
+  "upscale": {
+    "title": "HD 圖片放大",
+    "subtitle": "使用 AI 將圖片放大至 2 倍或 4 倍解析度",
+    "demoCta": "訂閱以上傳自己的圖片並下載高清結果",
+    "tryDemo": "試用示範圖片",
+    "uploadOwn": "或上傳你自己的圖片",
+    "original": "原始圖",
+    "scaleFactor": "放大倍率",
+    "processing": "放大中...",
+    "action": "放大 {scale}x",
+    "loading": "圖片放大中...",
+    "resultLabel": "放大結果 ({scale}x)",
+    "downloadHd": "下載 HD 圖片",
+    "subscribeDownload": "訂閱以下載 HD",
+    "placeholderDemo": "選一張示範圖片並點擊放大",
+    "placeholderPaid": "上傳一張圖片以進行放大",
+    "warnings": {
+      "selectImage": "請先選擇或上傳一張圖片"
+    },
+    "errors": {
+      "generic": "放大失敗"
+    },
+    "toasts": {
+      "success": "圖片已成功放大 {scale}x！",
+      "demoReady": "示範預覽已就緒。訂閱以放大你自己的圖片至 {scale}x HD。"
+    },
+    "demoLabels": {
+      "landscape": "風景",
+      "forest": "森林",
+      "interior": "室內",
+      "ocean": "海洋"
+    }
+  },
+  "howTo": {
+    "heading": "使用方法",
+    "formatTitle": "上傳檔案要求",
+    "reuploadNote": "若格式不支援，系統會提示您改用正確格式重新上傳。",
+    "background_removal": {
+      "step1": "選下方的示範圖片，或上傳你自己的照片。",
+      "step2": "點擊去背景取得透明背景的 PNG 圖片。",
+      "step3": "下載結果，或直接送到其他工具使用。"
+    },
+    "product_scene": {
+      "step1": "選擇或上傳一張乾淨的商品圖片，白底或透明背景最佳。",
+      "step2": "選擇一個場景預設，或訂閱後可自訂描述。",
+      "step3": "點擊生成取得適合電商使用的場景圖。"
+    },
+    "try_on": {
+      "step1": "上傳服裝圖片，以平鋪或商品頁圖片最佳。",
+      "step2": "選擇預設模特，或上傳你自己的全身模特照片。",
+      "step3": "點擊試穿即可預覽服裝上身效果。"
+    },
+    "room_redesign": {
+      "step1": "上傳你的房間照片，或選下方示範房間。",
+      "step2": "選擇房間類型、設計風格，可加上額外描述。",
+      "step3": "點擊生成取得重新設計的 2D 圖片；訂閱用戶可進一步建立 3D 演示。"
+    },
+    "short_video": {
+      "v2v": {
+        "step1": "上傳 MP4 / WebM / MOV 影片，最大 100MB。",
+        "step2": "從目錄中選擇一個風格轉換效果。",
+        "step3": "點擊生成以套用 AI 風格轉換。"
+      },
+      "i2v": {
+        "step1": "選示範圖片或上傳你自己的商品 / 場景圖。",
+        "step2": "從目錄中選擇一個動態 / 效果。",
+        "step3": "點擊生成創建一段短影片。"
+      }
+    },
+    "ai_avatar": {
+      "step1": "選一個預設頭像，或上傳你自己的正面頭像照片。",
+      "step2": "選擇腳本分類，或貼上你自己的腳本。",
+      "step3": "選擇語音與語言，再點擊生成影片。"
+    },
+    "image_translator": {
+      "step1": "選示範圖片或上傳自己的海報 / 商品圖 / 橫幅。",
+      "step2": "選擇來源語言與目標語言。",
+      "step3": "點擊翻譯，保留排版並替換文字。"
+    },
+    "video_dubbing": {
+      "step1": "選示範影片以快速預覽配音流程。",
+      "step2": "訂閱用戶可上傳自己的 MP4 / WebM / MOV 影片。",
+      "step3": "選擇來源 / 目標語言並點擊生成配音。"
+    },
+    "upscale": {
+      "step1": "選示範圖片或上傳你自己的低解析度圖片。",
+      "step2": "選擇 2 倍或 4 倍放大倍率。",
+      "step3": "點擊放大並下載高解析度結果。"
+    }
   }
 }

@@ -22,7 +22,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "leonardo_video_720p",
         "display_name": "VidGo Video 720p",
-        "credit_cost": 5,
+        "credit_cost": 10,
         "api_cost_usd": Decimal("0.05"),
         "resolution": "720p",
         "max_duration": 8,
@@ -33,7 +33,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "leonardo_video_1080p",
         "display_name": "VidGo Video 1080p",
-        "credit_cost": 8,
+        "credit_cost": 15,
         "api_cost_usd": Decimal("0.08"),
         "resolution": "1080p",
         "max_duration": 8,
@@ -44,7 +44,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "leonardo_video_4k",
         "display_name": "VidGo Video 4K",
-        "credit_cost": 12,
+        "credit_cost": 30,
         "api_cost_usd": Decimal("0.12"),
         "resolution": "4k",
         "max_duration": 8,
@@ -55,7 +55,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "leonardo_image_512",
         "display_name": "VidGo Image 512px",
-        "credit_cost": 2,
+        "credit_cost": 1,
         "api_cost_usd": Decimal("0.015"),
         "resolution": "512x512",
         "max_duration": None,
@@ -66,7 +66,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "leonardo_image_1024",
         "display_name": "VidGo Image 1024px",
-        "credit_cost": 3,
+        "credit_cost": 1,
         "api_cost_usd": Decimal("0.025"),
         "resolution": "1024x1024",
         "max_duration": None,
@@ -78,7 +78,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "vidgo_style",
         "display_name": "VidGo Style Effects",
-        "credit_cost": 8,
+        "credit_cost": 3,
         "api_cost_usd": Decimal("0.15"),
         "resolution": None,
         "max_duration": None,
@@ -89,7 +89,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "vidgo_hd_enhance",
         "display_name": "VidGo HD Enhance",
-        "credit_cost": 10,
+        "credit_cost": 3,
         "api_cost_usd": Decimal("0.20"),
         "resolution": "4k",
         "max_duration": None,
@@ -100,7 +100,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "vidgo_video_pro",
         "display_name": "VidGo Video Pro",
-        "credit_cost": 12,
+        "credit_cost": 30,
         "api_cost_usd": Decimal("0.25"),
         "resolution": None,
         "max_duration": None,
@@ -112,7 +112,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "pollo_basic",
         "display_name": "VidGo Advanced Basic",
-        "credit_cost": 20,
+        "credit_cost": 30,
         "api_cost_usd": Decimal("0.60"),
         "resolution": "720p",
         "max_duration": 5,
@@ -123,7 +123,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "pollo_premium",
         "display_name": "VidGo Advanced Premium",
-        "credit_cost": 30,
+        "credit_cost": 50,
         "api_cost_usd": Decimal("0.80"),
         "resolution": "1080p",
         "max_duration": 10,
@@ -135,7 +135,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "runway_720p",
         "display_name": "Runway Fallback 720p",
-        "credit_cost": 15,
+        "credit_cost": 30,
         "api_cost_usd": Decimal("0.50"),
         "resolution": "720p",
         "max_duration": 8,
@@ -147,7 +147,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "model_pixverse_v4_5",
         "display_name": "Pixverse v4.5 (Fast)",
-        "credit_cost": 8,
+        "credit_cost": 10,
         "api_cost_usd": Decimal("0.10"),
         "resolution": "720p",
         "max_duration": 8,
@@ -158,7 +158,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "model_pixverse_v5",
         "display_name": "Pixverse v5 (Creative)",
-        "credit_cost": 12,
+        "credit_cost": 15,
         "api_cost_usd": Decimal("0.15"),
         "resolution": "720p",
         "max_duration": 8,
@@ -169,7 +169,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "model_kling_v1_5",
         "display_name": "Kling v1.5 (Good Quality)",
-        "credit_cost": 15,
+        "credit_cost": 20,
         "api_cost_usd": Decimal("0.25"),
         "resolution": "1080p",
         "max_duration": 10,
@@ -180,7 +180,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "model_kling_v2",
         "display_name": "Kling v2.0 (High Quality)",
-        "credit_cost": 20,
+        "credit_cost": 30,
         "api_cost_usd": Decimal("0.40"),
         "resolution": "1080p",
         "max_duration": 10,
@@ -191,7 +191,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "model_luma_ray2",
         "display_name": "Luma Ray 2.0 (Cinematic)",
-        "credit_cost": 25,
+        "credit_cost": 30,
         "api_cost_usd": Decimal("0.50"),
         "resolution": "1080p",
         "max_duration": 10,
@@ -202,7 +202,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "model_wan_t2i",
         "display_name": "Wan T2I (Standard Image)",
-        "credit_cost": 3,
+        "credit_cost": 1,
         "api_cost_usd": Decimal("0.02"),
         "resolution": "1024x1024",
         "max_duration": None,
@@ -225,7 +225,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "bg_removal",
         "display_name": "Background Removal",
-        "credit_cost": 3,
+        "credit_cost": 1,
         "api_cost_usd": Decimal("0.02"),
         "resolution": None,
         "max_duration": None,
@@ -237,7 +237,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "product_scene_gen",
         "display_name": "Product Scene Generation",
-        "credit_cost": 5,
+        "credit_cost": 1,
         "api_cost_usd": Decimal("0.05"),
         "resolution": "1024x1024",
         "max_duration": None,
@@ -249,7 +249,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "pattern_gen",
         "display_name": "Pattern Generation",
-        "credit_cost": 5,
+        "credit_cost": 1,
         "api_cost_usd": Decimal("0.03"),
         "resolution": "1024x1024",
         "max_duration": None,
@@ -261,7 +261,7 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "style_transfer",
         "display_name": "Style Transfer",
-        "credit_cost": 5,
+        "credit_cost": 1,
         "api_cost_usd": Decimal("0.05"),
         "resolution": "1024x1024",
         "max_duration": None,
@@ -271,7 +271,10 @@ SERVICE_PRICING_DATA = [
     },
 ]
 
-# Plan data (Weekly Credit System)
+# Plan data (VidGo 2.0 — monthly subscription credit system)
+# 週期性配點: subscription_credits reset to monthly_credits each billing date
+# 過期清空: monthly subscription credits do NOT roll over (Breakage 利潤)
+# 換算單點成本 (TWD/credit): Starter 0.98, Pro 0.86, Master 0.82
 PLAN_DATA = [
     {
         "name": "demo",
@@ -288,7 +291,7 @@ PLAN_DATA = [
         "max_resolution": "720p",
         "has_watermark": True,
         "priority_queue": False,
-        "can_use_effects": False,  # No VidGo Effects access
+        "can_use_effects": False,
         "pollo_limit": 0,
         "goenhance_limit": 0,
         "description": "Free demo tier with cached results (2 one-time credits)"
@@ -298,91 +301,95 @@ PLAN_DATA = [
         "display_name": "Starter",
         "slug": "starter",
         "plan_type": "basic",
-        "price_twd": Decimal("299"),
-        "price_usd": Decimal("10"),
-        "price_monthly": 299.0,
-        "price_yearly": 2990.0,
-        "monthly_credits": 100,
-        "weekly_credits": 25,  # 25 credits per week
+        "price_twd": Decimal("490"),
+        "price_usd": Decimal("16"),
+        "price_monthly": 490.0,
+        "price_yearly": 4900.0,
+        "monthly_credits": 500,
+        "weekly_credits": 0,  # VidGo 2.0: monthly only
         "topup_discount_rate": Decimal("0"),
         "max_resolution": "1080p",
         "has_watermark": False,
         "priority_queue": False,
-        "can_use_effects": True,  # VidGo Effects access
+        "can_use_effects": True,
         "pollo_limit": 30,
         "goenhance_limit": None,
-        "description": "Great for getting started (25 credits/week)"
+        "description": "初學者 Starter — 每月 500 點 (每點 TWD 0.98)"
     },
     {
         "name": "pro",
         "display_name": "Pro",
         "slug": "pro",
         "plan_type": "pro",
-        "price_twd": Decimal("599"),
-        "price_usd": Decimal("20"),
-        "price_monthly": 599.0,
-        "price_yearly": 5990.0,
-        "monthly_credits": 250,
-        "weekly_credits": 60,  # 60 credits per week
+        "price_twd": Decimal("1290"),
+        "price_usd": Decimal("42"),
+        "price_monthly": 1290.0,
+        "price_yearly": 12900.0,
+        "monthly_credits": 1500,
+        "weekly_credits": 0,
         "topup_discount_rate": Decimal("0.10"),
         "max_resolution": "4k",
         "has_watermark": False,
         "priority_queue": True,
-        "can_use_effects": True,  # VidGo Effects access
+        "can_use_effects": True,
         "pollo_limit": 50,
         "goenhance_limit": None,
-        "description": "For professionals and power users (60 credits/week)"
+        "description": "專業版 Pro — 每月 1,500 點 (每點 TWD 0.86)"
     },
     {
+        # internal name "pro_plus" retained for foreign-key compatibility,
+        # display surfaces as "Master" per VidGo 2.0 spec.
         "name": "pro_plus",
-        "display_name": "Pro+",
-        "slug": "pro_plus",
+        "display_name": "Master",
+        "slug": "master",
         "plan_type": "enterprise",
-        "price_twd": Decimal("999"),
-        "price_usd": Decimal("33"),
-        "price_monthly": 999.0,
-        "price_yearly": 9990.0,
-        "monthly_credits": 500,
-        "weekly_credits": 125,  # 125 credits per week
+        "price_twd": Decimal("2890"),
+        "price_usd": Decimal("93"),
+        "price_monthly": 2890.0,
+        "price_yearly": 28900.0,
+        "monthly_credits": 3500,
+        "weekly_credits": 0,
         "topup_discount_rate": Decimal("0.20"),
         "max_resolution": "4k",
         "has_watermark": False,
         "priority_queue": True,
-        "can_use_effects": True,  # VidGo Effects access
+        "can_use_effects": True,
         "pollo_limit": 100,
         "goenhance_limit": None,
-        "description": "Unlimited potential for enterprises (125 credits/week)"
+        "description": "大師版 Master — 每月 3,500 點 (每點 TWD 0.82)"
     },
 ]
 
-# Credit package data
+# Credit package data (VidGo 2.0 Top-up packages)
+# 權限限制: subscribers-only (min_plan=starter); non-subscribers see higher prices
+# 永不過期: top-up credits land in user.purchased_credits and never expire
 CREDIT_PACKAGE_DATA = [
     {
-        "name": "small",
-        "name_en": "Small Pack",
-        "name_zh": "小包",
-        "display_name": "Small Pack",
-        "credits": 50,
-        "price": 5.0,
-        "price_twd": Decimal("150"),
-        "price_usd": Decimal("5"),
-        "min_plan": None,
+        "name": "compact",
+        "name_en": "Compact Pack",
+        "name_zh": "精簡儲值包",
+        "display_name": "Compact Pack",
+        "credits": 300,
+        "price": 11.0,
+        "price_twd": Decimal("350"),
+        "price_usd": Decimal("11"),
+        "min_plan": "starter",  # subscribers only
         "bonus_credits": 0,
         "is_popular": False,
         "is_best_value": False,
         "sort_order": 1
     },
     {
-        "name": "medium",
-        "name_en": "Medium Pack",
-        "name_zh": "中包",
-        "display_name": "Medium Pack",
-        "credits": 100,
-        "price": 8.0,
-        "price_twd": Decimal("250"),
-        "price_usd": Decimal("8"),
+        "name": "standard",
+        "name_en": "Standard Pack",
+        "name_zh": "標準儲值包",
+        "display_name": "Standard Pack",
+        "credits": 1000,
+        "price": 32.0,
+        "price_twd": Decimal("990"),
+        "price_usd": Decimal("32"),
         "min_plan": "starter",
-        "bonus_credits": 10,
+        "bonus_credits": 0,
         "is_popular": True,
         "is_best_value": False,
         "sort_order": 2
@@ -390,32 +397,17 @@ CREDIT_PACKAGE_DATA = [
     {
         "name": "large",
         "name_en": "Large Pack",
-        "name_zh": "大包",
+        "name_zh": "大容量儲值包",
         "display_name": "Large Pack",
-        "credits": 200,
-        "price": 13.0,
-        "price_twd": Decimal("400"),
-        "price_usd": Decimal("13"),
-        "min_plan": "pro",
-        "bonus_credits": 30,
+        "credits": 2000,
+        "price": 61.0,
+        "price_twd": Decimal("1890"),
+        "price_usd": Decimal("61"),
+        "min_plan": "starter",
+        "bonus_credits": 0,
         "is_popular": False,
         "is_best_value": True,
         "sort_order": 3
-    },
-    {
-        "name": "enterprise",
-        "name_en": "Enterprise Pack",
-        "name_zh": "企業包",
-        "display_name": "Enterprise Pack",
-        "credits": 500,
-        "price": 26.0,
-        "price_twd": Decimal("800"),
-        "price_usd": Decimal("26"),
-        "min_plan": "pro_plus",
-        "bonus_credits": 100,
-        "is_popular": False,
-        "is_best_value": False,
-        "sort_order": 4
     },
 ]
 

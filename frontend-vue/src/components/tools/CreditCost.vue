@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useCreditsStore } from '@/stores'
+import { useAuthStore, useCreditsStore } from '@/stores'
 
 const props = defineProps<{
   service?: string
@@ -10,6 +10,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 const creditsStore = useCreditsStore()
 
 const cost = computed(() => {
@@ -17,12 +18,21 @@ const cost = computed(() => {
     return props.cost * (props.count || 1)
   }
   if (!props.service) return 0
-  
+
   const baseCost = creditsStore.getServiceCost(props.service)
   return baseCost * (props.count || 1)
 })
 
-const canAfford = computed(() => creditsStore.remainingCredits >= cost.value)
+// Admins always have full tool access on the backend (`is_subscribed_user`
+// short-circuits on `is_superuser`), and login deliberately clears their
+// local credit balance — so the credits store reads 0 for them and the
+// raw `remainingCredits >= cost` check would otherwise show a misleading
+// "(Insufficient)" tag on every tool. Treat admins as if they could afford
+// any single-call cost.
+const canAfford = computed(() => {
+  if (authStore.isAdmin) return true
+  return creditsStore.remainingCredits >= cost.value
+})
 </script>
 
 <template>
@@ -34,6 +44,6 @@ const canAfford = computed(() => creditsStore.remainingCredits >= cost.value)
     >
       {{ cost }} {{ t('common.credits') }}
     </span>
-    <span v-if="!canAfford" class="text-red-400 text-xs">(Insufficient)</span>
+    <span v-if="!canAfford" class="text-red-400 text-xs">{{ t('common.insufficient', '(Insufficient)') }}</span>
   </div>
 </template>

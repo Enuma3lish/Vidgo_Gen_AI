@@ -13,7 +13,9 @@
     "dashboard": "ダッシュボード",
     "myWorks": "作品一覧",
     "tools": "ツール",
-    "credits": "クレジット"
+    "credits": "クレジット",
+    "adminDashboard": "管理者ダッシュボード",
+    "toggleMenu": "メニュー切替"
   },
   "hero": {
     "title": "AIで素晴らしいビジュアルを作成",
@@ -140,7 +142,28 @@
     "shortVideo": {
       "name": "ショート動画",
       "desc": "魅力的なショート動画を作成",
-      "longDesc": "テキスト説明や画像から魅力的なショート動画を生成"
+      "longDesc": "テキスト説明や画像から魅力的なショート動画を生成",
+      "aiModelSelection": "AI モデル選択",
+      "chooseAiModel": "生成効果に合わせて AI モデルを選択",
+      "clickToSee": "クリックして異なるモーション効果を確認",
+      "duration": "再生時間",
+      "generatedVideo": "生成された動画",
+      "motionEffect": "モーション効果",
+      "motionType": "モーションタイプ",
+      "selectExample": "例を選択",
+      "selectExampleHint": "上記から例を選択して結果をご覧ください",
+      "selectedExample": "選択した例",
+      "subscribeAdvanced": "サブスクリプションで詳細設定と AI モデル選択を解放",
+      "subscribeToDuration": "サブスクリプションで動画の長さをカスタマイズ",
+      "subscribeToMotion": "サブスクリプションでモーション効果を選択",
+      "subscribersOnly": "サブスクライバー限定",
+      "tryExamples": "ぜひ素晴らしい例をお試しください",
+      "upgradeSettings": "アップグレードしてカスタム設定を使用",
+      "upgradeToModel": "アップグレードして異なる AI モデルを選択",
+      "videoPlaceholder": "生成された動画はここに表示されます",
+      "videoSettings": "動画設定",
+      "viewPlans": "プランを見る",
+      "viewResult": "結果を見る"
     },
     "common": {
       "uploadImage": "画像をアップロード",
@@ -272,7 +295,11 @@
       },
       "aiVideo": {
         "title": "AI動画作成",
-        "desc": "画像とテキストから動画を生成"
+        "desc": "画像とテキストから動画を生成",
+        "ctaDesc": "1 枚の画像から安定した商品モーション動画を出力",
+        "longDesc": "1 枚の画像から安定した商品モーション広告を生み出す Image-to-Video に特化",
+        "styleTransform": "画像から動画へ",
+        "stylesDesc": "1 枚の画像をアップロードして IG・TikTok 用ショートモーション素材を生成"
       },
       "ecommerce": {
         "title": "商品・EC",
@@ -384,7 +411,9 @@
     "uploadVideo": "動画をアップロード",
     "result": "結果",
     "previewComingSoon": "プレビュー近日公開",
-    "startFree": "無料で開始"
+    "startFree": "無料で開始",
+    "dropFilesHere": "ここにファイルをドロップ",
+    "insufficient": "（クレジット不足）"
   },
   "auth": {
     "email": "メールアドレス",
@@ -407,7 +436,32 @@
     "signIn": "ログイン",
     "promotionCode": "プロモーションコード",
     "promotionCodePlaceholder": "コード入力で+40クレジット",
-    "promotionCodeHint": "任意。有効なコードはメール認証後に40クレジットを追加します。"
+    "promotionCodeHint": "任意。有効なコードはメール認証後に40クレジットを追加します。",
+    "fillAllFields": "すべての項目を入力してください",
+    "freeCreditsDesc": "すべての AI ツールをすぐに試せます",
+    "freeCreditsTitle": "新規登録で 40 クレジット無料プレゼント",
+    "loginBrandingDesc": "100 万以上のブランド・クリエイターと一緒に。動画生成から EC ビジュアルまで、すべてここで。",
+    "loginBrandingTitle": "AI でもっと賢く、もっと速く創造する",
+    "loginFeature1Desc": "テキストを入力してプロ品質の動画を生成",
+    "loginFeature1Name": "AI ショート動画",
+    "loginFeature2Desc": "AI モデルで衣装を表示し、コンバージョン率を向上",
+    "loginFeature2Name": "バーチャル試着",
+    "loginFeature3Desc": "EC 向けの商品シーンを自動生成",
+    "loginFeature3Name": "商品シーン",
+    "loginSubtitle2": "アカウントにログインして制作を続けましょう",
+    "perk1": "40 クレジット無料・クレジットカード不要",
+    "perk2": "6 つの AI ツール、すぐ使える",
+    "perk3": "台湾電子発票・税務対応",
+    "perk4": "いつでも解約可能、契約期間なし",
+    "registerBrandingDesc": "クレジットカード不要。動画生成、EC ビジュアル、インテリアデザインなど、すべての AI ツールをご利用いただけます。",
+    "registerBrandingTitle": "AI クリエイションを無料で始めよう",
+    "registerBtn": "無料で始める — 40 クレジット獲得",
+    "registerSubtitle2": "40 クレジットを今すぐ獲得・クレジットカード不要",
+    "setPassword": "パスワードを設定",
+    "signUpFree": "無料登録 — 40 クレジット獲得",
+    "signingIn": "ログイン中…",
+    "signingUp": "登録中…",
+    "termsAgree": "「無料で始める」をクリックすると、利用規約とプライバシーポリシーに同意したものとみなされます"
   },
   "dashboard": {
     "welcome": "おかえりなさい",
@@ -443,7 +497,75 @@
       "hoursAgo": "{n}時間前",
       "yesterday": "昨日",
       "daysAgo": "{n}日前"
-    }
+    },
+    "myWorks": {
+      "clearedAfter": "{date} に削除されます",
+      "createdAt": "作成日",
+      "createdOn": "作成日: {date}",
+      "creditsUsed": "使用クレジット",
+      "creditsUsedInline": "使用クレジット: {credits}",
+      "creditsUsedShort": "{credits} クレジット",
+      "deleteConfirm": "この作品を削除しますか？元に戻せません。生成記録も併せて削除されます。",
+      "deleteRecord": "記録を削除",
+      "deleting": "削除中…",
+      "downloadExpired": "この作品は 14 日経過したためダウンロードできません。\n生成記録は引き続きご覧いただけます。",
+      "emptyDesc": "別のフィルターを試すか、新しい作品を作成しましょう",
+      "emptyTitle": "作品はまだありません",
+      "expiredDesc": "この作品は {days} 日間の保存期間を過ぎ、自動的に削除されました。下記の生成記録は永続的に保持されます。",
+      "expiredTitle": "メディアの有効期限切れ",
+      "expiry": {
+        "days": "{days}日後に期限切れ",
+        "expired": "期限切れ",
+        "hours": "{hours}時間後に期限切れ",
+        "soon": "まもなく期限切れ"
+      },
+      "expiryTime": "期限切れ日時",
+      "filters": {
+        "ai_avatar": "AI アバター",
+        "all": "すべて",
+        "background_removal": "背景除去",
+        "effect": "スタイル変換",
+        "pattern_generate": "パターンデザイン",
+        "product_scene": "AI 商品シーンスタジオ",
+        "room_redesign": "ルーム/スケッチレンダー",
+        "short_video": "商品ショート動画",
+        "try_on": "AI バーチャル試着"
+      },
+      "generationRecord": "生成記録",
+      "inputTextTitle": "入力テキスト / プロンプト",
+      "loading": "作品を読み込み中…",
+      "mediaExpired": "メディアの有効期限切れ",
+      "mediaPolicyCopy": "AI 生成メディア（画像/動画）は {days} 日間保存されます。期限後はメディア URL が自動削除されますが、生成記録（ツール、パラメータ、使用クレジット等）は永続的に保持されます。期限内に作品をダウンロードしてください。",
+      "mediaPolicyTitle": "メディア保管ポリシー",
+      "mediaRetentionRemaining": "メディア保管残り日数:",
+      "next": "次へ",
+      "params": {
+        "garmentType": "衣装タイプ",
+        "model": "モデル",
+        "prompt": "プロンプト",
+        "roomType": "部屋タイプ",
+        "scene": "シーン",
+        "style": "スタイル"
+      },
+      "paramsTitle": "生成パラメータ",
+      "previous": "前へ",
+      "publishShort": "シェア",
+      "publishSocial": "作品リンクをシェア",
+      "record": "記録",
+      "recordKept": "記録は保持されています",
+      "shareExpired": "この作品は期限切れのためシェアできません。",
+      "showHistory": "履歴を表示",
+      "socialAccounts": "シェアリンク",
+      "subtitle": "AI で作成した作品を閲覧・管理。メディアファイルは 14 日間保存されます",
+      "title": "マイ作品ライブラリ",
+      "tool": "ツール",
+      "upgradeToPublish": "アップグレードしてシェア",
+      "video": "動画",
+      "view": "表示"
+    },
+    "backToDashboard": "ダッシュボードに戻る",
+    "noInvoices": "発票はまだありません",
+    "noInvoicesDesc": "サブスクリプション後、お支払いの発票がここに表示されます。"
   },
   "pricing": {
     "title": "プランを選択",
@@ -472,7 +594,67 @@
     "creditsPerMonth": "{credits}クレジット/月",
     "ecpayPaymentLabel": "クレジットカード決済 (ECPay)",
     "testPaymentLabel": "テスト決済 (US$1 / 約NT$32)",
-    "paddlePaymentLabel": "国際決済 (Paddle)",
+    "paypalPaymentLabel": "国際決済 (PayPal)",
+    "paypalPricingStrategy": "海外でPayPalをご利用の際はUSD価格をご利用ください：スタンダード US$19.99、Pro US$49.99、Pro+ US$99.99。PayPal手数料と為替損失をカバーします。",
+    "creditReference": {
+      "title": "クレジット換算の目安（100クレジット）",
+      "headers": {
+        "featureType": "機能カテゴリ",
+        "creditsPerRun": "消費クレジット / 回",
+        "outputFor100": "100クレジットで生成可能",
+        "useCase": "推奨利用シーン"
+      },
+      "rows": {
+        "proLong": {
+          "feature": "プロ向け長尺動画 (10秒+)",
+          "cost": "35クレジット",
+          "output": "約3本",
+          "useCase": "映画品質・高品質 Luma/Kling"
+        },
+        "restore": {
+          "feature": "動画画質の修復 / 強化",
+          "cost": "15クレジット",
+          "output": "約6本",
+          "useCase": "古い映像の再生、低解像度をHD化"
+        }
+      },
+      "scenarios": {
+        "title": "🚀 100クレジットで何ができる？（利用例）",
+        "intro": "価値を分かりやすく伝えるため、次の「シナリオパック」を案内できます：",
+        "creatorStarter": "「クリエイター入門パック」：標準ショート動画5本 + カバー画像50枚。",
+        "proDesigner": "「プロデザイナーパック」：高画質プロ動画2本 + 商用画像6枚。",
+        "imageSprint": "「画像制作スプリント」：標準AI画像100枚。"
+      }
+    },
+    "creditPacks": {
+      "sectionBadge": "クレジット単品購入",
+      "title": "サブスクなしでもクレジットを直接購入できます",
+      "subtitle": "3つの公式TWDパックを用意。スポット提案、インテリアレンダリング、商品画像のバッチ、動画の追加生成に最適です。購入したクレジットは月次でリセットされません。",
+      "checkoutNote": "台湾ECPay決済",
+      "badges": {
+        "bestValue": "最もお得",
+        "popular": "人気"
+      },
+      "bonusPct": "{pct}% ボーナス付き",
+      "flexibleTopup": "柔軟なチャージ",
+      "oneTime": "単発購入",
+      "creditsUnit": "クレジット",
+      "bonusInclusion": "{bonus} クレジットのボーナス含む",
+      "noBonus": "ボーナスなし、お試しに最適",
+      "featureCrossTool": "画像・動画・インテリア・商品シーンの生成に利用可能",
+      "featureNoReset": "購入クレジットは毎月リセットされず、プロジェクトの補充に最適",
+      "cta": {
+        "buy": "クレジットを購入",
+        "signInToBuy": "ログインして購入"
+      },
+      "purchaseFailed": "クレジットパックの購入に失敗しました。後ほどお試しください。",
+      "orderCreated": "注文が作成されました",
+      "fallbackNames": {
+        "light": "ライトパック",
+        "standard": "スタンダードパック",
+        "heavy": "ヘビーパック"
+      }
+    },
     "qualityFeature": "{resolution}品質",
     "priorityQueueFeature": "優先キュー",
     "apiAccessFeature": "APIアクセス",
@@ -511,7 +693,13 @@
         "q": "返金ポリシーは何ですか？",
         "a": "登録後7日以内に全額返金をリクエストできます。7日後もキャンセルできますが、請求期間終了までアクセスを保持します。"
       }
-    }
+    },
+    "confirmCancel": "はい、サブスクリプションを解約します",
+    "confirmCancelMessage": "現在の請求期間の終了までサブスクリプションは有効です。次回の請求は発生しません。いつでも再加入できます。",
+    "confirmCancelTitle": "サブスクリプションを解約しますか？",
+    "confirmRefund": "はい、解約して返金します",
+    "confirmRefundMessage": "全額返金を受けます。サブスクリプションは即時終了し、サブスクリプションクレジットは取り消されます。元に戻せません。",
+    "confirmRefundTitle": "解約して返金を申請しますか？"
   },
   "footer": {
     "tagline": "AIパワード創作プラットフォーム",
@@ -536,8 +724,8 @@
     "processing": "デザインを生成中...",
     "tabs": {
       "redesign": "部屋をリデザイン",
-      "generate": "デザインを生成",
-      "styleTransfer": "スタイル転送"
+      "generate": "デザイン生成",
+      "styleTransfer": "スタイル変換"
     },
     "uploadTitle": "部屋の写真をアップロード",
     "roomType": "部屋のタイプ",
@@ -553,8 +741,8 @@
     "tryAnother": "別を試す",
     "actions": {
       "redesign": "部屋をリデザイン",
-      "generate": "デザインを生成",
-      "applyStyle": "スタイルを適用"
+      "generate": "デザイン生成",
+      "applyStyle": "スタイル適用"
     },
     "success": {
       "redesigned": "部屋のリデザインが成功しました！",
@@ -1057,6 +1245,254 @@
     "amount": "金額",
     "status": "ステータス",
     "actions": "操作",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "addItem": "項目を追加",
+    "buyerCompanyPlaceholder": "会社名を入力",
+    "citizenCert": "市民証明書",
+    "goToList": "発票一覧へ",
+    "issueFailed": "発票発行失敗",
+    "issueSuccess": "発票を発行しました",
+    "issuedAt": "発行日",
+    "loveCodeHint": "3〜7 桁、財政部で確認してください",
+    "mobileBarcode": "モバイルバーコード",
+    "periodError": "現在の課税期間内の発票のみ無効化できます",
+    "receiptMethod": "受領方法",
+    "selectOrderFirst": "発票を発行するにはリストから注文を選択してください",
+    "taxIdError": "統一番号は 8 桁の数字でなければなりません",
+    "type": "種類",
+    "voidFailed": "無効化に失敗しました",
+    "voidReasonPlaceholder": "無効化理由を入力",
+    "voidSuccess": "発票を無効化しました"
+  },
+  "upscale": {
+    "title": "HD 画像アップスケール",
+    "subtitle": "AI で画像を 2 倍または 4 倍の解像度にアップスケール",
+    "demoCta": "自分の画像をアップロードし HD 結果をダウンロードするにはサブスクライブ",
+    "tryDemo": "デモ画像を試す",
+    "uploadOwn": "または自分の画像をアップロード",
+    "original": "オリジナル",
+    "scaleFactor": "アップスケール倍率",
+    "processing": "アップスケール中...",
+    "action": "{scale}x にアップスケール",
+    "loading": "画像をアップスケール中...",
+    "resultLabel": "アップスケール結果 ({scale}x)",
+    "downloadHd": "HD 画像をダウンロード",
+    "subscribeDownload": "HD をダウンロードするにはサブスクライブ",
+    "placeholderDemo": "デモ画像を選んでアップスケールをクリック",
+    "placeholderPaid": "アップスケールする画像をアップロード",
+    "warnings": {
+      "selectImage": "先に画像を選択またはアップロードしてください"
+    },
+    "errors": {
+      "generic": "アップスケールに失敗しました"
+    },
+    "toasts": {
+      "success": "画像を {scale}x にアップスケールしました！",
+      "demoReady": "デモプレビューの準備ができました。自分の画像を {scale}x HD でアップスケールするにはサブスクライブしてください。"
+    },
+    "demoLabels": {
+      "landscape": "風景",
+      "forest": "森",
+      "interior": "インテリア",
+      "ocean": "海"
+    }
+  },
+  "gallery": {
+    "categories": {
+      "ai_avatar": "AI アバター",
+      "all": "すべての例",
+      "background_removal": "背景除去",
+      "effect": "画像エフェクト",
+      "pattern_generate": "パターン生成",
+      "product_scene": "商品シーン",
+      "room_redesign": "ルームリデザイン",
+      "short_video": "ショート動画",
+      "try_on": "バーチャル試着"
+    },
+    "clearFilters": "フィルターをクリア",
+    "ctaButtonPrimary": "無料登録",
+    "ctaButtonSecondary": "料金を見る",
+    "ctaSubtitle": "サブスクリプションで自分の画像をアップロードし、ウォーターマークなしのカスタム結果を生成しましょう。",
+    "ctaTitle": "あなた自身の作品を作る準備はできましたか？",
+    "filterByIndustry": "業界で絞り込む",
+    "filterByTool": "ツールで絞り込む",
+    "industries": {
+      "all": "すべての業界",
+      "ecommerce": "EC",
+      "fashion": "ファッション・アパレル",
+      "food_beverage": "飲食",
+      "interior_design": "インテリアデザイン",
+      "marketing": "マーケティング・広告",
+      "small_business": "中小企業"
+    },
+    "noResults": "該当する例が見つかりません",
+    "noResultsHint": "フィルターまたは検索キーワードを変更してみてください",
+    "searchPlaceholder": "キーワード・スタイル・業界で例を検索…",
+    "showingResults": "{total} 件中 {count} 件を表示",
+    "subtitle": "AI で生成された商品撮影アイデアを探索。無料ユーザーは厳選例の閲覧が可能。サブスクリプションで自分の商品をアップロードしてカスタム生成できます。",
+    "title": "商品撮影インスピレーションライブラリ",
+    "tryThis": "この例を試す",
+    "video": "動画",
+    "viewAllExamples": "すべての例を見る"
+  },
+  "referrals": {
+    "applyCode": {
+      "description": "コードを入力すると、20 ボーナスクレジットがアカウントに追加されます。",
+      "error": "コードを適用できませんでした。再度お試しください。",
+      "placeholder": "紹介コードを入力（例: ABC12345）",
+      "submit": "適用",
+      "title": "紹介コードをお持ちですか？"
+    },
+    "copied": "コピーしました！",
+    "copy": "コピー",
+    "howItWorks": {
+      "step1": "ユニークな紹介リンクを友達や SNS でシェアしましょう。",
+      "step2": "友達があなたのリンクから登録し、メール認証を完了します。",
+      "step3": "あなたは 50 ボーナスクレジット、友達は 20 ウェルカムクレジットを獲得！",
+      "title": "仕組み"
+    },
+    "leaderboard": {
+      "empty": "紹介はまだありません。最初の一人になりましょう！",
+      "referrals": "紹介数",
+      "title": "紹介ランキング"
+    },
+    "linkDescription": "このリンクで友達を招待しましょう。登録ごとに 50 クレジット獲得できます。",
+    "share": {
+      "copyLink": "リンクをコピー"
+    },
+    "shareText": "VidGo AI に登録すると 20 クレジットが無料！",
+    "stats": {
+      "creditsEarned": "獲得クレジット",
+      "invited": "招待人数",
+      "none": "—",
+      "referredBy": "招待者"
+    },
+    "subtitle": "友達を招待して無料クレジットを獲得しよう",
+    "title": "紹介プログラム",
+    "yourLink": "あなたの紹介リンク"
+  },
+  "socialShare": {
+    "caption": "キャプション",
+    "captionAndMediaReady": "キャプションをコピー、メディアをダウンロードしました。{platform} に貼り付けてアップロードしてください。",
+    "captionCopied": "キャプションをコピーしました。",
+    "captionPlaceholder": "SNS 投稿用のキャプションを追加…",
+    "charCount": "{count} 文字",
+    "close": "閉じる",
+    "copied": "リンクをコピーしました。",
+    "copyBeforeOpen": "リンクをコピーしました。{platform} を開いた後に貼り付けてください。",
+    "copyCaption": "キャプションをコピー",
+    "copyFailed": "リンクをコピーできませんでした。",
+    "copyFirstPlatforms": "リンクをコピーしてからプラットフォームを開く",
+    "copyForAnyApp": "どのアプリにもコピー",
+    "copyLink": "リンクをコピー",
+    "defaultCaptionGeneric": "VidGo AI で作成 #AICreation #VidGoAI",
+    "defaultCaptionTool": "VidGo AI {tool} で作成 #AICreation #VidGoAI",
+    "directPlatforms": "シェアコンポーザーを開く",
+    "downloadImage": "画像をダウンロード",
+    "downloadVideo": "動画をダウンロード",
+    "fallbackCaptionAndDownload": "キャプションをコピー、メディアをダウンロードしました。任意のアプリに貼り付けてください。",
+    "imageUnsupported": "動画のみ",
+    "mediaDownloaded": "メディアをダウンロードしました。",
+    "nativeFallbackCopied": "リンクをコピーしました。任意のアプリに貼り付けてください。",
+    "nativeShare": "デバイスでシェア",
+    "nativeShareWithImage": "画像をアプリにシェア",
+    "openPlatform": "プラットフォームを開く",
+    "openShare": "シェアを開く",
+    "popupBlocked": "ブラウザによってプラットフォームページがブロックされました。",
+    "subtitle": "作品リンクを 1 つ作成して、プラットフォームの共有ページを開きます。SNS アカウントの連携は不要です。",
+    "title": "作品リンクをシェア",
+    "videoUnsupported": "動画は未対応",
+    "workLink": "作品リンク"
+  },
+  "subscription": {
+    "backToPricing": "料金ページに戻る",
+    "goNow": "今すぐ移動",
+    "goToDashboard": "ダッシュボードへ",
+    "mockComplete": "デモ決済が完了しました",
+    "paymentCancelled": "決済がキャンセルされました",
+    "paymentCancelledDesc": "決済をキャンセルしました。請求は発生していません。",
+    "paymentSuccess": "決済が成功しました",
+    "paymentSuccessDesc": "サブスクリプションが有効になりました。すべての機能をご利用いただけます。",
+    "redirecting": "ダッシュボードへリダイレクト中…",
+    "viewPlans": "プランを見る"
+  },
+  "upload": {
+    "credits": "クレジット",
+    "download": "ダウンロード",
+    "downloading": "ダウンロード中…",
+    "dropzone": {
+      "hint": "JPEG / PNG / WebP — 最大 20 MB",
+      "title": "画像をここにドロップ、またはクリックして選択"
+    },
+    "gate": {
+      "cta": "プランを見る",
+      "description": "自分の画像をアップロードして、ウォーターマークなしの AI 結果を取得しましょう。サブスクリプションで解放。",
+      "title": "サブスクライバー機能"
+    },
+    "generate": "生成",
+    "generating": "生成中…",
+    "promptLabel": "希望する内容を記述（任意）",
+    "promptPlaceholder": "例: アニメ風、鮮やかな色合い…",
+    "resultReady": "結果が完成しました",
+    "selectModel": "AI モデルを選択",
+    "startOver": "最初からやり直す",
+    "uploading": "アップロード中…"
+  },
+  "howTo": {
+    "heading": "使い方",
+    "formatTitle": "アップロード要件",
+    "reuploadNote": "形式がサポートされていない場合は、対応する形式で再アップロードするよう求められます。",
+    "background_removal": {
+      "step1": "下のデモ画像から選ぶか、ご自身の写真をアップロードしてください。",
+      "step2": "「背景を削除」をクリックして透過 PNG を取得します。",
+      "step3": "結果をダウンロードするか、他のツールへ直接送ることができます。"
+    },
+    "product_scene": {
+      "step1": "白背景または透過のきれいな商品写真を選ぶかアップロードしてください。",
+      "step2": "シーンのプリセットを選ぶか、ご自身で説明します（サブスクライバー）。",
+      "step3": "「生成」をクリックして EC 向けに整えられたシーン写真を取得します。"
+    },
+    "try_on": {
+      "step1": "服のはっきりした写真をアップロードします（平置きや商品ページ画像が最適）。",
+      "step2": "デフォルトモデルを選ぶか、全身モデル写真をアップロードします。",
+      "step3": "「試着する」をクリックすると、選んだモデルに服を着せたプレビューが表示されます。"
+    },
+    "room_redesign": {
+      "step1": "部屋の写真をアップロードするか、下のデモから選んでください。",
+      "step2": "部屋のタイプ・デザインスタイル・任意の追加メモを選びます。",
+      "step3": "「生成」をクリックして再デザインされた 2D 画像を取得します。サブスクライバーは 3D ウォークスルーも作成できます。"
+    },
+    "short_video": {
+      "v2v": {
+        "step1": "MP4 / WebM / MOV の動画を 100MB までアップロードします。",
+        "step2": "カタログからスタイル変換を選びます。",
+        "step3": "「生成」をクリックして AI スタイル変換を適用します。"
+      },
+      "i2v": {
+        "step1": "デモ画像を選ぶか、ご自身の商品/シーン画像をアップロードします。",
+        "step2": "カタログから動き/エフェクトを選びます。",
+        "step3": "「生成」をクリックしてショート動画を作成します。"
+      }
+    },
+    "ai_avatar": {
+      "step1": "デフォルトのアバターを選ぶか、ご自身の正面ポートレートをアップロードします。",
+      "step2": "スクリプトのカテゴリを選ぶか、ご自身のスクリプトを貼り付けます。",
+      "step3": "音声と言語を選び、「動画を生成」をクリックします。"
+    },
+    "image_translator": {
+      "step1": "デモ画像を選ぶか、ご自身のポスター / 商品画像 / バナーをアップロードします。",
+      "step2": "ソース言語とターゲット言語を選びます。",
+      "step3": "「翻訳」をクリックして、レイアウトを維持しつつテキストを差し替えます。"
+    },
+    "video_dubbing": {
+      "step1": "サンプル動画を選んで吹き替えフローをプレビューします。",
+      "step2": "サブスクライバーはご自身の MP4 / WebM / MOV 動画をアップロードできます。",
+      "step3": "ソース/ターゲット言語を選び、「吹き替えを生成」をクリックします。"
+    },
+    "upscale": {
+      "step1": "デモ画像を選ぶか、ご自身の低解像度画像をアップロードします。",
+      "step2": "拡大倍率を 2 倍 / 4 倍から選びます。",
+      "step3": "「拡大」をクリックして高解像度の結果をダウンロードします。"
+    }
   }
 }

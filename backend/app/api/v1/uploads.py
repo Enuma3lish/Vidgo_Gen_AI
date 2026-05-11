@@ -57,40 +57,44 @@ GENERIC_UPLOAD_FAILURE_MESSAGE = (
 # Model / credit configuration
 # ─────────────────────────────────────────
 
-# Base credit cost per tool type
+# Base credit cost per tool type (VidGo 2.0 spec — 2026-05)
+# Image tools = 1 (standard) / 3 (premium); Video tools = 10 (std) / 30 (pro);
+# Video extend/repair = 15.
 TOOL_BASE_CREDITS = {
-    "background_removal": 5,
-    "product_scene": 10,
-    "try_on": 15,
-    "room_redesign": 10,
-    "short_video": 30,
-    "video_transform": 35,
-    "ai_avatar": 40,
-    "pattern_generate": 8,
-    "effect": 10,
+    "background_removal": 1,
+    "product_scene": 1,
+    "try_on": 10,
+    "room_redesign": 1,
+    "short_video": 10,
+    "video_transform": 15,
+    "ai_avatar": 30,
+    "pattern_generate": 1,
+    "effect": 1,
 }
 
 # Available models per tool type with their credit multipliers
+# Multipliers are chosen so default×multiplier lands on the spec tier
+# (1→3 for premium image, 10→30 for premium video).
 TOOL_MODELS = {
     "background_removal": [
         {"id": "default", "name": "Standard", "name_zh": "標準", "credit_multiplier": 1},
     ],
     "product_scene": [
         {"id": "default", "name": "Standard (Flux)", "name_zh": "標準 (Flux)", "credit_multiplier": 1},
-        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 2},
+        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 3},
     ],
     "try_on": [
         {"id": "default", "name": "Standard (Kling v1.5)", "name_zh": "標準 (Kling v1.5)", "credit_multiplier": 1},
-        {"id": "kling_v2", "name": "Premium (Kling v2)", "name_zh": "精緻 (Kling v2)", "credit_multiplier": 2},
+        {"id": "kling_v2", "name": "Premium (Kling v2)", "name_zh": "精緻 (Kling v2)", "credit_multiplier": 3},
     ],
     "room_redesign": [
         {"id": "default", "name": "Standard (Flux)", "name_zh": "標準 (Flux)", "credit_multiplier": 1},
-        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 2},
+        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 3},
     ],
     "short_video": [
         {"id": "pixverse_v4.5", "name": "Fast (Pixverse v4.5)", "name_zh": "快速 (Pixverse v4.5)", "credit_multiplier": 1},
         {"id": "pixverse_v5", "name": "Creative (Pixverse v5)", "name_zh": "創意 (Pixverse v5)", "credit_multiplier": 1.5},
-        {"id": "kling_v2", "name": "High Quality (Kling v2)", "name_zh": "高品質 (Kling v2)", "credit_multiplier": 2},
+        {"id": "kling_v2", "name": "High Quality (Kling v2)", "name_zh": "高品質 (Kling v2)", "credit_multiplier": 3},
         {"id": "luma_ray2", "name": "Cinematic (Luma Ray2)", "name_zh": "電影級 (Luma Ray2)", "credit_multiplier": 3},
     ],
     "video_transform": [
@@ -101,11 +105,11 @@ TOOL_MODELS = {
     ],
     "pattern_generate": [
         {"id": "default", "name": "Standard (Flux)", "name_zh": "標準 (Flux)", "credit_multiplier": 1},
-        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 2},
+        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 3},
     ],
     "effect": [
         {"id": "default", "name": "Standard (Flux I2I)", "name_zh": "標準 (Flux I2I)", "credit_multiplier": 1},
-        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 2},
+        {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 3},
     ],
 }
 

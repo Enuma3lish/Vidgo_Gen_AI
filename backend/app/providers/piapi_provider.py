@@ -269,12 +269,16 @@ class PiAPIProvider(BaseProvider):
 
     async def _fallback_avatar_video(self, image_url: str, audio_url: str, script: str) -> Dict[str, Any]:
         """Fallback when Kling Avatar cannot ingest an otherwise valid portrait."""
+        # Same fix as the primary path (BUG-005): keep the spoken content out
+        # of the visual prompt so the image-to-video model doesn't render any
+        # of the script as on-screen text. The lip-sync step still uses the
+        # full audio so the message itself is preserved.
         presenter_prompt = (
-            "natural presenter talking to camera, subtle head movement, friendly expression, "
-            "professional studio lighting, stable face, no text"
+            "natural presenter talking to camera, subtle head movement, "
+            "friendly expression, professional studio lighting, stable face, "
+            "no text, no captions, no subtitles, no watermark, no logos, "
+            "no on-screen graphics"
         )
-        if script:
-            presenter_prompt = f"{presenter_prompt}. Speaker message: {script[:400]}"
 
         logger.warning("[PiAPI] Avatar: trying presenter image-to-video fallback")
         try:
@@ -640,6 +644,7 @@ class PiAPIProvider(BaseProvider):
         garment_image_url: Optional[str] = None,
         upper_garment_url: Optional[str] = None,
         lower_garment_url: Optional[str] = None,
+        category: str = "dress",
         batch_size: int = 1
     ) -> Dict[str, Any]:
         """
@@ -651,9 +656,14 @@ class PiAPIProvider(BaseProvider):
 
         Args:
             model_image_url: Photo of person/model
-            garment_image_url: Clothing image (full body garment)
+            garment_image_url: Clothing image (full body garment OR routed by category)
             upper_garment_url: Upper body garment only (optional)
             lower_garment_url: Lower body garment only (optional)
+            category: When only garment_image_url is given, controls which Kling
+                input slot it goes into:
+                  - "upper_body" → upper_input
+                  - "lower_body" → lower_input
+                  - "dress" / "full_body" → dress_input (default)
             batch_size: Number of output images (1-4, default 1)
 
         Notes:
@@ -666,7 +676,8 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("virtual_try_on", {
             "model_image_url": model_image_url,
-            "garment_image_url": garment_image_url
+            "garment_image_url": garment_image_url,
+            "category": category,
         })
 
         input_data = {
@@ -676,7 +687,13 @@ class PiAPIProvider(BaseProvider):
 
         # Add garment input - either full body or upper/lower
         if garment_image_url:
-            input_data["dress_input"] = garment_image_url
+            cat = (category or "dress").lower()
+            if cat == "upper_body":
+                input_data["upper_input"] = garment_image_url
+            elif cat == "lower_body":
+                input_data["lower_input"] = garment_image_url
+            else:  # dress / full_body / default
+                input_data["dress_input"] = garment_image_url
         else:
             if upper_garment_url:
                 input_data["upper_input"] = upper_garment_url
@@ -718,11 +735,24 @@ class PiAPIProvider(BaseProvider):
             "input": {
                 "image": self._resolve_image_url(params["image_url"]),
                 "prompt": params.get("prompt", "smooth natural motion"),
+                "negative_prompt": params.get("negative_prompt", ""),
                 "duration": params.get("duration", 5),
                 "resolution": params.get("resolution", "1080P"),
-                "watermark": False
-            }
+                # image_fidelity (0.0-1.0): how strictly the generated video
+                # must preserve the source image's subject. We default high
+                # (0.85) because product/short-video flows depend on the
+                # original product staying recognizable; callers can tune
+                # down for more creative motion.
+                "image_fidelity": float(params.get("image_fidelity", 0.85)),
+                "watermark": False,
+            },
         }
+        # motion_bucket_id (1-255 in SVD-style models, ~127 default). Lower =
+        # less motion = more product preservation. We expose it as an optional
+        # param; only forward when set so older PiAPI variants that ignore it
+        # do not error on the extra key.
+        if params.get("motion_bucket_id") is not None:
+            payload["input"]["motion_bucket_id"] = int(params["motion_bucket_id"])
 
         return await self._submit_and_poll(payload)
 
@@ -812,12 +842,22 @@ class PiAPIProvider(BaseProvider):
         # base64), NOT `image_url`. The wrong key returns HTTP 500.
         self._log_request("background_removal", params)
 
+        input_block: Dict[str, Any] = {
+            "image": self._resolve_image_url(params["image_url"]),
+        }
+        # Fine-edge / alpha-matting controls: enabled by default for the
+        # product-cutout flow so hair, comb teeth, and translucent edges
+        # come back with a real soft alpha rather than a 1-bit hard mask.
+        # Toolkit accepts these as hints; ignored by older variants.
+        if params.get("alpha_matting", True):
+            input_block["alpha_matting"] = True
+        if params.get("fine_detail", True):
+            input_block["fine_detail"] = True
+
         payload = {
             "model": "Qubico/image-toolkit",
             "task_type": "background-remove",
-            "input": {
-                "image": self._resolve_image_url(params["image_url"]),
-            },
+            "input": input_block,
         }
 
         return await self._submit_and_poll(payload)
@@ -885,16 +925,89 @@ class PiAPIProvider(BaseProvider):
     # TEXT TO SPEECH (F5-TTS via PiAPI)
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ─── OpenAI-compatible TTS via PiAPI (tts-1) — primary path ────────────
+    # PiAPI's Qubico/tts F5-TTS model has been returning "internal server error
+    # 500" on every call for several days (task creates fine, fails at worker
+    # level: `logs: ["internal server error\nstatus code: 500\nfailed to do
+    # request"]`). Their OpenAI-compatible /v1/audio/speech endpoint with
+    # tts-1 works reliably, supports 6 voices, no ref_audio required, and
+    # returns the MP3 bytes synchronously. We use it as the primary TTS path
+    # and only fall through to F5-TTS when the caller explicitly wants voice
+    # cloning (ref_audio supplied AND not the dead default).
+
+    OPENAI_COMPAT_TTS_URL = "https://api.piapi.ai/v1/audio/speech"
+    OPENAI_VOICE_DEFAULT = "alloy"
+    OPENAI_VOICES = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+
+    async def _tts_via_openai_compat(self, text: str, voice: str | None) -> Dict[str, Any]:
+        """Call PiAPI's OpenAI-compatible /v1/audio/speech, persist the MP3
+        bytes to GCS, and return a result shape that matches the rest of the
+        TTS pipeline ({success, output:{audio_url, duration_estimate_s}})."""
+        v = (voice or self.OPENAI_VOICE_DEFAULT).lower()
+        if v not in self.OPENAI_VOICES:
+            v = self.OPENAI_VOICE_DEFAULT
+        payload = {"model": "tts-1", "input": text, "voice": v}
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                r = await client.post(
+                    self.OPENAI_COMPAT_TTS_URL,
+                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                    json=payload,
+                )
+            if r.status_code != 200:
+                detail = r.text[:300]
+                logger.error("[PiAPI] tts-1 HTTP %d: %s", r.status_code, detail)
+                return {"success": False, "error": f"tts-1 returned HTTP {r.status_code}: {detail}"}
+            audio_bytes = r.content
+            if not audio_bytes or len(audio_bytes) < 1024:
+                return {"success": False, "error": "tts-1 returned empty audio"}
+            # Persist to GCS so the dubbing ffmpeg mux can fetch it later.
+            gcs = get_gcs_storage()
+            blob_name = f"generated/audio/tts_{uuid.uuid4().hex[:12]}.mp3"
+            audio_url: Optional[str]
+            if gcs.enabled:
+                audio_url = gcs.upload_public(data=audio_bytes, blob_name=blob_name, content_type="audio/mpeg")
+            else:
+                # Local dev fallback — caller must be running under PUBLIC_APP_URL
+                tmp = os.path.join("/app/static/generated", os.path.basename(blob_name))
+                os.makedirs(os.path.dirname(tmp), exist_ok=True)
+                with open(tmp, "wb") as f:
+                    f.write(audio_bytes)
+                public_base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+                audio_url = f"{public_base}/static/generated/{os.path.basename(blob_name)}" if public_base else f"/static/generated/{os.path.basename(blob_name)}"
+            logger.info("[PiAPI] tts-1 success: %d bytes → %s", len(audio_bytes), audio_url)
+            return {
+                "success": True,
+                "task_id": f"tts1-{uuid.uuid4().hex[:8]}",
+                "output": {"audio_url": audio_url, "voice": v, "model": "tts-1"},
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[PiAPI] tts-1 exception: %s", exc)
+            return {"success": False, "error": f"tts-1 exception: {exc}"}
+
     async def text_to_speech(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate speech audio from text using F5-TTS (zero-shot) via PiAPI.
-        Reference: https://piapi.ai/docs/tts-api/f5-tts
+        Generate speech audio from text. PiAPI exposes two TTS surfaces:
+
+        1. OpenAI-compatible /v1/audio/speech with `tts-1` — synchronous MP3
+           response, 6 fixed voices (alloy/echo/fable/onyx/nova/shimmer),
+           supports en/zh/ja/ko/es and many more, no reference audio required.
+        2. Qubico/tts F5-TTS via the async /api/v1/task endpoint — zero-shot
+           voice cloning from a reference audio clip. Currently broken
+           upstream (worker returns 500 on every call as of 2026-05-09).
+
+        Routing rule:
+          - If `ref_audio` is supplied AND non-empty AND voice cloning is
+            actually required → use F5-TTS, fall back to tts-1 on 500.
+          - Otherwise → use tts-1 directly (the common case for video_dubbing
+            where the user just wants a localized voiceover, not a clone).
 
         Args:
             params: {
-                "text": str,           # Text to synthesize
-                "ref_audio": str,      # Reference audio URL for voice cloning
-                "ref_text": str,       # (optional) Text of the reference audio
+                "text": str,
+                "ref_audio": str | None,   # voice-clone reference URL
+                "ref_text": str | None,    # transcript of the reference clip
+                "voice": str | None,       # tts-1 voice id (alloy/echo/...)
             }
 
         Returns:
@@ -902,30 +1015,50 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("text_to_speech", params)
 
-        # Reference audio for voice cloning. If not provided, use a default sample.
-        ref_audio = params.get("ref_audio", "")
-        if not ref_audio:
-            # Default: use Kling's sample audio as reference voice
-            ref_audio = "https://v15-kling.klingai.com/bs2/upload-ylab-stunt-sgp/minimax_tts/05648231552788212e980aade977d672/audio.mp3"
-            logger.info("[PiAPI] Using default Kling sample as TTS reference voice")
+        text = params.get("text") or ""
+        ref_audio = (params.get("ref_audio") or "").strip()
+        voice_hint = params.get("voice") or params.get("voice_id")
 
-        payload = {
-            "model": "Qubico/tts",
-            "task_type": "zero-shot",
-            "input": {
-                "gen_text": params["text"],
-                "ref_audio": ref_audio,
-            },
-            "config": {
-                "service_mode": "public"
+        # Path A: caller wants voice cloning → F5-TTS, with tts-1 fallback.
+        # _submit_and_poll RAISES on task failure (not returns success=False),
+        # so we have to wrap it. Auth errors get surfaced; everything else
+        # (notably the persistent upstream 500) falls through to tts-1.
+        if ref_audio:
+            payload = {
+                "model": "Qubico/tts",
+                "task_type": "zero-shot",
+                "input": {"gen_text": text, "ref_audio": ref_audio},
+                "config": {"service_mode": "public"},
             }
-        }
+            ref_text = params.get("ref_text")
+            if ref_text:
+                payload["input"]["ref_text"] = ref_text
 
-        ref_text = params.get("ref_text")
-        if ref_text:
-            payload["input"]["ref_text"] = ref_text
+            err_text = ""
+            try:
+                result = await self._submit_and_poll(payload)
+                if isinstance(result, dict) and result.get("success") is True:
+                    return result
+                if isinstance(result, dict):
+                    err_text = (result.get("error") or result.get("message") or "")
+            except Exception as exc:  # noqa: BLE001
+                err_text = str(exc)
 
-        return await self._submit_and_poll(payload)
+            err_text_lower = err_text.lower()
+            if any(tok in err_text_lower for tok in ("unauthorized", "forbidden", "permission", "403", "401", "model_not_authorized")):
+                return {
+                    "success": False,
+                    "error": (
+                        "Voice cloning model is not enabled on this PiAPI account. "
+                        "Enable F5-TTS / voice-clone access in the PiAPI dashboard, "
+                        "or omit ref_audio to use the built-in default voice."
+                    ),
+                }
+            logger.warning("[PiAPI] F5-TTS failed (%s); falling back to tts-1", err_text[:160])
+            return await self._tts_via_openai_compat(text, voice_hint)
+
+        # Path B (default): no voice cloning needed → tts-1.
+        return await self._tts_via_openai_compat(text, voice_hint)
 
     # ─────────────────────────────────────────────────────────────────────────
     # AVATAR (Kling Avatar via PiAPI — talking head video)
@@ -992,15 +1125,30 @@ class PiAPIProvider(BaseProvider):
 
         audio_url = await self._prepare_avatar_audio_url(audio_url, params.get("user_id"))
 
-        # Step 2: Build Kling Avatar request (requires local_dubbing_url)
+        # Step 2: Build Kling Avatar request (requires local_dubbing_url).
+        # NOTE: Kling's `prompt` field controls the *visual scene*, not the
+        # spoken content. Passing the user's script in `prompt` made Kling
+        # render parts of it as on-screen captions/text overlays (BUG-005).
+        # The script reaches Kling via `local_dubbing_url` (the TTS audio);
+        # the prompt should be a clean visual brief that explicitly tells
+        # the model "no text, no captions, no watermark" so the output is a
+        # plain talking-head video.
         input_data: Dict[str, Any] = {
             "image_url": image_url,
             "local_dubbing_url": audio_url,
             "mode": mode,
             "batch_size": params.get("batch_size", 1),
+            "prompt": (
+                "Natural talking-head presenter video, subtle lip-sync and "
+                "head movement, neutral background, professional studio "
+                "lighting, no text, no captions, no subtitles, no watermark, "
+                "no logos, no on-screen graphics"
+            ),
+            "negative_prompt": (
+                "text, captions, subtitles, watermark, logo, on-screen "
+                "graphics, written words, overlays"
+            ),
         }
-        if script:
-            input_data["prompt"] = script  # Additional context for lip-sync
 
         payload = {
             "model": "kling",

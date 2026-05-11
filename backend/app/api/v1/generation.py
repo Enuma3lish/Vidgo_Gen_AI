@@ -28,12 +28,15 @@ import uuid
 from app.providers.provider_router import get_provider_router, TaskType
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.similarity import get_similarity_service
+from app.services.prompt_library import lookup_prompt as _lookup_curated_prompt
 from app.api.deps import get_current_user_optional, get_db, get_redis, is_subscribed_user
 from app.core.upload_validation import image_dimension_rules_for_tool, validate_uploaded_content
 from app.models.demo import ToolShowcase, PromptCache
 from app.models.material import Material, ToolType
 from app.models.user_generation import UserGeneration
 from app.services.demo_cache_service import DemoCacheService
+from app.services.gcs_storage_service import get_gcs_storage
+from app.services.prompt_refinement_service import PromptRefinementService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -193,6 +196,8 @@ async def image_to_video_with_rescue(request: I2VRequest):
 
         output = result.get("output", {})
         video_url = output.get("video_url")
+        # Persist provider CDN result to GCS so it survives 14-day expiry.
+        video_url = await get_gcs_storage().safe_persist_url(video_url, "video", None)
 
         return I2VResponse(
             success=result.get("success", False),
@@ -284,8 +289,15 @@ async def get_room_types():
 # ============================================================================
 
 class PatternGenerateRequest(BaseModel):
-    """Generate pattern from text"""
-    prompt: str
+    """Generate pattern from text.
+
+    `prompt_id` is the curated path: when set, the server resolves canonical
+    EN/ZH text from prompt_library.json and ignores any free-form `prompt`.
+    `prompt` stays optional so internal admin/automation paths still work.
+    """
+    prompt: Optional[str] = None
+    prompt_id: Optional[str] = None
+    locale: Optional[str] = None
     style: str = "seamless"  # seamless, floral, geometric, abstract, traditional
     width: int = 1024
     height: int = 1024
@@ -356,6 +368,18 @@ async def generate_pattern(
 
     Styles: seamless, floral, geometric, abstract, traditional
     """
+    # Resolve curated prompt (server-side validated). Overrides any free-form
+    # `prompt` so a determined client cannot bypass the curated library.
+    if request.prompt_id:
+        curated = _lookup_curated_prompt("pattern_generate", request.prompt_id, request.locale)
+        if curated:
+            request.prompt = curated
+    if not request.prompt or not request.prompt.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Either 'prompt' or 'prompt_id' is required for pattern generation.",
+        )
+
     # Demo path: return cached demo example
     if not is_subscribed_user(current_user):
         return await _gen_demo_response(db, ToolType.PATTERN_GENERATE, topic=request.style, cta="Subscribe to generate custom patterns.")
@@ -374,10 +398,26 @@ async def generate_pattern(
         }
         style_desc = style_prompts.get(request.style, "seamless pattern")
 
+        # Refine the combined user+style prompt with Gemini for tighter pattern
+        # specificity (palette, motif scale, tile-friendly edges, no text/logos).
+        base_prompt = f"{request.prompt}, {style_desc}, high quality, detailed"
+        try:
+            refinement = await PromptRefinementService().refine_for_tool(
+                prompt=base_prompt,
+                tool_name="pattern_generate",
+                prompt_role="text-to-image pattern prompt",
+                user_prompt=True,
+                context={"style": request.style, "width": request.width, "height": request.height},
+            )
+            final_prompt = refinement.refined_prompt or base_prompt
+        except Exception as refine_exc:  # noqa: BLE001 - refinement is best-effort
+            logger.warning("Pattern prompt refinement skipped: %s", refine_exc)
+            final_prompt = base_prompt
+
         result = await provider_router.route(
             TaskType.T2I,
             {
-                "prompt": f"{request.prompt}, {style_desc}, high quality, detailed",
+                "prompt": final_prompt,
                 "size": f"{request.width}*{request.height}"
             }
         )
@@ -390,6 +430,10 @@ async def generate_pattern(
                 images = [{"url": image_url}]
 
             result_url = images[0]["url"] if images else image_url
+            # Persist provider CDN result to GCS so it survives 14-day expiry.
+            result_url = await get_gcs_storage().safe_persist_url(
+                result_url, "image", str(current_user.id)
+            )
 
             # Save to UserGeneration
             generation = UserGeneration(
@@ -701,6 +745,10 @@ async def image_to_video(
         if result.get("success"):
             output = result.get("output", {})
             video_url = output.get("video_url")
+            # Persist provider CDN video to GCS so it survives 14-day expiry.
+            video_url = await get_gcs_storage().safe_persist_url(
+                video_url, "video", str(current_user.id)
+            )
 
             # Optional: Apply style transformation with PiAPI V2V
             if request.style:
@@ -715,7 +763,9 @@ async def image_to_video(
                     )
                     styled_url = style_result.get("video_url") or style_result.get("output_url")
                     if styled_url:
-                        video_url = styled_url
+                        video_url = await get_gcs_storage().safe_persist_url(
+                            styled_url, "video", str(current_user.id)
+                        )
                 except Exception:
                     pass  # Use original video if style transfer fails
 
@@ -971,7 +1021,7 @@ AVAILABLE_MODELS = [
         "name": "Pixverse v4.5",
         "description": "Fast, affordable video generation",
         "type": "video",
-        "credit_cost": 8,
+        "credit_cost": 10,
         "min_plan": "starter",
         "max_length": 8,
         "resolution": "720p",
@@ -982,7 +1032,7 @@ AVAILABLE_MODELS = [
         "name": "Pixverse v5",
         "description": "Creative animations with better quality",
         "type": "video",
-        "credit_cost": 12,
+        "credit_cost": 15,
         "min_plan": "starter",
         "max_length": 8,
         "resolution": "720p",
@@ -993,7 +1043,7 @@ AVAILABLE_MODELS = [
         "name": "Kling v1.5",
         "description": "Good quality, fast generation",
         "type": "video",
-        "credit_cost": 15,
+        "credit_cost": 20,
         "min_plan": "starter",
         "max_length": 10,
         "resolution": "1080p",
@@ -1004,7 +1054,7 @@ AVAILABLE_MODELS = [
         "name": "Kling v2.0",
         "description": "High quality video generation",
         "type": "video",
-        "credit_cost": 20,
+        "credit_cost": 30,
         "min_plan": "pro",
         "max_length": 10,
         "resolution": "1080p",
@@ -1015,7 +1065,7 @@ AVAILABLE_MODELS = [
         "name": "Luma Ray 2.0",
         "description": "Cinematic quality, best results",
         "type": "video",
-        "credit_cost": 25,
+        "credit_cost": 30,
         "min_plan": "pro",
         "max_length": 10,
         "resolution": "1080p",
@@ -1026,7 +1076,7 @@ AVAILABLE_MODELS = [
         "name": "Wan T2I (Default)",
         "description": "Standard text-to-image generation",
         "type": "image",
-        "credit_cost": 3,
+        "credit_cost": 1,
         "min_plan": "starter",
         "max_length": None,
         "resolution": "1024x1024",
@@ -1215,6 +1265,11 @@ async def upload_and_generate(
         images = output.get("images", [])
         if images and not result_url:
             result_url = images[0].get("url")
+        # Persist provider CDN result to GCS so it survives 14-day expiry.
+        media_kind = "video" if tool_type == "short_video" else "image"
+        result_url = await get_gcs_storage().safe_persist_url(
+            result_url, media_kind, str(current_user.id)
+        )
 
         # Deduct credits
         await credit_svc.deduct_credits(

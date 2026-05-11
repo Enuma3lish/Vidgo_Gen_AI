@@ -22,6 +22,7 @@ from app.api.deps import get_current_user, get_db, get_redis
 from app.core.config import settings
 from app.core.test_plans import TEST_PRO_PLAN_CREDITS, TEST_PRO_PLAN_DEFAULTS, is_test_pro_plan
 from app.models.billing import Plan
+from app.models.site_settings import SiteSettings
 from app.models.user import User, generate_referral_code
 from app.providers.provider_router import get_provider_router, TaskType
 from app.services.admin_dashboard import AdminDashboardService
@@ -1479,3 +1480,331 @@ async def prewarm_example_cache(
         "results": triggered,
         "error_details": errors,
     }
+
+
+# ============================================================================
+# Plan Management
+# ============================================================================
+#
+# Admin endpoints for editing subscription plan pricing, credit allowances,
+# feature flags, and the bilingual feature-list copy shown on the pricing
+# page. The Plan model already exists; these endpoints expose CRUD over it
+# so the admin doesn't need to write SQL to change pricing.
+
+# Editable fields. We allowlist these explicitly so a request can't sneak in
+# columns like `id` or `created_at`. Keep in sync with `_serialize_plan`.
+_PLAN_EDITABLE_FIELDS = {
+    "name", "slug", "display_name", "plan_type", "description",
+    "price_twd", "price_usd", "price_monthly", "price_yearly",
+    "currency", "billing_cycle",
+    "monthly_credits", "weekly_credits", "topup_discount_rate",
+    "allowed_models",
+    "can_use_effects", "social_media_batch_posting", "priority_queue",
+    "enterprise_features", "api_access",
+    "max_video_length", "max_resolution", "max_concurrent_generations",
+    "has_watermark", "watermark",
+    "pollo_limit", "goenhance_limit",
+    "feature_clothing_transform", "feature_goenhance", "feature_video_gen",
+    "feature_batch_processing", "feature_custom_styles",
+    "features",
+    "features_text_zh", "features_text_en",
+    "display_order",
+    "is_active", "is_featured",
+}
+
+
+def _serialize_plan(plan: Plan) -> Dict[str, Any]:
+    """Return a JSON-ready dict for a single Plan row."""
+    def _f(value):
+        # Decimal → float so JSON encodes cleanly.
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return value
+
+    return {
+        "id": str(plan.id),
+        "name": plan.name,
+        "slug": plan.slug,
+        "display_name": plan.display_name,
+        "plan_type": plan.plan_type,
+        "description": plan.description,
+        "price_twd": _f(plan.price_twd),
+        "price_usd": _f(plan.price_usd),
+        "price_monthly": plan.price_monthly,
+        "price_yearly": plan.price_yearly,
+        "currency": plan.currency,
+        "billing_cycle": plan.billing_cycle,
+        "monthly_credits": plan.monthly_credits,
+        "weekly_credits": plan.weekly_credits,
+        "topup_discount_rate": _f(plan.topup_discount_rate),
+        "allowed_models": plan.allowed_models,
+        "can_use_effects": plan.can_use_effects,
+        "social_media_batch_posting": plan.social_media_batch_posting,
+        "priority_queue": plan.priority_queue,
+        "enterprise_features": plan.enterprise_features,
+        "api_access": plan.api_access,
+        "max_video_length": plan.max_video_length,
+        "max_resolution": plan.max_resolution,
+        "max_concurrent_generations": plan.max_concurrent_generations,
+        "has_watermark": plan.has_watermark,
+        "watermark": plan.watermark,
+        "pollo_limit": plan.pollo_limit,
+        "goenhance_limit": plan.goenhance_limit,
+        "feature_clothing_transform": plan.feature_clothing_transform,
+        "feature_goenhance": plan.feature_goenhance,
+        "feature_video_gen": plan.feature_video_gen,
+        "feature_batch_processing": plan.feature_batch_processing,
+        "feature_custom_styles": plan.feature_custom_styles,
+        "features": plan.features,
+        "features_text_zh": plan.features_text_zh,
+        "features_text_en": plan.features_text_en,
+        "display_order": plan.display_order,
+        "is_active": plan.is_active,
+        "is_featured": plan.is_featured,
+        "created_at": plan.created_at.isoformat() if plan.created_at else None,
+        "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
+    }
+
+
+class PlanUpsertRequest(BaseModel):
+    """Open-shape payload. Only fields listed in _PLAN_EDITABLE_FIELDS are
+    applied; unknown keys are silently dropped so the frontend can send the
+    full plan dict back without trimming it."""
+    class Config:
+        extra = "allow"
+
+
+@router.get("/plans")
+async def admin_list_plans(
+    include_inactive: bool = Query(default=True),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """List all subscription plans, ordered by display_order then price."""
+    stmt = select(Plan)
+    if not include_inactive:
+        stmt = stmt.where(Plan.is_active.is_(True))
+    result = await db.execute(stmt)
+    plans = list(result.scalars().all())
+    # Sort: display_order (NULL last) then price_monthly ascending.
+    plans.sort(key=lambda p: (
+        p.display_order if p.display_order is not None else 99999,
+        p.price_monthly or 0,
+    ))
+    return {"plans": [_serialize_plan(p) for p in plans]}
+
+
+@router.post("/plans")
+async def admin_create_plan(
+    payload: PlanUpsertRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Create a new subscription plan."""
+    data = payload.model_dump(exclude_unset=True)
+    if not data.get("name"):
+        raise HTTPException(status_code=400, detail="Field 'name' is required.")
+    filtered = {k: v for k, v in data.items() if k in _PLAN_EDITABLE_FIELDS}
+    plan = Plan(**filtered)
+    db.add(plan)
+    await db.commit()
+    await db.refresh(plan)
+    logger.info("[admin] %s created plan %s (%s)", admin.email, plan.id, plan.name)
+    return {"success": True, "plan": _serialize_plan(plan)}
+
+
+@router.patch("/plans/{plan_id}")
+async def admin_update_plan(
+    plan_id: str,
+    payload: PlanUpsertRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Patch fields on an existing plan."""
+    plan = (await db.execute(select(Plan).where(Plan.id == plan_id))).scalars().first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        if key in _PLAN_EDITABLE_FIELDS:
+            setattr(plan, key, value)
+    await db.commit()
+    await db.refresh(plan)
+    logger.info("[admin] %s updated plan %s (%s)", admin.email, plan.id, plan.name)
+    return {"success": True, "plan": _serialize_plan(plan)}
+
+
+@router.delete("/plans/{plan_id}")
+async def admin_delete_plan(
+    plan_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Soft-delete a plan by flipping is_active=false.
+
+    We never hard-delete plans because Subscription / Order rows reference
+    them; removing the row would break invoice and revenue history.
+    """
+    plan = (await db.execute(select(Plan).where(Plan.id == plan_id))).scalars().first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    plan.is_active = False
+    await db.commit()
+    logger.info("[admin] %s deactivated plan %s (%s)", admin.email, plan.id, plan.name)
+    return {"success": True, "message": "Plan deactivated."}
+
+
+# ============================================================================
+# Branding / Site Settings (singleton row, id=1)
+# ============================================================================
+#
+# Admins edit logo URLs, brand strings, and the bilingual pricing-page intro
+# copy here. The migration seeds an empty row so GET always returns data.
+
+_SITE_SETTINGS_EDITABLE = {
+    "logo_url", "logo_url_dark", "favicon_url",
+    "brand_name", "brand_tagline_zh", "brand_tagline_en",
+    "pricing_intro_title_zh", "pricing_intro_title_en",
+    "pricing_intro_body_zh", "pricing_intro_body_en",
+    "pricing_footnote_zh", "pricing_footnote_en",
+}
+
+
+async def _get_or_create_site_settings(db: AsyncSession) -> SiteSettings:
+    """Return the singleton settings row; create it if the seed insert lost
+    a race or never ran (idempotent recovery for fresh local DBs)."""
+    row = (
+        await db.execute(select(SiteSettings).where(SiteSettings.id == 1))
+    ).scalars().first()
+    if row is None:
+        row = SiteSettings(id=1)
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+    return row
+
+
+def _serialize_site_settings(row: SiteSettings) -> Dict[str, Any]:
+    return {
+        "logo_url": row.logo_url,
+        "logo_url_dark": row.logo_url_dark,
+        "favicon_url": row.favicon_url,
+        "brand_name": row.brand_name,
+        "brand_tagline_zh": row.brand_tagline_zh,
+        "brand_tagline_en": row.brand_tagline_en,
+        "pricing_intro_title_zh": row.pricing_intro_title_zh,
+        "pricing_intro_title_en": row.pricing_intro_title_en,
+        "pricing_intro_body_zh": row.pricing_intro_body_zh,
+        "pricing_intro_body_en": row.pricing_intro_body_en,
+        "pricing_footnote_zh": row.pricing_footnote_zh,
+        "pricing_footnote_en": row.pricing_footnote_en,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+class SiteSettingsUpdateRequest(BaseModel):
+    class Config:
+        extra = "allow"
+
+
+@router.get("/branding")
+async def admin_get_branding(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Return the current site-branding / pricing-copy settings."""
+    row = await _get_or_create_site_settings(db)
+    return {"settings": _serialize_site_settings(row)}
+
+
+@router.patch("/branding")
+async def admin_update_branding(
+    payload: SiteSettingsUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Update one or more branding fields. Unknown keys are ignored."""
+    row = await _get_or_create_site_settings(db)
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        if key in _SITE_SETTINGS_EDITABLE:
+            setattr(row, key, value)
+    await db.commit()
+    await db.refresh(row)
+    logger.info("[admin] %s updated branding fields: %s", admin.email, list(data.keys()))
+    return {"success": True, "settings": _serialize_site_settings(row)}
+
+
+@router.post("/branding/logo")
+async def admin_upload_logo(
+    file_url: Optional[str] = None,
+    slot: str = Query(default="logo_url", pattern="^(logo_url|logo_url_dark|favicon_url)$"),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Store a logo URL into a specific slot.
+
+    The admin uploads the file via the existing /uploads endpoint (which
+    handles GCS / size / mime validation) and then calls this endpoint with
+    the returned URL. We deliberately don't accept the binary here so the
+    admin route stays small and uses the proven upload pipeline.
+    """
+    if not file_url:
+        raise HTTPException(status_code=400, detail="file_url is required")
+    row = await _get_or_create_site_settings(db)
+    setattr(row, slot, file_url)
+    await db.commit()
+    await db.refresh(row)
+    return {"success": True, "settings": _serialize_site_settings(row)}
+
+
+# ============================================================================
+# Public branding endpoint (no auth) — consumed by the frontend on boot.
+# ============================================================================
+
+@router.get("/branding/public")
+async def public_branding(
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the public-safe subset of branding. No auth required — used by
+    the frontend bootstrap to render the live logo and pricing-page copy."""
+    row = (
+        await db.execute(select(SiteSettings).where(SiteSettings.id == 1))
+    ).scalars().first()
+    if row is None:
+        return {"settings": {}}
+    return {"settings": _serialize_site_settings(row)}
+
+
+# ============================================================================
+# Infrastructure Cost Stats (GCP + PiAPI + Pollo + A2E)
+# ============================================================================
+
+@router.get("/costs/infrastructure")
+async def admin_costs_infrastructure(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Combined view of the platform's three big cost buckets:
+
+    1. GCP — Cloud Run + GCS + Cloud SQL + egress. We read these from the
+       configured GCP_BILLING_BIGQUERY dataset when available, and fall
+       back to manually-set monthly estimates from env vars otherwise so
+       the dashboard never breaks on local dev.
+    2. PiAPI — image / video provider, billed per-call. Reuses the existing
+       ServicePricing per-call cost (provider='piapi') aggregated this
+       month.
+    3. Pollo — primary video provider. Same per-call aggregation, scoped
+       to provider='pollo' / 'pollo_mcp'.
+    4. A2E — talking-avatar provider. Same per-call aggregation, scoped
+       to provider='a2e'.
+
+    Returns dollars (USD) for everything; the GCP slice already lives in
+    USD inside billing exports, and the provider per-call costs are stored
+    in USD in service_pricing.api_cost_usd.
+    """
+    service = AdminDashboardService(db)
+    return await service.get_infrastructure_costs()

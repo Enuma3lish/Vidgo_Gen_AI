@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUIStore } from '@/stores'
+import { useLocalized } from '@/composables'
 import apiClient from '@/api/client'
 
 const route = useRoute()
@@ -16,18 +17,20 @@ const isLoading = ref(false)
 const isComplete = ref(false)
 const token = computed(() => String(route.query.token || route.query.reset_password || ''))
 const isZh = computed(() => locale.value.startsWith('zh'))
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 async function handleSubmit() {
   if (!token.value) {
-    uiStore.showError(isZh.value ? '重設連結無效或已過期' : 'Reset link is invalid or expired')
+    uiStore.showError(L('重設連結無效或已過期', 'Reset link is invalid or expired', 'リセットリンクが無効または期限切れです', '재설정 링크가 유효하지 않거나 만료되었습니다', 'Enlace de reinicio inválido o expirado'))
     return
   }
   if (password.value.length < 8) {
-    uiStore.showError(isZh.value ? '密碼至少需要 8 個字元' : 'Password must be at least 8 characters')
+    uiStore.showError(L('密碼至少需要 8 個字元', 'Password must be at least 8 characters', 'パスワードは8文字以上にしてください', '비밀번호는 최소 8자 이상이어야 합니다', 'La contraseña debe tener al menos 8 caracteres'))
     return
   }
   if (password.value !== passwordConfirm.value) {
-    uiStore.showError(isZh.value ? '兩次輸入的密碼不一致' : 'Passwords do not match')
+    uiStore.showError(L('兩次輸入的密碼不一致', 'Passwords do not match', 'パスワードが一致しません', '비밀번호가 일치하지 않습니다', 'Las contraseñas no coinciden'))
     return
   }
 
@@ -41,7 +44,7 @@ async function handleSubmit() {
     setTimeout(() => router.replace('/auth/login'), 1200)
   } catch (err: unknown) {
     const e = err as { response?: { data?: { detail?: string } } }
-    uiStore.showError(e.response?.data?.detail || (isZh.value ? '重設密碼失敗' : 'Failed to reset password'))
+    uiStore.showError(e.response?.data?.detail || L('重設密碼失敗', 'Failed to reset password', 'パスワードリセットに失敗', '비밀번호 재설정 실패', 'Falló el reinicio de contraseña'))
   } finally {
     isLoading.value = false
   }
@@ -58,8 +61,8 @@ async function handleSubmit() {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 class="text-2xl font-bold text-white mb-2">{{ isZh ? '密碼已更新' : 'Password Updated' }}</h1>
-          <p class="text-gray-400 mb-6">{{ isZh ? '請使用新密碼登入。' : 'You can now sign in with your new password.' }}</p>
+          <h1 class="text-2xl font-bold text-white mb-2">{{ L('密碼已更新', 'Password Updated', 'パスワードを更新しました', '비밀번호 업데이트됨', 'Contraseña actualizada') }}</h1>
+          <p class="text-gray-400 mb-6">{{ L('請使用新密碼登入。', 'You can now sign in with your new password.', '新しいパスワードでログインしてください。', '새 비밀번호로 로그인해 주세요.', 'Inicia sesión con tu nueva contraseña.') }}</p>
           <RouterLink to="/auth/login" class="btn-primary inline-block">{{ t('auth.login') }}</RouterLink>
         </div>
 
@@ -70,17 +73,17 @@ async function handleSubmit() {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 10-8 0v4h8z" />
               </svg>
             </div>
-            <h1 class="text-2xl font-bold text-white mb-2">{{ isZh ? '重設密碼' : 'Reset Password' }}</h1>
-            <p class="text-gray-400">{{ isZh ? '請輸入新的帳戶密碼。' : 'Enter a new password for your account.' }}</p>
+            <h1 class="text-2xl font-bold text-white mb-2">{{ L('重設密碼', 'Reset Password', 'パスワードを再設定', '비밀번호 재설정', 'Restablecer contraseña') }}</h1>
+            <p class="text-gray-400">{{ L('請輸入新的帳戶密碼。', 'Enter a new password for your account.', '新しいアカウントパスワードを入力してください。', '새 비밀번호를 입력해 주세요.', 'Introduce una nueva contraseña.') }}</p>
           </div>
 
           <form @submit.prevent="handleSubmit" class="space-y-6">
             <div>
-              <label class="label">{{ isZh ? '新密碼' : 'New password' }}</label>
+              <label class="label">{{ L('新密碼', 'New password', '新しいパスワード', '새 비밀번호', 'Nueva contraseña') }}</label>
               <input v-model="password" type="password" class="input-field" autocomplete="new-password" />
             </div>
             <div>
-              <label class="label">{{ isZh ? '確認新密碼' : 'Confirm new password' }}</label>
+              <label class="label">{{ L('確認新密碼', 'Confirm new password', '新しいパスワードを確認', '새 비밀번호 확인', 'Confirmar contraseña') }}</label>
               <input v-model="passwordConfirm" type="password" class="input-field" autocomplete="new-password" />
             </div>
 
@@ -92,13 +95,13 @@ async function handleSubmit() {
                 </svg>
                 {{ t('common.loading') }}
               </span>
-              <span v-else>{{ isZh ? '更新密碼' : 'Update Password' }}</span>
+              <span v-else>{{ L('更新密碼', 'Update Password', 'パスワードを更新', '비밀번호 업데이트', 'Actualizar contraseña') }}</span>
             </button>
           </form>
 
           <p class="mt-6 text-center">
             <RouterLink to="/auth/login" class="text-gray-400 hover:text-white text-sm">
-              {{ isZh ? '返回登入' : 'Back to login' }}
+              {{ L('返回登入', 'Back to login', 'ログインに戻る', '로그인으로 돌아가기', 'Volver al inicio de sesión') }}
             </RouterLink>
           </p>
         </template>

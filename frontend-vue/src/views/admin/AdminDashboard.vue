@@ -827,6 +827,9 @@ function exportToolUsage() {
         <router-link to="/admin/users" class="quick-link"><span>{{ localized('使用者', 'Users') }}</span><span>&rarr;</span></router-link>
         <router-link to="/admin/materials" class="quick-link"><span>{{ localized('素材', 'Materials') }}</span><span>&rarr;</span></router-link>
         <router-link to="/admin/revenue" class="quick-link"><span>{{ localized('收入', 'Revenue') }}</span><span>&rarr;</span></router-link>
+        <router-link to="/admin/costs" class="quick-link"><span>{{ localized('成本（GCP+AI）', 'Costs (GCP+AI)') }}</span><span>&rarr;</span></router-link>
+        <router-link to="/admin/plans" class="quick-link"><span>{{ localized('訂閱方案', 'Plans') }}</span><span>&rarr;</span></router-link>
+        <router-link to="/admin/branding" class="quick-link"><span>{{ localized('品牌與文字', 'Branding') }}</span><span>&rarr;</span></router-link>
         <router-link to="/admin/system" class="quick-link"><span>{{ localized('系統', 'System') }}</span><span>&rarr;</span></router-link>
       </div>
     </section>

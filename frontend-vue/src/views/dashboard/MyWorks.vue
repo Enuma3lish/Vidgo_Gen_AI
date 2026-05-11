@@ -307,13 +307,29 @@ function closeShareModal() {
                 <span class="text-xs font-medium" style="color: #ff5050;">{{ t('dashboard.myWorks.mediaExpired') }}</span>
                 <span class="text-xs" style="color: #6b9ab8;">{{ t('dashboard.myWorks.recordKept') }}</span>
               </div>
-              <!-- 正常：顯示縮圖 -->
+              <!-- 正常：顯示縮圖。BUG-001: video results were trying to
+                   render `result_video_url` inside an <img>, which always
+                   fails because browsers can't decode video URLs as image
+                   sources. Render a <video> with poster + preload metadata
+                   so the browser shows the first frame as the thumbnail
+                   (falls back to the input image when the video itself
+                   doesn't have a poster yet). -->
               <template v-else>
+                <video
+                  v-if="isVideo(work) && work.result_video_url"
+                  :src="work.result_video_url"
+                  :poster="work.input_image_url || undefined"
+                  class="w-full h-full object-cover"
+                  muted
+                  playsinline
+                  preload="metadata"
+                />
                 <img
-                  v-if="getThumbnail(work)"
+                  v-else-if="getThumbnail(work)"
                   :src="getThumbnail(work)"
                   :alt="work.tool_type"
                   class="w-full h-full object-cover"
+                  loading="lazy"
                 />
                 <div v-else class="w-full h-full flex items-center justify-center text-4xl"
                      style="background: rgba(0,184,230,0.05);">

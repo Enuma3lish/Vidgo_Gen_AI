@@ -631,6 +631,141 @@ class AdminDashboardService:
             "model_distribution": model_distribution,
         }
 
+    async def get_infrastructure_costs(self) -> Dict[str, Any]:
+        """
+        Infrastructure-level cost dashboard (USD, current month).
+
+        Three big buckets:
+          1. GCP — Cloud Run + GCS + Cloud SQL + egress. Sourced from
+             environment-set monthly estimates (GCP_*_BUDGET_USD env
+             vars) so the dashboard works without a BigQuery billing
+             export. If a real billing export is wired up later, the
+             same shape can be returned from there.
+          2. PiAPI — image / video tools billed per-call. We aggregate
+             service_pricing.api_cost_usd over user_generations created
+             this month, scoped to tools that route through PiAPI.
+          3. Pollo — primary short-video provider.
+          4. A2E — talking-avatar fallback provider.
+
+        The provider→tool mapping mirrors provider_router.PROVIDER_MAP so
+        a tool that switches primaries (e.g. avatar → A2E) shows up under
+        the right bucket without code changes here.
+        """
+        import os
+        now = datetime.utcnow()
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # --- 1. GCP infrastructure estimates ----------------------------
+        # Env-driven so finance can tweak without a redeploy. Defaults are
+        # conservative ~$ figures based on the current Cloud Run / GCS /
+        # Cloud SQL / egress footprint; treat them as placeholders until a
+        # real billing export is wired in.
+        def _env_usd(name: str, default: float) -> float:
+            try:
+                return float(os.getenv(name, str(default)))
+            except (TypeError, ValueError):
+                return default
+
+        gcp_breakdown = [
+            {"name": "Cloud Run (backend + worker)", "cost_usd": _env_usd("GCP_CLOUD_RUN_BUDGET_USD", 180.0)},
+            {"name": "Cloud SQL (Postgres)",          "cost_usd": _env_usd("GCP_CLOUD_SQL_BUDGET_USD", 95.0)},
+            {"name": "GCS storage + egress",          "cost_usd": _env_usd("GCP_GCS_BUDGET_USD", 60.0)},
+            {"name": "Memorystore Redis",             "cost_usd": _env_usd("GCP_REDIS_BUDGET_USD", 35.0)},
+            {"name": "Other (logging, ops, build)",   "cost_usd": _env_usd("GCP_OTHER_BUDGET_USD", 25.0)},
+        ]
+        gcp_total = round(sum(item["cost_usd"] for item in gcp_breakdown), 2)
+
+        # --- 2/3/4. Provider per-call cost (PiAPI / Pollo / A2E) --------
+        # Maps tool_type → which provider bucket the call belongs to. This
+        # mirrors provider_router.PROVIDER_MAP primaries. When a primary
+        # changes there, update this table — it isn't load-bearing for
+        # correctness (we still show the data), only for the bucket split.
+        tool_to_provider = {
+            # PiAPI primaries
+            "background_removal": "piapi",
+            "product_scene":      "piapi",
+            "room_redesign":      "piapi",
+            "try_on":             "piapi",
+            "pattern_generate":   "piapi",
+            "image_translation":  "piapi",
+            "effect":             "piapi",
+            # Pollo primaries (video tools)
+            "short_video":        "pollo",
+            "video_transform":    "pollo",
+            "image_transform":    "pollo",
+            # A2E primary
+            "ai_avatar":          "a2e",
+        }
+
+        # Pull this-month provider costs the same way get_api_cost_stats
+        # does. UserGeneration is the source of truth (the legacy
+        # `generations` table is no longer written to by the active path).
+        tool_type_as_text = cast(UserGeneration.tool_type, String)
+
+        try:
+            month_result = await self.db.execute(
+                select(
+                    UserGeneration.tool_type.label("tool_type"),
+                    func.count(UserGeneration.id).label("calls"),
+                    func.coalesce(func.sum(ServicePricing.api_cost_usd), 0).label("cost_usd"),
+                )
+                .select_from(UserGeneration)
+                .outerjoin(
+                    ServicePricing,
+                    ServicePricing.tool_type == tool_type_as_text,
+                )
+                .where(UserGeneration.created_at >= month_start)
+                .group_by(UserGeneration.tool_type)
+            )
+            rows = month_result.all()
+        except Exception:
+            logger.exception("Infrastructure costs: failed to load provider costs")
+            await self.db.rollback()
+            rows = []
+
+        # Aggregate by provider bucket.
+        providers: Dict[str, Dict[str, Any]] = {
+            "piapi": {"label": "PiAPI",  "calls": 0, "cost_usd": 0.0, "tools": []},
+            "pollo": {"label": "Pollo",  "calls": 0, "cost_usd": 0.0, "tools": []},
+            "a2e":   {"label": "A2E.ai", "calls": 0, "cost_usd": 0.0, "tools": []},
+            "other": {"label": "Other",  "calls": 0, "cost_usd": 0.0, "tools": []},
+        }
+        for row in rows:
+            tt = row.tool_type
+            key = tt.value if hasattr(tt, "value") else str(tt)
+            bucket = tool_to_provider.get(key, "other")
+            cost = float(row.cost_usd or 0)
+            calls = int(row.calls or 0)
+            providers[bucket]["calls"] += calls
+            providers[bucket]["cost_usd"] += cost
+            providers[bucket]["tools"].append({
+                "tool_type": key,
+                "calls": calls,
+                "cost_usd": round(cost, 4),
+            })
+
+        # Round provider totals for display.
+        for bucket in providers.values():
+            bucket["cost_usd"] = round(bucket["cost_usd"], 4)
+            bucket["tools"].sort(key=lambda t: -t["cost_usd"])
+
+        provider_total = round(
+            sum(b["cost_usd"] for b in providers.values()), 4
+        )
+
+        return {
+            "month": now.strftime("%Y-%m"),
+            "currency": "USD",
+            "gcp": {
+                "total_usd": gcp_total,
+                "breakdown": gcp_breakdown,
+                "source": "env_estimate",
+            },
+            "providers": providers,
+            "providers_total_usd": provider_total,
+            "grand_total_usd": round(gcp_total + provider_total, 2),
+        }
+
     async def get_active_users_stats(self) -> Dict[str, Any]:
         """
         Get active generation count and online user sessions.

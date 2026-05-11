@@ -412,7 +412,8 @@
     "uploadVideo": "Upload Video",
     "result": "Result",
     "previewComingSoon": "Preview coming soon",
-    "startFree": "Start Free"
+    "startFree": "Start Free",
+    "insufficient": "(Insufficient)"
   },
   "auth": {
     "email": "Email",
@@ -561,7 +562,10 @@
         "roomType": "Room type",
         "garmentType": "Garment type"
       }
-    }
+    },
+    "backToDashboard": "Back to Dashboard",
+    "noInvoices": "No invoices yet",
+    "noInvoicesDesc": "Your payment invoices will appear here after you subscribe."
   },
   "socialShare": {
     "title": "Share Work Link",
@@ -586,7 +590,15 @@
     "charCount": "{count} chars",
     "close": "Close",
     "defaultCaptionGeneric": "Created with VidGo AI #AICreation #VidGoAI",
-    "defaultCaptionTool": "Created with VidGo AI {tool} #AICreation #VidGoAI"
+    "defaultCaptionTool": "Created with VidGo AI {tool} #AICreation #VidGoAI",
+    "copyCaption": "Copy caption",
+    "captionCopied": "Caption copied.",
+    "downloadImage": "Download image",
+    "downloadVideo": "Download video",
+    "mediaDownloaded": "Media downloaded.",
+    "nativeShareWithImage": "Share image to apps",
+    "captionAndMediaReady": "Caption copied and media downloaded. Paste & upload in {platform}.",
+    "fallbackCaptionAndDownload": "Caption copied and media downloaded. Paste into any app."
   },
   "pricing": {
     "title": "Choose Your Plan",
@@ -615,7 +627,67 @@
     "creditsPerMonth": "{credits} credits/month",
     "ecpayPaymentLabel": "Credit card payment (ECPay)",
     "testPaymentLabel": "Test payment (US$1 / approx. NT$32)",
-    "paddlePaymentLabel": "International payment (Paddle)",
+    "paypalPaymentLabel": "International payment (PayPal)",
+    "paypalPricingStrategy": "For overseas PayPal checkout, please use USD pricing: Standard US$19.99, Pro US$49.99, Pro+ US$99.99 — to offset PayPal fees and FX losses.",
+    "creditReference": {
+      "title": "Credit Conversion Reference (100 credits)",
+      "headers": {
+        "featureType": "Feature Type",
+        "creditsPerRun": "Credits / run",
+        "outputFor100": "Output with 100 credits",
+        "useCase": "Suggested Use Cases"
+      },
+      "rows": {
+        "proLong": {
+          "feature": "Pro long video (10s+)",
+          "cost": "35 credits",
+          "output": "about 3 videos",
+          "useCase": "Cinematic quality, high-end Luma/Kling"
+        },
+        "restore": {
+          "feature": "Video restoration / enhancement",
+          "cost": "15 credits",
+          "output": "about 6 videos",
+          "useCase": "Old footage refresh, low-res to HD"
+        }
+      },
+      "scenarios": {
+        "title": "🚀 What can 100 credits do? (Examples)",
+        "intro": "To make value clearer for users, consider these scenario bundles:",
+        "creatorStarter": "\"Creator Starter\": 5 standard short videos + 50 cover images.",
+        "proDesigner": "\"Pro Designer\": 2 high-quality professional videos + 6 commercial images.",
+        "imageSprint": "\"Image-only Sprint\": 100 standard AI images."
+      }
+    },
+    "creditPacks": {
+      "sectionBadge": "One-time Credit Pricing",
+      "title": "Buy credits directly without a subscription",
+      "subtitle": "Three official TWD packs are available for ad hoc proposals, interior renders, batch product images, and extra video runs. Purchased credits do not reset with monthly billing.",
+      "checkoutNote": "Taiwan ECPay checkout",
+      "badges": {
+        "bestValue": "Best Value",
+        "popular": "Popular"
+      },
+      "bonusPct": "{pct}% bonus included",
+      "flexibleTopup": "Flexible top-up",
+      "oneTime": "one-time",
+      "creditsUnit": "credits",
+      "bonusInclusion": "Includes {bonus} bonus credits",
+      "noBonus": "No bonus, best for light testing",
+      "featureCrossTool": "Works across images, video, interiors, and product scenes",
+      "featureNoReset": "Purchased credits do not reset monthly, ideal for project bursts",
+      "cta": {
+        "buy": "Buy Credits",
+        "signInToBuy": "Sign In to Buy"
+      },
+      "purchaseFailed": "Credit package purchase failed. Please try again.",
+      "orderCreated": "Order created",
+      "fallbackNames": {
+        "light": "Light Pack",
+        "standard": "Standard Pack",
+        "heavy": "Heavy Pack"
+      }
+    },
     "qualityFeature": "{resolution} quality",
     "priorityQueueFeature": "Priority queue",
     "apiAccessFeature": "API access",
@@ -697,8 +769,8 @@
     "processing": "Loading examples...",
     "tabs": {
       "redesign": "Browse Examples",
-      "generate": "Generate Design (Requires Subscription)",
-      "styleTransfer": "Style Transfer (Requires Subscription)"
+      "generate": "Generate Design",
+      "styleTransfer": "Style Transfer"
     },
     "uploadTitle": "Choose Reference Example",
     "roomType": "Space Type",
@@ -714,8 +786,8 @@
     "tryAnother": "View Other Examples",
     "actions": {
       "redesign": "View Example",
-      "generate": "Generate Design (Requires Subscription)",
-      "applyStyle": "Apply Style (Requires Subscription)"
+      "generate": "Generate Design",
+      "applyStyle": "Apply Style"
     },
     "success": {
       "redesigned": "Room redesigned successfully!",
@@ -1332,5 +1404,95 @@
     "selectOrderFirst": "Select an order from the list to issue an invoice",
     "goToList": "Go to Invoice List",
     "cancel": "Cancel"
+  },
+  "upscale": {
+    "title": "HD Image Upscale",
+    "subtitle": "Upscale images to 2x or 4x resolution with AI",
+    "demoCta": "Subscribe to upload your own images and download HD results",
+    "tryDemo": "Try a demo image",
+    "uploadOwn": "Or upload your own image",
+    "original": "Original",
+    "scaleFactor": "Upscale Factor",
+    "processing": "Upscaling...",
+    "action": "Upscale {scale}x",
+    "loading": "Upscaling image...",
+    "resultLabel": "Upscaled Result ({scale}x)",
+    "downloadHd": "Download HD Image",
+    "subscribeDownload": "Subscribe to download HD",
+    "placeholderDemo": "Pick a demo image and click Upscale",
+    "placeholderPaid": "Upload an image to upscale",
+    "warnings": {
+      "selectImage": "Please select or upload an image first"
+    },
+    "errors": {
+      "generic": "Upscale failed"
+    },
+    "toasts": {
+      "success": "Image upscaled {scale}x successfully!",
+      "demoReady": "Demo preview ready. Subscribe to upscale your own images at {scale}x HD."
+    },
+    "demoLabels": {
+      "landscape": "Landscape",
+      "forest": "Forest",
+      "interior": "Interior",
+      "ocean": "Ocean"
+    }
+  },
+  "howTo": {
+    "heading": "How to use",
+    "formatTitle": "Upload requirements",
+    "reuploadNote": "If the format is not supported, you will be asked to re-upload in a supported format.",
+    "background_removal": {
+      "step1": "Pick one of the demo subjects or upload your own photo.",
+      "step2": "Click Remove Background to get a transparent PNG.",
+      "step3": "Download or send the result straight to other tools."
+    },
+    "product_scene": {
+      "step1": "Pick or upload a clean product photo (white or transparent background works best).",
+      "step2": "Pick a scene preset or describe your own (subscribers).",
+      "step3": "Click Generate to get a polished commerce-ready scene shot."
+    },
+    "try_on": {
+      "step1": "Upload a clear garment photo (flat-lay or product page works best).",
+      "step2": "Pick a default model or upload a full-body model photo.",
+      "step3": "Click Try It On to preview the garment on the chosen model."
+    },
+    "room_redesign": {
+      "step1": "Pick a room photo or use one of the demo rooms below.",
+      "step2": "Choose a room type, design style, and (optional) extra notes.",
+      "step3": "Click Generate to get a redesigned 2D image; subscribers can also create a 3D walk-through."
+    },
+    "short_video": {
+      "v2v": {
+        "step1": "Upload an MP4, WebM, or MOV video up to 100MB.",
+        "step2": "Pick a style transform from the catalog.",
+        "step3": "Click Generate to apply the AI style transform."
+      },
+      "i2v": {
+        "step1": "Pick a demo image or upload your own product / scene image.",
+        "step2": "Choose a motion / effect from the catalog.",
+        "step3": "Click Generate to create a short video clip."
+      }
+    },
+    "ai_avatar": {
+      "step1": "Pick a default avatar or upload your own front-facing portrait.",
+      "step2": "Pick a script category or paste your own script.",
+      "step3": "Choose voice and language, then click Generate Video."
+    },
+    "image_translator": {
+      "step1": "Pick a demo image or upload your own poster / packshot / banner.",
+      "step2": "Choose source and target languages.",
+      "step3": "Click Translate to keep the layout and replace the text."
+    },
+    "video_dubbing": {
+      "step1": "Pick a sample video to preview the dubbing flow.",
+      "step2": "Subscribers can upload their own MP4 / WebM / MOV.",
+      "step3": "Choose source / target language and click Generate Dubbing."
+    },
+    "upscale": {
+      "step1": "Pick a demo image or upload your own low-resolution image.",
+      "step2": "Choose 2x or 4x scale factor.",
+      "step3": "Click Upscale and download the HD result."
+    }
   }
 }

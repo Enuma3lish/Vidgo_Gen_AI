@@ -1396,6 +1396,8 @@
     "nativeFallbackCopied": "リンクをコピーしました。任意のアプリに貼り付けてください。",
     "nativeShare": "デバイスでシェア",
     "nativeShareWithImage": "画像をアプリにシェア",
+    "mobileShareHint": "スマホの共有シート（Instagram、Threads、LINE、メッセージ…）をファイル付きで開きます。",
+    "desktopFallbackHint": "このブラウザはネイティブ共有に対応していません — キャプションをコピーしてファイルを保存します。",
     "openPlatform": "プラットフォームを開く",
     "openShare": "シェアを開く",
     "popupBlocked": "ブラウザによってプラットフォームページがブロックされました。",

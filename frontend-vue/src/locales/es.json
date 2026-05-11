@@ -1396,6 +1396,8 @@
     "nativeFallbackCopied": "Enlace copiado. Pégalo en cualquier aplicación.",
     "nativeShare": "Compartir con el dispositivo",
     "nativeShareWithImage": "Compartir imagen a apps",
+    "mobileShareHint": "Abre la hoja de compartir del móvil (Instagram, Threads, LINE, Mensajes…) con el archivo adjunto.",
+    "desktopFallbackHint": "Tu navegador no admite compartir nativo — copiaremos el texto y guardaremos el archivo.",
     "openPlatform": "Abrir plataforma",
     "openShare": "Abrir compartir",
     "popupBlocked": "El navegador bloqueó la página de la plataforma.",

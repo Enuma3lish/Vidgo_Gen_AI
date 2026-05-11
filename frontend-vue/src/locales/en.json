@@ -598,7 +598,9 @@
     "mediaDownloaded": "Media downloaded.",
     "nativeShareWithImage": "Share image to apps",
     "captionAndMediaReady": "Caption copied and media downloaded. Paste & upload in {platform}.",
-    "fallbackCaptionAndDownload": "Caption copied and media downloaded. Paste into any app."
+    "fallbackCaptionAndDownload": "Caption copied and media downloaded. Paste into any app.",
+    "mobileShareHint": "Opens your phone's share sheet (Instagram, Threads, LINE, Messages…) with the file attached.",
+    "desktopFallbackHint": "Your browser doesn't support native sharing — we'll copy the caption and save the file instead."
   },
   "pricing": {
     "title": "Choose Your Plan",

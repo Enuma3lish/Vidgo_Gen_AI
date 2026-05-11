@@ -6,10 +6,10 @@ import { useLocalized } from '@/composables'
 
 const route = useRoute()
 const router = useRouter()
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
-const isZh = computed(() => locale.value.startsWith('zh'))
 // 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+// `isZh` was removed because every reference migrated to L().
 const { L } = useLocalized()
 const titleKey = computed(() => String(route.meta.titleKey || 'nav.tools'))
 const descKey = computed(() => String(route.meta.descKey || 'lp.sec3Sub'))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
@@ -41,6 +41,13 @@ const selectedScriptPromptId = ref('')
 const uploadedImage = ref<string | undefined>(undefined)
 const resultVideo = ref<string | null>(null)
 const isProcessing = ref(false)
+// Wall-clock seconds since the last Generate click. Surfaced in the loading
+// overlay so the user can see the request is alive — without this the avatar
+// flow felt like "I clicked, then nothing happened" even though the backend
+// was running. Pulled live by a 1-Hz watcher; cleared when the request ends.
+const processingElapsedSec = ref(0)
+let _processingTimer: ReturnType<typeof setInterval> | null = null
+const processingStatus = ref('')
 // True when a demo user clicked Generate but the selected tile isn't backed
 // by a real Material DB preset (db_empty fallback or missing preset id).
 // Surfaces a persistent in-block message instead of a silent no-op.
@@ -299,10 +306,24 @@ const filteredVoices = computed(() => {
 })
 
 const pendingTitle = computed(() => isZh.value
-  ? '我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。'
-  : 'I am creating the requested video. This may take a few minutes, so please check back shortly.')
-const pendingDetail = computed(() => L('正在生成數位人影片...', 'Generating avatar video...', 'アバター動画を生成中...', '아바타 동영상 생성 중...', 'Generando video del avatar...'))
-const pendingDuration = computed(() => L('需要 3 至 5 分鐘', 'Usually takes 3 to 5 minutes', '通常3〜5分かかります', '보통 3-5분 소요', 'Suele tardar 3-5 minutos'))
+  ? '正在產生數位人影片，請稍候。'
+  : 'Generating your avatar video. Please wait.')
+// Show the running phase (upload → speech → render) so a quiet 60-second
+// Kling stretch doesn't feel like the request died. Falls back to the
+// generic "generating" line before the timer kicks in.
+const pendingDetail = computed(() => processingStatus.value || L('正在生成數位人影片...', 'Generating avatar video...', 'アバター動画を生成中...', '아바타 동영상 생성 중...', 'Generando video del avatar...'))
+// Live elapsed-time counter — appended to the existing "Usually takes 3-5
+// min" estimate so the user can confirm at a glance that the request is
+// still alive while Kling is processing.
+const pendingDuration = computed(() => {
+  const base = L('需要 3 至 5 分鐘', 'Usually takes 3 to 5 minutes', '通常3〜5分かかります', '보통 3-5분 소요', 'Suele tardar 3-5 minutos')
+  if (!isProcessing.value) return base
+  const s = processingElapsedSec.value
+  const mm = Math.floor(s / 60)
+  const ss = String(s % 60).padStart(2, '0')
+  const elapsed = `${mm}:${ss}`
+  return L(`${base}（已過 ${elapsed}）`, `${base} — elapsed ${elapsed}`, `${base}（経過 ${elapsed}）`, `${base} — 경과 ${elapsed}`, `${base} — transcurrido ${elapsed}`)
+})
 
 
 async function loadVoices() {
@@ -446,6 +467,19 @@ async function generateAvatar() {
 
   // For subscribed users, call API
   isProcessing.value = true
+  processingElapsedSec.value = 0
+  processingStatus.value = L('正在上傳圖片...', 'Uploading photo...', '画像をアップロード中...', '이미지 업로드 중...', 'Subiendo foto...')
+  if (_processingTimer) clearInterval(_processingTimer)
+  _processingTimer = setInterval(() => {
+    processingElapsedSec.value += 1
+    if (processingElapsedSec.value === 12) {
+      processingStatus.value = L('正在合成語音...', 'Generating speech...', '音声を合成中...', '음성 생성 중...', 'Generando voz...')
+    } else if (processingElapsedSec.value === 35) {
+      processingStatus.value = L('AI 模型正在生成影片，請稍候 (通常 1-3 分鐘)', 'AI is generating your video (usually 1-3 min)', 'AIが動画を生成中（通常1〜3分）', 'AI가 동영상을 생성 중 (보통 1-3분)', 'La IA está generando tu video (1-3 min)')
+    } else if (processingElapsedSec.value === 180) {
+      processingStatus.value = L('快完成了，請再稍等', 'Almost done — hang tight', 'もうすぐ完了します', '거의 다 완료됨', 'Casi listo, un momento')
+    }
+  }, 1000)
   try {
     let imageUrl = uploadedImage.value
     if (uploadedImage.value?.startsWith('data:')) {
@@ -466,9 +500,20 @@ async function generateAvatar() {
       locale: String(locale.value || ''),
     })
 
-    if (response.data.success && response.data.result_url) {
-      resultVideo.value = response.data.result_url
-      creditsStore.deductCredits(response.data.credits_used || 15)
+    // The avatar endpoint streams an `application/json` body with leading
+    // keep-alive whitespace (heartbeats every 25s). axios buffers the full
+    // body and runs JSON.parse on it — which tolerates leading whitespace
+    // per RFC 8259 — so response.data is the final payload. Belt-and-braces:
+    // if the buffered body comes back as a raw string (some browser/proxy
+    // combos), re-parse manually before we read .success / .result_url.
+    let data: any = response.data
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data.trim()) } catch { data = {} }
+    }
+    const resultUrl: string | undefined = data?.result_url || data?.video_url
+    if (data?.success && resultUrl) {
+      resultVideo.value = resultUrl
+      creditsStore.deductCredits(data.credits_used || 30)
       uiStore.showSuccess(t('common.success'))
       // Scroll the freshly-rendered result into view on small screens — the
       // right-panel sticky video is offscreen on mobile/tablet, so users
@@ -479,16 +524,48 @@ async function generateAvatar() {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }
     } else {
-      uiStore.showError(response.data.message || 'Generation failed')
+      // Surface the backend's user-facing message verbatim, then fall back
+      // to a localized error rather than the raw English "Generation failed".
+      uiStore.showError(
+        data?.message
+          || data?.detail
+          || L('影片生成失敗，請稍後再試。', 'Video generation failed. Please try again in a moment.', '動画生成に失敗しました。後でもう一度お試しください。', '동영상 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'Falló la generación del video. Inténtalo de nuevo.')
+      )
     }
   } catch (error: any) {
-    uiStore.showError(error.response?.data?.detail || 'Generation failed')
+    // Distinguish timeout / network failure from a structured backend error.
+    const code = error?.code
+    const status = error?.response?.status
+    const detail = error?.response?.data?.detail
+    if (code === 'ECONNABORTED' || /timeout/i.test(error?.message || '')) {
+      uiStore.showError(L('伺服器處理超時，請重試或縮短腳本。', 'Server timed out — please retry or shorten the script.', 'サーバータイムアウトです。再試行するか、スクリプトを短くしてください。', '서버 시간 초과 — 다시 시도하거나 대본을 줄여 주세요.', 'Tiempo agotado — reintenta o acorta el guion.'))
+    } else if (status === 401 || status === 403) {
+      uiStore.showError(L('登入逾期，請重新登入。', 'Session expired — please log in again.', 'セッションが切れました。再ログインしてください。', '세션 만료 — 다시 로그인해 주세요.', 'Sesión caducada — inicia sesión de nuevo.'))
+    } else if (status === 402 || /credit/i.test(detail || '')) {
+      uiStore.showError(L('點數不足，請至定價頁充值。', 'Not enough credits — top up on /pricing.', 'クレジット不足です。/pricingで補充してください。', '크레딧 부족 — /pricing에서 충전하세요.', 'Créditos insuficientes — recarga en /pricing.'))
+    } else {
+      uiStore.showError(detail || error?.message || L('影片生成失敗，請稍後再試。', 'Video generation failed. Please try again in a moment.', '動画生成に失敗しました。後でもう一度お試しください。', '동영상 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'Falló la generación del video. Inténtalo de nuevo.'))
+    }
   } finally {
     isProcessing.value = false
+    processingStatus.value = ''
+    if (_processingTimer) {
+      clearInterval(_processingTimer)
+      _processingTimer = null
+    }
   }
 }
 
 
+
+onBeforeUnmount(() => {
+  // The 1-Hz elapsed-time interval lives outside Vue reactivity; clean it
+  // up so a user who navigates away mid-generation doesn't leak it.
+  if (_processingTimer) {
+    clearInterval(_processingTimer)
+    _processingTimer = null
+  }
+})
 
 onMounted(async () => {
   loadVoices()

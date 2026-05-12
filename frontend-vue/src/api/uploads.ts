@@ -33,6 +33,17 @@ export interface UploadStatusResponse {
   completed_at: string | null
 }
 
+export interface VideoNormalizeResponse {
+  video_url: string
+  size_bytes: number
+  duration_sec: number
+  width: number
+  height: number
+  content_type: string
+  normalized: boolean
+  note?: string | null
+}
+
 export const uploadsApi = {
   /** List available AI models for a tool type (with credit costs). */
   async getToolModels(toolType: string): Promise<ToolModelsResponse> {
@@ -88,6 +99,31 @@ export const uploadsApi = {
   async downloadResult(uploadId: string): Promise<Blob> {
     const response = await apiClient.get(`/api/v1/uploads/${uploadId}/download`, {
       responseType: 'blob',
+    })
+    return response.data
+  },
+
+  /**
+   * Server-side video normalize. Streams the original file to the backend,
+   * which runs ffmpeg (libx264 / aac mp4, +faststart, ≤720p edge, ~20 MB
+   * target) and stores the result in GCS. The returned `video_url` is what
+   * short-video / video-transform / video-dubbing should be called with.
+   */
+  async normalizeVideo(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<VideoNormalizeResponse> {
+    const form = new FormData()
+    form.append('file', file)
+    const response = await apiClient.post('/api/v1/uploads/video-normalize', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      // Re-encoding a 2-minute 1080p clip on the worker pod can take 60-90 s.
+      timeout: 15 * 60 * 1000,
+      onUploadProgress(event) {
+        if (onProgress && event.total) {
+          onProgress(Math.round((event.loaded / event.total) * 100))
+        }
+      },
     })
     return response.data
   },

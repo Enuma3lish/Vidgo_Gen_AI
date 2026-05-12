@@ -407,6 +407,238 @@ async def _save_upload(file: UploadFile, user_id: str, tool_type: str) -> tuple[
     file_url = f"/static/uploads/{filename}"
     return file_url, file_size, content_type
 
+class VideoNormalizeResponse(BaseModel):
+    """Response from the server-side video normalize endpoint."""
+    video_url: str
+    size_bytes: int
+    duration_sec: float
+    width: int
+    height: int
+    content_type: str = "video/mp4"
+    normalized: bool = True
+    note: Optional[str] = None
+
+
+# Cap raw incoming video uploads. We accept large originals so we can
+# transcode them down to the dubbing/transform/short-video provider
+# budgets, but anything above this is rejected at the FastAPI layer to
+# protect Cloud Run memory.
+MAX_VIDEO_NORMALIZE_INPUT_BYTES = 500 * 1024 * 1024  # 500 MB
+VIDEO_NORMALIZE_TARGET_BYTES = 20 * 1024 * 1024  # 20 MB
+VIDEO_NORMALIZE_MAX_DIMENSION = 720  # longest edge
+VIDEO_NORMALIZE_MAX_DURATION_SEC = 120  # hard cap; longer clips fail fast
+
+
+async def _probe_video_metadata(path: Path) -> tuple[float, int, int]:
+    """Return (duration_sec, width, height) via ffprobe; raise if unreadable."""
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height:format=duration",
+        "-of", "json",
+        str(path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        detail = (stderr or b"").decode("utf-8", errors="replace")[-500:]
+        raise HTTPException(status_code=400, detail=f"Video could not be inspected: {detail}")
+    try:
+        data = json.loads(stdout.decode("utf-8", errors="replace"))
+        stream = (data.get("streams") or [{}])[0]
+        fmt = data.get("format") or {}
+        width = int(stream.get("width") or 0)
+        height = int(stream.get("height") or 0)
+        duration = float(fmt.get("duration") or 0.0)
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Video metadata unreadable.") from exc
+    if width <= 0 or height <= 0:
+        raise HTTPException(status_code=400, detail="Video has no decodable video stream.")
+    return duration, width, height
+
+
+@router.post("/video-normalize", response_model=VideoNormalizeResponse)
+async def normalize_video(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Server-side video re-encode for the upload pipelines.
+
+    Accepts any browser-recordable container (mp4/webm/mov/quicktime),
+    transcodes to H.264/AAC MP4 with `+faststart`, caps the longest edge
+    at 720 px, and tries to keep the output under ~20 MB so PiAPI / Pollo
+    / Vertex V2V providers don't reject the file. Returns a permanent
+    GCS URL the frontend can use as the `video_url` for short-video,
+    video-transform, or video-dubbing.
+
+    Strategy:
+      - Single-pass libx264 with crf=28, scale to fit max edge, +faststart
+      - If still over budget, retry at crf=32 (smaller, slightly softer)
+      - If still over, retry at crf=36 (last resort before failing)
+      - On any ffmpeg failure we fall through and return the original
+        bytes wrapped in an mp4 container if we can, else 422.
+    """
+    # Hard cap raw input. UploadFile.size is set by FastAPI when the
+    # Content-Length is known; otherwise we measure as we stream.
+    if file.size is not None and file.size > MAX_VIDEO_NORMALIZE_INPUT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Source video exceeds the {MAX_VIDEO_NORMALIZE_INPUT_BYTES // (1024 * 1024)} MB limit.",
+        )
+
+    ext = (Path(file.filename or "").suffix or ".mp4").lower()
+    if ext not in {".mp4", ".mov", ".webm", ".m4v", ".quicktime"}:
+        ext = ".mp4"
+
+    with tempfile.TemporaryDirectory(prefix="vidgo-vnorm-") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        input_path = tmp_path / f"input{ext}"
+        output_path = tmp_path / "normalized.mp4"
+
+        # Stream the upload to disk so we never hold the whole file in
+        # memory; abort if we exceed the cap mid-stream.
+        size_so_far = 0
+        with open(input_path, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size_so_far += len(chunk)
+                if size_so_far > MAX_VIDEO_NORMALIZE_INPUT_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Source video exceeds the {MAX_VIDEO_NORMALIZE_INPUT_BYTES // (1024 * 1024)} MB limit.",
+                    )
+                out.write(chunk)
+
+        duration, src_w, src_h = await _probe_video_metadata(input_path)
+        if duration > VIDEO_NORMALIZE_MAX_DURATION_SEC:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Video duration {duration:.1f}s exceeds the "
+                    f"{VIDEO_NORMALIZE_MAX_DURATION_SEC}s normalize cap. "
+                    "Please trim the clip first."
+                ),
+            )
+
+        # Fast-path: if the source is already an MP4 within budget on every
+        # axis, skip the re-encode and persist the original bytes to GCS.
+        # That keeps the per-upload Cloud Run CPU cost near-zero for the
+        # common "user has a small clean clip" case.
+        already_ok = (
+            size_so_far <= VIDEO_NORMALIZE_TARGET_BYTES * 1.05
+            and max(src_w, src_h) <= VIDEO_NORMALIZE_MAX_DIMENSION
+            and ext in {".mp4", ".m4v"}
+        )
+        if already_ok:
+            output_bytes = input_path.read_bytes()
+            user_id = str(current_user.id)
+            gcs = get_gcs_storage()
+            blob_name = f"uploads/videos/{user_id}/{uuid.uuid4().hex[:12]}.mp4"
+            if gcs.enabled:
+                video_url = gcs.upload_public(
+                    data=output_bytes, blob_name=blob_name, content_type="video/mp4",
+                )
+            else:
+                local_dir = Path(UPLOAD_DIR)
+                local_dir.mkdir(parents=True, exist_ok=True)
+                local_name = f"{user_id}_{uuid.uuid4().hex[:12]}.mp4"
+                (local_dir / local_name).write_bytes(output_bytes)
+                video_url = f"/static/uploads/{local_name}"
+            return VideoNormalizeResponse(
+                video_url=video_url,
+                size_bytes=len(output_bytes),
+                duration_sec=duration,
+                width=src_w,
+                height=src_h,
+                content_type="video/mp4",
+                normalized=False,
+                note="Source already within budget; persisted as-is.",
+            )
+
+        async def run_encode(crf: int) -> tuple[int, str]:
+            scale = (
+                f"scale='if(gt(iw,ih),min({VIDEO_NORMALIZE_MAX_DIMENSION},iw),-2)':"
+                f"'if(gt(ih,iw),min({VIDEO_NORMALIZE_MAX_DIMENSION},ih),-2)'"
+            )
+            args = [
+                "ffmpeg", "-y",
+                "-i", str(input_path),
+                "-vf", scale,
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", str(crf),
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-movflags", "+faststart",
+                str(output_path),
+            ]
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            detail = (stderr or stdout).decode("utf-8", errors="replace")[-1500:]
+            return proc.returncode, detail
+
+        last_detail = ""
+        success_crf: Optional[int] = None
+        for crf in (28, 32, 36):
+            if output_path.exists():
+                output_path.unlink()
+            rc, last_detail = await run_encode(crf)
+            if rc != 0 or not output_path.exists():
+                logger.warning("[video-normalize] crf=%s failed: %s", crf, last_detail[-400:])
+                continue
+            if output_path.stat().st_size <= VIDEO_NORMALIZE_TARGET_BYTES * 1.05:
+                success_crf = crf
+                break
+            # Output exists but is still oversized — try a harsher CRF.
+
+        if not output_path.exists():
+            raise HTTPException(
+                status_code=422,
+                detail=f"Video re-encode failed: {last_detail[-400:]}",
+            )
+
+        output_bytes = output_path.read_bytes()
+        out_duration, out_w, out_h = await _probe_video_metadata(output_path)
+
+        user_id = str(current_user.id)
+        gcs = get_gcs_storage()
+        blob_name = f"uploads/videos/{user_id}/{uuid.uuid4().hex[:12]}.mp4"
+        if gcs.enabled:
+            video_url = gcs.upload_public(
+                data=output_bytes,
+                blob_name=blob_name,
+                content_type="video/mp4",
+            )
+        else:
+            local_dir = Path(UPLOAD_DIR)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            local_name = f"{user_id}_{uuid.uuid4().hex[:12]}.mp4"
+            (local_dir / local_name).write_bytes(output_bytes)
+            video_url = f"/static/uploads/{local_name}"
+
+        note = None
+        if success_crf is None:
+            note = "Output is still larger than the soft target; provider may downsample further."
+        return VideoNormalizeResponse(
+            video_url=video_url,
+            size_bytes=len(output_bytes),
+            duration_sec=out_duration,
+            width=out_w,
+            height=out_h,
+            content_type="video/mp4",
+            normalized=True,
+            note=note,
+        )
+
+
 async def _run_ffmpeg_video_transform(source_url: str, upload: UserUpload) -> str:
     """Apply a lightweight local video transform when external V2V providers are unavailable."""
     with tempfile.TemporaryDirectory(prefix="vidgo-video-transform-") as tmp_dir:

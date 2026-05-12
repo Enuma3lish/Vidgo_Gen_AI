@@ -121,6 +121,35 @@ const activeDemoTab = ref<typeof heroDemoTabs[number]['key']>('product_scene')
 let heroTabTimer: ReturnType<typeof setInterval> | null = null
 
 async function loadDemos() {
+  // Primary source: /api/v1/hero/pairs — curated, admin-managed mapping
+  // that guarantees BEFORE/AFTER use the SAME subject (no cup-swap, no
+  // person-swap). The admin regen endpoint repopulates AFTER through
+  // gemini-2.5-flash-image with a "preserve subject EXACTLY" prompt, so
+  // these pairs stay correct over time even when underlying provider
+  // results drift. Falls through to the legacy /demo/presets path when
+  // the hero table is empty (fresh deploy, before first regen).
+  try {
+    const heroResp = await import('@/api/client').then(m =>
+      m.default.get('/api/v1/hero/pairs'),
+    )
+    const pairs: Array<{ tool_type: string; before_url: string; after_url: string }>
+      = heroResp?.data?.pairs || []
+    if (pairs.length > 0) {
+      const grouped: Record<string, { before: string; after: string }[]> = {}
+      for (const p of pairs) {
+        if (!p.after_url) continue
+        (grouped[p.tool_type] ||= []).push({ before: p.before_url, after: p.after_url })
+      }
+      demoImages.value = grouped
+      demoLoading.value = false
+      // Still poll the legacy presets path below for any tool the admin
+      // hasn't regenerated yet, so missing rows fall through to the old
+      // demo path rather than blanking out the hero card.
+    }
+  } catch {
+    /* fall through to legacy demo presets */
+  }
+
   const results = await Promise.allSettled(
     demoCats.map(cat =>
       import('@/api/client').then(m => m.default.get(`/api/v1/demo/presets/${cat}?limit=2`))
@@ -133,6 +162,9 @@ async function loadDemos() {
   results.forEach((r, i) => {
     if (r.status === 'fulfilled' && r.value?.data?.presets?.length) {
       const cat = demoCats[i]
+      // Don't clobber a curated hero pair from /hero/pairs above — only
+      // backfill tools that the hero table didn't return.
+      if (demoImages.value[cat]?.length) return
       demoImages.value[cat] = r.value.data.presets
         .filter((p: any) => p.result_watermarked_url || p.result_image_url || p.thumbnail_url)
         .map((p: any) => ({

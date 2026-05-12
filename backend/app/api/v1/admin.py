@@ -18,10 +18,13 @@ import asyncio
 import os
 import re
 
+from datetime import datetime, timezone
+
 from app.api.deps import get_current_user, get_db, get_redis
 from app.core.config import settings
 from app.core.test_plans import TEST_PRO_PLAN_CREDITS, TEST_PRO_PLAN_DEFAULTS, is_test_pro_plan
 from app.models.billing import Plan
+from app.models.hero_demo_pair import HeroDemoPair
 from app.models.site_settings import SiteSettings
 from app.models.user import User, generate_referral_code
 from app.providers.provider_router import get_provider_router, TaskType
@@ -1808,3 +1811,132 @@ async def admin_costs_infrastructure(
     """
     service = AdminDashboardService(db)
     return await service.get_infrastructure_costs()
+
+
+# ============================================================================
+# Hero Demo Pair Mapping (landing page BEFORE/AFTER consistency)
+# ============================================================================
+
+class HeroRegenerateRequest(BaseModel):
+    """Body for /admin/hero/regenerate."""
+    tool_type: str
+    slug: str = "default"
+    # When set, this prompt overrides the row's stored prompt for this
+    # one re-render. Useful for A/B-ing scene variants without persisting
+    # the change until we like the output.
+    prompt_override: Optional[str] = None
+
+
+def _serialize_hero_pair(row: HeroDemoPair) -> Dict[str, Any]:
+    return {
+        "id": row.id,
+        "tool_type": row.tool_type,
+        "slug": row.slug,
+        "before_url": row.before_url,
+        "after_url": row.after_url,
+        "prompt": row.prompt,
+        "label_en": row.label_en,
+        "label_zh": row.label_zh,
+        "display_order": row.display_order,
+        "generated_at": row.generated_at.isoformat() if row.generated_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@router.get("/hero/pairs")
+async def admin_list_hero_pairs(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Full admin view of every hero pair — used by the admin UI to
+    decide which ones still need regeneration (after_url IS NULL) and to
+    inspect the prompt history."""
+    rows = (
+        await db.execute(
+            select(HeroDemoPair).order_by(
+                HeroDemoPair.tool_type, HeroDemoPair.display_order, HeroDemoPair.id
+            )
+        )
+    ).scalars().all()
+    return {"pairs": [_serialize_hero_pair(r) for r in rows]}
+
+
+@router.post("/hero/regenerate")
+async def admin_regenerate_hero_pair(
+    request: HeroRegenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Re-render the AFTER image for a hero pair via Gemini 2.5 Flash
+    Image, then atomically swap the row's after_url + generated_at.
+
+    The AFTER MUST preserve the BEFORE's subject silhouette — that's the
+    whole reason this endpoint exists rather than re-using the generic
+    image_to_image router (which produced the squat-vs-tall bubble-tea
+    cup mismatch on /). The Vertex helper
+    ``regenerate_hero_pair`` enforces this by routing through
+    ``gemini-2.5-flash-image`` and reusing the row's stored prompt
+    (verbatim, with all the "preserve cup silhouette EXACTLY" clauses)
+    unless the caller passes an override.
+    """
+    row = (
+        await db.execute(
+            select(HeroDemoPair).where(
+                HeroDemoPair.tool_type == request.tool_type,
+                HeroDemoPair.slug == request.slug,
+            )
+        )
+    ).scalars().first()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Hero pair not found for tool_type={request.tool_type}, slug={request.slug}",
+        )
+
+    prompt = (request.prompt_override or row.prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Hero pair has no prompt; set one first.")
+
+    provider = get_provider_router()
+    result = await provider.vertex_ai.regenerate_hero_pair(
+        {
+            "image_url": row.before_url,
+            "prompt": prompt,
+            "tool_type": row.tool_type,
+            "slug": row.slug,
+        }
+    )
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini regen failed: {result.get('error', 'unknown error')}",
+        )
+
+    output = result.get("output") or {}
+    new_url = output.get("image_url")
+    if not new_url:
+        raise HTTPException(status_code=502, detail="Gemini regen returned no image URL")
+
+    row.after_url = new_url
+    if request.prompt_override:
+        row.prompt = request.prompt_override
+    row.generated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return {"success": True, "pair": _serialize_hero_pair(row)}
+
+
+@router.get("/hero/pairs/public", include_in_schema=False)
+async def public_hero_pairs_admin_alias(db: AsyncSession = Depends(get_db)):
+    """Admin-router alias of the public hero pairs endpoint. The canonical
+    public route is /api/v1/hero/pairs (in hero.py). This stub stays so
+    older clients that pre-date the split still keep working — it is the
+    same query, just returning only pairs that have been generated."""
+    rows = (
+        await db.execute(
+            select(HeroDemoPair)
+            .where(HeroDemoPair.after_url.is_not(None))
+            .order_by(HeroDemoPair.tool_type, HeroDemoPair.display_order, HeroDemoPair.id)
+        )
+    ).scalars().all()
+    return {"pairs": [_serialize_hero_pair(r) for r in rows]}

@@ -363,6 +363,96 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             "prompt": f"{instruction} {prompt}. Strength: {strength}.",
         })
 
+    async def regenerate_hero_pair(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Re-render a hero demo AFTER image from its curated BEFORE.
+
+        Used by /api/v1/admin/hero/regenerate to populate / refresh the
+        ``hero_demo_pairs`` table. The whole point of this path versus a
+        generic image_to_image call is that we want the AFTER to be the
+        SAME subject (cup, room, garment, model) placed in a transformed
+        scene — never a re-invented product. Routes through
+        ``gemini-2.5-flash-image`` (the same model image-translator
+        switched to) because it can read the input image's subject
+        silhouette and render it back in a new context, where
+        Imagen-edit and Flux-derive_image cannot.
+
+        Args:
+            params: {
+                "image_url": str,   # BEFORE — curated GCS URL
+                "prompt": str,      # full scene/style prompt with the
+                                    # "preserve subject EXACTLY" clauses
+                "tool_type": str,   # used only for the GCS blob name
+                "slug": str,        # used only for the GCS blob name
+            }
+        """
+        self._log_request("regenerate_hero_pair", params)
+        try:
+            client = self._get_genai_image_client()
+            from google.genai import types
+
+            http = self._get_http_client()
+            img_resp = await http.get(params["image_url"])
+            if img_resp.status_code != 200:
+                raise Exception(f"Failed to fetch BEFORE image: HTTP {img_resp.status_code}")
+            mime = img_resp.headers.get("content-type", "image/png").split(";")[0].strip()
+            if mime not in {"image/jpeg", "image/png", "image/webp"}:
+                mime = "image/png"
+
+            parts = [
+                types.Part.from_bytes(data=img_resp.content, mime_type=mime),
+                params["prompt"],
+            ]
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=self.gemini_image_model,
+                contents=parts,
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    response_modalities=["IMAGE", "TEXT"],
+                ),
+            )
+
+            image_bytes: Optional[bytes] = None
+            for candidate in getattr(response, "candidates", None) or []:
+                content = getattr(candidate, "content", None)
+                for part in getattr(content, "parts", None) or []:
+                    inline = getattr(part, "inline_data", None)
+                    data = getattr(inline, "data", None) if inline else None
+                    if data:
+                        image_bytes = data
+                        break
+                if image_bytes:
+                    break
+
+            if not image_bytes:
+                raise Exception("Gemini hero regen returned no inline image data")
+
+            from app.services.gcs_storage_service import get_gcs_storage
+
+            gcs = get_gcs_storage()
+            tool = (params.get("tool_type") or "hero").lower()
+            slug = (params.get("slug") or "default").lower()
+            filename = f"hero_{tool}_{slug}_{uuid.uuid4().hex[:8]}.png"
+            blob_name = f"examples/hero/generated/{filename}"
+            if gcs.enabled:
+                result_url = gcs.upload_public(
+                    data=image_bytes,
+                    blob_name=blob_name,
+                    content_type="image/png",
+                )
+            else:
+                output_dir = Path("/app/static/generated/hero")
+                output_dir.mkdir(parents=True, exist_ok=True)
+                (output_dir / filename).write_bytes(image_bytes)
+                result_url = f"/static/generated/hero/{filename}"
+
+            self._log_response("regenerate_hero_pair", True)
+            return {"success": True, "output": {"image_url": result_url}}
+        except Exception as e:
+            logger.error(f"[VertexAI] regenerate_hero_pair failed: {e}")
+            self._log_response("regenerate_hero_pair", False, str(e))
+            return {"success": False, "error": str(e)}
+
     async def translate_image_text(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """In-place image text translation via Gemini 2.5 Flash Image.
 

@@ -386,6 +386,68 @@ def _resolve_public_url(url: str) -> str:
     return url
 
 
+async def _ensure_public_image_url(url: str, user_id: Optional[str] = None) -> str:
+    """Ensure an image URL is fetchable by external providers (PiAPI, Pollo,
+    Vertex AI). Frontend uploaders read files via FileReader.readAsDataURL
+    and post a ``data:image/...;base64,...`` URL — Qubico/image-toolkit and
+    Kling reject data URLs (or silently 500), and Vertex/PIL paths try to
+    HTTP GET them. We decode the data URL once on receipt and persist the
+    bytes to GCS, then route the resulting public URL to the provider.
+
+    Returns the original URL unchanged for non-data URLs (already public
+    HTTPS, or /static/ paths handled by _resolve_public_url).
+    """
+    if not url:
+        return url
+    if not url.startswith("data:"):
+        return _resolve_public_url(url)
+
+    import base64
+
+    try:
+        prefix, payload = url.split(",", 1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Image data URL is malformed.")
+
+    header = prefix.lower()
+    if "base64" not in header:
+        raise HTTPException(status_code=400, detail="Image data URL must be base64-encoded.")
+
+    mime = "image/png"
+    if "image/" in header:
+        mime_part = header.split(";", 1)[0]
+        if mime_part.startswith("data:"):
+            mime = mime_part[len("data:") :] or "image/png"
+
+    try:
+        data = base64.b64decode(payload, validate=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Image data URL could not be decoded.") from exc
+
+    ext_by_mime = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/webp": "webp",
+        "image/gif": "gif",
+    }
+    ext = ext_by_mime.get(mime, "png")
+
+    gcs = get_gcs_storage()
+    blob_name = f"uploads/{user_id or 'anon'}/{uuid.uuid4().hex[:12]}.{ext}"
+    if gcs.enabled:
+        try:
+            return gcs.upload_public(data=data, blob_name=blob_name, content_type=mime)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[upload] GCS upload failed, falling back to /static/: %s", exc)
+
+    static_dir = Path("/app/static/uploads")
+    static_dir.mkdir(parents=True, exist_ok=True)
+    local_name = f"{uuid.uuid4().hex[:12]}.{ext}"
+    (static_dir / local_name).write_bytes(data)
+    return _resolve_public_url(f"/static/uploads/{local_name}")
+
+
 async def _download_media_to_path(url: str, path: Path) -> None:
     """Download a public URL or copy a local /static/ file into a temp path."""
     resolved_url = _resolve_public_url(url)
@@ -1271,6 +1333,10 @@ async def remove_background(
     """
     validate_media_url_or_raise(str(request.image_url), "image", "Background removal input")
     await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+    request.image_url = await _ensure_public_image_url(
+        str(request.image_url),
+        user_id=str(current_user.id) if current_user else None,
+    )
 
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
@@ -1497,6 +1563,14 @@ async def generate_product_scene(
     if product_media_url:
         validate_media_url_or_raise(product_media_url, "image", "Product scene input")
         await validate_image_url_dimensions_or_raise(product_media_url, PRODUCT_SCENE_IMAGE_DIMENSION_RULES)
+        promoted = await _ensure_public_image_url(
+            product_media_url,
+            user_id=str(current_user.id) if current_user else None,
+        )
+        if request.product_image_url:
+            request.product_image_url = promoted
+        if request.image_url:
+            request.image_url = promoted
 
     # Resolve curated prompt server-side: when prompt_id is supplied, use the
     # canonical text from prompt_library.json and switch to scene_type=custom
@@ -1878,9 +1952,21 @@ async def ai_try_on(
     if garment_media_url:
         validate_media_url_or_raise(garment_media_url, "image", "Try-on garment input")
         await validate_image_url_dimensions_or_raise(garment_media_url, TRY_ON_GARMENT_IMAGE_DIMENSION_RULES)
+        promoted_garment = await _ensure_public_image_url(
+            garment_media_url,
+            user_id=str(current_user.id) if current_user else None,
+        )
+        if request.garment_image_url:
+            request.garment_image_url = promoted_garment
+        if request.image_url:
+            request.image_url = promoted_garment
     if request.model_image_url:
         validate_media_url_or_raise(str(request.model_image_url), "image", "Try-on model input")
         await validate_image_url_dimensions_or_raise(str(request.model_image_url), TRY_ON_MODEL_IMAGE_DIMENSION_RULES)
+        request.model_image_url = await _ensure_public_image_url(
+            str(request.model_image_url),
+            user_id=str(current_user.id) if current_user else None,
+        )
 
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
@@ -2078,6 +2164,14 @@ async def room_redesign(
     if room_media_url:
         validate_media_url_or_raise(room_media_url, "image", "Room redesign input")
         await validate_image_url_dimensions_or_raise(room_media_url, ROOM_REDESIGN_IMAGE_DIMENSION_RULES)
+        promoted_room = await _ensure_public_image_url(
+            room_media_url,
+            user_id=str(current_user.id) if current_user else None,
+        )
+        if request.room_image_url:
+            request.room_image_url = promoted_room
+        if request.image_url:
+            request.image_url = promoted_room
 
     # Resolve curated prompt — overrides any free-form custom_prompt.
     curated = _resolve_curated_prompt("room_redesign", request.prompt_id, request.locale)
@@ -2227,6 +2321,10 @@ async def generate_short_video(
     """
     validate_media_url_or_raise(str(request.image_url), "image", "Short video input")
     await validate_image_url_dimensions_or_raise(str(request.image_url), IMAGE_TO_VIDEO_DIMENSION_RULES)
+    request.image_url = await _ensure_public_image_url(
+        str(request.image_url),
+        user_id=str(current_user.id) if current_user else None,
+    )
 
     # Resolve curated motion prompt — pin the request.style to the canonical
     # motion text so motion_prompt_base downstream uses it.
@@ -2592,6 +2690,14 @@ async def upscale_image(
     validate_media_url_or_raise(str(request.image_url), "image", "Upscale input")
     await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
 
+    # Frontend uploaders post base64 data: URLs. PiAPI, Pollo, and Vertex
+    # all need a fetchable public URL, so promote data URLs to GCS once
+    # here. Downstream code reads request.image_url unchanged.
+    request.image_url = await _ensure_public_image_url(
+        str(request.image_url),
+        user_id=str(current_user.id) if current_user else None,
+    )
+
     if not is_subscribed_user(current_user):
         return await _demo_response(
             db,
@@ -2702,6 +2808,10 @@ async def _generate_avatar_inner(
 
     validate_media_url_or_raise(str(request.image_url), "image", "AI avatar headshot")
     await validate_image_url_dimensions_or_raise(str(request.image_url), AVATAR_HEADSHOT_DIMENSION_RULES)
+    request.image_url = await _ensure_public_image_url(
+        str(request.image_url),
+        user_id=str(current_user.id) if current_user else None,
+    )
 
     # Resolve curated avatar script. The avatar `language` field decides which
     # canonical variant to use: zh-TW → ZH script; otherwise → EN script.
@@ -2905,6 +3015,10 @@ async def image_transform(
     """
     validate_media_url_or_raise(str(request.image_url), "image", "Image transform input")
     await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+    request.image_url = await _ensure_public_image_url(
+        str(request.image_url),
+        user_id=str(current_user.id) if current_user else None,
+    )
 
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
@@ -3025,6 +3139,12 @@ async def image_translate(
     """Translate visible text inside an image using the existing I2I provider path."""
     validate_media_url_or_raise(str(request.image_url), "image", "Image translation input")
     await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+    # Promote data: URLs to GCS so Gemini's HTTP fetch in translate_image_text
+    # works on subscriber uploads.
+    request.image_url = await _ensure_public_image_url(
+        str(request.image_url),
+        user_id=str(current_user.id) if current_user else None,
+    )
     prompt = _build_image_translation_prompt(request)
 
     if not is_subscribed_user(current_user):

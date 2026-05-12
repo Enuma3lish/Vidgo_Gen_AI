@@ -78,6 +78,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tools/ImageUpscale.vue'),
     meta: { requiresAuth: false }
   },
+  { path: '/tools/image-upscale', redirect: '/tools/upscale' },
 
   // AI Avatar — A2E provider
   {
@@ -224,6 +225,15 @@ const routes: RouteRecordRaw[] = [
     name: 'static-info',
     component: () => import('@/views/StaticInfoPage.vue')
   },
+  // /info/<slug> aliases — surface the same content at the namespaced path so
+  // external links built with /info/... prefixes resolve. Final QA expects
+  // /info/about, /info/contact, /info/terms, /info/privacy, /info/cookies,
+  // /info/refund, /info/affiliate to all render.
+  {
+    path: '/info/:slug(about|contact|blog|affiliate|terms|terms-of-service|terms-and-conditions|privacy|privacy-policy|cookies|refunds|refund|refund-policy)',
+    name: 'static-info-namespaced',
+    component: () => import('@/views/StaticInfoPage.vue')
+  },
 
   // Subscription payment results
   {
@@ -363,12 +373,14 @@ router.beforeEach(async (to, _from, next) => {
     next({ name: authStore.isAdmin ? 'admin-dashboard' : 'my-works' })
   } else if (
     isAuthenticated &&
-    (to.name === 'my-works' ||
-      to.path === '/dashboard/my-works' ||
-      to.path.startsWith('/dashboard/'))
+    (to.path === '/dashboard/invoices' ||
+      to.path === '/dashboard/referrals')
   ) {
-    // Admins should never see their own credits / personal gallery / works.
-    // Redirect any /dashboard/* route to the admin dashboard for admin accounts.
+    // Invoices and referrals are user-billing-only; admins don't have a
+    // personal billing record to view there, so we still bounce them up to
+    // the admin dashboard. /dashboard/my-works, /dashboard/share-links, and
+    // /dashboard/social-accounts ARE meaningful for admin accounts (own
+    // generations, own share links) so we let those pass through.
     const { useAuthStore } = await import('@/stores/auth')
     const authStore = useAuthStore()
     if (!authStore.user && token) {

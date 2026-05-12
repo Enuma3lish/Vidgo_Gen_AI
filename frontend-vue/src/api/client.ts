@@ -4,15 +4,17 @@ import type { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConf
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 // Create axios instance
-// NOTE: Timeout is 6 minutes because subscriber-tier generation endpoints
+// NOTE: Timeout is 15 minutes because subscriber-tier generation endpoints
 // (avatar / try_on / room_redesign / short_video) are synchronous and the
 // underlying providers (PiAPI Kling Avatar + F5-TTS, Pollo I2V, Vertex Veo)
-// regularly take 2-5 minutes per call. A 30s timeout cancels the request
-// from the client even though the backend keeps running, leaving the user
-// with a stuck "處理中..." UI that never resolves.
+// regularly take 2-8 minutes per call, with Kling Avatar peaking around
+// 10 minutes when PiAPI's F5-TTS path falls back to tts-1 and then waits
+// on Kling lip-sync. A shorter ceiling cancels the request from the client
+// even though the backend keeps running, leaving the user with a stuck
+// "處理中..." UI that never resolves.
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 360000,
+  timeout: 900000,
   headers: {
     'Content-Type': 'application/json'
   }

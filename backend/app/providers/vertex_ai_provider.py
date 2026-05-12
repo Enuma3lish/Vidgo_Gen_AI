@@ -363,6 +363,109 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             "prompt": f"{instruction} {prompt}. Strength: {strength}.",
         })
 
+    async def translate_image_text(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """In-place image text translation via Gemini 2.5 Flash Image.
+
+        Gemini 2.5 Flash Image (a.k.a. "nano banana") is the only model in
+        our stack that can read source text from an image and re-render the
+        same image with the text replaced by a translation while preserving
+        layout, typography, product photography, faces, and colors. Imagen
+        edit / Flux derive_image both repaint the text as decorative noise.
+
+        Args:
+            params: {
+                "image_url": str,
+                "target_language": str,
+                "source_language": str | None,
+                "instructions": str | None,
+            }
+        """
+        self._log_request("translate_image_text", params)
+        try:
+            client = self._get_genai_image_client()
+            from google.genai import types
+
+            http = self._get_http_client()
+            img_resp = await http.get(params["image_url"])
+            if img_resp.status_code != 200:
+                raise Exception(f"Failed to fetch image: HTTP {img_resp.status_code}")
+            mime = img_resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+            if mime not in {"image/jpeg", "image/png", "image/webp"}:
+                mime = "image/jpeg"
+
+            target_language = params.get("target_language") or "English"
+            source_language = params.get("source_language")
+            extra = (params.get("instructions") or "").strip()
+            source_hint = f" from {source_language}" if source_language else ""
+            extra_clause = f" Additional instructions: {extra}." if extra else ""
+
+            prompt = (
+                f"Translate every visible text element in this image{source_hint} into "
+                f"{target_language}. Replace each piece of original text IN-PLACE so the "
+                "translated copy occupies the same position, follows the same line breaks, "
+                "matches the original typography weight and color, and stays inside the "
+                "same signage, packaging, card, or poster boundaries. Preserve the product, "
+                "model, faces, hands, logos, photography, and background EXACTLY as they "
+                "appear. Keep brand names, URLs, prices, numbers, currency symbols, and "
+                "logos unchanged unless they are normal words that must be localized. Do "
+                "not add new objects, captions, watermarks, signatures, or decorative text. "
+                "Do not change any layer of the image except the text glyphs themselves. "
+                "Return a clean, commercial-quality, photoreal localized image."
+                f"{extra_clause}"
+            )
+
+            parts = [
+                types.Part.from_bytes(data=img_resp.content, mime_type=mime),
+                prompt,
+            ]
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=self.gemini_image_model,
+                contents=parts,
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    response_modalities=["IMAGE", "TEXT"],
+                ),
+            )
+
+            image_bytes: Optional[bytes] = None
+            for candidate in getattr(response, "candidates", None) or []:
+                content = getattr(candidate, "content", None)
+                for part in getattr(content, "parts", None) or []:
+                    inline = getattr(part, "inline_data", None)
+                    data = getattr(inline, "data", None) if inline else None
+                    if data:
+                        image_bytes = data
+                        break
+                if image_bytes:
+                    break
+
+            if not image_bytes:
+                raise Exception("Gemini image edit returned no inline image data")
+
+            from app.services.gcs_storage_service import get_gcs_storage
+
+            gcs = get_gcs_storage()
+            filename = f"translated_{uuid.uuid4().hex[:12]}.png"
+            if gcs.enabled:
+                result_url = gcs.upload_public(
+                    data=image_bytes,
+                    blob_name=f"generated/image/{filename}",
+                    content_type="image/png",
+                )
+            else:
+                output_dir = Path("/app/static/generated")
+                output_dir.mkdir(parents=True, exist_ok=True)
+                (output_dir / filename).write_bytes(image_bytes)
+                result_url = f"/static/generated/{filename}"
+
+            self._log_response("translate_image_text", True)
+            return {"success": True, "output": {"image_url": result_url}}
+        except Exception as e:
+            logger.error(f"[VertexAI] translate_image_text failed: {e}")
+            self._log_response("translate_image_text", False, str(e))
+            return {"success": False, "error": str(e)}
+
     # ─────────────────────────────────────────────────────────────────────────
     # GEMINI — INTERIOR DESIGN
     # ─────────────────────────────────────────────────────────────────────────

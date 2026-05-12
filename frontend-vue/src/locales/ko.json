@@ -645,6 +645,8 @@
       "featureNoReset": "구매한 크레딧은 매달 초기화되지 않아 프로젝트 보충에 적합",
       "cta": {
         "buy": "크레딧 구매",
+        "buyCard": "신용카드로 결제",
+        "buyPayPal": "PayPal로 결제",
         "signInToBuy": "로그인 후 구매"
       },
       "purchaseFailed": "크레딧 패키지 구매에 실패했습니다. 잠시 후 다시 시도해 주세요.",

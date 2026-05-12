@@ -680,6 +680,8 @@
       "featureNoReset": "Purchased credits do not reset monthly, ideal for project bursts",
       "cta": {
         "buy": "Buy Credits",
+        "buyCard": "Pay by Credit Card",
+        "buyPayPal": "Pay with PayPal",
         "signInToBuy": "Sign In to Buy"
       },
       "purchaseFailed": "Credit package purchase failed. Please try again.",

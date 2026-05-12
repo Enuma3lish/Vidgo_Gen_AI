@@ -645,6 +645,8 @@
       "featureNoReset": "Los créditos comprados no se reinician mensualmente, ideal para picos de proyecto",
       "cta": {
         "buy": "Comprar créditos",
+        "buyCard": "Pagar con tarjeta",
+        "buyPayPal": "Pagar con PayPal",
         "signInToBuy": "Inicia sesión para comprar"
       },
       "purchaseFailed": "No se pudo comprar el paquete de créditos. Inténtalo de nuevo.",

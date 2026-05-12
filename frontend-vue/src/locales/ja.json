@@ -645,6 +645,8 @@
       "featureNoReset": "購入クレジットは毎月リセットされず、プロジェクトの補充に最適",
       "cta": {
         "buy": "クレジットを購入",
+        "buyCard": "クレジットカードで支払う",
+        "buyPayPal": "PayPalで支払う",
         "signInToBuy": "ログインして購入"
       },
       "purchaseFailed": "クレジットパックの購入に失敗しました。後ほどお試しください。",

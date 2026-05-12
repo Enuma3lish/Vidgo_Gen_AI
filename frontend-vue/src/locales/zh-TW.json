@@ -680,6 +680,8 @@
       "featureNoReset": "購買點數不會每月歸零，適合專案補量",
       "cta": {
         "buy": "購買點數",
+        "buyCard": "信用卡付款",
+        "buyPayPal": "PayPal 付款",
         "signInToBuy": "登入後購買"
       },
       "purchaseFailed": "點數包購買失敗，請稍後再試。",

@@ -15,6 +15,10 @@ arq>=0.26.0
 python-decouple>=3.8
 email-validator>=2.3.0
 pillow>=10.2.0
+# iPhone HEIC/HEIF photos — registers a PIL plugin so Image.open() handles
+# .heic / .heif transparently. Without this the room-redesign uploader 422s
+# on any iPhone screenshot taken with default settings.
+pillow-heif>=0.16.0
 rembg[cpu]>=2.0.50
 pytest>=8.0.0
 pytest-asyncio>=0.23.5

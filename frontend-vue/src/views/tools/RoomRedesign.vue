@@ -12,6 +12,28 @@ import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
 
+// FastAPI returns 422 / 415 validation errors as `detail: [{msg, loc, ...}]`.
+// A bare `error.response.data.detail` then renders as "[object Object]" in
+// the toast (or no toast at all), which is what makes failed uploads look
+// like a silent "404". This helper flattens the array into a readable
+// single line so the user actually sees the reason.
+function explainBackendError(error: any, fallback: string): string {
+  const detail = error?.response?.data?.detail
+  if (!detail) return error?.message || fallback
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const lines = detail
+      .map((d: any) => (typeof d === 'string' ? d : d?.msg || d?.message))
+      .filter(Boolean)
+    if (lines.length) return lines.join('; ')
+  }
+  if (typeof detail === 'object') {
+    if (typeof detail.message === 'string') return detail.message
+    if (typeof detail.error === 'string') return detail.error
+  }
+  return fallback
+}
+
 const { t, locale } = useI18n()
 const router = useRouter()
 const uiStore = useUIStore()
@@ -530,7 +552,7 @@ async function handleRedesign() {
     }
   } catch (error: any) {
     console.error('Redesign failed:', error)
-    uiStore.showError(error.response?.data?.detail || t('interior.errors.failed'))
+    uiStore.showError(explainBackendError(error, t('interior.errors.failed')))
   } finally {
     isProcessing.value = false
   }
@@ -567,7 +589,7 @@ async function handleGenerate() {
     }
   } catch (error: any) {
     console.error('Generate failed:', error)
-    uiStore.showError(error.response?.data?.detail || t('interior.errors.failed'))
+    uiStore.showError(explainBackendError(error, t('interior.errors.failed')))
   } finally {
     isProcessing.value = false
   }
@@ -655,7 +677,7 @@ async function handleStyleTransfer() {
     }
   } catch (error: any) {
     console.error('Style transfer failed:', error)
-    uiStore.showError(error.response?.data?.detail || t('interior.errors.failed'))
+    uiStore.showError(explainBackendError(error, t('interior.errors.failed')))
   } finally {
     isProcessing.value = false
   }

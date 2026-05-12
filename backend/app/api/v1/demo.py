@@ -3358,18 +3358,43 @@ async def get_view_more_examples(
 async def upload_file(file: UploadFile = File(...), request: Request = None):
     """
     General file upload endpoint for demo tools.
-    Saves file to durable public storage when available and returns a
-    publicly accessible URL.
+
+    Auto-normalizes the upload: any decodable image format (JPG, PNG,
+    WebP, HEIC/HEIF, BMP, TIFF, GIF) is re-encoded to PNG (or JPEG when
+    we have to compress to fit the size budget) and resized/cropped to
+    fit the common dimension rule. Users no longer get a 422 because
+    their iPhone photo is HEIC or their panorama is 4:1 — we just fix
+    it server-side.
     """
     try:
         content = await file.read()
-        content_type = validate_uploaded_content(
-            content=content,
-            declared_content_type=file.content_type,
-            expected_kind=None,
-            max_bytes=20 * 1024 * 1024,
-            dimension_rules=COMMON_IMAGE_DIMENSION_RULES,
-        )
+
+        # Try the normaliser first. If it can decode the bytes as ANY
+        # image format, we accept and re-encode to a clean PNG. Falls
+        # through to the strict validator for non-image uploads (rare;
+        # this endpoint is image-only in practice).
+        from app.services.image_normalize_service import normalize_uploaded_image
+
+        try:
+            normalized = normalize_uploaded_image(
+                content,
+                rules=COMMON_IMAGE_DIMENSION_RULES,
+                max_bytes=20 * 1024 * 1024,
+            )
+            content = normalized.bytes
+            content_type = normalized.content_type
+        except HTTPException:
+            # Fall back to the strict validator so callers who genuinely
+            # uploaded a non-image (mistakenly) still see the original
+            # "Unsupported file content" 415 message.
+            content_type = validate_uploaded_content(
+                content=content,
+                declared_content_type=file.content_type,
+                expected_kind=None,
+                max_bytes=20 * 1024 * 1024,
+                dimension_rules=COMMON_IMAGE_DIMENSION_RULES,
+            )
+
         filename = f"{uuid.uuid4()}{extension_for_content_type(content_type)}"
 
         static_path = f"/static/uploads/{filename}"

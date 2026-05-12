@@ -643,15 +643,24 @@ async def demo_redesign(
     """
     import base64
 
-    # Read and encode the image
+    # Read + auto-normalize the image so iPhone HEIC photos, oversize
+    # panoramas, and tiny screenshots all succeed instead of 422-ing the
+    # user at the validator. Falls back to strict validation only when
+    # the bytes aren't a decodable image at all.
     contents = await image.read()
-    validate_uploaded_content(
-        content=contents,
-        declared_content_type=image.content_type,
-        expected_kind="image",
-        max_bytes=20 * 1024 * 1024,
-        dimension_rules=ROOM_REDESIGN_IMAGE_DIMENSION_RULES,
-    )
+    try:
+        from app.services.image_normalize_service import normalize_uploaded_image
+
+        normalized = normalize_uploaded_image(
+            contents,
+            rules=ROOM_REDESIGN_IMAGE_DIMENSION_RULES,
+            max_bytes=20 * 1024 * 1024,
+        )
+        contents = normalized.bytes
+    except HTTPException:
+        # Re-raise validation errors verbatim so the user sees the actual
+        # reason instead of a generic 422.
+        raise
     image_base64 = base64.b64encode(contents).decode()
 
     service = get_interior_design_service()

@@ -447,50 +447,82 @@ async function handleVideoUpload(event: Event) {
     return
   }
 
-  // Auto-resize: re-encode to ≤20 MB / ≤720p when the source is too big.
-  // The browser plays the video in real time during encoding (see
-  // normalizeVideoFileForUpload), so we surface a processing toast and
-  // a progress percentage so the user knows we didn't freeze.
+  // Auto-resize. Primary path is server-side ffmpeg via
+  // /api/v1/uploads/video-normalize — best quality, MP4 H.264 output,
+  // faster than realtime, no client compute. Falls back to the in-browser
+  // MediaRecorder pipeline if the network call fails so re-encode still
+  // works offline or when the backend is rate-limited.
   let workingFile = file
+  let normalizedGcsUrl: string | null = null
   const oversize = file.size > 20 * 1024 * 1024
   if (oversize) {
     isProcessing.value = true
-    processingMessage.value = L('正在壓縮影片...', 'Compressing video...', '動画を圧縮中...', '동영상 압축 중...', 'Comprimiendo video...')
+    processingStage.value = L('正在上傳並壓縮影片...', 'Uploading and compressing video...', '動画をアップロードして圧縮中...', '동영상 업로드 및 압축 중...', 'Subiendo y comprimiendo video...')
     try {
-      const result = await normalizeVideoFileForUpload(file, {
-        maxSizeMb: 20,
-        maxResolution: 720,
-        onProgress: (ratio) => {
-          processingMessage.value = L(
-            `正在壓縮影片 ${Math.round(ratio * 100)}%`,
-            `Compressing video ${Math.round(ratio * 100)}%`,
-            `動画を圧縮中 ${Math.round(ratio * 100)}%`,
-            `동영상 압축 중 ${Math.round(ratio * 100)}%`,
-            `Comprimiendo video ${Math.round(ratio * 100)}%`,
-          )
-        },
+      const result = await uploadsApi.normalizeVideo(file, (percent) => {
+        processingStage.value = L(
+          `正在上傳影片 ${percent}%`,
+          `Uploading video ${percent}%`,
+          `動画をアップロード中 ${percent}%`,
+          `동영상 업로드 중 ${percent}%`,
+          `Subiendo video ${percent}%`,
+        )
       })
-      if (result.normalized) {
-        workingFile = result.file
-      } else if (result.reason === 'browser_unsupported' || result.reason === 'playback_blocked') {
-        // Fall back to the old hard size limit.
-        const sizeError = validateVideoFile(file, isZh.value, { maxSizeMb: 20 })
-        if (sizeError) {
-          uiStore.showError(sizeError)
+      normalizedGcsUrl = result.video_url
+      // Pull the normalized clip back as a File so the existing
+      // uploadAndGenerate flow uploads the small version, not the
+      // 100 MB original. Round-trip is bounded by VIDEO_NORMALIZE_TARGET_BYTES
+      // (~20 MB) so this is cheap relative to a re-upload of the source.
+      try {
+        const blobResp = await fetch(result.video_url)
+        if (blobResp.ok) {
+          const blob = await blobResp.blob()
+          workingFile = new File(
+            [blob],
+            file.name.replace(/\.[^.]+$/, '') + '.mp4',
+            { type: 'video/mp4', lastModified: Date.now() },
+          )
+        }
+      } catch (fetchErr) {
+        console.warn('Could not refetch normalized clip; will upload original:', fetchErr)
+      }
+    } catch (err: any) {
+      console.warn('Server-side normalize failed, falling back to browser:', err?.message)
+      try {
+        processingStage.value = L('正在於瀏覽器壓縮影片...', 'Compressing video in browser...', 'ブラウザで動画を圧縮中...', '브라우저에서 동영상 압축 중...', 'Comprimiendo video en el navegador...')
+        const fallback = await normalizeVideoFileForUpload(file, {
+          maxSizeMb: 20,
+          maxResolution: 720,
+          onProgress: (ratio) => {
+            processingStage.value = L(
+              `正在於瀏覽器壓縮影片 ${Math.round(ratio * 100)}%`,
+              `Compressing in browser ${Math.round(ratio * 100)}%`,
+              `ブラウザで圧縮中 ${Math.round(ratio * 100)}%`,
+              `브라우저에서 압축 중 ${Math.round(ratio * 100)}%`,
+              `Comprimiendo ${Math.round(ratio * 100)}%`,
+            )
+          },
+        })
+        if (fallback.normalized) {
+          workingFile = fallback.file
+        } else {
+          uiStore.showError(L('影片壓縮失敗，請改用較小的影片。', 'Video compression failed. Please upload a smaller video.', '動画の圧縮に失敗しました。より小さな動画を使用してください。', '동영상 압축에 실패했습니다. 더 작은 동영상을 사용해 주세요.', 'Falló la compresión del video. Sube un video más pequeño.'))
           if (input) input.value = ''
+          isProcessing.value = false
+          processingStage.value = null
           return
         }
+      } catch (fallbackErr) {
+        console.error('Both server and browser video normalize failed:', fallbackErr)
+        uiStore.showError(L('影片壓縮失敗，請改用較小的影片。', 'Video compression failed. Please upload a smaller video.', '動画の圧縮に失敗しました。より小さな動画を使用してください。', '동영상 압축에 실패했습니다. 더 작은 동영상을 사용해 주세요.', 'Falló la compresión del video. Sube un video más pequeño.'))
+        if (input) input.value = ''
+        isProcessing.value = false
+        processingStage.value = null
+        return
       }
-    } catch (err) {
-      console.error('Video normalize failed:', err)
-      uiStore.showError(L('影片壓縮失敗，請改用較小的影片。', 'Video compression failed. Please upload a smaller video.', '動画の圧縮に失敗しました。より小さな動画を使用してください。', '동영상 압축에 실패했습니다. 더 작은 동영상을 사용해 주세요.', 'Falló la compresión del video. Sube un video más pequeño.'))
-      if (input) input.value = ''
-      isProcessing.value = false
-      processingMessage.value = ''
-      return
     } finally {
       isProcessing.value = false
-      processingMessage.value = ''
+      processingStage.value = null
     }
   }
 
@@ -499,7 +531,7 @@ async function handleVideoUpload(event: Event) {
   }
 
   uploadedVideoFile.value = workingFile
-  uploadedVideoPreview.value = URL.createObjectURL(workingFile)
+  uploadedVideoPreview.value = normalizedGcsUrl || URL.createObjectURL(workingFile)
   resultVideo.value = null
   demoEmptyState.value = false
 }

@@ -7,7 +7,29 @@
       "Bash(xargs -I {} basename {})",
       "Bash(sed 's/\\(.*$//')",
       "Bash(export TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzM3NDI4NDIsInN1YiI6Ijc3NDMyMmMwLTc5MDgtNDk5NC05NTkzLTVjYjk1YjA2OWE0ZiIsInR5cGUiOiJhY2Nlc3MifQ.BD1G4RMar2SVs4YtukjoNau3JuGrR6_IcZBRo9neUqI\" __NEW_LINE_f8c65807e9709cdb__ echo \"=== 1. LIST CONNECTED ACCOUNTS ===\" curl -s http://localhost:8001/api/v1/social/accounts -H \"Authorization: Bearer $TOKEN\")",
-      "Bash(docker volume:*)"
+      "Bash(docker volume:*)",
+      "Bash(md5 vt.mp4 vd_*.mp4 tts_*.mp3)",
+      "Bash(file vt.mp4 vd_*.mp4 tts_*.mp3)",
+      "Bash(md5 avatar.mp4 sv.mp4 vt.mp4 vd_zh.mp4 vd_en.mp4)",
+      "Bash(md5 bg_*.png bg_*.jpg ps_*.png pat*.png rr*.png it_*.png ups.png tryon_coat.png)",
+      "Bash(chmod +x /tmp/run_fix_galleries.sh)",
+      "Bash(bash /tmp/run_fix_galleries.sh)",
+      "Bash(gsutil -q cp gs://vidgo-media-vidgo-ai/generated/image/745d36d17ec4.png gs://vidgo-media-vidgo-ai/examples/hero/product_scene_after.png)",
+      "Bash(gsutil -q cp gs://vidgo-media-vidgo-ai/generated/image/8d4ba5d60d75.png gs://vidgo-media-vidgo-ai/examples/hero/background_removal_after.png)",
+      "Bash(gsutil -q cp gs://vidgo-media-vidgo-ai/generated/image/e2a6090bc1d0.png gs://vidgo-media-vidgo-ai/examples/hero/room_redesign_after.png)",
+      "Bash(gsutil -m acl ch -u AllUsers:R gs://vidgo-media-vidgo-ai/examples/hero/product_scene_after.png gs://vidgo-media-vidgo-ai/examples/hero/background_removal_after.png gs://vidgo-media-vidgo-ai/examples/hero/room_redesign_after.png)",
+      "Bash(gsutil -q cp gs://vidgo-media-vidgo-ai/examples/hero/bg___TRACKED_VAR__.png gs://vidgo-media-vidgo-ai/examples/fx/__TRACKED_VAR__.png)",
+      "Bash(gsutil -q acl ch -u AllUsers:R gs://vidgo-media-vidgo-ai/examples/fx/__TRACKED_VAR__.png)",
+      "Bash(gsutil hash *)",
+      "Bash(awk 'NR>=340 && NR<=600' /Users/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/src/views/tools/BackgroundRemoval.vue)",
+      "Bash(awk 'NR>=540 && NR<=600' /Users/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/src/views/tools/BackgroundRemoval.vue)",
+      "Bash(awk -F: '{print $1\":\"$2}')",
+      "Bash(awk -F\"'\" '{print $2}')",
+      "Bash(./node_modules/.bin/vue-tsc --noEmit)",
+      "Bash(sort -t: -k2 -nr)",
+      "Bash(awk -F: '$2 > 0')",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(textutil -convert txt \"/Users/mlw/Desktop/Vidgo_Gen_AI/bug_list/VidGo.co_網站測試驗收清單_\\(UAT_Checklist\\)0511.docx\" -output /tmp/uat.txt)"
     ]
   }
 }

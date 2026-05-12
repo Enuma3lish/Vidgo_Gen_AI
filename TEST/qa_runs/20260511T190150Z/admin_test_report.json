@@ -1,0 +1,389 @@
+{
+  "frontend": "https://vidgo.co",
+  "max_wait_sec": 900,
+  "total": 22,
+  "passed": 16,
+  "failed": 6,
+  "by_tool": {
+    "try_on": {
+      "pass": 2,
+      "fail": 0
+    },
+    "product_scene": {
+      "pass": 2,
+      "fail": 0
+    },
+    "background_removal": {
+      "pass": 2,
+      "fail": 0
+    },
+    "short_video": {
+      "pass": 2,
+      "fail": 0
+    },
+    "ai_avatar": {
+      "pass": 0,
+      "fail": 2
+    },
+    "room_redesign": {
+      "pass": 0,
+      "fail": 2
+    },
+    "upscale": {
+      "pass": 2,
+      "fail": 0
+    },
+    "pattern_generate": {
+      "pass": 2,
+      "fail": 0
+    },
+    "image_translator": {
+      "pass": 2,
+      "fail": 0
+    },
+    "video_transform": {
+      "pass": 1,
+      "fail": 1
+    },
+    "video_dubbing": {
+      "pass": 1,
+      "fail": 1
+    }
+  },
+  "results": [
+    {
+      "tool": "try_on",
+      "case_id": "try_on_wool_coat_female2",
+      "route": "/tools/try-on",
+      "uploaded": true,
+      "clicked": "生成",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/piapi_9bbdd0d7.png",
+      "wait_seconds": 100.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "try_on",
+      "case_id": "try_on_denim_dress_female1",
+      "route": "/tools/try-on",
+      "uploaded": true,
+      "clicked": "生成",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/piapi_749759bc.png",
+      "wait_seconds": 130.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "product_scene",
+      "case_id": "product_scene_bubble_tea_lunar_new_year",
+      "route": "/tools/product-scene",
+      "uploaded": true,
+      "clicked": "生成",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/23eefc5ecd74.png",
+      "wait_seconds": 80.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "product_scene",
+      "case_id": "product_scene_serum_elegant",
+      "route": "/tools/product-scene",
+      "uploaded": true,
+      "clicked": "生成",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/87e304fd7173.png",
+      "wait_seconds": 70.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "background_removal",
+      "case_id": "bg_remove_serum_cutout",
+      "route": "/tools/background-removal",
+      "uploaded": true,
+      "clicked": "✨ 去除背景",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/96b3eddfbd53.png",
+      "wait_seconds": 20.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "background_removal",
+      "case_id": "bg_remove_bubble_tea_cutout",
+      "route": "/tools/background-removal",
+      "uploaded": true,
+      "clicked": "✨ 去除背景",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/d9440016041c.png",
+      "wait_seconds": 20.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "short_video",
+      "case_id": "short_video_serum_rotate",
+      "route": "/tools/short-video",
+      "uploaded": true,
+      "clicked": "確認生成",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/video/d40380d48513.mp4",
+      "wait_seconds": 30.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "short_video",
+      "case_id": "short_video_bubble_tea_push_in",
+      "route": "/tools/short-video",
+      "uploaded": true,
+      "clicked": "確認生成",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/video/489adb7657ec.mp4",
+      "wait_seconds": 40.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "ai_avatar",
+      "case_id": "avatar_serum_launch_zh",
+      "route": "/tools/avatar",
+      "uploaded": true,
+      "clicked": "生成",
+      "completion_status": "pending",
+      "result_url": "",
+      "wait_seconds": 900.1,
+      "http_status": 0,
+      "prepared_steps": [],
+      "selected_dropdowns": [
+        "新品上架"
+      ],
+      "error": ""
+    },
+    {
+      "tool": "ai_avatar",
+      "case_id": "avatar_bubble_tea_social_en",
+      "route": "/tools/avatar",
+      "uploaded": true,
+      "clicked": "生成",
+      "completion_status": "pending",
+      "result_url": "",
+      "wait_seconds": 900.1,
+      "http_status": 0,
+      "prepared_steps": [],
+      "selected_dropdowns": [
+        "新品上架"
+      ],
+      "error": ""
+    },
+    {
+      "tool": "room_redesign",
+      "case_id": "room_living_scandinavian",
+      "route": "/tools/room-redesign",
+      "uploaded": true,
+      "clicked": "✨ 生成設計",
+      "completion_status": "no_api_observed",
+      "result_url": "",
+      "wait_seconds": 50.0,
+      "http_status": 0,
+      "prepared_steps": [
+        "room_type:客廳",
+        "style:北歐風格"
+      ],
+      "selected_dropdowns": [
+        "現代極簡"
+      ],
+      "error": ""
+    },
+    {
+      "tool": "room_redesign",
+      "case_id": "room_kitchen_modern_minimalist",
+      "route": "/tools/room-redesign",
+      "uploaded": true,
+      "clicked": "✨ 生成設計",
+      "completion_status": "no_api_observed",
+      "result_url": "",
+      "wait_seconds": 50.0,
+      "http_status": 0,
+      "prepared_steps": [
+        "room_type:廚房",
+        "style:現代極簡"
+      ],
+      "selected_dropdowns": [
+        "現代極簡"
+      ],
+      "error": ""
+    },
+    {
+      "tool": "upscale",
+      "case_id": "upscale_product_listing_2x",
+      "route": "/tools/upscale",
+      "uploaded": true,
+      "clicked": "放大 2x",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/8a10d4a6168d.png",
+      "wait_seconds": 30.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "upscale",
+      "case_id": "upscale_room_listing_4x",
+      "route": "/tools/upscale",
+      "uploaded": true,
+      "clicked": "放大 2x",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/834e131fcf99.png",
+      "wait_seconds": 20.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "pattern_generate",
+      "case_id": "pattern_tea_packaging_floral",
+      "route": "/tools/pattern-generate",
+      "uploaded": false,
+      "clicked": "生成",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/81631307c4ec.png",
+      "wait_seconds": 30.0,
+      "http_status": 200,
+      "prepared_steps": [
+        "style:花卉風格"
+      ],
+      "selected_dropdowns": [
+        "櫻花和紙"
+      ],
+      "error": ""
+    },
+    {
+      "tool": "pattern_generate",
+      "case_id": "pattern_skincare_mockup_minimal",
+      "route": "/tools/pattern-generate",
+      "uploaded": false,
+      "clicked": "生成",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/e37987d48726.png",
+      "wait_seconds": 50.0,
+      "http_status": 200,
+      "prepared_steps": [
+        "style:產品展示"
+      ],
+      "selected_dropdowns": [
+        "櫻花和紙"
+      ],
+      "error": ""
+    },
+    {
+      "tool": "image_translator",
+      "case_id": "translate_sale_card_en_to_zh",
+      "route": "/tools/image-translator",
+      "uploaded": true,
+      "clicked": "開始圖片翻譯",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/955a28b812ec.png",
+      "wait_seconds": 60.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "image_translator",
+      "case_id": "translate_menu_board_en_to_ja",
+      "route": "/tools/image-translator",
+      "uploaded": true,
+      "clicked": "開始圖片翻譯",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/6a33b746ef0a.png",
+      "wait_seconds": 50.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "video_transform",
+      "case_id": "video_transform_product_cinematic",
+      "route": "/tools/video-transform",
+      "uploaded": true,
+      "clicked": "開始轉換",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/video/uploads/faa3d322-fa3e-48cd-82b1-52841fe08d9c/d5fef6ce-d792-4776-9b31-468517198863.mp4",
+      "wait_seconds": 70.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [
+        "電影感推鏡"
+      ],
+      "error": ""
+    },
+    {
+      "tool": "video_transform",
+      "case_id": "video_transform_social_watercolor",
+      "route": "/tools/video-transform",
+      "uploaded": false,
+      "clicked": "",
+      "completion_status": "",
+      "result_url": "",
+      "wait_seconds": 0,
+      "http_status": 0,
+      "prepared_steps": [],
+      "selected_dropdowns": [
+        "電影感推鏡"
+      ],
+      "error": "no enabled action button found"
+    },
+    {
+      "tool": "video_dubbing",
+      "case_id": "dubbing_product_launch_en_to_zh",
+      "route": "/tools/video-dubbing",
+      "uploaded": true,
+      "clicked": "產生配音影片",
+      "completion_status": "completed",
+      "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/video/dubbing/faa3d322-fa3e-48cd-82b1-52841fe08d9c/819cd03d9955.mp4",
+      "wait_seconds": 20.0,
+      "http_status": 200,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    },
+    {
+      "tool": "video_dubbing",
+      "case_id": "dubbing_brand_update_en_to_es",
+      "route": "/tools/video-dubbing",
+      "uploaded": false,
+      "clicked": "原文翻譯",
+      "completion_status": "no_api_observed",
+      "result_url": "",
+      "wait_seconds": 50.0,
+      "http_status": 0,
+      "prepared_steps": [],
+      "selected_dropdowns": [],
+      "error": ""
+    }
+  ]
+}

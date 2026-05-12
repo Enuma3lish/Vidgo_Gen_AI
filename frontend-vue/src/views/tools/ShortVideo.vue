@@ -11,7 +11,7 @@ import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
-import { validateVideoFile } from '@/utils/mediaValidation'
+import { validateVideoFile, normalizeVideoFileForUpload } from '@/utils/mediaValidation'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -432,24 +432,74 @@ async function generateVideo() {
   }
 }
 
-function handleVideoUpload(event: Event) {
+async function handleVideoUpload(event: Event) {
   const input = event.target as HTMLInputElement | null
   const file = input?.files?.[0]
   if (!file) return
 
-  const validationError = validateVideoFile(file, isZh.value, { maxSizeMb: 20 })
-  if (validationError) {
-    uiStore.showError(validationError)
+  // First-pass MIME / extension validation. Size we'll handle below via the
+  // browser re-encode path so an oversize but otherwise valid clip gets
+  // normalized instead of rejected outright.
+  const formatError = validateVideoFile(file, isZh.value, { maxSizeMb: Number.MAX_SAFE_INTEGER })
+  if (formatError) {
+    uiStore.showError(formatError)
     if (input) input.value = ''
     return
+  }
+
+  // Auto-resize: re-encode to ≤20 MB / ≤720p when the source is too big.
+  // The browser plays the video in real time during encoding (see
+  // normalizeVideoFileForUpload), so we surface a processing toast and
+  // a progress percentage so the user knows we didn't freeze.
+  let workingFile = file
+  const oversize = file.size > 20 * 1024 * 1024
+  if (oversize) {
+    isProcessing.value = true
+    processingMessage.value = L('正在壓縮影片...', 'Compressing video...', '動画を圧縮中...', '동영상 압축 중...', 'Comprimiendo video...')
+    try {
+      const result = await normalizeVideoFileForUpload(file, {
+        maxSizeMb: 20,
+        maxResolution: 720,
+        onProgress: (ratio) => {
+          processingMessage.value = L(
+            `正在壓縮影片 ${Math.round(ratio * 100)}%`,
+            `Compressing video ${Math.round(ratio * 100)}%`,
+            `動画を圧縮中 ${Math.round(ratio * 100)}%`,
+            `동영상 압축 중 ${Math.round(ratio * 100)}%`,
+            `Comprimiendo video ${Math.round(ratio * 100)}%`,
+          )
+        },
+      })
+      if (result.normalized) {
+        workingFile = result.file
+      } else if (result.reason === 'browser_unsupported' || result.reason === 'playback_blocked') {
+        // Fall back to the old hard size limit.
+        const sizeError = validateVideoFile(file, isZh.value, { maxSizeMb: 20 })
+        if (sizeError) {
+          uiStore.showError(sizeError)
+          if (input) input.value = ''
+          return
+        }
+      }
+    } catch (err) {
+      console.error('Video normalize failed:', err)
+      uiStore.showError(L('影片壓縮失敗，請改用較小的影片。', 'Video compression failed. Please upload a smaller video.', '動画の圧縮に失敗しました。より小さな動画を使用してください。', '동영상 압축에 실패했습니다. 더 작은 동영상을 사용해 주세요.', 'Falló la compresión del video. Sube un video más pequeño.'))
+      if (input) input.value = ''
+      isProcessing.value = false
+      processingMessage.value = ''
+      return
+    } finally {
+      isProcessing.value = false
+      processingMessage.value = ''
+    }
   }
 
   if (uploadedVideoPreview.value) {
     URL.revokeObjectURL(uploadedVideoPreview.value)
   }
 
-  uploadedVideoFile.value = file
-  uploadedVideoPreview.value = URL.createObjectURL(file)
+  uploadedVideoFile.value = workingFile
+  uploadedVideoPreview.value = URL.createObjectURL(workingFile)
   resultVideo.value = null
   demoEmptyState.value = false
 }

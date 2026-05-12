@@ -360,6 +360,209 @@ export interface VideoValidationOptions {
  * or null when the file is acceptable. Falls back to file-extension sniffing
  * when the browser doesn't fill in `file.type`.
  */
+export interface VideoNormalizeOptions {
+  maxSizeMb?: number
+  maxResolution?: number // longest edge, e.g. 720
+  onProgress?: (ratio: number) => void
+}
+
+export interface VideoNormalizeResult {
+  file: File
+  normalized: boolean
+  reason?: string
+}
+
+/**
+ * Read basic metadata (duration + dimensions) from a video File without
+ * playing it through. Returns null on decode failure.
+ */
+function readVideoMetadata(
+  file: File,
+): Promise<{ duration: number; width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.muted = true
+    video.src = url
+    video.onloadedmetadata = () => {
+      const data = {
+        duration: video.duration,
+        width: video.videoWidth,
+        height: video.videoHeight,
+      }
+      URL.revokeObjectURL(url)
+      resolve(data)
+    }
+    video.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(null)
+    }
+  })
+}
+
+/**
+ * Browser-side video auto-resize. Mirrors normalizeImageFileForUpload for
+ * videos: if the file is over budget (size or resolution), re-encode it
+ * through Canvas + MediaRecorder so backend providers don't reject the
+ * upload as too large. Returns the original File when it's already within
+ * budget so we don't waste user time on a re-encode they didn't need.
+ *
+ * Caveats vs. server-side ffmpeg:
+ *   - Re-encoding plays the source in real time (1×) — a 60 s video takes
+ *     ~60 s to normalize. We surface progress via onProgress.
+ *   - Output is WebM/VP8 or WebM/VP9 (whatever the browser supports). Our
+ *     backend already accepts video/webm, so this is fine.
+ *   - On browsers that don't expose HTMLMediaElement.captureStream() we
+ *     fall back to returning the original file with `normalized: false`
+ *     and the caller decides whether to reject or accept it.
+ */
+export async function normalizeVideoFileForUpload(
+  file: File,
+  opts: VideoNormalizeOptions = {},
+): Promise<VideoNormalizeResult> {
+  const maxBytes = (opts.maxSizeMb ?? MAX_VIDEO_SIZE_MB) * 1024 * 1024
+  const maxResolution = opts.maxResolution ?? 1080
+
+  const meta = await readVideoMetadata(file)
+  if (!meta) {
+    return { file, normalized: false, reason: 'metadata_decode_failed' }
+  }
+
+  const currentMaxDim = Math.max(meta.width, meta.height)
+  if (file.size <= maxBytes && currentMaxDim <= maxResolution) {
+    return { file, normalized: false }
+  }
+
+  // Capability checks. Without canvas.captureStream + MediaRecorder we
+  // can't re-encode in the browser; tell the caller and let the existing
+  // size-error path show its message.
+  const hasMR = typeof MediaRecorder !== 'undefined'
+  if (!hasMR || typeof (document.createElement('canvas') as any).captureStream !== 'function') {
+    return { file, normalized: false, reason: 'browser_unsupported' }
+  }
+
+  const url = URL.createObjectURL(file)
+  const video = document.createElement('video')
+  video.src = url
+  video.muted = true
+  ;(video as any).playsInline = true
+  video.crossOrigin = 'anonymous'
+
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve()
+    video.onerror = () => reject(new Error('Video could not be loaded for re-encoding.'))
+  })
+
+  const duration = video.duration
+  const scale = Math.min(1, maxResolution / currentMaxDim)
+  // libx264 / VP8 expect even dimensions; round down to nearest 2.
+  const targetW = Math.max(2, Math.floor((meta.width * scale) / 2) * 2)
+  const targetH = Math.max(2, Math.floor((meta.height * scale) / 2) * 2)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = targetW
+  canvas.height = targetH
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    URL.revokeObjectURL(url)
+    return { file, normalized: false, reason: 'canvas_unavailable' }
+  }
+
+  const videoStream = (canvas as any).captureStream(30) as MediaStream
+
+  // Try to pull the audio track from the source video via the standard
+  // HTMLMediaElement.captureStream(). On Safari this may throw or return
+  // a stream without audio tracks; if so we record video-only.
+  try {
+    const elementStream: MediaStream | undefined =
+      typeof (video as any).captureStream === 'function'
+        ? (video as any).captureStream()
+        : typeof (video as any).mozCaptureStream === 'function'
+          ? (video as any).mozCaptureStream()
+          : undefined
+    if (elementStream) {
+      for (const audioTrack of elementStream.getAudioTracks()) {
+        videoStream.addTrack(audioTrack)
+      }
+    }
+  } catch {
+    /* video-only re-encode is still better than rejecting the upload */
+  }
+
+  const mimeCandidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ]
+  const mimeType = mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) || 'video/webm'
+
+  // Target ~75 % of byte budget so muxing overhead doesn't bust the cap.
+  const safeDuration = Math.max(1, duration || 0)
+  const targetBitsPerSecond = Math.max(
+    400_000,
+    Math.min(2_500_000, Math.floor((maxBytes * 8 * 0.75) / safeDuration)),
+  )
+
+  const recorder = new MediaRecorder(videoStream, {
+    mimeType,
+    videoBitsPerSecond: targetBitsPerSecond,
+    audioBitsPerSecond: 128_000,
+  })
+
+  const chunks: Blob[] = []
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data)
+  }
+
+  const stopped = new Promise<void>((resolve) => {
+    recorder.onstop = () => resolve()
+  })
+
+  let running = true
+  const drawFrame = () => {
+    if (!running) return
+    try {
+      ctx.drawImage(video, 0, 0, targetW, targetH)
+    } catch {
+      /* ignore intermittent draw errors near seek boundaries */
+    }
+    if (typeof opts.onProgress === 'function' && safeDuration > 0) {
+      opts.onProgress(Math.min(1, video.currentTime / safeDuration))
+    }
+    requestAnimationFrame(drawFrame)
+  }
+
+  recorder.start(1000)
+  try {
+    video.currentTime = 0
+    await video.play()
+  } catch (err) {
+    running = false
+    try { recorder.stop() } catch {}
+    URL.revokeObjectURL(url)
+    return { file, normalized: false, reason: 'playback_blocked' }
+  }
+  drawFrame()
+
+  await new Promise<void>((resolve) => {
+    video.onended = () => resolve()
+  })
+  running = false
+  try { recorder.stop() } catch {}
+  await stopped
+  URL.revokeObjectURL(url)
+
+  const blob = new Blob(chunks, { type: mimeType })
+  if (blob.size === 0) {
+    return { file, normalized: false, reason: 'recorder_empty' }
+  }
+  const newName = file.name.replace(/\.[^.]+$/, '') + '.webm'
+  const outFile = new File([blob], newName, { type: mimeType, lastModified: Date.now() })
+  return { file: outFile, normalized: true }
+}
+
+
 export function validateVideoFile(
   file: File,
   isZh = false,

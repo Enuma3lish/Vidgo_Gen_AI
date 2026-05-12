@@ -101,7 +101,15 @@ class VertexAIProvider(BaseProvider):
         return credentials.token
 
     def _get_gemini_text_client(self):
-        """Gemini API (AI Studio) client for text/moderation — API key preferred, Vertex AI fallback."""
+        """Gemini API (AI Studio) client for text/moderation — API key preferred, Vertex AI fallback.
+
+        Critical: when falling back to Vertex AI, pin to the same region
+        as the image client (us-central1 by default) because Gemini 2.5
+        Pro / Flash text models are not published in asia-east1, which is
+        where ``VERTEX_AI_LOCATION`` points in production to colocate
+        Cloud Run + Cloud SQL. Using ``self.location`` here meant every
+        gemini-2.5-pro call returned 404 PUBLISHER_MODEL_NOT_FOUND.
+        """
         if self._gemini_text_client is None:
             from google import genai
 
@@ -112,9 +120,12 @@ class VertexAIProvider(BaseProvider):
                 self._gemini_text_client = genai.Client(
                     vertexai=True,
                     project=self.project,
-                    location=self.location,
+                    location=self.image_location,
                 )
-                logger.info("[VertexAI] Gemini text ops via Vertex AI (no GEMINI_API_KEY)")
+                logger.info(
+                    "[VertexAI] Gemini text ops via Vertex AI (region=%s)",
+                    self.image_location,
+                )
             else:
                 raise RuntimeError("No GEMINI_API_KEY or VERTEX_AI_PROJECT configured")
         return self._gemini_text_client

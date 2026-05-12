@@ -7,8 +7,13 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
 # ── System dependencies + Node.js (for MCP servers) ──
+# fonts-noto-cjk: needed by the deterministic image-translator renderer
+# so PIL can draw real Traditional Chinese / Japanese / Korean glyphs
+# at the OCR bounding boxes Gemini returns. Without it PIL falls back
+# to its built-in Latin font and CJK characters render as tofu (□).
 RUN apt-get update && apt-get install -y \
     curl postgresql-client redis-tools ffmpeg dos2unix gnupg \
+    fonts-noto-cjk fonts-noto-cjk-extra \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*

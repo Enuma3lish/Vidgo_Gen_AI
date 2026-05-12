@@ -101,33 +101,46 @@ class VertexAIProvider(BaseProvider):
         return credentials.token
 
     def _get_gemini_text_client(self):
-        """Gemini API (AI Studio) client for text/moderation — API key preferred, Vertex AI fallback.
+        """Gemini text/moderation client — Vertex AI ADC wins over API key.
 
-        Critical: when falling back to Vertex AI, pin to the same region
-        as the image client (us-central1 by default) because Gemini 2.5
-        Pro / Flash text models are not published in asia-east1, which is
-        where ``VERTEX_AI_LOCATION`` points in production to colocate
-        Cloud Run + Cloud SQL. Using ``self.location`` here meant every
-        gemini-2.5-pro call returned 404 PUBLISHER_MODEL_NOT_FOUND.
+        Two interlocking issues forced this priority order:
+
+        1. The GEMINI_API_KEY in Secret Manager is the one Google flagged
+           as leaked and revoked. Every call returns
+           ``403 PERMISSION_DENIED — Your API key was reported as leaked``.
+           Until that secret is rotated we MUST avoid the API-key path.
+        2. Vertex AI Gemini text models (gemini-2.5-pro, -2.5-flash) are
+           not published in asia-east1, the region we pin the rest of the
+           backend to for Cloud SQL colocation. We pin this client to
+           ``image_location`` (us-central1) where the models live.
+
+        ``gemini_service.py`` already inverted this priority for the same
+        reason; this provider hadn't been updated. The result was every
+        Gemini call from VertexAIProvider (OCR for the image translator,
+        prompt refinement, interior text description) hit the dead key
+        first and returned 503 to the user.
         """
         if self._gemini_text_client is None:
             from google import genai
 
-            if self.gemini_api_key:
-                self._gemini_text_client = genai.Client(api_key=self.gemini_api_key)
-                logger.info("[VertexAI] Gemini text ops via Gemini API (API key)")
-            elif self.project:
+            if self.project:
                 self._gemini_text_client = genai.Client(
                     vertexai=True,
                     project=self.project,
                     location=self.image_location,
                 )
                 logger.info(
-                    "[VertexAI] Gemini text ops via Vertex AI (region=%s)",
+                    "[VertexAI] Gemini text ops via Vertex AI ADC (project=%s region=%s)",
+                    self.project,
                     self.image_location,
                 )
+            elif self.gemini_api_key:
+                # Local-dev fallback only. Production Cloud Run always
+                # has VERTEX_AI_PROJECT set so we never end up here.
+                self._gemini_text_client = genai.Client(api_key=self.gemini_api_key)
+                logger.info("[VertexAI] Gemini text ops via Gemini API key (no project configured)")
             else:
-                raise RuntimeError("No GEMINI_API_KEY or VERTEX_AI_PROJECT configured")
+                raise RuntimeError("No VERTEX_AI_PROJECT or GEMINI_API_KEY configured")
         return self._gemini_text_client
 
     def _get_genai_client(self):

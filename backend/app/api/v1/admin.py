@@ -1922,6 +1922,10 @@ async def admin_regenerate_hero_pair(
         row.prompt = request.prompt_override
     row.generated_at = datetime.now(timezone.utc)
     await db.commit()
+    # AsyncSession.commit() expires all loaded attributes by default; the
+    # next attribute read would trigger a lazy SQL emit that can't run in
+    # this context (MissingGreenlet). Refresh once to repopulate.
+    await db.refresh(row)
 
     return {"success": True, "pair": _serialize_hero_pair(row)}
 

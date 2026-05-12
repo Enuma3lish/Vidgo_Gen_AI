@@ -2304,12 +2304,29 @@ async def room_redesign(
 # Tool 5: Short Video
 # ============================================================================
 
-@router.post("/short-video", response_model=ToolResponse)
+@router.post("/short-video")
 async def generate_short_video(
     request: ShortVideoRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
+    """
+    Generate short video from image — chunked streaming with 25 s keep-alive
+    heartbeat so Cloudflare / GCLB / Cloud Run idle timeouts don't close
+    the connection during long Wan I2V or Veo runs (5-10 min typical).
+    """
+    async def _do_generate_short_video() -> Dict[str, Any]:
+        result = await _generate_short_video_inner(request, db, current_user)
+        return result.model_dump() if hasattr(result, "model_dump") else result
+
+    return _stream_with_heartbeat(_do_generate_short_video)
+
+
+async def _generate_short_video_inner(
+    request: "ShortVideoRequest",
+    db: AsyncSession,
+    current_user,
+) -> ToolResponse:
     """
     Generate short video from image.
 
@@ -2559,12 +2576,28 @@ class VideoTransformRequest(BaseModel):
     style: Optional[str] = None
 
 
-@router.post("/video-transform", response_model=ToolResponse)
+@router.post("/video-transform")
 async def video_transform(
     request: VideoTransformRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
+    """
+    Apply style transfer to a video — chunked streaming with 25 s keep-alive
+    so edge proxies don't drop the connection during long V2V runs.
+    """
+    async def _do_video_transform() -> Dict[str, Any]:
+        result = await _video_transform_inner(request, db, current_user)
+        return result.model_dump() if hasattr(result, "model_dump") else result
+
+    return _stream_with_heartbeat(_do_video_transform)
+
+
+async def _video_transform_inner(
+    request: "VideoTransformRequest",
+    db: AsyncSession,
+    current_user,
+) -> ToolResponse:
     """
     Apply style transfer to a video.
 

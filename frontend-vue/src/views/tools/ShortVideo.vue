@@ -447,6 +447,11 @@ async function handleVideoUpload(event: Event) {
     return
   }
 
+  // Stale-state guard: if a previous upload is still in flight when the
+  // user picks a new file, clear the staged file before we kick off the
+  // new normalize so a mid-flight Generate click can't grab the old one.
+  uploadedVideoFile.value = null
+
   // Auto-resize. Primary path is server-side ffmpeg via
   // /api/v1/uploads/video-normalize — best quality, MP4 H.264 output,
   // faster than realtime, no client compute. Falls back to the in-browser
@@ -473,18 +478,35 @@ async function handleVideoUpload(event: Event) {
       // uploadAndGenerate flow uploads the small version, not the
       // 100 MB original. Round-trip is bounded by VIDEO_NORMALIZE_TARGET_BYTES
       // (~20 MB) so this is cheap relative to a re-upload of the source.
+      //
+      // If this refetch fails (CORS, network, opaque response) we MUST
+      // error out — silently falling through to the original file means
+      // /uploads/material then receives a 100+ MB upload and rejects it
+      // with a confusing 413, after the user just sat through a 60 s
+      // normalize. Better to surface the failure here so they can retry.
+      let refetched = false
       try {
         const blobResp = await fetch(result.video_url)
         if (blobResp.ok) {
           const blob = await blobResp.blob()
-          workingFile = new File(
-            [blob],
-            file.name.replace(/\.[^.]+$/, '') + '.mp4',
-            { type: 'video/mp4', lastModified: Date.now() },
-          )
+          if (blob.size > 1024) {
+            workingFile = new File(
+              [blob],
+              file.name.replace(/\.[^.]+$/, '') + '.mp4',
+              { type: 'video/mp4', lastModified: Date.now() },
+            )
+            refetched = true
+          }
         }
       } catch (fetchErr) {
-        console.warn('Could not refetch normalized clip; will upload original:', fetchErr)
+        console.error('Refetch of normalized clip failed:', fetchErr)
+      }
+      if (!refetched) {
+        uiStore.showError(L('無法讀取已壓縮的影片，請重試。', 'Could not load the compressed video. Please retry.', '圧縮済み動画を読み込めませんでした。再試行してください。', '압축된 동영상을 불러올 수 없습니다. 다시 시도해 주세요.', 'No se pudo leer el video comprimido. Inténtalo de nuevo.'))
+        if (input) input.value = ''
+        isProcessing.value = false
+        processingStage.value = null
+        return
       }
     } catch (err: any) {
       console.warn('Server-side normalize failed, falling back to browser:', err?.message)

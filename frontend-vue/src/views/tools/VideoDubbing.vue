@@ -159,6 +159,13 @@ async function handleVideoFile(event: Event) {
     return
   }
 
+  // Stale-state guard: if the user picks a second file while a previous
+  // normalize is still in flight, the old uploadedVideoUrl would briefly
+  // remain valid and a Generate click during that window would hit the
+  // OLD video. Reset every per-file state ref up front.
+  uploadedVideoUrl.value = null
+  uploadedVideoFile.value = null
+
   // Always push the upload through /api/v1/uploads/video-normalize. The
   // backend's first action is a probe + early-return when the file is
   // already within budget (just persists to GCS), and an ffmpeg re-encode
@@ -201,7 +208,19 @@ async function handleVideoFile(event: Event) {
             )
           },
         })
-        if (fallback.normalized) workingFile = fallback.file
+        if (fallback.normalized) {
+          workingFile = fallback.file
+        } else {
+          // Browser doesn't support MediaRecorder/captureStream, or the
+          // recorder returned an empty blob. Don't silently let an
+          // oversize original through — surface the size error so the
+          // user knows to trim or pick a different clip.
+          uiStore.showError(L('影片壓縮失敗，請改用較小的影片。', 'Video compression failed. Please upload a smaller video.', '動画の圧縮に失敗しました。より小さな動画を使用してください。', '동영상 압축에 실패했습니다. 더 작은 동영상을 사용해 주세요.', 'Falló la compresión del video. Sube un video más pequeño.'))
+          input.value = ''
+          isProcessing.value = false
+          processingMessage.value = ''
+          return
+        }
       } catch (fallbackErr) {
         console.error('Fallback normalize failed:', fallbackErr)
         uiStore.showError(L('影片壓縮失敗，請改用較小的影片。', 'Video compression failed. Please upload a smaller video.', '動画の圧縮に失敗しました。より小さな動画を使用してください。', '동영상 압축에 실패했습니다. 더 작은 동영상을 사용해 주세요.', 'Falló la compresión del video. Sube un video más pequeño.'))

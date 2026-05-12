@@ -15,4 +15,5 @@ from app.models.prompt_template import (
 from app.models.social_account import SocialAccount
 from app.models.style_template import StyleTemplate
 from app.models.site_settings import SiteSettings
+from app.models.hero_demo_pair import HeroDemoPair
 from app.core.database import Base

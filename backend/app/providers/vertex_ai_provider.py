@@ -80,9 +80,10 @@ class VertexAIProvider(BaseProvider):
             logger.info("[VertexAI] GEMINI_API_KEY set — text ops via Gemini API; Imagen/Veo disabled (no VERTEX_AI_PROJECT)")
 
         self._client: Optional[httpx.AsyncClient] = None
-        self._gemini_text_client = None   # Gemini API (API key) — for text/moderation
-        self._genai_client = None         # Vertex AI genai — fallback text or Imagen
-        self._genai_image_client = None   # Vertex AI genai (us-central1) — for Imagen
+        self._gemini_text_client = None    # API-key preferred — text + multimodal Gemini
+        self._gemini_image_client = None   # API-key preferred — gemini-2.5-flash-image
+        self._genai_client = None          # Vertex AI genai — generic fallback
+        self._genai_image_client = None    # Vertex AI (us-central1) — Imagen only
 
     def _get_http_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -101,46 +102,41 @@ class VertexAIProvider(BaseProvider):
         return credentials.token
 
     def _get_gemini_text_client(self):
-        """Gemini text/moderation client — Vertex AI ADC wins over API key.
+        """Gemini text/moderation client — prefer Gemini API key (Developer
+        API) when available, fall back to Vertex AI ADC.
 
-        Two interlocking issues forced this priority order:
+        Why API key first now: the Secret Manager value was rotated
+        (v15) so the API path is healthy again. Going direct via
+        ``generativelanguage.googleapis.com`` skips ADC token resolution
+        and Vertex's region pinning entirely — gemini-2.5-pro /
+        gemini-2.5-flash are available on the API in every region, which
+        also unblocks local dev outside GCP. Vertex stays as the
+        fallback so Cloud Run keeps working if the key is ever revoked
+        again or if AI Studio quota throttles.
 
-        1. The GEMINI_API_KEY in Secret Manager is the one Google flagged
-           as leaked and revoked. Every call returns
-           ``403 PERMISSION_DENIED — Your API key was reported as leaked``.
-           Until that secret is rotated we MUST avoid the API-key path.
-        2. Vertex AI Gemini text models (gemini-2.5-pro, -2.5-flash) are
-           not published in asia-east1, the region we pin the rest of the
-           backend to for Cloud SQL colocation. We pin this client to
-           ``image_location`` (us-central1) where the models live.
-
-        ``gemini_service.py`` already inverted this priority for the same
-        reason; this provider hadn't been updated. The result was every
-        Gemini call from VertexAIProvider (OCR for the image translator,
-        prompt refinement, interior text description) hit the dead key
-        first and returned 503 to the user.
+        Imagen + Veo paths are unaffected — those still call
+        ``_get_genai_image_client`` which we keep Vertex-only because
+        those models aren't published on the Gemini Developer API.
         """
         if self._gemini_text_client is None:
             from google import genai
 
-            if self.project:
+            if self.gemini_api_key:
+                self._gemini_text_client = genai.Client(api_key=self.gemini_api_key)
+                logger.info("[VertexAI] Gemini text ops via Gemini API key")
+            elif self.project:
                 self._gemini_text_client = genai.Client(
                     vertexai=True,
                     project=self.project,
                     location=self.image_location,
                 )
                 logger.info(
-                    "[VertexAI] Gemini text ops via Vertex AI ADC (project=%s region=%s)",
+                    "[VertexAI] Gemini text ops via Vertex AI ADC fallback (project=%s region=%s)",
                     self.project,
                     self.image_location,
                 )
-            elif self.gemini_api_key:
-                # Local-dev fallback only. Production Cloud Run always
-                # has VERTEX_AI_PROJECT set so we never end up here.
-                self._gemini_text_client = genai.Client(api_key=self.gemini_api_key)
-                logger.info("[VertexAI] Gemini text ops via Gemini API key (no project configured)")
             else:
-                raise RuntimeError("No VERTEX_AI_PROJECT or GEMINI_API_KEY configured")
+                raise RuntimeError("No GEMINI_API_KEY or VERTEX_AI_PROJECT configured")
         return self._gemini_text_client
 
     def _get_genai_client(self):
@@ -156,7 +152,17 @@ class VertexAIProvider(BaseProvider):
         return self._genai_client
 
     def _get_genai_image_client(self):
-        """Vertex AI genai client pinned to us-central1 for Imagen image generation."""
+        """Vertex AI genai client pinned to us-central1 for IMAGEN image
+        generation. Imagen models (imagen-3.0-generate-002,
+        imagen-3.0-capability-001) are not published on the Gemini
+        Developer API, so this client must stay Vertex-only.
+
+        Gemini Flash Image (gemini-2.5-flash-image) — which IS available
+        on the Developer API — should use ``_get_gemini_image_client``
+        instead so production traffic goes direct via api key, faster
+        and region-agnostic, falling back to Vertex only if the key is
+        unset or revoked.
+        """
         if self._genai_image_client is None:
             from google import genai
 
@@ -166,6 +172,36 @@ class VertexAIProvider(BaseProvider):
                 location=self.image_location,
             )
         return self._genai_image_client
+
+    def _get_gemini_image_client(self):
+        """Gemini Flash Image client — API key preferred, Vertex fallback.
+
+        gemini-2.5-flash-image is available on both the Gemini Developer
+        API and Vertex AI. Production prefers the API key path for the
+        same reasons as the text client (no region pin, faster auth,
+        works in local dev). Vertex stays as the fallback when the key
+        is unset / revoked. Used by ``regenerate_hero_pair`` and any
+        future code that calls gemini-2.5-flash-image.
+        """
+        if self._gemini_image_client is None:
+            from google import genai
+
+            if self.gemini_api_key:
+                self._gemini_image_client = genai.Client(api_key=self.gemini_api_key)
+                logger.info("[VertexAI] Gemini Flash Image via Gemini API key")
+            elif self.project:
+                self._gemini_image_client = genai.Client(
+                    vertexai=True,
+                    project=self.project,
+                    location=self.image_location,
+                )
+                logger.info(
+                    "[VertexAI] Gemini Flash Image via Vertex AI fallback (region=%s)",
+                    self.image_location,
+                )
+            else:
+                raise RuntimeError("No GEMINI_API_KEY or VERTEX_AI_PROJECT configured")
+        return self._gemini_image_client
 
     async def health_check(self) -> bool:
         if not self.gemini_api_key and not self.project:
@@ -411,7 +447,10 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         """
         self._log_request("regenerate_hero_pair", params)
         try:
-            client = self._get_genai_image_client()
+            # gemini-2.5-flash-image is available on the Gemini Developer
+            # API — prefer the API-key client for lower latency / no
+            # region pin. Falls back to Vertex when the key is unset.
+            client = self._get_gemini_image_client()
             from google.genai import types
 
             http = self._get_http_client()

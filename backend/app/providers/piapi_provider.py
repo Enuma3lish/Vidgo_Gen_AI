@@ -823,12 +823,22 @@ class PiAPIProvider(BaseProvider):
         room_type = params.get("room_type", "living room")
         prompt = params.get("prompt", "")
 
-        full_prompt = f"{style} {room_type} interior design, professional architectural rendering, {prompt}"
+        INTERIOR_CONSTRAINTS = (
+            "no people, no humans, no faces, no hands, no pets, "
+            "preserve original walls windows doors ceiling and room footprint, "
+            "empty interior staged only with furniture and decor, "
+            "photorealistic real-estate interior photography"
+        )
+        full_prompt = (
+            f"{style} {room_type} interior design, professional architectural rendering, "
+            f"{prompt}. {INTERIOR_CONSTRAINTS}"
+        )
 
         # Try kontext first (more likely to be available)
         return await self.kontext_image({
             "image_url": params["image_url"],
             "prompt": full_prompt,
+            "negative_prompt": "people, humans, persons, faces, hands, pets, animals, text, watermark, signature",
             "width": 1024,
             "height": 768,
             "steps": 10

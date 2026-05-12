@@ -477,7 +477,22 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         style = params.get("style", "modern")
         room_type = params.get("room_type", "living room")
         prompt = params.get("prompt", "")
-        full_prompt = f"Transform this room into a {style} {room_type} interior design. {prompt}"
+        # Hard constraint suffix: users were reporting people, pets, and
+        # invented furniture in kitchen / living-room outputs. The frontend
+        # also adds these instructions but we duplicate at the provider
+        # level so direct API consumers and prompt-refinement rewrites
+        # cannot strip them.
+        INTERIOR_CONSTRAINTS = (
+            "No people, no humans, no faces, no hands, no pets. "
+            "Preserve the original walls, windows, doors, ceiling height, "
+            "and overall room footprint. Empty interior staged only with "
+            "furniture, decor, and lighting. Photorealistic real-estate "
+            "interior photography, sharp focus, balanced exposure."
+        )
+        full_prompt = (
+            f"Transform this room into a {style} {room_type} interior design. "
+            f"{prompt} {INTERIOR_CONSTRAINTS}"
+        )
 
         try:
             result = await self.edit_image({

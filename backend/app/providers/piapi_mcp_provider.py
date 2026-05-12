@@ -234,8 +234,22 @@ class PiAPIMCPProvider(BaseProvider):
     async def doodle_interior(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Interior design via Flux generate_image with referenceImage."""
         self._log_request("interior_design", params)
+        # Append the interior-only constraint so Flux doesn't invent people
+        # or pets in the staged room (users reported "lots of people" in
+        # kitchen outputs). The frontend already adds these, this is just
+        # a belt-and-suspenders so the constraint reaches the model even
+        # if a custom prompt is passed in.
+        INTERIOR_CONSTRAINTS = (
+            " no people, no humans, no faces, no hands, no pets, "
+            "preserve original walls windows and room footprint, "
+            "empty interior staged with furniture and decor only, "
+            "photorealistic real-estate interior photography"
+        )
+        prompt_text = params.get("prompt", "") or ""
+        if "no people" not in prompt_text.lower():
+            prompt_text = (prompt_text.rstrip(". ") + ".").strip() + INTERIOR_CONSTRAINTS
         result = await self._call_tool("interior_design", {
-            "prompt": params.get("prompt", ""),
+            "prompt": prompt_text,
             "referenceImage": self._resolve_image_url(params.get("image_url", "")),
         })
         return self._normalize_result(result, "image")

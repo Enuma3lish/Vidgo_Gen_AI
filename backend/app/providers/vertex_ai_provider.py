@@ -473,6 +473,7 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         self._log_request("translate_image_text", params)
         try:
             client = self._get_genai_image_client()
+            text_client = self._get_gemini_text_client()
             from google.genai import types
 
             http = self._get_http_client()
@@ -487,33 +488,113 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             source_language = params.get("source_language")
             extra = (params.get("instructions") or "").strip()
             source_hint = f" from {source_language}" if source_language else ""
+
+            # ── PASS 1: OCR + translate via Gemini TEXT model ──────────────
+            #
+            # gemini-2.5-flash-image is great at re-rendering an image with
+            # changed text WHEN you tell it exactly what text to render —
+            # but if you only ask "translate the text", it falls back to
+            # hallucinating glyph SHAPES that look like the target script.
+            # For CJK / Arabic / Thai this produces semantically garbage
+            # output ("夆 专 偂 諭 石 折 復 惠" instead of "夏季特賣 五折優惠").
+            #
+            # So we first have the text model OCR the source text, produce
+            # a real translation, and emit a JSON map of source→translated
+            # phrases that the image model can use as a literal stencil.
+            ocr_prompt = (
+                "Extract every distinct piece of visible text in this image"
+                f"{source_hint}, then translate each piece into {target_language}. "
+                "Treat each visually-separated text block (line, label, sticker, "
+                "price tag) as one item. Keep brand names, URLs, prices, numbers, "
+                "and currency symbols unchanged unless they're normal words that "
+                "must be localized. Return ONLY a JSON array of objects with this "
+                "exact shape:\n"
+                '  [{"source": "<original text>", "translated": "<target-language text>"}, ...]\n'
+                "No prose, no markdown fences, no extra keys. If the image has no "
+                "text, return []."
+            )
+            ocr_response = await asyncio.to_thread(
+                text_client.models.generate_content,
+                model=self.gemini_model,
+                contents=[
+                    types.Part.from_bytes(data=img_resp.content, mime_type=mime),
+                    ocr_prompt,
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=2048,
+                    response_mime_type="application/json",
+                ),
+            )
+
+            translation_map: list[Dict[str, str]] = []
+            try:
+                raw_text = (ocr_response.text or "").strip()
+                # Strip markdown code fences if Gemini added them despite
+                # the response_mime_type hint.
+                if raw_text.startswith("```"):
+                    raw_text = raw_text.strip("`")
+                    if raw_text.startswith("json"):
+                        raw_text = raw_text[4:].lstrip()
+                parsed = json.loads(raw_text or "[]")
+                if isinstance(parsed, list):
+                    for entry in parsed:
+                        if isinstance(entry, dict):
+                            src = str(entry.get("source") or "").strip()
+                            tgt = str(entry.get("translated") or "").strip()
+                            if src and tgt:
+                                translation_map.append({"source": src, "translated": tgt})
+            except Exception as parse_exc:
+                logger.warning("[VertexAI] OCR JSON parse failed (%s); falling back to inline-prompt path", parse_exc)
+                translation_map = []
+
+            # ── PASS 2: render the image with the precise translations ───
+            #
+            # Tell the image model EXACTLY which source string maps to which
+            # target string. The model now does pure glyph rendering, not
+            # translation guessing, so CJK / Arabic / Thai come out correct.
+            mappings_block = ""
+            if translation_map:
+                mappings_lines = [
+                    f'  "{m["source"]}" -> "{m["translated"]}"' for m in translation_map[:30]
+                ]
+                mappings_block = (
+                    "Use this exact translation map. Replace each source phrase "
+                    "with the EXACT translated phrase given here — do not paraphrase, "
+                    "do not invent new characters, do not add or drop words:\n"
+                    + "\n".join(mappings_lines)
+                    + "\n\n"
+                )
             extra_clause = f" Additional instructions: {extra}." if extra else ""
 
-            prompt = (
-                f"Translate every visible text element in this image{source_hint} into "
-                f"{target_language}. Replace each piece of original text IN-PLACE so the "
-                "translated copy occupies the same position, follows the same line breaks, "
-                "matches the original typography weight and color, and stays inside the "
-                "same signage, packaging, card, or poster boundaries. Preserve the product, "
-                "model, faces, hands, logos, photography, and background EXACTLY as they "
-                "appear. Keep brand names, URLs, prices, numbers, currency symbols, and "
-                "logos unchanged unless they are normal words that must be localized. Do "
-                "not add new objects, captions, watermarks, signatures, or decorative text. "
-                "Do not change any layer of the image except the text glyphs themselves. "
-                "Return a clean, commercial-quality, photoreal localized image."
+            render_prompt = (
+                f"Re-render this image with every visible text element replaced "
+                f"by its {target_language} translation. "
+                f"{mappings_block}"
+                "Place each translated phrase at the same position, same line "
+                "break structure, same typography weight, same color, and inside "
+                "the same signage / packaging / card / poster boundary as the "
+                "original. Preserve the product, model, faces, hands, logos, "
+                "photography, and background EXACTLY as they appear. Keep brand "
+                "names, URLs, prices, numbers, currency symbols, and logos "
+                "unchanged unless the map above explicitly translates them. Do "
+                "not add new objects, captions, watermarks, signatures, or "
+                "decorative text. Do not change any layer of the image except "
+                "the text glyphs themselves. Return a clean, commercial-quality, "
+                "photoreal localized image."
                 f"{extra_clause}"
             )
 
             parts = [
                 types.Part.from_bytes(data=img_resp.content, mime_type=mime),
-                prompt,
+                render_prompt,
             ]
             response = await asyncio.to_thread(
                 client.models.generate_content,
                 model=self.gemini_image_model,
                 contents=parts,
                 config=types.GenerateContentConfig(
-                    temperature=0.2,
+                    temperature=0.15,
                     response_modalities=["IMAGE", "TEXT"],
                 ),
             )

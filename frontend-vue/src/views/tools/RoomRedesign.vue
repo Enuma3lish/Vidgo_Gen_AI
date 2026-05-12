@@ -343,7 +343,16 @@ function clearGeneratedResult() {
 }
 
 function handleRoomFileSelected(file: File) {
+  // The Generate button's :disabled binding reads `uploadedImage` (the
+  // display-URL ref), so we MUST set it here when a subscriber uploads a
+  // real file. Without this the button stayed disabled after upload and
+  // clicks were silently dropped — which is why the e2e bot logged
+  // "no_api_observed" on Room Redesign cases (see bug.md FT-010).
+  if (uploadedImage.value && uploadedImage.value.startsWith('blob:')) {
+    URL.revokeObjectURL(uploadedImage.value)
+  }
   uploadedFile.value = file
+  uploadedImage.value = URL.createObjectURL(file)
   clearGeneratedResult()
 }
 

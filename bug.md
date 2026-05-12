@@ -1,339 +1,148 @@
-# VidGo.co UAT Bug List
+# VidGo Final QA Bugs
 
-Date: 2026-05-11
-Source files:
+Date: 2026-05-12
+Test plan: `final_test.md`
+Run folder: `TEST/qa_runs/20260511T190150Z/`
+Production target: `https://vidgo.co` + `https://api.vidgo.co`
 
-- `bug_list/VidGo.co_網站測試驗收清單_(UAT_Checklist)0511.pdf`
-- `bug_list/VidGo.co_網站測試驗收清單_(UAT_Checklist)0511.docx`
+## Status — fix pass 2026-05-12
 
-Extraction note: direct PDF text conversion through the available local tool failed because the PDF text is Flate-encoded/embedded. The same checklist exists as a paired DOCX with the same filename/date, and its table text was extracted successfully with `textutil`; the bugs below are based on that extracted UAT checklist content.
+| ID | Status | Note |
+|---|---|---|
+| FT-001 `/info/*` 404 | ✅ Fixed | Added `/info/:slug` alias route to `frontend-vue/src/router/index.ts` |
+| FT-002 `/tools/image-upscale` 404 | ✅ Fixed | Added redirect alias to `/tools/upscale` |
+| FT-003 `?mode=transform` ignored | ✅ Fixed | `ShortVideo.vue` now also honours `route.query.mode === 'transform'` |
+| FT-004 ORB blocked Unsplash/Pixabay/GCS | ❌ Cannot fix in code | Bucket/CDN config — see "Cannot fix in this pass" below |
+| FT-005 Pricing has 6 cards not 4 | ❌ Won't fix | Admin-editable plans intentionally surface 6; final QA spec needs updating, not the product |
+| FT-006 AI Avatar provider ERROR before fallback | ❌ Cannot fix in code | PiAPI F5-TTS upstream is dead (500 on every call) — fallback already in place; log line is honest signal |
+| FT-007 Pollo/PiAPI progress validation errors | ❌ Cannot fix in code | Provider partner notification schema mismatch — log noise only, generation completes |
+| FT-008 Admin redirected away from My Works | ✅ Fixed | Router guard now lets `/dashboard/my-works`, `/dashboard/share-links` pass for admins |
+| FT-009 Avatar 504 from edge | ✅ Fixed | Avatar endpoint now uses chunked `StreamingResponse` with a 25 s whitespace heartbeat to keep edge proxies from idling out; raised axios global timeout 6→15 min and PiAPI httpx 5→10 min |
+| FT-010 Room Redesign button click no-op | ✅ Fixed | `handleRoomFileSelected` was setting `uploadedFile` but never `uploadedImage`, so the button's `:disabled` binding stayed true after a subscriber upload — bot's click was hitting a disabled button |
+| FT-011 Test asset 403 | ✅ Fixed | Replaced the dead `gtv-videos-bucket/sample/ForBiggerJoyrides.mp4` references with `test-videos.co.uk` Big Buck Bunny / Sintel mirrors that return 200 |
+| image-translator results faulty | ✅ Fixed | Switched from generic I2I (Flux derive_image / Imagen edit) to direct Gemini 2.5 Flash Image edit path |
+| video-dubbing results faulty | ✅ Fixed | New ffmpeg graph keeps full video length, mixes original ambient under the dub, never `-shortest`-truncates |
 
-## Summary
+### Cannot fix in this pass
 
-| Severity | Count | Items |
-| --- | ---: | --- |
-| Critical / Blocker | 6 | BUG-001, BUG-006, BUG-011, BUG-012, BUG-013, BUG-018 |
-| High | 7 | BUG-002, BUG-003, BUG-004, BUG-005, BUG-007, BUG-008, BUG-009 |
-| Medium | 4 | BUG-010, BUG-014, BUG-015, BUG-017 |
-| Low / UI polish | 1 | BUG-016 |
+- **FT-004 ORB / cross-origin image blocks** — caused by GCS bucket/CDN not returning `Cross-Origin-Resource-Policy: cross-origin`. Needs bucket CORS config update in GCP console; route the Unsplash/Pixabay topic assets through the existing `/api/v1/share/share-media` proxy if you can't relax the bucket CORS.
+- **FT-005 Pricing 6 vs 4 cards** — product decision, not a code bug. Update `final_test.md` PAY-EXISTS-01 to accept the admin-editable count.
+- **FT-006/FT-007 provider noise** — F5-TTS upstream is broken on PiAPI side; we already fall through to tts-1 and the user-visible flow works. Notification schema drift is a partner-side fix.
 
-Overall UAT status from source: unresolved. The checklist notes that most generation flows display failures and/or wait too long.
 
-## Bugs
+## BUG-FT-001 - Static `/info/*` pages render SPA 404
 
-### BUG-001 — Dashboard generated-work thumbnails do not display
+- Severity: Blocker
+- Related UAT: TOPIC-07
+- Steps: Open `/info/about`, `/info/contact`, `/info/terms`, `/info/privacy`, `/info/cookies`, `/info/refund`, `/info/affiliate`.
+- Expected: Each static info page renders.
+- Actual: Each route returns HTTP 200 at the CDN level but the Vue app renders H1 `404` / `Page Not Found`.
+- Notes: Root slug routes do work: `/about`, `/contact`, `/terms`, `/privacy`, `/cookies`, `/refunds`, `/affiliate`.
+- Evidence: `TEST/qa_runs/20260511T190150Z/browser_smoke_report.md`.
 
-- Severity: Critical / Blocker
-- Source row: Dashboard, result `fail`
-- Affected area: Dashboard / generated works list
-- Source wording: `生成作品縮圖無法顯示`
-- Observed issue: Generated work thumbnails are missing or fail to render in the dashboard.
-- Expected behavior: Every completed generation should show a visible thumbnail/preview in the dashboard so users can identify and reopen their work.
-- Reproduction steps:
-  1. Log in to VidGo.co.
-  2. Generate any supported asset.
-  3. Navigate to Dashboard / generated works.
-  4. Check whether the generated item has a thumbnail.
-- Impact: Users cannot visually identify previous results; this also makes download/history workflows unreliable.
-- Suggested fix direction: Verify stored thumbnail/result URLs, signed URL expiry, image proxy/CORS behavior, and dashboard fallback rendering for missing thumbnails.
+## BUG-FT-002 - `/tools/image-upscale` route is missing
 
-### BUG-002 — Product Dynamic Video exposes unwanted data/name text in top-left
+- Severity: Blocker
+- Related UAT: Section 3.7 Commercial HD Upscale
+- Steps: Open `/tools/image-upscale`.
+- Expected: Commercial HD Upscale tool renders.
+- Actual: Vue SPA renders H1 `404` / `Page Not Found`.
+- Notes: The deployed route is `/tools/upscale`; `frontend-vue/src/router/index.ts` does not define `/tools/image-upscale` or a redirect alias.
+- Evidence: `TEST/qa_runs/20260511T190150Z/browser_smoke_report.md`.
 
-- Severity: High
-- Source row: AI-02 Product Dynamic Video, result `pass` with note
-- Affected area: Product Dynamic Video result UI/output preview
-- Source wording: `左上角資料名稱需隱藏`
-- Observed issue: The top-left data/name label is visible and should be hidden.
-- Expected behavior: Generated video preview/output should not expose internal filenames, data labels, or debugging metadata.
-- Reproduction steps:
-  1. Open Product Dynamic Video.
-  2. Upload a product image.
-  3. Select a motion effect/template.
-  4. Generate a short video.
-  5. Inspect the top-left area of the preview/result.
-- Impact: Internal metadata may be visible to users and can make the output look unprofessional.
-- Suggested fix direction: Hide debug/name overlays in the frontend result card and confirm the provider output itself does not burn metadata into the video.
+## BUG-FT-003 - `/tools/short-video?mode=transform` does not open Video Transform
 
-### BUG-003 — AI Digital Human cannot accept custom script
+- Severity: Blocker
+- Related UAT: Section 3.10 Video Transform
+- Steps: Open `/tools/short-video?mode=transform`.
+- Expected: Video Transform workflow renders with upload video + transform style controls.
+- Actual: The page still renders `商品動態短影音（圖生影片）`, the Image-to-Video workflow.
+- Notes: `/tools/video-transform` renders the correct `影片風格轉換` page; `ShortVideo.vue` uses `route.name === 'video-transform'`, so the query-string mode is ignored.
+- Evidence: `TEST/qa_runs/20260511T190150Z/browser_smoke_report.md`.
 
-- Severity: High
-- Source row: AI 數位人, result `fail`
-- Affected area: AI Digital Human / Avatar script input
-- Source wording: `無法自行輸入腳本`
-- Observed issue: Users cannot freely input their own script for digital-human generation.
-- Expected behavior: The tool should allow custom script entry before generation, with validation for length/language.
-- Reproduction steps:
-  1. Open the AI Digital Human / Avatar tool.
-  2. Try to enter a custom speaking script.
-  3. Attempt generation using that script.
-- Impact: Core user workflow is blocked because users cannot create their own spokesperson content.
-- Suggested fix direction: Check whether the script textarea is disabled, overwritten by presets, not bound to request payload, or hidden by account state.
+## BUG-FT-004 - Topic/gallery media assets fail in browser with ORB/abort errors
 
-### BUG-004 — AI Digital Human result video is not shown on the same page
+- Severity: Major
+- Related UAT: TOPIC-03, TOPIC-04, TOPIC-05, GAL-03
+- Steps: Browser-smoke `/topics/product`, `/topics/video`, `/gallery`.
+- Expected: Product image grid, video/motion examples, and gallery tiles render all visible media.
+- Actual:
+	- `/topics/product`: one Unsplash image request failed with `net::ERR_BLOCKED_BY_ORB`.
+	- `/topics/video`: four Pixabay image requests failed with `net::ERR_BLOCKED_BY_ORB`.
+	- `/gallery`: multiple GCS image/video media requests failed with `net::ERR_BLOCKED_BY_ORB` or `net::ERR_ABORTED`.
+- Evidence: `TEST/qa_runs/20260511T190150Z/browser_smoke_report.md`.
 
-- Severity: High
-- Source row: AI 數位人, result `fail`
-- Affected area: AI Digital Human / Avatar result rendering
-- Source wording: `生成後的影片未顯示在同個頁面 要到控制板才看到`
-- Observed issue: After generation, the result video does not appear on the generation page; users must go to the dashboard/control panel to find it.
-- Expected behavior: The generated video should appear immediately on the same tool page with playback and download controls.
-- Reproduction steps:
-  1. Open AI Digital Human / Avatar.
-  2. Select/avatar upload input and provide script.
-  3. Generate video.
-  4. Observe whether the video appears in the tool result panel.
-- Impact: Users may think generation failed and repeat the action, wasting credits and time.
-- Suggested fix direction: Ensure the frontend maps backend `result_video_url` / `video_url` to the visible result state and does not only persist it in dashboard history.
+## BUG-FT-005 - Pricing page card count does not match final QA expectation
 
-### BUG-005 — AI Digital Human generated video contains unexpected text
+- Severity: Major / Spec mismatch
+- Related UAT: TOPIC-06, PAY-EXISTS-01
+- Steps: Open `/pricing`.
+- Expected: 4 plan cards render with localized text.
+- Actual: Browser smoke observed 6 subscription plan cards plus credit-pack cards.
+- Notes: This may be intentional after the new pricing-system work, but it conflicts with the current signed-off `final_test.md` expectation.
+- Evidence: `TEST/qa_runs/20260511T190150Z/browser_smoke_report.md`.
 
-- Severity: High
-- Source row: AI 數位人, result `fail`
-- Affected area: AI Digital Human / Avatar output quality
-- Source wording: `生成影片有莫名的文字`
-- Observed issue: Generated digital-human video includes unexpected/random text.
-- Expected behavior: Output video should only include intended avatar/video content and should not add stray text overlays unless explicitly requested.
-- Reproduction steps:
-  1. Generate an AI Digital Human video.
-  2. Play the generated result.
-  3. Inspect for unexpected text overlays or artifacts.
-- Impact: Output may be unusable for commercial publishing.
-- Suggested fix direction: Review provider prompt/request parameters, overlay/subtitle settings, template defaults, and post-processing layers.
+## BUG-FT-006 - AI Avatar generation logs provider ERROR before fallback
 
-### BUG-006 — AI Product Scene Studio output does not follow standard-plan/request changes
+- Severity: Major
+- Related UAT: REL-01, Section 3.6
+- Steps: Run admin AI Avatar generation (`avatar_serum_launch_zh`) through `TEST/admin_test_tools.py`.
+- Expected: Completed generation has no backend `ERROR` lines for the task.
+- Actual: Cloud Run logs include `ERROR:app.providers.base:[piapi] Response: zero-shot - FAILED: Server error '500 Internal Server Error' for url 'https://api.piapi.ai/api/v1/task'`, then `F5-TTS failed ... falling back to tts-1`.
+- User impact: The user-facing task may still complete through fallback, but REL-01 explicitly fails on backend `ERROR` lines for just-completed tasks.
+- Evidence: Cloud Run log sample captured during run; `TEST/qa_runs/20260511T190150Z/admin_test_tools.log` contains the corresponding Avatar case.
 
-- Severity: Critical / Blocker
-- Source row: AI-03 AI Product Scene Studio, result `Fail`
-- Affected area: AI Product Scene Studio / paid generation
-- Source wording: `標準版生成圖片無照需求變動`
-- Observed issue: Standard-plan generated images do not reflect the requested requirement changes.
-- Expected behavior: When a user changes the scene description/requirements, the generated product-scene image should reflect those changes according to the selected plan permissions.
-- Reproduction steps:
-  1. Open AI Product Scene Studio.
-  2. Upload a product image.
-  3. Choose or enter a scene description.
-  4. Change the requested requirements.
-  5. Generate using a standard-plan account.
-  6. Compare the output with the requested changes.
-- Impact: Paid users may receive outputs that ignore prompts or plan-specific capabilities.
-- Suggested fix direction: Verify prompt payload construction, plan/model routing, cache-key reuse, and whether old preset/demo results are being returned instead of fresh standard-plan generation.
+## BUG-FT-007 - Provider progress notification validation errors appear during generation
 
-### BUG-007 — Smart Background Removal fails on complex backgrounds
+- Severity: Minor / Reliability
+- Related UAT: REL-01
+- Steps: Run Product Scene generation through `TEST/admin_test_tools.py` and inspect Cloud Run logs.
+- Expected: No backend errors during completed generation.
+- Actual: Cloud Run logs showed Pydantic validation errors for `TaskStatusNotification.params.status` and `TaskStatusNotification.params.lastUpdatedAt` on `notifications/progress` payloads like `{'progress': 23.333333333333332, 'total': 100}`.
+- User impact: Product Scene still completed successfully, but backend logs are noisy and violate the no-error-lines reliability check.
 
-- Severity: High
-- Source row: AI-04 Smart Background Removal, result `Fail`
-- Affected area: Background Removal / segmentation quality
-- Source wording: `複雜背景會失效`
-- Observed issue: Background removal fails when the uploaded product image has a complex background.
-- Expected behavior: The tool should detect the product subject and remove complex backgrounds with acceptable edge quality.
-- Reproduction steps:
-  1. Open Smart Background Removal.
-  2. Upload a product image with a complex background.
-  3. Click background removal.
-  4. Inspect the resulting cutout.
-- Impact: Core background-removal promise is unreliable for real-world product photos.
-- Suggested fix direction: Improve segmentation model/settings, add fallback provider or matting refinement, and add test fixtures with complex backgrounds.
+## BUG-FT-008 - Admin account cannot access Dashboard My Works gallery
 
-### BUG-008 — Smart Background Removal black-background mode does not work
+- Severity: Blocker
+- Related UAT: Section 3 step E for every tool, GAL-01 through GAL-08
+- Steps: Log in as admin `vidgo168@gmail.com`, then open `/dashboard/my-works`.
+- Expected: Admin tester can view My Works so generated results can be verified in the dashboard gallery.
+- Actual: Browser navigates to `/admin/dashboard`; My Works never renders.
+- Notes: `frontend-vue/src/router/index.ts` intentionally redirects any authenticated admin from `/dashboard/*` to `admin-dashboard`, which conflicts with the final QA plan's admin-account dashboard validation.
+- Evidence: Browser smoke returned final URL `https://vidgo.co/admin/dashboard` for `/dashboard/my-works`.
 
-- Severity: High
-- Source row: AI-04 Smart Background Removal, result `Fail`
-- Affected area: Background Removal / replacement background options
-- Source wording: `黑底無效`
-- Observed issue: Selecting black background does not produce a valid black-background output.
-- Expected behavior: Black background mode should composite the cutout onto a black background and display/download the result.
-- Reproduction steps:
-  1. Open Smart Background Removal.
-  2. Upload a valid product image.
-  3. Select black background output.
-  4. Generate and inspect result.
-- Impact: Replacement-background feature is unreliable and may confuse users.
-- Suggested fix direction: Verify selected background mode state, request payload mapping, compositing code path, and result format/preview update.
+## BUG-FT-009 - AI Avatar generation returns production 504
 
-### BUG-009 — Smart Background Removal mobile cannot upload custom image
+- Severity: Blocker
+- Related UAT: Section 3.6 AI Digital Human / Avatar
+- Steps: Run admin Avatar generation cases `avatar_serum_launch_zh` and `avatar_bubble_tea_social_en` through `TEST/admin_test_tools.py`.
+- Expected: Backend completes and returns a JSON response with `result_video_url`; frontend renders result video on the same page.
+- Actual: `/api/v1/tools/avatar` returned HTTP 504 with `content-type: text/plain` at the browser/API proxy layer, after the backend logged a PiAPI TTS 500 fallback and Kling submission. Backend Cloud Run logs later show `POST /api/v1/tools/avatar` completing with `200 OK`, so the client appears to time out before the backend result is delivered.
+- User impact: Avatar generation does not complete for the admin QA case; no result URL is available for same-page preview, download, dashboard gallery, or sharing validation.
+- Evidence: `TEST/qa_runs/20260511T190150Z/admin_test_tools.log` shows both Avatar admin cases returned `[RES] 504 /api/v1/tools/avatar non-json content_type=text/plain`, then failed with `status=pending wait=900.1s`; Cloud Run logs show the backend request eventually completed with `200 OK`. The recording run reproduced this on `avatar_serum_launch_zh` with HTTP 504 text/plain and `status=pending wait=420.3s`, while `avatar_bubble_tea_social_en` completed in 60.0s.
 
-- Severity: High
-- Source row: AI-04 Smart Background Removal, result `Fail`
-- Affected area: Background Removal / mobile upload
-- Source wording: `手機版無法上傳自訂圖片`
-- Observed issue: On mobile, users cannot upload their own custom image.
-- Expected behavior: Mobile users should be able to select/capture/upload an image through the upload control.
-- Reproduction steps:
-  1. Open `/tools/background-removal` on a mobile viewport/device.
-  2. Tap upload/custom image control.
-  3. Select an image from the device.
-  4. Verify preview appears and generation can proceed.
-- Impact: Mobile workflow is blocked for a core free/basic tool.
-- Suggested fix direction: Inspect mobile layout overlays, hidden file input click forwarding, accepted MIME types, and `capture`/file input behavior.
+## BUG-FT-010 - Room Redesign button click does not start generation
 
-### BUG-010 — Background replacement should use file upload instead of URL paste
+- Severity: Blocker
+- Related UAT: Section 3.8 Room Redesign
+- Steps: Run admin Room Redesign cases `room_living_scandinavian` and `room_kitchen_modern_minimalist` through `TEST/admin_test_tools.py`.
+- Expected: Clicking `✨ 生成設計` sends a generation request and returns a completed design image.
+- Actual: The page loaded `/api/v1/interior/styles` and `/api/v1/interior/room-types`, accepted the upload/prep steps, and the script clicked `✨ 生成設計`, but no generation API request was observed for either case within 50 seconds.
+- User impact: Room Redesign cannot be validated end-to-end; users may click generate and see no completed design.
+- Evidence: `TEST/qa_runs/20260511T190150Z/admin_test_report.json` has both Room Redesign cases with `completion_status: no_api_observed`, `http_status: 0`, and no `result_url`. The recording report reproduced both failures with `status=no_api_observed` after 46.0s / 46.1s.
 
-- Severity: Medium
-- Source row: AI-04 Smart Background Removal, result `Fail`
-- Affected area: Background Removal / replacement background UX
-- Source wording: `更換背景不該為貼上網址 改為上傳 檔案`
-- Observed issue: Replacement background requires pasting a URL instead of uploading a file.
-- Expected behavior: Users should upload a replacement background image directly from local device.
-- Reproduction steps:
-  1. Open Smart Background Removal.
-  2. Choose replacement background mode.
-  3. Observe the input method.
-- Impact: URL-only input is too technical and blocks normal users from completing the workflow.
-- Suggested fix direction: Replace/augment URL input with an `input[type=file]` upload flow and reuse the existing image uploader component.
+## BUG-FT-011 - Two video UAT source assets return HTTP 403
 
-### BUG-011 — Sketch Instant Render is completely unavailable / API 404
+- Severity: Major / Test data blocker
+- Related UAT: Section 3.10 Video Transform, Section 3.11 Video Dubbing
+- Steps: Run admin cases `video_transform_social_watercolor` and `dubbing_brand_update_en_to_es` through `TEST/admin_test_tools.py`.
+- Expected: Each catalog source video downloads successfully so the browser can upload it and exercise the tool.
+- Actual: The script logged `remote asset download failed ... HTTP Error 403: Forbidden`; `video_transform_social_watercolor` could not find an enabled action button, and `dubbing_brand_update_en_to_es` clicked `原文翻譯` but observed no generation API.
+- User impact: These cases cannot validate production tool behavior until the catalog media URLs are replaced with accessible assets or mirrored into controlled storage.
+- Evidence: `TEST/qa_runs/20260511T190150Z/admin_test_tools.log`, `TEST/qa_runs/20260511T190150Z/admin_test_report.json`, and `TEST/qa_runs/20260511T190150Z/browser_record_run_report.json`.
 
-- Severity: Critical / Blocker
-- Source row: AI-05 Sketch Instant Render, result `Fail`
-- Affected area: Sketch Instant Render / Room Redesign render flow
-- Source wording: `全功能無法使用`, `API error:404`, `生成有誤`
-- Observed issue: The feature cannot be used; generation returns API 404 and output is incorrect.
-- Expected behavior: Sketch upload plus selected style should generate a realistic interior render matching the selected style.
-- Reproduction steps:
-  1. Open Sketch Instant Render.
-  2. Upload an interior sketch.
-  3. Select a style such as Scandinavian/Nordic.
-  4. Click generate.
-  5. Observe API response and output.
-- Impact: Entire feature appears broken and blocks the sketch-to-render workflow.
-- Suggested fix direction: Confirm route registration/deployment for sketch render endpoint, frontend endpoint path, Cloud Run deploy context, and backend handler mapping.
+## Current Script Status
 
-### BUG-012 — Image Translation has no effect
-
-- Severity: Critical / Blocker
-- Source row: 圖片翻譯, result `fail`
-- Affected area: Image Translator
-- Source wording: `無作用`
-- Observed issue: Image Translation does not perform the expected action.
-- Expected behavior: Uploaded image text should be detected, translated into the target language, and rendered back into the image layout.
-- Reproduction steps:
-  1. Open Image Translator.
-  2. Upload an image containing readable text.
-  3. Select source/target language.
-  4. Click translate/generate.
-  5. Inspect whether translated result appears.
-- Impact: Core feature is non-functional.
-- Suggested fix direction: Verify frontend submit handler, credit/permission gating, `/api/v1/tools/image-translate` route, provider result mapping, and result panel state update.
-
-### BUG-013 — Annual subscription checkout routes to monthly-price payment page
-
-- Severity: Critical / Blocker
-- Source row: PAY-02 Purchase subscription plan, result `Fail`
-- Affected area: Pricing / checkout / subscription payment
-- Source wording: `年付頁面點支付會到月付價格支付頁面`
-- Observed issue: Clicking payment from the annual plan page opens a monthly-price payment page.
-- Expected behavior: Annual plan checkout should preserve annual billing interval and annual price through the payment flow.
-- Reproduction steps:
-  1. Open Pricing.
-  2. Select annual billing.
-  3. Choose a paid annual plan.
-  4. Click payment/checkout.
-  5. Verify amount and billing interval on payment page.
-- Impact: Users may be charged/displayed the wrong price; this is a serious billing trust issue.
-- Suggested fix direction: Validate billing interval state in frontend, checkout payload, backend order creation, and ECPay/payment page parameters.
-
-### BUG-014 — User plan changes immediately after entering payment page and pressing back
-
-- Severity: Medium
-- Source row: PAY-03 Credit update confirmation, result `Fail`
-- Affected area: Subscription lifecycle / payment callback handling
-- Source wording: `點擊付款後到付款頁面回上一頁用戶方案會直接更改`
-- Observed issue: After clicking payment and navigating to the payment page, pressing browser Back causes the user plan to change immediately, before confirmed payment completion.
-- Expected behavior: Plan and credits should change only after verified successful payment callback/webhook.
-- Reproduction steps:
-  1. Select a paid plan.
-  2. Click payment and reach the payment provider page.
-  3. Use browser Back before completing payment.
-  4. Check the user's plan in dashboard/account state.
-- Impact: Users can receive plan changes without payment confirmation; revenue and entitlement logic are at risk.
-- Suggested fix direction: Ensure order creation uses pending status only; apply plan changes only after trusted payment confirmation and idempotent webhook validation.
-
-### BUG-015 — Cancel subscription immediately zeros account credits
-
-- Severity: Medium
-- Source row: PAY-04 Subscription management / cancel, result `Fail`
-- Affected area: Subscription cancellation / credits
-- Source wording: `取消後帳戶點數直接歸零`
-- Observed issue: User credits become zero immediately after cancellation.
-- Expected behavior: Cancellation should change subscription status to canceled/non-renewing, but current-period credits should remain usable until the end of the paid period unless policy says otherwise.
-- Reproduction steps:
-  1. Log in as a paid subscriber with remaining credits.
-  2. Open subscription management.
-  3. Cancel subscription.
-  4. Check remaining credits immediately after cancellation.
-- Impact: Paid users lose purchased/current-period value unexpectedly, causing support and refund risk.
-- Suggested fix direction: Separate subscription renewal state from credit balance; do not clear credits on cancel unless explicitly expiring at period end.
-
-### BUG-016 — Mobile Product Dynamic Video thumbnail does not display
-
-- Severity: Low / UI polish
-- Source row: UX-01 Responsive mobile design, result `Fail`
-- Affected area: Mobile UI / Product Dynamic Video thumbnail
-- Source wording: `動態短影音縮圖無顯示`
-- Observed issue: Product Dynamic Video thumbnail is missing on mobile.
-- Expected behavior: Thumbnail should render correctly in mobile layout with no overflow or hidden content.
-- Reproduction steps:
-  1. Open VidGo.co on a mobile browser/viewport.
-  2. Navigate to Product Dynamic Video or homepage tool card section.
-  3. Check whether the short-video thumbnail appears.
-- Impact: Mobile users see incomplete UI and may not understand the tool preview.
-- Suggested fix direction: Check responsive image sizing, lazy-loading, source URL, container height, and mobile breakpoints.
-
-### BUG-017 — Non-Chinese language settings still show English operation UI
-
-- Severity: Medium
-- Source row: UX-02 Multi-language switching, result `Fail`
-- Affected area: i18n / operation panels
-- Source wording: `中文以外語言操作區仍為英文介面`
-- Observed issue: When switching to non-Chinese languages, operation areas still display English UI.
-- Expected behavior: Main content, menus, buttons, and operation panels should switch to the selected language.
-- Reproduction steps:
-  1. Click the language selector.
-  2. Choose a non-Chinese language.
-  3. Navigate through homepage and tool operation panels.
-  4. Check labels, buttons, and form controls.
-- Impact: International users get inconsistent localization and may not understand tool operation steps.
-- Suggested fix direction: Audit locale message coverage for tool forms/components, especially operation panels, dropdowns, buttons, validation, and loading/result states.
-
-## Cross-Cutting Blocker From UAT Summary
-
-### BUG-018 — Most generation flows show failure and wait too long
-
-- Severity: Critical / Blocker
-- Source section: Overall Test Summary / Blockers-Critical Issues
-- Source wording: `大部分生成顯示失敗，等待時間過長`
-- Affected area: AI generation platform-wide
-- Observed issue: Most generation flows show failure states and excessive waiting time.
-- Expected behavior: Generation flows should show clear progress, complete within documented time budgets, and either return a usable result or a friendly actionable error with credit refund behavior.
-- Reproduction steps:
-  1. Run each core AI generation flow with standard test fixtures.
-  2. Record request time, loading state, final status, and result visibility.
-  3. Compare against expected time budgets per tool.
-- Impact: This is a release blocker because it affects multiple core paid/free product workflows.
-- Suggested fix direction: Add per-tool timeout/error telemetry, provider-status polling diagnostics, frontend stuck-state guards, credit-refund checks, and nightly E2E generation tests.
-
-## Enhancement Requests From UAT
-
-These were listed in the UAT summary as non-urgent but recommended improvements:
-
-1. Improve generation effect/model quality.
-   - Source wording: `生成效果模型優化`
-2. Replace/update demo example images.
-   - Source wording: `範例示範圖更改`
-3. Replace/update demo example videos.
-   - Source wording: `範例影片更改`
-
-## Passed Areas Mentioned In Checklist
-
-The source checklist marked these rows as passed and they are not included as bugs unless notes above indicate a related issue:
-
-- UA-01 New user registration
-- UA-02 User login
-- UA-03 Password reset
-- UA-04 Logout
-- AI-01 AI Model Try-On
-- AI-06 Commercial HD Upscale
-- AI-07 Result download and save
-- PAY-01 Pricing page browsing
-- UX-03 Error prompt for unsupported file format
-- UX-04 Page loading speed
+- `TEST/admin_test_tools.py` completed: 22 total, 16 passed, 6 failed. Passing tools: try-on, product-scene, background-removal, short-video, upscale, pattern-generate, image-translator, one video-transform case, and one video-dubbing case. Failing tools: 2/2 Avatar, 2/2 Room Redesign, 1/2 Video Transform, 1/2 Video Dubbing.
+- `TEST/browser_record_tools.py` completed: 33 total recordings, 11 default-example screenshots loaded, 17 generated outputs downloaded, 5 generated cases failed/no result. Successful generated tools: try-on 2/2, product-scene 2/2, background-removal 2/2, short-video 2/2, upscale 2/2, pattern-generate 2/2, image-translator 2/2, ai-avatar 1/2, video-transform 1/2, video-dubbing 1/2. Failed generated cases: `avatar_serum_launch_zh` pending after HTTP 504, both Room Redesign cases no API observed, `video_transform_social_watercolor` source asset 403/no action button, and `dubbing_brand_update_en_to_es` source asset 403/no generation API.
+- Fresh artifacts: `TEST/qa_runs/20260511T190150Z/browser_record_tools.log`, `TEST/qa_runs/20260511T190150Z/browser_record_run_report.json`, screenshots/videos under `TEST/screen_recording/`, and generated downloads under `TEST/screen_recording/result/`.

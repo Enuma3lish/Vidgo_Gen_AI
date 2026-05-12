@@ -11,7 +11,9 @@ Tools:
 6. AI Avatar - /tools/avatar (NEW: Photo-to-Avatar with lip sync)
 """
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
+import json as _json
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -142,6 +144,88 @@ async def _persist_provider_url(
     failure (14-day grace from CDN). See GCSStorageService.safe_persist_url."""
     user_id = str(user.id) if user is not None and getattr(user, "id", None) else None
     return await get_gcs_storage().safe_persist_url(url, media_type, user_id)
+
+
+def _stream_with_heartbeat(worker_coro_factory):
+    """Wrap a long-running JSON-returning coroutine in a chunked streaming
+    response that emits a single space every 25 seconds while the work runs.
+
+    Why: Cloud Run can keep a request alive for 1 hour, but every proxy in
+    between (Cloudflare free tier in particular at ~100 s, and GCLB backend
+    services at their configured idle timeout) will close an idle connection
+    long before our slowest providers (Kling Avatar with F5-TTS fallback,
+    Veo, Wan 14B) finish. As long as bytes flow regularly, the proxies hold
+    the connection open. The leading whitespace is parsed cleanly by
+    ``JSON.parse`` and by httpx's ``response.json()`` on the client side
+    because the JSON spec allows insignificant whitespace before the value.
+
+    Args:
+        worker_coro_factory: zero-arg callable that returns the coroutine to
+            run. We accept a factory rather than a coroutine so we can start
+            the worker inside the generator (avoids the "coroutine was never
+            awaited" warning when the client disconnects early).
+    """
+
+    async def _gen():
+        queue: asyncio.Queue = asyncio.Queue()
+        sentinel_done = object()
+
+        async def _heartbeat():
+            try:
+                while True:
+                    await asyncio.sleep(25)
+                    await queue.put(b" ")
+            except asyncio.CancelledError:
+                return
+
+        async def _worker():
+            try:
+                result = await worker_coro_factory()
+                payload = result if isinstance(result, (bytes, bytearray)) else _json.dumps(
+                    result, default=str
+                ).encode("utf-8")
+                await queue.put(payload)
+            except HTTPException as exc:
+                # Preserve validation/auth errors as JSON so the client gets
+                # the same shape it would have without streaming. We can't
+                # change the HTTP status mid-stream (headers are flushed
+                # with 200 the moment we start writing) so we encode the
+                # status into the JSON body and let the caller branch on
+                # ``success: false``.
+                detail = exc.detail if isinstance(exc.detail, (str, int, float, bool)) else _json.dumps(exc.detail)
+                await queue.put(
+                    _json.dumps(
+                        {"success": False, "message": str(detail), "status_code": exc.status_code}
+                    ).encode("utf-8")
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("[stream_with_heartbeat] worker failed: %s", exc)
+                await queue.put(
+                    _json.dumps(
+                        {"success": False, "message": GENERIC_TOOL_FAILURE_MESSAGE}
+                    ).encode("utf-8")
+                )
+            finally:
+                await queue.put(sentinel_done)
+
+        hb_task = asyncio.create_task(_heartbeat())
+        worker_task = asyncio.create_task(_worker())
+        try:
+            while True:
+                chunk = await queue.get()
+                if chunk is sentinel_done:
+                    break
+                yield chunk
+        finally:
+            hb_task.cancel()
+            if not worker_task.done():
+                worker_task.cancel()
+            try:
+                await hb_task
+            except Exception:  # noqa: BLE001
+                pass
+
+    return StreamingResponse(_gen(), media_type="application/json")
 
 
 async def _refine_generation_prompt(
@@ -320,7 +404,18 @@ async def _download_media_to_path(url: str, path: Path) -> None:
 
 
 async def _run_ffmpeg_voiceover_mux(video_url: str, audio_url: str, user_id: str) -> str:
-    """Replace the video's audio track with generated voiceover and persist the MP4."""
+    """Combine the dubbed voiceover with the source video while keeping the
+    original ambient audio under it. We never truncate the video to the
+    voiceover length, and we never drop the original audio entirely — both
+    of those produce results that feel broken to the end user.
+
+    Strategy:
+      v: keep original video stream verbatim.
+      a: amix(generated_voice @ ~1.0, original_audio @ ~0.15) padded to the
+         video duration so the dubbed track plays for the full clip.
+      If the source video has no audio track, we fall back to using the
+      voiceover only, padded to video length.
+    """
     with tempfile.TemporaryDirectory(prefix="vidgo-dubbing-") as tmp_dir:
         tmp_path = Path(tmp_dir)
         input_video = tmp_path / "input_video"
@@ -340,16 +435,75 @@ async def _run_ffmpeg_voiceover_mux(video_url: str, audio_url: str, user_id: str
             detail = (stderr or stdout).decode("utf-8", errors="replace")[-1200:]
             return process.returncode, detail
 
+        # Detect whether the source video has any audio track. ffprobe is
+        # already installed alongside ffmpeg in the runtime image.
+        async def has_audio_stream(path: Path) -> bool:
+            probe = await asyncio.create_subprocess_exec(
+                "ffprobe", "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=index",
+                "-of", "csv=p=0",
+                str(path),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await probe.communicate()
+            return bool((stdout or b"").strip())
+
+        source_has_audio = await has_audio_stream(input_video)
+
+        if source_has_audio:
+            # Mix: dub at 1.0, original at 0.15. apad ensures the dub track
+            # extends to the full video length; amix with first input as
+            # duration source keeps the mix locked to the dub-leading channel.
+            filter_complex = (
+                "[1:a]aresample=44100,apad[dub];"
+                "[0:a]aresample=44100,volume=0.15[bg];"
+                "[dub][bg]amix=inputs=2:duration=longest:dropout_transition=0,"
+                "atrim=duration=VIDDUR_PLACEHOLDER,asetpts=PTS-STARTPTS[aout]"
+            )
+        else:
+            filter_complex = (
+                "[1:a]aresample=44100,apad,"
+                "atrim=duration=VIDDUR_PLACEHOLDER,asetpts=PTS-STARTPTS[aout]"
+            )
+
+        # Get video duration so atrim can pin the audio to the visual length.
+        async def video_duration(path: Path) -> float:
+            probe = await asyncio.create_subprocess_exec(
+                "ffprobe", "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(path),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await probe.communicate()
+            try:
+                return float((stdout or b"0").decode("utf-8", errors="ignore").strip() or 0)
+            except ValueError:
+                return 0.0
+
+        vid_dur = await video_duration(input_video)
+        # Fall back: if probe failed, drop the atrim clause entirely.
+        if vid_dur > 0.1:
+            filter_complex = filter_complex.replace("VIDDUR_PLACEHOLDER", f"{vid_dur:.3f}")
+        else:
+            filter_complex = filter_complex.replace(
+                "atrim=duration=VIDDUR_PLACEHOLDER,asetpts=PTS-STARTPTS", ""
+            ).rstrip(",")
+
         copy_args = [
             "ffmpeg", "-y",
             "-i", str(input_video),
             "-i", str(input_audio),
+            "-filter_complex", filter_complex,
             "-map", "0:v:0",
-            "-map", "1:a:0",
+            "-map", "[aout]",
             "-c:v", "copy",
             "-c:a", "aac",
-            "-b:a", "160k",
-            "-shortest",
+            "-b:a", "192k",
             "-movflags", "+faststart",
             str(output_video),
         ]
@@ -360,15 +514,15 @@ async def _run_ffmpeg_voiceover_mux(video_url: str, audio_url: str, user_id: str
                 "ffmpeg", "-y",
                 "-i", str(input_video),
                 "-i", str(input_audio),
+                "-filter_complex", filter_complex,
                 "-map", "0:v:0",
-                "-map", "1:a:0",
+                "-map", "[aout]",
                 "-c:v", "libx264",
                 "-preset", "veryfast",
                 "-crf", "23",
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
-                "-b:a", "160k",
-                "-shortest",
+                "-b:a", "192k",
                 "-movflags", "+faststart",
                 str(output_video),
             ]
@@ -2506,7 +2660,7 @@ async def upscale_image(
 # Tool 6: AI Avatar
 # ============================================================================
 
-@router.post("/avatar", response_model=ToolResponse)
+@router.post("/avatar")
 async def generate_avatar_video(
     request: AvatarRequest,
     db: AsyncSession = Depends(get_db),
@@ -2515,6 +2669,12 @@ async def generate_avatar_video(
     """
     Generate AI Avatar video from photo with lip sync.
 
+    Returns ``application/json`` streamed with a 25-second keep-alive
+    heartbeat so intermediate proxies (Cloudflare, GCLB, Cloud Run gateway)
+    do not drop the connection while PiAPI Kling Avatar (with F5-TTS or
+    tts-1 fallback) is still running upstream — that path can take up to
+    10 minutes for longer scripts.
+
     USER TIER LOGIC:
     - Demo users: Return pre-generated result from Material DB
     - Subscribers: Real-time avatar generation + save to UserGeneration
@@ -2522,6 +2682,22 @@ async def generate_avatar_video(
     Supported languages: 'en' (English), 'zh-TW' (Traditional Chinese)
     Credits: 30 per generation
     """
+
+    async def _do_generate_avatar() -> Dict[str, Any]:
+        return (await _generate_avatar_inner(request, db, current_user)).model_dump()
+
+    return _stream_with_heartbeat(_do_generate_avatar)
+
+
+async def _generate_avatar_inner(
+    request: "AvatarRequest",
+    db: AsyncSession,
+    current_user,
+) -> ToolResponse:
+    """Actual avatar generation logic — split out from the route handler so
+    we can wrap it in a chunked streaming response with periodic keep-alive
+    bytes (see ``_stream_with_heartbeat``). All return paths produce a
+    ``ToolResponse`` so the wrapper can serialise the final JSON payload."""
     from app.models.material import MaterialSource, MaterialStatus
 
     validate_media_url_or_raise(str(request.image_url), "image", "AI avatar headshot")
@@ -2880,9 +3056,8 @@ async def image_translate(
     if not allowed:
         return ToolResponse(success=False, message=err)
 
-    from app.services.tier_config import get_credit_cost, get_user_tier
+    from app.services.tier_config import get_credit_cost
 
-    tier = get_user_tier(current_user)
     cost = get_credit_cost("i2i", current_user)
     ok, err = await _check_and_deduct_credits(db, current_user, cost, "image_translation")
     if not ok:
@@ -2891,27 +3066,21 @@ async def image_translate(
     try:
         router_instance = get_provider_router()
         original_translation_prompt = prompt
-        prompt, prompt_refinement = await _refine_generation_prompt(
-            prompt,
-            "image_translation",
-            "image translation edit prompt",
-            user_prompt=bool(request.instructions),
-            context={
-                "target_language": request.target_language,
-                "source_language": request.source_language,
-                "has_user_instructions": bool(request.instructions),
-            },
-        )
-        result = await router_instance.route(
-            TaskType.I2I,
+        # Image translation needs in-place text replacement. The generic I2I
+        # router (Flux derive_image / Imagen edit) produces a creative re-paint
+        # where text becomes decorative gibberish. Call Gemini 2.5 Flash Image
+        # directly — it's the only model in our stack that reads source text
+        # and re-renders the same image with translated text in the same
+        # layout. Skip prompt refinement: the literal prompt is already tuned.
+        result = await router_instance.vertex_ai.translate_image_text(
             {
                 "image_url": _resolve_public_url(str(request.image_url)),
-                "prompt": prompt,
-                "strength": 0.45,
-                "negative_prompt": "distorted text, gibberish, extra text, changed logo, changed product, blurry text",
-            },
-            user_tier=tier,
+                "target_language": request.target_language,
+                "source_language": request.source_language,
+                "instructions": request.instructions,
+            }
         )
+        prompt_refinement = {"changed": False, "reason": "direct_gemini_image_edit"}
 
         if not result.get("success"):
             await _refund_credits(db, current_user, cost, "image_translation")

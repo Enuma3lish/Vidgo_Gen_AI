@@ -39,7 +39,11 @@ class PiAPIProvider(BaseProvider):
             logger.warning("PIAPI_KEY not set in environment")
 
         self.client = httpx.AsyncClient(
-            timeout=300.0,  # 5 minutes for video generation
+            # 10 minutes per individual HTTP call. Kling Avatar polling can
+            # idle for several minutes between status transitions and the
+            # default 5 minutes was tripping on long jobs even when the task
+            # was still healthy server-side.
+            timeout=600.0,
             headers={
                 "X-API-Key": self.api_key,
                 "Content-Type": "application/json"

@@ -1,0 +1,416 @@
+{
+  "schema_version": "2026-05-07-tool-folders",
+  "purpose": "Precise website-related input cases for VidGo homepage and public tool QA.",
+  "source_checked": {
+    "url": "https://vidgo.co/",
+    "date": "2026-05-07",
+    "observed_homepage_topics": [
+      "AI try-on",
+      "product short video",
+      "product avatar spokesperson",
+      "product scene studio",
+      "background removal",
+      "room redesign",
+      "HD image upscale",
+      "video transform",
+      "pattern design",
+      "image translation",
+      "video dubbing"
+    ]
+  },
+  "quality_rules": [
+    "Try-on garment inputs must contain clothing only, with no person in the before/input image.",
+    "Use product packshots for product scene, background removal, upscale, and short video unless intentionally testing lifestyle inputs.",
+    "Use square or near-square head-and-shoulders portraits for avatar inputs.",
+    "Room redesign prompts should preserve core layout, window position, and room proportions unless testing free transform.",
+    "Pattern prompts should include seamless/tileable constraints and avoid text/logo unless explicitly testing text handling.",
+    "Translation inputs should contain readable source text and a brand-safe instruction style."
+  ],
+  "local_assets": {
+    "garment_coat_only": "assets/try-on/garment-coat-only.png",
+    "garment_dress_only": "assets/try-on/garment-dress-only.png",
+    "garment_tshirt_only": "assets/try-on/garment-tshirt-only.png",
+    "model_female_1": "assets/try-on/model-female-1.png",
+    "model_female_2": "assets/try-on/model-female-2.png",
+    "model_male_1": "assets/try-on/model-male-1.png",
+    "product_bubble_tea": "assets/product-scene/product-bubble-tea-packshot.png",
+    "product_skincare_serum": "assets/product-scene/product-skincare-serum-packshot.png",
+    "product_coffee_beans": "assets/product-scene/product-coffee-beans-packshot.png",
+    "avatar_female_headshot": "assets/avatar/avatar-female-headshot.png",
+    "avatar_male_headshot": "assets/avatar/avatar-male-headshot.png",
+    "room_living_2d_sketch": "assets/room-redesign/room-living-2d-sketch.png",
+    "room_kitchen_2d_sketch": "assets/room-redesign/room-kitchen-2d-sketch.png",
+    "room_bedroom_2d_sketch": "assets/room-redesign/room-bedroom-2d-sketch.png",
+    "room_floor_plan_2d": "assets/room-redesign/room-floor-plan-2d.png",
+    "pattern_tea_floral": "assets/pattern-generate/pattern-tea-packaging-floral.png",
+    "pattern_skincare_tissue": "assets/pattern-generate/pattern-skincare-tissue.png",
+    "pattern_tech_geometric": "assets/pattern-generate/pattern-tech-geometric.png",
+    "text_sale_card": "assets/image-translator/text-sale-card-en.png",
+    "short_video_storyboard": "assets/short-video/short-video-storyboard-product.png"
+  },
+  "remote_test_assets": {
+    "product_watch": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=900&fit=crop",
+    "product_skincare": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=900&fit=crop",
+    "garment_flatlay": "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=900&fit=crop",
+    "room_living": "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1000&fit=crop",
+    "room_kitchen": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1000&fit=crop",
+    "avatar_portrait": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/avatars/female-1.png",
+    "sample_video_flower": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    "sample_video_campaign": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_2MB.mp4",
+    "image_translation_sale_card": "https://placehold.co/900x560/ffffff/171717/png?text=Summer%20Sale%2050%25%20Off"
+  },
+  "tools": [
+    {
+      "tool_type": "try_on",
+      "route": "/tools/try-on",
+      "api_endpoint": "/api/v1/tools/try-on",
+      "homepage_label_zh": "AI 模特換裝",
+      "input_contract": "Garment-only image plus model_id. The input/before image must not contain a person.",
+      "cases": [
+        {
+          "case_id": "try_on_wool_coat_female2",
+          "source_asset": "assets/try-on/garment-coat-only.png",
+          "remote_asset": "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=900&fit=crop",
+          "params": {
+            "model_id": "female-2",
+            "angle": "front"
+          },
+          "prompt_en": "Camel wool coat only, front-facing ecommerce garment photo, no person, clean white background, clear sleeves and collar.",
+          "prompt_zh": "駝色羊毛大衣單品，正面電商服裝照，不含人物，乾淨白底，袖子與領口清楚。",
+          "expected_visual": "Before is a coat alone; after is the selected model wearing the coat.",
+          "model_asset": "assets/try-on/model-female-2.png"
+        },
+        {
+          "case_id": "try_on_denim_dress_female1",
+          "source_asset": "assets/try-on/garment-dress-only.png",
+          "remote_asset": "https://images.unsplash.com/photo-1594938298603-c8148c4b4357?w=900&fit=crop",
+          "params": {
+            "model_id": "female-1",
+            "angle": "front"
+          },
+          "prompt_en": "Blue denim dress only, flat ecommerce product image, no mannequin, no person, straight front view, simple studio background.",
+          "prompt_zh": "藍色丹寧洋裝單品，平面電商商品圖，無模特、無人體，正面視角，簡單棚拍背景。",
+          "expected_visual": "Before is a dress only; after is the model wearing the dress.",
+          "model_asset": "assets/try-on/model-female-1.png"
+        }
+      ]
+    },
+    {
+      "tool_type": "product_scene",
+      "route": "/tools/product-scene",
+      "api_endpoint": "/api/v1/tools/product-scene",
+      "homepage_label_zh": "AI 商品情境攝影棚",
+      "input_contract": "Single product image plus scene_type or custom_prompt.",
+      "cases": [
+        {
+          "case_id": "product_scene_bubble_tea_lunar_new_year",
+          "source_asset": "assets/product-scene/product-bubble-tea-packshot.png",
+          "params": {
+            "scene_type": "holiday",
+            "product_id": "product-1"
+          },
+          "prompt_en": "Premium bubble tea product photography for Lunar New Year gifting, red lanterns, gold foil accents, plum blossoms, warm tabletop light, no extra text.",
+          "prompt_zh": "農曆新年送禮情境的珍珠奶茶商品攝影，紅燈籠、金箔點綴、梅花枝、溫暖桌面光，不要額外文字。",
+          "expected_visual": "The drink remains the hero product and the holiday props support the campaign."
+        },
+        {
+          "case_id": "product_scene_serum_elegant",
+          "source_asset": "assets/product-scene/product-skincare-serum-packshot.png",
+          "remote_asset": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=900&fit=crop",
+          "params": {
+            "scene_type": "elegant",
+            "product_id": "product-4"
+          },
+          "prompt_en": "Luxury skincare serum on translucent glass and soft cream fabric, diffused daylight, subtle water droplets, premium ecommerce hero image, no logo changes.",
+          "prompt_zh": "高級保養精華液置於透明玻璃與柔和奶油色布料上，漫射日光、細緻水珠，高級電商主圖，不改動 Logo。",
+          "expected_visual": "A refined product hero with stable bottle shape and readable label area."
+        }
+      ]
+    },
+    {
+      "tool_type": "background_removal",
+      "route": "/tools/background-removal",
+      "api_endpoint": "/api/v1/tools/remove-bg",
+      "homepage_label_zh": "智能去背",
+      "input_contract": "Product photo with a removable background; output format png.",
+      "cases": [
+        {
+          "case_id": "bg_remove_serum_cutout",
+          "source_asset": "assets/product-scene/product-skincare-serum-packshot.png",
+          "params": {
+            "output_format": "png"
+          },
+          "prompt_en": "Remove the tabletop and background from the skincare bottle, keep the cap, label edge, transparent glass edge, and soft shadow clean.",
+          "prompt_zh": "移除保養瓶的桌面與背景，保留瓶蓋、標籤邊緣、透明玻璃邊與乾淨陰影。",
+          "expected_visual": "Transparent or white-background ecommerce cutout with no missing bottle edges."
+        },
+        {
+          "case_id": "bg_remove_bubble_tea_cutout",
+          "source_asset": "assets/product-scene/product-bubble-tea-packshot.png",
+          "params": {
+            "output_format": "png"
+          },
+          "prompt_en": "Cut out the bubble tea cup cleanly, preserve straw, lid rim, printed label area, cup shadow, and visible tapioca pearls.",
+          "prompt_zh": "乾淨去背珍珠奶茶杯，保留吸管、杯蓋邊緣、印刷標籤區、杯身陰影與珍珠顆粒。",
+          "expected_visual": "Cup remains intact with no jagged straw or lid edges."
+        }
+      ]
+    },
+    {
+      "tool_type": "short_video",
+      "route": "/tools/short-video",
+      "api_endpoint": "/api/v1/tools/short-video",
+      "homepage_label_zh": "商品動態短影音",
+      "input_contract": "Image input plus motion_strength/model_id/style. Output should be video.",
+      "cases": [
+        {
+          "case_id": "short_video_serum_rotate",
+          "source_asset": "assets/product-scene/product-skincare-serum-packshot.png",
+          "params": {
+            "model_id": "pixverse_v4.5",
+            "motion_strength": 7,
+            "style": "rotate"
+          },
+          "prompt_en": "Five-second premium skincare ad, slow rotating bottle, glossy highlights moving across glass, clean studio background, no text overlay, no label distortion.",
+          "prompt_zh": "5 秒高級保養品廣告，瓶身慢速旋轉，玻璃高光滑過，乾淨棚拍背景，無文字疊加，不扭曲標籤。",
+          "expected_visual": "Subject stays centered while highlights/motion add product-ad energy."
+        },
+        {
+          "case_id": "short_video_bubble_tea_push_in",
+          "source_asset": "assets/short-video/short-video-storyboard-product.png",
+          "params": {
+            "model_id": "pixverse_v4.5",
+            "motion_strength": 5,
+            "style": "zoom-in"
+          },
+          "prompt_en": "Cinematic push-in on bubble tea, ice glints, tapioca pearls gently moving, warm cafe light, social media product reel, no new text.",
+          "prompt_zh": "電影感推近珍珠奶茶，冰塊反光、珍珠輕微流動、溫暖咖啡店光線，社群商品短影音，不新增文字。",
+          "expected_visual": "A smooth product reel with controlled motion and no warped cup."
+        }
+      ]
+    },
+    {
+      "tool_type": "ai_avatar",
+      "route": "/tools/avatar",
+      "api_endpoint": "/api/v1/tools/avatar",
+      "homepage_label_zh": "產品代言人",
+      "input_contract": "Head-and-shoulders avatar/portrait plus script and language.",
+      "cases": [
+        {
+          "case_id": "avatar_serum_launch_zh",
+          "source_asset": "assets/avatar/avatar-female-headshot.png",
+          "remote_asset": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/avatars/female-1.png",
+          "params": {
+            "language": "zh-TW",
+            "avatar_id": "female-1"
+          },
+          "script_zh": "這瓶保濕精華專為台灣悶熱天氣設計，質地清爽、不黏膩。早晚各一次，讓肌膚維持穩定透亮。今天下單享免運，30 天不滿意可退。",
+          "script_en": "This hydrating serum is designed for humid weather. It feels light, never sticky, and keeps skin calm and bright with morning and night use. Order today for free shipping and a 30-day satisfaction guarantee.",
+          "expected_visual": "Centered talking-head spokesperson with natural lip sync and product-sales tone."
+        },
+        {
+          "case_id": "avatar_bubble_tea_social_en",
+          "source_asset": "assets/avatar/avatar-female-headshot.png",
+          "remote_asset": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/avatars/male-1.png",
+          "params": {
+            "language": "en",
+            "avatar_id": "male-1"
+          },
+          "script_en": "Stop scrolling. Our brown sugar bubble tea is made fresh every morning, with chewy pearls and roasted caramel flavor. Buy two cups today and get the second one half off.",
+          "script_zh": "先別滑走。我們的黑糖珍珠奶茶每天早上現煮，珍珠 Q 彈、焦糖香濃。今天買兩杯，第二杯半價。",
+          "expected_visual": "Short social-sales pitch suitable for product spokesperson demos."
+        }
+      ]
+    },
+    {
+      "tool_type": "room_redesign",
+      "route": "/tools/room-redesign",
+      "api_endpoint": "/api/v1/tools/room-redesign",
+      "homepage_label_zh": "室內設計渲染",
+      "input_contract": "Room photo/sketch/floor plan plus room_type and style; preserve structure for redesign.",
+      "cases": [
+        {
+          "case_id": "room_living_scandinavian",
+          "source_asset": "assets/room-redesign/room-living-2d-sketch.png",
+          "remote_asset": "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1000&fit=crop",
+          "params": {
+            "room_type": "living_room",
+            "style": "scandinavian",
+            "preserve_structure": true
+          },
+          "prompt_en": "Redesign this living room in Scandinavian style while preserving window placement and wall geometry; natural wood, light grey sofa, soft white curtains, daylight, realistic staging.",
+          "prompt_zh": "將客廳改造成北歐風，保留窗戶位置與牆面幾何；自然木質、淺灰沙發、柔白窗簾、日光、真實家具佈置。",
+          "expected_visual": "Same room layout with new Scandinavian materials and furniture."
+        },
+        {
+          "case_id": "room_kitchen_modern_minimalist",
+          "source_asset": "assets/room-redesign/room-kitchen-2d-sketch.png",
+          "remote_asset": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1000&fit=crop",
+          "params": {
+            "room_type": "kitchen",
+            "style": "modern_minimalist",
+            "preserve_structure": true
+          },
+          "prompt_en": "Modern minimalist kitchen redesign, keep existing cabinet wall and island position, matte white cabinets, slim black handles, warm under-cabinet lighting, uncluttered countertop.",
+          "prompt_zh": "現代極簡廚房改造，保留原有櫃體牆與中島位置，霧面白櫃、細黑把手、溫暖櫃下燈、檯面乾淨不雜亂。",
+          "expected_visual": "Proposal-ready kitchen render with preserved layout."
+        }
+      ]
+    },
+    {
+      "tool_type": "upscale",
+      "route": "/tools/upscale",
+      "api_endpoint": "/api/v1/tools/upscale",
+      "homepage_label_zh": "商用無損放大",
+      "input_contract": "Image URL plus scale 2 or 4.",
+      "cases": [
+        {
+          "case_id": "upscale_product_listing_2x",
+          "source_asset": "assets/product-scene/product-skincare-serum-packshot.png",
+          "params": {
+            "scale": 2
+          },
+          "prompt_en": "Upscale product listing image while preserving label edges, bottle reflections, and natural shadow; no hallucinated extra text.",
+          "prompt_zh": "放大商品上架圖，保留標籤邊緣、瓶身反射與自然陰影，不生成錯誤文字。",
+          "expected_visual": "Cleaner, larger ecommerce image with stable product details."
+        },
+        {
+          "case_id": "upscale_room_listing_4x",
+          "source_asset": "assets/room-redesign/room-living-2d-sketch.png",
+          "params": {
+            "scale": 4
+          },
+          "prompt_en": "Upscale real-estate interior listing image; preserve perspective, straight walls, window edges, and furniture outlines.",
+          "prompt_zh": "放大房仲室內刊登圖，保留透視、直線牆面、窗框邊緣與家具輪廓。",
+          "expected_visual": "Higher-resolution listing image without warped architecture."
+        }
+      ]
+    },
+    {
+      "tool_type": "pattern_generate",
+      "route": "/tools/pattern-generate",
+      "api_endpoint": "/api/v1/generate/pattern/generate",
+      "homepage_label_zh": "花紋設計",
+      "input_contract": "Text prompt plus style; usually 1:1 seamless output.",
+      "cases": [
+        {
+          "case_id": "pattern_tea_packaging_floral",
+          "params": {
+            "style": "floral",
+            "width": 1024,
+            "height": 1024
+          },
+          "prompt_en": "Seamless premium tea packaging pattern, Alishan tea leaves, misty mountain contour lines, jade green and warm cream palette, flat vector, clean repeat, no text, no logo.",
+          "prompt_zh": "高山茶包裝用無縫圖案，阿里山茶葉、薄霧山線，翡翠綠與暖奶油配色，扁平向量，乾淨重複，不要文字，不要 Logo。",
+          "expected_visual": "Tileable packaging pattern with no visible seams or text artifacts."
+        },
+        {
+          "case_id": "pattern_skincare_mockup_minimal",
+          "params": {
+            "style": "mockup",
+            "width": 1024,
+            "height": 1024
+          },
+          "prompt_en": "Boutique skincare tissue-paper pattern, white camellia petals, soft glass droplets, airy spacing, pearl white and sage green, luxury minimal seamless repeat, no logo.",
+          "prompt_zh": "精品保養品牌包裝襯紙圖案，白山茶花瓣、柔和玻璃水滴、留白充足，珍珠白與鼠尾草綠，高級極簡無縫重複，不要 Logo。",
+          "expected_visual": "Brand-safe repeat suitable for packaging tissue or backdrop."
+        }
+      ]
+    },
+    {
+      "tool_type": "image_translator",
+      "route": "/tools/image-translator",
+      "api_endpoint": "/api/v1/tools/image-translate",
+      "homepage_label_zh": "圖片翻譯",
+      "input_contract": "Image with visible text plus source/target language and optional instructions.",
+      "cases": [
+        {
+          "case_id": "translate_sale_card_en_to_zh",
+          "source_asset": "assets/image-translator/text-sale-card-en.png",
+          "remote_asset": "https://placehold.co/900x560/ffffff/171717/png?text=Summer%20Sale%2050%25%20Off",
+          "params": {
+            "source_language": "English",
+            "target_language": "Traditional Chinese"
+          },
+          "instructions_en": "Keep the brand/product name unchanged. Translate promotion copy into natural Taiwan ecommerce wording. Preserve layout and discount number.",
+          "instructions_zh": "保留品牌與商品名稱，將促銷文案翻成自然台灣電商語氣，維持版面與折扣數字。",
+          "expected_visual": "Same poster layout with readable Traditional Chinese promotion copy."
+        },
+        {
+          "case_id": "translate_menu_board_en_to_ja",
+          "remote_asset": "https://placehold.co/900x560/f8fafc/111827/png?text=New%20Coffee%20Menu%20Today",
+          "params": {
+            "source_language": "English",
+            "target_language": "Japanese"
+          },
+          "instructions_en": "Use concise cafe signage wording; preserve product names if they are brand names; do not add extra decorative text.",
+          "instructions_zh": "使用簡潔咖啡店看板語氣；若是品牌名稱請保留；不要新增裝飾文字。",
+          "expected_visual": "Readable Japanese text in the original sign layout."
+        }
+      ]
+    },
+    {
+      "tool_type": "video_transform",
+      "route": "/tools/video-transform",
+      "api_endpoint": "/api/v1/tools/video-transform",
+      "homepage_label_zh": "影片變換",
+      "input_contract": "Uploaded video URL plus style/prompt.",
+      "cases": [
+        {
+          "case_id": "video_transform_product_cinematic",
+          "remote_asset": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+          "params": {
+            "style": "cinematic"
+          },
+          "prompt_en": "Cinematic premium product-ad color grade, warm highlights, shallow-depth look, smooth commercial lighting, preserve original subject and motion, no text overlay.",
+          "prompt_zh": "電影感高級商品廣告調色，溫暖高光、淺景深觀感、順滑商業燈光，保留原主體與動作，不加文字。",
+          "expected_visual": "Source video becomes more polished without changing core content."
+        },
+        {
+          "case_id": "video_transform_social_watercolor",
+          "remote_asset": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_2MB.mp4",
+          "params": {
+            "style": "watercolor"
+          },
+          "prompt_en": "Soft watercolor social clip style, clean edges, gentle paper texture, stable faces and product details, natural camera movement.",
+          "prompt_zh": "柔和水彩社群短片風格，邊緣乾淨、淡紙張紋理，人物與商品細節穩定，自然鏡頭運動。",
+          "expected_visual": "Stylized but stable video transform."
+        }
+      ]
+    },
+    {
+      "tool_type": "video_dubbing",
+      "route": "/tools/video-dubbing",
+      "api_endpoint": "/api/v1/tools/video-dubbing",
+      "homepage_label_zh": "影片翻譯配音",
+      "input_contract": "Video URL plus source/target language and transcript/translated script.",
+      "cases": [
+        {
+          "case_id": "dubbing_product_launch_en_to_zh",
+          "remote_asset": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+          "params": {
+            "source_language": "English",
+            "target_language": "Traditional Chinese"
+          },
+          "source_script_en": "Meet our new seasonal bouquet. Fresh color, soft texture, and a natural look for every special moment.",
+          "translated_script_zh": "認識我們全新的季節花束。清新的色彩、柔和的質感，為每個特別時刻帶來自然優雅的氛圍。",
+          "expected_visual": "Dubbed product launch clip with Traditional Chinese voiceover."
+        },
+        {
+          "case_id": "dubbing_brand_update_en_to_es",
+          "remote_asset": "https://test-videos.co.uk/vids/sintel/mp4/h264/360/Sintel_360_10s_1MB.mp4",
+          "params": {
+            "source_language": "English",
+            "target_language": "Spanish"
+          },
+          "source_script_en": "A new update is here. Faster setup, cleaner visuals, and a more polished customer experience from start to finish.",
+          "translated_script_es": "La nueva version ya esta aqui. Configuracion mas rapida, imagenes mas limpias y una experiencia de cliente mas cuidada de principio a fin.",
+          "expected_visual": "Spanish dubbed social/brand update with synced pacing."
+        }
+      ]
+    }
+  ],
+  "regenerated_at": "2026-05-07T15:30:00Z",
+  "regenerated_via": "Vertex AI Imagen via /api/v1/admin/generate-demo, prompts from TEST/Test_material/prompts/*.md",
+  "folder_layout": "assets/<tool-name>/<filename>.png"
+}

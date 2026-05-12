@@ -22,7 +22,12 @@ const isZh = computed(() => locale.value.startsWith('zh'))
 // 5-language inline picker — fixes BUG-017 (ja/ko/es users were falling
 // into the English branch of the legacy `isZh ? zh : en` ternary).
 const { L } = useLocalized()
-const isVideoTransformMode = computed(() => route.name === 'video-transform')
+// `route.name === 'video-transform'` covers /tools/video-transform. The QA
+// plan also expects /tools/short-video?mode=transform to land on the same
+// workflow, so we honor the query-string variant too.
+const isVideoTransformMode = computed(() =>
+  route.name === 'video-transform' || String(route.query.mode || '') === 'transform'
+)
 const pageTitle = computed(() => isVideoTransformMode.value
   ? L('影片風格轉換', 'Video Style Transform', '動画スタイル変換', '비디오 스타일 변환', 'Transformación de estilo de video')
   : t('tools.shortVideo.name'))

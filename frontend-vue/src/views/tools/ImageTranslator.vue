@@ -163,7 +163,7 @@ async function handleTranslate() {
           <!-- Upload (subscribers only) -->
           <div v-if="!isDemoUser" class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-3" style="color: #e8e8f0;">{{ L('或上傳自己的圖片', 'Or upload your own image', 'または自分の画像をアップロード', '또는 본인 이미지 업로드', 'O sube tu propia imagen') }}</label>
-            <ImageUploader v-model="uploadedImage" />
+            <ImageUploader tool-type="image_translator" v-model="uploadedImage" />
           </div>
 
           <div v-if="uploadedImage" class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">

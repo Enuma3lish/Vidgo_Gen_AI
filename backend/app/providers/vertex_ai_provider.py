@@ -496,10 +496,7 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         """
         self._log_request("translate_image_text", params)
         try:
-            client = self._get_genai_image_client()
             text_client = self._get_gemini_text_client()
-            from google.genai import types
-
             http = self._get_http_client()
             img_resp = await http.get(params["image_url"])
             if img_resp.status_code != 200:
@@ -508,6 +505,60 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             if mime not in {"image/jpeg", "image/png", "image/webp"}:
                 mime = "image/jpeg"
 
+            target_language = params.get("target_language") or "English"
+            source_language = params.get("source_language")
+
+            # ── Deterministic CJK-safe path ────────────────────────────────
+            # Gemini 2.5 Flash Image renders CJK glyphs as visual shape-
+            # matched decoration (not real characters) even when handed the
+            # exact target string. We side-step that by extracting OCR +
+            # bounding boxes via the text model, then rendering with PIL +
+            # NotoSans CJK so every glyph is literally drawn correctly.
+            from app.services.image_translator_service import translate_image_pil
+
+            image_bytes = await translate_image_pil(
+                text_client=text_client,
+                text_model=self.gemini_model,
+                img_bytes=img_resp.content,
+                mime=mime,
+                target_language=target_language,
+                source_language=source_language,
+            )
+
+            from app.services.gcs_storage_service import get_gcs_storage
+
+            gcs = get_gcs_storage()
+            filename = f"translated_{uuid.uuid4().hex[:12]}.png"
+            if gcs.enabled:
+                result_url = gcs.upload_public(
+                    data=image_bytes,
+                    blob_name=f"generated/image/{filename}",
+                    content_type="image/png",
+                )
+            else:
+                output_dir = Path("/app/static/generated")
+                output_dir.mkdir(parents=True, exist_ok=True)
+                (output_dir / filename).write_bytes(image_bytes)
+                result_url = f"/static/generated/{filename}"
+
+            self._log_response("translate_image_text", True)
+            return {"success": True, "output": {"image_url": result_url}}
+        except Exception as e:
+            logger.error(f"[VertexAI] translate_image_text failed: {e}")
+            self._log_response("translate_image_text", False, str(e))
+            return {"success": False, "error": str(e)}
+
+    async def _legacy_translate_image_text_unused(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Original two-pass generative path. Kept for diff history only —
+        not wired into the router. Remove once the PIL path has shipped a
+        full week without regression."""
+        try:
+            from google.genai import types
+            client = self._get_genai_image_client()
+            text_client = self._get_gemini_text_client()
+            http = self._get_http_client()
+            img_resp = await http.get(params["image_url"])
+            mime = img_resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
             target_language = params.get("target_language") or "English"
             source_language = params.get("source_language")
             extra = (params.get("instructions") or "").strip()

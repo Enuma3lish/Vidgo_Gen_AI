@@ -195,10 +195,15 @@ interface DemoRoom {
   nameZh: string
 }
 
+// Static fallback room images — the previous kitchen photo
+// (1556909114-f6e7ad7d3136) had people working in the foreground and the
+// AI was echoing them into the redesign output. Swapped to a well-known
+// empty modern kitchen Unsplash photo. Other rooms retained — user only
+// flagged the kitchen and the others have rendered cleanly in past runs.
 const STATIC_ROOM_FALLBACKS: Record<string, string> = {
   living_room: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800',
   bedroom: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800',
-  kitchen: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800',
+  kitchen: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=800',
   bathroom: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800',
   dining_room: 'https://images.unsplash.com/photo-1617806118233-18e1de247200?w=800',
   home_office: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800',
@@ -322,15 +327,32 @@ const pendingDetail = computed(() => L('正在生成室內設計圖...', 'Genera
 const pendingDuration = computed(() => L('需要 1 至 2 分鐘', 'Usually takes 1 to 2 minutes', '通常1〜2分かかります', '보통 1~2분 소요', 'Suele tardar 1-2 minutos'))
 
 function buildInteriorPrompt(): string {
-  const trimmedPrompt = prompt.value.trim()
-  if (trimmedPrompt) return trimmedPrompt
-
   const styleInfo = styles.value.find(s => s.id === selectedStyle.value)
   const roomInfo = roomTypes.value.find(r => r.id === selectedRoomType.value)
   const styleLabel = styleInfo?.name || selectedStyle.value.replace(/_/g, ' ') || 'selected'
   const roomLabel = roomInfo?.name || selectedRoomType.value.replace(/_/g, ' ') || 'room'
 
-  return `Redesign this ${roomLabel} in ${styleLabel} style while preserving the main room layout.`
+  // Common constraints attached to every interior request so the output
+  // always reads as a real-estate / staging photo and not an aspirational
+  // lifestyle scene. Without these the model frequently invented people,
+  // pets, or open floor plans that didn't match the uploaded room — which
+  // is what users were reporting for the kitchen demo.
+  const CONSTRAINTS = (
+    'No people, no humans, no faces, no hands, no pets. '
+    + 'Preserve the original walls, windows, doors, ceiling height, and overall room footprint. '
+    + 'Empty interior staged only with furniture, decor, and lighting. '
+    + 'Photorealistic real-estate interior photography, sharp focus, balanced exposure.'
+  )
+
+  const trimmedPrompt = prompt.value.trim()
+  if (trimmedPrompt) {
+    return `${trimmedPrompt}. ${CONSTRAINTS}`
+  }
+
+  return (
+    `Redesign this ${roomLabel} in ${styleLabel} style while preserving the main room layout. `
+    + CONSTRAINTS
+  )
 }
 
 function clearGeneratedResult() {

@@ -558,6 +558,13 @@ async def normalize_video(
                 note="Source already within budget; persisted as-is.",
             )
 
+        # Hard wall-clock cap per ffmpeg pass. A 120 s 1080p source encodes
+        # in ~30 s on Cloud Run's 1 vCPU; if we ever blow past 5 minutes the
+        # input is pathological (broken container, unseekable webm) and we
+        # should kill the process instead of letting it tie up the worker
+        # until Cloud Run's 3600 s request timeout fires.
+        ENCODE_TIMEOUT_SEC = 300
+
         async def run_encode(crf: int) -> tuple[int, str]:
             scale = (
                 f"scale='if(gt(iw,ih),min({VIDEO_NORMALIZE_MAX_DIMENSION},iw),-2)':"
@@ -581,7 +588,24 @@ async def normalize_video(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await proc.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=ENCODE_TIMEOUT_SEC,
+                )
+            except asyncio.TimeoutError:
+                logger.error("[video-normalize] ffmpeg crf=%s exceeded %ss; killing", crf, ENCODE_TIMEOUT_SEC)
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                # Drain any remaining output so the pipe doesn't hold a
+                # zombie around. Bound this wait so a misbehaving subprocess
+                # can't lock us up a second time.
+                try:
+                    await asyncio.wait_for(proc.communicate(), timeout=5)
+                except Exception:
+                    pass
+                return -1, f"ffmpeg timed out after {ENCODE_TIMEOUT_SEC}s"
             detail = (stderr or stdout).decode("utf-8", errors="replace")[-1500:]
             return proc.returncode, detail
 

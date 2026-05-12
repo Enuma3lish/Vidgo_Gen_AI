@@ -2,13 +2,20 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore, useCreditsStore } from '@/stores'
+import { useAuthStore, useBrandingStore, useCreditsStore } from '@/stores'
 import LanguageSelector from './LanguageSelector.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const creditsStore = useCreditsStore()
+const brandingStore = useBrandingStore()
+// Admin-uploaded logo overrides the built-in SVG mark when set. The
+// store fetches /admin/branding/public on first mount and persists the
+// result, so subsequent navigations re-use the same URL without
+// re-hitting the API.
+const logoUrl = computed(() => brandingStore.settings.logo_url || '')
+const brandName = computed(() => brandingStore.settings.brand_name || 'VidgoAI')
 const isScrolled = ref(false)
 const mobileMenuOpen = ref(false)
 const toolsOpen = ref(false)
@@ -91,16 +98,27 @@ onUnmounted(() => {
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
 
-        <!-- Logo -->
-        <RouterLink to="/" class="flex items-center gap-2.5 flex-shrink-0 group" aria-label="VidGo AI Home">
-          <div class="relative w-8 h-8 flex-shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_0_18px_rgba(245,158,11,0.45)]" style="border-radius: 9px; background: #f59e0b;">
-            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 32 32" fill="none">
-              <path d="M9 10.5 L16 21 L23 10.5" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <span class="text-[15px] font-bold leading-none" style="font-family: 'Syne', sans-serif; color: var(--text-primary); letter-spacing: 0;">
-            Vidgo<span style="color: #f59e0b;">AI</span>
-          </span>
+        <!-- Logo — admin-uploaded image (from site_settings.logo_url)
+             wins, falls back to the built-in SVG mark when unset. -->
+        <RouterLink to="/" class="flex items-center gap-2.5 flex-shrink-0 group" :aria-label="`${brandName} Home`">
+          <template v-if="logoUrl">
+            <img
+              :src="logoUrl"
+              :alt="brandName"
+              class="flex-shrink-0 transition-all duration-300 group-hover:scale-105"
+              style="height: 32px; width: auto; max-width: 160px; object-fit: contain; border-radius: 6px;"
+            />
+          </template>
+          <template v-else>
+            <div class="relative w-8 h-8 flex-shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_0_18px_rgba(245,158,11,0.45)]" style="border-radius: 9px; background: #f59e0b;">
+              <svg class="absolute inset-0 w-full h-full" viewBox="0 0 32 32" fill="none">
+                <path d="M9 10.5 L16 21 L23 10.5" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <span class="text-[15px] font-bold leading-none" style="font-family: 'Syne', sans-serif; color: var(--text-primary); letter-spacing: 0;">
+              Vidgo<span style="color: #f59e0b;">AI</span>
+            </span>
+          </template>
         </RouterLink>
 
         <!-- Center Nav -->

@@ -3,6 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminApi, type SiteBrandingSettings } from '@/api/admin'
 import { toolsApi } from '@/api'
+import { useBrandingStore } from '@/stores'
+
+const brandingStore = useBrandingStore()
 
 const { locale } = useI18n()
 const isZh = computed(() => locale.value === 'zh-TW')
@@ -48,6 +51,9 @@ async function saveBranding() {
   try {
     const { settings: row } = await adminApi.updateBranding(settings.value)
     settings.value = { ...settings.value, ...row }
+    // Push the new branding into the global store so AppHeader's logo
+    // image swaps in the same tab without a hard reload.
+    brandingStore.apply(row)
     successMsg.value = L('已儲存。', 'Saved.')
   } catch (e: any) {
     error.value = e?.response?.data?.detail || e?.message || 'Save failed'
@@ -69,6 +75,7 @@ async function uploadLogo(event: Event, slot: 'logo_url' | 'logo_url_dark' | 'fa
     // Stage 2: persist the URL into the chosen logo slot.
     const { settings: row } = await adminApi.setLogoUrl(slot, uploaded.url)
     settings.value = { ...settings.value, ...row }
+    brandingStore.apply(row)
     successMsg.value = L('已上傳並套用。', 'Uploaded and applied.')
   } catch (e: any) {
     error.value = e?.response?.data?.detail || e?.message || 'Upload failed'

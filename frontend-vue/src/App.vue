@@ -7,13 +7,14 @@ import AppFooter from './components/layout/AppFooter.vue'
 import Toast from './components/common/Toast.vue'
 import { useGeoLanguage } from './composables/useGeoLanguage'
 import { useSessionHeartbeat } from './composables/useSessionHeartbeat'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useBrandingStore } from '@/stores'
 import { localeToHtmlLang, persistLocale } from '@/utils/locales'
 
 const { initLanguage } = useGeoLanguage()
 const { startHeartbeat } = useSessionHeartbeat()
 const { locale } = useI18n()
 const authStore = useAuthStore()
+const brandingStore = useBrandingStore()
 
 watch(locale, (newLocale) => {
   const normalizedLocale = persistLocale(newLocale)
@@ -24,6 +25,9 @@ onMounted(async () => {
   await authStore.init()
   await initLanguage()
   startHeartbeat()
+  // Load admin-uploaded logo/favicon/brand name once on boot. Failures
+  // here don't block — AppHeader falls back to the built-in SVG mark.
+  brandingStore.fetch().catch(() => undefined)
 })
 </script>
 

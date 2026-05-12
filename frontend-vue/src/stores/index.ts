@@ -1,4 +1,5 @@
 export { useAuthStore } from './auth'
+export { useBrandingStore } from './branding'
 export { useCreditsStore } from './credits'
 export { useUIStore } from './ui'
 export { useGenerationStore } from './generation'

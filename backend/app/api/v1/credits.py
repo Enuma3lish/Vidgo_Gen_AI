@@ -9,9 +9,13 @@ Endpoints:
 - POST /credits/purchase - Purchase credit package
 - GET /credits/pricing - Get service pricing table
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps import get_db, get_current_user, get_current_active_user, get_redis
 from app.services.credit_service import CreditService, OFFICIAL_CREDIT_PACKAGE_NAMES
@@ -260,10 +264,52 @@ async def purchase_credits(
             client_back_url=f"{settings.FRONTEND_URL}/pricing",
             choose_payment="Credit",
         )
+    elif purchase.payment_method == "paypal":
+        # One-shot PayPal Orders v2 checkout for credit packs. Anyone who
+        # doesn't want to subscribe should still be able to top up credits
+        # via PayPal; previously this branch returned only a placeholder URL
+        # and the user got a hard 503 from /payments/paypal/checkout because
+        # it required a subscription paypal_plan_id. We now create the
+        # PayPal order here directly with amount_usd; the existing
+        # PAYMENT.CAPTURE.COMPLETED webhook already credits the user based
+        # on order.payment_data.package_id.
+        try:
+            from app.services.paypal_service import get_paypal_service
+            paypal_service = get_paypal_service()
+            paypal_result = await paypal_service.create_checkout_session(
+                user_id=current_user.id,
+                user_email=current_user.email,
+                plan_id=f"credits:{package.name}",
+                price_id=f"sku_{order.order_number}",
+                billing_cycle="one-time",
+                success_url=f"{settings.FRONTEND_URL}/subscription/success?order={order.order_number}",
+                cancel_url=f"{settings.FRONTEND_URL}/pricing",
+                amount_usd=float(amount),
+            )
+            if not paypal_result.get("success"):
+                # Roll the pending order back so the user can retry without
+                # hitting a stale duplicate when they click again.
+                order.status = "failed"
+                await db.commit()
+                raise HTTPException(
+                    status_code=502,
+                    detail=paypal_result.get("error") or "PayPal checkout failed",
+                )
+            order.payment_data["paypal_transaction_id"] = paypal_result.get("transaction_id")
+            await db.commit()
+            payment_url = paypal_result.get("checkout_url")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error("PayPal credit checkout failed: %s", exc, exc_info=True)
+            order.status = "failed"
+            await db.commit()
+            raise HTTPException(status_code=502, detail="PayPal checkout is temporarily unavailable")
     else:
-        # PayPal credit checkout is not implemented yet; keep the legacy URL
-        # placeholder so existing clients do not break.
-        payment_url = f"/api/v1/payments/paypal/checkout/{order.order_number}"
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported payment_method: {purchase.payment_method}",
+        )
 
     return CreditPurchaseResponse(
         order_id=order.id,

@@ -76,6 +76,25 @@ const toolRules: Record<string, ImageDimensionRule> = {
   },
   pattern_generate: commonImageDimensionRule,
   effect: commonImageDimensionRule,
+  upscale: {
+    ...commonImageDimensionRule,
+    label: 'Upscale input',
+    // Cap pre-upscale dimensions so 2x/4x doesn't blow past the
+    // PiAPI image-toolkit 8 MP output ceiling. 2048x2048 in → 4096 at 2x.
+    maxWidth: 2048,
+    maxHeight: 2048,
+    maxMegapixels: 4,
+    guidance: 'Please choose an image up to 2048px on each side (4 MP).',
+    guidanceZh: '請選擇每邊最大 2048px（4 MP）的圖片。',
+  },
+  image_translator: {
+    ...commonImageDimensionRule,
+    label: 'Image translation input',
+    minWidth: 256,
+    minHeight: 256,
+    guidance: 'Please choose a clear image with readable text, at least 256px on each side.',
+    guidanceZh: '請選擇文字清楚可讀、每邊至少 256px 的圖片。',
+  },
 }
 
 export function imageDimensionRuleForTool(toolType?: string): ImageDimensionRule {

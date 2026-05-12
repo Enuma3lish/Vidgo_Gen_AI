@@ -113,7 +113,7 @@ async function handleUpscale() {
           <!-- Paid: upload zone -->
           <div v-if="!isDemoUser" class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-3" style="color: #e8e8f0;">{{ t('upscale.uploadOwn') }}</label>
-            <ImageUploader v-model="uploadedImage" />
+            <ImageUploader tool-type="upscale" v-model="uploadedImage" />
           </div>
 
           <div v-if="uploadedImage" class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">

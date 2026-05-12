@@ -20,14 +20,15 @@ Production target: `https://vidgo.co` + `https://api.vidgo.co`
 | FT-009 Avatar 504 from edge | ✅ Fixed | Avatar endpoint now uses chunked `StreamingResponse` with a 25 s whitespace heartbeat to keep edge proxies from idling out; raised axios global timeout 6→15 min and PiAPI httpx 5→10 min |
 | FT-010 Room Redesign button click no-op | ✅ Fixed | `handleRoomFileSelected` was setting `uploadedFile` but never `uploadedImage`, so the button's `:disabled` binding stayed true after a subscriber upload — bot's click was hitting a disabled button |
 | FT-011 Test asset 403 | ✅ Fixed | Replaced the dead `gtv-videos-bucket/sample/ForBiggerJoyrides.mp4` references with `test-videos.co.uk` Big Buck Bunny / Sintel mirrors that return 200 |
-| image-translator results faulty | ✅ Fixed | Switched from generic I2I (Flux derive_image / Imagen edit) to direct Gemini 2.5 Flash Image edit path |
-| video-dubbing results faulty | ✅ Fixed | New ffmpeg graph keeps full video length, mixes original ambient under the dub, never `-shortest`-truncates |
+| image-translator results faulty | ✅ Fixed (v2) | First attempt (single-pass Gemini Flash Image) still produced garbled CJK glyphs on live test — model can shape-match but doesn't carry translation semantics. Second pass replaced with **two-step OCR-then-render**: gemini-2.5-pro extracts source phrases + emits a JSON translation map, gemini-2.5-flash-image renders the image with the literal translated strings as a stencil. |
+| video-dubbing results faulty | ✅ Partial | Translation + ffmpeg mux are correct (verified live: clean Traditional Chinese script, full video length preserved, ambient under the dub). Voice quality is the remaining issue — PiAPI's F5-TTS upstream is dead so we fall back to OpenAI tts-1 which is intelligible but generic. **NOT FIXABLE in code** until PiAPI's voice-cloning service comes back online. |
 
 ### Cannot fix in this pass
 
 - **FT-004 ORB / cross-origin image blocks** — caused by GCS bucket/CDN not returning `Cross-Origin-Resource-Policy: cross-origin`. Needs bucket CORS config update in GCP console; route the Unsplash/Pixabay topic assets through the existing `/api/v1/share/share-media` proxy if you can't relax the bucket CORS.
 - **FT-005 Pricing 6 vs 4 cards** — product decision, not a code bug. Update `final_test.md` PAY-EXISTS-01 to accept the admin-editable count.
 - **FT-006/FT-007 provider noise** — F5-TTS upstream is broken on PiAPI side; we already fall through to tts-1 and the user-visible flow works. Notification schema drift is a partner-side fix.
+- **video-dubbing voice quality** — PiAPI's F5-TTS / Qubico voice-cloning model has been returning 500 on every call since 2026-05-09 (logged in `piapi_provider.py`). We fall through to OpenAI tts-1 via PiAPI's OpenAI-compatible endpoint, which produces intelligible speech but in a generic English-accented voice for every language — there's no voice-cloning step. The original-speaker timbre cannot be matched in code until either (a) PiAPI restores F5-TTS, or (b) we add a different voice-cloning provider (ElevenLabs / Resemble) which is a procurement + new-integration task, not a code-side fix.
 
 
 ## BUG-FT-001 - Static `/info/*` pages render SPA 404

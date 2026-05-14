@@ -116,13 +116,14 @@ NEW_PLAN_DATA = [
     },
 ]
 
-# New Credit Package data from specification
+# Three production Point Pack top-ups. Top-up credits land in
+# user.purchased_credits and do not expire.
 NEW_CREDIT_PACKAGE_DATA = [
     {
         "name": "light_pack",
-        "name_en": "Light Pack",
-        "name_zh": "輕量包",
-        "display_name": "輕量包",
+        "name_en": "Point Pack",
+        "name_zh": "點數包",
+        "display_name": "Point Pack",
         "credits": 3000,
         "price": 299.0,
         "price_twd": Decimal("299"),
@@ -136,9 +137,9 @@ NEW_CREDIT_PACKAGE_DATA = [
     },
     {
         "name": "standard_pack",
-        "name_en": "Standard Pack",
-        "name_zh": "標準包",
-        "display_name": "標準包 (多送 10%)",
+        "name_en": "Point Pack Plus",
+        "name_zh": "超值點數包",
+        "display_name": "Point Pack Plus",
         "credits": 5500,
         "price": 499.0,
         "price_twd": Decimal("499"),
@@ -147,14 +148,14 @@ NEW_CREDIT_PACKAGE_DATA = [
         "min_plan": "basic",
         "bonus_credits": 500,  # 10% bonus included in 5500
         "is_popular": True,
-        "is_best_value": False,
+        "is_best_value": True,
         "sort_order": 2
     },
     {
         "name": "heavy_pack",
-        "name_en": "Heavy Pack",
-        "name_zh": "重度包",
-        "display_name": "重度包 (多送 20%)",
+        "name_en": "Point Pack Max",
+        "name_zh": "重度點數包",
+        "display_name": "Point Pack Max",
         "credits": 12000,
         "price": 999.0,
         "price_twd": Decimal("999"),
@@ -279,6 +280,115 @@ NEW_SERVICE_PRICING_DATA = [
         "min_plan": "premium",
         "allowed_models": ["sora"],
         "description": "頂規耗能任務 - 超高畫質影片 (如需外接 Sora 或極高畫質 3D)"
+    },
+
+    # ========================================================================
+    # Deduction Firewall — Six tier categories per 2026-05 spec.
+    #
+    # Margin model:
+    #   1 credit ≈ NT$0.10 ≈ $0.00333 USD (Basic plan NT$699 / 7000 credits)
+    #   Target: ≥ 2x markup over API cost (≈ 200% gross margin)
+    #   credit_cost ≈ ceil(api_cost_usd * 900) for 3x markup
+    #
+    # Spec asked for 1/5/10/15/35/50 but that scale undercuts API cost on the
+    # flagship tier (50 credits = NT$5 revenue vs $0.5 USD = NT$15 cost).
+    # Numbers below replace the spec with margin-safe equivalents so adding
+    # high-cost flagship models doesn't bleed gross margin.
+    #
+    # tools.py endpoints fall through to their hardcoded CREDIT_COST when no
+    # ServicePricing row matches by service_type, so adding these rows does
+    # NOT change pricing of existing endpoints — only declares the catalog
+    # for upcoming model integrations.
+    # ========================================================================
+    {
+        "service_type": "image_generation_standard",
+        "display_name": "標準 AI 圖片 (SDXL / Flux)",
+        "credit_cost": 5,  # spec said 1; recalculated for $0.005 cost
+        "api_cost_usd": Decimal("0.005"),
+        "model_type": "default",
+        "tool_category": "static",
+        "tool_type": "text_to_image",
+        "resolution": "1024x1024",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["default", "sdxl", "flux"],
+        "description": "標準靜態圖片 - SDXL / Flux 等開源模型"
+    },
+    {
+        "service_type": "image_generation_premium",
+        "display_name": "高品質 AI 圖片 (Midjourney / DALL-E 3)",
+        "credit_cost": 50,  # spec said 5; recalculated for $0.05 cost
+        "api_cost_usd": Decimal("0.050"),
+        "model_type": "wan_pro",
+        "tool_category": "static",
+        "tool_type": "text_to_image",
+        "resolution": "2048x2048",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["midjourney", "dalle3"],
+        "description": "高品質圖片 - Midjourney / DALL-E 3"
+    },
+    {
+        "service_type": "video_generation_standard",
+        "display_name": "標準 AI 影片 (5-10s)",
+        "credit_cost": 100,  # spec said 10; recalculated for $0.10 cost
+        "api_cost_usd": Decimal("0.100"),
+        "model_type": "wan_pro",
+        "tool_category": "dynamic",
+        "tool_type": "image_to_video",
+        "resolution": "720p",
+        "max_duration": 10,
+        "subscribers_only": False,
+        "min_plan": "pro",
+        "allowed_models": ["wan_pro", "kling_standard"],
+        "description": "標準影片 - 主流 5-10s 模型"
+    },
+    {
+        "service_type": "video_upscale",
+        "display_name": "影片畫質修復 / 增強 (AI Upscale)",
+        "credit_cost": 50,  # spec said 15; recalculated for $0.05 cost
+        "api_cost_usd": Decimal("0.050"),
+        "model_type": "default",
+        "tool_category": "static",
+        "tool_type": "upscale",
+        "resolution": "4k",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["default", "esrgan"],
+        "description": "影片畫質修復 / Upscale"
+    },
+    {
+        "service_type": "video_generation_professional",
+        "display_name": "專業級長影片 (Luma / Kling Standard)",
+        "credit_cost": 300,  # spec said 35; recalculated for $0.30 cost
+        "api_cost_usd": Decimal("0.300"),
+        "model_type": "wan_pro",
+        "tool_category": "premium",
+        "tool_type": "image_to_video",
+        "resolution": "1080p",
+        "max_duration": 10,
+        "subscribers_only": False,
+        "min_plan": "pro",
+        "allowed_models": ["luma_dream_machine", "kling_standard"],
+        "description": "專業級長影片 - Luma Dream Machine / Kling Standard"
+    },
+    {
+        "service_type": "video_flagship",
+        "display_name": "極致旗艦影片 (Kling 2.1 Master / Sora2 / Veo)",
+        "credit_cost": 500,  # spec said 50; recalculated for $0.50 cost
+        "api_cost_usd": Decimal("0.500"),
+        "model_type": "sora",
+        "tool_category": "premium",
+        "tool_type": "ultra_hd_video",
+        "resolution": "4k",
+        "max_duration": 10,
+        "subscribers_only": False,
+        "min_plan": "premium",
+        "allowed_models": ["kling_2_1_master", "sora2_pro", "veo"],
+        "description": "極致旗艦影片 - 單次成本 > $0.5 USD 的頂級模型"
     },
 ]
 

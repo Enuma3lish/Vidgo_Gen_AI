@@ -825,8 +825,15 @@ async def _check_and_deduct_credits(
     """Check concurrent limit, check credits, and deduct.
     Returns (ok: bool, error_msg: str | None)
 
+    Cost resolution: queries ``ServicePricing`` by ``service_type`` first;
+    if a row exists, its ``credit_cost`` overrides the caller-supplied
+    ``amount``. This makes the per-endpoint hardcoded CREDIT_COST constants
+    a fallback only, so ops can dial deduction weights via DB without a
+    redeploy ("deduction firewall"). The caller's ``amount`` is still used
+    when no ServicePricing row matches (e.g. service_types not yet seeded).
+
     Admin (superuser) accounts bypass credit checks — they can use all
-    tools without needing credits.  A zero-cost transaction is still
+    tools without needing credits. A zero-cost transaction is still
     recorded for auditing.
     """
     # Admins bypass credit checks entirely
@@ -849,12 +856,30 @@ async def _check_and_deduct_credits(
         logger.warning("Generation abuse check skipped for user %s: %s", user.id, exc)
 
     credit_svc = CreditService(db, redis_client)
-    has_enough = await credit_svc.check_sufficient(str(user.id), amount)
+
+    # Dynamic deduction config: prefer ServicePricing.credit_cost when seeded.
+    # Falling back to the caller's hardcoded amount keeps behavior identical
+    # when no row exists, which is critical for endpoints whose service_type
+    # has not yet been added to the seed.
+    effective_amount = amount
+    try:
+        pricing = await credit_svc.get_service_pricing(service_type)
+        if pricing and pricing.credit_cost is not None:
+            effective_amount = int(pricing.credit_cost)
+            if effective_amount != amount:
+                logger.info(
+                    "Credit cost override for %s: hardcoded=%d, ServicePricing=%d",
+                    service_type, amount, effective_amount,
+                )
+    except Exception as exc:
+        logger.warning("ServicePricing lookup failed for %s, using hardcoded %d: %s", service_type, amount, exc)
+
+    has_enough = await credit_svc.check_sufficient(str(user.id), effective_amount)
     if not has_enough:
-        return False, f"Insufficient credits. Need {amount} credits."
+        return False, f"Insufficient credits. Need {effective_amount} credits."
     success, result = await credit_svc.deduct_credits(
         user_id=str(user.id),
-        amount=amount,
+        amount=effective_amount,
         service_type=service_type,
     )
     if not success:

@@ -170,8 +170,16 @@ class CreditService:
         description: Optional[str] = None,
         metadata: Optional[Dict] = None
     ) -> Tuple[bool, Dict[str, Any]]:
-        """Internal method to perform credit deduction."""
-        result = await self.db.execute(select(User).where(User.id == user_id))
+        """Internal method to perform credit deduction.
+
+        Acquires a PostgreSQL row-level lock on the user row via
+        ``SELECT ... FOR UPDATE`` so concurrent deduct calls serialize at the
+        DB level even if Redis is unavailable or its lock TTL expired. This is
+        defense-in-depth: the Redis lock above is still the primary mutex.
+        """
+        result = await self.db.execute(
+            select(User).where(User.id == user_id).with_for_update()
+        )
         user = result.scalar_one_or_none()
 
         if not user:

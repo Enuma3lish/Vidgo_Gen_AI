@@ -20,6 +20,7 @@ import uuid
 
 from app.providers.base import BaseProvider
 from app.services.gcs_storage_service import get_gcs_storage
+from app.core.model_registry import PIAPI_MODELS
 
 logger = logging.getLogger(__name__)
 
@@ -308,7 +309,7 @@ class PiAPIProvider(BaseProvider):
             return base_video
 
         lip_sync_payload = {
-            "model": "kling",
+            "model": PIAPI_MODELS["kling_lip_sync"],
             "task_type": "lip_sync",
             "input": {
                 "video_url": video_url,
@@ -462,7 +463,7 @@ class PiAPIProvider(BaseProvider):
             width, height = 1024, 1024
 
         payload = {
-            "model": "Qubico/flux1-schnell",
+            "model": PIAPI_MODELS["flux_t2i"],
             "task_type": "txt2img",
             "input": {
                 "prompt": params["prompt"],
@@ -503,7 +504,7 @@ class PiAPIProvider(BaseProvider):
             return await self.kontext_image(params)
 
         payload = {
-            "model": "Qubico/flux1-schnell",
+            "model": PIAPI_MODELS["flux_i2i"],
             "task_type": "img2img",
             "input": {
                 "image": self._resolve_image_url(params["image_url"]),
@@ -536,7 +537,7 @@ class PiAPIProvider(BaseProvider):
         self._log_request("kontext_image", params)
 
         payload = {
-            "model": "Qubico/flux1-dev-advanced",
+            "model": PIAPI_MODELS["flux_kontext"],
             "task_type": "kontext",
             "input": {
                 "image": self._resolve_image_url(params["image_url"]),
@@ -610,7 +611,11 @@ class PiAPIProvider(BaseProvider):
         self._log_request("image_to_3d", params)
 
         model_version = str(params.get("model_version", "v1")).lower()
-        model_name = "Qubico/trellis2" if model_version in ("v2", "trellis2", "hq", "hd") else "Qubico/trellis"
+        model_name = (
+            PIAPI_MODELS["trellis_v2"]
+            if model_version in ("v2", "trellis2", "hq", "hd")
+            else PIAPI_MODELS["trellis_v1"]
+        )
 
         image_url = self._resolve_image_url(params["image_url"])
         # Trellis rejects images > 1024×1024 — auto-resize if needed
@@ -705,7 +710,7 @@ class PiAPIProvider(BaseProvider):
                 input_data["lower_input"] = lower_garment_url
 
         payload = {
-            "model": "kling",
+            "model": PIAPI_MODELS["kling_try_on"],
             "task_type": "ai_try_on",
             "input": input_data
         }
@@ -734,8 +739,8 @@ class PiAPIProvider(BaseProvider):
         self._log_request("image_to_video", params)
 
         payload = {
-            "model": "Wan",
-            "task_type": "wan26-img2video",
+            "model": PIAPI_MODELS["wan_video"],
+            "task_type": PIAPI_MODELS["wan_i2v_task"],
             "input": {
                 "image": self._resolve_image_url(params["image_url"]),
                 "prompt": params.get("prompt", "smooth natural motion"),
@@ -783,8 +788,8 @@ class PiAPIProvider(BaseProvider):
         self._log_request("text_to_video", params)
 
         payload = {
-            "model": "Wan",
-            "task_type": "wan26-txt2video",
+            "model": PIAPI_MODELS["wan_video"],
+            "task_type": PIAPI_MODELS["wan_t2v_task"],
             "input": {
                 "prompt": params["prompt"],
                 "negative_prompt": params.get("negative_prompt", ""),
@@ -869,7 +874,7 @@ class PiAPIProvider(BaseProvider):
             input_block["fine_detail"] = True
 
         payload = {
-            "model": "Qubico/image-toolkit",
+            "model": PIAPI_MODELS["image_toolkit"],
             "task_type": "background-remove",
             "input": input_block,
         }
@@ -925,7 +930,7 @@ class PiAPIProvider(BaseProvider):
         # `image_url`). PiAPI rejects the wrong key with a 500. Also normalize
         # backend-local /static/ paths so PiAPI can fetch the source.
         payload = {
-            "model": "Qubico/image-toolkit",
+            "model": PIAPI_MODELS["image_toolkit"],
             "task_type": "upscale",
             "input": {
                 "image": self._resolve_image_url(params["image_url"]),
@@ -960,7 +965,7 @@ class PiAPIProvider(BaseProvider):
         v = (voice or self.OPENAI_VOICE_DEFAULT).lower()
         if v not in self.OPENAI_VOICES:
             v = self.OPENAI_VOICE_DEFAULT
-        payload = {"model": "tts-1", "input": text, "voice": v}
+        payload = {"model": PIAPI_MODELS["tts_openai"], "input": text, "voice": v}
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 r = await client.post(
@@ -1039,7 +1044,7 @@ class PiAPIProvider(BaseProvider):
         # (notably the persistent upstream 500) falls through to tts-1.
         if ref_audio:
             payload = {
-                "model": "Qubico/tts",
+                "model": PIAPI_MODELS["tts_f5"],
                 "task_type": "zero-shot",
                 "input": {"gen_text": text, "ref_audio": ref_audio},
                 "config": {"service_mode": "public"},
@@ -1165,7 +1170,7 @@ class PiAPIProvider(BaseProvider):
         }
 
         payload = {
-            "model": "kling",
+            "model": PIAPI_MODELS["kling_avatar"],
             "task_type": "avatar",
             "input": input_data,
             "config": {

@@ -1564,7 +1564,7 @@
   "adminModels": {
     "title": "AI Model Registry",
     "subtitle": "런타임에 AI 모델 교체 (Midjourney / Kling / Flux / Luma…). 우선순위: DB → 환경변수 → 하드코드 기본값.",
-    "restartWarning": "저장한 오버라이드는 이 Cloud Run instance에 즉시 적용됩니다. 다른 instance는 재시작(~30초 롤링 업데이트) 후 반영됩니다.",
+    "restartWarning": "저장된 오버라이드는 Redis pub/sub을 통해 수 초 내에 모든 backend instance로 전파됩니다. Redis 사용 불가 시에도 DB에 저장되며 다음 instance 재시작 시 반영됩니다.",
     "listTitle": "Service keys",
     "editTitle": "오버라이드 편집",
     "pickHint": "왼쪽에서 service key를 선택하세요.",
@@ -1587,6 +1587,8 @@
     "metricAvgLatency": "평균 지연",
     "metricCost": "비용 (USD)",
     "metricCalls": "{n}회 호출",
+    "filterPlaceholder": "패밀리/이름/키/모델로 검색…",
+    "noMatches": "조건에 맞는 service key가 없습니다.",
     "warnings": { "modelRequired": "Model 문자열이 필요합니다." },
     "toasts": { "saved": "오버라이드가 저장되었습니다." },
     "errors": { "loadFailed": "모델 레지스트리 로드 실패.", "saveFailed": "오버라이드 저장 실패." }

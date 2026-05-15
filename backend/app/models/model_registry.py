@@ -71,4 +71,7 @@ class GenerationMetric(Base):
     error_message = Column(Text, nullable=True)
     used_backup = Column(Boolean, nullable=False, default=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Set by ProviderRouter when an experiment is active for this task type;
+    # NULL otherwise. Powers per-cohort breakdown on the model dashboard.
+    cohort = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

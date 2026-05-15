@@ -153,6 +153,27 @@ async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(_media_cleanup_loop())
     logger.info("[Background] Hourly media cleanup task started")
 
+    # Model-registry live cache subscriber. Listens on a Redis channel for
+    # admin overrides published by ModelRegistryService.set_override and
+    # refreshes the in-process PIAPI_MODELS dict so each Cloud Run instance
+    # picks up flips within seconds instead of waiting for a redeploy.
+    # Best-effort: if Redis is unavailable, providers still work using the
+    # DB-on-write + env-on-restart fallback chain.
+    model_registry_task = None
+    try:
+        from app.api.deps import get_redis
+        from app.services.model_registry_pubsub import (
+            model_registry_subscriber_loop,
+            refresh_in_process_cache,
+        )
+        redis_client = await get_redis()
+        if redis_client:
+            await refresh_in_process_cache(redis_client)
+            model_registry_task = asyncio.create_task(model_registry_subscriber_loop(redis_client))
+            logger.info("[Background] Model registry pub/sub subscriber started")
+    except Exception as e:
+        logger.warning(f"[Background] Model registry subscriber failed to start: {e}")
+
     yield
 
     # Shutdown: cancel cleanup task and MCP servers
@@ -161,6 +182,12 @@ async def lifespan(app: FastAPI):
         await cleanup_task
     except asyncio.CancelledError:
         pass
+    if model_registry_task:
+        model_registry_task.cancel()
+        try:
+            await model_registry_task
+        except asyncio.CancelledError:
+            pass
     try:
         from app.services.mcp_client import get_mcp_manager
         await get_mcp_manager().shutdown()

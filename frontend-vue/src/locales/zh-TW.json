@@ -1564,7 +1564,7 @@
   "adminModels": {
     "title": "AI 模型管理",
     "subtitle": "在執行時切換 AI 模型（Midjourney / Kling / Flux / Luma…）。優先順序：DB → 環境變數 → 程式碼預設值。",
-    "restartWarning": "儲存的覆寫會立即在這台 Cloud Run instance 生效，但其他正在運行的 instance 要等下次重啟（~30 秒滾動更新）。跨 instance 即時生效在 roadmap 上。",
+    "restartWarning": "儲存的覆寫會透過 Redis pub/sub 在數秒內傳播到所有後端 instance。若 Redis 不可用，變更仍持久化於 DB，下次 instance 重啟時生效。",
     "listTitle": "Service keys",
     "editTitle": "編輯覆寫",
     "pickHint": "從左邊清單選一個 service key 開始編輯。",
@@ -1587,6 +1587,8 @@
     "metricAvgLatency": "平均延遲",
     "metricCost": "成本 (USD)",
     "metricCalls": "{n} 次呼叫",
+    "filterPlaceholder": "依群組、名稱、key 或 model 搜尋…",
+    "noMatches": "沒有 service key 符合篩選條件。",
     "warnings": {
       "modelRequired": "請輸入 Model 字串。"
     },

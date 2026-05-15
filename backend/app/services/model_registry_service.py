@@ -217,6 +217,15 @@ class ModelRegistryService:
         await self.db.commit()
         await self._cache_invalidate(service_key)
 
+        # Publish cross-instance invalidate so other Cloud Run instances
+        # refresh their in-process PIAPI_MODELS dict. Best-effort —
+        # admin's write succeeded regardless of publish outcome.
+        try:
+            from app.services.model_registry_pubsub import publish_invalidate
+            await publish_invalidate(self.redis, service_key, model, version)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("model_registry: publish_invalidate failed for %s: %s", service_key, exc)
+
         logger.info(
             "model_registry override: key=%s %s/%s -> %s/%s by=%s reason=%s",
             service_key, before_model, before_version, model, version, changed_by, reason,

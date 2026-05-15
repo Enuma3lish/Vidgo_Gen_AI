@@ -1564,7 +1564,7 @@
   "adminModels": {
     "title": "Registro de Modelos IA",
     "subtitle": "Cambia modelos IA en tiempo de ejecución (Midjourney / Kling / Flux / Luma…). Prioridad: DB → variable de entorno → predeterminado.",
-    "restartWarning": "Los cambios se aplican inmediatamente en esta instancia de Cloud Run. Otras instancias verán el cambio tras su próximo reinicio (~30s rolling).",
+    "restartWarning": "Los cambios se propagan a todas las instancias del backend en segundos vía Redis pub/sub. Si Redis no está disponible, el cambio persiste en DB y se aplica en el próximo reinicio.",
     "listTitle": "Claves de servicio",
     "editTitle": "Editar override",
     "pickHint": "Selecciona una clave de servicio de la lista.",
@@ -1587,6 +1587,8 @@
     "metricAvgLatency": "Latencia media",
     "metricCost": "Costo (USD)",
     "metricCalls": "{n} llamadas",
+    "filterPlaceholder": "Filtrar por familia, nombre, clave o modelo…",
+    "noMatches": "Ninguna clave coincide con el filtro.",
     "warnings": { "modelRequired": "Se requiere la cadena del modelo." },
     "toasts": { "saved": "Override guardado." },
     "errors": { "loadFailed": "Error al cargar el registro de modelos.", "saveFailed": "Error al guardar el override." }

@@ -1006,6 +1006,7 @@ class ProviderRouter:
             model_used = self._derive_model_used(task_type, params)
             err_short = (error_message or "")[:1000] or None
             user_id = params.get("user_id")  # tools.py doesn't pass this today; kept for future opt-in
+            cohort = params.get("_cohort")    # populated by an experiment runner; NULL when no experiment active
 
             async with AsyncSessionLocal() as session:
                 session.add(
@@ -1018,6 +1019,7 @@ class ProviderRouter:
                         error_message=err_short,
                         used_backup=used_backup,
                         user_id=user_id,
+                        cohort=cohort,
                     )
                 )
                 await session.commit()

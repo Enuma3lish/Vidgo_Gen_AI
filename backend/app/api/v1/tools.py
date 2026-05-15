@@ -3522,6 +3522,275 @@ async def video_dubbing(
 
 
 # ============================================================================
+# Premium / Flagship Model Endpoints (Midjourney, Kling video, Luma)
+# ----------------------------------------------------------------------------
+# Credit costs flow through ServicePricing rows seeded in
+# backend/scripts/seed_new_pricing_tiers.py. The hardcoded values below are
+# fallback only — _check_and_deduct_credits prefers the DB-driven amount.
+#
+# Demo users hit _demo_response with the new service_type string; until ops
+# seeds demo_examples rows for these tools the demo cache will return 503,
+# which is the intended "subscribe to unlock" UX for flagship models.
+# ============================================================================
+
+
+class MidjourneyImagineRequest(BaseModel):
+    """Generate a single image via Midjourney through PiAPI."""
+    prompt: str = Field(..., min_length=1, max_length=2000)
+    aspect_ratio: str = Field(default="1:1", description="1:1, 16:9, 9:16, 4:3, 3:4, etc.")
+    process_mode: Optional[str] = Field(
+        default=None,
+        description="relax | fast | turbo. Defaults to PIAPI_MIDJOURNEY_PROCESS_MODE."
+    )
+
+
+@router.post("/midjourney-imagine", response_model=ToolResponse)
+async def midjourney_imagine(
+    request: MidjourneyImagineRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """
+    Premium image generation via Midjourney (PiAPI).
+    Credit cost: image_generation_premium tier (~50 credits per ServicePricing).
+    """
+    if not is_subscribed_user(current_user):
+        return await _demo_response(
+            db,
+            "image_generation_premium",
+            cta="Subscribe to generate Midjourney images.",
+            effect_prompt=request.prompt[:200],
+        )
+
+    CREDIT_COST = 50
+    ok, err = await _check_and_deduct_credits(
+        db, current_user, CREDIT_COST, "image_generation_premium"
+    )
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        provider_router = get_provider_router()
+        result = await provider_router.route(
+            TaskType.MIDJOURNEY_T2I,
+            {
+                "prompt": request.prompt,
+                "aspect_ratio": request.aspect_ratio,
+                "process_mode": request.process_mode,
+            },
+        )
+        if not result.get("success"):
+            await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
+            return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
+
+        output = result.get("output") or {}
+        image_url = output.get("image_url")
+        image_url = await _persist_provider_url(image_url, "image", current_user)
+        if not image_url:
+            await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
+            return ToolResponse(success=False, message="Midjourney returned no image. Please try again.")
+
+        return ToolResponse(
+            success=True,
+            result_url=image_url,
+            image_url=image_url,
+            credits_used=CREDIT_COST,
+            message="Image generated via Midjourney.",
+        )
+    except Exception as exc:
+        logger.error("midjourney_imagine error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
+        _notify_admin_of_tool_failure("midjourney_imagine", exc, current_user)
+        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+class KlingVideoRequest(BaseModel):
+    """Generate video via Kling (PiAPI). T2V if no image_url; I2V otherwise."""
+    prompt: str = Field(..., min_length=1, max_length=2500)
+    tier: str = Field(
+        default="default",
+        description='"default" → Kling 2.6 (~100 credits); "flagship" → Kling 2.1-master pro mode (~500 credits)',
+    )
+    aspect_ratio: str = Field(default="16:9", description="T2V only: 16:9 / 9:16 / 1:1")
+    duration: int = Field(default=5, description="5 or 10")
+    image_url: Optional[str] = Field(default=None, description="If set, switches to image-to-video")
+    image_tail_url: Optional[str] = Field(default=None, description="Optional end frame for I2V")
+    negative_prompt: Optional[str] = Field(default=None, max_length=2500)
+    cfg_scale: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+@router.post("/kling-video", response_model=ToolResponse)
+async def kling_video(
+    request: KlingVideoRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """
+    Premium Kling video generation. Single endpoint, two tiers:
+      - tier="default"  → Kling 2.6 std mode, video_generation_standard pricing
+      - tier="flagship" → Kling 2.1-master pro mode, video_flagship pricing
+    """
+    tier = (request.tier or "default").lower()
+    if tier not in {"default", "flagship"}:
+        return ToolResponse(success=False, message="tier must be 'default' or 'flagship'")
+
+    if tier == "flagship":
+        service_type = "video_flagship"
+        credit_cost_fallback = 500
+        demo_cta = "Subscribe to unlock Kling 2.1-master flagship videos."
+    else:
+        service_type = "video_generation_standard"
+        credit_cost_fallback = 100
+        demo_cta = "Subscribe to generate Kling videos."
+
+    if not is_subscribed_user(current_user):
+        return await _demo_response(
+            db,
+            service_type,
+            cta=demo_cta,
+            input_image_url=request.image_url,
+            effect_prompt=request.prompt[:200],
+        )
+
+    if request.image_url:
+        request.image_url = await _ensure_public_image_url(
+            request.image_url, user_id=str(current_user.id) if current_user else None
+        )
+    if request.image_tail_url:
+        request.image_tail_url = await _ensure_public_image_url(
+            request.image_tail_url, user_id=str(current_user.id) if current_user else None
+        )
+
+    ok, err = await _check_and_deduct_credits(
+        db, current_user, credit_cost_fallback, service_type
+    )
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        provider_router = get_provider_router()
+        result = await provider_router.route(
+            TaskType.KLING_VIDEO,
+            {
+                "prompt": request.prompt,
+                "tier": tier,
+                "aspect_ratio": request.aspect_ratio,
+                "duration": request.duration,
+                "image_url": request.image_url,
+                "image_tail_url": request.image_tail_url,
+                "negative_prompt": request.negative_prompt,
+                "cfg_scale": request.cfg_scale,
+            },
+        )
+        if not result.get("success"):
+            await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+            return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
+
+        output = result.get("output") or {}
+        video_url = output.get("video_url")
+        video_url = await _persist_provider_url(video_url, "video", current_user)
+        if not video_url:
+            await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+            return ToolResponse(success=False, message="Kling returned no video URL. Please try again.")
+
+        return ToolResponse(
+            success=True,
+            result_url=video_url,
+            video_url=video_url,
+            credits_used=credit_cost_fallback,
+            message=f"Video generated via Kling ({tier}).",
+        )
+    except Exception as exc:
+        logger.error("kling_video error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+        _notify_admin_of_tool_failure("kling_video", exc, current_user)
+        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+class LumaVideoRequest(BaseModel):
+    """Luma Dream Machine via PiAPI. T2V / I2V / first-last frame."""
+    prompt: str = Field(..., min_length=1, max_length=2000)
+    duration: int = Field(default=5, description="5 or 9 seconds (PiAPI: $0.2 / $0.4)")
+    aspect_ratio: str = Field(default="16:9")
+    start_image: Optional[str] = Field(default=None, description="First frame URL (enables I2V)")
+    end_image: Optional[str] = Field(default=None, description="Last frame URL (for first-last transition)")
+    loop: bool = Field(default=False)
+
+
+@router.post("/luma-video", response_model=ToolResponse)
+async def luma_video(
+    request: LumaVideoRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """
+    Professional video via Luma Dream Machine (PiAPI).
+    Credit cost: video_generation_professional tier (~300 credits per ServicePricing).
+    """
+    if not is_subscribed_user(current_user):
+        return await _demo_response(
+            db,
+            "video_generation_professional",
+            cta="Subscribe to generate Luma videos.",
+            input_image_url=request.start_image,
+            effect_prompt=request.prompt[:200],
+        )
+
+    if request.start_image:
+        request.start_image = await _ensure_public_image_url(
+            request.start_image, user_id=str(current_user.id) if current_user else None
+        )
+    if request.end_image:
+        request.end_image = await _ensure_public_image_url(
+            request.end_image, user_id=str(current_user.id) if current_user else None
+        )
+
+    CREDIT_COST = 300
+    ok, err = await _check_and_deduct_credits(
+        db, current_user, CREDIT_COST, "video_generation_professional"
+    )
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        provider_router = get_provider_router()
+        result = await provider_router.route(
+            TaskType.LUMA_VIDEO,
+            {
+                "prompt": request.prompt,
+                "duration": request.duration,
+                "aspect_ratio": request.aspect_ratio,
+                "start_image": request.start_image,
+                "end_image": request.end_image,
+                "loop": request.loop,
+            },
+        )
+        if not result.get("success"):
+            await _refund_credits(db, current_user, CREDIT_COST, "video_generation_professional")
+            return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
+
+        output = result.get("output") or {}
+        video_url = output.get("video_url")
+        video_url = await _persist_provider_url(video_url, "video", current_user)
+        if not video_url:
+            await _refund_credits(db, current_user, CREDIT_COST, "video_generation_professional")
+            return ToolResponse(success=False, message="Luma returned no video URL. Please try again.")
+
+        return ToolResponse(
+            success=True,
+            result_url=video_url,
+            video_url=video_url,
+            credits_used=CREDIT_COST,
+            message="Video generated via Luma Dream Machine.",
+        )
+    except Exception as exc:
+        logger.error("luma_video error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, CREDIT_COST, "video_generation_professional")
+        _notify_admin_of_tool_failure("luma_video", exc, current_user)
+        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+# ============================================================================
 # Template & Resource Endpoints
 # ============================================================================
 

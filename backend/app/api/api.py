@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1 import (
     auth, payments, demo, plans, promotions, credits, effects, generation,
-    landing, quota, tools, admin, session, interior, workflow, subscriptions,
+    landing, quota, tools, admin, admin_models, session, interior, workflow, subscriptions,
     prompts, user_works, uploads, referrals, social_media, einvoices,
     example, downloads, share_proxy, hero,
 )
@@ -20,6 +20,7 @@ api_router.include_router(landing.router, prefix="/landing", tags=["landing"])
 api_router.include_router(quota.router, prefix="/quota", tags=["quota"])
 api_router.include_router(tools.router, prefix="/tools", tags=["tools"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(admin_models.router, prefix="/admin", tags=["admin-models"])
 api_router.include_router(session.router, prefix="/session", tags=["session"])
 api_router.include_router(interior.router, tags=["interior"])
 api_router.include_router(workflow.router, tags=["workflow"])

@@ -202,6 +202,81 @@ export interface ActiveUsersStats {
 }
 
 // ============================================================================
+// Model Registry (admin-editable AI model overrides)
+// ============================================================================
+
+export interface ModelEffective {
+  model: string
+  version: string | null
+  source: 'db' | 'env' | 'default' | 'missing'
+}
+
+export interface ModelOverrideRow {
+  model: string
+  version: string | null
+  updated_by: string | null
+  updated_at: string | null
+  notes: string | null
+}
+
+export interface ModelDefault {
+  model: string
+  version: string | null
+}
+
+export interface ModelEntry {
+  service_key: string
+  effective: ModelEffective
+  override: ModelOverrideRow | null
+  default: ModelDefault
+  env_var: string | null
+}
+
+export interface ModelListResponse {
+  entries: ModelEntry[]
+}
+
+export interface ModelOverrideUpdate {
+  model: string
+  version?: string | null
+  reason?: string | null
+}
+
+export interface AuditEntry {
+  id: string
+  service_key: string
+  before_model: string | null
+  before_version: string | null
+  after_model: string
+  after_version: string | null
+  changed_by: string | null
+  changed_at: string
+  reason: string | null
+}
+
+export interface AuditListResponse {
+  entries: AuditEntry[]
+}
+
+export interface ModelMetricsItem {
+  model_used: string
+  window_days: number
+  total_calls: number
+  success_count: number
+  failure_count: number
+  success_rate: number
+  avg_duration_ms: number | null
+  p95_duration_ms: number | null
+  total_cost_usd: number
+}
+
+export interface ModelMetricsResponse {
+  service_key: string
+  window_days: number
+  metrics_by_model: ModelMetricsItem[]
+}
+
+// ============================================================================
 // Admin API
 // ============================================================================
 
@@ -426,6 +501,34 @@ export const adminApi = {
   // ────────────────────────────────────────────────────────────────
   async getInfrastructureCosts(): Promise<InfrastructureCosts> {
     const response = await apiClient.get('/api/v1/admin/costs/infrastructure')
+    return response.data
+  },
+
+  // ────────────────────────────────────────────────────────────────
+  // AI model registry (admin-editable overrides + audit + metrics)
+  // ────────────────────────────────────────────────────────────────
+  async listModels(): Promise<ModelListResponse> {
+    const response = await apiClient.get('/api/v1/admin/models')
+    return response.data
+  },
+  async getModel(serviceKey: string): Promise<ModelEntry> {
+    const response = await apiClient.get(`/api/v1/admin/models/${serviceKey}`)
+    return response.data
+  },
+  async updateModel(serviceKey: string, payload: ModelOverrideUpdate): Promise<ModelEntry> {
+    const response = await apiClient.put(`/api/v1/admin/models/${serviceKey}`, payload)
+    return response.data
+  },
+  async getModelAudit(serviceKey: string, limit = 50): Promise<AuditListResponse> {
+    const response = await apiClient.get(`/api/v1/admin/models/${serviceKey}/audit`, {
+      params: { limit },
+    })
+    return response.data
+  },
+  async getModelMetrics(serviceKey: string, windowDays = 7): Promise<ModelMetricsResponse> {
+    const response = await apiClient.get(`/api/v1/admin/models/${serviceKey}/metrics`, {
+      params: { window_days: windowDays },
+    })
     return response.data
   },
 }

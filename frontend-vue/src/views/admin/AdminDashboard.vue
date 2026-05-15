@@ -830,6 +830,7 @@ function exportToolUsage() {
         <router-link to="/admin/costs" class="quick-link"><span>{{ localized('成本（GCP+AI）', 'Costs (GCP+AI)') }}</span><span>&rarr;</span></router-link>
         <router-link to="/admin/plans" class="quick-link"><span>{{ localized('訂閱方案', 'Plans') }}</span><span>&rarr;</span></router-link>
         <router-link to="/admin/branding" class="quick-link"><span>{{ localized('品牌與文字', 'Branding') }}</span><span>&rarr;</span></router-link>
+        <router-link to="/admin/models" class="quick-link"><span>{{ localized('AI 模型管理', 'AI Model Registry') }}</span><span>&rarr;</span></router-link>
         <router-link to="/admin/system" class="quick-link"><span>{{ localized('系統', 'System') }}</span><span>&rarr;</span></router-link>
       </div>
     </section>

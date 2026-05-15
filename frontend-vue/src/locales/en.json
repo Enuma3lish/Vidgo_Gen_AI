@@ -1583,5 +1583,42 @@
     "warnings": { "emptyPrompt": "Please enter a prompt." },
     "toasts": { "success": "Luma video generated.", "demoReady": "Demo video ready." },
     "errors": { "generic": "Generation failed. Please try again." }
+  },
+  "adminModels": {
+    "title": "AI Model Registry",
+    "subtitle": "Swap upstream AI models (Midjourney / Kling / Flux / Luma …) at runtime. Reads from DB first, env var second, hardcoded default last.",
+    "restartWarning": "Saved overrides take effect on this Cloud Run instance immediately, but other running instances will see the change after their next restart (~30s rolling update). Live cache propagation across instances is on the roadmap.",
+    "listTitle": "Service keys",
+    "editTitle": "Edit override",
+    "pickHint": "Pick a service key from the list to edit.",
+    "overridden": "overridden",
+    "overriddenSummary": "{n} overridden / {total} total",
+    "serviceKey": "Service key",
+    "modelLabel": "Model string",
+    "defaultHint": "Default: {model}",
+    "versionLabel": "Version (Kling only)",
+    "versionPlaceholder": "e.g. 2.6, 2.1-master",
+    "reasonLabel": "Change reason",
+    "reasonPlaceholder": "Why are you changing this? Will be saved to the audit log.",
+    "save": "Save override",
+    "saving": "Saving...",
+    "auditTitle": "Recent changes",
+    "auditEmpty": "No changes yet.",
+    "metricsTitle": "Last {days} days",
+    "metricsEmpty": "No call data yet. Provider-router metrics pipeline ships in a follow-up PR.",
+    "metricSuccessRate": "Success",
+    "metricAvgLatency": "Avg latency",
+    "metricCost": "Cost (USD)",
+    "metricCalls": "{n} calls",
+    "warnings": {
+      "modelRequired": "Model string is required."
+    },
+    "toasts": {
+      "saved": "Override saved. Audit log updated."
+    },
+    "errors": {
+      "loadFailed": "Failed to load model registry.",
+      "saveFailed": "Failed to save override."
+    }
   }
 }

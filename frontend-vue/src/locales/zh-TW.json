@@ -1561,6 +1561,43 @@
     "toasts": { "success": "{tier} 影片生成完成。", "demoReady": "範例影片已準備好。" },
     "errors": { "generic": "生成失敗，請再試一次。" }
   },
+  "adminModels": {
+    "title": "AI 模型管理",
+    "subtitle": "在執行時切換 AI 模型（Midjourney / Kling / Flux / Luma…）。優先順序：DB → 環境變數 → 程式碼預設值。",
+    "restartWarning": "儲存的覆寫會立即在這台 Cloud Run instance 生效，但其他正在運行的 instance 要等下次重啟（~30 秒滾動更新）。跨 instance 即時生效在 roadmap 上。",
+    "listTitle": "Service keys",
+    "editTitle": "編輯覆寫",
+    "pickHint": "從左邊清單選一個 service key 開始編輯。",
+    "overridden": "已覆寫",
+    "overriddenSummary": "{n} 個已覆寫 / 共 {total}",
+    "serviceKey": "Service key",
+    "modelLabel": "Model 字串",
+    "defaultHint": "預設值：{model}",
+    "versionLabel": "版本（僅 Kling）",
+    "versionPlaceholder": "例如 2.6、2.1-master",
+    "reasonLabel": "變更原因",
+    "reasonPlaceholder": "為何要改？會寫進 audit log。",
+    "save": "儲存覆寫",
+    "saving": "儲存中...",
+    "auditTitle": "最近變更",
+    "auditEmpty": "尚無變更紀錄。",
+    "metricsTitle": "最近 {days} 天",
+    "metricsEmpty": "尚無呼叫資料。Provider-router 指標 pipeline 將於後續 PR 上線。",
+    "metricSuccessRate": "成功率",
+    "metricAvgLatency": "平均延遲",
+    "metricCost": "成本 (USD)",
+    "metricCalls": "{n} 次呼叫",
+    "warnings": {
+      "modelRequired": "請輸入 Model 字串。"
+    },
+    "toasts": {
+      "saved": "覆寫已儲存。Audit log 已更新。"
+    },
+    "errors": {
+      "loadFailed": "讀取模型登錄表失敗。",
+      "saveFailed": "儲存覆寫失敗。"
+    }
+  },
   "lumaVideo": {
     "title": "Luma Dream Machine",
     "subtitle": "透過 PiAPI 使用 Luma 生成電影級 AI 影片。支援文生影片、圖生影片，以及首尾畫面轉場。",

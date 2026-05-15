@@ -49,6 +49,8 @@ const {
   loadDemoTemplates,
   demoTemplates,
   resolveDemoTemplateResultUrl,
+  useDemoTemplate,
+  getDemoResultUrl,
   checkSubscription,
   subscriptionChecked,
   loadInputLibrary,
@@ -820,8 +822,19 @@ async function selectProposalExample(example: { styleId: string; templateId: str
 
   isProcessing.value = true
   try {
-    const demoResultUrl = await resolveDemoTemplateResultUrl(example.templateId)
+    const presetResult = await useDemoTemplate(example.templateId)
+    const demoResultUrl = getDemoResultUrl(presetResult)
     if (demoResultUrl) {
+      // Also set uploadedImage from the preset's input so the
+      // BeforeAfterSlider (which requires both before+after) renders for
+      // admins/subscribers who haven't uploaded their own room photo yet.
+      // Without this, clicking a proposal example silently set resultImage
+      // but the result panel kept showing the placeholder because its
+      // v-if is `resultImage && uploadedImage && activeTab !== 'generate'`.
+      const presetInputUrl = (presetResult as any)?.input_image_url
+      if (presetInputUrl && !uploadedImage.value) {
+        uploadedImage.value = presetInputUrl
+      }
       resultImage.value = demoResultUrl
       uiStore.showSuccess(L('已套用示範範例', 'Example applied', 'デモ例を適用しました', '데모 예시 적용됨', 'Ejemplo aplicado'))
     }

@@ -130,51 +130,50 @@ class PlanInfo(BaseModel):
 # ENDPOINTS
 # =============================================================================
 
-# Default plans to ensure pricing page always has data (TWD for NT$ display)
+# Default production plans to ensure pricing page always has data (TWD for NT$ display).
+# Keep this aligned with scripts.seed_new_pricing_tiers.NEW_PLAN_DATA.
 DEFAULT_VIDGO_PLANS = [
-    {"name": "demo", "display_name": "Demo", "slug": "demo", "plan_type": "free", "price_monthly": 0.0, "price_yearly": 0.0, "price_twd": 0, "monthly_credits": 0, "weekly_credits": 0, "max_resolution": "720p", "has_watermark": True, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False},
-    {"name": "starter", "display_name": "Starter", "slug": "starter", "plan_type": "basic", "price_monthly": 299.0, "price_yearly": 2990.0, "price_twd": 299, "monthly_credits": 100, "weekly_credits": 25, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": False, "feature_custom_styles": False},
-    {"name": "standard", "display_name": "Standard", "slug": "standard", "plan_type": "basic", "price_monthly": 399.0, "price_yearly": 3990.0, "price_twd": 399, "monthly_credits": 150, "weekly_credits": 38, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False},
-    {"name": "pro", "display_name": "Pro", "slug": "pro", "plan_type": "pro", "price_monthly": 599.0, "price_yearly": 5990.0, "price_twd": 599, "monthly_credits": 250, "weekly_credits": 60, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True},
-    {"name": "pro_plus", "display_name": "Pro+", "slug": "pro_plus", "plan_type": "enterprise", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "monthly_credits": 500, "weekly_credits": 125, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True},
+    {"name": "basic", "display_name": "基礎進階版", "slug": "basic", "plan_type": "basic", "price_monthly": 699.0, "price_yearly": 6990.0, "price_twd": 699, "price_usd": 22, "monthly_credits": 7000, "weekly_credits": 0, "max_resolution": "720p", "has_watermark": True, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False, "social_media_batch_posting": False, "enterprise_features": False, "max_concurrent_generations": 1, "allowed_models": ["default"], "pollo_limit": 0, "goenhance_limit": 0, "description": "引流款，讓用戶體驗基本圖文生成，僅限 default 模型"},
+    {"name": "pro", "display_name": "專業版", "slug": "pro", "plan_type": "pro", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "price_usd": 32, "monthly_credits": 10000, "weekly_credits": 0, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 3, "allowed_models": ["default", "wan_pro", "gemini_pro"], "pollo_limit": 50, "goenhance_limit": None, "description": "主力銷售方案，開放高級模型與社交媒體一鍵批次發布"},
+    {"name": "premium", "display_name": "尊榮版", "slug": "premium", "plan_type": "premium", "price_monthly": 1699.0, "price_yearly": 16990.0, "price_twd": 1699, "price_usd": 55, "monthly_credits": 18000, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 5, "allowed_models": ["default", "wan_pro", "gemini_pro"], "pollo_limit": 100, "goenhance_limit": None, "description": "針對重度創作者，包含 Pro 所有功能，外加優先任務處理佇列"},
+    {"name": "enterprise", "display_name": "企業旗艦版", "slug": "enterprise", "plan_type": "enterprise", "price_monthly": 15000.0, "price_yearly": 150000.0, "price_twd": 15000, "price_usd": 485, "monthly_credits": 160000, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True, "social_media_batch_posting": True, "enterprise_features": True, "max_concurrent_generations": 10, "allowed_models": ["default", "wan_pro", "gemini_pro", "sora"], "pollo_limit": None, "goenhance_limit": None, "description": "全功能解鎖、專屬企業素材庫、自訂浮水印"},
     TEST_PRO_PLAN_DEFAULTS,
 ]
 
 
 async def ensure_vidgo_plans(db: AsyncSession) -> None:
     """
-    Ensure every plan in DEFAULT_VIDGO_PLANS exists.
-
-    Previous implementation bailed out if ANY plan was already in the DB,
-    which meant that databases seeded before a new plan was added (e.g.
-    Standard @ 399 TWD) would never backfill. That caused the pricing page
-    to miss plans on prod. Switch to per-name upsert so adding a new plan
-    to DEFAULT_VIDGO_PLANS is enough to make it appear after the next
-    request to /plans.
+    Ensure every production plan in DEFAULT_VIDGO_PLANS exists and deactivate
+    legacy public plans so PayPal plan mapping only needs basic/pro/premium/
+    enterprise keys.
     """
     existing_result = await db.execute(select(Plan))
-    existing_by_name = {p.name: p for p in existing_result.scalars().all()}
+    existing_plans = existing_result.scalars().all()
+    existing_by_name = {p.name: p for p in existing_plans}
+    default_names = {data["name"] for data in DEFAULT_VIDGO_PLANS}
 
     added = 0
     changed = False
     for data in DEFAULT_VIDGO_PLANS:
         name = data["name"]
         if name in existing_by_name:
-            # Keep an existing row as-is — admin may have customized prices.
-            # Only touch if it was explicitly deactivated by accident.
             existing = existing_by_name[name]
             if not existing.is_active:
                 existing.is_active = True
                 changed = True
-            if is_test_pro_plan(existing):
-                for key, value in data.items():
-                    if getattr(existing, key, None) != value:
-                        setattr(existing, key, value)
-                        changed = True
+            for key, value in data.items():
+                if getattr(existing, key, None) != value:
+                    setattr(existing, key, value)
+                    changed = True
             continue
         plan = Plan(**data)
         db.add(plan)
         added += 1
+
+    for plan in existing_plans:
+        if plan.name not in default_names and plan.is_active and not is_test_pro_plan(plan):
+            plan.is_active = False
+            changed = True
 
     if added or changed:
         await db.commit()

@@ -8,7 +8,7 @@ import logging
 from typing import Optional, List, Dict, Any
 
 from app.services.base import BaseGenerationService, GenerationResult, GenerationType
-from app.services.pollo_ai import PolloAIClient, POLLO_MODELS
+from app.services.pollo_ai import PolloAIClient, POLLO_MODELS, DEFAULT_MODEL as _POLLO_DEFAULT
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class PolloGenerationService(BaseGenerationService):
             return await self._generate_image_to_video(
                 source_image_url=source_image_url,
                 prompt=prompt or "smooth motion, cinematic quality",
-                model=style_id or "pixverse_v4.5",
+                model=style_id or _POLLO_DEFAULT,
                 **kwargs
             )
 
@@ -108,7 +108,7 @@ class PolloGenerationService(BaseGenerationService):
         self,
         source_image_url: str,
         prompt: str,
-        model: str = "pixverse_v4.5",
+        model: str = _POLLO_DEFAULT,
         **kwargs
     ) -> GenerationResult:
         """Generate video from image"""
@@ -118,7 +118,7 @@ class PolloGenerationService(BaseGenerationService):
             "blurry, distorted, low quality, jerky motion"
         )
 
-        model_info = POLLO_MODELS.get(model, POLLO_MODELS["pixverse_v4.5"])
+        model_info = POLLO_MODELS.get(model, POLLO_MODELS[_POLLO_DEFAULT])
 
         success, task_id, _ = await self._client.generate_video(
             image_url=source_image_url,

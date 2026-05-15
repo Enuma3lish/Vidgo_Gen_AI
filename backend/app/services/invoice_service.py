@@ -33,6 +33,22 @@ def _use_giveme() -> bool:
     return getattr(settings, "GIVEME_ENABLED", False) and bool(getattr(settings, "GIVEME_IDNO", ""))
 
 
+def _is_paypal_order(order: Order) -> bool:
+    """Return True if the order was paid via PayPal (use Invoicing v2 instead of TW e-invoice)."""
+    if not order:
+        return False
+    method = (order.payment_method or "").lower()
+    if method == "paypal":
+        return True
+    pd = order.payment_data or {}
+    return bool(pd.get("paypal_subscription_id") or pd.get("paypal_transaction_id"))
+
+
+def _paypal_currency(order: Order) -> str:
+    pd = (order.payment_data or {}) if order else {}
+    return str(pd.get("currency") or "USD").upper()
+
+
 def _invoice_status_after_issue() -> str:
     """Determine invoice status after successful issuance."""
     if _use_giveme():
@@ -184,6 +200,121 @@ async def _issue_b2b_giveme(
     return response, invoice_number, order.order_number
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# PayPal Invoicing v2 helper (alongside Giveme/ECPay)
+# Used for orders paid via PayPal (international USD); Giveme/ECPay still
+# handle Taiwan tax-compliant e-invoices for ECPay/local payments.
+# ─────────────────────────────────────────────────────────────────────────
+
+async def _issue_paypal_invoice(
+    *,
+    order: Order,
+    buyer_email: Optional[str],
+    items: List[Dict[str, Any]],
+    invoice_type: str,
+    buyer_company_name: Optional[str] = None,
+    buyer_tax_id: Optional[str] = None,
+    note: Optional[str] = None,
+) -> tuple:
+    """
+    Issue and send a PayPal-hosted invoice via Invoicing v2.
+
+    Returns (response_dict, invoice_number, paypal_invoice_id).
+    response_dict always contains a "provider": "paypal" marker so void_invoice
+    can route correctly.
+    """
+    from app.services.paypal_service import get_paypal_service
+    paypal = get_paypal_service()
+
+    currency = _paypal_currency(order)
+    total_amount = order.amount
+
+    # 1. Generate next invoice number from PayPal
+    num_result = await paypal.generate_invoice_number()
+    if not num_result.get("success"):
+        return (
+            {"success": False, "provider": "paypal", "error": num_result.get("error", "generate_invoice_number failed")},
+            "",
+            "",
+        )
+    invoice_number = num_result.get("invoice_number") or ""
+
+    # 2. Build invoice payload per Invoicing v2 schema
+    paypal_items = []
+    for item in items:
+        qty = item.get("item_count", 1)
+        unit_price = item.get("item_price", 0)
+        paypal_items.append({
+            "name": str(item["item_name"])[:200],
+            "quantity": str(qty),
+            "unit_amount": {"currency_code": currency, "value": f"{float(unit_price):.2f}"},
+            "unit_of_measure": "QUANTITY",
+        })
+
+    primary_recipient: Dict[str, Any] = {}
+    if buyer_email:
+        primary_recipient["billing_info"] = {"email_address": buyer_email}
+    if invoice_type == "b2b" and buyer_company_name:
+        primary_recipient.setdefault("billing_info", {})
+        primary_recipient["billing_info"]["business_name"] = buyer_company_name[:300]
+    if buyer_tax_id and invoice_type == "b2b":
+        # Surface tax id in additional_notes (PayPal Invoicing has no first-class field for it).
+        primary_recipient.setdefault("billing_info", {}).setdefault("additional_info", "")
+        primary_recipient["billing_info"]["additional_info"] = (
+            (primary_recipient["billing_info"].get("additional_info") or "") + f"\nTax ID: {buyer_tax_id}"
+        ).strip()
+
+    payload: Dict[str, Any] = {
+        "detail": {
+            "invoice_number": invoice_number,
+            "currency_code": currency,
+            "note": note or f"VidGo subscription — Order {order.order_number}",
+            "reference": order.order_number,
+        },
+        "items": paypal_items,
+    }
+    if primary_recipient:
+        payload["primary_recipients"] = [primary_recipient]
+
+    # 3. Create draft
+    create_result = await paypal.create_invoice(payload)
+    if not create_result.get("success"):
+        return (
+            {"success": False, "provider": "paypal", "error": create_result.get("error", "create_invoice failed"), "raw": create_result},
+            invoice_number,
+            "",
+        )
+    paypal_invoice_id = create_result.get("invoice_id") or ""
+
+    # 4. Send to recipient
+    send_result = await paypal.send_invoice(paypal_invoice_id, send_to_recipient=bool(buyer_email))
+    if not send_result.get("success"):
+        return (
+            {
+                "success": False,
+                "provider": "paypal",
+                "error": send_result.get("error", "send_invoice failed"),
+                "paypal_invoice_id": paypal_invoice_id,
+                "raw": create_result,
+            },
+            invoice_number,
+            paypal_invoice_id,
+        )
+
+    return (
+        {
+            "success": True,
+            "provider": "paypal",
+            "paypal_invoice_id": paypal_invoice_id,
+            "currency": currency,
+            "amount": float(total_amount),
+            "paypal_invoice": create_result.get("invoice"),
+        },
+        invoice_number,
+        paypal_invoice_id,
+    )
+
+
 async def create_b2c_invoice(
     db: AsyncSession,
     user_id: str,
@@ -220,10 +351,24 @@ async def create_b2c_invoice(
 
     # Calculate tax
     total_amount = order.amount
-    sales_amount, tax_amount = calculate_tax(Decimal(str(total_amount)), tax_type)
+    if _is_paypal_order(order):
+        # PayPal/USD invoices: no Taiwan 5% VAT split.
+        sales_amount, tax_amount = Decimal(str(total_amount)), Decimal("0")
+    else:
+        sales_amount, tax_amount = calculate_tax(Decimal(str(total_amount)), tax_type)
 
-    # ── Issue via Giveme or ECPay ──
-    if _use_giveme():
+    # ── Branch: PayPal Invoicing v2 vs Giveme vs ECPay ──
+    if _is_paypal_order(order):
+        # PayPal-paid order — issue international invoice via Invoicing v2.
+        # USD/foreign currency: skip TW tax-period bookkeeping (no 5% VAT split).
+        response, invoice_number, paypal_invoice_id = await _issue_paypal_invoice(
+            order=order,
+            buyer_email=buyer_email,
+            items=items,
+            invoice_type="b2c",
+        )
+        relate_number = paypal_invoice_id  # reuse column to store PayPal invoice id
+    elif _use_giveme():
         response, invoice_number, relate_number = await _issue_b2c_giveme(
             total_amount=total_amount,
             buyer_email=buyer_email,
@@ -352,10 +497,23 @@ async def create_b2b_invoice(
         return {"success": False, "error": "Invoice already exists for this order"}
 
     total_amount = order.amount
-    sales_amount, tax_amount = calculate_tax(Decimal(str(total_amount)), tax_type)
+    if _is_paypal_order(order):
+        sales_amount, tax_amount = Decimal(str(total_amount)), Decimal("0")
+    else:
+        sales_amount, tax_amount = calculate_tax(Decimal(str(total_amount)), tax_type)
 
-    # ── Issue via Giveme or ECPay ──
-    if _use_giveme():
+    # ── Branch: PayPal Invoicing v2 vs Giveme vs ECPay ──
+    if _is_paypal_order(order):
+        response, invoice_number, paypal_invoice_id = await _issue_paypal_invoice(
+            order=order,
+            buyer_email=buyer_email,
+            items=items,
+            invoice_type="b2b",
+            buyer_company_name=buyer_company_name,
+            buyer_tax_id=buyer_tax_id,
+        )
+        relate_number = paypal_invoice_id
+    elif _use_giveme():
         response, invoice_number, relate_number = await _issue_b2b_giveme(
             total_amount=total_amount,
             buyer_tax_id=buyer_tax_id,
@@ -486,13 +644,37 @@ async def void_invoice(
         return {"success": False, "error": "Invoice does not belong to user"}
     if invoice.status not in ("issued", "uploaded"):
         return {"success": False, "error": "Only issued invoices can be voided"}
-    if not invoice.invoice_period or not is_same_tax_period(invoice.invoice_period):
-        return {"success": False, "error": "Can only void invoices within current tax period (當期)"}
     if not invoice.invoice_number:
         return {"success": False, "error": "Invoice has no invoice number"}
 
-    # Void via Giveme or ECPay
-    if _use_giveme():
+    # Detect provider from stored response data (PayPal Invoicing v2 vs TW e-invoice).
+    response_data = invoice.ecpay_response_data or {}
+    is_paypal_invoice = (response_data.get("provider") == "paypal") or bool(response_data.get("paypal_invoice_id"))
+
+    # Tax-period gating only applies to TW e-invoices (Giveme/ECPay).
+    if not is_paypal_invoice:
+        if not invoice.invoice_period or not is_same_tax_period(invoice.invoice_period):
+            return {"success": False, "error": "Can only void invoices within current tax period (當期)"}
+
+    # Void via PayPal Invoicing v2, Giveme, or ECPay
+    if is_paypal_invoice:
+        from app.services.paypal_service import get_paypal_service
+        paypal = get_paypal_service()
+        paypal_invoice_id = response_data.get("paypal_invoice_id") or invoice.ecpay_relate_number
+        if not paypal_invoice_id:
+            return {"success": False, "error": "PayPal invoice id not found on invoice record"}
+        try:
+            response = await paypal.cancel_invoice(
+                paypal_invoice_id,
+                subject="Invoice cancelled",
+                note=reason or "Subscription refunded — invoice cancelled.",
+            )
+        except Exception as e:
+            logger.error(f"PayPal cancel invoice error: {e}")
+            return {"success": False, "error": f"PayPal API error: {str(e)}"}
+        if not response.get("success"):
+            return {"success": False, "error": response.get("error", "PayPal invoice cancel failed")}
+    elif _use_giveme():
         giveme = get_giveme_client()
         if not giveme:
             return {"success": False, "error": "Giveme not configured"}

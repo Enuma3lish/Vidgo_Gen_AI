@@ -39,11 +39,13 @@ from typing import Any, Dict, List, Optional
 
 from app.providers.base import BaseProvider, VideoGenerationProvider
 from app.services.mcp_client import get_mcp_manager
+from app.core.model_registry import POLLO_MODELS as _POLLO_REG
 
 logger = logging.getLogger(__name__)
 
-# Default model alias when none specified
-DEFAULT_VIDEO_MODEL = "pollo-v1-6"
+# Default model alias when none specified (env-overridable via
+# POLLO_MCP_DEFAULT_MODEL — see backend/app/core/model_registry.py).
+DEFAULT_VIDEO_MODEL = _POLLO_REG["mcp_default_video"]
 
 # Polling config for getTaskStatus
 POLL_INTERVAL_SECONDS = 10

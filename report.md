@@ -1,204 +1,152 @@
-# VidGo Homepage + Tool QA Report
+# 模型版本同步策略報告（PiAPI / Pollo）
 
-Date: 2026-05-11
-Target: https://vidgo.co
-Tester account: admin account `vidgo168@gmail.com` (password omitted from report)
-Browser: built-in Playwright browser automation, authenticated admin session
+> 狀態：v1 已實作（Option A 中央化模型登錄表）
+> 撰寫日期：2026-05-15
+> 範圍：`backend/app/core/model_registry.py` 與所有 PiAPI / Pollo provider
+> 舊版報告已封存為 [report.previous.md](report.previous.md)
 
-## Executive Summary
+---
 
-| Area | Status | Notes |
-| --- | --- | --- |
-| Admin login/session | PASS | `/admin/dashboard` was reachable without redirecting to login. |
-| Homepage zh-TW | PASS | Homepage rendered target tool cards and no raw i18n keys or broken images were detected. |
-| Homepage English | PASS | Homepage rendered target tool cards and no raw i18n keys or broken images were detected. English copy uses `Video Translation & Dubbing`. |
-| Tool page language coverage | PASS | Room Redesign, Image Translator, Video Dubbing, and Background Removal rendered in zh-TW and English with expected localized UI text. |
-| Background Removal operation | PASS | Uploaded product fixture, generated result, and verified download URL returned a valid PNG. |
-| Room Redesign operation | BLOCKED | Admin session sees custom generation as subscription-only: `Generate Design (Requires Subscription)` and `Style Transfer (Requires Subscription)`. |
-| Image Translator operation | BLOCKED | Admin session shows `20 Credits (Insufficient)`; upload/settings worked, but generation did not proceed. |
-| Video Dubbing operation | BLOCKED | Admin session shows `35 Credits (Insufficient)`; sample/settings worked, but generation did not proceed. |
+## 1. 摘要
 
-## Environment Checks
+> **「PiAPI 今天上 Kling 4，我們網站還在 Kling 3，能不能自動同步？」**
 
-- `https://vidgo.co` loaded successfully.
-- Admin-authenticated navigation was confirmed by reaching `https://vidgo.co/admin/dashboard`.
-- Language selector was visible on the homepage.
-- The four target homepage links were present:
-  - `/tools/room-redesign`: found 6 links
-  - `/tools/image-translator`: found 2 links
-  - `/tools/video-dubbing`: found 2 links
-  - `/tools/background-removal`: found 5 links
+**結論：能做到「30 秒內手動切換」，但目前不建議「完全自動拉取最新版」。**
+本次已完成中央化模型登錄表（model registry）+ 環境變數覆寫機制；
+未來若要往「全自動同步」推進，需要面對下方第 4 節列出的三個風險。
 
-## Homepage Checks
+---
 
-### zh-TW
+## 2. 為什麼我們無法 100% 自動同步？
 
-Status: PASS
+### 2.1 PiAPI / Pollo 沒有提供「列出當前可用模型」的 API
+經過實際盤點：
 
-Validated visible localized content:
-- `VidGo AI`
-- `智能去背`
-- `室內設計渲染`
-- `圖片翻譯`
-- `影片翻譯配音`
+| 廠商 | 模型清單 API | 自動發現的可行性 |
+|------|--------------|------------------|
+| PiAPI | ❌ 不存在 | 只能讀官網 HTML 文件 |
+| Pollo (REST) | ❌ 不存在 | 端點是 `/{vendor}/{model-slug}` 硬路徑 |
+| Pollo (MCP) | 只列 tool 名（`text2video_kling-v2`） | 版本後綴需從 tool 名 parse |
 
-Additional checks:
-- No raw i18n keys detected.
-- No opposite-language leakage detected in the sampled terms.
-- No broken images detected in the visible sampled image set.
-- Target tool cards link to the expected `/tools/...` routes.
+也就是說，沒有一個官方端點告訴我們「你呼叫 `kling` 這個 alias，
+今天會被路由到 v3 還是 v4」。
 
-### English
+### 2.2 廠商的 alias 行為不一致
+- PiAPI 的 `"model": "kling"` 是 **server-side alias**：他們可能在
+  某次部署後把它指到 v4，也可能繼續指 v3，毫無公告。
+- Pollo 則是 **顯式版本字串**：`pixverse_v4.5` 與 `pixverse_v5`
+  是兩個不同 endpoint，呼叫端必須明示。
 
-Status: PASS
+### 2.3 大版本升級幾乎都帶 breaking changes
+歷史上 Kling v1 → v2 改了：
+- `aspectRatio` 接受值（從 `16:9, 9:16` 加入 `1:1, 4:3`）
+- `duration` 從固定 5/10 秒改成 enum
+- 部分回傳欄位重新命名
 
-Validated visible localized content:
-- `VidGo AI`
-- `Background Removal`
-- `Interior Rendering`
-- `Image Translation`
-- `Video Translation & Dubbing`
+如果做「夜間自動 promote」，PiAPI 上線 Kling v4 的當下，
+我們的 prod 會在沒有人值守的情況下開始打到新模型，輸入欄位可能
+被 reject、回傳格式可能 parse 失敗，**直接造成全站該工具掛掉**。
+比「使用者多等一天才用上新版」嚴重很多。
 
-Additional checks:
-- No raw i18n keys detected.
-- No opposite-language leakage detected in the sampled terms.
-- No broken images detected in the visible sampled image set.
-- Target tool cards link to the expected `/tools/...` routes.
+---
 
-Note: the English homepage/page wording is `Video Translation & Dubbing`, not the shorter `Video Dubbing`. This looks like intentional product copy, not a localization failure.
+## 3. 本次實作（Option A — 中央化登錄表 + env 覆寫）
 
-## Tool Page Language Checks
+### 3.1 新檔案
+- [backend/app/core/model_registry.py](backend/app/core/model_registry.py)
+  集中所有 PiAPI / Pollo 的模型 ID，每個欄位都用
+  `os.environ.get(<KEY>, <default>)` 包起來。
 
-| Page | zh-TW Result | English Result | Notes |
-| --- | --- | --- | --- |
-| `/tools/room-redesign` | PASS | PASS | zh-TW h1: `室內設計渲染與提案工具`; English h1: `Interior Rendering and Proposal Tool`. |
-| `/tools/image-translator` | PASS | PASS | zh-TW h1: `圖片翻譯`; English h1: `Image Translation`. |
-| `/tools/video-dubbing` | PASS | PASS | zh-TW h1: `影片翻譯配音`; English h1: `Video Translation & Dubbing`. |
-| `/tools/background-removal` | PASS | PASS | zh-TW h1: `智能去背（基礎）`; English h1: `Smart Background Removal (Base)`. |
+### 3.2 改動的呼叫端
+| 檔案 | 改動 |
+|------|------|
+| [backend/app/providers/piapi_provider.py](backend/app/providers/piapi_provider.py) | Kling 影片特效、Try-On、Avatar、Lip-Sync、Trellis v1/v2 全部改讀 `PIAPI_MODELS` |
+| [backend/app/providers/pollo_provider.py](backend/app/providers/pollo_provider.py) | `_normalize_model` 預設值改用 `POLLO_MODELS["pixverse_default"]` |
+| [backend/app/providers/pollo_mcp_provider.py](backend/app/providers/pollo_mcp_provider.py) | `DEFAULT_VIDEO_MODEL` 改用 `POLLO_MODELS["mcp_default_video"]` |
+| [backend/app/services/pollo_ai.py](backend/app/services/pollo_ai.py) | 函式預設參數改用 `DEFAULT_MODEL` 常數 |
+| [backend/app/services/generation/pollo_service.py](backend/app/services/generation/pollo_service.py) | 同上 |
+| [backend/app/api/v1/uploads.py](backend/app/api/v1/uploads.py) | V2V 短影片預設模型改用 registry |
+| [backend/.env.example](backend/.env.example) | 新增 11 個註解掉的 `PIAPI_*` / `POLLO_*` 環境變數範例 |
 
-Language validation details:
-- Checked zh-TW and English via locale setting reloads.
-- No raw i18n keys such as `lp.*`, `nav.*`, `tools.*`, or `common.*` were detected.
-- No sampled opposite-language leakage was detected.
-- No broken images were detected in sampled visible images.
+### 3.3 操作流程（升級 Kling 3 → 4 的 SOP）
+1. PiAPI 公告新模型可用、確認 API 文件中要求的欄位。
+2. 在本機 `.env` 設 `PIAPI_KLING_AVATAR_MODEL=kling-v4`，跑一次煙霧測試。
+3. 通過後在 GCP Cloud Run 設定相同環境變數（或寫入 Secret Manager）。
+4. `gcloud run services update vidgo-backend --region asia-east1 --update-env-vars PIAPI_KLING_AVATAR_MODEL=kling-v4` 觸發 rolling restart（**不需要重新打 image**）。
+5. 觀察 Cloud Logging 的 5xx 率與成功率 30 分鐘。
+6. 若失常，將 env 改回原值再 `update` 一次，**30 秒內可回滾**。
 
-## Operational Checks
+> 與舊作法相比：以前要 grep 程式碼 → 改 4 個檔案 → 重 build image → 部署，
+> 約需 15–30 分鐘且不可即時回滾。
 
-### Background Removal
+---
 
-Status: PASS
+## 4. 為什麼「不再加自動拉取」是有意識的決定？
 
-Flow tested:
-1. Opened `/tools/background-removal` in English.
-2. Uploaded fixture: `TEST/Test_material/assets/product-scene/product-skincare-serum-packshot.png`.
-3. Selected `Transparent PNG` output mode.
-4. Clicked `Remove Background`.
-5. Result panel appeared with generated image.
-6. Download link appeared as `Download Result`.
-7. Download URL was fetched and validated.
+### 風險 A：靜默上線新版會踩到 schema breaking change
+見 §2.3。除非我們同時建立「相容性測試矩陣 + 自動 schema 偵測」，
+否則自動 promote 等同把生產環境當測試環境。
 
-Download validation:
-- HTTP status: 200
-- Content type: `image/png`
-- Size: 250,540 bytes
-- PNG signature: valid
-- Result URL observed: `https://storage.googleapis.com/vidgo-media-vidgo-ai/generated/image/eda6540ff0d9.png`
+### 風險 B：偵測手段只剩爬官網文件
+- PiAPI 文件是動態目錄樹，每次改版 selector 就壞掉。
+- 違反 robots.txt 風險。
+- 每天打一次 LLM 來 diff 文件 ≈ 月成本 USD$5–10，但訊號品質不穩定。
 
-Result: admin account can run and download Background Removal successfully.
+### 風險 C：自動 dry-run 探測會花錢、也會誤觸限流
+若改成「每日對 `kling-v3 / kling-v4 / kling-v5` 發試打 request 看 200 vs 400」：
+- 即使最小請求，每模型每天成本約 USD$0.01–0.03。
+- 容易被 PiAPI 視為異常流量觸發 429，影響真實使用者。
 
-### Room Redesign
+---
 
-Status: BLOCKED by account entitlement/subscription gate
+## 5. 未來路線圖（如果真的要做「半自動同步」）
 
-Flow attempted:
-1. Opened `/tools/room-redesign` in English.
-2. Uploaded fixture: `TEST/Test_material/assets/room-redesign/room-living-2d-sketch.png`.
-3. Selected room/style controls:
-   - `Living`
-   - `Scandinavian`
-4. Looked for an unlocked generation CTA.
+| 階段 | 動作 | 風險 | 預估投入 |
+|------|------|------|----------|
+| **v1（已完成）** | 中央 registry + env 覆寫 | 低 | 已完成 |
+| v1.1 | 把 `model_registry` 改讀 PostgreSQL `model_registry` 表 + Redis 快取 1h，運維可在 admin panel 改 | 低 | 0.5 天 |
+| v2 | 加 Cloud Scheduler 每日通知（不變更）：對候選新版本送 1 token dry-run，若回 200 就開 Slack 告警給工程師審核 | 中 | 1 天 |
+| v3 | 自動 PR：偵測到新版即在 GitHub 自動開 PR 改 `.env` 預設並附上 schema diff，仍需人工 merge | 中高 | 2–3 天 |
+| v4 | 真自動 promote（不建議） | 高 | — |
 
-Observed blocker:
-- No unlocked custom generation button was available.
-- Page displayed subscription-gated CTAs:
-  - `Generate Design (Requires Subscription)`
-  - `Style Transfer (Requires Subscription)`
-- Page also displayed: `Select a design style to view AI-generated examples, or subscribe to upload your room photo`.
+> 個人建議停在 **v2**：得到「新版上線通知」的好處，但永遠保留人類最後一道閘門。
 
-API observations:
-- `/api/v1/interior/room-types` returned 200 with room types.
-- `/api/v1/interior/styles` returned 200 with design styles.
-- No custom generation API request was triggered.
+---
 
-Result: page, upload, and selectors work, but custom generation/download could not be verified using the admin account because this admin session is not treated as a subscriber for Room Redesign generation.
+## 6. 已知的可立即收益
 
-### Image Translator
+完成 v1 後：
+1. **緊急回滾時間** 從 ~20 分鐘降到 ~30 秒。
+2. **A/B 測試**：可同時在不同 Cloud Run revision 跑不同模型，比較成功率與成本。
+3. **多區域差異化**：例如台灣站 pin `kling_v2`，海外站試 `kling_v3`。
+4. **降低 build pipeline 噪音**：模型升級不再產生 commit history。
 
-Status: BLOCKED by insufficient credits
+---
 
-Flow attempted:
-1. Opened `/tools/image-translator` in English.
-2. Uploaded fixture: `TEST/Test_material/assets/image-translator/text-sale-card-en.png`.
-3. Selected target language: `Traditional Chinese`.
-4. Selected tone: `Food & beverage menu`.
-5. Clicked `Translate Image`.
+## 7. 驗收清單
 
-Observed blocker:
-- Page displayed: `Estimated cost: 20 Credits (Insufficient)`.
-- No generation result appeared.
-- No generation API response was captured after clicking.
-- No download control appeared.
+- [x] `backend/app/core/model_registry.py` 提供 `PIAPI_MODELS` / `POLLO_MODELS`。
+- [x] 所有先前 hard-coded `"kling"` / `"pixverse_v4.5"` / `"pollo-v1-6"` 改為從 registry 讀取。
+- [x] `.env.example` 提供完整覆寫範例。
+- [x] Lint / Type 檢查通過（`get_errors` 0 errors）。
+- [ ] 部署後抽測 RoomRedesign / ShortVideo / VirtualTryOn 三條鏈，確保預設模型仍正確（**待下次部署回歸**）。
 
-Result: upload and settings UI work, but generation/download could not be verified using the admin account because the account has insufficient credits for Image Translator.
+---
 
-### Video Dubbing
+## 附錄：可覆寫的環境變數一覽
 
-Status: BLOCKED by insufficient credits
+```bash
+# PiAPI
+PIAPI_KLING_EFFECTS_MODEL=kling
+PIAPI_KLING_TRYON_MODEL=kling
+PIAPI_KLING_AVATAR_MODEL=kling
+PIAPI_KLING_LIPSYNC_MODEL=kling
+PIAPI_TRELLIS_V1_MODEL=Qubico/trellis
+PIAPI_TRELLIS_V2_MODEL=Qubico/trellis2
 
-Flow attempted:
-1. Opened `/tools/video-dubbing` in English.
-2. Selected sample: `Retail Product Launch`.
-3. Filled script text.
-4. Selected target language: `Traditional Chinese`.
-5. Clicked the dubbing CTA after scrolling/force-click retry.
-
-Observed blocker:
-- Page displayed: `Estimated cost: 35 Credits (Insufficient)`.
-- No generation API response was captured after clicking.
-- No generated downloadable video appeared.
-- The page did show the demo/sample output panel, but this is not proof of a new generated result from uploaded input.
-
-Result: page and settings UI work, but generation/download could not be verified using the admin account because the account has insufficient credits for Video Dubbing.
-
-Note: the test plan estimated Video Dubbing at 30 credits, but the live UI shows 35 credits. Update the plan or pricing expectations if 35 is the intended production price.
-
-## Issues / Follow-Up Items
-
-1. Admin account is not enough for paid-tool E2E generation.
-   - Room Redesign custom generation is subscription-gated.
-   - Image Translator shows insufficient credits.
-   - Video Dubbing shows insufficient credits.
-   - Recommendation: seed this admin account with test credits/subscriber entitlement, or use a dedicated QA Pro subscriber account for paid generation flows.
-
-2. Video Dubbing pricing expectation mismatch.
-   - Plan expected 30 credits.
-   - Live UI shows 35 credits.
-   - Recommendation: confirm intended production price and align `tier_config.py`, UI copy, and test plan.
-
-3. Full upload → effect → generate → download validation is currently complete only for Background Removal.
-   - Background Removal passed with a valid generated PNG download.
-   - Room Redesign, Image Translator, and Video Dubbing require account entitlement/credits before their generation/download flows can be fully validated.
-
-## Final Status
-
-| Requirement | Status |
-| --- | --- |
-| Homepage target items correct | PASS |
-| Each requested page checked in zh-TW | PASS |
-| Each requested page checked in English | PASS |
-| Background Removal upload/effect/generate/download | PASS |
-| Room Redesign upload/effect/generate/download | BLOCKED |
-| Image Translator upload/effect/generate/download | BLOCKED |
-| Video Dubbing upload/effect/generate/download | BLOCKED |
-
-Overall: homepage and localization checks passed. Background Removal passed the full operational flow. The other three paid tools are blocked by the current admin account's entitlement/credit state, not by page-rendering or language failures.
+# Pollo
+POLLO_PIXVERSE_DEFAULT_MODEL=pixverse_v4.5
+POLLO_PIXVERSE_CREATIVE_MODEL=pixverse_v5
+POLLO_KLING_VIDEO_MODEL=kling_v2
+POLLO_MCP_DEFAULT_MODEL=pollo-v1-6
+```

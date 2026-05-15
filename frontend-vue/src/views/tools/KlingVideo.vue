@@ -23,10 +23,10 @@ const negativePrompt = ref('')
 const resultVideo = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
 
-// service_type changes with tier so CreditCost reads the right price
-const serviceKey = computed(() =>
-  tier.value === 'flagship' ? 'video_flagship' : 'video_generation_standard'
-)
+// Backend hardcoded fallback per tier (matches seeded ServicePricing).
+// Admin overrides via /admin/models still affect the actual deduction
+// regardless of what's displayed here.
+const displayCost = computed(() => tier.value === 'flagship' ? 500 : 100)
 
 async function handleGenerate() {
   if (!prompt.value.trim()) {
@@ -71,7 +71,7 @@ async function handleGenerate() {
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold mb-2" style="color: #f5f5fa;">{{ t('klingVideo.title') }}</h1>
         <p style="color: #9494b0;">{{ t('klingVideo.subtitle') }}</p>
-        <CreditCost :service="serviceKey" class="mt-2" />
+        <CreditCost :cost="displayCost" class="mt-2" />
         <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
           <RouterLink to="/pricing" class="hover:underline">
             {{ t('klingVideo.demoCta') }}

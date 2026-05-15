@@ -64,7 +64,8 @@ async function handleGenerate() {
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold mb-2" style="color: #f5f5fa;">{{ t('lumaVideo.title') }}</h1>
         <p style="color: #9494b0;">{{ t('lumaVideo.subtitle') }}</p>
-        <CreditCost service="video_generation_professional" class="mt-2" />
+        <!-- Backend tools.py CREDIT_COST = 300; admin can dial via /admin/models. -->
+        <CreditCost :cost="300" class="mt-2" />
         <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
           <RouterLink to="/pricing" class="hover:underline">
             {{ t('lumaVideo.demoCta') }}

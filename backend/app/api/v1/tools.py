@@ -2899,7 +2899,11 @@ async def _generate_avatar_inner(
     if not res_ok:
         return ToolResponse(success=False, message=res_err)
 
-    CREDIT_COST = 30
+    # Hardcoded fallback aligned with the seeded ServicePricing row
+    # (ai_avatar.credit_cost=300, api_cost_usd≈$0.30). Previously 30, which
+    # would have surfaced as a 10x silent jump the moment the seed ran
+    # against prod DB once dynamic ServicePricing lookup took effect.
+    CREDIT_COST = 300
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "ai_avatar")
     if not ok:
         return ToolResponse(success=False, message=err)

@@ -23,6 +23,26 @@ const negativePrompt = ref('')
 const resultVideo = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
 
+// Curated prompts. The `kind` hint tells the user whether the prompt is
+// designed for text-to-video (no input image needed) or for image-to-video
+// (best with a start frame). Selecting a preset only fills the prompt
+// text — the user still picks the start frame separately.
+const PROMPT_PRESETS = [
+  { id: 'oceanWaves',    kind: 't2v', prompt: 'slow ocean waves at sunset, dramatic golden light reflecting on the water, cinematic camera glide forward, photorealistic' },
+  { id: 'forestWalk',    kind: 't2v', prompt: 'first-person walk through a sunlit pine forest, dappled light through leaves, gentle handheld camera shake, ultra-realistic' },
+  { id: 'cityFlyover',   kind: 't2v', prompt: 'aerial drone shot flying over a futuristic neon-lit city at night, smooth forward motion, cinematic depth of field' },
+  { id: 'productSpin',   kind: 'i2v', prompt: 'slow 360-degree rotation around the subject, studio lighting unchanged, product remains sharp and centered, no background motion' },
+  { id: 'subjectTurn',   kind: 'i2v', prompt: 'subject slowly turns to face the camera with a confident smile, subtle head movement, gentle wind in hair, cinematic shallow depth of field' },
+  { id: 'cameraDolly',   kind: 'i2v', prompt: 'smooth cinematic camera dolly forward toward the subject, subtle parallax in background, preserve subject identity and clothing' },
+  { id: 'subtleBreeze',  kind: 'i2v', prompt: 'subtle wind gently blowing through hair and fabric, micro-movements only, photorealistic, preserve subject pose and expression' },
+  { id: 'dramaticZoom',  kind: 't2v', prompt: 'dramatic slow zoom toward a vast desert landscape, golden hour, lens flare, epic cinematic atmosphere' },
+]
+const selectedPresetId = ref('')
+function applyPreset() {
+  const preset = PROMPT_PRESETS.find(p => p.id === selectedPresetId.value)
+  if (preset) prompt.value = preset.prompt
+}
+
 // Backend hardcoded fallback per tier (matches seeded ServicePricing).
 // Admin overrides via /admin/models still affect the actual deduction
 // regardless of what's displayed here.
@@ -98,8 +118,21 @@ async function handleGenerate() {
             </div>
           </div>
 
-          <!-- Prompt -->
+          <!-- Prompt + presets -->
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.presetLabel') }}</label>
+            <select
+              v-model="selectedPresetId"
+              @change="applyPreset"
+              class="w-full px-3 py-2 rounded-lg text-sm mb-3"
+              style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
+            >
+              <option value="">{{ t('klingVideo.presetCustom') }}</option>
+              <option v-for="p in PROMPT_PRESETS" :key="p.id" :value="p.id">
+                [{{ p.kind.toUpperCase() }}] {{ t(`klingVideo.presets.${p.id}`) }}
+              </option>
+            </select>
+
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.promptLabel') }}</label>
             <textarea
               v-model="prompt"

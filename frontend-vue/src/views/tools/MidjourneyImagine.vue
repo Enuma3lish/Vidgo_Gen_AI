@@ -18,6 +18,26 @@ const processMode = ref<'relax' | 'fast' | 'turbo'>('fast')
 const resultImage = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
 
+// Curated prompts that are known to produce strong Midjourney results.
+// Prompt text stays English (the model's native input); label is i18n'd.
+// Each one is a complete, ready-to-generate payload — picking → click
+// Generate produces a result with no further input required.
+const PROMPT_PRESETS = [
+  { id: 'cityDusk',       prompt: 'cinematic city skyline at dusk, golden hour, ultra-wide, dramatic clouds, photorealistic, 8k --ar 16:9' },
+  { id: 'minimalProduct', prompt: 'minimalist product photograph on white seamless background, soft three-point studio lighting, sharp focus, commercial e-commerce style --ar 1:1' },
+  { id: 'forestFog',      prompt: 'ethereal forest with morning fog and god rays streaming through tall pine trees, soft volumetric light, photorealistic landscape --ar 16:9' },
+  { id: 'cyberpunkStreet',prompt: 'futuristic neon-lit street, rainy night, cyberpunk style, reflective puddles, blade-runner inspired color palette --ar 16:9' },
+  { id: 'abstractMetal',  prompt: 'abstract liquid metal sculpture, chrome surface with subtle iridescence, studio lighting, soft shadows, gallery exhibition --ar 1:1' },
+  { id: 'minimalKitchen', prompt: 'Japanese minimalist kitchen interior, warm afternoon light, natural wood and white plaster, calm atmosphere, architectural photography --ar 16:9' },
+  { id: 'fashionPortrait',prompt: 'editorial fashion portrait, dramatic Rembrandt lighting, neutral linen backdrop, sharp focus on face, high-end magazine quality --ar 3:4' },
+  { id: 'foodHero',       prompt: 'hero shot of a steaming ceramic bowl of ramen on dark wood table, overhead 45-degree angle, moody warm lighting, professional food photography --ar 1:1' },
+]
+const selectedPresetId = ref('')
+function applyPreset() {
+  const preset = PROMPT_PRESETS.find(p => p.id === selectedPresetId.value)
+  if (preset) prompt.value = preset.prompt
+}
+
 async function handleGenerate() {
   if (!prompt.value.trim()) {
     uiStore.showWarning(t('midjourney.warnings.emptyPrompt'))
@@ -71,6 +91,19 @@ async function handleGenerate() {
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="space-y-4">
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('midjourney.presetLabel') }}</label>
+            <select
+              v-model="selectedPresetId"
+              @change="applyPreset"
+              class="w-full px-3 py-2 rounded-lg text-sm mb-3"
+              style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
+            >
+              <option value="">{{ t('midjourney.presetCustom') }}</option>
+              <option v-for="p in PROMPT_PRESETS" :key="p.id" :value="p.id">
+                {{ t(`midjourney.presets.${p.id}`) }}
+              </option>
+            </select>
+
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('midjourney.promptLabel') }}</label>
             <textarea
               v-model="prompt"

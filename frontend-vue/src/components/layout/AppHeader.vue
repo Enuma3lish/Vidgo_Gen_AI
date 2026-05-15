@@ -58,6 +58,14 @@ const toolGroups: ToolGroup[] = [
       { to: '/tools/video-dubbing',    emoji: '🎙️', key: 'lp.videoDubbing.title' },
     ],
   },
+  {
+    titleKey: 'lp.categories.proAi',
+    items: [
+      { to: '/tools/midjourney-imagine', emoji: '🎨', key: 'lp.allTools.midjourney.name' },
+      { to: '/tools/kling-video',        emoji: '🎥', key: 'lp.allTools.klingVideo.name' },
+      { to: '/tools/luma-video',         emoji: '✨', key: 'lp.allTools.lumaVideo.name' },
+    ],
+  },
 ]
 
 const visibleToolGroups = computed(() =>

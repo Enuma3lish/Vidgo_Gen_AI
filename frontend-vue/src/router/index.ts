@@ -96,6 +96,32 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
+  // ===== Premium / Flagship Models (PiAPI) =====
+
+  // Midjourney text-to-image — image_generation_premium tier (~50 credits)
+  {
+    path: '/tools/midjourney-imagine',
+    name: 'midjourney-imagine',
+    component: () => import('@/views/tools/MidjourneyImagine.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // Kling video — tier-based pricing (default 100 / flagship 500 credits)
+  {
+    path: '/tools/kling-video',
+    name: 'kling-video',
+    component: () => import('@/views/tools/KlingVideo.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // Luma Dream Machine — video_generation_professional tier (~300 credits)
+  {
+    path: '/tools/luma-video',
+    name: 'luma-video',
+    component: () => import('@/views/tools/LumaVideo.vue'),
+    meta: { requiresAuth: false }
+  },
+
   // ===== Redirects for removed/aliased routes =====
   { path: '/tools/remove-watermark', redirect: '/tools/effects' },
   {

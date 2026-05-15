@@ -595,7 +595,8 @@
     "ecpayPaymentLabel": "クレジットカード決済 (ECPay)",
     "testPaymentLabel": "テスト決済 (US$1 / 約NT$32)",
     "paypalPaymentLabel": "国際決済 (PayPal)",
-    "paypalPricingStrategy": "海外でPayPalをご利用の際はUSD価格をご利用ください：スタンダード US$19.99、Pro US$49.99、Pro+ US$99.99。PayPal手数料と為替損失をカバーします。",
+    "paypalPricingStrategy": "海外PayPal推奨価格 (USD)：Basic US$19.99、Pro US$49.99、Premium US$99.99。PayPal手数料と為替損失をカバーします。",
+    "overseasUsdLabel": "海外USD",
     "creditReference": {
       "title": "クレジット換算の目安（100クレジット）",
       "headers": {
@@ -1084,6 +1085,18 @@
       "patternGenerate": {
         "name": "パターンデザイン",
         "desc": "ブランド向けシームレスパターン生成"
+      },
+      "midjourney": {
+        "name": "Midjourney",
+        "desc": "プレミアム AI 画像生成"
+      },
+      "klingVideo": {
+        "name": "Kling 動画",
+        "desc": "シネマティック AI 動画（標準 / 旗艦 Pro）"
+      },
+      "lumaVideo": {
+        "name": "Luma Dream Machine",
+        "desc": "Luma Ray プロフェッショナル AI 動画"
       }
     },
     "categories": {
@@ -1092,7 +1105,8 @@
       "ecommerceAI": "EコマースAI",
       "ecommerceAIDesc": "商品シーン生成、背景除去、AIシャドウ — すべてのプラットフォームで商品を際立たせる。",
       "designAI": "デザイン＆コンテンツAI",
-      "designAIDesc": "ルームリデザイン、スタイルクローン、画像翻訳 — クリエイティブデザインワークフローのための強力なツール。"
+      "designAIDesc": "ルームリデザイン、スタイルクローン、画像翻訳 — クリエイティブデザインワークフローのための強力なツール。",
+      "proAi": "Pro AI Studio"
     },
     "seasons": {
       "spring": "春セール",
@@ -1498,5 +1512,76 @@
       "step2": "拡大倍率を 2 倍 / 4 倍から選びます。",
       "step3": "「拡大」をクリックして高解像度の結果をダウンロードします。"
     }
+  },
+  "midjourney": {
+    "title": "Midjourney AI 画像",
+    "subtitle": "PiAPI 経由で Midjourney によるプレミアム画像生成。",
+    "demoCta": "サブスクすると Midjourney 画像を生成できます。",
+    "promptLabel": "プロンプト",
+    "promptPlaceholder": "生成したい画像を説明してください...",
+    "aspectRatio": "アスペクト比",
+    "processMode": "処理モード",
+    "processModes": {
+      "relax": "Relax（遅い・安い）",
+      "fast": "Fast（標準）",
+      "turbo": "Turbo（最速）"
+    },
+    "action": "生成",
+    "processing": "生成中...",
+    "loading": "Midjourney で生成中...",
+    "placeholder": "生成された画像はここに表示されます。",
+    "resultLabel": "結果",
+    "download": "ダウンロード",
+    "warnings": { "emptyPrompt": "プロンプトを入力してください。" },
+    "toasts": { "success": "画像の生成が完了しました。", "demoReady": "デモ画像の準備ができました。" },
+    "errors": { "generic": "生成に失敗しました。もう一度お試しください。" }
+  },
+  "klingVideo": {
+    "title": "Kling 動画",
+    "subtitle": "PiAPI 経由で Kling によるシネマティック AI 動画。標準または旗艦 Pro モード。",
+    "demoCta": "サブスクすると Kling 動画を生成できます。",
+    "tierLabel": "ティア",
+    "tiers": { "default": "標準（Kling 2.6）", "flagship": "旗艦（Kling 2.1-master Pro）" },
+    "tierHints": { "default": "高速・低コスト。", "flagship": "最高画質・Pro モードのみ。" },
+    "promptLabel": "プロンプト",
+    "promptPlaceholder": "見たい内容と動きを説明してください...",
+    "startImage": "開始フレーム（任意）",
+    "startImageHint": "アップロードすると image-to-video に切り替わります。",
+    "endImage": "終了フレーム（任意）",
+    "endImageHint": "両方を使うとトランジションになります。",
+    "duration": "時間",
+    "aspectRatio": "アスペクト比",
+    "action": "動画を生成",
+    "processing": "生成中...",
+    "loading": "Kling で生成中...",
+    "placeholder": "生成された動画はここに表示されます。",
+    "resultLabel": "結果",
+    "download": "ダウンロード",
+    "warnings": { "emptyPrompt": "プロンプトを入力してください。" },
+    "toasts": { "success": "{tier} 動画を生成しました。", "demoReady": "デモ動画の準備ができました。" },
+    "errors": { "generic": "生成に失敗しました。もう一度お試しください。" }
+  },
+  "lumaVideo": {
+    "title": "Luma Dream Machine",
+    "subtitle": "PiAPI 経由で Luma によるシネマティック AI 動画。T2V、I2V、最初/最後フレーム遷移に対応。",
+    "demoCta": "サブスクすると Luma 動画を生成できます。",
+    "promptLabel": "プロンプト",
+    "promptPlaceholder": "動きを含めて見たい内容を説明してください...",
+    "startImage": "開始画像（任意）",
+    "startImageHint": "アップロードすると image-to-video に切り替わります。",
+    "endImage": "終了画像（任意）",
+    "endImageHint": "両方を使うと最初/最後フレーム遷移になります。",
+    "duration": "時間",
+    "aspectRatio": "アスペクト比",
+    "loopLabel": "ループとして生成",
+    "action": "動画を生成",
+    "processing": "生成中...",
+    "loading": "Luma で生成中...",
+    "placeholder": "生成された動画はここに表示されます。",
+    "resultLabel": "結果",
+    "download": "ダウンロード",
+    "warnings": { "emptyPrompt": "プロンプトを入力してください。" },
+    "toasts": { "success": "Luma 動画を生成しました。", "demoReady": "デモ動画の準備ができました。" },
+    "errors": { "generic": "生成に失敗しました。もう一度お試しください。" }
   }
 }

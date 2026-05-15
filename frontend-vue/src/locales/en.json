@@ -630,7 +630,8 @@
     "ecpayPaymentLabel": "Credit card payment (ECPay)",
     "testPaymentLabel": "Test payment (US$1 / approx. NT$32)",
     "paypalPaymentLabel": "International payment (PayPal)",
-    "paypalPricingStrategy": "For overseas PayPal checkout, please use USD pricing: Standard US$19.99, Pro US$49.99, Pro+ US$99.99 — to offset PayPal fees and FX losses.",
+    "paypalPricingStrategy": "International USD pricing (PayPal): Basic US$19.99, Pro US$49.99, Premium US$99.99 — to offset PayPal fees and FX losses.",
+    "overseasUsdLabel": "Overseas USD",
     "creditReference": {
       "title": "Credit Conversion Reference (100 credits)",
       "headers": {
@@ -1189,6 +1190,18 @@
       "patternGenerate": {
         "name": "Pattern Design",
         "desc": "Generate seamless patterns for branding"
+      },
+      "midjourney": {
+        "name": "Midjourney",
+        "desc": "Premium AI image generation"
+      },
+      "klingVideo": {
+        "name": "Kling Video",
+        "desc": "Cinematic AI video (standard / flagship pro)"
+      },
+      "lumaVideo": {
+        "name": "Luma Dream Machine",
+        "desc": "Professional AI video with Luma Ray"
       }
     },
     "categories": {
@@ -1197,7 +1210,8 @@
       "ecommerceAI": "E-commerce AI",
       "ecommerceAIDesc": "Clean backgrounds, professional product scenes, and crystal-clear images — everything you need for listings that convert.",
       "designAI": "Design & Content AI",
-      "designAIDesc": "Transform empty rooms or rough sketches into photorealistic interior designs your clients will love."
+      "designAIDesc": "Transform empty rooms or rough sketches into photorealistic interior designs your clients will love.",
+      "proAi": "Pro AI Studio"
     },
     "seasons": {
       "spring": "Spring Sale",
@@ -1498,5 +1512,76 @@
       "step2": "Choose 2x or 4x scale factor.",
       "step3": "Click Upscale and download the HD result."
     }
+  },
+  "midjourney": {
+    "title": "Midjourney AI Image",
+    "subtitle": "Premium image generation via Midjourney on PiAPI.",
+    "demoCta": "Subscribe to generate your own Midjourney images.",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe the image you want to create...",
+    "aspectRatio": "Aspect Ratio",
+    "processMode": "Process Mode",
+    "processModes": {
+      "relax": "Relax (slow, cheaper)",
+      "fast": "Fast (default)",
+      "turbo": "Turbo (fastest)"
+    },
+    "action": "Generate",
+    "processing": "Generating...",
+    "loading": "Generating with Midjourney...",
+    "placeholder": "Your generated image will appear here.",
+    "resultLabel": "Result",
+    "download": "Download",
+    "warnings": { "emptyPrompt": "Please enter a prompt." },
+    "toasts": { "success": "Image generated successfully.", "demoReady": "Demo image ready." },
+    "errors": { "generic": "Generation failed. Please try again." }
+  },
+  "klingVideo": {
+    "title": "Kling Video",
+    "subtitle": "Cinematic AI video via Kling on PiAPI. Standard or flagship pro mode.",
+    "demoCta": "Subscribe to generate your own Kling videos.",
+    "tierLabel": "Tier",
+    "tiers": { "default": "Standard (Kling 2.6)", "flagship": "Flagship (Kling 2.1-master Pro)" },
+    "tierHints": { "default": "Fast turnaround, lower cost.", "flagship": "Highest quality, pro-mode only." },
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe what you want to see and how it should move...",
+    "startImage": "Start Frame (optional)",
+    "startImageHint": "Upload to switch to image-to-video.",
+    "endImage": "End Frame (optional)",
+    "endImageHint": "Use both frames for a transition.",
+    "duration": "Duration",
+    "aspectRatio": "Aspect Ratio",
+    "action": "Generate Video",
+    "processing": "Generating...",
+    "loading": "Generating with Kling...",
+    "placeholder": "Your generated video will appear here.",
+    "resultLabel": "Result",
+    "download": "Download",
+    "warnings": { "emptyPrompt": "Please enter a prompt." },
+    "toasts": { "success": "{tier} video generated.", "demoReady": "Demo video ready." },
+    "errors": { "generic": "Generation failed. Please try again." }
+  },
+  "lumaVideo": {
+    "title": "Luma Dream Machine",
+    "subtitle": "Cinematic AI video with Luma on PiAPI. Text-to-video, image-to-video, and first/last-frame transitions.",
+    "demoCta": "Subscribe to generate your own Luma videos.",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe what you want to see in motion...",
+    "startImage": "Start Image (optional)",
+    "startImageHint": "Upload to switch to image-to-video.",
+    "endImage": "End Image (optional)",
+    "endImageHint": "Use both frames for a first/last-frame transition.",
+    "duration": "Duration",
+    "aspectRatio": "Aspect Ratio",
+    "loopLabel": "Generate as loop",
+    "action": "Generate Video",
+    "processing": "Generating...",
+    "loading": "Generating with Luma...",
+    "placeholder": "Your generated video will appear here.",
+    "resultLabel": "Result",
+    "download": "Download",
+    "warnings": { "emptyPrompt": "Please enter a prompt." },
+    "toasts": { "success": "Luma video generated.", "demoReady": "Demo video ready." },
+    "errors": { "generic": "Generation failed. Please try again." }
   }
 }

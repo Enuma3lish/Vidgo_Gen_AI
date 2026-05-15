@@ -183,6 +183,75 @@ export const toolsApi = {
     return response.data
   },
 
+  // ─── Premium / flagship model endpoints ────────────────────────────────
+
+  async midjourneyImagine(params: {
+    prompt: string
+    aspectRatio?: string
+    processMode?: 'relax' | 'fast' | 'turbo'
+  }): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/midjourney-imagine',
+      {
+        prompt: params.prompt,
+        aspect_ratio: params.aspectRatio ?? '1:1',
+        process_mode: params.processMode,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
+  async klingVideo(params: {
+    prompt: string
+    tier?: 'default' | 'flagship'
+    aspectRatio?: string
+    duration?: 5 | 10
+    imageUrl?: string
+    imageTailUrl?: string
+    negativePrompt?: string
+    cfgScale?: number
+  }): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/kling-video',
+      {
+        prompt: params.prompt,
+        tier: params.tier ?? 'default',
+        aspect_ratio: params.aspectRatio ?? '16:9',
+        duration: params.duration ?? 5,
+        image_url: params.imageUrl,
+        image_tail_url: params.imageTailUrl,
+        negative_prompt: params.negativePrompt,
+        cfg_scale: params.cfgScale,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
+  async lumaVideo(params: {
+    prompt: string
+    duration?: 5 | 9
+    aspectRatio?: string
+    startImage?: string
+    endImage?: string
+    loop?: boolean
+  }): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/luma-video',
+      {
+        prompt: params.prompt,
+        duration: params.duration ?? 5,
+        aspect_ratio: params.aspectRatio ?? '16:9',
+        start_image: params.startImage,
+        end_image: params.endImage,
+        loop: params.loop ?? false,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
   async uploadImage(file: File): Promise<{ url: string }> {
     const formData = new FormData()
     formData.append('file', file)

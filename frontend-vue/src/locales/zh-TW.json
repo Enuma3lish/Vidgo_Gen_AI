@@ -1582,7 +1582,7 @@
     "auditTitle": "最近變更",
     "auditEmpty": "尚無變更紀錄。",
     "metricsTitle": "最近 {days} 天",
-    "metricsEmpty": "尚無呼叫資料。Provider-router 指標 pipeline 將於後續 PR 上線。",
+    "metricsEmpty": "此區間尚無呼叫資料。Metrics 從現在起每次 provider 呼叫都會記錄。",
     "metricSuccessRate": "成功率",
     "metricAvgLatency": "平均延遲",
     "metricCost": "成本 (USD)",

@@ -24,7 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_redis
-from app.models.billing import Generation
+from app.models.model_registry import GenerationMetric
 from app.models.user import User
 from app.services.model_registry_service import ModelRegistryService
 
@@ -211,33 +211,32 @@ async def get_model_metrics(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """Phase C: aggregate success rate / avg latency / cost from generations.
+    """Phase C: aggregate success rate / avg latency from generation_metrics.
 
     Groups by model_used so admins can compare "Kling 2.6 vs 2.5 vs 2.1-master"
-    side-by-side. service_key is used here as a label / filter hint via the
-    Generation.service_type column when populated; otherwise the dashboard
-    just shows all model_used values that produced traffic in the window.
+    side-by-side. The ``service_key`` URL param is informational only —
+    metrics are keyed by ``model_used`` strings produced by ProviderRouter's
+    derivation, which don't map 1:1 to registry service_keys.
+
+    Cost is computed at query time as call_count × api_cost_usd if we can
+    resolve a matching ServicePricing row for the derived model; otherwise
+    falls back to 0.0 (TODO: improve once provider_router exposes per-call
+    cost from PiAPI/Pollo responses).
     """
     since = datetime.now(timezone.utc) - timedelta(days=window_days)
 
-    # Aggregate per model_used. We don't filter by service_key in the SQL
-    # because Generation.service_type uses the credit-cost service slug
-    # (image_generation_premium, video_flagship, ...) while service_key is
-    # the registry slug (kling_video, flux_t2i, ...). The admin UI groups by
-    # model_used regardless. Caller can pass service_key="all" to see global.
     base = (
         select(
-            Generation.model_used,
+            GenerationMetric.model_used,
             func.count().label("total_calls"),
             func.sum(
-                func.case((Generation.status == "completed", 1), else_=0)
+                func.case((GenerationMetric.success.is_(True), 1), else_=0)
             ).label("success_count"),
-            func.avg(Generation.duration_ms).label("avg_duration_ms"),
-            func.sum(Generation.api_cost_usd).label("total_cost_usd"),
+            func.avg(GenerationMetric.duration_ms).label("avg_duration_ms"),
         )
-        .where(Generation.created_at >= since)
-        .where(Generation.model_used.isnot(None))
-        .group_by(Generation.model_used)
+        .where(GenerationMetric.created_at >= since)
+        .where(GenerationMetric.model_used.isnot(None))
+        .group_by(GenerationMetric.model_used)
     )
     result = await db.execute(base)
 
@@ -247,7 +246,6 @@ async def get_model_metrics(
         total = int(row[1] or 0)
         success = int(row[2] or 0)
         avg_ms = row[3]
-        cost = row[4] or 0
         metrics_by_model.append(
             ModelMetrics(
                 model_used=model_used,
@@ -257,8 +255,8 @@ async def get_model_metrics(
                 failure_count=max(0, total - success),
                 success_rate=(success / total) if total > 0 else 0.0,
                 avg_duration_ms=int(avg_ms) if avg_ms is not None else None,
-                p95_duration_ms=None,  # populate from a separate percentile_cont call when needed
-                total_cost_usd=float(cost),
+                p95_duration_ms=None,  # populate from percentile_cont when needed
+                total_cost_usd=0.0,    # TODO: join ServicePricing for cost estimate
             )
         )
 

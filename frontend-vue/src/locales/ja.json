@@ -1582,7 +1582,7 @@
     "auditTitle": "最近の変更",
     "auditEmpty": "変更履歴はまだありません。",
     "metricsTitle": "過去 {days} 日",
-    "metricsEmpty": "呼び出しデータはまだありません。",
+    "metricsEmpty": "この期間の呼び出しデータはまだありません。今後の provider 呼び出しから記録されます。",
     "metricSuccessRate": "成功率",
     "metricAvgLatency": "平均レイテンシ",
     "metricCost": "コスト (USD)",

@@ -1582,7 +1582,7 @@
     "auditTitle": "최근 변경",
     "auditEmpty": "아직 변경 내역이 없습니다.",
     "metricsTitle": "최근 {days}일",
-    "metricsEmpty": "아직 호출 데이터가 없습니다.",
+    "metricsEmpty": "이 기간의 호출 데이터가 아직 없습니다. 앞으로의 provider 호출부터 기록됩니다.",
     "metricSuccessRate": "성공률",
     "metricAvgLatency": "평균 지연",
     "metricCost": "비용 (USD)",

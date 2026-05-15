@@ -1605,7 +1605,7 @@
     "auditTitle": "Recent changes",
     "auditEmpty": "No changes yet.",
     "metricsTitle": "Last {days} days",
-    "metricsEmpty": "No call data yet. Provider-router metrics pipeline ships in a follow-up PR.",
+    "metricsEmpty": "No call data in this window yet. Metrics are captured per provider call going forward.",
     "metricSuccessRate": "Success",
     "metricAvgLatency": "Avg latency",
     "metricCost": "Cost (USD)",

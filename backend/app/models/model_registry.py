@@ -1,9 +1,10 @@
-"""SQLAlchemy models for the admin-editable model registry + audit log.
+"""SQLAlchemy models for the admin-editable model registry + audit log
+and the provider-router metrics sink.
 
 Companion to ``app/core/model_registry.py`` (the in-process registry) and
 ``app/services/model_registry_service.py`` (the DB-first resolver).
 """
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, func
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, func, Integer, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
@@ -45,3 +46,29 @@ class ModelRegistryAudit(Base):
     changed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     changed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     reason = Column(Text, nullable=True)
+
+
+class GenerationMetric(Base):
+    """One row per provider call from ProviderRouter.route().
+
+    Lightweight metrics sink that doesn't depend on tools.py creating a row
+    in ``generations`` or ``user_generations``. Captures only what the
+    router can observe by itself: which provider answered, derived
+    model_used string, elapsed time, success/error, and whether the
+    primary failed and a backup served the request.
+
+    Aggregated by /api/v1/admin/models/{service_key}/metrics for the
+    admin model registry dashboard.
+    """
+    __tablename__ = "generation_metrics"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    task_type = Column(String(64), nullable=False)        # 'image_to_video', 'midjourney_imagine', ...
+    provider_used = Column(String(32), nullable=False)    # 'piapi' / 'pollo' / 'vertex_ai' / 'a2e'
+    model_used = Column(String(128), nullable=True)       # 'kling-2.6' / 'midjourney' / 'luma-ray-v2' / ...
+    duration_ms = Column(Integer, nullable=True)
+    success = Column(Boolean, nullable=False, default=True)
+    error_message = Column(Text, nullable=True)
+    used_backup = Column(Boolean, nullable=False, default=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

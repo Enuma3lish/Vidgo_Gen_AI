@@ -57,7 +57,10 @@ async function handleGenerate() {
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold mb-2" style="color: #f5f5fa;">{{ t('midjourney.title') }}</h1>
         <p style="color: #9494b0;">{{ t('midjourney.subtitle') }}</p>
-        <CreditCost service="image_generation_premium" class="mt-2" />
+        <!-- Backend tools.py CREDIT_COST = 50; ServicePricing override (admin
+             can dial via /admin/models) takes effect on deduction even if
+             the displayed value here stays at the hardcoded baseline. -->
+        <CreditCost :cost="50" class="mt-2" />
         <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
           <RouterLink to="/pricing" class="hover:underline">
             {{ t('midjourney.demoCta') }}

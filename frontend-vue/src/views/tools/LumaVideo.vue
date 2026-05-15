@@ -22,6 +22,25 @@ const loop = ref(false)
 const resultVideo = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
 
+// Luma Ray-v2 reads cinematic-style prompts best. `kind` tags whether the
+// preset is designed for text-to-video, image-to-video (needs start image),
+// or first-last-frame transition (needs both start + end image).
+const PROMPT_PRESETS = [
+  { id: 'sunsetRun',     kind: 't2v',   prompt: 'a runner sprinting along an empty beach at sunset, slow-motion, cinematic golden hour, salt spray in the air' },
+  { id: 'spaceshipFly',  kind: 't2v',   prompt: 'sleek spaceship banking through nebula clouds, dramatic lighting, lens flare, sci-fi cinematic atmosphere' },
+  { id: 'flowerBloom',   kind: 't2v',   prompt: 'time-lapse of a single rose blooming from bud to full flower, macro lens, soft natural light, photorealistic' },
+  { id: 'productOrbit',  kind: 'i2v',   prompt: 'smooth orbiting camera move around the product, subtle parallax, product remains sharp and centered, studio lighting unchanged' },
+  { id: 'subjectGaze',   kind: 'i2v',   prompt: 'subject slowly looks up toward the light, subtle micro-expressions, cinematic shallow depth of field, no background motion' },
+  { id: 'driftingClouds',kind: 'i2v',   prompt: 'slow upward camera tilt while clouds drift gently in the background, otherwise preserve the scene exactly' },
+  { id: 'morphAtoB',     kind: 'first-last', prompt: 'smooth dreamlike morph between the two frames, cinematic transition, continuous motion, no harsh cuts' },
+  { id: 'dayToNight',    kind: 'first-last', prompt: 'time-of-day transition from the first frame to the second, gradual lighting shift, cinematic and continuous' },
+]
+const selectedPresetId = ref('')
+function applyPreset() {
+  const preset = PROMPT_PRESETS.find(p => p.id === selectedPresetId.value)
+  if (preset) prompt.value = preset.prompt
+}
+
 async function handleGenerate() {
   if (!prompt.value.trim()) {
     uiStore.showWarning(t('lumaVideo.warnings.emptyPrompt'))
@@ -76,6 +95,19 @@ async function handleGenerate() {
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="space-y-4">
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('lumaVideo.presetLabel') }}</label>
+            <select
+              v-model="selectedPresetId"
+              @change="applyPreset"
+              class="w-full px-3 py-2 rounded-lg text-sm mb-3"
+              style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
+            >
+              <option value="">{{ t('lumaVideo.presetCustom') }}</option>
+              <option v-for="p in PROMPT_PRESETS" :key="p.id" :value="p.id">
+                [{{ p.kind.toUpperCase() }}] {{ t(`lumaVideo.presets.${p.id}`) }}
+              </option>
+            </select>
+
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('lumaVideo.promptLabel') }}</label>
             <textarea
               v-model="prompt"

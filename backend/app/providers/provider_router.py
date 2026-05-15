@@ -260,6 +260,17 @@ class ProviderRouter:
                     skipped_providers or [],
                 )
 
+                # Persist a metrics row (best-effort; failures here must not
+                # surface as user errors). Powers /admin/models/<key>/metrics.
+                await self._record_metric(
+                    task_type=task_type,
+                    provider=provider_name,
+                    params=params,
+                    duration_ms=elapsed_ms,
+                    success=True,
+                    used_backup=(provider_index > 0),
+                )
+
                 return {
                     **result,
                     "used_backup": provider_index > 0,
@@ -277,6 +288,19 @@ class ProviderRouter:
                     provider_index,
                     elapsed_ms,
                     e,
+                )
+                # Per-attempt failure metric. If a later provider in the chain
+                # succeeds the user still gets a result; the dashboard groups
+                # by model_used so the failed attempt of the primary still
+                # shows up as a failure for THAT model.
+                await self._record_metric(
+                    task_type=task_type,
+                    provider=provider_name,
+                    params=params,
+                    duration_ms=elapsed_ms,
+                    success=False,
+                    used_backup=False,
+                    error_message=str(e),
                 )
                 self._record_failure(provider_name, str(e))
                 await self._maybe_alert_provider_failure(
@@ -915,6 +939,90 @@ class ProviderRouter:
             except Exception as e:
                 status[name] = {"status": "error", "error": str(e)}
         return status
+
+    # ─────────────────────────────────────────────────────────────────────
+    # METRICS (Phase C)
+    # Lightweight per-call telemetry written to generation_metrics. Powers
+    # /api/v1/admin/models/<key>/metrics — success rate / avg latency / per-
+    # model call counts. Cost is intentionally NOT captured here: it's
+    # derived at query time from ServicePricing.api_cost_usd × call count.
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _derive_model_used(self, task_type: TaskType, params: Dict[str, Any]) -> Optional[str]:
+        """Best-effort label for the model that handled this call.
+
+        Returns None when we can't tell — the metrics row stores NULL and
+        the dashboard groups it under "unknown". Explicit ``params["model"]``
+        always wins; otherwise falls back to per-task heuristics for the
+        flagship endpoints where we know the convention.
+        """
+        explicit = str(params.get("model") or "").strip()
+        if explicit and explicit != "default":
+            return explicit[:128]
+
+        if task_type == TaskType.MIDJOURNEY_T2I:
+            mode = params.get("process_mode") or "fast"
+            return f"midjourney-{mode}"
+        if task_type == TaskType.KLING_VIDEO:
+            version = params.get("version") or (
+                "2.1-master" if params.get("tier") == "flagship" else "2.6"
+            )
+            return f"kling-{version}"
+        if task_type == TaskType.LUMA_VIDEO:
+            return f"luma-{params.get('model_name') or 'ray-v2'}"
+        if task_type == TaskType.INTERIOR_3D:
+            return f"trellis-{params.get('model_version') or 'v1'}"
+        if task_type in (TaskType.I2V, TaskType.T2V):
+            return "wan-2.6"
+        if task_type == TaskType.AVATAR:
+            return "kling-avatar"
+        if task_type == TaskType.BACKGROUND_REMOVAL:
+            return "image-toolkit"
+        if task_type == TaskType.UPSCALE:
+            return "image-toolkit-upscale"
+        return None
+
+    async def _record_metric(
+        self,
+        task_type: TaskType,
+        provider: str,
+        params: Dict[str, Any],
+        duration_ms: int,
+        success: bool,
+        used_backup: bool,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Best-effort insert into generation_metrics.
+
+        Uses its own AsyncSession so router callers don't need to thread a
+        request-scoped session through. NEVER raises — metrics infrastructure
+        failure must not surface as user error.
+        """
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.models.model_registry import GenerationMetric
+
+            task_label = task_type.value if hasattr(task_type, "value") else str(task_type)
+            model_used = self._derive_model_used(task_type, params)
+            err_short = (error_message or "")[:1000] or None
+            user_id = params.get("user_id")  # tools.py doesn't pass this today; kept for future opt-in
+
+            async with AsyncSessionLocal() as session:
+                session.add(
+                    GenerationMetric(
+                        task_type=task_label,
+                        provider_used=provider,
+                        model_used=model_used,
+                        duration_ms=duration_ms,
+                        success=success,
+                        error_message=err_short,
+                        used_backup=used_backup,
+                        user_id=user_id,
+                    )
+                )
+                await session.commit()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("metrics write failed task=%s provider=%s: %s", task_type, provider, exc)
 
     async def close(self):
         await asyncio.gather(

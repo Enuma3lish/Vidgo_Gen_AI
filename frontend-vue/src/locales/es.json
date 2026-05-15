@@ -1582,7 +1582,7 @@
     "auditTitle": "Cambios recientes",
     "auditEmpty": "Aún no hay cambios.",
     "metricsTitle": "Últimos {days} días",
-    "metricsEmpty": "Aún no hay datos de llamadas.",
+    "metricsEmpty": "Aún no hay datos de llamadas en esta ventana. Las métricas se registran desde ahora en cada llamada.",
     "metricSuccessRate": "Éxito",
     "metricAvgLatency": "Latencia media",
     "metricCost": "Costo (USD)",

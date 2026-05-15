@@ -595,7 +595,8 @@
     "ecpayPaymentLabel": "Pago con tarjeta (ECPay)",
     "testPaymentLabel": "Pago de prueba (US$1 / aprox. NT$32)",
     "paypalPaymentLabel": "Pago internacional (PayPal)",
-    "paypalPricingStrategy": "Para pagos internacionales con PayPal, usa precios en USD: Standard US$19.99, Pro US$49.99, Pro+ US$99.99. Compensa las comisiones de PayPal y la diferencia cambiaria.",
+    "paypalPricingStrategy": "Precio recomendado en USD (PayPal): Basic US$19.99, Pro US$49.99, Premium US$99.99. Compensa las comisiones de PayPal y la diferencia cambiaria.",
+    "overseasUsdLabel": "USD internacional",
     "creditReference": {
       "title": "Referencia de conversión (100 créditos)",
       "headers": {
@@ -1084,6 +1085,18 @@
       "patternGenerate": {
         "name": "Diseño de Patrones",
         "desc": "Genera patrones sin costuras para branding"
+      },
+      "midjourney": {
+        "name": "Midjourney",
+        "desc": "Generación de imágenes IA premium"
+      },
+      "klingVideo": {
+        "name": "Video Kling",
+        "desc": "Video IA cinematográfico (estándar / flagship Pro)"
+      },
+      "lumaVideo": {
+        "name": "Luma Dream Machine",
+        "desc": "Video IA profesional con Luma Ray"
       }
     },
     "categories": {
@@ -1092,7 +1105,8 @@
       "ecommerceAI": "IA de E-commerce",
       "ecommerceAIDesc": "Generación de escenas de productos, eliminación de fondos y sombras IA — haz que tus productos destaquen en cada plataforma.",
       "designAI": "IA de Diseño y Contenido",
-      "designAIDesc": "Rediseño de habitaciones, clonación de estilos y traducción de imágenes — herramientas poderosas para flujos de trabajo de diseño creativo."
+      "designAIDesc": "Rediseño de habitaciones, clonación de estilos y traducción de imágenes — herramientas poderosas para flujos de trabajo de diseño creativo.",
+      "proAi": "Pro AI Studio"
     },
     "seasons": {
       "spring": "Rebajas de Primavera",
@@ -1498,5 +1512,76 @@
       "step2": "Elige el factor de escala 2x o 4x.",
       "step3": "Haz clic en «Ampliar» y descarga el resultado en alta definición."
     }
+  },
+  "midjourney": {
+    "title": "Imagen IA Midjourney",
+    "subtitle": "Generación de imágenes premium con Midjourney vía PiAPI.",
+    "demoCta": "Suscríbete para generar tus propias imágenes Midjourney.",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe la imagen que quieres crear...",
+    "aspectRatio": "Relación de aspecto",
+    "processMode": "Modo de proceso",
+    "processModes": {
+      "relax": "Relax (lento, barato)",
+      "fast": "Fast (predeterminado)",
+      "turbo": "Turbo (más rápido)"
+    },
+    "action": "Generar",
+    "processing": "Generando...",
+    "loading": "Generando con Midjourney...",
+    "placeholder": "Tu imagen generada aparecerá aquí.",
+    "resultLabel": "Resultado",
+    "download": "Descargar",
+    "warnings": { "emptyPrompt": "Ingresa un prompt." },
+    "toasts": { "success": "Imagen generada correctamente.", "demoReady": "Imagen de demostración lista." },
+    "errors": { "generic": "Falló la generación. Inténtalo de nuevo." }
+  },
+  "klingVideo": {
+    "title": "Video Kling",
+    "subtitle": "Video IA cinematográfico vía Kling en PiAPI. Modo estándar o flagship Pro.",
+    "demoCta": "Suscríbete para generar tus propios videos Kling.",
+    "tierLabel": "Nivel",
+    "tiers": { "default": "Estándar (Kling 2.6)", "flagship": "Flagship (Kling 2.1-master Pro)" },
+    "tierHints": { "default": "Rápido y económico.", "flagship": "Máxima calidad, solo modo Pro." },
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe lo que quieres ver y cómo debe moverse...",
+    "startImage": "Cuadro inicial (opcional)",
+    "startImageHint": "Sube para cambiar a image-to-video.",
+    "endImage": "Cuadro final (opcional)",
+    "endImageHint": "Usa ambos cuadros para una transición.",
+    "duration": "Duración",
+    "aspectRatio": "Relación de aspecto",
+    "action": "Generar video",
+    "processing": "Generando...",
+    "loading": "Generando con Kling...",
+    "placeholder": "Tu video generado aparecerá aquí.",
+    "resultLabel": "Resultado",
+    "download": "Descargar",
+    "warnings": { "emptyPrompt": "Ingresa un prompt." },
+    "toasts": { "success": "Video {tier} generado.", "demoReady": "Video de demostración listo." },
+    "errors": { "generic": "Falló la generación. Inténtalo de nuevo." }
+  },
+  "lumaVideo": {
+    "title": "Luma Dream Machine",
+    "subtitle": "Video IA cinematográfico con Luma vía PiAPI. T2V, I2V y transiciones primer/último cuadro.",
+    "demoCta": "Suscríbete para generar tus propios videos Luma.",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe lo que quieres ver en movimiento...",
+    "startImage": "Imagen inicial (opcional)",
+    "startImageHint": "Sube para cambiar a image-to-video.",
+    "endImage": "Imagen final (opcional)",
+    "endImageHint": "Usa ambas para transición primer/último cuadro.",
+    "duration": "Duración",
+    "aspectRatio": "Relación de aspecto",
+    "loopLabel": "Generar en bucle",
+    "action": "Generar video",
+    "processing": "Generando...",
+    "loading": "Generando con Luma...",
+    "placeholder": "Tu video generado aparecerá aquí.",
+    "resultLabel": "Resultado",
+    "download": "Descargar",
+    "warnings": { "emptyPrompt": "Ingresa un prompt." },
+    "toasts": { "success": "Video Luma generado.", "demoReady": "Video de demostración listo." },
+    "errors": { "generic": "Falló la generación. Inténtalo de nuevo." }
   }
 }

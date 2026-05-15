@@ -595,7 +595,8 @@
     "ecpayPaymentLabel": "신용카드 결제 (ECPay)",
     "testPaymentLabel": "테스트 결제 (US$1 / 약 NT$32)",
     "paypalPaymentLabel": "국제 결제 (PayPal)",
-    "paypalPricingStrategy": "해외에서 PayPal로 결제할 때는 USD 가격을 사용해 주세요: 스탠다드 US$19.99, Pro US$49.99, Pro+ US$99.99. PayPal 수수료와 환율 손실을 상쇄합니다.",
+    "paypalPricingStrategy": "해외 PayPal 권장 가격 (USD): Basic US$19.99, Pro US$49.99, Premium US$99.99. PayPal 수수료와 환율 손실을 상쇄합니다.",
+    "overseasUsdLabel": "해외 USD",
     "creditReference": {
       "title": "크레딧 환산 참고 (100크레딧)",
       "headers": {
@@ -1084,6 +1085,18 @@
       "patternGenerate": {
         "name": "패턴 디자인",
         "desc": "브랜드를 위한 원활한 패턴 생성"
+      },
+      "midjourney": {
+        "name": "Midjourney",
+        "desc": "프리미엄 AI 이미지 생성"
+      },
+      "klingVideo": {
+        "name": "Kling 비디오",
+        "desc": "시네마틱 AI 비디오 (스탠다드 / 플래그십 프로)"
+      },
+      "lumaVideo": {
+        "name": "Luma Dream Machine",
+        "desc": "Luma Ray 프로페셔널 AI 비디오"
       }
     },
     "categories": {
@@ -1092,7 +1105,8 @@
       "ecommerceAI": "이커머스 AI",
       "ecommerceAIDesc": "제품 장면 생성, 배경 제거, AI 그림자 — 모든 플랫폼에서 제품을 돋보이게.",
       "designAI": "디자인 & 콘텐츠 AI",
-      "designAIDesc": "공간 리디자인, 스타일 클론, 이미지 번역 — 크리에이티브 디자인 워크플로우를 위한 강력한 도구."
+      "designAIDesc": "공간 리디자인, 스타일 클론, 이미지 번역 — 크리에이티브 디자인 워크플로우를 위한 강력한 도구.",
+      "proAi": "Pro AI Studio"
     },
     "seasons": {
       "spring": "봄 세일",
@@ -1498,5 +1512,76 @@
       "step2": "확대 배율(2x 또는 4x)을 선택하세요.",
       "step3": "‘확대’를 클릭하고 고해상도 결과를 다운로드하세요."
     }
+  },
+  "midjourney": {
+    "title": "Midjourney AI 이미지",
+    "subtitle": "PiAPI를 통한 Midjourney 프리미엄 이미지 생성.",
+    "demoCta": "구독하면 나만의 Midjourney 이미지를 생성할 수 있어요.",
+    "promptLabel": "프롬프트",
+    "promptPlaceholder": "생성할 이미지를 설명하세요...",
+    "aspectRatio": "화면 비율",
+    "processMode": "처리 모드",
+    "processModes": {
+      "relax": "Relax (느림, 저렴)",
+      "fast": "Fast (기본)",
+      "turbo": "Turbo (가장 빠름)"
+    },
+    "action": "생성",
+    "processing": "생성 중...",
+    "loading": "Midjourney로 생성 중...",
+    "placeholder": "생성된 이미지가 여기에 표시됩니다.",
+    "resultLabel": "결과",
+    "download": "다운로드",
+    "warnings": { "emptyPrompt": "프롬프트를 입력하세요." },
+    "toasts": { "success": "이미지 생성이 완료되었습니다.", "demoReady": "데모 이미지가 준비되었습니다." },
+    "errors": { "generic": "생성에 실패했습니다. 다시 시도하세요." }
+  },
+  "klingVideo": {
+    "title": "Kling 비디오",
+    "subtitle": "PiAPI를 통한 Kling 시네마틱 AI 비디오. 스탠다드 또는 플래그십 프로 모드.",
+    "demoCta": "구독하면 나만의 Kling 비디오를 생성할 수 있어요.",
+    "tierLabel": "등급",
+    "tiers": { "default": "스탠다드 (Kling 2.6)", "flagship": "플래그십 (Kling 2.1-master Pro)" },
+    "tierHints": { "default": "빠른 처리, 저렴.", "flagship": "최고 품질, Pro 모드 전용." },
+    "promptLabel": "프롬프트",
+    "promptPlaceholder": "원하는 내용과 동작을 설명하세요...",
+    "startImage": "시작 프레임 (선택)",
+    "startImageHint": "업로드하면 image-to-video로 전환됩니다.",
+    "endImage": "종료 프레임 (선택)",
+    "endImageHint": "두 프레임을 사용하면 전환 효과가 생성됩니다.",
+    "duration": "길이",
+    "aspectRatio": "화면 비율",
+    "action": "비디오 생성",
+    "processing": "생성 중...",
+    "loading": "Kling으로 생성 중...",
+    "placeholder": "생성된 비디오가 여기에 표시됩니다.",
+    "resultLabel": "결과",
+    "download": "다운로드",
+    "warnings": { "emptyPrompt": "프롬프트를 입력하세요." },
+    "toasts": { "success": "{tier} 비디오가 생성되었습니다.", "demoReady": "데모 비디오가 준비되었습니다." },
+    "errors": { "generic": "생성에 실패했습니다. 다시 시도하세요." }
+  },
+  "lumaVideo": {
+    "title": "Luma Dream Machine",
+    "subtitle": "PiAPI를 통한 Luma 시네마틱 AI 비디오. T2V, I2V, 시작/종료 프레임 전환 지원.",
+    "demoCta": "구독하면 나만의 Luma 비디오를 생성할 수 있어요.",
+    "promptLabel": "프롬프트",
+    "promptPlaceholder": "움직임을 포함한 원하는 장면을 설명하세요...",
+    "startImage": "시작 이미지 (선택)",
+    "startImageHint": "업로드하면 image-to-video로 전환됩니다.",
+    "endImage": "종료 이미지 (선택)",
+    "endImageHint": "두 이미지를 사용하면 시작/종료 프레임 전환이 생성됩니다.",
+    "duration": "길이",
+    "aspectRatio": "화면 비율",
+    "loopLabel": "루프로 생성",
+    "action": "비디오 생성",
+    "processing": "생성 중...",
+    "loading": "Luma로 생성 중...",
+    "placeholder": "생성된 비디오가 여기에 표시됩니다.",
+    "resultLabel": "결과",
+    "download": "다운로드",
+    "warnings": { "emptyPrompt": "프롬프트를 입력하세요." },
+    "toasts": { "success": "Luma 비디오가 생성되었습니다.", "demoReady": "데모 비디오가 준비되었습니다." },
+    "errors": { "generic": "생성에 실패했습니다. 다시 시도하세요." }
   }
 }

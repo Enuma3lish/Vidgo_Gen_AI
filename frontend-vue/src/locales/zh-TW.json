@@ -630,7 +630,8 @@
     "ecpayPaymentLabel": "信用卡付款 (ECPay)",
     "testPaymentLabel": "測試付款 (US$1 / 約 NT$32)",
     "paypalPaymentLabel": "國際付款 (PayPal)",
-    "paypalPricingStrategy": "海外使用 PayPal 付款請改用美金定價：標準版 US$19.99、Pro 版 US$49.99、Pro+ 版 US$99.99，以抵銷 PayPal 手續費與匯差。",
+    "paypalPricingStrategy": "國外定價建議 (PayPal/USD)：建議分別定價為 US$19.99 / US$49.99 / US$99.99，分別對應 Basic / Pro / Premium，以抵銷 PayPal 手續費與匯差。",
+    "overseasUsdLabel": "海外收美金費用",
     "creditReference": {
       "title": "點數換算參考（100 點）",
       "headers": {
@@ -1189,6 +1190,18 @@
       "patternGenerate": {
         "name": "花紋設計",
         "desc": "為品牌生成無縫圖案設計"
+      },
+      "midjourney": {
+        "name": "Midjourney",
+        "desc": "高品質 AI 圖片生成"
+      },
+      "klingVideo": {
+        "name": "Kling 影片",
+        "desc": "電影級 AI 影片（標準 / 旗艦 Pro 模式）"
+      },
+      "lumaVideo": {
+        "name": "Luma Dream Machine",
+        "desc": "Luma Ray 專業 AI 影片"
       }
     },
     "categories": {
@@ -1197,7 +1210,8 @@
       "ecommerceAI": "電商 AI",
       "ecommerceAIDesc": "乾淨去背、專業商品場景、高清圖片一次搞定，讓商品上架轉化率倍增。",
       "designAI": "設計與內容 AI",
-      "designAIDesc": "將空屋或粗糙草圖轉化為讓客戶心動的寫實室內設計圖。"
+      "designAIDesc": "將空屋或粗糙草圖轉化為讓客戶心動的寫實室內設計圖。",
+      "proAi": "Pro AI Studio"
     },
     "seasons": {
       "spring": "春季特賣",
@@ -1498,5 +1512,76 @@
       "step2": "選擇 2 倍或 4 倍放大倍率。",
       "step3": "點擊放大並下載高解析度結果。"
     }
+  },
+  "midjourney": {
+    "title": "Midjourney AI 圖片",
+    "subtitle": "透過 PiAPI 使用 Midjourney 進行高品質圖片生成。",
+    "demoCta": "訂閱後即可生成你自己的 Midjourney 圖片。",
+    "promptLabel": "提示詞",
+    "promptPlaceholder": "描述你想要生成的畫面...",
+    "aspectRatio": "畫面比例",
+    "processMode": "生成模式",
+    "processModes": {
+      "relax": "Relax（慢、便宜）",
+      "fast": "Fast（預設）",
+      "turbo": "Turbo（最快）"
+    },
+    "action": "開始生成",
+    "processing": "生成中...",
+    "loading": "Midjourney 生成中...",
+    "placeholder": "生成的圖片會顯示在這裡。",
+    "resultLabel": "結果",
+    "download": "下載",
+    "warnings": { "emptyPrompt": "請先輸入提示詞。" },
+    "toasts": { "success": "圖片生成完成。", "demoReady": "範例圖片已準備好。" },
+    "errors": { "generic": "生成失敗，請再試一次。" }
+  },
+  "klingVideo": {
+    "title": "Kling 影片",
+    "subtitle": "透過 PiAPI 使用 Kling 生成電影級 AI 影片。可選標準或旗艦 Pro 模式。",
+    "demoCta": "訂閱後即可生成你自己的 Kling 影片。",
+    "tierLabel": "等級",
+    "tiers": { "default": "標準（Kling 2.6）", "flagship": "旗艦（Kling 2.1-master Pro）" },
+    "tierHints": { "default": "速度快、成本低。", "flagship": "最高畫質，僅 Pro 模式。" },
+    "promptLabel": "提示詞",
+    "promptPlaceholder": "描述畫面內容與運動方式...",
+    "startImage": "起始畫面（可選）",
+    "startImageHint": "上傳以切換為圖生影片。",
+    "endImage": "結束畫面（可選）",
+    "endImageHint": "兩張一起使用可生成轉場。",
+    "duration": "時長",
+    "aspectRatio": "畫面比例",
+    "action": "生成影片",
+    "processing": "生成中...",
+    "loading": "Kling 生成中...",
+    "placeholder": "生成的影片會顯示在這裡。",
+    "resultLabel": "結果",
+    "download": "下載",
+    "warnings": { "emptyPrompt": "請先輸入提示詞。" },
+    "toasts": { "success": "{tier} 影片生成完成。", "demoReady": "範例影片已準備好。" },
+    "errors": { "generic": "生成失敗，請再試一次。" }
+  },
+  "lumaVideo": {
+    "title": "Luma Dream Machine",
+    "subtitle": "透過 PiAPI 使用 Luma 生成電影級 AI 影片。支援文生影片、圖生影片，以及首尾畫面轉場。",
+    "demoCta": "訂閱後即可生成你自己的 Luma 影片。",
+    "promptLabel": "提示詞",
+    "promptPlaceholder": "描述你想要的動態畫面...",
+    "startImage": "起始圖片（可選）",
+    "startImageHint": "上傳以切換為圖生影片。",
+    "endImage": "結束圖片（可選）",
+    "endImageHint": "兩張一起使用可生成首尾轉場。",
+    "duration": "時長",
+    "aspectRatio": "畫面比例",
+    "loopLabel": "生成為循環影片",
+    "action": "生成影片",
+    "processing": "生成中...",
+    "loading": "Luma 生成中...",
+    "placeholder": "生成的影片會顯示在這裡。",
+    "resultLabel": "結果",
+    "download": "下載",
+    "warnings": { "emptyPrompt": "請先輸入提示詞。" },
+    "toasts": { "success": "Luma 影片生成完成。", "demoReady": "範例影片已準備好。" },
+    "errors": { "generic": "生成失敗，請再試一次。" }
   }
 }

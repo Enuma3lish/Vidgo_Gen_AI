@@ -38,6 +38,7 @@ from app.core.upload_validation import (
     validate_uploaded_content,
 )
 from app.providers.provider_router import get_provider_router, TaskType
+from app.core.model_registry import POLLO_MODELS as _POLLO_REG
 from app.services.gcs_storage_service import get_gcs_storage
 from app.services.email_service import send_admin_tool_failure_email
 
@@ -917,7 +918,7 @@ async def _trigger_generation(
             )
 
     elif tool_type == "short_video":
-        i2v_model = model_id if model_id != "default" else "pixverse_v4.5"
+        i2v_model = model_id if model_id != "default" else _POLLO_REG["pixverse_default"]
         result = await provider_router.route(
             TaskType.I2V,
             {"image_url": abs_file_url, "prompt": prompt, "model": i2v_model, "duration": 5}

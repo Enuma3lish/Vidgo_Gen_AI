@@ -5,13 +5,14 @@ Supports:
 - PayPal: International subscription checkout, webhook handling, invoice retrieval
 - ECPay: Taiwan credit card payment, callback handling
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import datetime
 from typing import Optional
 import logging
+import json
 import urllib.parse
 
 from fastapi.responses import HTMLResponse
@@ -201,42 +202,75 @@ async def create_ecpay_checkout(
 @router.post("/paypal/webhook")
 async def paypal_webhook(
     request: Request,
-    paypal_signature: Optional[str] = Header(None, alias="Paypal-Transmission-Sig"),
     db: AsyncSession = Depends(deps.get_db)
 ):
     """
     Handle PayPal webhooks.
 
     PayPal sends webhooks for:
-    - PAYMENT.CAPTURE.COMPLETED  - Payment successful
+    - PAYMENT.CAPTURE.COMPLETED      - One-time order captured
+    - PAYMENT.SALE.COMPLETED         - Recurring subscription billed (renewal)
+    - PAYMENT.CAPTURE.REFUNDED       - Capture refunded
+    - PAYMENT.SALE.REFUNDED          - Subscription billing refunded
     - BILLING.SUBSCRIPTION.CREATED   - Subscription created
+    - BILLING.SUBSCRIPTION.ACTIVATED - Subscription activated (first payment)
     - BILLING.SUBSCRIPTION.UPDATED   - Subscription changed
     - BILLING.SUBSCRIPTION.CANCELLED - Subscription cancelled
+    - BILLING.SUBSCRIPTION.EXPIRED   - Subscription expired
+    - BILLING.SUBSCRIPTION.PAYMENT.FAILED - Renewal payment failed
     """
     body = await request.body()
 
-    # Verify webhook signature (skip in mock mode)
-    if not paypal_service.is_mock and not paypal_service.verify_webhook(body, paypal_signature or ""):
-        logger.warning("Invalid PayPal webhook signature")
-        raise HTTPException(status_code=401, detail="Invalid signature")
+    # Verify webhook via PayPal's verify-webhook-signature API (RSA + cert chain).
+    # The HMAC fallback was insecure — PayPal does NOT sign webhooks with HMAC.
+    if not paypal_service.is_mock:
+        verified = await paypal_service.verify_webhook_signature(body, dict(request.headers))
+        if not verified:
+            logger.warning("PayPal webhook signature verification failed")
+            raise HTTPException(status_code=401, detail="Invalid signature")
 
     try:
         data = await request.json()
         event_type = data.get("event_type", "")
+        event_id = data.get("id") or ""
         event_data = data.get("resource", {}) or data.get("data", {})
 
-        logger.info(f"PayPal webhook received: {event_type}")
+        # Idempotency: dedup by PayPal event id (PayPal retries up to 25x).
+        # Without this, renewal events can double-credit users.
+        if event_id:
+            try:
+                redis_client = await deps.get_redis()
+                dedup_key = f"paypal:webhook:event:{event_id}"
+                # SETNX with 7-day TTL (PayPal retries up to 3 days).
+                claimed = await redis_client.set(dedup_key, "1", nx=True, ex=7 * 24 * 3600)
+                if not claimed:
+                    logger.info(f"PayPal webhook duplicate event ignored: {event_type} id={event_id}")
+                    return {"success": True, "duplicate": True}
+            except Exception as exc:
+                # Redis down: log but do NOT block payment processing.
+                logger.warning(f"PayPal webhook Redis dedup failed (continuing): {exc}")
 
-        if event_type in ("PAYMENT.CAPTURE.COMPLETED", "CHECKOUT.ORDER.APPROVED", "transaction.completed"):
-            result = await handle_transaction_completed(db, event_data)
-            if result and result.get("already_processed"):
-                logger.info(f"PayPal webhook duplicate ignored: {event_data.get('id')}")
+        logger.info(f"PayPal webhook received: {event_type} id={event_id}")
+
+        if event_type in ("PAYMENT.CAPTURE.COMPLETED", "CHECKOUT.ORDER.APPROVED"):
+            await handle_transaction_completed(db, event_data)
+        elif event_type == "PAYMENT.SALE.COMPLETED":
+            # Recurring billing capture for an active subscription.
+            await handle_subscription_renewal(db, event_data)
+        elif event_type in ("PAYMENT.CAPTURE.REFUNDED", "PAYMENT.SALE.REFUNDED"):
+            logger.info(f"PayPal refund webhook acknowledged: {event_id}")
         elif event_type == "BILLING.SUBSCRIPTION.CREATED":
             await handle_subscription_created(db, event_data)
-        elif event_type == "BILLING.SUBSCRIPTION.UPDATED":
+        elif event_type in ("BILLING.SUBSCRIPTION.ACTIVATED", "BILLING.SUBSCRIPTION.UPDATED"):
             await handle_subscription_updated(db, event_data)
-        elif event_type in ("BILLING.SUBSCRIPTION.CANCELLED", "BILLING.SUBSCRIPTION.EXPIRED"):
+        elif event_type in (
+            "BILLING.SUBSCRIPTION.CANCELLED",
+            "BILLING.SUBSCRIPTION.EXPIRED",
+            "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
+        ):
             await handle_subscription_canceled(db, event_data)
+        else:
+            logger.info(f"PayPal webhook event ignored (not handled): {event_type}")
 
         return {"success": True}
 
@@ -297,10 +331,20 @@ async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
             invoice_result = await paypal_service.get_invoice_pdf_url(transaction_id)
             pdf_url = invoice_result.get("pdf_url", "")
 
-            # Extract amount info
-            totals = data.get("details", {}).get("totals", {})
-            amount = float(totals.get("grand_total", 0)) / 100  # Provider returns cents
-            currency = data.get("currency_code", "USD")
+            # PayPal Orders v2 returns amount as a decimal string (e.g. "19.99"),
+            # NOT cents. Read it from purchase_units[0].amount or top-level amount.
+            amount = 0.0
+            currency = "USD"
+            try:
+                amt_obj = (
+                    (data.get("purchase_units") or [{}])[0].get("amount")
+                    or data.get("amount")
+                    or {}
+                )
+                amount = float(amt_obj.get("value", 0) or 0)
+                currency = amt_obj.get("currency_code", "USD") or "USD"
+            except Exception:
+                pass
             plan_name = custom_data.get("plan_name", "VidGo Subscription")
 
             # Send email
@@ -324,28 +368,152 @@ async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
     return {"success": True}
 
 
+def _extract_paypal_custom_data(data: dict) -> dict:
+    """Normalize PayPal custom metadata from custom_data or custom_id."""
+    custom_data = data.get("custom_data") if isinstance(data.get("custom_data"), dict) else {}
+    custom_id = data.get("custom_id")
+    if isinstance(custom_id, str) and custom_id:
+        try:
+            parsed = json.loads(custom_id)
+            if isinstance(parsed, dict):
+                custom_data = {**parsed, **custom_data}
+        except json.JSONDecodeError:
+            pass
+    if "user_id" not in custom_data and custom_data.get("u"):
+        custom_data["user_id"] = custom_data["u"]
+    if "plan_id" not in custom_data and custom_data.get("p"):
+        custom_data["plan_id"] = custom_data["p"]
+    return custom_data
+
+
+async def _find_order_by_paypal_transaction(db: AsyncSession, transaction_id: str) -> Optional[Order]:
+    result = await db.execute(
+        select(Order).where(
+            Order.payment_data["paypal_transaction_id"].astext == transaction_id
+        )
+    )
+    return result.scalars().first()
+
+
+async def _activate_paypal_subscription_order(db: AsyncSession, data: dict) -> dict:
+    paypal_sub_id = data.get("id")
+    if paypal_sub_id is not None:
+        paypal_sub_id = str(paypal_sub_id).strip('"')
+    if not paypal_sub_id:
+        logger.warning("PayPal subscription webhook missing id")
+        return {"success": False, "error": "no subscription id"}
+
+    status = str(data.get("status") or "").upper()
+    if status != "ACTIVE":
+        logger.info(f"PayPal subscription {paypal_sub_id} status={status or 'unknown'}; waiting for ACTIVE")
+        return {"success": True, "pending": True}
+
+    order = await _find_order_by_paypal_transaction(db, paypal_sub_id)
+    if not order:
+        logger.warning(f"No order found for PayPal subscription: {paypal_sub_id}")
+        return {"success": False, "error": "order not found"}
+    if order.status == "paid":
+        logger.info(f"Order {order.order_number} already paid - ignoring duplicate subscription webhook")
+        return {"success": True, "already_processed": True}
+
+    from app.services.subscription_service import get_subscription_service
+    subscription_service = get_subscription_service()
+    payment_payload = dict(data)
+    payment_payload["paypal_subscription_id"] = paypal_sub_id
+    payment_payload["custom_data"] = _extract_paypal_custom_data(data)
+    await subscription_service.handle_payment_success(db, order.order_number, payment_payload)
+    logger.info(f"Activated subscription order {order.order_number} from PayPal subscription {paypal_sub_id}")
+    return {"success": True}
+
+
 async def handle_subscription_created(db: AsyncSession, data: dict):
     """Handle subscription created event from PayPal."""
     paypal_sub_id = data.get("id")
-    custom_data = data.get("custom_data", {})
+    custom_data = _extract_paypal_custom_data(data)
     user_id = custom_data.get("user_id")
     logger.info(f"Subscription created: {paypal_sub_id} for user {user_id}")
+    await _activate_paypal_subscription_order(db, data)
 
 
 async def handle_subscription_updated(db: AsyncSession, data: dict):
     """Handle subscription updated event from PayPal (plan change, billing update)."""
     paypal_sub_id = data.get("id")
     status = data.get("status")
-    custom_data = data.get("custom_data", {})
+    custom_data = _extract_paypal_custom_data(data)
     user_id = custom_data.get("user_id")
     logger.info(f"Subscription updated: {paypal_sub_id} status={status} user={user_id}")
+    await _activate_paypal_subscription_order(db, data)
+
+
+async def handle_subscription_renewal(db: AsyncSession, data: dict):
+    """
+    Handle PAYMENT.SALE.COMPLETED — a recurring subscription billing capture.
+
+    PayPal sends this every billing cycle (month/year) for an active
+    subscription. The resource includes ``billing_agreement_id`` which is
+    the PayPal subscription id (``I-...``) we stored on the original order.
+
+    We refresh the user's monthly credit allotment and record a
+    CreditTransaction. Idempotency is provided upstream by the webhook
+    event-id Redis dedup, so this can safely be called once per renewal.
+    """
+    paypal_sub_id = data.get("billing_agreement_id") or data.get("billing_agreement", {}).get("id")
+    if not paypal_sub_id:
+        logger.warning(f"PAYMENT.SALE.COMPLETED missing billing_agreement_id: {data.get('id')}")
+        return {"success": False, "error": "no billing_agreement_id"}
+
+    paypal_sub_id = str(paypal_sub_id).strip('"')
+    order = await _find_order_by_paypal_transaction(db, paypal_sub_id)
+    if not order or not order.subscription_id:
+        logger.warning(f"No subscription order found for renewal: {paypal_sub_id}")
+        return {"success": False, "error": "subscription order not found"}
+
+    # Load subscription + plan + user
+    from app.models.billing import Subscription, Plan, CreditTransaction
+    sub_result = await db.execute(select(Subscription).where(Subscription.id == order.subscription_id))
+    subscription = sub_result.scalar_one_or_none()
+    if not subscription or subscription.status != "active":
+        logger.info(f"Renewal received for non-active subscription {paypal_sub_id}; ignoring")
+        return {"success": True, "skipped": True}
+
+    plan = await db.get(Plan, subscription.plan_id)
+    user = await db.get(User, order.user_id)
+    if not plan or not user:
+        logger.warning(f"Renewal: missing plan/user for {paypal_sub_id}")
+        return {"success": False, "error": "missing plan or user"}
+
+    credits = plan.monthly_credits or plan.weekly_credits or 0
+    if credits > 0:
+        # Subscription credits are a *replacement* allotment, not additive,
+        # to mirror what handle_payment_success does on the first activation.
+        user.subscription_credits = credits
+        from app.services.subscription_service import utc_now
+        user.credits_reset_at = utc_now()
+
+        txn = CreditTransaction(
+            user_id=user.id,
+            amount=credits,
+            balance_after=user.total_credits,
+            transaction_type="subscription",
+            description=f"Subscription renewal credits for {plan.name}",
+            payment_id=str(data.get("id") or paypal_sub_id),
+        )
+        db.add(txn)
+
+    await db.commit()
+    logger.info(f"Subscription renewal processed: sub={paypal_sub_id} user={user.id} +{credits} credits")
+    return {"success": True}
 
 
 async def handle_subscription_canceled(db: AsyncSession, data: dict):
-    """Handle subscription cancelled event from PayPal."""
+    """Handle subscription cancelled / expired / payment-failed events."""
     paypal_sub_id = data.get("id")
-    custom_data = data.get("custom_data", {})
+    custom_data = _extract_paypal_custom_data(data)
     user_id = custom_data.get("user_id")
+    if not user_id and paypal_sub_id:
+        order = await _find_order_by_paypal_transaction(db, str(paypal_sub_id).strip('"'))
+        if order:
+            user_id = str(order.user_id)
 
     if user_id:
         try:

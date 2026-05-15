@@ -12,6 +12,7 @@ Features:
 import asyncio
 import logging
 import base64
+import os
 import uuid
 import json
 from pathlib import Path
@@ -167,13 +168,25 @@ class InteriorDesignService:
     # Google AI endpoint (requires API key)
     GENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
-    # gemini-2.0-flash-exp supports multimodal image input + image output generation
-    MODEL = "gemini-2.0-flash-exp"
+    # gemini-2.5-flash-image is the current GA model that supports multimodal
+    # image input + image output generation. The legacy gemini-2.0-flash-exp
+    # alias was retired upstream and now returns HTTP 404 from both Vertex
+    # and the Google AI endpoint, breaking RoomRedesign tabs 1-3 for paid
+    # users (admin gets HTTP 500 "API error: 404").
+    MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or getattr(settings, 'GEMINI_API_KEY', '')
         self.vertex_project = getattr(settings, 'VERTEX_AI_PROJECT', '')
-        self.vertex_location = getattr(settings, 'VERTEX_AI_LOCATION', 'asia-east1')
+        # gemini-2.5-flash-image is only available in us-central1 (and global)
+        # on Vertex AI; asia-east1 returns NOT_FOUND. Pin the GenAI location
+        # via VERTEX_AI_GENAI_LOCATION (used elsewhere in the codebase) and
+        # fall back to us-central1 rather than the legacy asia-east1 default.
+        self.vertex_location = os.environ.get(
+            "VERTEX_AI_GENAI_LOCATION",
+            getattr(settings, 'VERTEX_AI_GENAI_LOCATION', None)
+            or "us-central1",
+        )
         self.static_dir = Path("/app/static/generated/interior")
         self.static_dir.mkdir(parents=True, exist_ok=True)
 

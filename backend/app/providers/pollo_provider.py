@@ -23,6 +23,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from app.providers.base import BaseProvider
+from app.core.model_registry import POLLO_MODELS as _POLLO_REG
 from app.services.pollo_ai import POLLO_MODELS, PolloAIClient
 
 logger = logging.getLogger(__name__)
@@ -152,17 +153,18 @@ class PolloProvider(BaseProvider):
     @staticmethod
     def _normalize_model(model: Optional[str]) -> str:
         """Map frontend model_id aliases to keys present in POLLO_MODELS."""
+        default_model = _POLLO_REG["pixverse_default"]
         if not model:
-            return "pixverse_v4.5"
+            return default_model
         m = str(model).strip()
         aliases = {
-            "pixverse": "pixverse_v4.5",
+            "pixverse": _POLLO_REG["pixverse_default"],
             "pixverse_v4_5": "pixverse_v4.5",
             "pixverse-v4.5": "pixverse_v4.5",
             "pixverse-v4-5": "pixverse_v4.5",
-            "pixverse_v5": "pixverse_v5",
+            "pixverse_v5": _POLLO_REG["pixverse_creative"],
             "pixverse-v5": "pixverse_v5",
-            "kling": "kling_v2",
+            "kling": _POLLO_REG["kling_video"],
             "kling_v1_5": "kling_v1.5",
             "kling-v1-5": "kling_v1.5",
             "kling-v2": "kling_v2",
@@ -173,8 +175,8 @@ class PolloProvider(BaseProvider):
         m = aliases.get(m, m)
         if m in POLLO_MODELS:
             return m
-        logger.warning(f"[Pollo REST] Unknown model '{model}', defaulting to pixverse_v4.5")
-        return "pixverse_v4.5"
+        logger.warning(f"[Pollo REST] Unknown model '{model}', defaulting to {default_model}")
+        return default_model
 
     @staticmethod
     def _normalize_length(model: str, length: Any) -> int:

@@ -13,8 +13,6 @@ for development and testing.
 API Docs: https://developer.paypal.com/api/rest/
 """
 import base64
-import hashlib
-import hmac
 import json
 import logging
 import time
@@ -94,7 +92,7 @@ class PayPalService:
         }
 
     # =========================================================================
-    # SUBSCRIPTION CHECKOUT (PayPal Orders v2)
+    # CHECKOUT (PayPal Subscriptions v1 or Orders v2)
     # =========================================================================
 
     async def create_checkout_session(
@@ -109,29 +107,79 @@ class PayPalService:
         amount_usd: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Create a PayPal order. ``price_id`` here represents either a PayPal
-        Plan ID (for subscriptions) or an opaque SKU; ``amount_usd`` is used
-        as the order total when subscription plans aren't pre-provisioned.
+        Create a PayPal checkout. ``price_id`` represents either a PayPal Plan
+        ID (``P-*`` for subscriptions) or an opaque SKU for one-time orders.
 
         Returns ``checkout_url`` (the approve link) and ``transaction_id``
-        (the PayPal order id).
+        (the PayPal subscription id or order id).
         """
         if self.is_mock:
             return self._mock_checkout_session(user_id, user_email, plan_id, billing_cycle)
 
+        # PayPal-Request-Id is PayPal's idempotency key. Bind it to the
+        # logical (user, plan, cycle, price) tuple so retries from our
+        # frontend do not create duplicate subscriptions/orders.
+        import uuid as _uuid
+        request_id = _uuid.uuid5(
+            _uuid.NAMESPACE_URL,
+            f"vidgo:checkout:{user_id}:{plan_id}:{billing_cycle}:{price_id}",
+        ).hex
+
         try:
-            value = f"{amount_usd:.2f}" if amount_usd else "0.00"
+            if billing_cycle != "one-time" and price_id.startswith("P-"):
+                custom_id = json.dumps(
+                    {"u": str(user_id), "p": plan_id, "c": billing_cycle[:1]},
+                    separators=(",", ":"),
+                )
+                payload = {
+                    "plan_id": price_id,
+                    "custom_id": custom_id,
+                    "subscriber": {"email_address": user_email},
+                    "application_context": {
+                        "brand_name": "VidGo",
+                        "locale": "zh-TW",
+                        "shipping_preference": "NO_SHIPPING",
+                        "user_action": "SUBSCRIBE_NOW",
+                        "return_url": success_url or f"{settings.FRONTEND_URL}/subscription/success",
+                        "cancel_url": cancel_url or f"{settings.FRONTEND_URL}/subscription/cancelled",
+                    },
+                }
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    headers = await self._auth_headers()
+                    headers["PayPal-Request-Id"] = request_id
+                    response = await client.post(
+                        f"{self.base_url}/v1/billing/subscriptions",
+                        headers=headers,
+                        json=payload,
+                    )
+                    if response.status_code in (200, 201):
+                        data = response.json()
+                        approve = next(
+                            (link["href"] for link in data.get("links", []) if link.get("rel") == "approve"),
+                            None,
+                        )
+                        return {
+                            "success": True,
+                            "checkout_url": approve,
+                            "transaction_id": data.get("id"),
+                            "paypal_response": data,
+                        }
+                    logger.error(f"PayPal subscription checkout failed: {response.text}")
+                    return {"success": False, "error": f"PayPal API error: {response.status_code}"}
+
+            if amount_usd is None or amount_usd <= 0:
+                return {"success": False, "error": "amount_usd must be positive for one-time orders"}
+            value = f"{amount_usd:.2f}"
             payload = {
                 "intent": "CAPTURE",
                 "purchase_units": [
                     {
                         "reference_id": str(user_id),
-                        "custom_id": json.dumps({
-                            "user_id": str(user_id),
-                            "plan_id": plan_id,
-                            "billing_cycle": billing_cycle,
-                            "price_id": price_id,
-                        }),
+                        # Keep custom_id short — PayPal limits to 127 chars.
+                        "custom_id": json.dumps(
+                            {"u": str(user_id), "p": plan_id, "c": billing_cycle[:1]},
+                            separators=(",", ":"),
+                        ),
                         "amount": {"currency_code": "USD", "value": value},
                     }
                 ],
@@ -146,9 +194,11 @@ class PayPalService:
                 },
             }
             async with httpx.AsyncClient(timeout=30.0) as client:
+                headers = await self._auth_headers()
+                headers["PayPal-Request-Id"] = request_id
                 response = await client.post(
                     f"{self.base_url}/v2/checkout/orders",
-                    headers=await self._auth_headers(),
+                    headers=headers,
                     json=payload,
                 )
                 if response.status_code in (200, 201):
@@ -281,6 +331,36 @@ class PayPalService:
             logger.error(f"PayPal resume error: {exc}")
             return {"success": False, "error": str(exc)}
 
+    async def get_subscription_transactions(
+        self,
+        subscription_id: str,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """List PayPal subscription transactions (captures) for a subscription."""
+        if self.is_mock:
+            return {"success": True, "is_mock": True, "transactions": []}
+        if not start_time:
+            start_time = (datetime.utcnow() - timedelta(days=370)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if not end_time:
+            end_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            params = {"start_time": start_time, "end_time": end_time}
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/v1/billing/subscriptions/{subscription_id}/transactions",
+                    headers=await self._auth_headers(),
+                    params=params,
+                )
+                if response.status_code == 200:
+                    data = response.json() or {}
+                    return {"success": True, "transactions": data.get("transactions", [])}
+                logger.error(f"PayPal subscription transactions failed: {response.text}")
+                return {"success": False, "error": f"List failed: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"PayPal subscription transactions error: {exc}")
+            return {"success": False, "error": str(exc)}
+
     # =========================================================================
     # REFUND PROCESSING (Payments v2)
     # =========================================================================
@@ -305,10 +385,14 @@ class PayPalService:
             payload: Dict[str, Any] = {"note_to_payer": reason}
             if amount:
                 payload["amount"] = {"value": f"{amount:.2f}", "currency_code": currency}
+            import uuid as _uuid
+            request_id = _uuid.uuid5(_uuid.NAMESPACE_URL, f"vidgo:refund:{transaction_id}:{amount or 'full'}").hex
             async with httpx.AsyncClient(timeout=30.0) as client:
+                headers = await self._auth_headers()
+                headers["PayPal-Request-Id"] = request_id
                 response = await client.post(
                     f"{self.base_url}/v2/payments/captures/{transaction_id}/refund",
-                    headers=await self._auth_headers(),
+                    headers=headers,
                     json=payload,
                 )
                 if response.status_code in (200, 201):
@@ -321,31 +405,88 @@ class PayPalService:
             return {"success": False, "error": str(exc)}
 
     # =========================================================================
-    # WEBHOOK VERIFICATION
+    # WEBHOOK VERIFICATION (PayPal /v1/notifications/verify-webhook-signature)
     # =========================================================================
 
-    def verify_webhook(self, payload: bytes, signature: str) -> bool:
+    async def verify_webhook_signature(
+        self,
+        body: bytes,
+        headers: Dict[str, str],
+    ) -> bool:
         """
-        Best-effort PayPal webhook signature verification.
+        Verify a PayPal webhook by calling PayPal's verify-webhook-signature API.
 
-        For full PCI compliance, replace this with the
-        ``/v1/notifications/verify-webhook-signature`` API call. Here we accept
-        either a configured shared HMAC secret (``PAYPAL_WEBHOOK_SECRET``) or
-        skip verification when none is configured.
+        PayPal signs webhooks with RSA + a rotating cert chain — there is no
+        local-only verification. We must POST the raw event back to PayPal
+        along with the transmission headers and our configured webhook id.
+
+        Returns True only when PayPal answers SUCCESS. In mock mode (no creds),
+        verification is skipped (returns True). When PAYPAL_WEBHOOK_ID is not
+        configured, returns False — webhook MUST be rejected so production
+        cannot accept unsigned payloads.
         """
         if self.is_mock:
             return True
-        if not self.webhook_secret:
-            logger.warning("PayPal webhook secret not configured — skipping verification")
-            return True
+        if not self.webhook_id:
+            logger.error("PAYPAL_WEBHOOK_ID is not configured — rejecting webhook")
+            return False
+
+        def _h(name: str) -> str:
+            return headers.get(name) or headers.get(name.lower()) or headers.get(name.upper()) or ""
+
         try:
-            expected = hmac.new(
-                self.webhook_secret.encode(), payload, hashlib.sha256
-            ).hexdigest()
-            return hmac.compare_digest(expected, signature or "")
+            event_body = json.loads(body.decode("utf-8") or "{}")
+        except Exception as exc:
+            logger.warning(f"PayPal webhook body is not valid JSON: {exc}")
+            return False
+
+        verification_payload = {
+            "auth_algo": _h("Paypal-Auth-Algo"),
+            "cert_url": _h("Paypal-Cert-Url"),
+            "transmission_id": _h("Paypal-Transmission-Id"),
+            "transmission_sig": _h("Paypal-Transmission-Sig"),
+            "transmission_time": _h("Paypal-Transmission-Time"),
+            "webhook_id": self.webhook_id,
+            "webhook_event": event_body,
+        }
+        # Required fields must be present.
+        for key in ("auth_algo", "cert_url", "transmission_id", "transmission_sig", "transmission_time"):
+            if not verification_payload[key]:
+                logger.warning(f"PayPal webhook missing header: {key}")
+                return False
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/notifications/verify-webhook-signature",
+                    headers=await self._auth_headers(),
+                    json=verification_payload,
+                )
+                if response.status_code != 200:
+                    logger.warning(f"PayPal webhook verify HTTP {response.status_code}: {response.text}")
+                    return False
+                status = (response.json() or {}).get("verification_status", "")
+                ok = status == "SUCCESS"
+                if not ok:
+                    logger.warning(f"PayPal webhook verify_status={status}")
+                return ok
         except Exception as exc:
             logger.error(f"PayPal webhook verification error: {exc}")
             return False
+
+    def verify_webhook(self, payload: bytes, signature: str) -> bool:
+        """
+        DEPRECATED: legacy HMAC fallback retained for backwards compatibility.
+
+        Real PayPal webhooks must be verified with `verify_webhook_signature`
+        (which calls PayPal's verify API). This method is unsafe for production
+        and is only kept so existing import sites do not break — it now logs an
+        error and returns False unless we are in mock mode.
+        """
+        if self.is_mock:
+            return True
+        logger.error("paypal.verify_webhook (HMAC) is deprecated — use verify_webhook_signature instead")
+        return False
 
     # =========================================================================
     # CUSTOMER MANAGEMENT (no concept of stored customers — return mock)
@@ -391,6 +532,129 @@ class PayPalService:
             "success": True,
             "pdf_url": f"https://{host}/activity/payment/{transaction_id}",
         }
+
+    # =========================================================================
+    # INVOICING v2 (PayPal-hosted invoices alongside Giveme/ECPay)
+    # Docs: https://developer.paypal.com/docs/api/invoicing/v2/
+    # =========================================================================
+
+    async def generate_invoice_number(self) -> Dict[str, Any]:
+        """POST /v2/invoicing/generate-next-invoice-number"""
+        if self.is_mock:
+            import uuid as _uuid
+            return {"success": True, "is_mock": True, "invoice_number": f"MOCK-{_uuid.uuid4().hex[:8].upper()}"}
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/v2/invoicing/generate-next-invoice-number",
+                    headers=await self._auth_headers(),
+                )
+                if response.status_code in (200, 201):
+                    data = response.json() or {}
+                    return {"success": True, "invoice_number": data.get("invoice_number")}
+                logger.error(f"PayPal generate-invoice-number failed: {response.text}")
+                return {"success": False, "error": f"Generate failed: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"PayPal generate-invoice-number error: {exc}")
+            return {"success": False, "error": str(exc)}
+
+    async def create_invoice(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /v2/invoicing/invoices — create draft invoice."""
+        if self.is_mock:
+            import uuid as _uuid
+            mock_id = f"INV2-MOCK-{_uuid.uuid4().hex[:10].upper()}"
+            return {"success": True, "is_mock": True, "invoice_id": mock_id, "invoice": {"id": mock_id}}
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/v2/invoicing/invoices",
+                    headers=await self._auth_headers(),
+                    json=payload,
+                )
+                if response.status_code in (200, 201, 202):
+                    data = response.json() or {}
+                    invoice_id = data.get("id")
+                    if not invoice_id:
+                        # PayPal returns 202 with Location header pointing at the new invoice.
+                        location = response.headers.get("Location") or ""
+                        if location:
+                            invoice_id = location.rstrip("/").rsplit("/", 1)[-1]
+                    return {"success": True, "invoice_id": invoice_id, "invoice": data}
+                logger.error(f"PayPal create-invoice failed: {response.text}")
+                return {"success": False, "error": f"Create failed: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"PayPal create-invoice error: {exc}")
+            return {"success": False, "error": str(exc)}
+
+    async def send_invoice(
+        self, invoice_id: str, send_to_recipient: bool = True
+    ) -> Dict[str, Any]:
+        """POST /v2/invoicing/invoices/{id}/send — send invoice to recipient."""
+        if self.is_mock:
+            return {"success": True, "is_mock": True}
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/v2/invoicing/invoices/{invoice_id}/send",
+                    headers=await self._auth_headers(),
+                    json={"send_to_recipient": send_to_recipient},
+                )
+                if response.status_code in (200, 202):
+                    return {"success": True}
+                logger.error(f"PayPal send-invoice failed: {response.text}")
+                return {"success": False, "error": f"Send failed: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"PayPal send-invoice error: {exc}")
+            return {"success": False, "error": str(exc)}
+
+    async def get_invoice(self, invoice_id: str) -> Dict[str, Any]:
+        """GET /v2/invoicing/invoices/{id}"""
+        if self.is_mock:
+            return {"success": True, "is_mock": True, "invoice": {"id": invoice_id}}
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/v2/invoicing/invoices/{invoice_id}",
+                    headers=await self._auth_headers(),
+                )
+                if response.status_code == 200:
+                    return {"success": True, "invoice": response.json()}
+                return {"success": False, "error": f"Get failed: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"PayPal get-invoice error: {exc}")
+            return {"success": False, "error": str(exc)}
+
+    async def cancel_invoice(
+        self,
+        invoice_id: str,
+        subject: str = "Invoice cancelled",
+        note: str = "Subscription refunded — invoice cancelled.",
+        send_to_recipient: bool = True,
+        send_to_invoicer: bool = True,
+    ) -> Dict[str, Any]:
+        """POST /v2/invoicing/invoices/{id}/cancel — cancel a sent invoice."""
+        if self.is_mock:
+            return {"success": True, "is_mock": True}
+        payload = {
+            "subject": subject,
+            "note": note,
+            "send_to_recipient": send_to_recipient,
+            "send_to_invoicer": send_to_invoicer,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/v2/invoicing/invoices/{invoice_id}/cancel",
+                    headers=await self._auth_headers(),
+                    json=payload,
+                )
+                if response.status_code in (200, 204):
+                    return {"success": True}
+                logger.error(f"PayPal cancel-invoice failed: {response.text}")
+                return {"success": False, "error": f"Cancel failed: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"PayPal cancel-invoice error: {exc}")
+            return {"success": False, "error": str(exc)}
 
 
 # Singleton instance

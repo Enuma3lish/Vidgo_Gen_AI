@@ -36,7 +36,7 @@ const successMessage = ref<string | null>(null)
 const showCancelModal = ref(false)
 const cancelWithRefund = ref(false)
 const TEST_PRO_PLAN_NAME = 'test_pro_usd_1'
-const officialCreditPackageNames = ['light_pack', 'standard_pack']
+const officialCreditPackageNames = ['light_pack', 'standard_pack', 'heavy_pack']
 const creditPackages = ref<CreditTopUpPackage[]>([])
 const creditPackagesLoading = ref(false)
 
@@ -95,6 +95,18 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
       isPopular: true,
       isBestValue: true,
     },
+    {
+      id: 'heavy_pack',
+      name: 'heavy_pack',
+      displayName: t('pricing.creditPacks.fallbackNames.heavy'),
+      credits: 12000,
+      price: 999,
+      currency: 'TWD',
+      bonusCredits: 2000,
+      bonusPct: 20,
+      isPopular: false,
+      isBestValue: true,
+    },
   ]
 }
 
@@ -112,7 +124,7 @@ function normalizeCreditPackage(raw: any): CreditTopUpPackage {
     price,
     currency: 'TWD',
     bonusCredits: Number(raw.bonus_credits ?? fallback?.bonusCredits ?? 0),
-    bonusPct: raw.name === 'standard_pack' ? 10 : 0,
+    bonusPct: raw.name === 'standard_pack' ? 10 : raw.name === 'heavy_pack' ? 20 : 0,
     isPopular: Boolean(raw.is_popular ?? fallback?.isPopular),
     isBestValue: Boolean(raw.is_best_value ?? fallback?.isBestValue),
   }
@@ -382,6 +394,29 @@ function isPlanPopular(name: string): boolean {
 
 function isTestPlan(plan: PlanInfo): boolean {
   return Boolean(plan.is_test_only) || plan.name === TEST_PRO_PLAN_NAME
+}
+
+// Recommended overseas USD pricing for international PayPal checkout.
+// Keep aligned with the locale `paypalPricingStrategy` copy and PayPal Plan IDs.
+const OVERSEAS_USD_MONTHLY: Record<string, number> = {
+  basic: 19.99,
+  pro: 49.99,
+  premium: 99.99,
+}
+
+function getOverseasUsdMonthly(plan: PlanInfo): number | null {
+  const key = (plan.name || plan.display_name || '').toLowerCase()
+  return OVERSEAS_USD_MONTHLY[key] ?? null
+}
+
+function formatOverseasUsd(plan: PlanInfo, period: 'monthly' | 'yearly'): string {
+  const monthly = getOverseasUsdMonthly(plan)
+  if (monthly == null) return ''
+  if (period === 'yearly') {
+    const yearly = Math.round(monthly * 12 * 100) / 100
+    return `US$${yearly.toFixed(2)}/yr`
+  }
+  return `US$${monthly.toFixed(2)}/mo`
 }
 
 function isHiddenDisplayPlan(plan: PlanInfo): boolean {
@@ -655,6 +690,7 @@ onMounted(async () => {
 
               <div class="space-y-2">
                 <button
+                  v-if="isZh"
                   @click="handleCreditPurchase(pkg, 'ecpay')"
                   :disabled="!!subscribing && subscribing.startsWith(`credit:${pkg.id}`)"
                   class="w-full py-3 rounded font-medium transition-all duration-200 disabled:opacity-50 text-white"
@@ -670,6 +706,7 @@ onMounted(async () => {
                   <span v-else>{{ isLoggedIn ? t('pricing.creditPacks.cta.buyCard') : t('pricing.creditPacks.cta.signInToBuy') }}</span>
                 </button>
                 <button
+                  v-if="!isZh"
                   @click="handleCreditPurchase(pkg, 'paypal')"
                   :disabled="!!subscribing && subscribing.startsWith(`credit:${pkg.id}`)"
                   class="w-full py-3 rounded font-medium transition-all duration-200 disabled:opacity-50"
@@ -787,28 +824,47 @@ onMounted(async () => {
 
           <!-- Price -->
           <div class="mb-6">
-            <span class="text-4xl font-bold" style="color: #f5f5fa;">
-              {{ formatPlanPrice(plan) }}
-            </span>
-            <span style="color: #6b6b8a;">
-              /{{ t('pricing.perMonthShort', 'mo') }}
-            </span>
-            <!-- When the user is viewing yearly pricing, also surface the real
-                 annual total + savings so they understand the full commitment. -->
-            <div
-              v-if="billingPeriod === 'yearly' && plan.price_monthly > 0 && !isTestPlan(plan)"
-              class="mt-2 text-xs"
-              style="color: #6b6b8a;"
-            >
-              <span>{{ t('pricing.billedAnnually') }}: NT${{ getAnnualTotal(plan) }}</span>
-              <span
-                v-if="getYearlySavingsPct(plan) > 0"
-                class="ml-2"
-                style="color: #10b981;"
-              >
-                {{ t('pricing.saveVsMonthly', { pct: getYearlySavingsPct(plan) }) }}
+            <!-- zh-TW: 顯示新台幣 (ECPay) 價格 -->
+            <template v-if="isZh">
+              <span class="text-4xl font-bold" style="color: #f5f5fa;">
+                {{ formatPlanPrice(plan) }}
               </span>
-            </div>
+              <span style="color: #6b6b8a;">
+                /{{ t('pricing.perMonthShort', 'mo') }}
+              </span>
+              <!-- When the user is viewing yearly pricing, also surface the real
+                   annual total + savings so they understand the full commitment. -->
+              <div
+                v-if="billingPeriod === 'yearly' && plan.price_monthly > 0 && !isTestPlan(plan)"
+                class="mt-2 text-xs"
+                style="color: #6b6b8a;"
+              >
+                <span>{{ t('pricing.billedAnnually') }}: NT${{ getAnnualTotal(plan) }}</span>
+                <span
+                  v-if="getYearlySavingsPct(plan) > 0"
+                  class="ml-2"
+                  style="color: #10b981;"
+                >
+                  {{ t('pricing.saveVsMonthly', { pct: getYearlySavingsPct(plan) }) }}
+                </span>
+              </div>
+            </template>
+            <!-- Non-zh locales: show USD (PayPal) price as the primary headline, in yellow. -->
+            <template v-else>
+              <template v-if="getOverseasUsdMonthly(plan) !== null && !isTestPlan(plan)">
+                <span class="text-4xl font-bold" style="color: #facc15;">
+                  {{ formatOverseasUsd(plan, billingPeriod === 'yearly' ? 'yearly' : 'monthly') }}
+                </span>
+              </template>
+              <template v-else>
+                <span class="text-4xl font-bold" style="color: #f5f5fa;">
+                  {{ formatPlanPrice(plan) }}
+                </span>
+                <span style="color: #6b6b8a;">
+                  /{{ t('pricing.perMonthShort', 'mo') }}
+                </span>
+              </template>
+            </template>
           </div>
 
           <!-- Credits -->
@@ -818,8 +874,9 @@ onMounted(async () => {
 
           <!-- CTA Button -->
           <div v-if="!isCurrentPlan(plan.id)">
+            <!-- ECPay (TWD) — only shown to zh-TW visitors -->
             <button
-              v-if="plan.price_monthly > 0 && isLoggedIn"
+              v-if="isZh && plan.price_monthly > 0 && isLoggedIn"
               @click="handleSubscribe(plan, 'ecpay')"
               :disabled="subscribing === plan.id"
               class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 disabled:opacity-50 text-white hover:opacity-90"
@@ -839,14 +896,15 @@ onMounted(async () => {
                 {{ getPrimaryPaymentLabel(plan) }}
               </span>
             </button>
+            <!-- PayPal (USD) — only shown to non-zh-TW visitors -->
             <button
-              v-if="paypalEnabled && plan.price_monthly > 0 && isLoggedIn && !isTestPlan(plan)"
+              v-if="!isZh && paypalEnabled && plan.price_monthly > 0 && isLoggedIn && !isTestPlan(plan)"
               @click="handleSubscribe(plan, 'paypal')"
               :disabled="subscribing === plan.id"
               class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 disabled:opacity-50"
-              style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
+              style="background: #ffc439; color: #003087;"
             >
-              <span class="flex items-center justify-center gap-2">
+              <span class="flex items-center justify-center gap-2 font-bold">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                 </svg>
@@ -854,7 +912,7 @@ onMounted(async () => {
               </span>
             </button>
             <p
-              v-if="paypalEnabled && plan.price_monthly > 0 && !isTestPlan(plan)"
+              v-if="!isZh && paypalEnabled && plan.price_monthly > 0 && !isTestPlan(plan)"
               class="mb-2 rounded px-3 py-2 text-xs leading-relaxed"
               style="background: #fef08a; color: #111827;"
             >
@@ -862,7 +920,7 @@ onMounted(async () => {
             </p>
             <button
               v-if="!(plan.price_monthly > 0 && isLoggedIn)"
-              @click="handleSubscribe(plan, 'ecpay')"
+              @click="handleSubscribe(plan, isZh ? 'ecpay' : 'paypal')"
               :disabled="subscribing === plan.id"
               class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 disabled:opacity-50"
               style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"

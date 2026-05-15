@@ -1076,6 +1076,30 @@ async def get_presets(
     def _r(u):
         return gcs.refresh_signed_url(u) if u else u
 
+    def _safe_thumb(p):
+        """Return a still-image thumbnail URL or None.
+
+        Falling back to result_watermarked_url leaked .mp4 URLs into
+        thumbnail_url for video tools (short_video, ai_avatar). The frontend
+        uses thumbnail_url as an <img> src and as the I2V source, which
+        triggered net::ERR_ABORTED on previews and HTTP 415
+        invalid_upload errors when the user clicked "Generate".
+        """
+        candidates = [
+            getattr(p, "result_thumbnail_url", None),
+            getattr(p, "result_image_url", None),
+            getattr(p, "input_image_url", None),
+            getattr(p, "result_watermarked_url", None),
+        ]
+        for c in candidates:
+            if not c:
+                continue
+            lower = str(c).split("?", 1)[0].lower()
+            if lower.endswith((".mp4", ".webm", ".mov", ".m4v")):
+                continue
+            return c
+        return None
+
     payload = {
         "success": True,
         "tool_type": tool_type,
@@ -1093,7 +1117,7 @@ async def get_presets(
                     "result_image_url": _r(getattr(p, "result_image_url", None)),
                     "result_video_url": _r(getattr(p, "result_video_url", None)),
                     "result_watermarked_url": _r(getattr(p, "result_watermarked_url", None)),
-                    "thumbnail_url": _r(getattr(p, "result_thumbnail_url", None) or getattr(p, "result_watermarked_url", None) or getattr(p, "result_image_url", None)),
+                    "thumbnail_url": _r(_safe_thumb(p)),
                     "topic": getattr(p, "topic", None),
                     "input_params": getattr(p, "input_params", None) or {},
                     "style_tags": getattr(p, "tags", None) or []

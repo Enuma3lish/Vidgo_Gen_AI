@@ -9,9 +9,14 @@ import logging
 from typing import Optional, Dict, Any, Tuple
 import httpx
 from app.core.config import get_settings
+from app.core.model_registry import POLLO_MODELS as _POLLO_REG
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Default model when caller omits ``model`` (env-overridable via
+# POLLO_PIXVERSE_DEFAULT_MODEL — see app/core/model_registry.py).
+DEFAULT_MODEL = _POLLO_REG["pixverse_default"]
 
 
 # Available I2V models on Pollo AI
@@ -65,7 +70,7 @@ class PolloAIClient:
         self,
         image_url: str,
         prompt: str,
-        model: str = "pixverse_v4.5",
+        model: str = DEFAULT_MODEL,
         negative_prompt: str = "blurry, distorted, low quality, jerky motion",
         length: int = 5
     ) -> Tuple[bool, str, Optional[str]]:
@@ -85,7 +90,7 @@ class PolloAIClient:
         if not self.api_key:
             return False, "Pollo API key not configured", None
 
-        model_info = POLLO_MODELS.get(model, POLLO_MODELS["pixverse_v4.5"])
+        model_info = POLLO_MODELS.get(model, POLLO_MODELS[DEFAULT_MODEL])
         endpoint = model_info["endpoint"]
 
         # Validate and adjust length to supported values
@@ -230,7 +235,7 @@ class PolloAIClient:
         self,
         image_url: str,
         prompt: str,
-        model: str = "pixverse_v4.5",
+        model: str = DEFAULT_MODEL,
         timeout: int = 300
     ) -> Dict[str, Any]:
         """

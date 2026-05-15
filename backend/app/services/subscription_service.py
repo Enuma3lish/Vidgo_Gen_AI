@@ -884,11 +884,17 @@ class SubscriptionService:
             user.work_retention_until = end + timedelta(days=WORK_RETENTION_DAYS)
 
             # If using PayPal, notify them
-            if order and order.payment_data.get("paypal_subscription_id"):
-                await self.paypal.cancel_subscription(
-                    order.payment_data["paypal_subscription_id"],
-                    effective_from="next_billing_period"
-                )
+            if order:
+                paypal_sub_id = order.payment_data.get("paypal_subscription_id")
+                if not paypal_sub_id:
+                    candidate = order.payment_data.get("paypal_transaction_id")
+                    if candidate and str(candidate).startswith("I-"):
+                        paypal_sub_id = candidate
+                if paypal_sub_id:
+                    await self.paypal.cancel_subscription(
+                        paypal_sub_id,
+                        effective_from="next_billing_period"
+                    )
 
         subscription.auto_renew = False
         await db.commit()
@@ -1090,16 +1096,67 @@ class SubscriptionService:
                 "requires_manual": True,
             }
 
-        # Real PayPal refund
-        transaction_id = order.payment_data.get("paypal_transaction_id")
-        if not transaction_id:
+        # Real PayPal refund.
+        # Subscription orders carry an "I-..." subscription id under
+        # paypal_transaction_id (and/or paypal_subscription_id). PayPal's
+        # refund endpoint requires a CAPTURE id, not a subscription id, so
+        # we must (1) cancel the subscription to stop future billing, and
+        # (2) look up the most recent capture id and refund that.
+        payment_data_view = order.payment_data or {}
+        paypal_subscription_id = (
+            payment_data_view.get("paypal_subscription_id")
+            or (
+                payment_data_view.get("paypal_transaction_id")
+                if str(payment_data_view.get("paypal_transaction_id") or "").startswith("I-")
+                else None
+            )
+        )
+        capture_id: Optional[str] = None
+
+        if paypal_subscription_id:
+            cancel_result = await self.paypal.cancel_subscription(
+                paypal_subscription_id,
+                effective_from="immediately",
+            )
+            if not cancel_result.get("success"):
+                logger.warning(
+                    f"PayPal subscription cancel failed for refund "
+                    f"{order.order_number}: {cancel_result.get('error')}"
+                )
+
+            tx_result = await self.paypal.get_subscription_transactions(paypal_subscription_id)
+            if tx_result.get("success"):
+                # Pick the most recent COMPLETED capture.
+                for tx in sorted(
+                    tx_result.get("transactions", []),
+                    key=lambda t: t.get("time") or "",
+                    reverse=True,
+                ):
+                    status = str(tx.get("status") or "").upper()
+                    tx_id = tx.get("id")
+                    if tx_id and status in ("COMPLETED", "PARTIALLY_REFUNDED"):
+                        capture_id = tx_id
+                        break
+            else:
+                logger.warning(
+                    f"PayPal transactions lookup failed for {paypal_subscription_id}: "
+                    f"{tx_result.get('error')}"
+                )
+
+        if not capture_id:
+            # Non-subscription PayPal order — payment_data carries a capture id.
+            transaction_id = order.payment_data.get("paypal_transaction_id")
+            if transaction_id and not str(transaction_id).startswith("I-"):
+                capture_id = transaction_id
+
+        if not capture_id:
             return {
                 "success": False,
-                "error": "No PayPal transaction ID found"
+                "error": "No PayPal capture available to refund",
             }
 
         paypal_result = await self.paypal.create_refund(
-            transaction_id=transaction_id,
+            transaction_id=capture_id,
             reason="customer_request",
             amount=None  # Full refund
         )
@@ -1286,17 +1343,21 @@ class SubscriptionService:
 
         await db.commit()
 
-        # Taiwan e-invoice: auto-issue (or create pending_issue record) right
-        # after payment so we stay within the tax period. Runs when Giveme
-        # is enabled OR the payment was made via ECPay (Taiwan local
-        # payments). International PayPal payments skip this branch.
+        # Auto-issue invoice right after payment.
+        # - Taiwan payments (ECPay / Giveme enabled) → Giveme/ECPay e-invoice (5% VAT, tax-period gated).
+        # - PayPal payments (international USD) → PayPal Invoicing v2 (no VAT split).
         # Failures here MUST NOT roll back the payment — log and continue.
         from app.core.config import settings
         is_taiwan_payment = (
             settings.GIVEME_ENABLED
             or (order.payment_method or "") == "ecpay"
         )
-        if is_taiwan_payment:
+        is_paypal_payment = (
+            (order.payment_method or "") == "paypal"
+            or bool((order.payment_data or {}).get("paypal_subscription_id"))
+            or bool((order.payment_data or {}).get("paypal_transaction_id"))
+        )
+        if is_taiwan_payment or is_paypal_payment:
             try:
                 from app.services.invoice_service import auto_issue_invoice
                 invoice_result = await auto_issue_invoice(

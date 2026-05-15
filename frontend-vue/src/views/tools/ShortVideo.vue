@@ -183,20 +183,42 @@ const aiModelOptions = [
 const selectedDemoImageId = ref<string | null>(null)
 
 const demoImages = computed(() => {
+  // Some pregenerated rows store the finished video URL in `thumbnail_url`
+  // because no still-frame extraction step ran. Treat any video extension
+  // (.mp4/.webm/.mov) as a non-image and fall through to the real input
+  // frame. This is critical for short_video: selectDemoImage uses
+  // `preview` as the I2V source, and an .mp4 there gets rejected by the
+  // backend's `validate_media_url_or_raise(..., "image", ...)` guard.
+  const isImageUrl = (url: string | null | undefined): url is string => {
+    if (!url) return false
+    try {
+      const path = new URL(url, window.location.origin).pathname.toLowerCase()
+      if (path.endsWith('.mp4') || path.endsWith('.webm') || path.endsWith('.mov')) return false
+    } catch {
+      const lower = url.toLowerCase()
+      if (lower.includes('.mp4') || lower.includes('.webm') || lower.includes('.mov')) return false
+    }
+    return true
+  }
   return demoTemplates.value
     .filter(t => t.result_video_url || t.result_watermarked_url)
-    .map(t => ({
-      id: t.id,
-      // Always show prompt in user's current language
-      name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
-      // Use thumbnail, input_image, or generate from video URL
-      preview: t.thumbnail_url || t.input_image_url || undefined,
-      video_url: t.result_video_url || t.result_watermarked_url,
-      watermarked_result: t.result_watermarked_url,
-      topic: t.topic,
-      // Extract motion type from input_params (API returns metadata in input_params)
-      motion: normalizeMotionId(t.input_params?.motion || t.topic || 'auto')
-    }))
+    .map(t => {
+      const thumb = isImageUrl(t.thumbnail_url) ? t.thumbnail_url : undefined
+      const inputImg = isImageUrl(t.input_image_url) ? t.input_image_url : undefined
+      return {
+        id: t.id,
+        // Always show prompt in user's current language
+        name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
+        // Prefer the original input frame so I2V has a valid still image to
+        // start from. Fall back to thumbnail only if it's actually an image.
+        preview: inputImg || thumb || undefined,
+        video_url: t.result_video_url || t.result_watermarked_url,
+        watermarked_result: t.result_watermarked_url,
+        topic: t.topic,
+        // Extract motion type from input_params (API returns metadata in input_params)
+        motion: normalizeMotionId(t.input_params?.motion || t.topic || 'auto')
+      }
+    })
 })
 
 
@@ -331,7 +353,10 @@ watch(locale, () => loadEffectCatalog('short_video', locale.value))
 
 function selectDemoImage(item: { id: string; preview?: string; video_url?: string; motion?: string }) {
   selectedDemoImageId.value = item.id
-  uploadedImage.value = item.preview || item.video_url || undefined
+  // Never use video_url as the I2V source — backend rejects .mp4 in image
+  // slots. If preview is missing, leave uploadedImage empty so the user
+  // is prompted to upload their own image instead of triggering a 415.
+  uploadedImage.value = item.preview || undefined
   resultVideo.value = null
   demoEmptyState.value = false
 }

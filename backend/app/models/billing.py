@@ -408,6 +408,13 @@ class Generation(Base):
     credits_used = Column(Integer, nullable=False, default=0)
     cache_hit = Column(Boolean, default=False)
 
+    # Metrics (populated by provider_router after each call) — power the
+    # per-model success-rate / latency / cost dashboard on /admin/models.
+    provider_used = Column(String(32), nullable=True)   # 'piapi' / 'pollo' / 'vertex_ai' / 'a2e'
+    model_used = Column(String(128), nullable=True)     # actual model string sent to provider
+    duration_ms = Column(Integer, nullable=True)        # end-to-end latency
+    api_cost_usd = Column(DECIMAL(10, 4), nullable=True)
+
     # Status
     status = Column(String(20), default="pending")  # pending, processing, completed, failed
     error_message = Column(Text, nullable=True)

@@ -346,6 +346,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminCosts.vue'),
     meta: { requiresAuth: true, requiresAdmin: true }
   },
+  {
+    path: '/admin/models',
+    name: 'admin-models',
+    component: () => import('@/views/admin/AdminModels.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
 
   // 404
   {

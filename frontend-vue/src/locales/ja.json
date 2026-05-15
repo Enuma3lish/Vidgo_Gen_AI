@@ -1564,7 +1564,7 @@
   "adminModels": {
     "title": "AI Model Registry",
     "subtitle": "実行時に AI モデルを切り替え（Midjourney / Kling / Flux / Luma …）。優先順位：DB → 環境変数 → ハードコード既定値。",
-    "restartWarning": "保存した上書きはこの Cloud Run instance では即座に有効。他の instance は次回再起動（~30 秒のローリング更新）で反映されます。",
+    "restartWarning": "保存した上書きは Redis pub/sub により数秒以内に全 backend instance に伝播します。Redis 利用不可の場合も DB に保存され、次回 instance 再起動時に反映されます。",
     "listTitle": "Service keys",
     "editTitle": "上書きを編集",
     "pickHint": "左のリストから service key を選んでください。",
@@ -1587,6 +1587,8 @@
     "metricAvgLatency": "平均レイテンシ",
     "metricCost": "コスト (USD)",
     "metricCalls": "{n} 回呼び出し",
+    "filterPlaceholder": "ファミリー、名前、キー、モデルで絞り込み…",
+    "noMatches": "該当する service key がありません。",
     "warnings": { "modelRequired": "Model 文字列が必要です。" },
     "toasts": { "saved": "上書きを保存しました。" },
     "errors": { "loadFailed": "モデルレジストリの取得に失敗。", "saveFailed": "上書きの保存に失敗。" }

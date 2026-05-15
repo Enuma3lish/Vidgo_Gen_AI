@@ -16,7 +16,7 @@ restarts. A `gcloud run services update --update-env-vars MODEL_REGISTRY_RESEED=
 forces a rolling restart in ~30 seconds.
 """
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from typing import Any, Dict, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_redis
+from app.models.billing import ServicePricing
 from app.models.model_registry import GenerationMetric
 from app.models.user import User
 from app.services.model_registry_service import ModelRegistryService
@@ -228,6 +229,7 @@ async def get_model_metrics(
     base = (
         select(
             GenerationMetric.model_used,
+            GenerationMetric.task_type,
             func.count().label("total_calls"),
             func.sum(
                 func.case((GenerationMetric.success.is_(True), 1), else_=0)
@@ -236,27 +238,58 @@ async def get_model_metrics(
         )
         .where(GenerationMetric.created_at >= since)
         .where(GenerationMetric.model_used.isnot(None))
-        .group_by(GenerationMetric.model_used)
+        .group_by(GenerationMetric.model_used, GenerationMetric.task_type)
     )
     result = await db.execute(base)
+    rows = result.all()
+
+    # Approximate cost per call = ServicePricing.api_cost_usd of the row whose
+    # tool_type matches our task_type. Imperfect (one task_type can map to
+    # multiple service_types with different costs — e.g. kling-2.6 vs
+    # kling-2.1-master both have task_type="kling_video_generation") but it's
+    # the best estimate we have without the provider returning per-call cost.
+    task_types = {r[1] for r in rows if r[1]}
+    cost_map = {}
+    if task_types:
+        cost_q = await db.execute(
+            select(ServicePricing.tool_type, func.avg(ServicePricing.api_cost_usd))
+            .where(ServicePricing.tool_type.in_(task_types))
+            .group_by(ServicePricing.tool_type)
+        )
+        cost_map = {t: float(c or 0) for t, c in cost_q.all()}
+
+    # Collapse model_used groups across task_types in case the same model
+    # served multiple task_types in the window (rare but possible).
+    aggregated: Dict[str, Dict[str, Any]] = {}
+    for model_used, task_type, total_calls, success, avg_ms in rows:
+        total = int(total_calls or 0)
+        succ = int(success or 0)
+        cost = cost_map.get(task_type, 0.0) * total
+        entry = aggregated.setdefault(model_used, {
+            "total": 0, "success": 0, "duration_ms_sum": 0, "duration_ms_count": 0, "cost": 0.0
+        })
+        entry["total"] += total
+        entry["success"] += succ
+        if avg_ms is not None:
+            entry["duration_ms_sum"] += float(avg_ms) * total
+            entry["duration_ms_count"] += total
+        entry["cost"] += cost
 
     metrics_by_model: List[ModelMetrics] = []
-    for row in result.all():
-        model_used = row[0]
-        total = int(row[1] or 0)
-        success = int(row[2] or 0)
-        avg_ms = row[3]
+    for model_used, agg in aggregated.items():
+        total = agg["total"]
+        avg_ms = (agg["duration_ms_sum"] / agg["duration_ms_count"]) if agg["duration_ms_count"] else None
         metrics_by_model.append(
             ModelMetrics(
                 model_used=model_used,
                 window_days=window_days,
                 total_calls=total,
-                success_count=success,
-                failure_count=max(0, total - success),
-                success_rate=(success / total) if total > 0 else 0.0,
+                success_count=agg["success"],
+                failure_count=max(0, total - agg["success"]),
+                success_rate=(agg["success"] / total) if total > 0 else 0.0,
                 avg_duration_ms=int(avg_ms) if avg_ms is not None else None,
-                p95_duration_ms=None,  # populate from percentile_cont when needed
-                total_cost_usd=0.0,    # TODO: join ServicePricing for cost estimate
+                p95_duration_ms=None,
+                total_cost_usd=round(agg["cost"], 4),
             )
         )
 

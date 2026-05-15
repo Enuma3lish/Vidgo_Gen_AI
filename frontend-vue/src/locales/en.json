@@ -1587,7 +1587,7 @@
   "adminModels": {
     "title": "AI Model Registry",
     "subtitle": "Swap upstream AI models (Midjourney / Kling / Flux / Luma …) at runtime. Reads from DB first, env var second, hardcoded default last.",
-    "restartWarning": "Saved overrides take effect on this Cloud Run instance immediately, but other running instances will see the change after their next restart (~30s rolling update). Live cache propagation across instances is on the roadmap.",
+    "restartWarning": "Saved overrides propagate to every running backend instance within seconds via Redis pub/sub. If Redis is unavailable the change still persists in DB and takes effect on next instance restart.",
     "listTitle": "Service keys",
     "editTitle": "Edit override",
     "pickHint": "Pick a service key from the list to edit.",
@@ -1610,6 +1610,8 @@
     "metricAvgLatency": "Avg latency",
     "metricCost": "Cost (USD)",
     "metricCalls": "{n} calls",
+    "filterPlaceholder": "Filter by family, name, key, or model…",
+    "noMatches": "No service keys match your filter.",
     "warnings": {
       "modelRequired": "Model string is required."
     },

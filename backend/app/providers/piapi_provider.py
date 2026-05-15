@@ -20,7 +20,11 @@ import uuid
 
 from app.providers.base import BaseProvider
 from app.services.gcs_storage_service import get_gcs_storage
-from app.core.model_registry import PIAPI_MODELS
+from app.core.model_registry import (
+    PIAPI_MODELS,
+    PIAPI_KLING_VERSIONS,
+    PIAPI_MIDJOURNEY_PROCESS_MODE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -551,6 +555,68 @@ class PiAPIProvider(BaseProvider):
 
         return await self._submit_and_poll(payload)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # MIDJOURNEY IMAGINE (text-to-image)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def midjourney_imagine(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate image via Midjourney through PiAPI.
+        Reference: piapi.ai/docs/midjourney-api/imagine
+
+        PiAPI exposes a single ``midjourney`` model alias; the underlying MJ
+        version (v6/v7) is selected server-side. Cost vs latency is tuned via
+        ``process_mode``: ``relax`` (cheapest, slow), ``fast`` (default), or
+        ``turbo`` (most expensive, fastest).
+
+        Args:
+            params: {
+                "prompt": str (required),
+                "aspect_ratio": str (optional, "1:1"/"16:9"/"9:16"/...),
+                "process_mode": str (optional, "relax"|"fast"|"turbo";
+                    defaults to PIAPI_MIDJOURNEY_PROCESS_MODE = "fast"),
+                "skip_prompt_check": bool (optional, default False),
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"image_url": str,
+             "images": [str, ...]}}
+        """
+        self._log_request("midjourney_imagine", params)
+
+        process_mode = params.get("process_mode") or PIAPI_MIDJOURNEY_PROCESS_MODE
+        if process_mode not in {"relax", "fast", "turbo"}:
+            process_mode = "fast"
+
+        payload = {
+            "model": PIAPI_MODELS["midjourney"],
+            "task_type": "imagine",
+            "input": {
+                "prompt": params["prompt"],
+                "aspect_ratio": params.get("aspect_ratio", "1:1"),
+                "process_mode": process_mode,
+                "skip_prompt_check": bool(params.get("skip_prompt_check", False)),
+            },
+        }
+
+        result = await self._submit_and_poll(payload)
+        output = result.get("output") or {}
+        if isinstance(output, dict):
+            # Midjourney returns image_url (primary) and image_urls (multi-grid
+            # variants). temporary_image_urls is the time-limited CDN copy.
+            image_url = (
+                output.get("image_url")
+                or (output.get("temporary_image_urls") or [None])[0]
+                or output.get("discord_image_url")
+            )
+            if image_url:
+                output["image_url"] = image_url
+            images = output.get("image_urls") or output.get("temporary_image_urls") or []
+            if images:
+                output["images"] = images
+            result["output"] = output
+        return result
+
     async def _resize_image_for_trellis(self, image_url: str, max_dim: int = 1024) -> str:
         """
         Download image, resize to fit within max_dim × max_dim, re-upload to GCS.
@@ -801,6 +867,187 @@ class PiAPIProvider(BaseProvider):
         }
 
         return await self._submit_and_poll(payload)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # KLING VIDEO GENERATION (text-to-video + image-to-video, with version pin)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def kling_video_generation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate video using Kling via PiAPI.
+        Reference: piapi.ai/docs/kling-api/create-task
+
+        Mode is auto-selected by presence of ``image_url``:
+          - no image_url → text-to-video (uses ``aspect_ratio``)
+          - image_url    → image-to-video (uses ``image_url`` + optional
+                          ``image_tail_url`` for first-last frame)
+
+        ``version`` defaults to PIAPI_KLING_VERSIONS["default"] (2.6 GA).
+        Pass ``tier="flagship"`` to use 2.1-master (pro-mode only). Or pass
+        an explicit ``version`` string ("1.5"/"1.6"/"2.1"/"2.1-master"/
+        "2.5"/"2.6") to override.
+
+        Args:
+            params: {
+                "prompt": str (required),
+                "negative_prompt": str (optional, max 2500),
+                "duration": int (optional, 5|10, default 5),
+                "aspect_ratio": str (optional, T2V only, "16:9"|"9:16"|"1:1"),
+                "image_url": str (optional, switches to I2V),
+                "image_tail_url": str (optional, I2V end frame),
+                "mode": str (optional, "std"|"pro"; auto "pro" for 2.1-master),
+                "cfg_scale": float (optional, 0-1),
+                "version": str (optional, explicit override),
+                "tier": str (optional, "default"|"flagship"),
+                "enable_audio": bool (optional),
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"video_url": str}}
+        """
+        self._log_request("kling_video_generation", params)
+
+        # Version selection: explicit > tier preset > registry default
+        version = params.get("version")
+        if not version:
+            tier = (params.get("tier") or "default").lower()
+            version = PIAPI_KLING_VERSIONS.get(tier, PIAPI_KLING_VERSIONS["default"])
+
+        # 2.1-master is pro-mode only per PiAPI docs; auto-promote.
+        mode = params.get("mode") or ("pro" if version == "2.1-master" else "std")
+
+        input_data: Dict[str, Any] = {
+            "prompt": params["prompt"],
+            "version": version,
+            "mode": mode,
+            "duration": int(params.get("duration", 5)),
+        }
+        if params.get("negative_prompt"):
+            input_data["negative_prompt"] = params["negative_prompt"]
+        if params.get("cfg_scale") is not None:
+            input_data["cfg_scale"] = str(params["cfg_scale"])
+        if params.get("enable_audio") is not None:
+            input_data["enable_audio"] = bool(params["enable_audio"])
+
+        if params.get("image_url"):
+            input_data["image_url"] = self._resolve_image_url(params["image_url"])
+            if params.get("image_tail_url"):
+                input_data["image_tail_url"] = self._resolve_image_url(params["image_tail_url"])
+        else:
+            # aspect_ratio is T2V-only per Kling docs
+            input_data["aspect_ratio"] = params.get("aspect_ratio", "16:9")
+
+        payload = {
+            "model": PIAPI_MODELS["kling_video"],
+            "task_type": "video_generation",
+            "input": input_data,
+            "config": {"service_mode": "public"},
+        }
+
+        result = await self._submit_and_poll(payload)
+        output = result.get("output") or {}
+        if isinstance(output, dict):
+            # Kling returns video at one of several locations depending on
+            # task variant — same normalization pattern as generate_avatar.
+            video_url = output.get("video_url") or output.get("url") or ""
+            if not video_url:
+                works = output.get("works") or []
+                if isinstance(works, list):
+                    for w in works:
+                        if isinstance(w, dict):
+                            v = w.get("video")
+                            if isinstance(v, dict) and v.get("url"):
+                                video_url = v["url"]
+                                break
+                            if isinstance(v, str):
+                                video_url = v
+                                break
+            if video_url:
+                output["video_url"] = video_url
+            result["output"] = output
+        return result
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # LUMA DREAM MACHINE (text-to-video, image-to-video, first-last frame)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def luma_video_generation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate video using Luma Dream Machine via PiAPI.
+        Reference: piapi.ai/docs/dream-machine/create-task
+
+        Modes (auto-selected by which images are supplied):
+          - prompt only                      → text-to-video
+          - prompt + start_image             → image-to-video
+          - prompt + start_image + end_image → first-last frame
+          - end_image only                   → reverse-direction generation
+
+        Args:
+            params: {
+                "prompt": str (required),
+                "model_name": str (optional, default "ray-v2" from registry —
+                    Ray1 deprecated, Ray3 in dev),
+                "duration": int (optional, 5 or 9; PiAPI prices 5s=$0.2, 9s=$0.4),
+                "aspect_ratio": str (optional, default "16:9"; also "9:16",
+                    "1:1", "3:4", "4:3", "21:9"),
+                "start_image": str (optional, first frame URL for I2V),
+                "image_url": str (alias for start_image),
+                "end_image": str (optional, last frame URL),
+                "loop": bool (optional, default False),
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"video_url": str}}
+
+        Note: V2V (video-to-video) is NOT supported by Luma's create-task.
+        Use Wan or Pollo for V2V flows.
+        """
+        self._log_request("luma_video_generation", params)
+
+        # Accept either "start_image" (PiAPI-native) or "image_url" (codebase
+        # convention) so callers can stay consistent with other I2V methods.
+        start_image = params.get("start_image") or params.get("image_url")
+        end_image = params.get("end_image")
+        duration = int(params.get("duration", 5))
+        if duration not in (5, 9):
+            duration = 5
+
+        input_data: Dict[str, Any] = {
+            "prompt": params["prompt"],
+            "model_name": params.get("model_name") or PIAPI_MODELS["luma_ray_version"],
+            "duration": duration,
+            "aspect_ratio": params.get("aspect_ratio", "16:9"),
+            "loop": bool(params.get("loop", False)),
+        }
+        if start_image:
+            input_data["start_image"] = self._resolve_image_url(start_image)
+        if end_image:
+            input_data["end_image"] = self._resolve_image_url(end_image)
+
+        payload = {
+            "model": PIAPI_MODELS["luma_video"],
+            "task_type": "video_generation",
+            "input": input_data,
+            "config": {"service_mode": "public"},
+        }
+
+        result = await self._submit_and_poll(payload)
+        output = result.get("output") or {}
+        if isinstance(output, dict):
+            # Luma returns the URL at output.video per docs; normalize so
+            # downstream consumers can treat all video providers uniformly.
+            video_url = (
+                output.get("video_url")
+                or output.get("video")
+                or output.get("url")
+                or ""
+            )
+            if isinstance(video_url, dict):
+                video_url = video_url.get("url") or video_url.get("download_url") or ""
+            if video_url:
+                output["video_url"] = video_url
+            result["output"] = output
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERIOR DESIGN (using Flux img2img as fallback)

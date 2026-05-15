@@ -98,6 +98,11 @@ PIAPI_MODELS: Dict[str, str] = {
 
     # Midjourney (alias only; PiAPI auto-routes to current MJ version)
     "midjourney":          os.environ.get("PIAPI_MIDJOURNEY_MODEL",    "midjourney"),
+
+    # Luma Dream Machine. model="luma"; model_name (in input) selects the
+    # Ray family. Ray1 is sunset, Ray3 is in dev, so ray-v2 is current.
+    "luma_video":          os.environ.get("PIAPI_LUMA_VIDEO_MODEL",    "luma"),
+    "luma_ray_version":    os.environ.get("PIAPI_LUMA_RAY_VERSION",    "ray-v2"),
 }
 
 

@@ -44,6 +44,14 @@ class TaskType(str, Enum):
     INTERIOR_3D = "interior_3d"
     I2I = "image_to_image"
     MATERIAL_GENERATION = "material_generation"
+    # Premium / flagship tiers — PiAPI-only, no fallback path. These map to
+    # the new ServicePricing rows (image_generation_premium, video_generation_
+    # professional, video_flagship) and bypass the model-override routing in
+    # _get_providers_for_task since the model identity is baked into the
+    # task type itself.
+    MIDJOURNEY_T2I = "midjourney_imagine"
+    KLING_VIDEO    = "kling_video_generation"
+    LUMA_VIDEO     = "luma_video_generation"
 
 
 class ProviderStatus(str, Enum):
@@ -90,6 +98,15 @@ class ProviderRouter:
         # Vertex AI-only tasks
         TaskType.MODERATION:          {"primary": "vertex_ai", "backup": None, "fallback": None},
         TaskType.MATERIAL_GENERATION: {"primary": "vertex_ai", "backup": None, "fallback": None},
+
+        # Premium tiers — PiAPI REST is the only path. Pollo/Vertex don't expose
+        # these models with comparable params, so we deliberately don't list a
+        # backup; failure surfaces as a user error rather than silently routing
+        # to a cheaper substitute (would defeat the purpose of charging the
+        # flagship credit cost).
+        TaskType.MIDJOURNEY_T2I: {"primary": "piapi", "backup": None, "tertiary": None, "fallback": None},
+        TaskType.KLING_VIDEO:    {"primary": "piapi", "backup": None, "tertiary": None, "fallback": None},
+        TaskType.LUMA_VIDEO:     {"primary": "piapi", "backup": None, "tertiary": None, "fallback": None},
     }
 
     POLLO_VIDEO_MODEL_IDS = {
@@ -612,6 +629,12 @@ class ProviderRouter:
             return await self.piapi.trellis_3d(params)
         elif task_type == TaskType.AVATAR:
             return await self.piapi.generate_avatar(params)
+        elif task_type == TaskType.MIDJOURNEY_T2I:
+            return await self.piapi.midjourney_imagine(params)
+        elif task_type == TaskType.KLING_VIDEO:
+            return await self.piapi.kling_video_generation(params)
+        elif task_type == TaskType.LUMA_VIDEO:
+            return await self.piapi.luma_video_generation(params)
         else:
             raise ValueError(f"PiAPI doesn't support: {task_type}")
 

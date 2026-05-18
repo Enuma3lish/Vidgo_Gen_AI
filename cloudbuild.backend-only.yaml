@@ -1,0 +1,31 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-backend'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgo-images/vidgo-backend:vision-fusion'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgo-images/vidgo-backend:latest'
+      - '--cache-from'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgo-images/vidgo-backend:latest'
+      - '-f'
+      - 'backend/Dockerfile'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-backend'
+    waitFor: ['build-backend']
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgo-images/vidgo-backend'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: '1800s'
+
+images:
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/vidgo-images/vidgo-backend:vision-fusion'

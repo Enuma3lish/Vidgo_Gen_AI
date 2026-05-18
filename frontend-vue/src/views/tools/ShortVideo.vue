@@ -9,6 +9,7 @@ import type { Style } from '@/api/effects'
 import type { UploadStatusResponse } from '@/api/uploads'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import { downloadAsset } from '@/utils/downloadAsset'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import { validateVideoFile, normalizeVideoFileForUpload } from '@/utils/mediaValidation'
@@ -1127,14 +1128,13 @@ function dataURItoBlob(dataURI: string): Blob | null {
             <div class="text-center text-xs text-dark-400">vidgo.ai</div>
             <!-- Download / Action Buttons -->
             <div class="flex gap-3">
-               <a
+               <button
                  v-if="!isDemoUser"
-                 :href="resultVideo"
-                 download="vidgo_short_video.mp4"
+                 @click="downloadAsset(resultVideo!, 'vidgo_short_video.mp4')"
                  class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
                >
                  <span class="mr-2">📥</span> {{ t('common.download') }}
-               </a>
+               </button>
 
                <RouterLink v-else to="/pricing" class="btn-primary w-full text-center block">
                  {{ L('訂閱以獲得完整功能', 'Subscribe for Full Access', 'サブスクで全機能を解禁', '구독으로 전체 액세스', 'Suscríbete para acceso completo') }}

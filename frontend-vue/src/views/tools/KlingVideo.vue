@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
+import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import { downloadAsset } from '@/utils/downloadAsset'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const { isDemoUser } = useDemoMode()
@@ -23,25 +25,19 @@ const negativePrompt = ref('')
 const resultVideo = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
 
-// Curated prompts. The `kind` hint tells the user whether the prompt is
-// designed for text-to-video (no input image needed) or for image-to-video
-// (best with a start frame). Selecting a preset only fills the prompt
-// text — the user still picks the start frame separately.
-const PROMPT_PRESETS = [
-  { id: 'oceanWaves',    kind: 't2v', prompt: 'slow ocean waves at sunset, dramatic golden light reflecting on the water, cinematic camera glide forward, photorealistic' },
-  { id: 'forestWalk',    kind: 't2v', prompt: 'first-person walk through a sunlit pine forest, dappled light through leaves, gentle handheld camera shake, ultra-realistic' },
-  { id: 'cityFlyover',   kind: 't2v', prompt: 'aerial drone shot flying over a futuristic neon-lit city at night, smooth forward motion, cinematic depth of field' },
-  { id: 'productSpin',   kind: 'i2v', prompt: 'slow 360-degree rotation around the subject, studio lighting unchanged, product remains sharp and centered, no background motion' },
-  { id: 'subjectTurn',   kind: 'i2v', prompt: 'subject slowly turns to face the camera with a confident smile, subtle head movement, gentle wind in hair, cinematic shallow depth of field' },
-  { id: 'cameraDolly',   kind: 'i2v', prompt: 'smooth cinematic camera dolly forward toward the subject, subtle parallax in background, preserve subject identity and clothing' },
-  { id: 'subtleBreeze',  kind: 'i2v', prompt: 'subtle wind gently blowing through hair and fabric, micro-movements only, photorealistic, preserve subject pose and expression' },
-  { id: 'dramaticZoom',  kind: 't2v', prompt: 'dramatic slow zoom toward a vast desert landscape, golden hour, lens flare, epic cinematic atmosphere' },
-]
+// Wire to the curated 40-prompt `kling_video` library (kv_*) — same
+// source of truth all flagship tools share. The previous hardcoded
+// 8-item list was visibly too small in the dropdown.
+const { options: presetOptions, promptFor: presetPromptFor } = usePromptLibrary('kling_video')
+
 const selectedPresetId = ref('')
 function applyPreset() {
-  const preset = PROMPT_PRESETS.find(p => p.id === selectedPresetId.value)
-  if (preset) prompt.value = preset.prompt
+  if (!selectedPresetId.value) return
+  prompt.value = presetPromptFor(selectedPresetId.value)
 }
+watch(locale, () => {
+  if (selectedPresetId.value) prompt.value = presetPromptFor(selectedPresetId.value)
+})
 
 // Backend hardcoded fallback per tier (matches seeded ServicePricing).
 // Admin overrides via /admin/models still affect the actual deduction
@@ -118,30 +114,38 @@ async function handleGenerate() {
             </div>
           </div>
 
-          <!-- Prompt + presets -->
+          <!-- Curated prompt picker — locked, no free-form input. The
+               kling_video library carries 40 hand-validated prompts. Users
+               pick one from the dropdown; the resolved prompt text shows
+               below as a read-only preview so they know exactly what's
+               being submitted, but they cannot edit it. Same enforcement
+               pattern as /tools/pattern-generate. -->
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.presetLabel') }}</label>
+            <div class="mb-2 p-2 rounded-lg" style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.18);">
+              <p class="text-[11px]" style="color: #fbbf24;">
+                {{ t('common.curatedNotice') }}
+              </p>
+            </div>
             <select
               v-model="selectedPresetId"
               @change="applyPreset"
+              size="8"
               class="w-full px-3 py-2 rounded-lg text-sm mb-3"
               style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
             >
-              <option value="">{{ t('klingVideo.presetCustom') }}</option>
-              <option v-for="p in PROMPT_PRESETS" :key="p.id" :value="p.id">
-                [{{ p.kind.toUpperCase() }}] {{ t(`klingVideo.presets.${p.id}`) }}
+              <option v-for="opt in presetOptions" :key="opt.id" :value="opt.id">
+                {{ opt.label }}
               </option>
             </select>
 
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.promptLabel') }}</label>
-            <textarea
-              v-model="prompt"
-              rows="3"
-              :placeholder="t('klingVideo.promptPlaceholder')"
-              class="w-full px-3 py-2 rounded-lg text-sm"
-              style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
-              maxlength="2500"
-            />
+            <div
+              class="w-full px-3 py-2 rounded-lg text-xs whitespace-pre-wrap"
+              style="background: #0d0d15; color: #b4b4cf; border: 1px solid rgba(255,255,255,0.08); min-height: 70px;"
+            >
+              {{ prompt || t('common.curatedPickToPreview') }}
+            </div>
           </div>
 
           <!-- Start frame (I2V) -->
@@ -201,14 +205,12 @@ async function handleGenerate() {
           <div v-if="!isProcessing && resultVideo" class="w-full">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.resultLabel') }}</label>
             <video :src="resultVideo" controls class="w-full rounded-lg" style="max-height: 500px;" />
-            <a
+            <button
               v-if="!isDemoUser"
-              :href="resultVideo"
-              target="_blank"
-              download
-              class="block mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
+              @click="downloadAsset(resultVideo!, 'vidgo_kling_video.mp4')"
+              class="block w-full mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
               style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
-            >{{ t('klingVideo.download') }}</a>
+            >{{ t('klingVideo.download') }}</button>
           </div>
           <div v-if="!isProcessing && !resultVideo" class="text-center" style="color: #6b6b8a;">
             <p class="text-sm">{{ t('klingVideo.placeholder') }}</p>

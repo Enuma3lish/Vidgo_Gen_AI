@@ -1197,6 +1197,18 @@ async def get_inspiration_examples(
 
     if topic:
         query = query.where(DemoExample.topic == topic)
+    else:
+        # 2026-05-18 — historical seeded rows for room-redesign topics
+        # (living_room / bedroom / kitchen / bathroom / dining_room /
+        # home_office / balcony) have unreliable image_url ↔ caption
+        # pairing (e.g. a bubble-tea image labeled "interior proposal").
+        # The frontend ships vetted curated fallbacks for room_redesign,
+        # so drop the broken DB rows here rather than render them.
+        _UNRELIABLE_ROOM_TOPICS = (
+            "living_room", "bedroom", "kitchen", "bathroom",
+            "dining_room", "home_office", "balcony", "room_redesign",
+        )
+        query = query.where(~DemoExample.topic.in_(_UNRELIABLE_ROOM_TOPICS))
 
     # Get random examples using SQL RANDOM()
     query = query.order_by(func.random()).limit(count)
@@ -3166,11 +3178,15 @@ async def get_landing_works(
 
     # Tool types for product visuals, interiors, image effects, and video content
     valid_tool_types = ("product_scene", "effect", "background_removal", "room_redesign", "short_video", "ai_avatar")
+    # 2026-05-18 — drop ROOM_REDESIGN from the default pool. Historical seed
+    # rows pair captions and images unreliably (e.g. balcony caption on a
+    # bedroom image, or people present in renders the user asked to keep
+    # unpopulated). The frontend curated fallback covers this category.
+    # An explicit ?tool_type=room_redesign request still works.
     works_tool_types = [
         ToolType.PRODUCT_SCENE,
         ToolType.EFFECT,
         ToolType.BACKGROUND_REMOVAL,
-        ToolType.ROOM_REDESIGN,
         ToolType.SHORT_VIDEO,
         ToolType.AI_AVATAR,
     ]

@@ -8,6 +8,7 @@ import ImageUploader from '@/components/common/ImageUploader.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import { downloadAsset } from '@/utils/downloadAsset'
 
 const { t } = useI18n()
 const uiStore = useUIStore()
@@ -156,16 +157,14 @@ async function handleUpscale() {
           <div v-if="!isProcessing && resultImage" class="w-full">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('upscale.resultLabel', { scale }) }}</label>
             <img :src="resultImage" class="w-full rounded-lg" style="max-height: 500px; object-fit: contain;" />
-            <a
+            <button
               v-if="!isDemoUser"
-              :href="resultImage"
-              target="_blank"
-              download
-              class="block mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
+              @click="downloadAsset(resultImage!, `vidgo_upscale_${scale}x.png`)"
+              class="block w-full mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
               style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
             >
               {{ t('upscale.downloadHd') }}
-            </a>
+            </button>
             <RouterLink
               v-else
               to="/pricing"

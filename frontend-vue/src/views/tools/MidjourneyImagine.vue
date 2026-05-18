@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
+import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import { downloadAsset } from '@/utils/downloadAsset'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const { isDemoUser } = useDemoMode()
@@ -18,25 +20,20 @@ const processMode = ref<'relax' | 'fast' | 'turbo'>('fast')
 const resultImage = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
 
-// Curated prompts that are known to produce strong Midjourney results.
-// Prompt text stays English (the model's native input); label is i18n'd.
-// Each one is a complete, ready-to-generate payload — picking → click
-// Generate produces a result with no further input required.
-const PROMPT_PRESETS = [
-  { id: 'cityDusk',       prompt: 'cinematic city skyline at dusk, golden hour, ultra-wide, dramatic clouds, photorealistic, 8k --ar 16:9' },
-  { id: 'minimalProduct', prompt: 'minimalist product photograph on white seamless background, soft three-point studio lighting, sharp focus, commercial e-commerce style --ar 1:1' },
-  { id: 'forestFog',      prompt: 'ethereal forest with morning fog and god rays streaming through tall pine trees, soft volumetric light, photorealistic landscape --ar 16:9' },
-  { id: 'cyberpunkStreet',prompt: 'futuristic neon-lit street, rainy night, cyberpunk style, reflective puddles, blade-runner inspired color palette --ar 16:9' },
-  { id: 'abstractMetal',  prompt: 'abstract liquid metal sculpture, chrome surface with subtle iridescence, studio lighting, soft shadows, gallery exhibition --ar 1:1' },
-  { id: 'minimalKitchen', prompt: 'Japanese minimalist kitchen interior, warm afternoon light, natural wood and white plaster, calm atmosphere, architectural photography --ar 16:9' },
-  { id: 'fashionPortrait',prompt: 'editorial fashion portrait, dramatic Rembrandt lighting, neutral linen backdrop, sharp focus on face, high-end magazine quality --ar 3:4' },
-  { id: 'foodHero',       prompt: 'hero shot of a steaming ceramic bowl of ramen on dark wood table, overhead 45-degree angle, moody warm lighting, professional food photography --ar 1:1' },
-]
+// Use the curated 40-prompt `premium_image` library (pi_*) — same source
+// of truth as every other flagship tool. The previous 8-item hardcoded
+// preset list was too small for users to browse meaningful variety.
+const { options: presetOptions, promptFor: presetPromptFor } = usePromptLibrary('premium_image')
+
 const selectedPresetId = ref('')
 function applyPreset() {
-  const preset = PROMPT_PRESETS.find(p => p.id === selectedPresetId.value)
-  if (preset) prompt.value = preset.prompt
+  if (!selectedPresetId.value) return
+  prompt.value = presetPromptFor(selectedPresetId.value)
 }
+// Re-resolve prompt text when locale flips (zh ↔ en variant per library).
+watch(locale, () => {
+  if (selectedPresetId.value) prompt.value = presetPromptFor(selectedPresetId.value)
+})
 
 async function handleGenerate() {
   if (!prompt.value.trim()) {
@@ -53,7 +50,16 @@ async function handleGenerate() {
     })
     if (result.success && (result.image_url || result.result_url)) {
       resultImage.value = result.image_url || result.result_url
-      if (!isDemoUser.value) {
+      // Backend short-circuits non-subscribers (incl. logged-out users) to a
+      // static pre-rendered demo PNG (_PREMIUM_DEMO_FALLBACKS in tools.py).
+      // The prompt is NOT actually run against Flux in that case. Tell the
+      // user honestly that the image they're seeing is a placeholder.
+      if (result.is_demo || result.cached) {
+        uiStore.showWarning(
+          result.message ||
+          t('midjourney.toasts.demoPlaceholder', '此為示範圖（非依您提示詞生成）— 登入並訂閱後即可用您的提示詞實際生成。'),
+        )
+      } else if (!isDemoUser.value) {
         creditsStore.fetchBalance()
         uiStore.showSuccess(t('midjourney.toasts.success'))
       } else {
@@ -90,29 +96,36 @@ async function handleGenerate() {
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="space-y-4">
+          <!-- Curated prompt picker — locked, no free-form input. The
+               premium_image library carries 40 hand-validated prompts.
+               Same enforcement pattern as /tools/pattern-generate and
+               /tools/kling-video. -->
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('midjourney.presetLabel') }}</label>
+            <div class="mb-2 p-2 rounded-lg" style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.18);">
+              <p class="text-[11px]" style="color: #fbbf24;">
+                {{ t('common.curatedNotice') }}
+              </p>
+            </div>
             <select
               v-model="selectedPresetId"
               @change="applyPreset"
+              size="8"
               class="w-full px-3 py-2 rounded-lg text-sm mb-3"
               style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
             >
-              <option value="">{{ t('midjourney.presetCustom') }}</option>
-              <option v-for="p in PROMPT_PRESETS" :key="p.id" :value="p.id">
-                {{ t(`midjourney.presets.${p.id}`) }}
+              <option v-for="opt in presetOptions" :key="opt.id" :value="opt.id">
+                {{ opt.label }}
               </option>
             </select>
 
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('midjourney.promptLabel') }}</label>
-            <textarea
-              v-model="prompt"
-              rows="4"
-              :placeholder="t('midjourney.promptPlaceholder')"
-              class="w-full px-3 py-2 rounded-lg text-sm"
-              style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
-              maxlength="2000"
-            />
+            <div
+              class="w-full px-3 py-2 rounded-lg text-xs whitespace-pre-wrap"
+              style="background: #0d0d15; color: #b4b4cf; border: 1px solid rgba(255,255,255,0.08); min-height: 80px;"
+            >
+              {{ prompt || t('common.curatedPickToPreview') }}
+            </div>
           </div>
 
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
@@ -156,14 +169,12 @@ async function handleGenerate() {
           <div v-if="!isProcessing && resultImage" class="w-full">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('midjourney.resultLabel') }}</label>
             <img :src="resultImage" class="w-full rounded-lg" style="max-height: 500px; object-fit: contain;" />
-            <a
+            <button
               v-if="!isDemoUser"
-              :href="resultImage"
-              target="_blank"
-              download
-              class="block mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
+              @click="downloadAsset(resultImage, 'vidgo_premium_image.png')"
+              class="block w-full mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
               style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
-            >{{ t('midjourney.download') }}</a>
+            >{{ t('midjourney.download') }}</button>
           </div>
           <div v-if="!isProcessing && !resultImage" class="text-center" style="color: #6b6b8a;">
             <p class="text-sm">{{ t('midjourney.placeholder') }}</p>

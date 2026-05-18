@@ -211,7 +211,7 @@ onMounted(loadBranding)
 </template>
 
 <style scoped>
-.admin-page { padding: 6rem 2rem 4rem; max-width: 1080px; margin: 0 auto; color: #e8e8f0; }
+.admin-page { padding: 1.5rem 2rem 4rem; max-width: 1080px; margin: 0 auto; color: #e8e8f0; }
 .page-header h1 { font-size: 1.75rem; font-weight: 700; margin: 0; }
 .subtitle { color: #9494b0; margin: 0.5rem 0 1.5rem; max-width: 760px; }
 .hint { font-size: 0.85rem; color: #9494b0; margin: -0.5rem 0 1rem; }

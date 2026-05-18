@@ -108,8 +108,48 @@ const styles = [
   { key: 'mockup', icon: '📦' }
 ]
 
+// Map each UI style button to the prompt-library `category` band(s) it
+// surfaces. The library categories are: geometric, floral, animal,
+// traditional, abstract. The UI exposes 8 styles, so a few of them join
+// onto the same backend category (e.g. `interior` borrows floral/botanical
+// prompts; `mockup` borrows geometric clean-design prompts). `seamless`
+// is the catch-all that shows the entire 40-prompt set.
+const STYLE_TO_CATEGORIES: Record<string, string[] | null> = {
+  seamless: null,                          // null = no filter, show all
+  floral: ['floral'],
+  geometric: ['geometric'],
+  abstract: ['abstract', 'animal'],
+  traditional: ['traditional'],
+  '3d': ['geometric'],                     // closest match
+  interior: ['floral'],                    // botanical wallpapers
+  mockup: ['geometric'],                   // clean packaging-friendly
+}
+
 const selectedStyle = ref('seamless')
 const prompt = ref('')
+
+// Filter the prompt-library dropdown by the currently-selected style band.
+const filteredPromptOptions = computed(() => {
+  const cats = STYLE_TO_CATEGORIES[selectedStyle.value]
+  const all = patternPromptOptions.value
+  if (!cats || cats.length === 0) return all
+  const set = new Set(cats)
+  const matches = all.filter((o: any) => o.category && set.has(o.category))
+  // Fall back to the full list if the band somehow has no entries — never
+  // leave the user with an empty dropdown.
+  return matches.length > 0 ? matches : all
+})
+
+// When the user changes style, drop the now-invalid prompt selection.
+watch(selectedStyle, () => {
+  if (selectedPatternPromptId.value) {
+    const stillValid = filteredPromptOptions.value.some(
+      (o: any) => o.id === selectedPatternPromptId.value
+    )
+    if (!stillValid) selectedPatternPromptId.value = ''
+  }
+})
+
 watch([selectedPatternPromptId, locale], () => {
   prompt.value = selectedPatternPromptId.value ? patternPromptTextFor(selectedPatternPromptId.value) : ''
 })
@@ -134,7 +174,11 @@ const filteredExamples = computed(() => {
 
 
 
-// Fallback examples if API returns empty
+// Hardcoded Unsplash fallback — kept around for reference only. The
+// runtime now uses `libraryExamples()` (40 cards from the curated prompt
+// library) as the last-resort gallery, since the 6 entries below felt
+// too thin to a real user.
+// @ts-expect-error TS6133 — intentionally retained but not referenced.
 const fallbackExamples = [
   {
     id: 1,
@@ -186,6 +230,42 @@ const fallbackExamples = [
   }
 ]
 
+// Build a synthetic gallery from the curated 40-prompt library when no
+// pre-rendered Material rows exist. Without this, /tools/pattern-generate
+// fell back to 6 hardcoded Unsplash thumbnails, which the user (rightly)
+// complained looked too thin.
+//
+// CSS gradient placeholders are keyed off the prompt's `category` so the
+// 5 bands (geometric / floral / animal / traditional / abstract) read
+// visually distinct even though we don't have rendered PNGs yet.
+function libraryExamples() {
+  const CATEGORY_GRADIENTS: Record<string, string> = {
+    geometric:   'linear-gradient(135deg, #1e293b 0%, #475569 50%, #94a3b8 100%)',
+    floral:      'linear-gradient(135deg, #f9a8d4 0%, #fde68a 50%, #86efac 100%)',
+    animal:      'linear-gradient(135deg, #78350f 0%, #b45309 50%, #fde68a 100%)',
+    traditional: 'linear-gradient(135deg, #1e3a8a 0%, #ffffff 50%, #1e3a8a 100%)',
+    abstract:    'linear-gradient(135deg, #581c87 0%, #db2777 50%, #f59e0b 100%)',
+  }
+  return patternPromptOptions.value.map((opt: any, i: number) => {
+    const cat: string = opt.category || 'seamless'
+    return {
+      id: opt.id,
+      presetId: opt.id,
+      title: opt.label,
+      title_zh: opt.label,
+      prompt: opt.full,
+      prompt_zh: opt.full,
+      // No `after` URL → card renders a styled placeholder block. The card
+      // template falls back to a category-tinted gradient div.
+      after: '',
+      placeholder_gradient: CATEGORY_GRADIENTS[cat] || CATEGORY_GRADIENTS['geometric'],
+      tool: 'pattern_generate',
+      style: cat,
+      _index: i,
+    }
+  })
+}
+
 async function loadExamples() {
   try {
     if (demoTemplates.value.length === 0) {
@@ -225,11 +305,25 @@ async function loadExamples() {
       return
     }
 
-    const response = await generationApi.getExamples('pattern')
-    examples.value = response.examples?.length > 0 ? response.examples : fallbackExamples
+    // No DB rows — try the legacy /examples API once for any seeded examples.
+    let apiExamples: any[] = []
+    try {
+      const response = await generationApi.getExamples('pattern')
+      apiExamples = response.examples || []
+    } catch { apiExamples = [] }
+
+    if (apiExamples.length > 0) {
+      examples.value = apiExamples
+      return
+    }
+
+    // Last resort: render the full 40-prompt curated library as cards.
+    // Each card carries a category-tinted gradient placeholder so the
+    // visual scan-time matches the polish of the rest of the page.
+    examples.value = libraryExamples()
   } catch (error) {
     console.error('Failed to load examples:', error)
-    examples.value = fallbackExamples
+    examples.value = libraryExamples()
   }
 }
 
@@ -436,7 +530,7 @@ onMounted(() => {
               class="flex-1 bg-dark-700 border border-dark-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary-500"
             >
               <option value="">{{ L('— 請選擇 —', '— Select —', '— 選択 —', '— 선택 —', '— Seleccionar —') }}</option>
-              <option v-for="opt in patternPromptOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
+              <option v-for="opt in filteredPromptOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
             </select>
             <button
               @click="generatePattern"
@@ -513,6 +607,18 @@ onMounted(() => {
             </div>
             <div v-else-if="example.after" class="rounded-xl overflow-hidden">
               <img :src="example.after" :alt="getLocalizedField(example, 'title')" class="w-full aspect-square object-cover" />
+            </div>
+            <!-- Library-driven cards have no rendered image; render a
+                 category-tinted gradient block so the gallery still has
+                 strong visual rhythm. -->
+            <div
+              v-else-if="(example as any).placeholder_gradient"
+              class="rounded-xl overflow-hidden aspect-square flex items-center justify-center"
+              :style="`background: ${(example as any).placeholder_gradient};`"
+            >
+              <span class="text-white/85 text-xs font-mono tracking-wider" style="text-shadow: 0 1px 8px rgba(0,0,0,0.45);">
+                {{ String(example.id).toUpperCase() }}
+              </span>
             </div>
 
             <!-- Prompt -->

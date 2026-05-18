@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode } from '@/composables'
+import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import { downloadAsset } from '@/utils/downloadAsset'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const { isDemoUser } = useDemoMode()
@@ -22,24 +24,19 @@ const loop = ref(false)
 const resultVideo = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
 
-// Luma Ray-v2 reads cinematic-style prompts best. `kind` tags whether the
-// preset is designed for text-to-video, image-to-video (needs start image),
-// or first-last-frame transition (needs both start + end image).
-const PROMPT_PRESETS = [
-  { id: 'sunsetRun',     kind: 't2v',   prompt: 'a runner sprinting along an empty beach at sunset, slow-motion, cinematic golden hour, salt spray in the air' },
-  { id: 'spaceshipFly',  kind: 't2v',   prompt: 'sleek spaceship banking through nebula clouds, dramatic lighting, lens flare, sci-fi cinematic atmosphere' },
-  { id: 'flowerBloom',   kind: 't2v',   prompt: 'time-lapse of a single rose blooming from bud to full flower, macro lens, soft natural light, photorealistic' },
-  { id: 'productOrbit',  kind: 'i2v',   prompt: 'smooth orbiting camera move around the product, subtle parallax, product remains sharp and centered, studio lighting unchanged' },
-  { id: 'subjectGaze',   kind: 'i2v',   prompt: 'subject slowly looks up toward the light, subtle micro-expressions, cinematic shallow depth of field, no background motion' },
-  { id: 'driftingClouds',kind: 'i2v',   prompt: 'slow upward camera tilt while clouds drift gently in the background, otherwise preserve the scene exactly' },
-  { id: 'morphAtoB',     kind: 'first-last', prompt: 'smooth dreamlike morph between the two frames, cinematic transition, continuous motion, no harsh cuts' },
-  { id: 'dayToNight',    kind: 'first-last', prompt: 'time-of-day transition from the first frame to the second, gradual lighting shift, cinematic and continuous' },
-]
+// Wire to the curated 40-prompt `luma_video` library (lv_*) — same source
+// of truth all flagship tools share. Previously the page had no example
+// prompts wired at all on production builds; now the full 40 are available.
+const { options: presetOptions, promptFor: presetPromptFor } = usePromptLibrary('luma_video')
+
 const selectedPresetId = ref('')
 function applyPreset() {
-  const preset = PROMPT_PRESETS.find(p => p.id === selectedPresetId.value)
-  if (preset) prompt.value = preset.prompt
+  if (!selectedPresetId.value) return
+  prompt.value = presetPromptFor(selectedPresetId.value)
 }
+watch(locale, () => {
+  if (selectedPresetId.value) prompt.value = presetPromptFor(selectedPresetId.value)
+})
 
 async function handleGenerate() {
   if (!prompt.value.trim()) {
@@ -94,29 +91,35 @@ async function handleGenerate() {
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="space-y-4">
+          <!-- Curated prompt picker — locked, no free-form input. See
+               KlingVideo.vue for the same enforcement pattern; the
+               luma_video library has 40 hand-validated prompts. -->
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('lumaVideo.presetLabel') }}</label>
+            <div class="mb-2 p-2 rounded-lg" style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.18);">
+              <p class="text-[11px]" style="color: #fbbf24;">
+                {{ t('common.curatedNotice') }}
+              </p>
+            </div>
             <select
               v-model="selectedPresetId"
               @change="applyPreset"
+              size="8"
               class="w-full px-3 py-2 rounded-lg text-sm mb-3"
               style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
             >
-              <option value="">{{ t('lumaVideo.presetCustom') }}</option>
-              <option v-for="p in PROMPT_PRESETS" :key="p.id" :value="p.id">
-                [{{ p.kind.toUpperCase() }}] {{ t(`lumaVideo.presets.${p.id}`) }}
+              <option v-for="opt in presetOptions" :key="opt.id" :value="opt.id">
+                {{ opt.label }}
               </option>
             </select>
 
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('lumaVideo.promptLabel') }}</label>
-            <textarea
-              v-model="prompt"
-              rows="3"
-              :placeholder="t('lumaVideo.promptPlaceholder')"
-              class="w-full px-3 py-2 rounded-lg text-sm"
-              style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
-              maxlength="2000"
-            />
+            <div
+              class="w-full px-3 py-2 rounded-lg text-xs whitespace-pre-wrap"
+              style="background: #0d0d15; color: #b4b4cf; border: 1px solid rgba(255,255,255,0.08); min-height: 70px;"
+            >
+              {{ prompt || t('common.curatedPickToPreview') }}
+            </div>
           </div>
 
           <!-- Start image (enables I2V) -->
@@ -179,14 +182,12 @@ async function handleGenerate() {
           <div v-if="!isProcessing && resultVideo" class="w-full">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('lumaVideo.resultLabel') }}</label>
             <video :src="resultVideo" controls class="w-full rounded-lg" style="max-height: 500px;" />
-            <a
+            <button
               v-if="!isDemoUser"
-              :href="resultVideo"
-              target="_blank"
-              download
-              class="block mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
+              @click="downloadAsset(resultVideo!, 'vidgo_luma_video.mp4')"
+              class="block w-full mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
               style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
-            >{{ t('lumaVideo.download') }}</a>
+            >{{ t('lumaVideo.download') }}</button>
           </div>
           <div v-if="!isProcessing && !resultVideo" class="text-center" style="color: #6b6b8a;">
             <p class="text-sm">{{ t('lumaVideo.placeholder') }}</p>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useBrandingStore, useCreditsStore } from '@/stores'
 import LanguageSelector from './LanguageSelector.vue'
+import { toolHubTiles, getRecentTiles, pushRecentTool, type ToolHubTile } from '@/data/toolHub'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -76,6 +77,31 @@ const visibleToolGroups = computed(() =>
       : group.items.filter(item => item.to !== '/gallery'),
   })).filter(group => group.items.length > 0)
 )
+
+// Tool-hub data for the redesigned dropdown ("Recently Used" + "Create with
+// AI"). The mockup shows only 2 recent tiles in the dropdown, so we cap
+// the dropdown view at 2 even though the full hub page shows more.
+const HEADER_RECENT_CAP = 2
+const hubRecent = ref<ToolHubTile[]>([])
+const hubCreateTiles = computed<ToolHubTile[]>(() => {
+  const usedIds = new Set(hubRecent.value.map(tile => tile.id))
+  return toolHubTiles.filter(tile => !usedIds.has(tile.id))
+})
+
+function refreshHubRecent() {
+  hubRecent.value = getRecentTiles().slice(0, HEADER_RECENT_CAP)
+}
+
+function handleHubTileClick(tile: ToolHubTile) {
+  pushRecentTool(tile.id)
+  toolsOpen.value = false
+  refreshHubRecent()
+  router.push(tile.to)
+}
+
+watch(toolsOpen, (open) => {
+  if (open) refreshHubRecent()
+})
 
 function handleScroll() {
   isScrolled.value = window.scrollY > 8
@@ -152,29 +178,56 @@ onUnmounted(() => {
             >
               <div
                 v-show="toolsOpen"
-                class="absolute top-full left-1/2 -translate-x-1/2 pt-3 w-[calc(100vw-2rem)] md:w-[820px]"
+                class="absolute top-full left-1/2 -translate-x-1/2 pt-3 w-[calc(100vw-2rem)] md:w-[1040px] lg:w-[1100px]"
               >
                 <div class="dropdown-menu overflow-hidden">
-                  <div class="grid grid-cols-4 gap-1 p-4">
-                    <div v-for="group in visibleToolGroups" :key="group.titleKey">
-                      <div class="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted">
-                        {{ t(group.titleKey) }}
-                      </div>
-                      <RouterLink
-                        v-for="item in group.items"
-                        :key="item.to"
-                        :to="item.to"
-                        class="dropdown-item"
-                        @click="toolsOpen = false"
+                  <div class="px-5 pt-4 pb-2">
+                    <h3 class="text-base font-bold" style="color: var(--text-primary);">
+                      {{ t('tools.hub.aiTools') }}
+                    </h3>
+                  </div>
+
+                  <div v-if="hubRecent.length > 0" class="px-5 pt-2">
+                    <div class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color: var(--text-secondary, #6b6b8a);">
+                      {{ t('tools.hub.recentlyUsed') }}
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                      <button
+                        v-for="tile in hubRecent"
+                        :key="tile.id"
+                        @click="handleHubTileClick(tile)"
+                        class="dropdown-tile"
                       >
-                        <span class="text-base leading-none">{{ item.emoji }}</span>
-                        <span>{{ t(item.key) }}</span>
-                      </RouterLink>
+                        <span class="dropdown-tile-label">{{ t(tile.labelKey) }}</span>
+                        <img :src="tile.thumb" :alt="t(tile.labelKey)" class="dropdown-tile-thumb" />
+                      </button>
                     </div>
                   </div>
-                  <div class="px-4 py-3 flex items-center justify-between" style="background: rgba(245,158,11,0.05); border-top: 1px solid var(--border-subtle);">
+
+                  <div class="px-5 pt-2 pb-4">
+                    <div class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color: var(--text-secondary, #6b6b8a);">
+                      {{ t('tools.hub.createWithAi') }}
+                    </div>
+                    <!-- 5-col grid on wide viewports fits 15 / 17 tiles
+                         above the fold; max-h bumped from 420 → 620 so the
+                         remaining rows are visible without scrolling on a
+                         typical 800-1000px-tall screen. -->
+                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[640px] overflow-y-auto pr-1">
+                      <button
+                        v-for="tile in hubCreateTiles"
+                        :key="tile.id"
+                        @click="handleHubTileClick(tile)"
+                        class="dropdown-tile dropdown-tile--compact"
+                      >
+                        <span class="dropdown-tile-label">{{ t(tile.labelKey) }}</span>
+                        <img :src="tile.thumb" :alt="t(tile.labelKey)" class="dropdown-tile-thumb" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="px-5 py-3 flex items-center justify-between" style="background: rgba(245,158,11,0.05); border-top: 1px solid var(--border-subtle);">
                     <span class="text-xs text-secondary">{{ t('nav.tools') }} · {{ t('lp.sec3Sub') }}</span>
-                    <RouterLink to="/" class="text-xs font-semibold" style="color: var(--color-primary);" @click="toolsOpen = false">
+                    <RouterLink to="/tools/product-scene" class="text-xs font-semibold" style="color: var(--color-primary);" @click="toolsOpen = false">
                       {{ t('lp.ctaSecondary') }} →
                     </RouterLink>
                   </div>

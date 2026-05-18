@@ -303,7 +303,21 @@ async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paypal' | 'ecpay'
         successMessage.value = t('pricing.redirectingToPayment')
         setTimeout(() => submitECPayForm(result.ecpay_form!), 500)
       } else if (result.checkout_url && !result.is_mock) {
-        // PayPal: redirect to checkout URL
+        // PayPal: redirect to checkout URL. Stash the chosen plan +
+        // billing cycle in sessionStorage so SubscriptionCancelled can
+        // offer a one-click retry on the SAME plan instead of dumping
+        // the user back to /pricing to re-pick.
+        try {
+          sessionStorage.setItem(
+            'vidgo.pendingPaypalSubscribe',
+            JSON.stringify({
+              plan_id: plan.id,
+              plan_name: plan.name,
+              billing_cycle: isTestPlan(plan) ? 'monthly' : billingPeriod.value,
+              ts: Date.now(),
+            }),
+          )
+        } catch { /* sessionStorage disabled in private mode — non-fatal */ }
         successMessage.value = t('pricing.redirectingToPayment')
         window.location.href = result.checkout_url
       } else {
@@ -404,6 +418,15 @@ const OVERSEAS_USD_MONTHLY: Record<string, number> = {
   premium: 99.99,
 }
 
+// USD pricing for the three official credit packs, used when the visitor is
+// on a non-zh locale (i.e. paying via PayPal, not ECPay/TWD). Values picked
+// at psychological price points (~TWD/30) so they read naturally.
+const CREDIT_PACK_USD_PRICE: Record<string, number> = {
+  light_pack: 9.99,
+  standard_pack: 16.99,
+  heavy_pack: 32.99,
+}
+
 function getOverseasUsdMonthly(plan: PlanInfo): number | null {
   const key = (plan.name || plan.display_name || '').toLowerCase()
   return OVERSEAS_USD_MONTHLY[key] ?? null
@@ -429,7 +452,15 @@ function getCurrencySymbol(plan: PlanInfo): string {
 }
 
 function formatPackagePrice(pkg: CreditTopUpPackage): string {
-  return `${pkg.currency === 'TWD' ? 'NT$' : 'US$'}${pkg.price}`
+  // Mirror the plan-card pricing rule: zh-TW visitors see NT$ (paid via
+  // ECPay), everyone else sees US$ (paid via PayPal). Without this branch
+  // the credit-pack currency was hardcoded to TWD on every locale, which
+  // surfaced "NT$299" on the English/JA/KO/ES Pricing page even though
+  // the checkout would go through PayPal in USD.
+  if (isZh.value) return `NT$${pkg.price}`
+  const usd = CREDIT_PACK_USD_PRICE[pkg.name]
+  if (usd != null) return `US$${usd.toFixed(2)}`
+  return `US$${pkg.price}`
 }
 
 function formatCredits(value: number): string {

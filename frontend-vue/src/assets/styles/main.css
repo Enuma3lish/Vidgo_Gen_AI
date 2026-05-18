@@ -423,6 +423,49 @@
     transform: translateX(2px);
   }
 
+  /* Tool-hub tile used in the AppHeader Tools dropdown and the
+     ProductScene hub page. Layout mirrors the mockup: label left, square
+     thumbnail right, dark card with a subtle hover lift. */
+  .dropdown-tile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #141420;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+    text-align: left;
+    overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    min-height: 64px;
+    width: 100%;
+  }
+  .dropdown-tile:hover {
+    transform: translateY(-1px);
+    border-color: rgba(245, 158, 11, 0.45);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+  .dropdown-tile-label {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    max-width: 60%;
+    word-break: break-word;
+  }
+  .dropdown-tile-thumb {
+    width: 48px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 8px;
+    background: #0f0f17;
+    flex-shrink: 0;
+  }
+  .dropdown-tile--compact { min-height: 56px; padding: 8px 10px; }
+  .dropdown-tile--compact .dropdown-tile-label { font-size: 11px; }
+  .dropdown-tile--compact .dropdown-tile-thumb { width: 42px; height: 32px; }
+
   /* === App Header === */
   .app-header {
     background: rgba(12, 12, 12, 0.88);

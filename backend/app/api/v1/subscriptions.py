@@ -320,16 +320,12 @@ async def subscribe_to_plan(
         logger.info("ECPay not configured — falling back to explicit mock mode")
         force_skip = True
 
-    # Admin override: superusers always activate directly. Without this, an
-    # admin trying to change plans on prod gets stuck in the payment flow
-    # (ECPay/PayPal redirect) even though they never need to actually pay —
-    # which blocks all internal QA / plan experiments. The audit trail still
-    # records the transaction via _activate_subscription_directly.
-    if getattr(current_user, "is_superuser", False) and not is_test_pro_plan(plan_for_policy):
-        logger.info(
-            f"[subscribe] superuser {current_user.email} — bypassing payment"
-        )
-        force_skip = True
+    # Note: superusers go through the same PayPal / ECPay flow as regular
+    # users. The previous admin-bypass branch silently activated plans
+    # without ever opening PayPal, which made admins clicking PayPal see
+    # "nothing happen" (no spinner, no redirect, no error) and broke admin
+    # PayPal testing. If an admin needs to grant a plan without payment,
+    # the `/subscribe/direct` endpoint or admin dashboard is the right path.
 
     result = await subscription_service.subscribe(
         db=db,

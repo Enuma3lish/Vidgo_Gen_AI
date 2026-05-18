@@ -1944,3 +1944,303 @@ async def public_hero_pairs_admin_alias(db: AsyncSession = Depends(get_db)):
         )
     ).scalars().all()
     return {"pairs": [_serialize_hero_pair(r) for r in rows]}
+
+
+# =============================================================================
+# Payment settings — admin-editable PayPal config (env / client_id / secret /
+# webhook_id / plan_ids). Persists to the `payment_settings` row; PayPal
+# service refreshes from this on every checkout call. The actual flow is
+# documented at docs/PAYPAL_SETUP.md.
+# =============================================================================
+
+class PaymentSettingsResponse(BaseModel):
+    paypal_env: str
+    paypal_client_id: str
+    # Always returned as empty string. The actual ciphertext never leaves
+    # the server. UI uses `has_paypal_client_secret` to show "[hidden]".
+    paypal_client_secret: str = ""
+    has_paypal_client_secret: bool
+    paypal_webhook_id: str
+    paypal_plan_ids: str
+    source_env_from_db: bool
+    source_client_id_from_db: bool
+    source_secret_from_db: bool
+    source_webhook_from_db: bool
+    source_plans_from_db: bool
+    updated_at: Optional[str]
+    updated_by: Optional[str]
+
+
+class PaymentSettingsUpdate(BaseModel):
+    """All fields optional — None means "leave existing value alone";
+    empty string means "clear the DB override and fall back to env"."""
+    paypal_env: Optional[str] = None
+    paypal_client_id: Optional[str] = None
+    paypal_client_secret: Optional[str] = None
+    paypal_webhook_id: Optional[str] = None
+    paypal_plan_ids: Optional[str] = None
+
+
+def _serialize_payment_settings(resolved) -> dict:
+    return {
+        "paypal_env": resolved.paypal_env,
+        "paypal_client_id": resolved.paypal_client_id,
+        "paypal_client_secret": "",
+        "has_paypal_client_secret": bool(resolved.paypal_client_secret),
+        "paypal_webhook_id": resolved.paypal_webhook_id,
+        "paypal_plan_ids": resolved.paypal_plan_ids,
+        "source_env_from_db": resolved.source_env_from_db,
+        "source_client_id_from_db": resolved.source_client_id_from_db,
+        "source_secret_from_db": resolved.source_secret_from_db,
+        "source_webhook_from_db": resolved.source_webhook_from_db,
+        "source_plans_from_db": resolved.source_plans_from_db,
+        "updated_at": resolved.updated_at_iso,
+        "updated_by": resolved.updated_by,
+    }
+
+
+@router.get("/settings/payment", response_model=PaymentSettingsResponse)
+async def admin_get_payment_settings(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Return the effective PayPal config the runtime is using right now.
+
+    Includes per-field `source_*_from_db` flags so the UI can show which
+    values are admin-overridden vs falling back to Cloud Run env / Secret
+    Manager. The actual client_secret is never returned — only a boolean
+    indicating one is configured.
+    """
+    from app.services.payment_settings_service import get_resolved_settings
+    resolved = await get_resolved_settings(db)
+    return _serialize_payment_settings(resolved)
+
+
+@router.put("/settings/payment", response_model=PaymentSettingsResponse)
+async def admin_update_payment_settings(
+    payload: PaymentSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Persist an admin override.
+
+    A field set to None is ignored (existing value preserved).
+    A field set to "" clears the DB override so the runtime falls back to
+    the env / Secret Manager value the next time it refreshes.
+    """
+    from app.services.payment_settings_service import update_settings
+    resolved = await update_settings(
+        db,
+        updated_by=admin.email or str(admin.id),
+        paypal_env=payload.paypal_env,
+        paypal_client_id=payload.paypal_client_id,
+        paypal_client_secret=payload.paypal_client_secret,
+        paypal_webhook_id=payload.paypal_webhook_id,
+        paypal_plan_ids=payload.paypal_plan_ids,
+    )
+    return _serialize_payment_settings(resolved)
+
+
+@router.get("/activity-feed")
+async def admin_activity_feed(
+    limit: int = Query(default=30, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Recent platform events for the admin dashboard right rail.
+
+    Doesn't introduce a new audit table — it's a derived view over rows we
+    already write to (user signups, orders, material moderation, payment-
+    settings changes, model-registry overrides). Each entry has a uniform
+    shape so the UI can render it as a single timeline.
+    """
+    from app.models.material import Material
+    from app.models.billing import Order
+    from app.models.payment_settings import PaymentSettings
+    from app.models.model_registry import ModelRegistryAudit
+    feed: list[dict] = []
+
+    # Recent user signups
+    rows = (await db.execute(
+        select(User.id, User.email, User.created_at)
+        .order_by(User.created_at.desc())
+        .limit(limit)
+    )).all()
+    for uid, email, ts in rows:
+        feed.append({
+            "type": "user_signup",
+            "summary": f"New user · {email}",
+            "actor": email,
+            "timestamp": ts.isoformat() if ts else None,
+            "target_url": f"/admin/users?focus={uid}",
+        })
+
+    # Recent orders (paid or pending)
+    rows = (await db.execute(
+        select(Order.id, Order.order_number, Order.status, Order.amount, Order.created_at, Order.user_id)
+        .order_by(Order.created_at.desc())
+        .limit(limit)
+    )).all()
+    for oid, num, status, amt, ts, _uid in rows:
+        feed.append({
+            "type": "order",
+            "summary": f"Order {num or oid} · {status} · {amt or '?'}",
+            "actor": None,
+            "timestamp": ts.isoformat() if ts else None,
+            "target_url": f"/admin/revenue?order={num or oid}",
+        })
+
+    # Recent material status changes (moderation)
+    rows = (await db.execute(
+        select(Material.id, Material.tool_type, Material.topic, Material.status, Material.approved_at)
+        .where(Material.approved_at.is_not(None))
+        .order_by(Material.approved_at.desc())
+        .limit(limit)
+    )).all()
+    for mid, tt, topic, status, ts in rows:
+        tool = tt.value if hasattr(tt, "value") else str(tt)
+        feed.append({
+            "type": "material_review",
+            "summary": f"{tool}/{topic or '—'} · {status.value if hasattr(status, 'value') else status}",
+            "actor": None,
+            "timestamp": ts.isoformat() if ts else None,
+            "target_url": f"/admin/materials?focus={mid}",
+        })
+
+    # Payment settings updates
+    row = (await db.execute(
+        select(PaymentSettings).where(PaymentSettings.id == 1)
+    )).scalar_one_or_none()
+    if row and row.updated_at:
+        feed.append({
+            "type": "payment_settings",
+            "summary": f"PayPal config updated · env={row.paypal_env or 'env-fallback'}",
+            "actor": row.updated_by,
+            "timestamp": row.updated_at.isoformat(),
+            "target_url": "/admin/settings/payment",
+        })
+
+    # Model registry overrides — ModelRegistryAudit stores before/after model
+    # rather than an "action" column, so we synthesize the summary from that.
+    rows = (await db.execute(
+        select(ModelRegistryAudit.id, ModelRegistryAudit.service_key,
+               ModelRegistryAudit.before_model, ModelRegistryAudit.after_model,
+               ModelRegistryAudit.changed_by, ModelRegistryAudit.changed_at)
+        .order_by(ModelRegistryAudit.changed_at.desc())
+        .limit(limit)
+    )).all()
+    for aid, service_key, before, after, who_uid, ts in rows:
+        summary = f"{service_key}: {before or '∅'} → {after}"
+        feed.append({
+            "type": "model_registry",
+            "summary": summary,
+            "actor": str(who_uid)[:8] if who_uid else None,
+            "timestamp": ts.isoformat() if ts else None,
+            "target_url": "/admin/models",
+        })
+
+    # Sort newest first, cap to requested limit
+    feed = [f for f in feed if f["timestamp"]]
+    feed.sort(key=lambda f: f["timestamp"], reverse=True)
+    return {"events": feed[:limit]}
+
+
+@router.get("/global-search")
+async def admin_global_search(
+    q: str = Query(..., min_length=1, max_length=120),
+    limit: int = Query(default=10, ge=1, le=30),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Cross-table search the admin top-bar uses. Returns at most `limit`
+    matches per category, plus a best-guess `target_url` so the UI can
+    deep-link straight into the right detail view.
+
+    Heuristics:
+      - q looks like a UUID → exact user/order/material/generation lookup.
+      - q contains '@'      → email-prefix match on User.email.
+      - q starts with 'SUB' → order_number prefix match.
+      - otherwise           → ILIKE substring across User.email,
+                              Material.title_en/topic, Plan.name.
+    """
+    from app.models.material import Material
+    from app.models.billing import Order, Plan
+    needle = q.strip()
+    like = f"%{needle.lower()}%"
+    results: dict[str, list[dict]] = {"users": [], "orders": [], "materials": [], "plans": []}
+
+    # Users by email prefix / substring
+    user_rows = (await db.execute(
+        select(User.id, User.email, User.is_superuser)
+        .where(User.email.ilike(like))
+        .limit(limit)
+    )).all()
+    results["users"] = [
+        {"id": str(uid), "label": email + (" · admin" if is_su else ""), "target_url": f"/admin/users?focus={uid}"}
+        for uid, email, is_su in user_rows
+    ]
+
+    # Orders by order_number
+    order_rows = (await db.execute(
+        select(Order.id, Order.order_number, Order.status, Order.amount)
+        .where(Order.order_number.ilike(like))
+        .order_by(Order.created_at.desc())
+        .limit(limit)
+    )).all()
+    results["orders"] = [
+        {"id": str(oid), "label": f"{num} · {status} · {amt or '?'}", "target_url": f"/admin/revenue?order={num}"}
+        for oid, num, status, amt in order_rows
+    ]
+
+    # Materials by topic / title
+    mat_rows = (await db.execute(
+        select(Material.id, Material.topic, Material.tool_type, Material.title_en)
+        .where(or_(Material.topic.ilike(like), Material.title_en.ilike(like)))
+        .limit(limit)
+    )).all()
+    results["materials"] = [
+        {"id": str(mid), "label": f"{tt.value if hasattr(tt, 'value') else tt} · {topic or title or '—'}",
+         "target_url": f"/admin/materials?focus={mid}"}
+        for mid, topic, tt, title in mat_rows
+    ]
+
+    # Plans by name / slug
+    plan_rows = (await db.execute(
+        select(Plan.id, Plan.name, Plan.display_name, Plan.price_monthly)
+        .where(or_(Plan.name.ilike(like), Plan.slug.ilike(like)))
+        .limit(limit)
+    )).all()
+    results["plans"] = [
+        {"id": str(pid), "label": f"{name} · {dn or name} · {price}", "target_url": f"/admin/plans?focus={pid}"}
+        for pid, name, dn, price in plan_rows
+    ]
+
+    return {"q": needle, "results": results}
+
+
+@router.post("/settings/payment/test-connection")
+async def admin_test_paypal_connection(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Validate the effective PayPal credentials by doing a real OAuth call.
+
+    Useful right after switching sandbox ↔ production from the UI — confirms
+    the new credentials authenticate before any real customer hits the
+    checkout flow.
+    """
+    from app.services.paypal_service import get_paypal_service
+    svc = get_paypal_service()
+    await svc.refresh_from_db(db)
+    if svc.is_mock:
+        return {"ok": False, "error": "No credentials configured (running in mock mode)"}
+    try:
+        token = await svc._get_access_token()
+        return {
+            "ok": True,
+            "env": "production" if not svc.is_sandbox else "sandbox",
+            "base_url": svc.base_url,
+            "token_prefix": token[:12] + "...",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)[:200]}

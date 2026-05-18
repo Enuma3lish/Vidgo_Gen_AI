@@ -163,7 +163,7 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #09090b;">
+  <div class="min-h-screen pt-6 pb-20" style="background: #09090b;">
     <div class="max-w-7xl mx-auto px-4">
       <div class="mb-6">
         <h1 class="text-2xl font-bold" style="color: #f5f5fa;">{{ t('adminModels.title') }}</h1>

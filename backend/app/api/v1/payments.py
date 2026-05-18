@@ -59,19 +59,23 @@ async def _ecpay_query_confirms_paid(ecpay_client: ECPayClient, order_number: st
 # =============================================================================
 
 @router.get("/methods")
-async def get_payment_methods():
+async def get_payment_methods(db: AsyncSession = Depends(deps.get_db)):
     """
     Return which payment methods are actually configured in production.
     The frontend calls this on /pricing render to decide whether to show the
-    PayPal button — when PAYPAL_CLIENT_ID is unset the button is hidden so
-    users don't click it and get a mock-mode 200 with no real checkout URL.
+    PayPal button — when no credentials are configured, the button is hidden
+    so users don't click it and get a mock-mode 200 with no real checkout URL.
+
+    Resolves PayPal config through PaymentSettingsService so an admin who
+    rotates credentials in /admin/settings/payment sees the change reflect
+    here within ~60s without a redeploy.
     """
+    from app.services.payment_settings_service import get_resolved_settings
+    r = await get_resolved_settings(db)
     return {
         "paypal": {
-            "enabled": bool(getattr(settings, "PAYPAL_CLIENT_ID", "")) and bool(
-                getattr(settings, "PAYPAL_CLIENT_SECRET", "")
-            ),
-            "is_sandbox": (getattr(settings, "PAYPAL_ENV", "sandbox") or "sandbox").lower() != "production",
+            "enabled": bool(r.paypal_client_id) and bool(r.paypal_client_secret),
+            "is_sandbox": (r.paypal_env or "sandbox").lower() != "production",
         },
         "ecpay": {
             "enabled": bool(getattr(settings, "ECPAY_MERCHANT_ID", "")) and bool(

@@ -413,7 +413,9 @@
     "previewComingSoon": "미리보기 곧 출시",
     "startFree": "무료로 시작",
     "dropFilesHere": "여기에 파일을 드롭하세요",
-    "insufficient": "(크레딧 부족)"
+    "insufficient": "(크레딧 부족)",
+    "curatedNotice": "품질과 안전을 위해 시스템이 프롬프트를 엄선합니다. 아래 목록에서 선택해 주세요.",
+    "curatedPickToPreview": "— 위에서 프롬프트를 선택하면 내용이 여기에 표시됩니다 —"
   },
   "auth": {
     "email": "이메일",
@@ -1544,9 +1546,16 @@
     "placeholder": "생성된 이미지가 여기에 표시됩니다.",
     "resultLabel": "결과",
     "download": "다운로드",
-    "warnings": { "emptyPrompt": "프롬프트를 입력하세요." },
-    "toasts": { "success": "이미지 생성이 완료되었습니다.", "demoReady": "데모 이미지가 준비되었습니다." },
-    "errors": { "generic": "생성에 실패했습니다. 다시 시도하세요." }
+    "warnings": {
+      "emptyPrompt": "프롬프트를 입력하세요."
+    },
+    "toasts": {
+      "success": "이미지 생성이 완료되었습니다.",
+      "demoReady": "데모 이미지가 준비되었습니다."
+    },
+    "errors": {
+      "generic": "생성에 실패했습니다. 다시 시도하세요."
+    }
   },
   "klingVideo": {
     "title": "Kling 비디오",
@@ -1565,8 +1574,14 @@
       "dramaticZoom": "사막 드라마틱 줌"
     },
     "tierLabel": "등급",
-    "tiers": { "default": "스탠다드 (Kling 2.6)", "flagship": "플래그십 (Kling 2.1-master Pro)" },
-    "tierHints": { "default": "빠른 처리, 저렴.", "flagship": "최고 품질, Pro 모드 전용." },
+    "tiers": {
+      "default": "스탠다드 (Kling 2.6)",
+      "flagship": "플래그십 (Kling 2.1-master Pro)"
+    },
+    "tierHints": {
+      "default": "빠른 처리, 저렴.",
+      "flagship": "최고 품질, Pro 모드 전용."
+    },
     "promptLabel": "프롬프트",
     "promptPlaceholder": "원하는 내용과 동작을 설명하세요...",
     "startImage": "시작 프레임 (선택)",
@@ -1581,9 +1596,16 @@
     "placeholder": "생성된 비디오가 여기에 표시됩니다.",
     "resultLabel": "결과",
     "download": "다운로드",
-    "warnings": { "emptyPrompt": "프롬프트를 입력하세요." },
-    "toasts": { "success": "{tier} 비디오가 생성되었습니다.", "demoReady": "데모 비디오가 준비되었습니다." },
-    "errors": { "generic": "생성에 실패했습니다. 다시 시도하세요." }
+    "warnings": {
+      "emptyPrompt": "프롬프트를 입력하세요."
+    },
+    "toasts": {
+      "success": "{tier} 비디오가 생성되었습니다.",
+      "demoReady": "데모 비디오가 준비되었습니다."
+    },
+    "errors": {
+      "generic": "생성에 실패했습니다. 다시 시도하세요."
+    }
   },
   "adminModels": {
     "title": "AI Model Registry",
@@ -1613,9 +1635,16 @@
     "metricCalls": "{n}회 호출",
     "filterPlaceholder": "패밀리/이름/키/모델로 검색…",
     "noMatches": "조건에 맞는 service key가 없습니다.",
-    "warnings": { "modelRequired": "Model 문자열이 필요합니다." },
-    "toasts": { "saved": "오버라이드가 저장되었습니다." },
-    "errors": { "loadFailed": "모델 레지스트리 로드 실패.", "saveFailed": "오버라이드 저장 실패." }
+    "warnings": {
+      "modelRequired": "Model 문자열이 필요합니다."
+    },
+    "toasts": {
+      "saved": "오버라이드가 저장되었습니다."
+    },
+    "errors": {
+      "loadFailed": "모델 레지스트리 로드 실패.",
+      "saveFailed": "오버라이드 저장 실패."
+    }
   },
   "lumaVideo": {
     "title": "Luma Dream Machine",
@@ -1648,8 +1677,15 @@
     "placeholder": "생성된 비디오가 여기에 표시됩니다.",
     "resultLabel": "결과",
     "download": "다운로드",
-    "warnings": { "emptyPrompt": "프롬프트를 입력하세요." },
-    "toasts": { "success": "Luma 비디오가 생성되었습니다.", "demoReady": "데모 비디오가 준비되었습니다." },
-    "errors": { "generic": "생성에 실패했습니다. 다시 시도하세요." }
+    "warnings": {
+      "emptyPrompt": "프롬프트를 입력하세요."
+    },
+    "toasts": {
+      "success": "Luma 비디오가 생성되었습니다.",
+      "demoReady": "데모 비디오가 준비되었습니다."
+    },
+    "errors": {
+      "generic": "생성에 실패했습니다. 다시 시도하세요."
+    }
   }
 }

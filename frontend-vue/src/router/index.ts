@@ -1,6 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
+// 2026-05-18 — subscription result pages are eagerly imported. They
+// are the landing target when PayPal redirects back to vidgo.co after
+// the user cancels or completes payment, and a lazy-chunk fetch over
+// a slow network on top of the PayPal redirect was producing a blank
+// "page keeps loading but does nothing" experience for cancellers.
+import SubscriptionSuccess from '@/views/subscription/SubscriptionSuccess.vue'
+import SubscriptionCancelled from '@/views/subscription/SubscriptionCancelled.vue'
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -22,11 +30,21 @@ const routes: RouteRecordRaw[] = [
   { path: '/tools/effects', redirect: '/tools/room-redesign' },
   { path: '/tools/image-transform', redirect: '/tools/room-redesign' },
 
-  // Product Scene — T2I + rembg + PIL composite
+  // Product Scene — now the tool-hub launcher ("What do you need?").
   {
     path: '/tools/product-scene',
     name: 'product-scene',
     component: () => import('@/views/tools/ProductScene.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // Legacy Product Scene generator (preset products × scenes) kept reachable
+  // for users who deep-link or who still want the scene picker. Linked from
+  // the hub tiles for "Flat lay" and "Product photography".
+  {
+    path: '/tools/product-scene-classic',
+    name: 'product-scene-classic',
+    component: () => import('@/views/tools/ProductSceneClassic.vue'),
     meta: { requiresAuth: false }
   },
 
@@ -261,17 +279,23 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/StaticInfoPage.vue')
   },
 
-  // Subscription payment results
+  // Subscription payment results — eagerly imported so the browser
+  // never sits on a blank "loading" frame waiting on a lazy chunk
+  // after PayPal redirects back to vidgo.co. The chunks are tiny.
   {
     path: '/subscription/success',
     name: 'subscription-success',
-    component: () => import('@/views/subscription/SubscriptionSuccess.vue'),
-    meta: { requiresAuth: true }
+    component: SubscriptionSuccess,
+    // Intentionally NOT requiring auth here — PayPal sometimes drops
+    // our access_token cookie during its OAuth roundtrip, and bouncing
+    // a paying user to /login on /subscription/success is a worse UX
+    // than letting them see the success message. The webhook + return
+    // handler validate the order server-side.
   },
   {
     path: '/subscription/cancelled',
     name: 'subscription-cancelled',
-    component: () => import('@/views/subscription/SubscriptionCancelled.vue')
+    component: SubscriptionCancelled
   },
   {
     path: '/subscription/mock-checkout',
@@ -288,69 +312,22 @@ const routes: RouteRecordRaw[] = [
   // Admin Dashboard
   {
     path: '/admin',
-    name: 'admin',
+    component: () => import('@/views/admin/AdminLayout.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
     redirect: { name: 'admin-dashboard' },
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/dashboard',
-    name: 'admin-dashboard',
-    component: () => import('@/views/admin/AdminDashboard.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/users',
-    name: 'admin-users',
-    component: () => import('@/views/admin/AdminUsers.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/materials',
-    name: 'admin-materials',
-    component: () => import('@/views/admin/AdminMaterials.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/moderation',
-    name: 'admin-moderation',
-    component: () => import('@/views/admin/AdminModeration.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/revenue',
-    name: 'admin-revenue',
-    component: () => import('@/views/admin/AdminRevenue.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/system',
-    name: 'admin-system',
-    component: () => import('@/views/admin/AdminSystem.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/plans',
-    name: 'admin-plans',
-    component: () => import('@/views/admin/AdminPlans.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/branding',
-    name: 'admin-branding',
-    component: () => import('@/views/admin/AdminBranding.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/costs',
-    name: 'admin-costs',
-    component: () => import('@/views/admin/AdminCosts.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/models',
-    name: 'admin-models',
-    component: () => import('@/views/admin/AdminModels.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
+    children: [
+      { path: 'dashboard',         name: 'admin-dashboard',        component: () => import('@/views/admin/AdminDashboard.vue') },
+      { path: 'users',             name: 'admin-users',            component: () => import('@/views/admin/AdminUsers.vue') },
+      { path: 'materials',         name: 'admin-materials',        component: () => import('@/views/admin/AdminMaterials.vue') },
+      { path: 'moderation',        name: 'admin-moderation',       component: () => import('@/views/admin/AdminModeration.vue') },
+      { path: 'revenue',           name: 'admin-revenue',          component: () => import('@/views/admin/AdminRevenue.vue') },
+      { path: 'system',            name: 'admin-system',           component: () => import('@/views/admin/AdminSystem.vue') },
+      { path: 'plans',             name: 'admin-plans',            component: () => import('@/views/admin/AdminPlans.vue') },
+      { path: 'branding',          name: 'admin-branding',         component: () => import('@/views/admin/AdminBranding.vue') },
+      { path: 'costs',             name: 'admin-costs',            component: () => import('@/views/admin/AdminCosts.vue') },
+      { path: 'models',            name: 'admin-models',           component: () => import('@/views/admin/AdminModels.vue') },
+      { path: 'settings/payment',  name: 'admin-settings-payment', component: () => import('@/views/admin/AdminPaymentSettings.vue') },
+    ],
   },
 
   // 404

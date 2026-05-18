@@ -399,7 +399,7 @@ function activeLabel(isActive: boolean): string {
 
 <style scoped>
 .admin-users {
-  padding: 6rem 2rem 2rem;
+  padding: 1.5rem 2rem 2rem;
   max-width: 1400px;
   margin: 0 auto;
 }

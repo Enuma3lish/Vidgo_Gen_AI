@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
-import { RouterView } from 'vue-router'
+import { computed, onMounted, watch } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppHeader from './components/layout/AppHeader.vue'
 import AppFooter from './components/layout/AppFooter.vue'
@@ -15,6 +15,12 @@ const { startHeartbeat } = useSessionHeartbeat()
 const { locale } = useI18n()
 const authStore = useAuthStore()
 const brandingStore = useBrandingStore()
+const route = useRoute()
+
+// /admin/* uses its own persistent shell (AdminLayout with sidebar +
+// status strip), so we hide the consumer AppHeader / AppFooter there to
+// avoid stacking two top bars on admin pages.
+const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 
 watch(locale, (newLocale) => {
   const normalizedLocale = persistLocale(newLocale)
@@ -33,7 +39,7 @@ onMounted(async () => {
 
 <template>
   <div class="min-h-screen flex flex-col" style="background: var(--bg-page); color: var(--text-primary);">
-    <AppHeader />
+    <AppHeader v-if="!isAdminRoute" />
     <main class="flex-1">
       <RouterView v-slot="{ Component, route: r }">
         <Transition name="page-fade" mode="out-in">
@@ -41,7 +47,7 @@ onMounted(async () => {
         </Transition>
       </RouterView>
     </main>
-    <AppFooter />
+    <AppFooter v-if="!isAdminRoute" />
     <Toast />
   </div>
 </template>

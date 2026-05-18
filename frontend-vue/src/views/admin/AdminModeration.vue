@@ -136,7 +136,7 @@ function getToolLabel(toolType: string | null): string {
 
 <style scoped>
 .admin-moderation {
-  padding: 6rem 2rem 2rem;
+  padding: 1.5rem 2rem 2rem;
   max-width: 1200px;
   margin: 0 auto;
 }

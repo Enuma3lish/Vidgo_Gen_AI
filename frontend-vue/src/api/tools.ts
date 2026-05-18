@@ -12,6 +12,20 @@ export interface ToolResponse {
   credits_used: number
   message?: string
   results?: any[]
+  // True when backend short-circuited to a static premium fallback
+  // (non-subscribers on Midjourney/Kling/Luma/etc). The image/video
+  // shown is NOT a real generation from the user's prompt.
+  is_demo?: boolean
+  cached?: boolean
+  demo_input_url?: string
+  demo_prompt?: string
+  // 2026-05-18 — image-understanding fusion fields. Populated by tools
+  // that take image+prompt (room redesign, product scene). The frontend
+  // VisionFusionInfo component reads these to show "we see: __" and
+  // "your text was overridden because it didn't match the image".
+  vision_summary?: string | null
+  user_prompt_used?: boolean | null
+  prompt_gap_reason?: string | null
 }
 
 export interface ImageTranslateParams {
@@ -35,13 +49,29 @@ export const toolsApi = {
   async removeBackground(
     imageUrl: string,
     outputFormat: 'png' | 'white' | 'black' = 'png',
-    opts?: { backgroundColor?: string; backgroundImageUrl?: string },
+    opts?: { backgroundColor?: string; backgroundImageUrl?: string; aiBackgroundPrompt?: string },
   ): Promise<ToolResponse> {
     const response = await apiClient.post('/api/v1/tools/remove-bg', {
       image_url: imageUrl,
       output_format: outputFormat,
       background_color: opts?.backgroundColor,
       background_image_url: opts?.backgroundImageUrl,
+      ai_background_prompt: opts?.aiBackgroundPrompt,
+    })
+    return response.data
+  },
+
+  async removeBackgroundBatch(
+    imageUrls: string[],
+    outputFormat: 'png' | 'white' | 'black' = 'png',
+    opts?: { backgroundColor?: string; backgroundImageUrl?: string; aiBackgroundPrompt?: string },
+  ): Promise<{ success: boolean; results: Array<{ image_url?: string; success: boolean; error?: string }>; message?: string }> {
+    const response = await apiClient.post('/api/v1/tools/remove-bg/batch', {
+      image_urls: imageUrls,
+      output_format: outputFormat,
+      background_color: opts?.backgroundColor,
+      background_image_url: opts?.backgroundImageUrl,
+      ai_background_prompt: opts?.aiBackgroundPrompt,
     })
     return response.data
   },
@@ -71,7 +101,7 @@ export const toolsApi = {
     return response.data
   },
 
-  async tryOn(garmentImageUrl: string, opts?: { modelImageUrl?: string; modelId?: string; angle?: string; templateId?: string }): Promise<ToolResponse> {
+  async tryOn(garmentImageUrl: string, opts?: { modelImageUrl?: string; modelId?: string; angle?: string; templateId?: string; category?: 'upper_body' | 'lower_body' | 'dress' | 'full_body' }): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/try-on',
       {
@@ -80,13 +110,34 @@ export const toolsApi = {
         model_id: opts?.modelId,
         angle: opts?.angle ?? 'front',
         template_id: opts?.templateId,
+        // Category controls which Kling input slot the garment goes into.
+        // 'dress' (default) sends to dress_input → Kling expects a full
+        // outfit and improvises missing pieces, which produced the
+        // jacket+pants hybrid bug when users uploaded jeans alone.
+        category: opts?.category ?? 'dress',
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
     return response.data
   },
 
-  async roomRedesign(roomImageUrl: string, style = 'modern', customPrompt?: string, promptId?: string, locale?: string): Promise<ToolResponse> {
+  async roomRedesign(
+    roomImageUrl: string,
+    style = 'modern',
+    customPrompt?: string,
+    promptId?: string,
+    locale?: string,
+    opts?: {
+      spaceKind?: 'interior' | 'exterior' | 'commercial'
+      styleStrength?: number
+      preserveStructure?: boolean
+      // ReRoom-inspired knobs (2026-05-18). All optional.
+      mode?: 'redesign' | 'stage'
+      lightingTone?: 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'
+      materialAccent?: 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'
+      variationCount?: 1 | 2 | 3
+    },
+  ): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/room-redesign',
       {
@@ -95,7 +146,13 @@ export const toolsApi = {
         custom_prompt: customPrompt,
         prompt_id: promptId,
         locale,
-        preserve_structure: true,
+        preserve_structure: opts?.preserveStructure ?? true,
+        space_kind: opts?.spaceKind ?? 'interior',
+        ...(typeof opts?.styleStrength === 'number' ? { style_strength: opts.styleStrength } : {}),
+        ...(opts?.mode ? { mode: opts.mode } : {}),
+        ...(opts?.lightingTone ? { lighting_tone: opts.lightingTone } : {}),
+        ...(opts?.materialAccent ? { material_accent: opts.materialAccent } : {}),
+        ...(opts?.variationCount && opts.variationCount > 1 ? { variation_count: opts.variationCount } : {}),
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )

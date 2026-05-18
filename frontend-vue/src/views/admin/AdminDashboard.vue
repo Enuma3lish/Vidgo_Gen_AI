@@ -8,6 +8,7 @@ import DoughnutChart from '@/components/admin/charts/DoughnutChart.vue'
 import DateRangeSelector from '@/components/admin/DateRangeSelector.vue'
 import type { DateRange } from '@/components/admin/DateRangeSelector.vue'
 import { exportToCsv } from '@/utils/exportCsv'
+import AdminActivityFeed from '@/components/admin/AdminActivityFeed.vue'
 
 const adminStore = useAdminStore()
 const { locale } = useI18n()
@@ -820,19 +821,13 @@ function exportToolUsage() {
       </div>
     </section>
 
-    <!-- ===== Quick Links ===== -->
+    <!-- ===== Activity Feed =====
+         Recent-activity surface replaces the redundant Quick Actions row.
+         The persistent admin sidebar already provides single-click nav to
+         every section, so the dashboard now uses its real-estate for a
+         signal — what's actually happening on the platform right now. -->
     <section class="section">
-      <h2>{{ localized('快速操作', 'Quick Actions') }}</h2>
-      <div class="quick-links">
-        <router-link to="/admin/users" class="quick-link"><span>{{ localized('使用者', 'Users') }}</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/materials" class="quick-link"><span>{{ localized('素材', 'Materials') }}</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/revenue" class="quick-link"><span>{{ localized('收入', 'Revenue') }}</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/costs" class="quick-link"><span>{{ localized('成本（GCP+AI）', 'Costs (GCP+AI)') }}</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/plans" class="quick-link"><span>{{ localized('訂閱方案', 'Plans') }}</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/branding" class="quick-link"><span>{{ localized('品牌與文字', 'Branding') }}</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/models" class="quick-link"><span>{{ localized('AI 模型管理', 'AI Model Registry') }}</span><span>&rarr;</span></router-link>
-        <router-link to="/admin/system" class="quick-link"><span>{{ localized('系統', 'System') }}</span><span>&rarr;</span></router-link>
-      </div>
+      <AdminActivityFeed />
     </section>
 
     <!-- Loading -->
@@ -843,7 +838,9 @@ function exportToolUsage() {
 </template>
 
 <style scoped>
-.admin-dashboard { padding: 6rem 2rem 2rem; max-width: 1400px; margin: 0 auto; }
+/* AdminLayout already provides the sticky top strip + nav. The page just
+   needs vertical breathing room from that strip — no header offset. */
+.admin-dashboard { padding: 1.5rem 2rem 2rem; max-width: 1400px; margin: 0 auto; }
 
 .dashboard-header { margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
 .dashboard-header h1 { font-size: 2rem; font-weight: 700; color: #f5f5fa; margin: 0; }

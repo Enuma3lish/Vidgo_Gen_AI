@@ -23,6 +23,11 @@ export type PromptItem = {
   label: PromptLabel
   en: string
   zh: string
+  // Optional sub-category. Currently populated only for `pattern_generate`,
+  // where the 40 prompts are split into 5 bands (geometric / floral /
+  // animal / traditional / abstract) that drive the style-button filter
+  // on /tools/pattern-generate.
+  category?: string
 }
 
 type ToolEntry = {
@@ -43,6 +48,11 @@ export type PromptToolKey =
   | 'short_video'
   | 'ai_avatar'
   | 'pattern_generate'
+  | 'try_on'
+  | 'background_removal_ai_scene'
+  | 'premium_image'
+  | 'kling_video'
+  | 'luma_video'
 
 function normalizeLocale(raw: string): LocaleKey {
   const l = String(raw || '').toLowerCase()
@@ -92,6 +102,7 @@ export function usePromptLibrary(toolKey: PromptToolKey) {
         label: text,
         value: p.id,
         full: submitLang.value === 'zh' ? p.zh : p.en,
+        category: p.category,
       }
     })
   )

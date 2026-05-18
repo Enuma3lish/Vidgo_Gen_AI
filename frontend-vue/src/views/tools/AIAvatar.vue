@@ -10,6 +10,7 @@ import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import apiClient from '@/api/client'
+import { downloadAsset } from '@/utils/downloadAsset'
 import { demoApi } from '@/api/demo'
 
 const { t, locale } = useI18n()
@@ -872,14 +873,13 @@ watch(selectedAvatarId, () => {
 
             <!-- Download / Action Buttons -->
             <div class="flex gap-3">
-               <a
+               <button
                  v-if="!isDemoUser"
-                 :href="resultVideo"
-                 download="vidgo_avatar_video.mp4"
+                 @click="downloadAsset(resultVideo!, 'vidgo_avatar_video.mp4')"
                  class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
                >
                  <span class="mr-2">📥</span> {{ t('common.download') }}
-               </a>
+               </button>
 
                <RouterLink v-else to="/pricing" class="btn-primary w-full text-center block">
                  {{ L('訂閱以獲得完整功能', 'Subscribe for Full Access', 'サブスクで全機能を解禁', '구독으로 전체 액세스', 'Suscríbete para acceso completo') }}

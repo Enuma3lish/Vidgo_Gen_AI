@@ -76,8 +76,9 @@ logger = logging.getLogger("reseed_bg")
 GCS_BASE = "https://storage.googleapis.com/vidgo-media-vidgo-ai/examples"
 
 # Curated subjects available in examples/bg/ AND examples/fx/.
-# Order matters: when a Material row's prompt doesn't match any keyword, we
-# round-robin across this list so we don't pile every row onto bubbletea.
+# Order matters: when a Material row's prompt doesn't match any keyword AND
+# its topic doesn't either, we round-robin across this list so we don't pile
+# every row onto bubbletea.
 SUBJECTS = ["bubbletea", "fried-chicken", "bento", "cake", "soap"]
 
 # prompt-keyword → subject. Substring match against the Material's prompt
@@ -90,8 +91,43 @@ KEYWORDS: list[tuple[tuple[str, ...], str]] = [
     (("soap", "candle", "tote", "cleaning", "packaging", "container", "bag", "kraft"), "soap"),
 ]
 
+# topic → subject. Checked BEFORE the prompt-keyword pass so a row tagged
+# topic='desserts' gets `cake` (not `bubbletea` from a "milk tea" mention in
+# its prompt). This was the root cause of the 2026-05-17 audit where the
+# same `bubbletea.png` was attached to topics `desserts`, `snacks`,
+# `general`, etc., producing visible image↔topic mismatches in
+# /admin/materials.
+TOPIC_TO_SUBJECT: dict[str, str] = {
+    "drinks":      "bubbletea",
+    "beverages":   "bubbletea",
+    "drink":       "bubbletea",
+    "tea":         "bubbletea",
+    "coffee":      "bubbletea",
+    "snacks":      "fried-chicken",
+    "snack":       "fried-chicken",
+    "fried":       "fried-chicken",
+    "meals":       "bento",
+    "meal":        "bento",
+    "lunch":       "bento",
+    "rice":        "bento",
+    "desserts":    "cake",
+    "dessert":     "cake",
+    "bakery":      "cake",
+    "pastry":      "cake",
+    "packaging":   "soap",
+    "container":   "soap",
+    "equipment":   "soap",
+    "ingredients": "soap",
+    "signage":     "soap",
+}
 
-def pick_subject(prompt: str, fallback_index: int) -> str:
+
+def pick_subject(topic: str | None, prompt: str, fallback_index: int) -> str:
+    # Topic match first — the explicit category dominates over heuristic
+    # keyword sniffing of the prompt text.
+    t = (topic or "").lower().strip()
+    if t in TOPIC_TO_SUBJECT:
+        return TOPIC_TO_SUBJECT[t]
     text = (prompt or "").lower()
     for kws, subj in KEYWORDS:
         if any(kw in text for kw in kws):
@@ -120,7 +156,7 @@ async def reseed(session: AsyncSession, dry_run: bool) -> None:
     skipped = 0
     for i, mat in enumerate(rows):
         prompt_text = (mat.prompt_en or mat.prompt_zh or "")
-        subject = pick_subject(prompt_text, i)
+        subject = pick_subject(mat.topic, prompt_text, i)
         new_input = f"{GCS_BASE}/bg/{subject}.png"
         new_output = f"{GCS_BASE}/fx/{subject}.png"
 

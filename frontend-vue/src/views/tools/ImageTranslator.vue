@@ -8,6 +8,7 @@ import ImageUploader from '@/components/common/ImageUploader.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import { downloadAsset } from '@/utils/downloadAsset'
 
 const { locale } = useI18n()
 const uiStore = useUIStore()
@@ -215,16 +216,14 @@ async function handleTranslate() {
           <div v-if="!isProcessing && resultImage" class="w-full">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ L('翻譯結果', 'Translated Result', '翻訳結果', '번역 결과', 'Resultado traducido') }}</label>
             <img :src="resultImage" class="w-full rounded-lg" style="max-height: 520px; object-fit: contain;" />
-            <a
+            <button
               v-if="!isDemoUser"
-              :href="resultImage"
-              target="_blank"
-              download
-              class="block mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
+              @click="downloadAsset(resultImage!, 'vidgo_image_translated.png')"
+              class="block w-full mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
               style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
             >
               {{ L('下載翻譯圖片', 'Download Image', '画像をダウンロード', '이미지 다운로드', 'Descargar imagen') }}
-            </a>
+            </button>
             <RouterLink
               v-else
               to="/pricing"

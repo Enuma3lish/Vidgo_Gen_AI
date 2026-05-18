@@ -204,7 +204,7 @@ function getMaterialTitle(material: { title_zh?: string | null; title_en?: strin
 
 <style scoped>
 .admin-materials {
-  padding: 6rem 2rem 2rem;
+  padding: 1.5rem 2rem 2rem;
   max-width: 1400px;
   margin: 0 auto;
 }

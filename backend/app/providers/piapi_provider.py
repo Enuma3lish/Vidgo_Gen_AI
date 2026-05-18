@@ -29,6 +29,35 @@ from app.core.model_registry import (
 logger = logging.getLogger(__name__)
 
 
+# Transient PiAPI upstream failures we should retry instead of surfacing
+# straight to the user. Matched case-insensitively against str(error).
+#  - cookie_expired: PiAPI's internal Kling session cookie lapsed; the next
+#    request usually re-establishes it within ~5 s.
+#  - too many requests / 10001: PiAPI's global Luma rate-limit window.
+#  - task timeout / task failed (10000): occasionally caused by transient
+#    Kling/Luma queue stalls; one retry frequently succeeds.
+#  - upload_verify_timeout / UploadResource: timed out / upload failed:
+#    PiAPI's Kling image-ingestion pipeline occasionally stalls for 3 min
+#    then errors. The next attempt typically reuses a fresh upload slot.
+_TRANSIENT_PIAPI_ERROR_HINTS = (
+    "cookie_expired",
+    "too many requests",
+    "rate limit",
+    "10001",
+    "task timeout",
+    "piapi task timeout",
+    "upload_verify_timeout",
+    "uploadresource: timed out",
+    "kling-engine upload failed",
+    "create generation task: upload image",
+)
+
+
+def _is_transient_piapi_error(err: BaseException | str) -> bool:
+    msg = str(err).lower()
+    return any(hint in msg for hint in _TRANSIENT_PIAPI_ERROR_HINTS)
+
+
 class PiAPIProvider(BaseProvider):
     """
     PiAPI Provider - Primary provider for VidGo.
@@ -54,6 +83,41 @@ class PiAPIProvider(BaseProvider):
                 "Content-Type": "application/json"
             }
         )
+
+    async def _retry_transient(
+        self,
+        op_name: str,
+        coro_factory,
+        *,
+        attempts: int = 3,
+        backoff_seconds: tuple[float, ...] = (5.0, 15.0, 30.0),
+    ) -> Dict[str, Any]:
+        """Run an async PiAPI submit/poll and retry on transient upstream errors.
+
+        coro_factory is a zero-arg callable returning a fresh coroutine each
+        attempt — we can't reuse a coroutine after the first await raises.
+        """
+        last_exc: BaseException | None = None
+        for i in range(attempts):
+            try:
+                return await coro_factory()
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if i == attempts - 1 or not _is_transient_piapi_error(exc):
+                    raise
+                delay = backoff_seconds[min(i, len(backoff_seconds) - 1)]
+                logger.warning(
+                    "[piapi] %s transient failure (attempt %d/%d): %s — retrying in %.0fs",
+                    op_name,
+                    i + 1,
+                    attempts,
+                    str(exc)[:200],
+                    delay,
+                )
+                await asyncio.sleep(delay)
+        # Unreachable: loop either returns or re-raises last_exc on final attempt.
+        assert last_exc is not None
+        raise last_exc
 
     async def health_check(self) -> bool:
         """Check whether PiAPI is reachable without creating a billable task."""
@@ -781,7 +845,10 @@ class PiAPIProvider(BaseProvider):
             "input": input_data
         }
 
-        return await self._submit_and_poll(payload)
+        return await self._retry_transient(
+            "virtual_try_on",
+            lambda: self._submit_and_poll(payload),
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # IMAGE TO VIDEO (Wan 2.6 via PiAPI)
@@ -944,7 +1011,10 @@ class PiAPIProvider(BaseProvider):
             "config": {"service_mode": "public"},
         }
 
-        result = await self._submit_and_poll(payload)
+        result = await self._retry_transient(
+            "kling_video_generation",
+            lambda: self._submit_and_poll(payload),
+        )
         output = result.get("output") or {}
         if isinstance(output, dict):
             # Kling returns video at one of several locations depending on
@@ -1031,7 +1101,10 @@ class PiAPIProvider(BaseProvider):
             "config": {"service_mode": "public"},
         }
 
-        result = await self._submit_and_poll(payload)
+        result = await self._retry_transient(
+            "luma_video_generation",
+            lambda: self._submit_and_poll(payload),
+        )
         output = result.get("output") or {}
         if isinstance(output, dict):
             # Luma returns the URL at output.video per docs; normalize so

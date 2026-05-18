@@ -61,6 +61,92 @@
     }
   },
   "tools": {
+    "hub": {
+      "pageTitle": "你需要什麼？",
+      "aiTools": "AI 工具",
+      "recentlyUsed": "最近使用",
+      "createWithAi": "運用 AI 建立圖片",
+      "tiles": {
+        "recolor": "重新上色",
+        "productBeautifier": "商品優化",
+        "virtualModel": "虛擬模特",
+        "productStaging": "商品情境",
+        "editWithAi": "AI 編輯",
+        "flatLay": "平拍",
+        "ghostMannequin": "隱形人台",
+        "videoGenerator": "影片生成",
+        "ironing": "去皺整燙",
+        "logo": "Logo",
+        "text": "文字設計",
+        "instagramStory": "Instagram 限動",
+        "background": "背景",
+        "threeDIllustration": "3D 插畫",
+        "productPhotography": "商品攝影",
+        "productPackaging": "商品包裝",
+        "createAnyImage": "建立任意圖片"
+      }
+    },
+    "tryOnLayout": {
+      "selectModel": "模特",
+      "quality": "畫質",
+      "qualityStandard": "標準",
+      "qualityPro": "專業",
+      "background": "背景",
+      "backgroundRandom": "隨機",
+      "backgroundStudio": "攝影棚",
+      "backgroundOutdoor": "戶外",
+      "backgroundWhite": "純白",
+      "size": "尺寸",
+      "sizePortrait": "直幅 (2:3)",
+      "sizeSquare": "正方形 (1:1)",
+      "sizeLandscape": "橫幅 (16:9)",
+      "applyBrandStyle": "套用品牌風格",
+      "applyBrandStyleOff": "關閉",
+      "describePrompt": "描述你想要的圖片（選填）",
+      "generateOne": "生成 1 張圖片",
+      "uploadOwn": "上傳自己的"
+    },
+    "interiorLayout": {
+      "uploadStep": "1. 上傳單張或多張圖片",
+      "uploadSingle": "單張",
+      "uploadMultiple": "多張",
+      "stylesStep": "2. 類型與風格",
+      "tabIndoor": "室內",
+      "tabOutdoor": "室外",
+      "tabLandscape": "景觀",
+      "moodboard": "靈感拼貼",
+      "presetStyle": "預設風格",
+      "primary": "主要",
+      "secondary": "次要",
+      "amenities": "便利設施",
+      "roomLivingRoom": "客廳",
+      "roomKitchen": "廚房",
+      "roomBedroom": "臥室",
+      "roomBathroom": "浴室",
+      "roomMudroom": "泥房",
+      "roomDiningRoom": "餐廳",
+      "roomStudy": "書房",
+      "roomHomeOffice": "家庭辦公室",
+      "roomWalkInCloset": "步入式衣櫥",
+      "roomToilet": "廁所",
+      "amenityGym": "健身房",
+      "amenityPool": "泳池",
+      "amenityWineCellar": "酒窖",
+      "amenityHomeTheater": "家庭劇院",
+      "extModernFacade": "現代玻璃帷幕",
+      "extWoodHouse": "北歐木屋",
+      "extMedVilla": "地中海別墅",
+      "extTropicalResort": "熱帶度假",
+      "extRanch": "中世紀平房",
+      "extTownhouse": "都會聯排",
+      "extZenCourtyard": "日式合院",
+      "extIndustrialLoft": "工業 Loft 外觀",
+      "extStoneCabin": "鄉村石屋",
+      "extGardenStudio": "花園工作室",
+      "extStorefront": "精品店面",
+      "extWarehouse": "倉庫改建",
+      "custom": "自訂"
+    },
     "avatar": {
       "name": "AI 數位人",
       "desc": "照片轉會說話的數位人影片",
@@ -390,6 +476,8 @@
     "generate": "生成",
     "download": "下載",
     "cancel": "取消",
+    "on": "開啟",
+    "off": "關閉",
     "confirm": "確認",
     "save": "儲存",
     "delete": "刪除",
@@ -413,7 +501,9 @@
     "result": "結果",
     "previewComingSoon": "預覽即將推出",
     "startFree": "免費開始",
-    "insufficient": "（點數不足）"
+    "insufficient": "（點數不足）",
+    "curatedNotice": "為確保品質與安全，提示詞由系統精選提供，請從下方選單挑選一個。",
+    "curatedPickToPreview": "— 請從上方選擇提示詞，內容將顯示於此 —"
   },
   "auth": {
     "email": "電子郵件",
@@ -1192,8 +1282,8 @@
         "desc": "為品牌生成無縫圖案設計"
       },
       "midjourney": {
-        "name": "Midjourney",
-        "desc": "高品質 AI 圖片生成"
+        "name": "高品質 AI 圖片",
+        "desc": "透過 Flux 生成高品質圖片"
       },
       "klingVideo": {
         "name": "Kling 影片",
@@ -1514,9 +1604,9 @@
     }
   },
   "midjourney": {
-    "title": "Midjourney AI 圖片",
-    "subtitle": "透過 PiAPI 使用 Midjourney 進行高品質圖片生成。",
-    "demoCta": "訂閱後即可生成你自己的 Midjourney 圖片。",
+    "title": "高品質 AI 圖片",
+    "subtitle": "透過 PiAPI 使用 Flux 進行高品質圖片生成。",
+    "demoCta": "訂閱後即可生成你自己的高品質 AI 圖片。",
     "presetLabel": "範例提示詞",
     "presetCustom": "自訂（自己輸入）",
     "presets": {
@@ -1540,13 +1630,20 @@
     },
     "action": "開始生成",
     "processing": "生成中...",
-    "loading": "Midjourney 生成中...",
+    "loading": "高品質圖片生成中...",
     "placeholder": "生成的圖片會顯示在這裡。",
     "resultLabel": "結果",
     "download": "下載",
-    "warnings": { "emptyPrompt": "請先輸入提示詞。" },
-    "toasts": { "success": "圖片生成完成。", "demoReady": "範例圖片已準備好。" },
-    "errors": { "generic": "生成失敗，請再試一次。" }
+    "warnings": {
+      "emptyPrompt": "請先輸入提示詞。"
+    },
+    "toasts": {
+      "success": "圖片生成完成。",
+      "demoReady": "範例圖片已準備好。"
+    },
+    "errors": {
+      "generic": "生成失敗，請再試一次。"
+    }
   },
   "klingVideo": {
     "title": "Kling 影片",
@@ -1565,8 +1662,14 @@
       "dramaticZoom": "戲劇性沙漠拉鏡"
     },
     "tierLabel": "等級",
-    "tiers": { "default": "標準（Kling 2.6）", "flagship": "旗艦（Kling 2.1-master Pro）" },
-    "tierHints": { "default": "速度快、成本低。", "flagship": "最高畫質，僅 Pro 模式。" },
+    "tiers": {
+      "default": "標準（Kling 2.6）",
+      "flagship": "旗艦（Kling 2.1-master Pro）"
+    },
+    "tierHints": {
+      "default": "速度快、成本低。",
+      "flagship": "最高畫質，僅 Pro 模式。"
+    },
     "promptLabel": "提示詞",
     "promptPlaceholder": "描述畫面內容與運動方式...",
     "startImage": "起始畫面（可選）",
@@ -1581,9 +1684,16 @@
     "placeholder": "生成的影片會顯示在這裡。",
     "resultLabel": "結果",
     "download": "下載",
-    "warnings": { "emptyPrompt": "請先輸入提示詞。" },
-    "toasts": { "success": "{tier} 影片生成完成。", "demoReady": "範例影片已準備好。" },
-    "errors": { "generic": "生成失敗，請再試一次。" }
+    "warnings": {
+      "emptyPrompt": "請先輸入提示詞。"
+    },
+    "toasts": {
+      "success": "{tier} 影片生成完成。",
+      "demoReady": "範例影片已準備好。"
+    },
+    "errors": {
+      "generic": "生成失敗，請再試一次。"
+    }
   },
   "adminModels": {
     "title": "AI 模型管理",
@@ -1655,8 +1765,15 @@
     "placeholder": "生成的影片會顯示在這裡。",
     "resultLabel": "結果",
     "download": "下載",
-    "warnings": { "emptyPrompt": "請先輸入提示詞。" },
-    "toasts": { "success": "Luma 影片生成完成。", "demoReady": "範例影片已準備好。" },
-    "errors": { "generic": "生成失敗，請再試一次。" }
+    "warnings": {
+      "emptyPrompt": "請先輸入提示詞。"
+    },
+    "toasts": {
+      "success": "Luma 影片生成完成。",
+      "demoReady": "範例影片已準備好。"
+    },
+    "errors": {
+      "generic": "生成失敗，請再試一次。"
+    }
   }
 }

@@ -11,6 +11,9 @@ import ThreeViewer from '@/components/tools/ThreeViewer.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
+import ProToolHero from '@/components/tools/ProToolHero.vue'
+import VisionFusionInfo from '@/components/tools/VisionFusionInfo.vue'
+import { downloadAsset } from '@/utils/downloadAsset'
 
 // FastAPI returns 422 / 415 validation errors as `detail: [{msg, loc, ...}]`.
 // A bare `error.response.data.detail` then renders as "[object Object]" in
@@ -70,12 +73,14 @@ const styles = ref<DesignStyle[]>([])
 const roomTypes = ref<RoomType[]>([])
 
 // State
-const activeTab = ref<'redesign' | 'generate' | 'styleTransfer' | '3dModel' | 'transform'>('redesign')
-// Tab list: subscriber-only tabs (generate, 3dModel, transform) are hidden for visitors
+const activeTab = ref<'redesign' | 'stage' | 'generate' | 'styleTransfer' | '3dModel' | 'transform'>('redesign')
+// Tab list: subscriber-only tabs (generate, 3dModel, transform, stage) are hidden for visitors
 // so they never see locked chrome or error toasts.
 const visibleTabs = computed(() => {
   const all = [
     { id: 'redesign' as const,      icon: '🔄', label: t('interior.tabs.redesign'),      subOnly: false },
+    // 2026-05-18 ReRoom-inspired: AI Virtual Staging — empty room → furnished.
+    { id: 'stage' as const,         icon: '🛋️', label: L('AI 空間佈置', 'AI Virtual Staging', 'AIバーチャルステージ', 'AI 가상 스테이징', 'Staging Virtual AI'), subOnly: true },
     { id: 'generate' as const,      icon: '✨', label: t('interior.tabs.generate'),      subOnly: true },
     { id: 'styleTransfer' as const, icon: '🎨', label: t('interior.tabs.styleTransfer'), subOnly: false },
     { id: 'transform' as const,     icon: '🪄', label: L('AI 自由變換', 'AI Transform', 'AI 自由変換', 'AI 자유 변환', 'AI Transformación'), subOnly: true },
@@ -154,6 +159,10 @@ const demoEmptyState = ref(false)
 const uploadedFile = ref<File | null>(null)
 const resultImage = ref<string | null>(null)
 const resultDescription = ref<string>('')
+// 2026-05-18 — image-understanding fusion fields surfaced by VisionFusionInfo
+const visionSummary = ref<string | null>(null)
+const userPromptUsed = ref<boolean | null>(null)
+const promptGapReason = ref<string | null>(null)
 const isProcessing = ref(false)
 const selectedStyle = ref<string>('')
 const selectedRoomType = ref<string>('living_room')
@@ -207,6 +216,110 @@ const roomTypeIcons: Record<string, string> = {
   dining_room: '🍽️',
   home_office: '💻',
   balcony: '🌿'
+}
+
+// Compact "mockup-style" flow state. The flow is purely an alternative
+// presentation of the same data (uploadedImage, selectedRoomType, etc.),
+// so toggling between the compact and detailed sections never strands
+// user input.
+const compactUploadMode = ref<'single' | 'multiple'>('single')
+const compactStyleMode = ref<'moodboard' | 'preset'>('preset')
+// 'commercial' added 2026-05-18 (ReRoom-inspired). Maps to backend
+// space_kind='commercial' which surfaces the restaurant / retail / hotel /
+// office / café / gym style presets via COMMERCIAL_STYLES.
+const compactSpaceTab = ref<'indoor' | 'outdoor' | 'landscape' | 'commercial'>('indoor')
+
+// ReRoom-inspired modifiers (2026-05-18). All optional — backend defaults
+// preserve original behavior when nothing is picked.
+type LightingTone = 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'
+type MaterialAccent = 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'
+const lightingTone = ref<LightingTone | null>(null)
+const materialAccent = ref<MaterialAccent | null>(null)
+const variationCount = ref<1 | 2 | 3>(1)
+// All result URLs when variation_count > 1 (primary is index 0). Empty
+// during single-result flows so the legacy `resultImage` rendering still
+// works unchanged.
+const variantResults = ref<string[]>([])
+
+interface CompactRoomTile {
+  id: string
+  labelKey: string
+  thumb: string
+}
+
+const COMPACT_PRIMARY_ROOMS: CompactRoomTile[] = [
+  { id: 'living_room', labelKey: 'tools.interiorLayout.roomLivingRoom', thumb: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=400&h=300&fit=crop' },
+  { id: 'kitchen',     labelKey: 'tools.interiorLayout.roomKitchen',    thumb: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=400&h=300&fit=crop' },
+  { id: 'bedroom',     labelKey: 'tools.interiorLayout.roomBedroom',    thumb: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=400&h=300&fit=crop' },
+  { id: 'bathroom',    labelKey: 'tools.interiorLayout.roomBathroom',   thumb: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=400&h=300&fit=crop' },
+  { id: 'mudroom',     labelKey: 'tools.interiorLayout.roomMudroom',    thumb: 'https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?w=400&h=300&fit=crop' },
+  { id: 'dining_room', labelKey: 'tools.interiorLayout.roomDiningRoom', thumb: 'https://images.unsplash.com/photo-1617806118233-18e1de247200?w=400&h=300&fit=crop' },
+]
+
+const COMPACT_SECONDARY_ROOMS: CompactRoomTile[] = [
+  { id: 'home_office',     labelKey: 'tools.interiorLayout.roomStudy',        thumb: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&h=300&fit=crop' },
+  { id: 'home_office_alt', labelKey: 'tools.interiorLayout.roomHomeOffice',   thumb: 'https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?w=400&h=300&fit=crop' },
+  { id: 'walk_in_closet',  labelKey: 'tools.interiorLayout.roomWalkInCloset', thumb: 'https://images.unsplash.com/photo-1558997519-3c3b32afb5f6?w=400&h=300&fit=crop' },
+  { id: 'toilet',          labelKey: 'tools.interiorLayout.roomToilet',       thumb: 'https://images.unsplash.com/photo-1564540583246-934409427776?w=400&h=300&fit=crop' },
+]
+
+// Amenities — secondary spaces commonly found in larger homes. These all
+// map back to `living_room` on the backend until dedicated room types
+// exist; the labels just give designers a sharper starting point.
+const COMPACT_AMENITIES: CompactRoomTile[] = [
+  { id: 'gym',          labelKey: 'tools.interiorLayout.amenityGym',         thumb: 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=400&h=300&fit=crop' },
+  { id: 'pool',         labelKey: 'tools.interiorLayout.amenityPool',        thumb: 'https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?w=400&h=300&fit=crop' },
+  { id: 'wine_cellar',  labelKey: 'tools.interiorLayout.amenityWineCellar',  thumb: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=400&h=300&fit=crop' },
+  { id: 'home_theater', labelKey: 'tools.interiorLayout.amenityHomeTheater', thumb: 'https://images.unsplash.com/photo-1489599162946-648c0d8d59e2?w=400&h=300&fit=crop' },
+]
+
+// Outdoor / exterior catalog — id values match the backend
+// EXTERIOR_STYLES entries so the same selectCompactRoom() callsite can
+// drive interior or exterior generation depending on compactSpaceTab.
+const COMPACT_EXTERIOR_PRIMARY: CompactRoomTile[] = [
+  { id: 'modern_glass_facade',  labelKey: 'tools.interiorLayout.extModernFacade',  thumb: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&h=300&fit=crop' },
+  { id: 'scandi_wood_house',    labelKey: 'tools.interiorLayout.extWoodHouse',     thumb: 'https://images.unsplash.com/photo-1604014237800-1c9102c219da?w=400&h=300&fit=crop' },
+  { id: 'mediterranean_villa',  labelKey: 'tools.interiorLayout.extMedVilla',      thumb: 'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=400&h=300&fit=crop' },
+  { id: 'tropical_resort',      labelKey: 'tools.interiorLayout.extTropicalResort',thumb: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?w=400&h=300&fit=crop' },
+  { id: 'midcentury_ranch',     labelKey: 'tools.interiorLayout.extRanch',         thumb: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=300&fit=crop' },
+  { id: 'urban_townhouse',      labelKey: 'tools.interiorLayout.extTownhouse',     thumb: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&h=300&fit=crop' },
+]
+const COMPACT_EXTERIOR_SECONDARY: CompactRoomTile[] = [
+  { id: 'japanese_zen_courtyard',   labelKey: 'tools.interiorLayout.extZenCourtyard', thumb: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400&h=300&fit=crop' },
+  { id: 'industrial_loft_facade',   labelKey: 'tools.interiorLayout.extIndustrialLoft', thumb: 'https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=400&h=300&fit=crop' },
+  { id: 'rustic_stone_cabin',       labelKey: 'tools.interiorLayout.extStoneCabin',  thumb: 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=400&h=300&fit=crop' },
+  { id: 'garden_studio',            labelKey: 'tools.interiorLayout.extGardenStudio',thumb: 'https://images.unsplash.com/photo-1591389703635-e15a07b842d7?w=400&h=300&fit=crop' },
+]
+const COMPACT_EXTERIOR_AMENITY: CompactRoomTile[] = [
+  { id: 'commercial_storefront',    labelKey: 'tools.interiorLayout.extStorefront', thumb: 'https://images.unsplash.com/photo-1481437156560-3205f6a55735?w=400&h=300&fit=crop' },
+  { id: 'warehouse_loft_exterior',  labelKey: 'tools.interiorLayout.extWarehouse',  thumb: 'https://images.unsplash.com/photo-1542310229-c4ff6f4128a0?w=400&h=300&fit=crop' },
+]
+
+const compactPrimaryRooms = computed(() =>
+  (compactSpaceTab.value === 'outdoor' ? COMPACT_EXTERIOR_PRIMARY : COMPACT_PRIMARY_ROOMS)
+    .map(r => ({ ...r, label: t(r.labelKey) })),
+)
+const compactSecondaryRooms = computed(() =>
+  (compactSpaceTab.value === 'outdoor' ? COMPACT_EXTERIOR_SECONDARY : COMPACT_SECONDARY_ROOMS)
+    .map(r => ({ ...r, label: t(r.labelKey) })),
+)
+const compactAmenities = computed(() =>
+  (compactSpaceTab.value === 'outdoor' ? COMPACT_EXTERIOR_AMENITY : COMPACT_AMENITIES)
+    .map(r => ({ ...r, label: t(r.labelKey) })),
+)
+
+function selectCompactRoom(roomId: string) {
+  // Outdoor mode: tiles drive `selectedStyle` (a row in EXTERIOR_STYLES)
+  // rather than the interior room-type axis. Selection is sent to the
+  // backend with space_kind="exterior" at generate time.
+  if (compactSpaceTab.value === 'outdoor') {
+    selectedStyle.value = roomId
+    return
+  }
+  // Bridge mockup-only ids back to backend-known types so generation still
+  // works after the user clicks a tile from the compact grid.
+  const SUPPORTED = new Set(['living_room', 'bedroom', 'kitchen', 'bathroom', 'dining_room', 'home_office', 'balcony'])
+  selectedRoomType.value = SUPPORTED.has(roomId) ? roomId : 'living_room'
 }
 
 // Default room images for demo users
@@ -473,6 +586,9 @@ function loadAllPreGeneratedResults() {
 
 // Handlers
 async function handleRedesign() {
+  // Reset multi-variant grid on every single-shot call so the result
+  // panel doesn't leak the previous run's variants.
+  variantResults.value = []
   // For demo users, resolve the exact room×roomType×style preset through backend lookup
   if (isDemoUser.value) {
     isProcessing.value = true
@@ -532,7 +648,16 @@ async function handleRedesign() {
       uploadedFile.value,
       effectivePrompt,
       selectedStyle.value,
-      selectedRoomType.value
+      selectedRoomType.value,
+      {
+        spaceKind: compactSpaceTab.value === 'outdoor' ? 'exterior'
+                 : compactSpaceTab.value === 'commercial' ? 'commercial'
+                 : 'interior',
+        // ReRoom-inspired knobs. Stage mode only kicks in on the Stage tab.
+        mode: activeTab.value === 'stage' ? 'stage' : 'redesign',
+        lightingTone: lightingTone.value || undefined,
+        materialAccent: materialAccent.value || undefined,
+      },
     )
 
     if (result.success && result.image_url) {
@@ -541,6 +666,9 @@ async function handleRedesign() {
         : `${window.location.origin}${result.image_url}`
       resultDescription.value = result.description || ''
       conversationId.value = result.conversation_id || null
+      visionSummary.value = result.vision_summary ?? null
+      userPromptUsed.value = result.user_prompt_used ?? null
+      promptGapReason.value = result.prompt_gap_reason ?? null
 
       // Add to history
       editHistory.value.push({
@@ -665,7 +793,16 @@ async function handleStyleTransfer() {
       uploadedFile.value,
       stylePrompt,
       selectedStyle.value,
-      selectedRoomType.value
+      selectedRoomType.value,
+      {
+        spaceKind: compactSpaceTab.value === 'outdoor' ? 'exterior'
+                 : compactSpaceTab.value === 'commercial' ? 'commercial'
+                 : 'interior',
+        // ReRoom-inspired knobs. Stage mode only kicks in on the Stage tab.
+        mode: activeTab.value === 'stage' ? 'stage' : 'redesign',
+        lightingTone: lightingTone.value || undefined,
+        materialAccent: materialAccent.value || undefined,
+      },
     )
 
     if (result.success && result.image_url) {
@@ -795,8 +932,16 @@ async function handleTransform() {
 }
 
 function handleSubmit() {
+  // variation_count > 1 fires N parallel handleRedesign() calls so the
+  // user gets a 3-up grid of distinct renders in one click. Same backend
+  // endpoint, no server change needed. Only enabled on the redesign /
+  // stage tabs because the other tabs have their own flows.
+  if (variationCount.value > 1 && (activeTab.value === 'redesign' || activeTab.value === 'stage')) {
+    return handleRedesignVariants(variationCount.value)
+  }
   switch (activeTab.value) {
     case 'redesign':
+    case 'stage':
       handleRedesign()
       break
     case 'generate':
@@ -811,6 +956,54 @@ function handleSubmit() {
     case '3dModel':
       handle3DGenerate()
       break
+  }
+}
+
+// Fire N parallel demoRedesign calls; accumulate the URLs into variantResults
+// so the result panel renders them as a grid. Reuses the same prompt
+// pipeline; each call gets a small diversifier so the outputs differ.
+async function handleRedesignVariants(n: number) {
+  if (!uploadedFile.value) {
+    uiStore.showError(t('interior.errors.imageRequired'))
+    return
+  }
+  isProcessing.value = true
+  variantResults.value = []
+  try {
+    const basePrompt = buildInteriorPrompt()
+    const diversifiers = [
+      '',
+      ' Choose an alternate camera composition and lens choice (wider angle, slight reframing); keep room geometry unchanged.',
+      ' Choose a different time of day and lighting mood and slightly different decor accents; keep room geometry unchanged.',
+    ]
+    const spaceKind = compactSpaceTab.value === 'outdoor' ? 'exterior'
+                    : compactSpaceTab.value === 'commercial' ? 'commercial'
+                    : 'interior'
+    const calls = Array.from({ length: Math.min(n, 3) }, (_, i) =>
+      interiorApi.demoRedesign(
+        uploadedFile.value!,
+        basePrompt + diversifiers[i],
+        selectedStyle.value,
+        selectedRoomType.value,
+        {
+          spaceKind,
+          mode: activeTab.value === 'stage' ? 'stage' : 'redesign',
+          lightingTone: lightingTone.value || undefined,
+          materialAccent: materialAccent.value || undefined,
+        },
+      ).then(r => r.success ? r.image_url : null).catch(() => null)
+    )
+    const settled = await Promise.all(calls)
+    const urls = settled.filter((u): u is string => !!u)
+    if (urls.length === 0) {
+      uiStore.showError(L('全部變體都生成失敗', 'All variants failed to generate', 'すべてのバリアント生成に失敗', '모든 변형 생성 실패', 'Todas las variantes fallaron'))
+      return
+    }
+    variantResults.value = urls.map(u => u.startsWith('http') ? u : `${window.location.origin}${u}`)
+    resultImage.value = variantResults.value[0]
+    uiStore.showSuccess(L(`生成 ${urls.length} 個變體成功`, `Generated ${urls.length} variants`, `${urls.length}個のバリアントを生成`, `${urls.length}개 변형 생성 성공`, `${urls.length} variantes generadas`))
+  } finally {
+    isProcessing.value = false
   }
 }
 
@@ -908,31 +1101,189 @@ watch(selectedRoomType, (newType) => {
         {{ t('common.back') }}
       </button>
 
-      <!-- Header -->
-      <div class="text-center mb-12">
-        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-500/10 border border-primary-500/20 mb-4">
-          <span class="text-2xl">🏠</span>
-          <span class="text-primary-400 font-medium">{{ t('interior.badge') }}</span>
-        </div>
-        <h1 class="text-4xl md:text-5xl font-bold text-dark-50 mb-4">
-          {{ t('interior.title') }}
-        </h1>
-        <p class="text-xl text-dark-300 max-w-2xl mx-auto">
-          {{ t('interior.subtitle') }}
-        </p>
-        <p class="mt-3 text-sm md:text-base text-dark-400 max-w-3xl mx-auto">
-          {{ isZh
-            ? '把房間照片、空屋、草圖與平面圖轉成可交付的寫實渲染，適合室內設計提案、房仲刊登、家具品牌情境圖與 3D 展示素材。'
-            : 'Turn room photos, empty spaces, sketches, and floor plans into deliverable photorealistic renders for interior proposals, real estate listings, furniture scenes, and 3D presentation assets.' }}
-        </p>
+      <!-- Pro hero (ReRoom-inspired) — outcome headline + KPI strip
+           tuned to interior designers / real estate / furniture brands.
+           Keeps existing dark theme + amber accent. -->
+      <ProToolHero
+        :badge="L('AI 室內設計渲染', 'AI Interior Rendering', 'AI インテリアレンダリング', 'AI 인테리어 렌더링', 'Renderizado interior AI')"
+        :title="L('一張房間照片，秒變寫實設計提案圖', 'From one room photo to proposal-ready photoreal renders', '部屋写真1枚から、写実的な提案ビジュアルへ', '한 장의 사진을 사실적인 제안 렌더링으로', 'De una foto a renders fotorrealistas listos')"
+        :subtitle="L('把照片、空屋、草圖或平面圖轉成可交付的寫實視覺。適用於室內設計提案、房仲刊登、家具品牌情境與 3D 展示。', 'Turn photos, empty rooms, sketches, or floor plans into deliverable photoreal visuals — perfect for design proposals, real-estate listings, furniture brands, and 3D presentation assets.', '写真、空室、スケッチ、平面図を、提案・不動産掲載・家具・3D展示に使える写実ビジュアルへ。', '사진·빈 방·스케치·평면도를 제안·부동산 등록·가구·3D 시연용 사실적인 비주얼로.', 'Fotos, salas vacías, bocetos o planos a visuales fotorrealistas para propuestas, anuncios y 3D.')"
+        :rating="{ score: '4.9', label: L('受設計事務所與品牌信賴', 'Trusted by studios and brands', 'デザイン事務所・ブランドに信頼', '디자인 스튜디오·브랜드 신뢰', 'Avalado por estudios y marcas') }"
+        :trust-line="L('支援室內 / 室外 / 景觀 / 平面圖到 3D 模型輸出', 'Indoor / outdoor / landscape / floor-plan → 3D model export', '屋内 / 屋外 / ランドスケープ / 平面図 → 3Dモデル出力', '실내·실외·조경·평면도 → 3D 모델 출력', 'Interior / exterior / paisaje / planos → modelo 3D')"
+        :stats="[
+          { value: '24', label: L('種預設室內風格', 'Preset interior styles', '室内スタイルプリセット', '인테리어 스타일 프리셋', 'Estilos interiores') },
+          { value: '~30s', label: L('每張渲染交付', 'Per render delivery', '1枚あたり納品速度', '렌더링당 납품 속도', 'Por render') },
+          { value: '3D', label: L('GLB 模型可選輸出', 'GLB 3D model export', 'GLB 3Dモデル書き出し', 'GLB 3D 모델 출력', 'Exporta modelo GLB 3D') },
+        ]"
+        :steps="[
+          { icon: '📷', title: L('上傳空間素材', 'Upload your space', '空間素材をアップロード', '공간 자료 업로드', 'Sube el espacio'), body: L('現況照、空屋、草圖、平面圖都接受', 'Room photos, empty rooms, sketches, floor plans all welcome', '現況写真・空室・スケッチ・平面図に対応', '실내 사진·빈 방·스케치·평면도 모두 가능', 'Fotos, salas vacías, bocetos o planos') },
+          { icon: '🎨', title: L('選擇空間類型與風格', 'Pick room type and style', '部屋タイプとスタイルを選択', '공간 유형과 스타일 선택', 'Elige tipo y estilo'), body: L('客廳 / 廚房 / 臥室 + 24 種風格 + 自訂', 'Living / kitchen / bedroom + 24 styles + custom', 'リビング / キッチン / ベッドルーム + 24スタイル + カスタム', '거실·주방·침실 + 24 스타일 + 자유 설정', 'Salón / cocina / dormitorio + 24 estilos') },
+          { icon: '🏠', title: L('交付提案級成品', 'Deliver proposal-grade renders', '提案グレードのレンダーを納品', '제안 수준의 렌더 납품', 'Entrega un render apto') },
+        ]"
+      />
 
-        <!-- Subscribe Notice for Demo Users -->
-        <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
-          <RouterLink to="/pricing" class="hover:underline">
-            {{ L('訂閱以解鎖更多功能', 'Subscribe to unlock more features', 'サブスク登録で機能を解禁', '구독으로 더 많은 기능 잠금 해제', 'Suscríbete para desbloquear más funciones') }}
-          </RouterLink>
-        </div>
+      <!-- Subscribe Notice for Demo Users -->
+      <div v-if="isDemoUser" class="text-center mb-8">
+        <RouterLink to="/pricing" class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm hover:underline">
+          {{ L('訂閱以解鎖完整功能', 'Subscribe to unlock full features', 'サブスク登録で全機能を解禁', '구독으로 전체 기능 해제', 'Suscríbete para desbloquear todo') }}
+        </RouterLink>
       </div>
+
+      <!-- Compact mockup flow (Step 1 upload + Step 2 type & style + amenities).
+           Sits at the top of the page so users can start working immediately;
+           shares state with the detailed flow below, so a selection in
+           either area is reflected everywhere. -->
+      <section class="space-y-6 mb-10">
+        <!-- Step 1: Upload -->
+        <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <h3 class="text-lg font-semibold text-dark-50">
+              {{ t('tools.interiorLayout.uploadStep') }}
+            </h3>
+            <div class="inline-flex rounded-full p-1 text-xs" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
+              <button
+                @click="compactUploadMode = 'single'"
+                class="px-3 py-1.5 rounded-full transition-all"
+                :class="compactUploadMode === 'single' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
+              >📷 {{ t('tools.interiorLayout.uploadSingle') }}</button>
+              <button
+                @click="compactUploadMode = 'multiple'"
+                class="px-3 py-1.5 rounded-full transition-all"
+                :class="compactUploadMode === 'multiple' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
+              >🖼️ {{ t('tools.interiorLayout.uploadMultiple') }}</button>
+            </div>
+          </div>
+
+          <div v-if="uploadedImage" class="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <img :src="uploadedImage" alt="Source" class="w-full aspect-[4/3] object-cover rounded-xl" />
+            <div class="text-2xl text-dark-400 text-center" aria-hidden="true">»</div>
+            <div class="w-full aspect-[4/3] rounded-xl overflow-hidden flex items-center justify-center" style="background: #0f0f17; border: 1px dashed rgba(255,255,255,0.08);">
+              <img v-if="resultImage" :src="resultImage" alt="Result" class="w-full h-full object-cover" />
+              <span v-else class="text-xs text-dark-400 px-4 text-center">{{ L('生成結果將顯示於此', 'Result will appear here', '生成結果はここに表示', '결과가 여기에 표시됩니다', 'El resultado aparecerá aquí') }}</span>
+            </div>
+          </div>
+          <div v-else>
+            <ImageUploader
+              tool-type="room_redesign"
+              v-model="uploadedImage"
+              :label="L('拖曳檔案或選擇圖片', 'Drag a file or choose an image', 'ファイルをドラッグまたは選択', '파일을 드래그하거나 선택', 'Arrastra un archivo o elige una imagen')"
+              @file-selected="handleRoomFileSelected"
+            />
+          </div>
+        </div>
+
+        <!-- Step 2: Type & Style -->
+        <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <h3 class="text-lg font-semibold text-dark-50">
+              {{ t('tools.interiorLayout.stylesStep') }}
+            </h3>
+            <div class="inline-flex rounded-full p-1 text-xs" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
+              <button
+                @click="compactStyleMode = 'moodboard'"
+                class="px-3 py-1.5 rounded-full transition-all"
+                :class="compactStyleMode === 'moodboard' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
+              >🖼️ {{ t('tools.interiorLayout.moodboard') }}</button>
+              <button
+                @click="compactStyleMode = 'preset'"
+                class="px-3 py-1.5 rounded-full transition-all"
+                :class="compactStyleMode === 'preset' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
+              >⚙️ {{ t('tools.interiorLayout.presetStyle') }}</button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <div class="inline-flex gap-1 rounded-full p-1 text-xs" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
+              <button
+                @click="compactSpaceTab = 'indoor'"
+                class="px-4 py-1.5 rounded-full transition-all"
+                :class="compactSpaceTab === 'indoor' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
+              >{{ t('tools.interiorLayout.tabIndoor') }}</button>
+              <button
+                @click="compactSpaceTab = 'outdoor'"
+                class="px-4 py-1.5 rounded-full transition-all"
+                :class="compactSpaceTab === 'outdoor' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
+              >{{ t('tools.interiorLayout.tabOutdoor') }}</button>
+              <!-- 2026-05-18 ReRoom-inspired: Commercial / hospitality
+                   tab surfaces restaurant, retail, hotel, office, café,
+                   gym style presets via COMMERCIAL_STYLES on the backend. -->
+              <button
+                @click="compactSpaceTab = 'commercial'"
+                class="px-4 py-1.5 rounded-full transition-all"
+                :class="compactSpaceTab === 'commercial' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
+              >{{ L('商業空間', 'Commercial', '商業スペース', '상업 공간', 'Comercial') }}</button>
+              <button
+                disabled
+                class="px-4 py-1.5 rounded-full text-dark-500 inline-flex items-center gap-1.5"
+                :title="L('景觀模式即將推出', 'Landscape mode coming soon', 'ランドスケープモードは近日公開', '랜드스케이프 모드 곧 출시', 'Modo paisaje próximamente')"
+              >🔒 {{ t('tools.interiorLayout.tabLandscape') }}</button>
+            </div>
+            <button
+              type="button"
+              @click="activeTab = 'redesign'"
+              class="text-xs font-medium px-3 py-1.5 rounded-full transition-all"
+              style="border: 1px solid rgba(255,255,255,0.12); color: #b4b4cf;"
+            >{{ t('tools.interiorLayout.custom') }}</button>
+          </div>
+
+          <!-- Primary rooms -->
+          <p class="text-xs font-semibold uppercase tracking-wide text-dark-400 mb-2">
+            {{ t('tools.interiorLayout.primary') }}
+          </p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-5">
+            <button
+              v-for="room in compactPrimaryRooms"
+              :key="room.id"
+              @click="selectCompactRoom(room.id)"
+              class="room-tile"
+              :class="selectedRoomType === room.id ? 'room-tile--active' : ''"
+            >
+              <div class="room-tile-thumb">
+                <img :src="room.thumb" :alt="room.label" />
+              </div>
+              <span class="room-tile-label">{{ room.label }}</span>
+            </button>
+          </div>
+
+          <!-- Secondary rooms -->
+          <p class="text-xs font-semibold uppercase tracking-wide text-dark-400 mb-2">
+            {{ t('tools.interiorLayout.secondary') }}
+          </p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-5">
+            <button
+              v-for="room in compactSecondaryRooms"
+              :key="room.id"
+              @click="selectCompactRoom(room.id)"
+              class="room-tile"
+              :class="selectedRoomType === room.id ? 'room-tile--active' : ''"
+            >
+              <div class="room-tile-thumb">
+                <img :src="room.thumb" :alt="room.label" />
+              </div>
+              <span class="room-tile-label">{{ room.label }}</span>
+            </button>
+          </div>
+
+          <!-- Amenities -->
+          <p class="text-xs font-semibold uppercase tracking-wide text-dark-400 mb-2">
+            {{ t('tools.interiorLayout.amenities') }}
+          </p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <button
+              v-for="room in compactAmenities"
+              :key="room.id"
+              @click="selectCompactRoom(room.id)"
+              class="room-tile"
+              :class="selectedRoomType === room.id ? 'room-tile--active' : ''"
+            >
+              <div class="room-tile-thumb">
+                <img :src="room.thumb" :alt="room.label" />
+              </div>
+              <span class="room-tile-label">{{ room.label }}</span>
+            </button>
+          </div>
+        </div>
+      </section>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div
@@ -1011,6 +1362,7 @@ watch(selectedRoomType, (newType) => {
           'howTo.room_redesign.step3',
         ]"
       />
+
       <div class="flex justify-center mb-8">
         <div class="inline-flex rounded-xl p-1" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
           <button
@@ -1388,6 +1740,88 @@ watch(selectedRoomType, (newType) => {
             </div>
           </div>
 
+          <!-- ReRoom-inspired chip rows: Lighting + Material + Variations.
+               Each chip is optional. Picking a chip appends a clause to
+               the prompt; clearing it (clicking the active chip again)
+               removes the override. Variations fires N parallel calls
+               for client-deck workflows. (2026-05-18) -->
+          <div
+            v-if="!isDemoUser && (activeTab === 'redesign' || activeTab === 'stage')"
+            class="card"
+            style="background: #141420; border: 1px solid rgba(255,255,255,0.06);"
+          >
+            <h3 class="text-sm font-semibold text-dark-200 mb-3">
+              {{ L('進階風格調整（選填）', 'Fine-tune (optional)', '細かい調整（任意）', '세부 조정 (선택)', 'Ajustes finos (opcional)') }}
+            </h3>
+
+            <!-- Lighting chips -->
+            <p class="text-[11px] font-mono tracking-wider uppercase text-dark-500 mb-2">
+              {{ L('燈光氛圍', 'Lighting', '照明', '조명', 'Iluminación') }}
+            </p>
+            <div class="flex flex-wrap gap-2 mb-4">
+              <button
+                v-for="opt in [
+                  { id: null,                  label: L('預設', 'Default', '既定', '기본', 'Predeterm.') },
+                  { id: 'daylight' as const,           label: L('柔和日光', 'Daylight', '柔らかい日光', '부드러운 일광', 'Luz de día') },
+                  { id: 'warm_evening' as const,       label: L('暖色夜燈', 'Warm Evening', '暖色の夜光', '따뜻한 저녁', 'Tarde cálida') },
+                  { id: 'dramatic_spotlight' as const, label: L('戲劇聚光', 'Dramatic Spotlight', 'ドラマチックスポット', '드라마틱 스팟', 'Foco dramático') },
+                  { id: 'golden_hour' as const,        label: L('黃金時刻', 'Golden Hour', 'ゴールデンアワー', '골든 아워', 'Hora dorada') },
+                  { id: 'moody' as const,              label: L('低調氛圍', 'Moody', 'ムーディー', '무드 있는', 'Atmosférico') },
+                ]"
+                :key="String(opt.id)"
+                @click="lightingTone = opt.id"
+                class="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                :style="lightingTone === opt.id
+                  ? 'background: #f59e0b; color: #0a0a0a;'
+                  : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.08);'"
+              >{{ opt.label }}</button>
+            </div>
+
+            <!-- Material accent chips -->
+            <p class="text-[11px] font-mono tracking-wider uppercase text-dark-500 mb-2">
+              {{ L('主材質', 'Material Accent', '主素材', '주재료', 'Material principal') }}
+            </p>
+            <div class="flex flex-wrap gap-2 mb-4">
+              <button
+                v-for="opt in [
+                  { id: null,                  label: L('預設', 'Default', '既定', '기본', 'Predeterm.') },
+                  { id: 'wood' as const,       label: L('木質', 'Wood', '木材', '나무', 'Madera') },
+                  { id: 'marble' as const,     label: L('大理石', 'Marble', '大理石', '대리석', 'Mármol') },
+                  { id: 'concrete' as const,   label: L('清水模', 'Concrete', 'コンクリート', '콘크리트', 'Hormigón') },
+                  { id: 'linen' as const,      label: L('亞麻', 'Linen', 'リネン', '리넨', 'Lino') },
+                  { id: 'brass' as const,      label: L('黃銅', 'Brass', '真鍮', '황동', 'Latón') },
+                  { id: 'leather' as const,    label: L('皮革', 'Leather', 'レザー', '가죽', 'Cuero') },
+                  { id: 'terrazzo' as const,   label: L('磨石子', 'Terrazzo', 'テラゾー', '테라조', 'Terrazo') },
+                ]"
+                :key="String(opt.id)"
+                @click="materialAccent = opt.id"
+                class="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                :style="materialAccent === opt.id
+                  ? 'background: #f59e0b; color: #0a0a0a;'
+                  : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.08);'"
+              >{{ opt.label }}</button>
+            </div>
+
+            <!-- Variation count -->
+            <p class="text-[11px] font-mono tracking-wider uppercase text-dark-500 mb-2">
+              {{ L('一次生成幾張', 'Generate How Many', '一度に生成する枚数', '한 번에 생성 매수', 'Cuántas variantes') }}
+            </p>
+            <div class="flex gap-2">
+              <button
+                v-for="n in [1, 2, 3] as const"
+                :key="n"
+                @click="variationCount = n"
+                class="flex-1 px-3 py-2 rounded text-xs font-semibold transition-all"
+                :style="variationCount === n
+                  ? 'background: #f59e0b; color: #0a0a0a;'
+                  : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.08);'"
+              >{{ n }}{{ L(' 張', ' image' + (n > 1 ? 's' : ''), ' 枚', ' 장', ' imagen' + (n > 1 ? 'es' : '')) }}</button>
+            </div>
+            <p v-if="variationCount > 1" class="text-[10px] mt-2" style="color: #fbbf24;">
+              {{ L(`會花費 ${variationCount}× 點數，多張結果並排顯示`, `Uses ${variationCount}× credits; results shown side-by-side`, `${variationCount}×ポイントを消費、結果は横並び表示`, `${variationCount}× 포인트 사용, 결과는 나란히 표시`, `Usa ${variationCount}× créditos; resultados lado a lado`) }}
+            </p>
+          </div>
+
           <!-- Generate Button -->
           <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <button
@@ -1422,12 +1856,37 @@ watch(selectedRoomType, (newType) => {
               {{ t('interior.result') }}
             </h3>
 
-            <div v-if="resultImage && uploadedImage && activeTab !== 'generate'" class="space-y-4">
+            <!-- Multi-variant grid — shown when variation_count > 1. -->
+            <div v-if="variantResults.length > 1" class="space-y-4">
+              <p class="text-xs font-mono tracking-wider uppercase text-dark-400">
+                {{ L(`${variantResults.length} 種變體`, `${variantResults.length} variants`, `${variantResults.length}種類のバリアント`, `${variantResults.length}개 변형`, `${variantResults.length} variantes`) }}
+              </p>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div v-for="(url, i) in variantResults" :key="i" class="space-y-2">
+                  <img :src="url" :alt="`Variant ${i+1}`" class="w-full rounded-lg" />
+                  <button
+                    @click="downloadAsset(url, `vidgo_room_design_v${i+1}.png`)"
+                    class="btn-ghost text-xs w-full"
+                  >📥 {{ L(`下載變體 ${i+1}`, `Download variant ${i+1}`, `バリアント${i+1}をダウンロード`, `변형 ${i+1} 다운로드`, `Descargar variante ${i+1}`) }}</button>
+                </div>
+              </div>
+              <button @click="reset" class="btn-ghost w-full">
+                🔄 {{ t('interior.tryAnother') }}
+              </button>
+            </div>
+
+            <div v-else-if="resultImage && uploadedImage && activeTab !== 'generate'" class="space-y-4">
               <BeforeAfterSlider
                 :before-image="uploadedImage"
                 :after-image="resultImage"
                 :before-label="t('interior.before')"
                 :after-label="t('interior.after')"
+              />
+
+              <VisionFusionInfo
+                :vision-summary="visionSummary"
+                :user-prompt-used="userPromptUsed"
+                :prompt-gap-reason="promptGapReason"
               />
 
               <p v-if="resultDescription" class="text-sm text-dark-300 italic">
@@ -1439,14 +1898,13 @@ watch(selectedRoomType, (newType) => {
 
               <!-- Download / Action Buttons -->
               <div class="flex gap-3">
-                 <a
+                 <button
                    v-if="!isDemoUser"
-                   :href="resultImage"
-                   download="vidgo_room_design.png"
+                   @click="downloadAsset(resultImage!, 'vidgo_room_design.png')"
                    class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
                  >
                    <span class="mr-2">📥</span> {{ t('common.download') }}
-                 </a>
+                 </button>
 
                  <RouterLink
                    v-else
@@ -1468,6 +1926,12 @@ watch(selectedRoomType, (newType) => {
                 <img :src="resultImage" alt="Generated Design" class="w-full" />
               </div>
 
+              <VisionFusionInfo
+                :vision-summary="visionSummary"
+                :user-prompt-used="userPromptUsed"
+                :prompt-gap-reason="promptGapReason"
+              />
+
               <p v-if="resultDescription" class="text-sm text-dark-300 italic">
                 {{ resultDescription }}
               </p>
@@ -1477,14 +1941,13 @@ watch(selectedRoomType, (newType) => {
 
               <!-- Download / Action Buttons -->
               <div class="flex gap-3">
-                 <a
+                 <button
                    v-if="!isDemoUser"
-                   :href="resultImage"
-                   download="vidgo_room_design.png"
+                   @click="downloadAsset(resultImage!, 'vidgo_room_design.png')"
                    class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
                  >
                    <span class="mr-2">📥</span> {{ t('common.download') }}
-                 </a>
+                 </button>
 
                  <RouterLink
                    v-else
@@ -1513,13 +1976,12 @@ watch(selectedRoomType, (newType) => {
               </p>
 
               <div class="flex gap-3">
-                <a
-                  :href="modelUrl"
-                  download="vidgo_3d_model.glb"
+                <button
+                  @click="downloadAsset(modelUrl!, 'vidgo_3d_model.glb')"
                   class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
                 >
                   <span class="mr-2">📥</span> {{ L('下載 GLB 模型', 'Download GLB Model', 'GLBモデルをダウンロード', 'GLB 모델 다운로드', 'Descargar modelo GLB') }}
-                </a>
+                </button>
                 <button @click="reset" class="btn-ghost flex-1">
                   <span class="mr-2">🔄</span>
                   {{ t('interior.tryAnother') }}
@@ -1588,5 +2050,54 @@ watch(selectedRoomType, (newType) => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.room-tile {
+  position: relative;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.06);
+  background: #141420;
+  overflow: hidden;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  text-align: left;
+  display: block;
+  width: 100%;
+}
+.room-tile:hover {
+  transform: translateY(-1px);
+  border-color: rgba(82, 196, 26, 0.4);
+}
+.room-tile--active {
+  border-color: #95de64;
+  box-shadow: 0 0 0 3px rgba(149, 222, 100, 0.18);
+}
+.room-tile-thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  background: #0f0f17;
+  overflow: hidden;
+}
+.room-tile-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.room-tile-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 50%);
+  pointer-events: none;
+}
+.room-tile-label {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  z-index: 1;
 }
 </style>

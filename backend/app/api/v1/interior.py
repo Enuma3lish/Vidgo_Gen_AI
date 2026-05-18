@@ -51,6 +51,10 @@ class RedesignRequest(BaseModel):
     style_id: Optional[str] = Field(None, description="Design style to apply")
     room_type: Optional[str] = Field(None, description="Type of room for context")
     keep_layout: bool = Field(True, description="Preserve window/door layout")
+    space_kind: str = Field(
+        "interior",
+        description="'interior' (default) or 'exterior'. Drives which catalog (INTERIOR_STYLES vs EXTERIOR_STYLES) backs `style_id`.",
+    )
 
 
 class GenerateRequest(BaseModel):
@@ -87,6 +91,13 @@ class DesignResponse(BaseModel):
     conversation_id: Optional[str] = None
     turn_count: Optional[int] = None
     error: Optional[str] = None
+    space_kind: Optional[str] = None  # 'interior' | 'exterior', echoed back
+    # 2026-05-18 — image-understanding fusion result. Lets the frontend
+    # show "we see: ..." alongside the result and warn the user when
+    # their text prompt was suppressed because it contradicted the image.
+    vision_summary: Optional[str] = None
+    user_prompt_used: Optional[bool] = None
+    prompt_gap_reason: Optional[str] = None
 
 
 class Generate3DRequest(BaseModel):
@@ -212,12 +223,36 @@ async def redesign_room(
     if not image_url:
         raise HTTPException(status_code=400, detail="No image URL could be resolved")
 
+    # 2026-05-18 — image-understanding pass to fuse user prompt with
+    # what's actually in the photo. Drops the user's text when it
+    # contradicts the image (e.g. "redesign as a kitchen" on a bedroom
+    # photo). Fail-open: any Gemini error returns user's original prompt.
+    from app.services.image_understanding_service import (
+        get_image_understanding_service,
+    )
+
+    fusion = await get_image_understanding_service().describe_and_fuse(
+        image_url=image_url,
+        user_prompt=request.prompt,
+        tool_context=f"room_redesign:{request.space_kind}",
+        language="zh-TW",
+    )
+
+    # 2026-05-18 — hard "no people" constraint for every interior render.
+    # Architectural / staging renders must show the space, not occupants.
+    no_people_clause = (
+        " Empty room: NO people, NO humans, NO faces, NO hands, NO pets, "
+        "NO photographer in frame, NO occupants — render the space only, "
+        "as a clean unpopulated architectural proposal."
+    )
+    routed_prompt = f"{fusion.fused_prompt}{no_people_clause}".strip()
+
     try:
         result = await provider_router.route(
             TaskType.INTERIOR,
             {
                 "image_url": image_url,
-                "prompt": request.prompt,
+                "prompt": routed_prompt,
                 "style": request.style_id or "modern",
                 "room_type": request.room_type or "living_room",
             },
@@ -240,6 +275,9 @@ async def redesign_room(
         success=True,
         image_url=output.get("image_url") or result.get("image_url"),
         description=result.get("description") or "Room redesign complete",
+        vision_summary=fusion.image_summary or None,
+        user_prompt_used=fusion.used_user_prompt,
+        prompt_gap_reason=fusion.gap_reason,
     )
 
 
@@ -633,7 +671,14 @@ async def demo_redesign(
     prompt: str = Form(..., description="Description of desired changes"),
     style_id: Optional[str] = Form(None, description="Design style to apply"),
     room_type: Optional[str] = Form(None, description="Type of room"),
-    image: UploadFile = File(..., description="Room image file")
+    image: UploadFile = File(..., description="Room image file"),
+    # 2026-05-18 — ReRoom-inspired modifiers. Mirror tools.py:RoomRedesignRequest
+    # so the demo upload path supports the same enhancements as the
+    # URL-based subscriber endpoint.
+    space_kind: Optional[str] = Form("interior", description="interior | exterior | commercial"),
+    mode: Optional[str] = Form("redesign", description="redesign | stage (AI Virtual Staging on an empty room)"),
+    lighting_tone: Optional[str] = Form(None, description="daylight | warm_evening | dramatic_spotlight | golden_hour | moody"),
+    material_accent: Optional[str] = Form(None, description="wood | marble | concrete | linen | brass | leather | terrazzo"),
 ):
     """
     Demo endpoint for room redesign (no authentication required).
@@ -663,11 +708,66 @@ async def demo_redesign(
         raise
     image_base64 = base64.b64encode(contents).decode()
 
+    # Compose the final prompt: caller text + AI-Staging cue + lighting +
+    # material accent. Same clauses as tools.py so the two endpoints
+    # produce the same flavor of output for the same chip combination.
+    LIGHTING_CLAUSES = {
+        "daylight":            " Lit by soft cool natural daylight from large windows; balanced exposure, no harsh shadows.",
+        "warm_evening":        " Warm 2700K evening interior lighting from layered lamps; cozy atmospheric ambience.",
+        "dramatic_spotlight":  " Dramatic directional spotlighting from above; bold shadows and high contrast.",
+        "golden_hour":         " Late-golden-hour sunlight raking across surfaces; warm amber highlights, long soft shadows.",
+        "moody":               " Moody low-key lighting with deep shadow play; cinematic and atmospheric.",
+    }
+    MATERIAL_CLAUSES = {
+        "wood":      " Dominant material is warm natural oak / walnut wood across floors, ceilings, and feature walls.",
+        "marble":    " Dominant material is veined Calacatta or Carrara marble across counters and feature surfaces.",
+        "concrete":  " Dominant material is polished pigmented concrete across floors, walls, and select furnishings.",
+        "linen":     " Dominant material is natural unbleached linen across upholstery, drapery, and soft furnishings.",
+        "brass":     " Brass and bronze accents throughout: hardware, lighting, frames, and select decor pieces.",
+        "leather":   " Dominant material is rich saddle or oxblood leather across major upholstered pieces.",
+        "terrazzo":  " Terrazzo with mixed-color aggregate across floors and select surfaces; soft confetti pattern.",
+    }
+    stage_clause = ""
+    if (mode or "").lower() == "stage":
+        stage_clause = (
+            " The input is an EMPTY room. Furnish it completely in the chosen "
+            "style: add appropriate sofas, tables, lighting fixtures, rugs, "
+            "art, and accent decor. Preserve the original walls, windows, "
+            "doors, and overall room geometry. The final image must look "
+            "like a professionally staged real-estate listing photo."
+        )
+    lighting_clause = LIGHTING_CLAUSES.get((lighting_tone or "").lower(), "")
+    material_clause = MATERIAL_CLAUSES.get((material_accent or "").lower(), "")
+
+    # 2026-05-18 — image-understanding fusion BEFORE assembling the
+    # final prompt. Drops the user's text when it contradicts the
+    # uploaded room photo so we don't render a kitchen on a bedroom.
+    from app.services.image_understanding_service import (
+        get_image_understanding_service,
+    )
+
+    fusion = await get_image_understanding_service().describe_and_fuse(
+        image_bytes=contents,
+        user_prompt=prompt,
+        tool_context=f"room_redesign:{(space_kind or 'interior')}:{(mode or 'redesign')}",
+        language="zh-TW",
+    )
+
+    # 2026-05-18 — hard "no people" constraint. Architectural / staging
+    # renders must show the space, not occupants. Redundant phrasing
+    # because some upstream models drop a single negative cue.
+    no_people_clause = (
+        " Empty room: NO people, NO humans, NO faces, NO hands, NO pets, "
+        "NO photographer in frame, NO occupants — render the space only, "
+        "as a clean unpopulated architectural proposal."
+    )
+    final_prompt = f"{fusion.fused_prompt}{stage_clause}{lighting_clause}{material_clause}{no_people_clause}".strip()
+
     service = get_interior_design_service()
 
     result = await service.redesign_room(
         room_image_base64=image_base64,
-        prompt=prompt,
+        prompt=final_prompt,
         style_id=style_id,
         room_type=room_type,
         keep_layout=True
@@ -682,7 +782,11 @@ async def demo_redesign(
     return DesignResponse(
         success=True,
         image_url=result.get("image_url"),
-        description=result.get("description")
+        description=result.get("description"),
+        space_kind=space_kind if space_kind in ("interior", "exterior", "commercial") else None,
+        vision_summary=fusion.image_summary or None,
+        user_prompt_used=fusion.used_user_prompt,
+        prompt_gap_reason=fusion.gap_reason,
     )
 
 

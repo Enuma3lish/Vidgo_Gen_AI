@@ -329,6 +329,47 @@ async def _maybe_recycle_for_demo(
         logger.debug(f"[Recycle] Skip: {e}")
 
 
+# Static demo URLs for premium tools whose tool_type strings don't map to
+# the Material.tool_type enum (and which therefore have no Material rows
+# the demo cache could ever find). Each entry is a pre-rendered asset
+# generated via backend/scripts/generate_brand_assets.py --set demos and
+# uploaded to GCS. Re-running the script regenerates these files at the
+# same blob paths, so URLs stay stable.
+_PREMIUM_DEMO_FALLBACKS = {
+    "image_generation_premium": {
+        "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/premium/demos/premium-image.png",
+        "kind": "image",
+        "prompt": "Cinematic golden-hour city skyline with dramatic clouds (Premium AI Image demo).",
+    },
+    # Kling Video — standard tier (tier="default" in the request, used by
+    # most non-premium subscribers). Same MP4 as the premium-tier slot
+    # because the upstream model is the same family.
+    "video_generation_standard": {
+        "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/premium/demos/kling-video.mp4",
+        "kind": "video",
+        "prompt": "Cinematic ocean waves at sunset (Kling Video demo).",
+    },
+    "video_generation_premium": {
+        "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/premium/demos/kling-video.mp4",
+        "kind": "video",
+        "prompt": "Cinematic ocean waves at sunset (Kling Video demo).",
+    },
+    "video_generation_professional": {
+        # TODO: backfill once PiAPI's Luma rate limit clears. The seed
+        # script (set=demos) tried to generate this on 2026-05-16 and
+        # PiAPI returned "too many requests" for the Luma model. The
+        # Kling demo is used as a temporary stand-in so the user still
+        # sees a real video preview instead of a 503. Re-run
+        #   uv run --no-project --with httpx --with python-dotenv --with google-cloud-storage \
+        #       python backend/scripts/generate_brand_assets.py --set demos --only luma-video --gcs --no-db
+        # and then point `result_url` at /static/premium/demos/luma-video.mp4.
+        "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/premium/demos/kling-video.mp4",
+        "kind": "video",
+        "prompt": "Cinematic ocean waves at sunset (Luma demo — using Kling stand-in while PiAPI Luma is rate-limited).",
+    },
+}
+
+
 async def _demo_response(
     db: AsyncSession,
     tool_type: str,
@@ -341,11 +382,31 @@ async def _demo_response(
 ):
     """Resolve a demo result honoring the user's chosen input + effect.
 
-    Flow: check the DB for an existing (tool, effect_or_topic, input_url)
-    row via lookup_hash → fall back to generic topic match → otherwise run
-    on-demand generation against the user's chosen input + effect, cache the
-    result, and return it.
+    Flow:
+        1. If the tool_type is one of the premium tiers that aren't backed
+           by a Material.tool_type enum (Flux / Kling / Luma), short-circuit
+           to a static pre-rendered asset hosted on GCS. The materials
+           table has no rows for these tool_types and the
+           `_generate_on_demand` switch has no handler for them, so
+           without this fallback the call ends in a 503.
+        2. Otherwise, check the DB for an existing (tool, effect_or_topic,
+           input_url) row via lookup_hash → fall back to generic topic
+           match → otherwise run on-demand generation against the user's
+           chosen input + effect, cache the result, and return it.
     """
+    fallback = _PREMIUM_DEMO_FALLBACKS.get(tool_type)
+    if fallback:
+        return ToolResponse(
+            success=True,
+            result_url=fallback["result_url"],
+            credits_used=0,
+            cached=True,
+            is_demo=True,
+            demo_input_url=None,
+            demo_prompt=fallback["prompt"],
+            message=f"This is a demo example. {cta}",
+        )
+
     try:
         redis = await get_redis()
     except Exception:
@@ -917,6 +978,17 @@ class RemoveBackgroundRequest(BaseModel):
         max_length=2048,
         description="Optional replacement background image URL (jpg/png/webp). The cutout is composited on top of this image. Overrides background_color and output_format.",
     )
+    ai_background_prompt: Optional[str] = Field(
+        None,
+        max_length=500,
+        description=(
+            "Optional natural-language description of a background to generate "
+            "with Flux T2I. When provided, the prompt is rendered into a "
+            "background image (same aspect ratio as the cutout) and the "
+            "transparent product is composited on top. Takes priority over "
+            "background_image_url / background_color / output_format."
+        ),
+    )
 
     @field_validator("background_color")
     @classmethod
@@ -933,6 +1005,7 @@ class RemoveBackgroundBatchRequest(BaseModel):
     output_format: str = Field("png", description="Output background mode for every image in the batch.")
     background_color: Optional[str] = Field(None, max_length=32, description="Optional solid replacement background; same shape as the single endpoint.")
     background_image_url: Optional[str] = Field(None, max_length=2048, description="Optional replacement background image URL; same shape as the single endpoint.")
+    ai_background_prompt: Optional[str] = Field(None, max_length=500, description="Optional Flux T2I prompt to generate a background image; same shape as the single endpoint.")
 
 
 class ProductSceneRequest(BaseModel):
@@ -1026,7 +1099,16 @@ class RoomRedesignRequest(BaseModel):
     """Room Redesign - transform room style"""
     room_image_url: Optional[str] = Field(None, description="Source room image URL. Use this or image_url.")
     image_url: Optional[str] = Field(None, description="Alias for room_image_url for client compatibility.")
-    style: str = Field("modern_minimalist", description="Preset redesign style ID such as modern_minimalist, scandinavian, japanese, industrial, mediterranean, or mid_century_modern.")
+    style: str = Field("modern_minimalist", description="Preset style ID. Look up against INTERIOR_STYLES (space_kind='interior'), EXTERIOR_STYLES (space_kind='exterior'), or COMMERCIAL_STYLES (space_kind='commercial').")
+    space_kind: str = Field(
+        "interior",
+        description="'interior' (default) selects an INTERIOR_STYLES preset; 'exterior' selects an EXTERIOR_STYLES preset (building facades, gardens, storefronts); 'commercial' selects a COMMERCIAL_STYLES preset (restaurant, retail, hotel, office, café, gym).",
+    )
+    mode: str = Field(
+        "redesign",
+        pattern="^(redesign|stage)$",
+        description="'redesign' (default) restyles an existing furnished room. 'stage' is AI Virtual Staging: takes an empty room photo and furnishes it in the chosen style. The selected style still drives the look; mode controls whether existing furniture is preserved or generated.",
+    )
     prompt_id: Optional[str] = Field(
         None,
         description="Curated prompt id from prompt_library.json (e.g. 'rr_001'). When set, server resolves canonical text and ignores `custom_prompt`.",
@@ -1035,6 +1117,25 @@ class RoomRedesignRequest(BaseModel):
     custom_prompt: Optional[str] = Field(None, description="Optional detailed redesign instruction (legacy free-text path). Ignored when prompt_id is provided.")
     preserve_structure: bool = Field(True, description="Keep the original room layout and architectural structure while changing the design style.")
     style_strength: float = Field(0.7, ge=0.0, le=1.0, description="Stylization intensity, 0.0 (very faithful to source) to 1.0 (heavily restyled). Default 0.7 favors a clearly noticeable redesign while preserving room layout.")
+    # Optional chip-driven modifiers appended to the final prompt.
+    # `lighting_tone` adjusts ambience; `material_accent` swaps the
+    # dominant surface material. ReRoom-inspired (2026-05-18).
+    lighting_tone: Optional[str] = Field(
+        None,
+        pattern="^(daylight|warm_evening|dramatic_spotlight|golden_hour|moody)$",
+        description="Optional lighting-tone modifier appended to the prompt: daylight | warm_evening | dramatic_spotlight | golden_hour | moody.",
+    )
+    material_accent: Optional[str] = Field(
+        None,
+        pattern="^(wood|marble|concrete|linen|brass|leather|terrazzo)$",
+        description="Optional dominant-material modifier: wood | marble | concrete | linen | brass | leather | terrazzo.",
+    )
+    variation_count: int = Field(
+        1,
+        ge=1,
+        le=3,
+        description="How many distinct renders to return in one call (1-3). When >1 the server fires N parallel calls with light prompt diversification and returns all URLs in `results`. Useful for client-deck workflows.",
+    )
 
     def get_room_url(self) -> str:
         url = self.room_image_url or self.image_url
@@ -1126,6 +1227,14 @@ class ToolResponse(BaseModel):
     is_demo: bool = False
     demo_input_url: Optional[str] = None   # "before" image from the pre-generated example
     demo_prompt: Optional[str] = None      # prompt used to generate the example
+    # 2026-05-18 — image-understanding fusion (see image_understanding_service.py).
+    # Set on tools that take BOTH an uploaded image and a text prompt
+    # (room redesign, product scene, effects, I2V, avatar). Lets the
+    # frontend surface "we see: __" and warn the user when their text
+    # prompt was suppressed because it contradicted the image.
+    vision_summary: Optional[str] = None
+    user_prompt_used: Optional[bool] = None
+    prompt_gap_reason: Optional[str] = None
 
 
 # ============================================================================
@@ -1184,16 +1293,106 @@ INTERIOR_STYLES = [
      "prompt": "modern farmhouse interior, reclaimed barn wood accent wall with original nail holes, white subway tile kitchen backsplash with dark grout, apron-front farmhouse sink, open shelving with mason jars and stoneware, black matte hardware on cream Shaker cabinets, wrought iron chandelier with warm Edison bulbs, woven runner on wide plank pine floor, warm morning light through multi-pane windows, cozy country charm, photorealistic interior photography, empty room no people no person no human"},
     {"id": "art_deco", "name": "Art Deco", "name_zh": "裝飾藝術", "preview_url": "/static/interior/art_deco.jpg",
      "prompt": "Art Deco style interior, geometric chevron patterned stone floor in black and white, deep green tufted sofa with metallic nailhead trim, sunburst mirror with decorative frame, fluted column details, lacquered black console table with brass inlay, glass display cabinet with vintage decanters, dramatic uplighting on fluted wall panels, rich jewel tones with mirror accents, 1920s inspired geometric sophistication, photorealistic architectural visualization, empty room no people no person no human"},
+    # 2026-05-18 ReRoom-inspired style expansion — adds 8 categories the
+    # competitor highlights heavily on tw.reroom.ai. Same prompt grammar
+    # as the existing 10 entries so the demo / curated-prompt pipeline
+    # treats them uniformly.
+    {"id": "japandi", "name": "Japandi", "name_zh": "日式北歐",
+     "prompt": "Japandi interior blending Japanese wabi-sabi with Scandinavian warmth, pale ash wood and warm white palette, low-profile linen sofa, hand-thrown ceramic vessels on floating walnut shelf, paper lantern pendant, single bonsai on raw-edge bench, generous negative space, soft north-facing window light, photorealistic architectural render, empty room no people no person no human"},
+    {"id": "wabi_sabi", "name": "Wabi-Sabi", "name_zh": "侘寂",
+     "prompt": "wabi-sabi interior, hand-troweled lime plaster walls in dusty taupe, cracked stoneware urn with dried branches, hand-loomed natural linen drapery, weathered oak plank flooring, a single tatami corner, candle-warm ambient light, monochrome earthy palette, photorealistic interior photography, empty room no people no person no human"},
+    {"id": "contemporary_luxury", "name": "Contemporary Luxury", "name_zh": "當代奢華",
+     "prompt": "contemporary luxury interior, book-matched Calacatta marble feature wall with bronze veining, deep velvet emerald sofa with brass legs, sculptural alabaster pendant chandelier, fluted oak feature wall, full-height windows with floor-pooling drapery, dramatic warm uplighting, refined editorial aesthetic, photorealistic architectural rendering, empty room no people no person no human"},
+    {"id": "hollywood_regency", "name": "Hollywood Regency", "name_zh": "好萊塢攝政",
+     "prompt": "Hollywood Regency interior, glossy black lacquered cabinetry with gold leaf accents, mirrored console with crystal lamp, blush velvet tufted sofa, oversized starburst mirror, animal print accent pillow, palm fronds in brass urn, dramatic statement chandelier, theatrical jewel-toned palette, photorealistic interior photography, empty room no people no person no human"},
+    {"id": "retro_70s", "name": "1970s Lounge", "name_zh": "1970 復古",
+     "prompt": "1970s retro lounge interior, burnt orange and mustard yellow modular sectional, shag area rug, dark walnut paneling on accent wall, brass arc floor lamp, smoked glass coffee table, macrame wall art, bold geometric wallpaper, warm amber tungsten lighting, vintage cocktail bar vibe, photorealistic interior render, empty room no people no person no human"},
+    {"id": "spanish_revival", "name": "Spanish Revival", "name_zh": "西班牙復興",
+     "prompt": "Spanish Revival interior, hand-painted talavera tile floor, lime-washed ivory plaster walls with arched doorway, dark wrought iron pendant chandelier, exposed wood ceiling beams with carved corbels, terracotta accents and serape textile drape over leather club chair, warm Andalusian afternoon light, photorealistic architectural visualization, empty room no people no person no human"},
+    {"id": "desert_modern", "name": "Desert Modern", "name_zh": "沙漠現代",
+     "prompt": "desert modern interior, warm white plaster walls, sun-bleached oak floors, low-slung sand-toned linen sofa, saguaro and barrel cactus in matte black planters, terracotta and rust accent textiles, Palm-Springs-inspired butterfly chair, golden hour sunlight raking across walls, calm minimalist Southwestern aesthetic, photorealistic interior render, empty room no people no person no human"},
+    {"id": "cyberpunk_loft", "name": "Cyberpunk Loft", "name_zh": "賽博龐克 Loft",
+     "prompt": "cyberpunk loft interior, dark concrete walls with magenta and cyan neon LED accents, glossy black modular sofa, holographic pendant fixtures, exposed cable trays, floor-to-ceiling rain-slicked window overlooking neon cityscape, deep navy and electric pink palette, atmospheric haze, photorealistic dystopian architectural render, empty room no people no person no human"},
+]
+
+# 2026-05-18 — Commercial / hospitality space catalog (ReRoom-inspired).
+# Exposed when the request carries `space_kind="commercial"`. Each prompt
+# describes a complete commercial environment the model can stage from a
+# bare interior photo (or transform an existing one). Same "no people"
+# guard as the other catalogs — every render is for a marketing
+# proposal / property-listing context where stray figures are bugs.
+COMMERCIAL_STYLES = [
+    {"id": "restaurant_bistro", "name": "Bistro Restaurant", "name_zh": "小酒館餐廳",
+     "prompt": "modern bistro restaurant interior, warm dark wood tables and bentwood chairs, marble bar with brass railing, vintage Edison bulb pendant cluster, exposed brick accent wall with framed menu chalkboards, warm amber tungsten lighting, intimate inviting dining atmosphere, photorealistic commercial interior render, no people no person no human"},
+    {"id": "retail_boutique", "name": "Retail Boutique", "name_zh": "精品零售店",
+     "prompt": "premium retail boutique interior, polished concrete floor, white minimalist display walls with floating brass shelves, single-rack brass clothing rail, sculptural mannequins in window, soft warm museum-quality track lighting, cream and warm white palette with brass accents, refined editorial commercial space, photorealistic interior photography, no products no people no person no human"},
+    {"id": "hotel_lobby", "name": "Hotel Lobby", "name_zh": "飯店大廳",
+     "prompt": "boutique hotel lobby interior, double-height ceiling with sculptural brass chandelier, polished marble floor with herringbone wood inlay, velvet sectional sofa in deep emerald, walnut concierge desk, oversized abstract painting, warm layered ambient lighting, sophisticated hospitality atmosphere, photorealistic architectural render, no people no person no human"},
+    {"id": "modern_office", "name": "Modern Office", "name_zh": "現代辦公室",
+     "prompt": "modern open-plan office interior, light oak workstations with cable management, ergonomic mesh chairs, acoustic felt ceiling baffles, glass-walled meeting rooms with biophilic plant accents, full-height windows with motorized shades, neutral grey and warm wood palette, productive professional atmosphere, photorealistic commercial interior visualization, empty no people no person no human"},
+    {"id": "cafe_warm", "name": "Cozy Café", "name_zh": "溫馨咖啡館",
+     "prompt": "cozy specialty coffee café interior, exposed brick wall with chalkboard menu, reclaimed wood counter with copper espresso machine, mix of bentwood chairs and leather banquette seating, warm Edison filament pendants, hanging trailing plants from beam, warm cream and chocolate brown palette, inviting third-place atmosphere, photorealistic commercial interior render, no people no person no human"},
+    {"id": "gym_studio", "name": "Boutique Gym", "name_zh": "精品健身房",
+     "prompt": "boutique fitness studio interior, polished black rubber gym flooring, mirrored accent wall, exposed black ductwork on white-painted ceiling, branded LED accent strip lighting, sculptural mid-grey weight bench, statement neon wall sign, energetic but premium athletic atmosphere, photorealistic commercial interior visualization, empty no people no person no human"},
+]
+
+# Building exterior catalog — exposed under the same /room-redesign
+# endpoint when the request carries `space_kind="exterior"`. Mirrors
+# INTERIOR_STYLES in shape so the frontend can switch catalogs without
+# changing call sites. Prompts encode "no people" because every render
+# is for a marketing/proposal context where stray figures are bugs.
+EXTERIOR_STYLES = [
+    {"id": "modern_glass_facade", "name": "Modern Glass Facade", "name_zh": "現代玻璃帷幕", "preview_url": "/static/exterior/modern_glass_facade.jpg",
+     "prompt": "modern architectural exterior with floor-to-ceiling glass curtain wall, slim black aluminum mullions, polished concrete entry plaza, accent landscape lighting at dusk, photorealistic architectural visualization, no people no person no human"},
+    {"id": "scandi_wood_house", "name": "Nordic Wood House", "name_zh": "北歐木屋", "preview_url": "/static/exterior/scandi_wood_house.jpg",
+     "prompt": "Nordic timber-clad two-storey house exterior, vertical pine cladding stained black, gable roof, large picture windows with white trim, snowy ground with soft natural daylight, photorealistic architectural rendering, no people no person no human"},
+    {"id": "japanese_zen_courtyard", "name": "Japanese Courtyard", "name_zh": "日式合院", "preview_url": "/static/exterior/japanese_zen_courtyard.jpg",
+     "prompt": "Japanese contemporary house exterior with cypress wood lattice, white plaster walls, low pitched dark tile roof, raked gravel zen garden in foreground, soft morning light, photorealistic architectural rendering, no people no person no human"},
+    {"id": "mediterranean_villa", "name": "Mediterranean Villa", "name_zh": "地中海別墅", "preview_url": "/static/exterior/mediterranean_villa.jpg",
+     "prompt": "Mediterranean villa exterior with whitewashed lime plaster walls, blue wooden shutters, terracotta barrel-tile roof, climbing bougainvillea over arched entry, golden hour sunlight, photorealistic architectural visualization, no people no person no human"},
+    {"id": "industrial_loft_facade", "name": "Industrial Loft", "name_zh": "工業 Loft 外觀", "preview_url": "/static/exterior/industrial_loft_facade.jpg",
+     "prompt": "industrial loft exterior with exposed red brick, large black steel-framed factory windows, rooftop terrace with planter boxes, urban warehouse conversion, overcast even lighting, photorealistic architectural render, no people no person no human"},
+    {"id": "tropical_resort", "name": "Tropical Resort", "name_zh": "熱帶度假", "preview_url": "/static/exterior/tropical_resort.jpg",
+     "prompt": "tropical resort villa exterior, white stucco walls with teak wood accents, infinity pool reflecting palm trees, thatched accent canopy, vibrant garden landscaping, late afternoon sun, photorealistic architectural visualization, no people no person no human"},
+    {"id": "midcentury_ranch", "name": "Mid-Century Ranch", "name_zh": "中世紀美式平房", "preview_url": "/static/exterior/midcentury_ranch.jpg",
+     "prompt": "mid-century modern ranch house exterior, low-pitched gable roof, exposed wood beams, butterfly carport, warm timber siding with stone accents, manicured lawn, dusk lighting, photorealistic architectural render, no people no person no human"},
+    {"id": "urban_townhouse", "name": "Urban Townhouse", "name_zh": "都會聯排別墅", "preview_url": "/static/exterior/urban_townhouse.jpg",
+     "prompt": "contemporary urban townhouse facade, dark grey fiber cement panel cladding mixed with timber accents, recessed entry with planter, soft side-light, photorealistic architectural visualization, no people no person no human"},
+    {"id": "rustic_stone_cabin", "name": "Rustic Stone Cabin", "name_zh": "鄉村石屋", "preview_url": "/static/exterior/rustic_stone_cabin.jpg",
+     "prompt": "rustic stone cabin exterior with thick fieldstone walls, cedar shake roof, large stone chimney, woodland clearing setting, warm afternoon light through trees, photorealistic architectural render, no people no person no human"},
+    {"id": "commercial_storefront", "name": "Boutique Storefront", "name_zh": "精品店面", "preview_url": "/static/exterior/commercial_storefront.jpg",
+     "prompt": "boutique retail storefront exterior, minimalist black metal facade with floor-to-ceiling glass shopfront, illuminated brand signage, polished concrete sidewalk, evening ambient lighting, photorealistic architectural rendering, no people no person no human, no text on signage"},
+    {"id": "warehouse_loft_exterior", "name": "Warehouse Loft Conversion", "name_zh": "倉庫改建外觀", "preview_url": "/static/exterior/warehouse_loft_exterior.jpg",
+     "prompt": "converted warehouse loft exterior, restored brick facade, large multi-pane steel windows, contemporary rooftop addition with green planted terrace, mixed-use urban context, soft daylight, photorealistic architectural render, no people no person no human"},
+    {"id": "garden_studio", "name": "Garden Studio", "name_zh": "花園工作室", "preview_url": "/static/exterior/garden_studio.jpg",
+     "prompt": "small backyard studio cabin exterior, charred timber siding (yakisugi), single sliding glass door, surrounded by ornamental grasses, gravel walkway, golden hour, photorealistic architectural visualization, no people no person no human"},
 ]
 
 # Preset models for Try-On (IDs match frontend: "female-1", "male-1" etc.)
 TRYON_MODELS = {
+    # Legacy gender-prefixed IDs — kept as aliases for backwards compat
+    # with any old client / cached frontend.
     "female-1": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-1.png",
     "female-2": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-2.png",
     "female-3": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/female-3.png",
     "male-1": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-1.png",
     "male-2": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-2.png",
     "male-3": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/male-3.png",
+    # New named IDs the frontend modelOptions list uses (avery/sam/...).
+    # Each maps to the same physical PNG as one of the legacy IDs, but
+    # also points at standalone files so re-runs of the brand-asset
+    # script overwrite a stable URL per name.
+    "avery":   "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/avery.png",
+    "sam":     "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/sam.png",
+    "taylor":  "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/taylor.png",
+    "kendall": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/kendall.png",
+    "jordan":  "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/jordan.png",
+    "casey":   "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/casey.png",
+    "alex":    "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/alex.png",
+    "maya":    "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/maya.png",
+    "reece":   "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/reece.png",
+    "lena":    "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/lena.png",
+    "julia":   "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models/julia.png",
 }
 
 # TTS Voices
@@ -1391,11 +1590,39 @@ async def remove_background(
             # Persist PiAPI CDN result to GCS so it survives 14-day expiry.
             result_url = await _persist_provider_url(result_url, "image", current_user)
 
-            # Replacement background: priority is replacement_image > color >
+            # Replacement background: priority is ai_prompt > image > color >
             # output_format. Each path falls back to the transparent PNG on
             # failure so the user always gets a usable result.
             replacement_done = False
-            if result_url and request.background_image_url:
+
+            # AI text-to-background — generate a scene image via Flux T2I,
+            # then composite the cutout on top. Uses the same provider
+            # chain (TaskType.T2I) the rest of the app already trusts.
+            if result_url and request.ai_background_prompt:
+                try:
+                    bg_result = await provider_router.route(
+                        TaskType.T2I,
+                        {
+                            "prompt": request.ai_background_prompt,
+                            # Background scenes look best landscape — 4:3 is a
+                            # good neutral that crops to most product shots.
+                            "size": "1152*864",
+                        },
+                    )
+                    bg_url = (bg_result.get("output") or {}).get("image_url") if bg_result.get("success") else None
+                    bg_url = await _persist_provider_url(bg_url, "image", current_user) if bg_url else None
+                    if bg_url:
+                        replaced = await _composite_cutout_on_background(
+                            result_url, current_user.id,
+                            background_image_url=bg_url,
+                        )
+                        if replaced:
+                            result_url = replaced
+                            replacement_done = True
+                except Exception as bg_err:
+                    logger.warning("background_removal: ai-background composite failed: %s", bg_err)
+
+            if not replacement_done and result_url and request.background_image_url:
                 try:
                     replaced = await _composite_cutout_on_background(
                         result_url, current_user.id,
@@ -1447,6 +1674,7 @@ async def remove_background(
                     "output_format": request.output_format,
                     "background_color": request.background_color,
                     "background_image_url": request.background_image_url,
+                    "ai_background_prompt": request.ai_background_prompt,
                 },
                 result_image_url=result_url,
                 credits_used=CREDIT_COST,
@@ -1518,6 +1746,26 @@ async def remove_background_batch(
     credits_used = 0
     provider_router = get_provider_router()
 
+    # If the caller asked for an AI-generated scene, render it once and
+    # reuse the same background image across the whole batch (saves
+    # money and keeps the set visually consistent).
+    shared_ai_background: Optional[str] = None
+    if request.ai_background_prompt:
+        try:
+            bg_result = await provider_router.route(
+                TaskType.T2I,
+                {"prompt": request.ai_background_prompt, "size": "1152*864"},
+            )
+            bg_url = (bg_result.get("output") or {}).get("image_url") if bg_result.get("success") else None
+            shared_ai_background = await _persist_provider_url(bg_url, "image", current_user) if bg_url else None
+        except Exception as bg_err:
+            logger.warning("background_removal[batch]: ai-background generation failed: %s", bg_err)
+
+    color_rgb = _parse_color(request.background_color) if request.background_color else None
+    flatten_color = None
+    if (request.output_format or "").lower() in ("white", "black"):
+        flatten_color = (255, 255, 255) if request.output_format.lower() == "white" else (0, 0, 0)
+
     for image_url in request.image_urls:
         try:
             # Use provider router for background removal (PiAPI)
@@ -1527,9 +1775,43 @@ async def remove_background_batch(
             )
             if result.get("success"):
                 output = result.get("output", {})
+                cutout_url = output.get("image_url")
+                cutout_url = await _persist_provider_url(cutout_url, "image", current_user)
+
+                # Apply the same priority chain as the single endpoint.
+                bg_choice = shared_ai_background or request.background_image_url
+                if cutout_url and bg_choice:
+                    try:
+                        composed = await _composite_cutout_on_background(
+                            cutout_url, current_user.id,
+                            background_image_url=str(bg_choice),
+                        )
+                        if composed:
+                            cutout_url = composed
+                    except Exception as bg_err:
+                        logger.warning("background_removal[batch]: image composite failed: %s", bg_err)
+                elif cutout_url and color_rgb is not None:
+                    try:
+                        composed = await _composite_cutout_on_background(
+                            cutout_url, current_user.id, color=color_rgb,
+                        )
+                        if composed:
+                            cutout_url = composed
+                    except Exception as bg_err:
+                        logger.warning("background_removal[batch]: color composite failed: %s", bg_err)
+                elif cutout_url and flatten_color is not None:
+                    try:
+                        composed = await _composite_cutout_on_background(
+                            cutout_url, current_user.id, color=flatten_color,
+                        )
+                        if composed:
+                            cutout_url = composed
+                    except Exception as bg_err:
+                        logger.warning("background_removal[batch]: flatten failed: %s", bg_err)
+
                 results.append({
                     "input_url": str(image_url),
-                    "result_url": output.get("image_url"),
+                    "result_url": cutout_url,
                     "success": True
                 })
                 if not getattr(current_user, "is_superuser", False):
@@ -1686,6 +1968,27 @@ async def generate_product_scene(
 
     logger.info(f"Subscriber: Starting 3-step I2I generation for {request.product_image_url}")
 
+    # 2026-05-18 — image-understanding fusion runs only when the user
+    # supplied a custom prompt. Catalog scene prompts are vetted and
+    # don't need realignment. Fail-open on any Gemini error.
+    fusion = None
+    if request.custom_prompt and request.custom_prompt.strip():
+        try:
+            from app.services.image_understanding_service import (
+                get_image_understanding_service,
+            )
+
+            fusion = await get_image_understanding_service().describe_and_fuse(
+                image_url=str(request.get_product_url()),
+                user_prompt=request.custom_prompt,
+                tool_context=f"product_scene:{request.scene_type}",
+                language="zh-TW",
+            )
+            if fusion.fused_prompt:
+                scene_prompt = fusion.fused_prompt
+        except Exception as _exc:
+            logger.warning("product_scene fusion failed: %s", _exc)
+
     try:
         provider_router = get_provider_router()
         product_url = str(request.get_product_url())
@@ -1840,7 +2143,10 @@ async def generate_product_scene(
             success=True,
             result_url=result_url,
             credits_used=10,
-            message="Product scene generated successfully (subscriber)"
+            message="Product scene generated successfully (subscriber)",
+            vision_summary=(fusion.image_summary or None) if fusion else None,
+            user_prompt_used=(fusion.used_user_prompt if fusion else None),
+            prompt_gap_reason=(fusion.gap_reason if fusion else None),
         )
 
     except Exception as e:
@@ -2203,13 +2509,23 @@ async def room_redesign(
     if curated:
         request.custom_prompt = curated
 
+    # Pick the right catalog. `space_kind` defaults to 'interior' so old
+    # clients keep working; 'exterior' → EXTERIOR_STYLES, 'commercial'
+    # → COMMERCIAL_STYLES (restaurant / retail / hotel / office / café / gym).
+    if request.space_kind == "exterior":
+        _catalog = EXTERIOR_STYLES
+    elif request.space_kind == "commercial":
+        _catalog = COMMERCIAL_STYLES
+    else:
+        _catalog = INTERIOR_STYLES
+
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
         try:
             user_room = str(request.get_room_url())
         except ValueError:
             user_room = None
-        interior_match = next((s for s in INTERIOR_STYLES if s["id"] == request.style), None)
+        interior_match = next((s for s in _catalog if s["id"] == request.style), None)
         room_effect_prompt = request.custom_prompt or (interior_match["prompt"] if interior_match else None)
         return await _demo_response(
             db,
@@ -2226,11 +2542,34 @@ async def room_redesign(
     if not ok:
         return ToolResponse(success=False, message=err)
 
-    interior = next((s for s in INTERIOR_STYLES if s["id"] == request.style), None)
+    interior = next((s for s in _catalog if s["id"] == request.style), None)
     if not interior:
-        interior = INTERIOR_STYLES[0]
+        interior = _catalog[0]
 
-    style_prompt = request.custom_prompt or interior["prompt"]
+    # 2026-05-18 — image-understanding fusion runs only when the user
+    # supplied custom text. Curated catalog prompts are already vetted
+    # and don't need realignment. Fail-open: any Gemini error returns
+    # the user's text unchanged with fusion=None.
+    fusion = None
+    if request.custom_prompt and request.custom_prompt.strip():
+        try:
+            from app.services.image_understanding_service import (
+                get_image_understanding_service,
+            )
+
+            fusion = await get_image_understanding_service().describe_and_fuse(
+                image_url=str(request.get_room_url()),
+                user_prompt=request.custom_prompt,
+                tool_context=f"room_redesign:{request.space_kind}:{request.mode}",
+                language="zh-TW",
+            )
+        except Exception as _exc:
+            logger.warning("room_redesign fusion failed: %s", _exc)
+
+    effective_user_text = (
+        fusion.fused_prompt if fusion and fusion.fused_prompt else request.custom_prompt
+    )
+    style_prompt = effective_user_text or interior["prompt"]
     # Inject style_strength as explicit intensity guidance into the prompt.
     # Underlying Kontext / Gemini I2I has no native `strength` param, so we
     # communicate intensity via natural language. The router still receives
@@ -2243,7 +2582,53 @@ async def room_redesign(
         intensity_clause = "Apply the new style strongly; restyle finishes, furniture, lighting and decor while preserving room layout, walls and windows."
     else:
         intensity_clause = "Apply the new style very aggressively; fully restyle finishes, furniture, lighting and decor while preserving room geometry, doorways and windows."
-    style_prompt = f"{style_prompt} {intensity_clause}"
+
+    # Stage mode = AI Virtual Staging. Input is an empty room photo; the
+    # model must invent furniture, decor, and styling from scratch while
+    # preserving walls, windows, doors, and floor finish. ReRoom-inspired
+    # flagship use-case (2026-05-18).
+    stage_clause = ""
+    if request.mode == "stage":
+        stage_clause = (
+            " The input is an EMPTY room. Furnish it completely in the chosen "
+            "style: add appropriate sofas, tables, lighting fixtures, rugs, "
+            "art, and accent decor. Preserve the original walls, windows, "
+            "doors, and overall room geometry. The final image must look "
+            "like a professionally staged real-estate listing photo."
+        )
+
+    # Optional chip-driven modifiers — appended *after* the curated style
+    # prompt so they accent rather than override the chosen aesthetic.
+    LIGHTING_CLAUSES = {
+        "daylight":            " Lit by soft cool natural daylight from large windows; balanced exposure, no harsh shadows.",
+        "warm_evening":        " Warm 2700K evening interior lighting from layered lamps; cozy atmospheric ambience.",
+        "dramatic_spotlight":  " Dramatic directional spotlighting from above; bold shadows and high contrast.",
+        "golden_hour":         " Late-golden-hour sunlight raking across surfaces; warm amber highlights, long soft shadows.",
+        "moody":               " Moody low-key lighting with deep shadow play; cinematic and atmospheric.",
+    }
+    MATERIAL_CLAUSES = {
+        "wood":      " Dominant material is warm natural oak / walnut wood across floors, ceilings, and feature walls.",
+        "marble":    " Dominant material is veined Calacatta or Carrara marble across counters and feature surfaces.",
+        "concrete":  " Dominant material is polished pigmented concrete across floors, walls, and select furnishings.",
+        "linen":     " Dominant material is natural unbleached linen across upholstery, drapery, and soft furnishings.",
+        "brass":     " Brass and bronze accents throughout: hardware, lighting, frames, and select decor pieces.",
+        "leather":   " Dominant material is rich saddle or oxblood leather across major upholstered pieces.",
+        "terrazzo":  " Terrazzo with mixed-color aggregate across floors and select surfaces; soft confetti pattern.",
+    }
+    lighting_clause = LIGHTING_CLAUSES.get((request.lighting_tone or "").lower(), "")
+    material_clause = MATERIAL_CLAUSES.get((request.material_accent or "").lower(), "")
+
+    # 2026-05-18 — hard "no people" constraint for every interior render.
+    # Architectural / staging renders must show the space itself, not
+    # photographer / occupants / pets. Reinforced redundantly because some
+    # upstream models (Gemini, PiAPI Flux) drop a single negative cue.
+    no_people_clause = (
+        " Empty room: NO people, NO humans, NO faces, NO hands, NO pets, "
+        "NO photographer in frame, NO occupants — render the space only, "
+        "as a clean unpopulated architectural proposal."
+    )
+
+    style_prompt = f"{style_prompt} {intensity_clause}{stage_clause}{lighting_clause}{material_clause}{no_people_clause}".strip()
     style_prompt, prompt_refinement = await _refine_generation_prompt(
         style_prompt,
         "room_redesign",
@@ -2258,63 +2643,111 @@ async def room_redesign(
         # Floor at 0.6 because Kontext/Flux below ~0.55 often returns the
         # original image with cosmetic-only deltas, defeating the redesign.
         denoising_strength = max(0.6, min(0.85, 0.5 + request.style_strength * 0.4))
-        result = await router.route(
-            TaskType.INTERIOR,
-            {
-                "image_url": str(request.get_room_url()),  # already resolved in get_room_url
-                "prompt": style_prompt,
-                "style": request.style,
-                "preserve_structure": request.preserve_structure,
-                "strength": request.style_strength,
-                "denoising_strength": denoising_strength,
-            }
+
+        # variation_count > 1 fires N parallel calls. The user pays N×
+        # the base cost. Each variant gets a small prompt diversifier so
+        # the same model+style yields distinct compositions / camera angles.
+        # Deduction happens once for variant 1, then we top up for the rest.
+        n_variants = max(1, min(3, request.variation_count or 1))
+        if n_variants > 1:
+            additional = (n_variants - 1) * CREDIT_COST
+            ok2, err2 = await _check_and_deduct_credits(db, current_user, additional, "room_redesign")
+            if not ok2:
+                # Already paid for one — proceed with single result
+                n_variants = 1
+
+        DIVERSIFIERS = [
+            "",
+            " Choose an alternate camera composition and lens choice (wider angle, slight reframing); keep room geometry unchanged.",
+            " Choose a different time of day and lighting mood (e.g. blue-hour or overcast) and slightly different decor accents; keep room geometry unchanged.",
+        ]
+
+        async def _one_render(idx: int) -> str | None:
+            prompt = style_prompt + (DIVERSIFIERS[idx] if idx < len(DIVERSIFIERS) else "")
+            r = await router.route(
+                TaskType.INTERIOR,
+                {
+                    "image_url": str(request.get_room_url()),
+                    "prompt": prompt,
+                    "style": request.style,
+                    "preserve_structure": request.preserve_structure,
+                    "strength": request.style_strength,
+                    "denoising_strength": denoising_strength,
+                },
+            )
+            url = r.get("image_url") or r.get("output_url") or (r.get("output", {}).get("image_url") if isinstance(r.get("output"), dict) else None)
+            return await _persist_provider_url(url, "image", current_user)
+
+        import asyncio as _asyncio
+        rendered = await _asyncio.gather(
+            *[_one_render(i) for i in range(n_variants)],
+            return_exceptions=True,
         )
+        output_urls = [u for u in rendered if isinstance(u, str) and u]
+        # Refund any failed variants
+        failed = n_variants - len(output_urls)
+        if failed > 0:
+            await _refund_credits(db, current_user, failed * CREDIT_COST, "room_redesign")
 
-        output_url = result.get("image_url") or result.get("output_url") or (result.get("output", {}).get("image_url") if isinstance(result.get("output"), dict) else None)
-        # Persist PiAPI/Gemini CDN result to GCS so it survives 14-day expiry.
-        output_url = await _persist_provider_url(output_url, "image", current_user)
+        if not output_urls:
+            return _provider_failure_response("room_redesign", {"error": "all variants failed"}, current_user)
 
-        if output_url:
-            # Save to UserGeneration
+        # Persist primary result + variants as separate UserGeneration rows
+        primary_url = output_urls[0]
+        for url in output_urls:
             user_gen = UserGeneration(
                 user_id=current_user.id,
                 tool_type=ToolType.ROOM_REDESIGN,
                 input_image_url=str(request.get_room_url()),
                 input_params={
                     "style": request.style,
+                    "space_kind": request.space_kind,
+                    "mode": request.mode,
+                    "lighting_tone": request.lighting_tone,
+                    "material_accent": request.material_accent,
                     "custom_prompt": request.custom_prompt,
                     "preserve_structure": request.preserve_structure,
                     "style_strength": request.style_strength,
+                    "variation_count": n_variants,
+                    "is_primary": (url == primary_url),
                     "prompt_refinement": prompt_refinement,
                 },
                 input_text=style_prompt,
-                result_image_url=output_url,
-                credits_used=20,
+                result_image_url=url,
+                credits_used=CREDIT_COST,
             )
             user_gen.set_expiry()
             db.add(user_gen)
 
-            # Recycle for demo gallery
-            await _maybe_recycle_for_demo(
-                db, user_gen, ToolType.ROOM_REDESIGN,
-                topic=request.style or "modern",
-                prompt=style_prompt,
-                input_image_url=str(request.get_room_url()),
-                result_image_url=output_url,
-                input_params={"style": request.style, "prompt_refinement": prompt_refinement},
-            )
+        # Demo recycle uses the primary result only
+        primary_gen = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.ROOM_REDESIGN,
+            input_image_url=str(request.get_room_url()),
+            input_text=style_prompt,
+            result_image_url=primary_url,
+        )
+        await _maybe_recycle_for_demo(
+            db, primary_gen, ToolType.ROOM_REDESIGN,
+            topic=request.style or "modern",
+            prompt=style_prompt,
+            input_image_url=str(request.get_room_url()),
+            result_image_url=primary_url,
+            input_params={"style": request.style, "space_kind": request.space_kind, "mode": request.mode, "prompt_refinement": prompt_refinement},
+        )
 
-            await db.commit()
+        await db.commit()
 
-            return ToolResponse(
-                success=True,
-                result_url=output_url,
-                credits_used=20,
-                message="Room redesign successful"
-            )
-        else:
-            await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
-            return _provider_failure_response("room_redesign", result, current_user)
+        return ToolResponse(
+            success=True,
+            result_url=primary_url,
+            results=[{"image_url": u} for u in output_urls],
+            credits_used=CREDIT_COST * len(output_urls),
+            message=("Room redesign successful" if request.mode == "redesign" else "AI staging successful"),
+            vision_summary=(fusion.image_summary or None) if fusion else None,
+            user_prompt_used=(fusion.used_user_prompt if fusion else None),
+            prompt_gap_reason=(fusion.gap_reason if fusion else None),
+        )
     except Exception as e:
         logger.error(f"Room Redesign error: {e}", exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
@@ -3555,14 +3988,22 @@ async def midjourney_imagine(
     current_user=Depends(get_current_user_optional),
 ):
     """
-    Premium image generation via Midjourney (PiAPI).
-    Credit cost: image_generation_premium tier (~50 credits per ServicePricing).
+    Premium image generation.
+
+    Originally backed by Midjourney via PiAPI, but PiAPI permanently
+    dropped Midjourney support in 2026-05 ("sorry, we no longer support
+    MidJourney service"). The endpoint now routes through TaskType.T2I,
+    which uses Flux (PiAPI MCP → PiAPI REST → Pollo → Vertex AI) — the
+    premium image-generation tier the rest of the app already uses. The
+    50-credit price stays in place so existing pricing isn't broken.
+
+    UI still calls this path; clients don't need any change.
     """
     if not is_subscribed_user(current_user):
         return await _demo_response(
             db,
             "image_generation_premium",
-            cta="Subscribe to generate Midjourney images.",
+            cta="Subscribe to generate premium AI images.",
             effect_prompt=request.prompt[:200],
         )
 
@@ -3573,14 +4014,25 @@ async def midjourney_imagine(
     if not ok:
         return ToolResponse(success=False, message=err)
 
+    # Map MJ aspect_ratio (e.g. "16:9") to a Flux-compatible WxH size.
+    aspect_to_size = {
+        "1:1":  "1024*1024",
+        "16:9": "1280*720",
+        "9:16": "720*1280",
+        "4:3":  "1152*896",
+        "3:4":  "896*1152",
+        "3:2":  "1216*832",
+        "2:3":  "832*1216",
+    }
+    size = aspect_to_size.get(request.aspect_ratio, "1024*1024")
+
     try:
         provider_router = get_provider_router()
         result = await provider_router.route(
-            TaskType.MIDJOURNEY_T2I,
+            TaskType.T2I,
             {
                 "prompt": request.prompt,
-                "aspect_ratio": request.aspect_ratio,
-                "process_mode": request.process_mode,
+                "size": size,
             },
         )
         if not result.get("success"):
@@ -3592,20 +4044,23 @@ async def midjourney_imagine(
         image_url = await _persist_provider_url(image_url, "image", current_user)
         if not image_url:
             await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
-            return ToolResponse(success=False, message="Midjourney returned no image. Please try again.")
+            return ToolResponse(success=False, message="Image generation returned no result. Please try again.")
 
         return ToolResponse(
             success=True,
             result_url=image_url,
             image_url=image_url,
             credits_used=CREDIT_COST,
-            message="Image generated via Midjourney.",
+            message="Image generated.",
         )
     except Exception as exc:
         logger.error("midjourney_imagine error: %s", exc, exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
         _notify_admin_of_tool_failure("midjourney_imagine", exc, current_user)
-        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+        # Surface the upstream message when it exists so users see "PiAPI
+        # rate-limited" / "Pollo credits depleted" instead of the masked
+        # GENERIC fallback. Falls back to GENERIC for empty/None.
+        return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 
 
 class KlingVideoRequest(BaseModel):
@@ -3708,7 +4163,9 @@ async def kling_video(
         logger.error("kling_video error: %s", exc, exc_info=True)
         await _refund_credits(db, current_user, credit_cost_fallback, service_type)
         _notify_admin_of_tool_failure("kling_video", exc, current_user)
-        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+        # Surface the upstream message so users see the real reason (PiAPI
+        # rate-limit, model unsupported, etc.) rather than the generic mask.
+        return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 
 
 class LumaVideoRequest(BaseModel):
@@ -3788,10 +4245,53 @@ async def luma_video(
             message="Video generated via Luma Dream Machine.",
         )
     except Exception as exc:
+        # When PiAPI's Luma model is globally rate-limited (code 10001),
+        # PiAPI rejects retries within the same window. Auto-fall back to
+        # Kling — same provider, different model, separate quota — so the
+        # paid user still gets a video instead of a friendly error.
+        err_msg = str(exc).lower()
+        is_rate_limited = (
+            "too many requests" in err_msg
+            or "rate limit" in err_msg
+            or "10001" in err_msg
+        )
+        if is_rate_limited:
+            logger.warning("luma_video rate-limited upstream; falling back to Kling: %s", exc)
+            try:
+                provider_router = get_provider_router()
+                fb = await provider_router.route(
+                    TaskType.KLING_VIDEO,
+                    {
+                        "prompt": request.prompt,
+                        "duration": request.duration,
+                        "aspect_ratio": request.aspect_ratio,
+                        "image_url": request.start_image,
+                        "image_tail_url": request.end_image,
+                        "tier": "default",
+                    },
+                )
+                output = (fb or {}).get("output") or {}
+                video_url = output.get("video_url")
+                video_url = await _persist_provider_url(video_url, "video", current_user)
+                if video_url:
+                    return ToolResponse(
+                        success=True,
+                        result_url=video_url,
+                        video_url=video_url,
+                        credits_used=CREDIT_COST,
+                        message="Video generated via Kling (Luma was temporarily rate-limited).",
+                    )
+            except Exception as fb_exc:  # noqa: BLE001
+                logger.error("luma_video Kling fallback also failed: %s", fb_exc)
+                exc = fb_exc
+
         logger.error("luma_video error: %s", exc, exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "video_generation_professional")
         _notify_admin_of_tool_failure("luma_video", exc, current_user)
-        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+        # Surface the upstream message so users see the real reason
+        # (e.g. PiAPI's "experiencing technical difficulties") instead of
+        # the generic mask.
+        return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 
 
 # ============================================================================
@@ -3805,9 +4305,34 @@ async def get_scene_templates():
 
 
 @router.get("/templates/interior-styles")
-async def get_interior_styles():
-    """Get available interior styles for Room Redesign tool"""
+async def get_interior_styles(space_kind: str = "interior"):
+    """Get available styles for Room Redesign.
+
+    `space_kind="interior"` (default) returns INTERIOR_STYLES;
+    `"exterior"` returns EXTERIOR_STYLES (building facades, gardens,
+    storefronts); `"commercial"` returns COMMERCIAL_STYLES (restaurant,
+    retail, hotel lobby, modern office, café, gym). Frontend tab
+    switches drive this via query param.
+    """
+    if space_kind == "exterior":
+        return EXTERIOR_STYLES
+    if space_kind == "commercial":
+        return COMMERCIAL_STYLES
     return INTERIOR_STYLES
+
+
+@router.get("/templates/exterior-styles")
+async def get_exterior_styles():
+    """Convenience alias — returns EXTERIOR_STYLES directly so older clients
+    can hit a dedicated route without needing the `space_kind` query param."""
+    return EXTERIOR_STYLES
+
+
+@router.get("/templates/commercial-styles")
+async def get_commercial_styles():
+    """Convenience alias — returns COMMERCIAL_STYLES directly. Added
+    2026-05-18 alongside the ReRoom-inspired commercial space tab."""
+    return COMMERCIAL_STYLES
 
 
 @router.get("/templates/style-templates")

@@ -8,6 +8,8 @@ import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
+import ProToolHero from '@/components/tools/ProToolHero.vue'
+import { downloadAsset } from '@/utils/downloadAsset'
 
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
@@ -51,7 +53,7 @@ const demoEmptyState = ref(false)
 // preset palette so the user can pick a brand-friendly tone (beige, navy,
 // sage, etc.). `image` lets the user upload or paste a URL for a fully
 // custom replacement scene.
-type BgMode = 'transparent' | 'white' | 'black' | 'color' | 'image'
+type BgMode = 'transparent' | 'white' | 'black' | 'color' | 'image' | 'ai'
 const selectedBgMode = ref<BgMode>('transparent')
 const BG_MODE_OPTIONS: { id: BgMode; icon: string; labelEn: string; labelZh: string }[] = [
   { id: 'transparent', icon: '◇', labelEn: 'Transparent PNG', labelZh: '透明 PNG' },
@@ -59,7 +61,180 @@ const BG_MODE_OPTIONS: { id: BgMode; icon: string; labelEn: string; labelZh: str
   { id: 'black',       icon: '■', labelEn: 'Black',           labelZh: '純黑底' },
   { id: 'color',       icon: '●', labelEn: 'Solid color',     labelZh: '純色背景' },
   { id: 'image',       icon: '🖼', labelEn: 'Replace image',   labelZh: '替換圖片' },
+  { id: 'ai',          icon: '✨', labelEn: 'AI scene',        labelZh: 'AI 場景' },
 ]
+
+const aiBackgroundPrompt = ref<string>('')
+const AI_BG_PROMPT_PRESETS: { id: string; labelZh: string; labelEn: string; prompt: string }[] = [
+  { id: 'beachWood',  labelZh: '熱帶海灘木台',     labelEn: 'Tropical beach pedestal',  prompt: 'sunlit tropical beach with white sand and a soft turquoise ocean horizon, blurred background, soft daylight' },
+  { id: 'marble',     labelZh: '大理石檯面',       labelEn: 'White marble counter',     prompt: 'soft white marble counter with gentle natural shadow, minimalist studio background' },
+  { id: 'studioPink', labelZh: '柔粉攝影棚',       labelEn: 'Soft pink studio',         prompt: 'soft pastel pink seamless studio backdrop with subtle gradient, premium e-commerce lighting' },
+  { id: 'autumnLeaves', labelZh: '秋葉自然',       labelEn: 'Warm autumn leaves',       prompt: 'warm autumn leaves on a wooden table, soft natural light, shallow depth of field' },
+  { id: 'concreteCity', labelZh: '極簡水泥牆',     labelEn: 'Minimalist concrete wall', prompt: 'minimalist polished concrete wall with soft directional shadow, urban editorial vibe' },
+  { id: 'holiday',    labelZh: '節日聖誕情境',     labelEn: 'Holiday scene',            prompt: 'warm festive holiday scene with subtle bokeh string lights and pine branches, cinematic warm light' },
+]
+const selectedAiPresetId = ref<string>('')
+function applyAiPreset() {
+  const p = AI_BG_PROMPT_PRESETS.find(x => x.id === selectedAiPresetId.value)
+  if (p) aiBackgroundPrompt.value = p.prompt
+}
+
+// Platform auto-resize — applied client-side to the final result image
+// via a hidden <canvas>. Crop modes mirror the recommended specs each
+// platform publishes for product cards / hero images.
+type PlatformSize = '' | 'amazon_1to1' | 'shopify_1to1' | 'ig_square' | 'ig_story' | 'tiktok_video'
+const selectedPlatformSize = ref<PlatformSize>('')
+const PLATFORM_SIZE_OPTIONS: { id: PlatformSize; labelEn: string; labelZh: string; w: number; h: number }[] = [
+  { id: '',            labelEn: 'Original size',           labelZh: '原始尺寸',                w: 0,    h: 0 },
+  { id: 'amazon_1to1', labelEn: 'Amazon 2000×2000 (1:1)',  labelZh: 'Amazon 2000×2000 (1:1)', w: 2000, h: 2000 },
+  { id: 'shopify_1to1',labelEn: 'Shopify 2048×2048 (1:1)', labelZh: 'Shopify 2048×2048 (1:1)',w: 2048, h: 2048 },
+  { id: 'ig_square',   labelEn: 'Instagram 1080×1080',     labelZh: 'Instagram 1080×1080',     w: 1080, h: 1080 },
+  { id: 'ig_story',    labelEn: 'IG Story 1080×1920 (9:16)', labelZh: 'IG 限動 1080×1920 (9:16)', w: 1080, h: 1920 },
+  { id: 'tiktok_video',labelEn: 'TikTok 1080×1920 (9:16)', labelZh: 'TikTok 1080×1920 (9:16)', w: 1080, h: 1920 },
+]
+
+async function downloadResized(srcUrl: string) {
+  const spec = PLATFORM_SIZE_OPTIONS.find(o => o.id === selectedPlatformSize.value)
+  if (!spec || !spec.w || !spec.h) {
+    // Original size — route through the shared blob-based downloader so the
+    // browser actually downloads instead of opening the GCS-hosted file in
+    // a new tab (cross-origin `<a download>` is ignored by all browsers).
+    await downloadAsset(srcUrl, `vidgo-bg-removed.${selectedBgMode.value === 'transparent' ? 'png' : 'jpg'}`)
+    return
+  }
+  try {
+    isProcessing.value = true
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.src = srcUrl
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('image load failed'))
+    })
+    const canvas = document.createElement('canvas')
+    canvas.width = spec.w
+    canvas.height = spec.h
+    const ctx = canvas.getContext('2d')!
+    // Fill background — transparent for PNG mode, white otherwise so the
+    // canvas doesn't introduce a black border on JPEG.
+    if (selectedBgMode.value !== 'transparent') {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, spec.w, spec.h)
+    }
+    // Letterbox the cutout so the full subject is always visible (no
+    // automatic center-crop that could clip the product).
+    const ratio = Math.min(spec.w / img.width, spec.h / img.height)
+    const drawW = img.width * ratio
+    const drawH = img.height * ratio
+    ctx.drawImage(img, (spec.w - drawW) / 2, (spec.h - drawH) / 2, drawW, drawH)
+    const mime = selectedBgMode.value === 'transparent' ? 'image/png' : 'image/jpeg'
+    const ext  = selectedBgMode.value === 'transparent' ? 'png' : 'jpg'
+    canvas.toBlob((blob) => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `vidgo-${spec.id}-${Date.now()}.${ext}`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 500)
+    }, mime, 0.95)
+  } catch (e) {
+    console.error('resize failed', e)
+    uiStore.showError(L('調整尺寸失敗，使用原始圖片', 'Resize failed, downloading original instead', 'リサイズに失敗。元画像をダウンロード', '리사이즈 실패. 원본 다운로드', 'No se pudo redimensionar, descargando original'))
+    const a = document.createElement('a')
+    a.href = srcUrl
+    a.download = `vidgo-bg-removed.${selectedBgMode.value === 'transparent' ? 'png' : 'jpg'}`
+    a.click()
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+// Batch state — accepts up to 10 images, each gets the same background
+// mode / color / image / AI prompt. Backend (/remove-bg/batch) enforces
+// the same plan check + 10-image ceiling.
+interface BatchItem { id: string; file: File; url?: string; resultUrl?: string; status: 'queued' | 'uploaded' | 'done' | 'error'; error?: string }
+const batchItems = ref<BatchItem[]>([])
+const isBatchProcessing = ref(false)
+const BATCH_MAX = 10
+
+function onBatchPicked(e: Event) {
+  const target = e.target as HTMLInputElement
+  const files = Array.from(target.files || [])
+  for (const f of files) {
+    if (batchItems.value.length >= BATCH_MAX) break
+    batchItems.value.push({ id: Math.random().toString(36).slice(2), file: f, status: 'queued' })
+  }
+  target.value = ''
+}
+
+function removeBatchItem(id: string) {
+  batchItems.value = batchItems.value.filter(i => i.id !== id)
+}
+
+async function runBatch() {
+  if (!batchItems.value.length) return
+  isBatchProcessing.value = true
+  try {
+    // 1. Upload everything first so we have public URLs to pass to the
+    //    batch endpoint. Errors short-circuit per-file but don't block
+    //    the rest of the queue.
+    for (const item of batchItems.value) {
+      if (item.url) continue
+      try {
+        const r = await toolsApi.uploadImage(item.file)
+        item.url = r.url
+        item.status = 'uploaded'
+      } catch (err: any) {
+        item.status = 'error'
+        item.error = err?.message || 'upload failed'
+      }
+    }
+    const urls = batchItems.value.filter(i => i.url).map(i => i.url as string)
+    if (!urls.length) {
+      uiStore.showError(L('沒有可處理的圖片', 'No images to process', '処理可能な画像なし', '처리할 이미지 없음', 'Sin imágenes que procesar'))
+      return
+    }
+    const fmt: 'png' | 'white' | 'black' = selectedBgMode.value === 'white' ? 'white' : selectedBgMode.value === 'black' ? 'black' : 'png'
+    const opts: { backgroundColor?: string; backgroundImageUrl?: string; aiBackgroundPrompt?: string } = {}
+    if (selectedBgMode.value === 'color') opts.backgroundColor = selectedColorHex.value
+    if (selectedBgMode.value === 'image') opts.backgroundImageUrl = customBackgroundImageUrl.value
+    if (selectedBgMode.value === 'ai')    opts.aiBackgroundPrompt = aiBackgroundPrompt.value
+    const resp = await toolsApi.removeBackgroundBatch(urls, fmt, opts)
+    const results = resp.results || []
+    // Map results back to batchItems by index of the upload-ordered urls
+    let i = 0
+    for (const item of batchItems.value) {
+      if (!item.url) continue
+      const r = results[i++]
+      if (r && r.success) {
+        item.resultUrl = (r as any).result_url || (r as any).image_url
+        item.status = 'done'
+      } else {
+        item.status = 'error'
+        item.error = (r as any)?.error || 'failed'
+      }
+    }
+    creditsStore.fetchBalance()
+    uiStore.showSuccess(L('批次處理完成', 'Batch processing complete', 'バッチ処理完了', '일괄 처리 완료', 'Procesamiento por lotes completo'))
+  } catch (err: any) {
+    uiStore.showError(err?.response?.data?.detail || err?.message || L('批次處理失敗', 'Batch processing failed', 'バッチ処理失敗', '일괄 처리 실패', 'Falló el procesamiento'))
+  } finally {
+    isBatchProcessing.value = false
+  }
+}
+
+async function downloadAllBatchResults() {
+  for (const item of batchItems.value) {
+    if (!item.resultUrl) continue
+    const a = document.createElement('a')
+    a.href = item.resultUrl
+    a.download = `vidgo-batch-${item.id}.${selectedBgMode.value === 'transparent' ? 'png' : 'jpg'}`
+    a.click()
+    // Stagger so the browser doesn't suppress sequential downloads.
+    await new Promise((r) => setTimeout(r, 250))
+  }
+}
 
 // Curated palette — six tones that look natural behind a product cutout.
 const PRESET_COLORS = [
@@ -320,9 +495,10 @@ async function removeBackground() {
     //   image       → background_image_url=... (overrides everything)
     const mode = selectedBgMode.value
     const outputFormat = mode === 'white' ? 'white' : mode === 'black' ? 'black' : 'png'
-    const opts: { backgroundColor?: string; backgroundImageUrl?: string } = {}
+    const opts: { backgroundColor?: string; backgroundImageUrl?: string; aiBackgroundPrompt?: string } = {}
     if (mode === 'color') opts.backgroundColor = selectedColorHex.value
     if (mode === 'image') opts.backgroundImageUrl = customBackgroundImageUrl.value
+    if (mode === 'ai')    opts.aiBackgroundPrompt = aiBackgroundPrompt.value
     const result = await toolsApi.removeBackground(uploadResult.url, outputFormat, opts)
 
     if (result.success && (result.image_url || result.result_url)) {
@@ -377,28 +553,40 @@ function dataURItoBlob(dataURI: string): Blob | null {
         {{ t('common.back') }}
       </button>
 
-      <!-- Header -->
-      <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-dark-50 mb-4">
-          {{ t('tools.backgroundRemoval.name') }}
-        </h1>
-        <p class="text-xl text-dark-300">
-          {{ t('tools.backgroundRemoval.longDesc') }}
-        </p>
+      <!-- Pro hero (Photoroom-inspired) — outcome headline + KPI strip
+           + how-it-works. Same dark theme, just denser and more
+           commercial. Keeps the subscribe-notice + dbEmpty try-prompts
+           hint below for demo users. -->
+      <ProToolHero
+        :badge="L('AI 商品攝影', 'AI Product Photography', 'AI 商品撮影', 'AI 제품 촬영', 'Fotografía AI')"
+        :title="L('一鍵去背，打造工作室級商品圖', 'One-click background removal, studio-grade product photos', 'ワンクリック背景除去でスタジオ品質の商品画像へ', '한 번의 클릭으로 스튜디오급 제품 이미지', 'Recorte con un clic, fotos profesionales al instante')"
+        :subtitle="L('業界最精準的 AI 去背（連透明商品都行）。把成本砍 90%，畫質分毫不減，無 AI 感。', 'Industry-leading AI cutout (yes, even transparent products). Cut photo costs 90% while keeping studio-grade quality — no AI look.', '業界トップクラスのAI切り抜き（透明商品も対応）。撮影コストを90%削減し、AIっぽさのないスタジオ品質。', '업계 최정밀 AI 누끼 따기(투명 제품도 지원). 촬영 비용 90% 절감, 스튜디오 품질 유지.', 'Recorte AI líder (incluso productos transparentes). Reduce 90% el coste sin perder calidad.')"
+        :rating="{ score: '4.9', label: L('受 1,000+ 商家信賴', 'Trusted by 1,000+ sellers', '1,000+ 出店者に信頼', '1,000+ 셀러 신뢰', 'La confianza de 1,000+ vendedores') }"
+        :trust-line="L('Amazon · Shopify · TikTok 規格一鍵匯出', 'One-click export to Amazon · Shopify · TikTok specs', 'Amazon · Shopify · TikTok 規格を一発エクスポート', 'Amazon · Shopify · TikTok 사양 한 번에 출력', 'Exporta a Amazon · Shopify · TikTok')"
+        :stats="[
+          { value: '-90%', label: L('拍攝成本', 'Photo cost', '撮影コスト', '촬영 비용', 'Coste fotográfico') },
+          { value: '<5s', label: L('每張平均處理時間', 'Average time per image', '1枚あたり平均処理時間', '이미지당 평균 처리 시간', 'Tiempo medio por imagen') },
+          { value: '+72%', label: L('刊登點擊率提升', 'Listing CTR uplift', '掲載クリック率向上', '리스팅 CTR 상승', 'Aumento de CTR') },
+        ]"
+        :steps="[
+          { icon: '⬆️', title: L('上傳商品照片', 'Upload product photo', '商品写真をアップロード', '제품 사진 업로드', 'Sube la foto del producto'), body: L('支援 JPG / PNG / WebP，毛邊與透明商品都能處理', 'JPG / PNG / WebP — even fuzzy edges and transparent products', 'JPG/PNG/WebP対応 — 透明商品にも対応', 'JPG/PNG/WebP 지원, 투명 제품도 OK', 'JPG/PNG/WebP, incluso productos transparentes') },
+          { icon: '✂️', title: L('AI 自動精準去背', 'AI cleanly removes the background', 'AIが背景を自動で精密除去', 'AI가 자동으로 정밀하게 누끼', 'IA recorta con precisión'), body: L('保留邊緣細節，免手動修圖', 'Edge detail preserved — no manual retouching', '輪郭ディテールを保持、手動修正不要', '엣지 디테일 유지, 수동 보정 불필요', 'Detalle de bordes preservado, sin retoque manual') },
+          { icon: '⚡', title: L('替換背景 / 一鍵下載', 'Replace background or download', '背景差し替え or ダウンロード', '배경 변경 또는 다운로드', 'Cambia el fondo o descarga'), body: L('純白、品牌色、AI 場景隨意切換', 'Switch white, brand-colored, or AI scene backgrounds', '白背景・ブランドカラー・AIシーンを自由に切替', '흰색·브랜드 색·AI 씬 자유 전환', 'Cambia entre blanco, color o escena AI') },
+        ]"
+      />
 
-        <!-- Subscribe Notice for Demo Users -->
-        <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
-          <RouterLink to="/pricing" class="hover:underline">
-            {{ L('訂閱以解鎖更多功能', 'Subscribe to unlock more features', 'サブスク登録で機能を解禁', '구독으로 더 많은 기능 잠금 해제', 'Suscríbete para desbloquear más funciones') }}
-          </RouterLink>
-        </div>
+      <!-- Subscribe Notice for Demo Users -->
+      <div v-if="isDemoUser" class="text-center mb-8">
+        <RouterLink to="/pricing" class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm hover:underline">
+          {{ L('訂閱以解鎖完整功能', 'Subscribe to unlock full features', 'サブスク登録で全機能を解禁', '구독으로 전체 기능 해제', 'Suscríbete para desbloquear todo') }}
+        </RouterLink>
+      </div>
 
-        <!-- DB Empty: Show try prompts -->
-        <div v-if="dbEmpty && tryPrompts.length > 0" class="mt-6 p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <p class="text-sm text-dark-200 mb-2">{{ L('可試玩提示詞（資料庫尚無預生成）', 'Try prompts (no pre-generated results yet)', 'プロンプトを試す（まだ事前生成なし）', '프롬프트 시도 (사전 생성 없음)', 'Prueba prompts (sin pregenerados)') }}</p>
-          <div class="flex flex-wrap gap-2">
-            <span v-for="p in tryPrompts.slice(0, 5)" :key="p.id" class="px-2 py-1 rounded text-xs bg-dark-800 text-dark-200">{{ p.prompt }}</span>
-          </div>
+      <!-- DB Empty: Show try prompts -->
+      <div v-if="dbEmpty && tryPrompts.length > 0" class="mb-8 p-4 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+        <p class="text-sm text-dark-200 mb-2">{{ L('可試玩提示詞（資料庫尚無預生成）', 'Try prompts (no pre-generated results yet)', 'プロンプトを試す（まだ事前生成なし）', '프롬프트 시도 (사전 생성 없음)', 'Prueba prompts (sin pregenerados)') }}</p>
+        <div class="flex flex-wrap gap-2">
+          <span v-for="p in tryPrompts.slice(0, 5)" :key="p.id" class="px-2 py-1 rounded text-xs bg-dark-800 text-dark-200">{{ p.prompt }}</span>
         </div>
       </div>
 
@@ -485,15 +673,28 @@ function dataURItoBlob(dataURI: string): Blob | null {
               <!-- Watermark badge -->
               <div class="text-center text-xs text-dark-400">vidgo.ai</div>
 
-              <!-- Paid users: Download button -->
-              <a
-                v-if="!isDemoUser && resultImage"
-                :href="resultImage"
-                :download="`vidgo-bg-removed.${selectedBgMode === 'transparent' ? 'png' : 'jpg'}`"
-                class="btn-primary w-full text-center block"
-              >
-                {{ L('下載結果', 'Download Result', '結果をダウンロード', '결과 다운로드', 'Descargar resultado') }}
-              </a>
+              <!-- Paid users: Platform-aware Download -->
+              <div v-if="!isDemoUser && resultImage" class="space-y-2">
+                <label class="block text-xs text-dark-400">
+                  {{ L('輸出尺寸 / 平台', 'Export size / platform', '出力サイズ / プラットフォーム', '출력 크기 / 플랫폼', 'Tamaño / plataforma') }}
+                </label>
+                <select
+                  v-model="selectedPlatformSize"
+                  class="w-full px-3 py-2 rounded-md text-sm"
+                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #e8e8f0;"
+                >
+                  <option v-for="opt in PLATFORM_SIZE_OPTIONS" :key="opt.id || 'original'" :value="opt.id">
+                    {{ isZh ? opt.labelZh : opt.labelEn }}
+                  </option>
+                </select>
+                <button
+                  type="button"
+                  @click="downloadResized(resultImage)"
+                  class="btn-primary w-full text-center block"
+                >
+                  {{ L('下載結果', 'Download Result', '結果をダウンロード', '결과 다운로드', 'Descargar resultado') }}
+                </button>
+              </div>
               <!-- Demo users: Subscribe CTA -->
               <RouterLink
                 v-else
@@ -620,6 +821,37 @@ function dataURItoBlob(dataURI: string): Blob | null {
             </p>
           </div>
 
+          <!-- AI text-to-background — generate a fresh scene from a
+               natural-language prompt and composite the cutout on it.
+               Same Flux T2I path used by the rest of the site. -->
+          <div v-if="selectedBgMode === 'ai'" class="mb-3">
+            <label class="block text-xs text-dark-400 mb-2">
+              {{ L('AI 背景情境（中／英皆可）', 'AI background prompt (Chinese or English)', 'AI 背景プロンプト（中英対応）', 'AI 배경 프롬프트 (중·영)', 'Prompt de fondo AI (zh/en)') }}
+            </label>
+            <select
+              v-model="selectedAiPresetId"
+              @change="applyAiPreset"
+              class="w-full mb-2 px-3 py-2 rounded-md text-sm"
+              style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #e8e8f0;"
+            >
+              <option value="">{{ L('— 範例情境 —', '— Preset scenes —', '— プリセット —', '— 프리셋 —', '— Escenas —') }}</option>
+              <option v-for="p in AI_BG_PROMPT_PRESETS" :key="p.id" :value="p.id">
+                {{ isZh ? p.labelZh : p.labelEn }}
+              </option>
+            </select>
+            <textarea
+              v-model="aiBackgroundPrompt"
+              rows="3"
+              maxlength="500"
+              :placeholder="L('例如：陽光灑落的熱帶海灘，柔和散景', 'e.g. sun-drenched tropical beach with soft bokeh', '例：陽光あふれる熱帯ビーチ、柔らかいボケ', '예: 햇살 가득한 열대 해변, 부드러운 보케', 'ej: playa tropical soleada con bokeh suave')"
+              class="w-full px-3 py-2 rounded-md text-sm"
+              style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #e8e8f0;"
+            ></textarea>
+            <p class="text-[11px] text-dark-500 mt-2">
+              {{ L('AI 會即時生成背景場景，再把去背的商品合成在上面。約多花 5–10 秒。', 'The AI renders a scene and composites your cutout on top. Adds ~5–10s to the run.', 'AIがシーンを生成し、切り抜きを合成します。5〜10秒追加。', 'AI가 씬을 생성한 뒤 누끼와 합성합니다. 5–10초 추가.', 'La IA crea la escena y compone el recorte. +5–10s.') }}
+            </p>
+          </div>
+
           <p class="text-[11px] text-dark-500">
             {{ selectedBgMode === 'transparent'
               ? L('輸出透明背景 PNG，方便後製。', 'Outputs a transparent-background PNG for further compositing.', '透過背景PNGを出力します。後加工に便利。', '투명 배경 PNG로 출력. 후가공에 편리.', 'Devuelve un PNG con fondo transparente para composición.')
@@ -629,6 +861,8 @@ function dataURItoBlob(dataURI: string): Blob | null {
               ? L('輸出黑底圖片，適合精品 / 科技類品牌。', 'Outputs a black-background image for premium / tech brands.', '黒背景の画像を出力。プレミアム／テック系ブランド向け。', '검은 배경 이미지를 출력. 프리미엄/테크 브랜드에 적합.', 'Devuelve una imagen con fondo negro, ideal para marcas premium/tech.')
               : selectedBgMode === 'color'
               ? L('商品會合成在你選的純色背景上。', 'Composites the cutout onto your selected solid color.', '選択した単色背景に合成します。', '선택한 단색 배경에 합성됩니다.', 'Compone el recorte sobre el color sólido elegido.')
+              : selectedBgMode === 'ai'
+              ? L('AI 會生成背景場景，再合成商品。', 'AI generates a scene and composites the cutout on top.', 'AIがシーンを生成し、合成します。', 'AI가 씬을 생성하고 합성합니다.', 'La IA genera la escena y compone el recorte.')
               : L('商品會合成在你提供的背景圖片上。', 'Composites the cutout onto your replacement image.', '提供した背景画像に合成します。', '제공한 배경 이미지에 합성됩니다.', 'Compone el recorte sobre tu imagen de reemplazo.') }}
           </p>
         </div>
@@ -638,7 +872,7 @@ function dataURItoBlob(dataURI: string): Blob | null {
           <CreditCost service="background_removal" />
           <button
             @click="removeBackground"
-            :disabled="!uploadedImage || isProcessing || (selectedBgMode === 'image' && !customBackgroundImageUrl)"
+            :disabled="!uploadedImage || isProcessing || (selectedBgMode === 'image' && !customBackgroundImageUrl) || (selectedBgMode === 'ai' && !aiBackgroundPrompt.trim())"
             class="btn-primary px-12 py-4 text-lg font-semibold"
           >
             <span v-if="isProcessing" class="flex items-center gap-2">
@@ -657,6 +891,76 @@ function dataURItoBlob(dataURI: string): Blob | null {
           </button>
         </div>
       </div>
+
+      <!-- Batch mode — collapsible. Subscribers can drop up to 10
+           images and the backend `/remove-bg/batch` endpoint applies
+           the same background mode (color / image / AI prompt) chosen
+           above. Demo users see a Subscribe CTA instead. -->
+      <details v-if="!isDemoUser" class="mt-8 rounded-xl" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+        <summary class="cursor-pointer px-6 py-4 text-sm font-semibold flex items-center justify-between" style="color: #f5f5fa;">
+          <span class="flex items-center gap-2">
+            📦 {{ L('批次處理（最多 10 張）', 'Batch processing (up to 10)', 'バッチ処理（最大10枚）', '일괄 처리(최대 10장)', 'Lote (hasta 10)') }}
+          </span>
+          <span class="text-xs text-dark-400">{{ batchItems.length }}/{{ BATCH_MAX }}</span>
+        </summary>
+
+        <div class="px-6 pb-6 pt-2 space-y-4">
+          <label class="block w-full px-4 py-6 rounded-md text-sm text-center cursor-pointer transition-colors"
+                 style="background: #0f0f17; border: 1px dashed rgba(255,255,255,0.18); color: #c4c4d8;">
+            {{ L('點此或拖曳選擇圖片（JPG / PNG / WebP）', 'Tap or drag to add images (JPG / PNG / WebP)', 'タップ／ドラッグで画像を追加', '탭 또는 드래그로 이미지 추가', 'Toca o arrastra para añadir') }}
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" @change="onBatchPicked" />
+          </label>
+
+          <div v-if="batchItems.length" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            <div v-for="item in batchItems" :key="item.id" class="relative rounded-lg overflow-hidden" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
+              <div class="aspect-square">
+                <img v-if="item.resultUrl" :src="item.resultUrl" class="w-full h-full object-cover" />
+                <img v-else-if="item.url"   :src="item.url" class="w-full h-full object-cover opacity-60" />
+                <div v-else class="w-full h-full flex items-center justify-center text-dark-400 text-xs px-2">
+                  {{ item.file.name.slice(0, 24) }}
+                </div>
+              </div>
+              <div class="absolute top-1 right-1 flex gap-1">
+                <button @click="removeBatchItem(item.id)" class="w-5 h-5 rounded-full flex items-center justify-center text-xs"
+                        style="background: rgba(0,0,0,0.6); color: #f5f5fa;">×</button>
+              </div>
+              <div class="absolute bottom-0 left-0 right-0 px-2 py-1 text-[10px] text-center"
+                   :style="{
+                     background: 'rgba(0,0,0,0.65)',
+                     color: item.status === 'done' ? '#95de64' : item.status === 'error' ? '#ff7875' : '#d6d3d1',
+                   }">
+                {{ item.status === 'done' ? L('完成', 'Done', '完了', '완료', 'Listo')
+                  : item.status === 'error' ? L('失敗', 'Failed', '失敗', '실패', 'Falló')
+                  : item.status === 'uploaded' ? L('已上傳', 'Uploaded', 'アップロード済み', '업로드됨', 'Subido')
+                  : L('等待中', 'Queued', '待機中', '대기 중', 'En cola') }}
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-3">
+            <button @click="runBatch"
+                    :disabled="!batchItems.length || isBatchProcessing"
+                    class="btn-primary px-6 py-2.5 text-sm font-semibold disabled:opacity-50">
+              <span v-if="isBatchProcessing">{{ t('common.processing') }}</span>
+              <span v-else>{{ L('開始批次處理', 'Run batch', 'バッチ開始', '일괄 시작', 'Iniciar lote') }}</span>
+            </button>
+            <button v-if="batchItems.some(i => i.resultUrl)"
+                    @click="downloadAllBatchResults"
+                    class="btn-secondary px-4 py-2.5 text-sm">
+              {{ L('全部下載', 'Download all', '全てダウンロード', '모두 다운로드', 'Descargar todos') }}
+            </button>
+            <button v-if="batchItems.length"
+                    @click="batchItems = []"
+                    class="text-xs text-dark-400 hover:text-dark-50 self-center">
+              {{ L('清空', 'Clear', 'クリア', '비우기', 'Limpiar') }}
+            </button>
+          </div>
+
+          <p class="text-[11px] text-dark-500">
+            {{ L('批次會套用上方所選的背景模式。AI 場景模式會生成一張共用背景，套用在全部結果上以維持視覺一致。', 'Batch applies the background mode chosen above. AI scene mode renders one shared background for the whole set so the results stay visually consistent.', '上で選択した背景モードがバッチに適用されます。AIシーンは1枚の共有背景を生成し、全結果に適用します。', '위에서 선택한 배경 모드가 일괄에 적용됩니다. AI 씬 모드는 공유 배경 1장을 생성해 전체에 적용.', 'Aplica el modo elegido. El modo IA crea un único fondo compartido.') }}
+          </p>
+        </div>
+      </details>
     </div>
   </div>
 </template>

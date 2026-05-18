@@ -597,12 +597,21 @@ class SubscriptionService:
         db.add(order)
         await db.commit()
 
-        # Resolve PayPal Plan ID from config mapping
+        # Resolve PayPal Plan ID from config mapping.
+        # The mapping is admin-editable via /admin/settings/payment, so we
+        # ask PaymentSettingsService for the effective value (DB row first,
+        # env / Secret Manager fallback) rather than reading the env var
+        # directly. This is what makes "flip from sandbox to production
+        # without redeploy" actually work.
+        from app.services.payment_settings_service import get_resolved_settings
+        await self.paypal.refresh_from_db(db)
+        resolved_settings = await get_resolved_settings(db)
         import json as _json
         price_map = {}
-        if settings.PAYPAL_PLAN_IDS:
+        plan_ids_blob = resolved_settings.paypal_plan_ids or settings.PAYPAL_PLAN_IDS
+        if plan_ids_blob:
             try:
-                price_map = _json.loads(settings.PAYPAL_PLAN_IDS)
+                price_map = _json.loads(plan_ids_blob)
             except Exception:
                 logger.error("Failed to parse PAYPAL_PLAN_IDS config")
 

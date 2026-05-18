@@ -413,7 +413,9 @@
     "previewComingSoon": "Vista previa próximamente",
     "startFree": "Empezar Gratis",
     "dropFilesHere": "Suelta los archivos aquí",
-    "insufficient": "(Insuficiente)"
+    "insufficient": "(Insuficiente)",
+    "curatedNotice": "Por calidad y seguridad, los prompts están seleccionados. Elige uno de la lista de abajo.",
+    "curatedPickToPreview": "— Selecciona un prompt arriba y su contenido aparecerá aquí —"
   },
   "auth": {
     "email": "Correo electrónico",
@@ -1544,9 +1546,16 @@
     "placeholder": "Tu imagen generada aparecerá aquí.",
     "resultLabel": "Resultado",
     "download": "Descargar",
-    "warnings": { "emptyPrompt": "Ingresa un prompt." },
-    "toasts": { "success": "Imagen generada correctamente.", "demoReady": "Imagen de demostración lista." },
-    "errors": { "generic": "Falló la generación. Inténtalo de nuevo." }
+    "warnings": {
+      "emptyPrompt": "Ingresa un prompt."
+    },
+    "toasts": {
+      "success": "Imagen generada correctamente.",
+      "demoReady": "Imagen de demostración lista."
+    },
+    "errors": {
+      "generic": "Falló la generación. Inténtalo de nuevo."
+    }
   },
   "klingVideo": {
     "title": "Video Kling",
@@ -1565,8 +1574,14 @@
       "dramaticZoom": "Zoom dramático en el desierto"
     },
     "tierLabel": "Nivel",
-    "tiers": { "default": "Estándar (Kling 2.6)", "flagship": "Flagship (Kling 2.1-master Pro)" },
-    "tierHints": { "default": "Rápido y económico.", "flagship": "Máxima calidad, solo modo Pro." },
+    "tiers": {
+      "default": "Estándar (Kling 2.6)",
+      "flagship": "Flagship (Kling 2.1-master Pro)"
+    },
+    "tierHints": {
+      "default": "Rápido y económico.",
+      "flagship": "Máxima calidad, solo modo Pro."
+    },
     "promptLabel": "Prompt",
     "promptPlaceholder": "Describe lo que quieres ver y cómo debe moverse...",
     "startImage": "Cuadro inicial (opcional)",
@@ -1581,9 +1596,16 @@
     "placeholder": "Tu video generado aparecerá aquí.",
     "resultLabel": "Resultado",
     "download": "Descargar",
-    "warnings": { "emptyPrompt": "Ingresa un prompt." },
-    "toasts": { "success": "Video {tier} generado.", "demoReady": "Video de demostración listo." },
-    "errors": { "generic": "Falló la generación. Inténtalo de nuevo." }
+    "warnings": {
+      "emptyPrompt": "Ingresa un prompt."
+    },
+    "toasts": {
+      "success": "Video {tier} generado.",
+      "demoReady": "Video de demostración listo."
+    },
+    "errors": {
+      "generic": "Falló la generación. Inténtalo de nuevo."
+    }
   },
   "adminModels": {
     "title": "Registro de Modelos IA",
@@ -1613,9 +1635,16 @@
     "metricCalls": "{n} llamadas",
     "filterPlaceholder": "Filtrar por familia, nombre, clave o modelo…",
     "noMatches": "Ninguna clave coincide con el filtro.",
-    "warnings": { "modelRequired": "Se requiere la cadena del modelo." },
-    "toasts": { "saved": "Override guardado." },
-    "errors": { "loadFailed": "Error al cargar el registro de modelos.", "saveFailed": "Error al guardar el override." }
+    "warnings": {
+      "modelRequired": "Se requiere la cadena del modelo."
+    },
+    "toasts": {
+      "saved": "Override guardado."
+    },
+    "errors": {
+      "loadFailed": "Error al cargar el registro de modelos.",
+      "saveFailed": "Error al guardar el override."
+    }
   },
   "lumaVideo": {
     "title": "Luma Dream Machine",
@@ -1648,8 +1677,15 @@
     "placeholder": "Tu video generado aparecerá aquí.",
     "resultLabel": "Resultado",
     "download": "Descargar",
-    "warnings": { "emptyPrompt": "Ingresa un prompt." },
-    "toasts": { "success": "Video Luma generado.", "demoReady": "Video de demostración listo." },
-    "errors": { "generic": "Falló la generación. Inténtalo de nuevo." }
+    "warnings": {
+      "emptyPrompt": "Ingresa un prompt."
+    },
+    "toasts": {
+      "success": "Video Luma generado.",
+      "demoReady": "Video de demostración listo."
+    },
+    "errors": {
+      "generic": "Falló la generación. Inténtalo de nuevo."
+    }
   }
 }

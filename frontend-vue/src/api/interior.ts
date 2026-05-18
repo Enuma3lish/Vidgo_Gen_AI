@@ -21,6 +21,17 @@ export interface DesignResponse {
   conversation_id?: string
   turn_count?: number
   error?: string
+  space_kind?: 'interior' | 'exterior' | 'commercial'
+  // When variation_count > 1, the backend returns all variant URLs here.
+  // results[0] always matches image_url (the primary).
+  results?: Array<{ image_url: string }>
+  // 2026-05-18 — image-understanding fusion result. See backend
+  // image_understanding_service.py. Frontend reads these via
+  // <VisionFusionInfo> to surface "we see: __" and the user-text
+  // override warning when the gap detector kicked in.
+  vision_summary?: string | null
+  user_prompt_used?: boolean | null
+  prompt_gap_reason?: string | null
 }
 
 export interface RedesignRequest {
@@ -30,6 +41,14 @@ export interface RedesignRequest {
   style_id?: string
   room_type?: string
   keep_layout?: boolean
+  space_kind?: 'interior' | 'exterior' | 'commercial'
+  // ReRoom-inspired knobs added 2026-05-18. All optional; backend
+  // defaults match the original single-render redesign behavior so
+  // any caller that hasn't been updated still works.
+  mode?: 'redesign' | 'stage'
+  lighting_tone?: 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'
+  material_accent?: 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'
+  variation_count?: 1 | 2 | 3
 }
 
 export interface GenerateRequest {
@@ -124,13 +143,23 @@ export const interiorApi = {
     file: File,
     prompt: string,
     styleId?: string,
-    roomType?: string
+    roomType?: string,
+    opts?: {
+      spaceKind?: 'interior' | 'exterior' | 'commercial'
+      mode?: 'redesign' | 'stage'
+      lightingTone?: 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'
+      materialAccent?: 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'
+    },
   ): Promise<DesignResponse> {
     const formData = new FormData()
     formData.append('image', file)
     formData.append('prompt', prompt)
-    if (styleId) formData.append('style_id', styleId)
+    if (styleId)  formData.append('style_id', styleId)
     if (roomType) formData.append('room_type', roomType)
+    if (opts?.spaceKind) formData.append('space_kind', opts.spaceKind)
+    if (opts?.mode) formData.append('mode', opts.mode)
+    if (opts?.lightingTone) formData.append('lighting_tone', opts.lightingTone)
+    if (opts?.materialAccent) formData.append('material_accent', opts.materialAccent)
 
     const response = await apiClient.post('/api/v1/interior/demo/redesign', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

@@ -61,6 +61,92 @@
     }
   },
   "tools": {
+    "hub": {
+      "pageTitle": "What do you need?",
+      "aiTools": "AI Tools",
+      "recentlyUsed": "Recently Used",
+      "createWithAi": "Create with AI",
+      "tiles": {
+        "recolor": "Recolor",
+        "productBeautifier": "Product Beautifier",
+        "virtualModel": "Virtual Model",
+        "productStaging": "Product Staging",
+        "editWithAi": "Edit with AI",
+        "flatLay": "Flat lay",
+        "ghostMannequin": "Ghost Mannequin",
+        "videoGenerator": "Video Generator",
+        "ironing": "Ironing",
+        "logo": "Logo",
+        "text": "Text",
+        "instagramStory": "Instagram story",
+        "background": "Background",
+        "threeDIllustration": "3D illustration",
+        "productPhotography": "Product photography",
+        "productPackaging": "Product packaging",
+        "createAnyImage": "Create any image"
+      }
+    },
+    "tryOnLayout": {
+      "selectModel": "Model",
+      "quality": "Quality",
+      "qualityStandard": "Standard",
+      "qualityPro": "Pro",
+      "background": "Background",
+      "backgroundRandom": "Random",
+      "backgroundStudio": "Studio",
+      "backgroundOutdoor": "Outdoor",
+      "backgroundWhite": "White",
+      "size": "Size",
+      "sizePortrait": "Portrait (2:3)",
+      "sizeSquare": "Square (1:1)",
+      "sizeLandscape": "Landscape (16:9)",
+      "applyBrandStyle": "Apply brand style",
+      "applyBrandStyleOff": "Off",
+      "describePrompt": "Describe the image you want (optional)",
+      "generateOne": "Generate 1 image",
+      "uploadOwn": "Upload your own"
+    },
+    "interiorLayout": {
+      "uploadStep": "1. Upload one or more images",
+      "uploadSingle": "Single",
+      "uploadMultiple": "Multiple",
+      "stylesStep": "2. Type & Style",
+      "tabIndoor": "Indoor",
+      "tabOutdoor": "Outdoor",
+      "tabLandscape": "Landscape",
+      "moodboard": "Moodboard",
+      "presetStyle": "Preset style",
+      "primary": "Primary",
+      "secondary": "Secondary",
+      "amenities": "Amenities",
+      "roomLivingRoom": "Living room",
+      "roomKitchen": "Kitchen",
+      "roomBedroom": "Bedroom",
+      "roomBathroom": "Bathroom",
+      "roomMudroom": "Mudroom",
+      "roomDiningRoom": "Dining room",
+      "roomStudy": "Study",
+      "roomHomeOffice": "Home office",
+      "roomWalkInCloset": "Walk-in closet",
+      "roomToilet": "Toilet",
+      "amenityGym": "Home gym",
+      "amenityPool": "Pool",
+      "amenityWineCellar": "Wine cellar",
+      "amenityHomeTheater": "Home theater",
+      "extModernFacade": "Modern glass facade",
+      "extWoodHouse": "Nordic wood house",
+      "extMedVilla": "Mediterranean villa",
+      "extTropicalResort": "Tropical resort",
+      "extRanch": "Mid-century ranch",
+      "extTownhouse": "Urban townhouse",
+      "extZenCourtyard": "Japanese courtyard",
+      "extIndustrialLoft": "Industrial loft",
+      "extStoneCabin": "Rustic stone cabin",
+      "extGardenStudio": "Garden studio",
+      "extStorefront": "Boutique storefront",
+      "extWarehouse": "Warehouse conversion",
+      "custom": "Custom"
+    },
     "avatar": {
       "name": "AI Avatar",
       "desc": "Photo to talking avatar video",
@@ -390,6 +476,8 @@
     "generate": "Generate",
     "download": "Download",
     "cancel": "Cancel",
+    "on": "On",
+    "off": "Off",
     "confirm": "Confirm",
     "save": "Save",
     "delete": "Delete",
@@ -413,7 +501,9 @@
     "result": "Result",
     "previewComingSoon": "Preview coming soon",
     "startFree": "Start Free",
-    "insufficient": "(Insufficient)"
+    "insufficient": "(Insufficient)",
+    "curatedNotice": "For quality and safety, prompts are curated by the system. Pick one from the list below.",
+    "curatedPickToPreview": "— Pick a prompt above to preview its content here —"
   },
   "auth": {
     "email": "Email",
@@ -1192,8 +1282,8 @@
         "desc": "Generate seamless patterns for branding"
       },
       "midjourney": {
-        "name": "Midjourney",
-        "desc": "Premium AI image generation"
+        "name": "Premium AI Image",
+        "desc": "High-quality image generation via Flux"
       },
       "klingVideo": {
         "name": "Kling Video",
@@ -1514,9 +1604,9 @@
     }
   },
   "midjourney": {
-    "title": "Midjourney AI Image",
-    "subtitle": "Premium image generation via Midjourney on PiAPI.",
-    "demoCta": "Subscribe to generate your own Midjourney images.",
+    "title": "Premium AI Image",
+    "subtitle": "High-quality image generation via Flux on PiAPI.",
+    "demoCta": "Subscribe to generate your own premium AI images.",
     "presetLabel": "Prompt template",
     "presetCustom": "Custom (write your own)",
     "presets": {
@@ -1540,13 +1630,20 @@
     },
     "action": "Generate",
     "processing": "Generating...",
-    "loading": "Generating with Midjourney...",
+    "loading": "Generating premium AI image...",
     "placeholder": "Your generated image will appear here.",
     "resultLabel": "Result",
     "download": "Download",
-    "warnings": { "emptyPrompt": "Please enter a prompt." },
-    "toasts": { "success": "Image generated successfully.", "demoReady": "Demo image ready." },
-    "errors": { "generic": "Generation failed. Please try again." }
+    "warnings": {
+      "emptyPrompt": "Please enter a prompt."
+    },
+    "toasts": {
+      "success": "Image generated successfully.",
+      "demoReady": "Demo image ready."
+    },
+    "errors": {
+      "generic": "Generation failed. Please try again."
+    }
   },
   "klingVideo": {
     "title": "Kling Video",
@@ -1565,8 +1662,14 @@
       "dramaticZoom": "Dramatic desert zoom"
     },
     "tierLabel": "Tier",
-    "tiers": { "default": "Standard (Kling 2.6)", "flagship": "Flagship (Kling 2.1-master Pro)" },
-    "tierHints": { "default": "Fast turnaround, lower cost.", "flagship": "Highest quality, pro-mode only." },
+    "tiers": {
+      "default": "Standard (Kling 2.6)",
+      "flagship": "Flagship (Kling 2.1-master Pro)"
+    },
+    "tierHints": {
+      "default": "Fast turnaround, lower cost.",
+      "flagship": "Highest quality, pro-mode only."
+    },
     "promptLabel": "Prompt",
     "promptPlaceholder": "Describe what you want to see and how it should move...",
     "startImage": "Start Frame (optional)",
@@ -1581,9 +1684,16 @@
     "placeholder": "Your generated video will appear here.",
     "resultLabel": "Result",
     "download": "Download",
-    "warnings": { "emptyPrompt": "Please enter a prompt." },
-    "toasts": { "success": "{tier} video generated.", "demoReady": "Demo video ready." },
-    "errors": { "generic": "Generation failed. Please try again." }
+    "warnings": {
+      "emptyPrompt": "Please enter a prompt."
+    },
+    "toasts": {
+      "success": "{tier} video generated.",
+      "demoReady": "Demo video ready."
+    },
+    "errors": {
+      "generic": "Generation failed. Please try again."
+    }
   },
   "lumaVideo": {
     "title": "Luma Dream Machine",
@@ -1616,9 +1726,16 @@
     "placeholder": "Your generated video will appear here.",
     "resultLabel": "Result",
     "download": "Download",
-    "warnings": { "emptyPrompt": "Please enter a prompt." },
-    "toasts": { "success": "Luma video generated.", "demoReady": "Demo video ready." },
-    "errors": { "generic": "Generation failed. Please try again." }
+    "warnings": {
+      "emptyPrompt": "Please enter a prompt."
+    },
+    "toasts": {
+      "success": "Luma video generated.",
+      "demoReady": "Demo video ready."
+    },
+    "errors": {
+      "generic": "Generation failed. Please try again."
+    }
   },
   "adminModels": {
     "title": "AI Model Registry",

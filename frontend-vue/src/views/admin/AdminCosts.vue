@@ -156,7 +156,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.admin-page { padding: 6rem 2rem 4rem; max-width: 1280px; margin: 0 auto; color: #e8e8f0; }
+.admin-page { padding: 1.5rem 2rem 4rem; max-width: 1280px; margin: 0 auto; color: #e8e8f0; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
 .page-header h1 { font-size: 1.75rem; font-weight: 700; margin: 0; }
 .subtitle { color: #9494b0; margin-top: 0.5rem; max-width: 720px; }

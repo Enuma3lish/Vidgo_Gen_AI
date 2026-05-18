@@ -413,7 +413,9 @@
     "previewComingSoon": "プレビュー近日公開",
     "startFree": "無料で開始",
     "dropFilesHere": "ここにファイルをドロップ",
-    "insufficient": "（クレジット不足）"
+    "insufficient": "（クレジット不足）",
+    "curatedNotice": "品質と安全のため、プロンプトはシステムが厳選しています。下のリストから選んでください。",
+    "curatedPickToPreview": "— 上のリストからプロンプトを選ぶと内容がここに表示されます —"
   },
   "auth": {
     "email": "メールアドレス",
@@ -1544,9 +1546,16 @@
     "placeholder": "生成された画像はここに表示されます。",
     "resultLabel": "結果",
     "download": "ダウンロード",
-    "warnings": { "emptyPrompt": "プロンプトを入力してください。" },
-    "toasts": { "success": "画像の生成が完了しました。", "demoReady": "デモ画像の準備ができました。" },
-    "errors": { "generic": "生成に失敗しました。もう一度お試しください。" }
+    "warnings": {
+      "emptyPrompt": "プロンプトを入力してください。"
+    },
+    "toasts": {
+      "success": "画像の生成が完了しました。",
+      "demoReady": "デモ画像の準備ができました。"
+    },
+    "errors": {
+      "generic": "生成に失敗しました。もう一度お試しください。"
+    }
   },
   "klingVideo": {
     "title": "Kling 動画",
@@ -1565,8 +1574,14 @@
       "dramaticZoom": "砂漠ドラマチックズーム"
     },
     "tierLabel": "ティア",
-    "tiers": { "default": "標準（Kling 2.6）", "flagship": "旗艦（Kling 2.1-master Pro）" },
-    "tierHints": { "default": "高速・低コスト。", "flagship": "最高画質・Pro モードのみ。" },
+    "tiers": {
+      "default": "標準（Kling 2.6）",
+      "flagship": "旗艦（Kling 2.1-master Pro）"
+    },
+    "tierHints": {
+      "default": "高速・低コスト。",
+      "flagship": "最高画質・Pro モードのみ。"
+    },
     "promptLabel": "プロンプト",
     "promptPlaceholder": "見たい内容と動きを説明してください...",
     "startImage": "開始フレーム（任意）",
@@ -1581,9 +1596,16 @@
     "placeholder": "生成された動画はここに表示されます。",
     "resultLabel": "結果",
     "download": "ダウンロード",
-    "warnings": { "emptyPrompt": "プロンプトを入力してください。" },
-    "toasts": { "success": "{tier} 動画を生成しました。", "demoReady": "デモ動画の準備ができました。" },
-    "errors": { "generic": "生成に失敗しました。もう一度お試しください。" }
+    "warnings": {
+      "emptyPrompt": "プロンプトを入力してください。"
+    },
+    "toasts": {
+      "success": "{tier} 動画を生成しました。",
+      "demoReady": "デモ動画の準備ができました。"
+    },
+    "errors": {
+      "generic": "生成に失敗しました。もう一度お試しください。"
+    }
   },
   "adminModels": {
     "title": "AI Model Registry",
@@ -1613,9 +1635,16 @@
     "metricCalls": "{n} 回呼び出し",
     "filterPlaceholder": "ファミリー、名前、キー、モデルで絞り込み…",
     "noMatches": "該当する service key がありません。",
-    "warnings": { "modelRequired": "Model 文字列が必要です。" },
-    "toasts": { "saved": "上書きを保存しました。" },
-    "errors": { "loadFailed": "モデルレジストリの取得に失敗。", "saveFailed": "上書きの保存に失敗。" }
+    "warnings": {
+      "modelRequired": "Model 文字列が必要です。"
+    },
+    "toasts": {
+      "saved": "上書きを保存しました。"
+    },
+    "errors": {
+      "loadFailed": "モデルレジストリの取得に失敗。",
+      "saveFailed": "上書きの保存に失敗。"
+    }
   },
   "lumaVideo": {
     "title": "Luma Dream Machine",
@@ -1648,8 +1677,15 @@
     "placeholder": "生成された動画はここに表示されます。",
     "resultLabel": "結果",
     "download": "ダウンロード",
-    "warnings": { "emptyPrompt": "プロンプトを入力してください。" },
-    "toasts": { "success": "Luma 動画を生成しました。", "demoReady": "デモ動画の準備ができました。" },
-    "errors": { "generic": "生成に失敗しました。もう一度お試しください。" }
+    "warnings": {
+      "emptyPrompt": "プロンプトを入力してください。"
+    },
+    "toasts": {
+      "success": "Luma 動画を生成しました。",
+      "demoReady": "デモ動画の準備ができました。"
+    },
+    "errors": {
+      "generic": "生成に失敗しました。もう一度お試しください。"
+    }
   }
 }

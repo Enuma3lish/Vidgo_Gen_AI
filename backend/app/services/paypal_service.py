@@ -39,15 +39,17 @@ class PayPalService:
     PRODUCTION_URL = "https://api-m.paypal.com"
 
     def __init__(self):
-        self.client_id = getattr(settings, 'PAYPAL_CLIENT_ID', '')
-        self.client_secret = getattr(settings, 'PAYPAL_CLIENT_SECRET', '')
-        self.webhook_id = getattr(settings, 'PAYPAL_WEBHOOK_ID', '')
+        # Eager init from env / Secret Manager — gives a sensible default
+        # when there is no DB session (e.g. health checks, scripts). The
+        # `refresh_from_db()` method below is called by every endpoint
+        # that takes an admin-editable DB override into account.
+        self._apply_values(
+            client_id=getattr(settings, 'PAYPAL_CLIENT_ID', '') or '',
+            client_secret=getattr(settings, 'PAYPAL_CLIENT_SECRET', '') or '',
+            webhook_id=getattr(settings, 'PAYPAL_WEBHOOK_ID', '') or '',
+            env=(getattr(settings, 'PAYPAL_ENV', 'sandbox') or 'sandbox'),
+        )
         self.webhook_secret = getattr(settings, 'PAYPAL_WEBHOOK_SECRET', '')
-        self.is_mock = not (self.client_id and self.client_secret)
-
-        env = (getattr(settings, 'PAYPAL_ENV', 'sandbox') or 'sandbox').lower()
-        self.is_sandbox = env != 'production'
-        self.base_url = self.SANDBOX_URL if self.is_sandbox else self.PRODUCTION_URL
 
         self._access_token: Optional[str] = None
         self._token_expires_at: float = 0.0
@@ -56,6 +58,40 @@ class PayPalService:
             logger.warning("PayPal credentials not configured - running in MOCK mode")
         else:
             logger.info(f"PayPal service initialized (sandbox={self.is_sandbox}, url={self.base_url})")
+
+    def _apply_values(self, *, client_id: str, client_secret: str, webhook_id: str, env: str) -> None:
+        """Set the cred fields and recompute is_mock / base_url."""
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.webhook_id = webhook_id
+        self.is_mock = not (self.client_id and self.client_secret)
+        normalized_env = (env or 'sandbox').lower()
+        self.is_sandbox = normalized_env != 'production'
+        self.base_url = self.SANDBOX_URL if self.is_sandbox else self.PRODUCTION_URL
+
+    async def refresh_from_db(self, db) -> None:
+        """Pick up admin-editable overrides from the payment_settings row.
+
+        Called by subscription / webhook flows before any PayPal API call.
+        If the DB row has values they win; otherwise we keep the env-derived
+        defaults set in __init__. Cheap: PaymentSettingsService caches the
+        resolved values for 60s in-process.
+        """
+        from app.services.payment_settings_service import get_resolved_settings
+        r = await get_resolved_settings(db)
+        new_cid = r.paypal_client_id
+        new_secret = r.paypal_client_secret
+        if (new_cid != self.client_id) or (new_secret != self.client_secret):
+            # Token cached against old creds is now invalid — drop it so the
+            # next request fetches a fresh OAuth token against the new pair.
+            self._access_token = None
+            self._token_expires_at = 0.0
+        self._apply_values(
+            client_id=new_cid,
+            client_secret=new_secret,
+            webhook_id=r.paypal_webhook_id,
+            env=r.paypal_env,
+        )
 
     # =========================================================================
     # AUTH

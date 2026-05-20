@@ -531,30 +531,37 @@ PRODUCT_SCENE_MAPPING = {
             "name_zh": "節日",
             "prompt": "festive holiday backdrop with soft golden fairy-light bokeh and a hint of evergreen at the edges, warm cinematic glow, empty center area for product placement, no people, no text overlays, premium holiday campaign photography, 8K"
         },
+        # 2026-05-20 — rewrote all five season prompts for an editorial /
+        # premium feel. The previous spring/black_friday rows asked Flux for
+        # large "SALE" typography, which produced retail-flyer-looking output
+        # that small-shop owners flagged as off-brand. The new prompts
+        # explicitly EXCLUDE any text/typography/discount-tag rendering and
+        # bias toward magazine-editorial composition (negative space,
+        # cinematic lighting, natural prop layering, no human figures).
         "spring": {
             "name": "Spring Sale",
             "name_zh": "春季特賣",
-            "prompt": "clean seasonal retail sale campaign backdrop, soft daylight, airy pastel mint and blush studio display, large SALE typography and subtle discount tag shapes in the background, clean product placement, keep the original product unchanged, no flowers, no petals, no blossoms, no plants, no leaves, no botanical props, no decorations touching the product"
+            "prompt": "editorial spring campaign product backdrop, soft natural morning daylight from a tall window, airy pastel mint-green to powder-pink gradient wash, faint dewy mist in the air, simple matte ceramic display plinth in the center, light linen drape lightly bunched at the edge for texture, generous negative space, no flowers no petals no blossoms no leaves no plants no SALE no discount tag no text no typography no logo no people no hands, premium magazine-editorial composition, gentle film grain, fashion-still mood, 8K"
         },
         "valentines": {
             "name": "Valentine's Day",
             "name_zh": "情人節",
-            "prompt": "romantic valentine's day campaign backdrop, soft blush pink and burgundy color palette, scattered fresh red rose petals at the edges, satin ribbon swirls, faint heart bokeh in the background, warm candle glow, premium fashion editorial lighting, empty center for product placement, no text overlays on the product, 8K commercial photography"
+            "prompt": "editorial valentine's product backdrop, deep blush rose and soft burgundy gradient wash, hand-folded burgundy satin ribbon resting at one edge, single tasteful out-of-focus heart-shape bokeh in the deep background, low warm candle glow as side light, matte velvet plinth in the center, generous negative space, no rose petals scattered across the frame no heart confetti no SALE no text no typography no logo no people no hands, premium fashion-editorial composition, cinematic 50mm shallow depth of field, 8K"
         },
         "black_friday": {
             "name": "Black Friday",
             "name_zh": "黑色星期五",
-            "prompt": "premium black friday retail campaign backdrop, matte black surface with subtle gold metallic accents, dramatic single key spotlight from above, faint 'SALE' typography in deep background, no neon, sleek luxury promotion mood, empty center for product placement, commercial photography, 8K"
+            "prompt": "editorial luxury black-friday product backdrop, deep charcoal-to-graphite gradient with a single warm gold rim accent, matte black product stage in the center, soft cinematic key light from camera-right, slow film grain, generous negative space, no SALE no percent-off no discount tag no text no typography no neon no logo no people no hands, sleek premium magazine-editorial composition, 8K"
         },
         "christmas": {
             "name": "Christmas",
             "name_zh": "聖誕節",
-            "prompt": "elegant christmas holiday campaign backdrop, deep evergreen pine branches and frosted eucalyptus at the edges, warm golden fairy lights bokeh, classic red and gold ornaments, soft snow dust, cozy festive cinematic lighting, empty center for product placement, premium brand photography, 8K, no people"
+            "prompt": "editorial christmas product backdrop, deep evergreen pine and frosted eucalyptus branches softly out of focus at the frame edges only, warm golden fairy-light bokeh in the deep background, a few classic matte red and brushed-gold ornaments resting on the side, very light snow dust, cozy cinematic warm tungsten lighting, plain wood-grain plinth in the center, generous negative space, no SALE no text no typography no logo no people no hands, premium magazine-editorial composition, 8K"
         },
         "new_year": {
             "name": "Lunar New Year",
             "name_zh": "農曆新年",
-            "prompt": "traditional chinese lunar new year backdrop, deep festive red and gold color palette, soft red silk fabric, hanging red paper lanterns and tassels, golden 福 fortune calligraphy and auspicious cloud motifs, plum blossom branches, gold ingot and red envelope props at the edges, warm cinematic studio lighting, empty center area for product placement, prosperity and celebration mood, premium brand campaign photography, 8K, no people, no text overlays on the product"
+            "prompt": "editorial lunar new year product backdrop, deep festive red and warm brushed-gold color story, single red silk panel draped softly behind the stage, one tasteful red paper lantern hanging out of focus in the deep background, plum blossom branch resting at one edge, brushed-gold ingot or red envelope as a single accent prop on the side, warm cinematic studio lighting, plain matte plinth in the center, generous negative space, prosperity and celebration mood, no SALE no text no typography no calligraphy no logo no people no hands, premium magazine-editorial composition, 8K"
         }
     }
 }
@@ -1792,24 +1799,25 @@ class VidGoPreGenerator:
                 product_no_bg_url = rembg_result["image_url"]
                 logger.info(f"  Product (no bg): {product_no_bg_url}")
 
-                # Step 2: Generate scene background image
+                # Step 2: Generate scene background image. 2026-05-20 — the
+                # spring branch used to short-circuit to a PIL-painted
+                # backdrop with a hardcoded "SALE 20% OFF" overlay; small-shop
+                # owners flagged it as too retail-flyer-looking. Spring now
+                # uses the same Flux T2I path as every other season, driven
+                # by the editorial prompt in PRODUCT_SCENE_MAPPING["scenes"].
                 scene_prompt = f"{scene_data['prompt']}, empty background for product placement, professional studio lighting, commercial photography, 8K quality"
-                if scene_id == "spring":
-                    logger.info("  Step 2: Creating deterministic Spring Sale retail backdrop...")
-                    scene_url = self._create_spring_sale_backdrop()
-                else:
-                    logger.info("  Step 2: Generating scene background...")
-                    t2i = await self.piapi.generate_image(prompt=scene_prompt, width=1024, height=1024)
+                logger.info("  Step 2: Generating scene background...")
+                t2i = await self.piapi.generate_image(prompt=scene_prompt, width=1024, height=1024)
 
-                    if not t2i["success"]:
-                        logger.warning(f"  Scene T2I failed: {t2i.get('error')}, skipping...")
-                        self.stats["failed"] += 1
-                        self.stats["by_tool"]["product_scene"]["failed"] += 1
-                        count += 1
-                        self._topic_mark_generated(scene_id, topic_counts)
-                        continue
+                if not t2i["success"]:
+                    logger.warning(f"  Scene T2I failed: {t2i.get('error')}, skipping...")
+                    self.stats["failed"] += 1
+                    self.stats["by_tool"]["product_scene"]["failed"] += 1
+                    count += 1
+                    self._topic_mark_generated(scene_id, topic_counts)
+                    continue
 
-                    scene_url = t2i["image_url"]
+                scene_url = t2i["image_url"]
                 logger.info(f"  Scene background: {scene_url}")
 
                 # Step 3: Composite product onto scene using PIL

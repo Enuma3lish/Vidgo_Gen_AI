@@ -82,7 +82,11 @@ const demoEmptyState = ref(false)
 // Settings - only for subscribed users
 const selectedDuration = ref(5)
 const selectedMotion = ref('auto')
-const selectedModel = ref('pixverse_v4.5')
+// 2026-05-19 tier revision — Seedance 2.0 Fast is the owner-approved
+// primary default (best CP value, stable, high success rate). Backend
+// piapi_provider._resolve_video_model() maps this through PiAPI; Pollo
+// is the auto-backup on failure.
+const selectedModel = ref('seedance')
 const selectedStyle = ref<string | null>(null)
 const videoStyles = ref<Style[]>([])
 
@@ -116,67 +120,73 @@ const motionOptions = [
   { id: 'rotate',    nameEn: 'Rotate',     nameZh: '旋轉', nameJa: '回転',     nameKo: '회전',     nameEs: 'Rotar',        descEn: 'Circular motion',           descZh: '旋轉動態',       descJa: '円運動',               descKo: '원형 운동',             descEs: 'Movimiento circular' }
 ]
 
-// AI Model options from Pollo AI - subscriber only feature
+// 2026-05-19 tier revision — Owner-approved SaaS model tier table.
+// Order intentionally puts Seedance first so the default radio lands
+// on the "best CP value" tier; Kling Omni / 3.0 is the premium up-sell;
+// Hailuo Fast / Hunyuan / Wan cover cheap / 中文 / legacy use cases.
+// id values match the aliases that piapi_provider._resolve_video_model
+// and pollo_provider's alias map both recognize, so a single string
+// flows correctly to whichever provider serves the request.
 const aiModelOptions = [
   {
-    id: 'pixverse_v4.5',
-    nameEn: 'Pixverse 4.5',
-    nameZh: 'Pixverse 4.5',
-    descEn: 'Fast & Affordable - Good quality',
-    descZh: '快速實惠 - 品質優良',
-    descJa: '高速・低コスト・良好な品質',
-    descKo: '빠르고 저렴 - 좋은 품질',
-    descEs: 'Rápido y económico - Buena calidad',
-    lengths: [5, 8],
+    id: 'seedance',
+    nameEn: 'Seedance 2.0 Fast',
+    nameZh: 'Seedance 2.0 Fast',
+    descEn: 'Best CP value · Stable · Recommended default',
+    descZh: '最佳 CP 值 · 穩定 · 預設推薦',
+    descJa: '最高のCP値・安定・標準推奨',
+    descKo: '최고의 가성비 · 안정적 · 기본 추천',
+    descEs: 'Mejor relación calidad-precio · Estable · Predeterminado',
+    lengths: [5, 10],
     badge: 'default'
   },
   {
-    id: 'pixverse_v5',
-    nameEn: 'Pixverse 5.0',
-    nameZh: 'Pixverse 5.0',
-    descEn: 'Creative animations',
-    descZh: '創意動畫風格',
-    descJa: 'クリエイティブなアニメーション',
-    descKo: '창의적인 애니메이션',
-    descEs: 'Animaciones creativas',
-    lengths: [5, 8],
-    badge: 'new'
-  },
-  {
-    id: 'kling_v2',
-    nameEn: 'Kling AI 2.0',
-    nameZh: 'Kling AI 2.0',
-    descEn: 'High quality, lifelike movements',
-    descZh: '高品質，逼真動態',
-    descJa: '高品質、リアルな動き',
-    descKo: '고품질, 사실적인 움직임',
-    descEs: 'Alta calidad, movimientos realistas',
-    lengths: [5, 10],
-    badge: 'pro'
-  },
-  {
-    id: 'kling_v1.5',
-    nameEn: 'Kling AI 1.5',
-    nameZh: 'Kling AI 1.5',
-    descEn: 'Fast generation, good quality',
-    descZh: '快速生成，品質好',
-    descJa: '高速生成、良好な品質',
-    descKo: '빠른 생성, 좋은 품질',
-    descEs: 'Generación rápida, buena calidad',
-    lengths: [5, 10],
-    badge: null
-  },
-  {
-    id: 'luma_ray2',
-    nameEn: 'Luma Ray 2.0',
-    nameZh: 'Luma Ray 2.0',
-    descEn: 'Cinematic quality',
-    descZh: '電影級品質',
-    descJa: '映画レベルの品質',
-    descKo: '영화 수준의 품질',
-    descEs: 'Calidad cinematográfica',
+    id: 'kling_omni',
+    nameEn: 'Kling 3.0 / Omni',
+    nameZh: 'Kling 3.0 / Omni',
+    descEn: 'Premium tier — top quality + audio',
+    descZh: '高階付費 — 頂級品質含音訊',
+    descJa: 'プレミアム — 最高品質・音声付き',
+    descKo: '프리미엄 — 최고 품질 · 오디오 포함',
+    descEs: 'Premium — máxima calidad con audio',
     lengths: [5, 10],
     badge: 'premium'
+  },
+  {
+    id: 'hailuo',
+    nameEn: 'Hailuo Fast',
+    nameZh: 'Hailuo Fast',
+    descEn: 'Cheapest tier — fastest turnaround',
+    descZh: '快速 / 低價流量 — 速度最快、成本低',
+    descJa: '最安・最速のティア',
+    descKo: '가장 저렴 · 가장 빠름',
+    descEs: 'Más barato y rápido',
+    lengths: [5, 6],
+    badge: 'fast'
+  },
+  {
+    id: 'hunyuan',
+    nameEn: 'Hunyuan',
+    nameZh: '混元 Hunyuan',
+    descEn: 'Strong Chinese prompts + dynamic motion',
+    descZh: '中文強 · 動態豐富 · 性價比好',
+    descJa: '中国語に強く、ダイナミックな動き',
+    descKo: '중국어 강함 · 풍부한 동작',
+    descEs: 'Buen rendimiento en chino, movimiento dinámico',
+    lengths: [5, 8],
+    badge: 'feature'
+  },
+  {
+    id: 'wan',
+    nameEn: 'Wan 2.6',
+    nameZh: 'Wan 2.6',
+    descEn: 'Specialty / legacy tier',
+    descZh: '利基 · 特定需求',
+    descJa: 'スペシャルティ / レガシー',
+    descKo: '특수 / 레거시 티어',
+    descEs: 'Especializado / heredado',
+    lengths: [5, 10, 15],
+    badge: null
   }
 ]
 

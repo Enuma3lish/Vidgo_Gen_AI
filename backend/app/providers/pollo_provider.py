@@ -1,6 +1,6 @@
 """
 Pollo.ai REST Provider — primary REST lane for explicit Pollo model choices
-(pixverse_v4.5, pixverse_v5, kling_v1.5, kling_v2, luma_ray2, …).
+(seedance_v2, hailuo_fast, hunyuan_v1, kling_v3, pixverse_v4.5, …).
 
 Pollo's REST API is per-model; the path is:
     POST https://pollo.ai/api/platform/generation/{vendor}/{model-slug}
@@ -168,9 +168,20 @@ class PolloProvider(BaseProvider):
             "kling_v1_5": "kling_v1.5",
             "kling-v1-5": "kling_v1.5",
             "kling-v2": "kling_v2",
-            "luma": "luma_ray2",
-            "luma_ray_2": "luma_ray2",
-            "luma-ray-2": "luma_ray2",
+            # 2026-05-19 tier revision — Pollo is the backup for PiAPI on
+            # these models. Aliases mirror what callers might pass after
+            # picking a tier on the frontend (frontend sends the family
+            # name; Pollo normalizes to its slug here).
+            "seedance":      _POLLO_REG["seedance_default"],
+            "seedance_v2":   _POLLO_REG["seedance_default"],
+            "seedance-fast": _POLLO_REG["seedance_default"],
+            "hailuo":        _POLLO_REG["hailuo_default"],
+            "hailuo_fast":   _POLLO_REG["hailuo_default"],
+            "minimax":       _POLLO_REG["hailuo_default"],
+            "hunyuan":       _POLLO_REG["hunyuan_default"],
+            "kling_omni":    _POLLO_REG["kling_omni"],
+            "kling-3":       _POLLO_REG["kling_omni"],
+            "kling_v3":      _POLLO_REG["kling_omni"],
         }
         m = aliases.get(m, m)
         if m in POLLO_MODELS:

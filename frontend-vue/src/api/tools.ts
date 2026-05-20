@@ -246,6 +246,7 @@ export const toolsApi = {
     prompt: string
     aspectRatio?: string
     processMode?: 'relax' | 'fast' | 'turbo'
+    model?: 'flux' | 'qwen' | 'z-image'
   }): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/midjourney-imagine',
@@ -253,6 +254,10 @@ export const toolsApi = {
         prompt: params.prompt,
         aspect_ratio: params.aspectRatio ?? '1:1',
         process_mode: params.processMode,
+        // Backend reads `model` and forwards it to provider_router.route(T2I).
+        // piapi_provider.text_to_image() dispatches Flux / Qwen / Z-Image
+        // (verified against PiAPI's live catalog 2026-05-20).
+        ...(params.model && params.model !== 'flux' ? { model: params.model } : {}),
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
@@ -261,7 +266,9 @@ export const toolsApi = {
 
   async klingVideo(params: {
     prompt: string
-    tier?: 'default' | 'flagship'
+    // 2026-05-19: added "omni" tier (Kling 3.0 multimodal). Backend
+    // KlingVideoRequest accepts the same three values.
+    tier?: 'default' | 'flagship' | 'omni'
     aspectRatio?: string
     duration?: 5 | 10
     imageUrl?: string
@@ -286,28 +293,7 @@ export const toolsApi = {
     return response.data
   },
 
-  async lumaVideo(params: {
-    prompt: string
-    duration?: 5 | 9
-    aspectRatio?: string
-    startImage?: string
-    endImage?: string
-    loop?: boolean
-  }): Promise<ToolResponse> {
-    const response = await apiClient.post(
-      '/api/v1/tools/luma-video',
-      {
-        prompt: params.prompt,
-        duration: params.duration ?? 5,
-        aspect_ratio: params.aspectRatio ?? '16:9',
-        start_image: params.startImage,
-        end_image: params.endImage,
-        loop: params.loop ?? false,
-      },
-      { timeout: GENERATION_TIMEOUT_MS }
-    )
-    return response.data
-  },
+  // lumaVideo() removed 2026-05-19 — use shortVideo() with model_id picks.
 
   async uploadImage(file: File): Promise<{ url: string }> {
     const formData = new FormData()

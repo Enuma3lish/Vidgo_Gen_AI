@@ -5,7 +5,32 @@ import { useI18n } from 'vue-i18n'
 import { useLocalized } from '@/composables'
 import { useAuthStore, useCreditsStore } from '@/stores'
 import { userApi } from '@/api/user'
+import apiClient from '@/api/client'
 import type { UserGeneration, UserStatsResponse } from '@/api/user'
+
+// 2026-05-20 — Provider account status (admin-only).
+// VidGo's upstream credits at PiAPI / Pollo / Vertex AI are what
+// actually determine whether the platform can serve generations. The owner
+// asked to surface this on the dashboard with a "Visit vendor" one-click
+// for providers that don't expose a balance API. We gate the entire card
+// by `is_superuser` so end users don't see the company's wholesale balances.
+interface ProviderStatus {
+  provider: string
+  display_name: string
+  configured: boolean
+  status: 'healthy' | 'low' | 'depleted' | 'unknown' | 'disabled'
+  balance: number | null
+  balance_label: string | null
+  currency: string
+  vendor_url: string
+  supports_live_api: boolean
+  source: 'live' | 'cache' | 'env' | 'manual' | 'disabled'
+  error: string | null
+  last_checked: number | null
+}
+const providerStatuses = ref<ProviderStatus[]>([])
+const providerStatusLoading = ref(false)
+const providerStatusError = ref<string | null>(null)
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -69,6 +94,65 @@ function formatRelativeDate(dateStr: string): string {
   return date.toLocaleDateString()
 }
 
+const isOperator = computed(() => Boolean((authStore.user as any)?.is_superuser))
+
+const providerStatusSummaryStyle = computed(() => {
+  const counts = providerStatuses.value.reduce(
+    (acc, p) => {
+      if (!p.configured) return acc
+      if (p.status === 'depleted') acc.depleted += 1
+      else if (p.status === 'low') acc.low += 1
+      return acc
+    },
+    { depleted: 0, low: 0 },
+  )
+  if (counts.depleted > 0) return { color: '#ff4d4f', bg: 'rgba(255,77,79,0.10)', label: L('需立即儲值', 'Top up required', 'チャージが必要です', '충전이 필요합니다', 'Recarga necesaria') }
+  if (counts.low > 0) return { color: '#faad14', bg: 'rgba(250,173,20,0.10)', label: L('餘額偏低', 'Balance low', '残高が少ない', '잔액 부족', 'Saldo bajo') }
+  return { color: '#52c41a', bg: 'rgba(82,196,26,0.10)', label: L('全部正常', 'All operational', 'すべて正常', '모두 정상', 'Todo en orden') }
+})
+
+function providerStatusColor(status: ProviderStatus['status']): string {
+  switch (status) {
+    case 'healthy': return '#52c41a'
+    case 'low': return '#faad14'
+    case 'depleted': return '#ff4d4f'
+    case 'disabled': return '#6b6b8a'
+    default: return '#9494b0'
+  }
+}
+
+function providerStatusLabel(status: ProviderStatus['status']): string {
+  switch (status) {
+    case 'healthy':  return L('正常', 'Healthy', '正常', '정상', 'OK')
+    case 'low':      return L('餘額低', 'Low', '低', '낮음', 'Bajo')
+    case 'depleted': return L('已耗盡', 'Depleted', '残高なし', '소진됨', 'Agotado')
+    case 'disabled': return L('未啟用', 'Disabled', '無効', '비활성', 'Inactivo')
+    default:         return L('未知', 'Unknown', '不明', '알 수 없음', 'Desconocido')
+  }
+}
+
+function providerSourceHint(p: ProviderStatus): string {
+  if (p.source === 'live')   return L('即時 API 餘額', 'Live API balance', 'リアルタイムAPI残高', '실시간 API 잔액', 'Saldo en vivo')
+  if (p.source === 'cache')  return L('快取（5 分鐘內）', 'Cached (< 5 min)', 'キャッシュ（5分以内）', '캐시 (5분 이내)', 'En caché (< 5 min)')
+  if (p.source === 'env')    return L('環境變數（手動填寫）', 'Env var (manually entered)', '環境変数（手動）', '환경 변수 (수동)', 'Var. de entorno (manual)')
+  if (p.source === 'manual') return L('此供應商未提供餘額 API — 請點擊查看', 'No balance API — click to view', '残高APIなし — クリックして確認', '잔액 API 없음 — 클릭', 'Sin API de saldo — clic')
+  return ''
+}
+
+async function loadProviderStatus() {
+  if (!isOperator.value) return
+  providerStatusLoading.value = true
+  providerStatusError.value = null
+  try {
+    const { data } = await apiClient.get('/api/v1/admin/provider-balances')
+    providerStatuses.value = data?.providers ?? []
+  } catch (err: any) {
+    providerStatusError.value = err?.response?.data?.detail || err?.message || 'Failed to load provider status'
+  } finally {
+    providerStatusLoading.value = false
+  }
+}
+
 onMounted(async () => {
   if (!authStore.user) {
     await authStore.fetchUser()
@@ -80,6 +164,10 @@ onMounted(async () => {
   } catch {
     // Handle error silently
   }
+
+  // Operator-only widget — fetched in parallel with the rest so it doesn't
+  // delay the user-facing portions if the vendor APIs are slow.
+  loadProviderStatus()
 
   loadingWorks.value = true
   try {
@@ -150,6 +238,92 @@ onMounted(async () => {
           <RouterLink to="/pricing" class="text-xs font-medium transition-colors hover:opacity-80" style="color: #1677ff;">
             {{ t('dashboard.upgradePlan') }} →
           </RouterLink>
+        </div>
+      </div>
+
+      <!-- ───── Operator-only: AI provider account status ─────
+           Live balances for VidGo's upstream accounts at PiAPI / Pollo /
+           OpenAI / Vertex AI / A2E so the owner can spot a depleted vendor
+           before user-side generations start failing. Gated by is_superuser
+           so regular small-ecommerce users never see this panel. -->
+      <div v-if="isOperator" class="mb-8">
+        <div class="flex items-end justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <h2 class="text-base font-bold" style="color: #f5f5fa;">
+              {{ L('AI 供應商帳戶餘額', 'AI Provider Balances', 'AIプロバイダー残高', 'AI 공급자 잔액', 'Saldos de proveedores IA') }}
+            </h2>
+            <p class="text-xs mt-0.5" style="color: #6b6b8a;">
+              {{ L('VidGo 自有的上游帳戶 — 用戶看不到', "VidGo's own upstream accounts — hidden from end users", 'VidGo の上流アカウント — エンドユーザーには非表示', 'VidGo의 상위 계정 — 일반 사용자에게 비공개', 'Cuentas upstream de VidGo — ocultas a los usuarios') }}
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span
+              v-if="providerStatuses.length > 0"
+              class="text-xs px-3 py-1 rounded-full font-semibold"
+              :style="`color: ${providerStatusSummaryStyle.color}; background: ${providerStatusSummaryStyle.bg};`"
+            >{{ providerStatusSummaryStyle.label }}</span>
+            <button
+              @click="loadProviderStatus"
+              :disabled="providerStatusLoading"
+              class="text-xs px-3 py-1 rounded transition-colors disabled:opacity-60"
+              style="color: #1677ff; background: rgba(22,119,255,0.08); border: 1px solid rgba(22,119,255,0.2);"
+            >
+              {{ providerStatusLoading ? L('讀取中…', 'Refreshing…', '更新中…', '새로 고침 중…', 'Cargando…') : L('重新整理', 'Refresh', '更新', '새로 고침', 'Actualizar') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="providerStatusError" class="rounded-xl p-4 text-sm" style="background: rgba(255,77,79,0.08); border: 1px solid rgba(255,77,79,0.2); color: #ff7875;">
+          {{ providerStatusError }}
+        </div>
+
+        <div v-else-if="providerStatusLoading && providerStatuses.length === 0" class="rounded-xl text-center py-8" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+          <div class="animate-spin w-6 h-6 border-2 border-t-transparent rounded-full mx-auto mb-2" style="border-color: #1677ff; border-top-color: transparent;"></div>
+          <p class="text-sm" style="color: #6b6b8a;">{{ L('讀取供應商餘額中…', 'Loading provider balances…', 'プロバイダー残高を読み込み中…', '공급자 잔액 로드 중…', 'Cargando saldos…') }}</p>
+        </div>
+
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div
+            v-for="p in providerStatuses"
+            :key="p.provider"
+            class="rounded-xl p-4 flex flex-col gap-3"
+            :style="`background: #141420; border: 1px solid ${p.status === 'depleted' ? 'rgba(255,77,79,0.35)' : p.status === 'low' ? 'rgba(250,173,20,0.35)' : 'rgba(255,255,255,0.06)'};`"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold truncate" style="color: #f5f5fa;">{{ p.display_name }}</p>
+                <p class="text-[11px] mt-0.5" style="color: #6b6b8a;">{{ providerSourceHint(p) }}</p>
+              </div>
+              <span
+                class="shrink-0 text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider"
+                :style="`color: ${providerStatusColor(p.status)}; background: ${providerStatusColor(p.status)}1a;`"
+              >{{ providerStatusLabel(p.status) }}</span>
+            </div>
+
+            <div>
+              <p class="text-xl font-black" style="color: #f5f5fa;">
+                <template v-if="p.balance_label">{{ p.balance_label }}</template>
+                <template v-else-if="p.configured && !p.supports_live_api">—</template>
+                <template v-else-if="!p.configured">{{ L('未設定', 'Not configured', '未設定', '미설정', 'No configurado') }}</template>
+                <template v-else>?</template>
+              </p>
+              <p v-if="p.error" class="text-[11px] mt-1" style="color: #ff7875;">{{ p.error }}</p>
+            </div>
+
+            <a
+              :href="p.vendor_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-xs font-medium text-center py-2 rounded transition-colors"
+              :style="p.supports_live_api
+                ? 'color: #6b6b8a; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);'
+                : 'color: #1677ff; background: rgba(22,119,255,0.08); border: 1px solid rgba(22,119,255,0.2);'"
+            >
+              {{ p.supports_live_api
+                ? L('前往帳戶儲值 ↗', 'Top up account ↗', 'アカウントにチャージ ↗', '계정 충전 ↗', 'Recargar ↗')
+                : L('開啟供應商頁面查看 ↗', 'Open vendor page to check ↗', 'プロバイダーページで確認 ↗', '공급자 페이지에서 확인 ↗', 'Abrir página del proveedor ↗') }}
+            </a>
+          </div>
         </div>
       </div>
 

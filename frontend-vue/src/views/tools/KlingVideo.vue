@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode } from '@/composables'
+import { useDemoMode, useLocalized } from '@/composables'
 import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -14,9 +14,13 @@ const { t, locale } = useI18n()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const { isDemoUser } = useDemoMode()
+const { L } = useLocalized()
 
 const prompt = ref('')
-const tier = ref<'default' | 'flagship'>('default')
+// 2026-05-20: added "omni" tier (Kling 3.0 multimodal with audio + lip-sync).
+// Backend KlingVideoRequest accepts the same three values; mode selection
+// inside kling_video_generation routes "omni" to PiAPI's omni mode.
+const tier = ref<'default' | 'flagship' | 'omni'>('default')
 const duration = ref<5 | 10>(5)
 const aspectRatio = ref<'16:9' | '9:16' | '1:1'>('16:9')
 const startImage = ref<string | undefined>(undefined)
@@ -34,6 +38,10 @@ const selectedPresetId = ref('')
 function applyPreset() {
   if (!selectedPresetId.value) return
   prompt.value = presetPromptFor(selectedPresetId.value)
+  // Clear stale video from a previous generation so the result panel
+  // doesn't read as "this video doesn't match the prompt I just picked."
+  // Matches the fix applied to MidjourneyImagine for the same UX class.
+  resultVideo.value = undefined
 }
 watch(locale, () => {
   if (selectedPresetId.value) prompt.value = presetPromptFor(selectedPresetId.value)
@@ -42,7 +50,11 @@ watch(locale, () => {
 // Backend hardcoded fallback per tier (matches seeded ServicePricing).
 // Admin overrides via /admin/models still affect the actual deduction
 // regardless of what's displayed here.
-const displayCost = computed(() => tier.value === 'flagship' ? 500 : 100)
+const displayCost = computed(() => {
+  if (tier.value === 'omni') return 750
+  if (tier.value === 'flagship') return 500
+  return 100
+})
 
 async function handleGenerate() {
   if (!prompt.value.trim()) {
@@ -97,19 +109,28 @@ async function handleGenerate() {
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="space-y-4">
-          <!-- Tier -->
+          <!-- Tier — three options as of 2026-05-19: default (Kling 2.6, ~100c),
+               flagship (Kling 2.1-master pro, ~500c), omni (Kling 3.0 multimodal
+               with audio + lip-sync, ~750c). Translation fallbacks via L()
+               keep us functional even before the i18n strings ship. -->
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.tierLabel') }}</label>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
-                v-for="tk in ['default', 'flagship'] as const"
+                v-for="tk in ['default', 'flagship', 'omni'] as const"
                 :key="tk"
-                @click="tier = tk"
+                @click="tier = tk; resultVideo = undefined"
                 class="py-3 rounded-lg text-sm font-medium transition-all text-left px-3"
                 :style="tier === tk ? 'background: #1677ff; color: white;' : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.1);'"
               >
-                <div class="font-semibold">{{ t(`klingVideo.tiers.${tk}`) }}</div>
-                <div class="text-xs opacity-75 mt-1">{{ t(`klingVideo.tierHints.${tk}`) }}</div>
+                <div class="font-semibold">
+                  <template v-if="tk === 'omni'">{{ L('Kling 3.0 / Omni', 'Kling 3.0 / Omni', 'Kling 3.0 / Omni', 'Kling 3.0 / Omni', 'Kling 3.0 / Omni') }}</template>
+                  <template v-else>{{ t(`klingVideo.tiers.${tk}`) }}</template>
+                </div>
+                <div class="text-xs opacity-75 mt-1">
+                  <template v-if="tk === 'omni'">{{ L('多模態 + 音訊與口型同步（約 750 點）', 'Multimodal + audio & lip-sync (~750 credits)', 'マルチモーダル + 音声・リップシンク（約750ポイント）', '멀티모달 + 오디오·립싱크 (약 750 포인트)', 'Multimodal + audio y sincronización labial (~750 créditos)') }}</template>
+                  <template v-else>{{ t(`klingVideo.tierHints.${tk}`) }}</template>
+                </div>
               </button>
             </div>
           </div>

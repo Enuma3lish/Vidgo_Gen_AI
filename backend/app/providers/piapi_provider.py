@@ -509,13 +509,20 @@ class PiAPIProvider(BaseProvider):
 
     async def text_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate image from text using Flux via PiAPI.
+        Generate image from text via PiAPI. Default model is Flux schnell;
+        callers can switch by setting ``params["model"]`` to ``qwen`` or
+        ``z-image`` (verified against live PiAPI catalog 2026-05-20).
+
+        Hunyuan and Seedance T2I are NOT available on PiAPI — those are
+        video-only product lines. Use ``qwen`` for Chinese-prompt strength
+        and ``z-image`` for cheap/fast generation.
 
         Args:
             params: {
                 "prompt": str,
                 "negative_prompt": str (optional),
                 "size": str (optional, default "1024*1024"),
+                "model": str (optional; "flux" | "qwen" | "z-image"),
             }
 
         Returns:
@@ -530,16 +537,44 @@ class PiAPIProvider(BaseProvider):
         else:
             width, height = 1024, 1024
 
-        payload = {
-            "model": PIAPI_MODELS["flux_t2i"],
-            "task_type": "txt2img",
-            "input": {
-                "prompt": params["prompt"],
-                "negative_prompt": params.get("negative_prompt", ""),
-                "width": width,
-                "height": height
+        # Model family dispatch (revised 2026-05-20 after live PiAPI probe).
+        # Qwen Image and Z-Image Turbo are the only Flux-alternatives PiAPI
+        # actually exposes via /api/v1/task. Hunyuan/Seedance were guesses
+        # in the prior revision and silently returned default-model output.
+        model_id = str(params.get("model") or "").lower().strip()
+        if "qwen" in model_id:
+            payload = {
+                "model": PIAPI_MODELS["qwen_t2i"],
+                "task_type": "txt2img",
+                "input": {
+                    "prompt": params["prompt"],
+                    "negative_prompt": params.get("negative_prompt", ""),
+                    "width": width,
+                    "height": height,
+                },
             }
-        }
+        elif "z-image" in model_id or "z_image" in model_id or "zimage" in model_id:
+            payload = {
+                "model": PIAPI_MODELS["z_image_t2i"],
+                "task_type": "txt2img",
+                "input": {
+                    "prompt": params["prompt"],
+                    "negative_prompt": params.get("negative_prompt", ""),
+                    "width": width,
+                    "height": height,
+                },
+            }
+        else:
+            payload = {
+                "model": PIAPI_MODELS["flux_t2i"],
+                "task_type": "txt2img",
+                "input": {
+                    "prompt": params["prompt"],
+                    "negative_prompt": params.get("negative_prompt", ""),
+                    "width": width,
+                    "height": height,
+                },
+            }
 
         return await self._submit_and_poll(payload)
 
@@ -871,9 +906,11 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("image_to_video", params)
 
+        family = self._resolve_video_model(params.get("model"))
+        model_key, _, i2v_task_key = self._VIDEO_MODEL_MAP[family]
         payload = {
-            "model": PIAPI_MODELS["wan_video"],
-            "task_type": PIAPI_MODELS["wan_i2v_task"],
+            "model": PIAPI_MODELS[model_key],
+            "task_type": PIAPI_MODELS[i2v_task_key],
             "input": {
                 "image": self._resolve_image_url(params["image_url"]),
                 "prompt": params.get("prompt", "smooth natural motion"),
@@ -902,27 +939,55 @@ class PiAPIProvider(BaseProvider):
     # TEXT TO VIDEO (Wan 2.6 via PiAPI)
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Video model dispatch table (2026-05-19 tier revision) ──
+    # Each row picks the PiAPI (model, t2v_task, i2v_task) triplet for a
+    # named video family. Aliases (lowercase keys) are normalized in
+    # _resolve_video_model() below so callers can pass any common spelling.
+    _VIDEO_MODEL_MAP = {
+        "seedance": ("seedance_video", "seedance_t2v_task", "seedance_i2v_task"),
+        "hailuo":   ("hailuo_video",   "hailuo_t2v_task",   "hailuo_i2v_task"),
+        "hunyuan":  ("hunyuan_video",  "hunyuan_t2v_task",  "hunyuan_i2v_task"),
+        "wan":      ("wan_video",      "wan_t2v_task",      "wan_i2v_task"),
+    }
+
+    @staticmethod
+    def _resolve_video_model(model_id: Optional[str]) -> str:
+        """Map any caller-supplied alias to one of the _VIDEO_MODEL_MAP keys.
+        Defaults to ``seedance`` (the new owner-approved primary), so passing
+        ``None`` or an unknown alias produces a Seedance 2.0 Fast run."""
+        if not model_id:
+            return "seedance"
+        m = str(model_id).lower().strip()
+        # Strip vendor prefixes + common version suffixes so aliases like
+        # "Seedance 2.0 Fast" / "seedance_v2" / "Doubao/seedance" all match.
+        if "seedance" in m or "doubao" in m:
+            return "seedance"
+        if "hailuo" in m or "minimax" in m:
+            return "hailuo"
+        if "hunyuan" in m or "tencent" in m:
+            return "hunyuan"
+        if m.startswith("wan") or "wan2" in m or m.startswith("wan_"):
+            return "wan"
+        # Unknown alias → fall back to default tier (Seedance Fast).
+        return "seedance"
+
     async def text_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate video from text using Wan 2.6 T2V via PiAPI.
-
-        Args:
-            params: {
-                "prompt": str,
-                "negative_prompt": str (optional),
-                "duration": int (optional, 5/10/15, default 5),
-                "resolution": str (optional, "720P" or "1080P", default "1080P"),
-                "aspect_ratio": str (optional, "16:9", "9:16", "1:1", default "16:9")
-            }
+        Generate video from text via PiAPI. Model family is selected by
+        ``params["model"]`` (default: Seedance 2.0 Fast). Supported families:
+        ``seedance`` (primary), ``hailuo`` (fast/cheap), ``hunyuan`` (中文),
+        ``wan`` (legacy/specialty).
 
         Returns:
             {"success": True, "task_id": str, "output": {"video_url": str}}
         """
         self._log_request("text_to_video", params)
 
+        family = self._resolve_video_model(params.get("model"))
+        model_key, t2v_task_key, _ = self._VIDEO_MODEL_MAP[family]
         payload = {
-            "model": PIAPI_MODELS["wan_video"],
-            "task_type": PIAPI_MODELS["wan_t2v_task"],
+            "model": PIAPI_MODELS[model_key],
+            "task_type": PIAPI_MODELS[t2v_task_key],
             "input": {
                 "prompt": params["prompt"],
                 "negative_prompt": params.get("negative_prompt", ""),
@@ -980,8 +1045,23 @@ class PiAPIProvider(BaseProvider):
             tier = (params.get("tier") or "default").lower()
             version = PIAPI_KLING_VERSIONS.get(tier, PIAPI_KLING_VERSIONS["default"])
 
-        # 2.1-master is pro-mode only per PiAPI docs; auto-promote.
-        mode = params.get("mode") or ("pro" if version == "2.1-master" else "std")
+        # Mode selection: 2.1-master is pro-only; 3.0/Omni uses PiAPI's
+        # "omni" mode which unlocks the multimodal audio + lip-sync output
+        # the 高階付費 tier needs. Everything else stays on "std".
+        if params.get("mode"):
+            mode = params["mode"]
+        elif version == "2.1-master":
+            mode = "pro"
+        elif version == "3.0" or (params.get("tier") or "").lower() == "omni":
+            mode = "omni"
+        else:
+            mode = "std"
+
+        # Kling Omni's whole point is the audio/lip-sync output, so flip
+        # enable_audio on by default for that tier (callers can still pass
+        # enable_audio=False if they want a silent 3.0 generation).
+        if mode == "omni" and params.get("enable_audio") is None:
+            params = {**params, "enable_audio": True}
 
         input_data: Dict[str, Any] = {
             "prompt": params["prompt"],
@@ -1037,90 +1117,9 @@ class PiAPIProvider(BaseProvider):
             result["output"] = output
         return result
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # LUMA DREAM MACHINE (text-to-video, image-to-video, first-last frame)
-    # ─────────────────────────────────────────────────────────────────────────
-
-    async def luma_video_generation(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generate video using Luma Dream Machine via PiAPI.
-        Reference: piapi.ai/docs/dream-machine/create-task
-
-        Modes (auto-selected by which images are supplied):
-          - prompt only                      → text-to-video
-          - prompt + start_image             → image-to-video
-          - prompt + start_image + end_image → first-last frame
-          - end_image only                   → reverse-direction generation
-
-        Args:
-            params: {
-                "prompt": str (required),
-                "model_name": str (optional, default "ray-v2" from registry —
-                    Ray1 deprecated, Ray3 in dev),
-                "duration": int (optional, 5 or 9; PiAPI prices 5s=$0.2, 9s=$0.4),
-                "aspect_ratio": str (optional, default "16:9"; also "9:16",
-                    "1:1", "3:4", "4:3", "21:9"),
-                "start_image": str (optional, first frame URL for I2V),
-                "image_url": str (alias for start_image),
-                "end_image": str (optional, last frame URL),
-                "loop": bool (optional, default False),
-            }
-
-        Returns:
-            {"success": True, "task_id": str, "output": {"video_url": str}}
-
-        Note: V2V (video-to-video) is NOT supported by Luma's create-task.
-        Use Wan or Pollo for V2V flows.
-        """
-        self._log_request("luma_video_generation", params)
-
-        # Accept either "start_image" (PiAPI-native) or "image_url" (codebase
-        # convention) so callers can stay consistent with other I2V methods.
-        start_image = params.get("start_image") or params.get("image_url")
-        end_image = params.get("end_image")
-        duration = int(params.get("duration", 5))
-        if duration not in (5, 9):
-            duration = 5
-
-        input_data: Dict[str, Any] = {
-            "prompt": params["prompt"],
-            "model_name": params.get("model_name") or PIAPI_MODELS["luma_ray_version"],
-            "duration": duration,
-            "aspect_ratio": params.get("aspect_ratio", "16:9"),
-            "loop": bool(params.get("loop", False)),
-        }
-        if start_image:
-            input_data["start_image"] = self._resolve_image_url(start_image)
-        if end_image:
-            input_data["end_image"] = self._resolve_image_url(end_image)
-
-        payload = {
-            "model": PIAPI_MODELS["luma_video"],
-            "task_type": "video_generation",
-            "input": input_data,
-            "config": {"service_mode": "public"},
-        }
-
-        result = await self._retry_transient(
-            "luma_video_generation",
-            lambda: self._submit_and_poll(payload),
-        )
-        output = result.get("output") or {}
-        if isinstance(output, dict):
-            # Luma returns the URL at output.video per docs; normalize so
-            # downstream consumers can treat all video providers uniformly.
-            video_url = (
-                output.get("video_url")
-                or output.get("video")
-                or output.get("url")
-                or ""
-            )
-            if isinstance(video_url, dict):
-                video_url = video_url.get("url") or video_url.get("download_url") or ""
-            if video_url:
-                output["video_url"] = video_url
-            result["output"] = output
-        return result
+    # ── Luma Dream Machine removed 2026-05-19. Use Seedance/Hailuo/Hunyuan/
+    # Wan via text_to_video()/image_to_video(), or Kling Omni via
+    # kling_video_generation(params={"tier": "omni"}).
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERIOR DESIGN (using Flux img2img as fallback)

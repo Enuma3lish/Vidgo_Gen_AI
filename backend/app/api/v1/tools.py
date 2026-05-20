@@ -354,19 +354,7 @@ _PREMIUM_DEMO_FALLBACKS = {
         "kind": "video",
         "prompt": "Cinematic ocean waves at sunset (Kling Video demo).",
     },
-    "video_generation_professional": {
-        # TODO: backfill once PiAPI's Luma rate limit clears. The seed
-        # script (set=demos) tried to generate this on 2026-05-16 and
-        # PiAPI returned "too many requests" for the Luma model. The
-        # Kling demo is used as a temporary stand-in so the user still
-        # sees a real video preview instead of a 503. Re-run
-        #   uv run --no-project --with httpx --with python-dotenv --with google-cloud-storage \
-        #       python backend/scripts/generate_brand_assets.py --set demos --only luma-video --gcs --no-db
-        # and then point `result_url` at /static/premium/demos/luma-video.mp4.
-        "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/premium/demos/kling-video.mp4",
-        "kind": "video",
-        "prompt": "Cinematic ocean waves at sunset (Luma demo — using Kling stand-in while PiAPI Luma is rate-limited).",
-    },
+    # video_generation_professional was the Luma tier — removed 2026-05-19.
 }
 
 
@@ -1148,7 +1136,20 @@ class ShortVideoRequest(BaseModel):
     """Short Video - image to video with optional TTS"""
     image_url: str = Field(..., description="Input image URL used as the starting frame for video generation.")
     motion_strength: int = Field(5, ge=1, le=10, description="Motion intensity from 1 to 10. Higher values produce more camera or object movement.")
-    model_id: Optional[str] = Field(None, description="Optional image-to-video model identifier such as pixverse_v4.5, pixverse_v5, kling_v2, kling_v1.5, or luma_ray2.")
+    model_id: Optional[str] = Field(
+        None,
+        description=(
+            "Optional video model family. Falls back to Seedance 2.0 Fast (best CP value) "
+            "when omitted. Accepted aliases: "
+            "'seedance' (default tier, primary), "
+            "'kling_omni' / 'kling_v3' (premium — top quality + audio), "
+            "'hailuo' / 'minimax' (cheapest + fastest), "
+            "'hunyuan' (中文 prompts + dynamic motion), "
+            "'wan' (specialty / legacy), "
+            "or any pixverse_v4.5 / pixverse_v5 / kling_v1.5 / kling_v2 string. "
+            "PiAPI is the primary provider; Pollo is the automatic backup."
+        ),
+    )
     style: Optional[str] = Field(None, description="Optional visual style or effect hint to steer the motion result.")
     prompt_id: Optional[str] = Field(
         None,
@@ -2876,8 +2877,30 @@ async def _generate_short_video_inner(
             context={"motion_strength": strength, "style": request.style},
         )
 
+        # Image understanding pass — caption the user's frame with Gemini
+        # Vision and fuse the description into the motion prompt. Without
+        # this the I2V model often hallucinates props ("bubble tea on
+        # product shot") because Wan/Seedance get no info about *what*
+        # the source image actually depicts beyond the literal pixels.
+        # Fail-open: if Gemini errors out we just use the motion prompt
+        # as-is so the tool keeps working.
+        public_image_url = _resolve_public_url(str(request.image_url))
+        try:
+            from app.services.image_understanding_service import (
+                get_image_understanding_service,
+            )
+            fusion = await get_image_understanding_service().describe_and_fuse(
+                image_url=public_image_url,
+                user_prompt=motion_prompt,
+                tool_context=f"short_video motion_strength={strength}",
+            )
+            if fusion.fused_prompt:
+                motion_prompt = fusion.fused_prompt
+        except Exception as exc:  # noqa: BLE001
+            logger.info("short_video image understanding skipped: %s", exc)
+
         task_params = {
-            "image_url": _resolve_public_url(str(request.image_url)),
+            "image_url": public_image_url,
             "prompt": motion_prompt,
             "duration": 5,
             # Anti-hallucination baseline: keep the input product/subject; suppress
@@ -2899,10 +2922,36 @@ async def _generate_short_video_inner(
         if request.model_id:
             task_params["model"] = request.model_id
 
-        result = await provider_router.route(
-            TaskType.I2V,
-            task_params
-        )
+        # Kling family routing — when the user picks a Kling tier from the
+        # short-video model dropdown (kling_omni / kling_v3 / kling_v2 / etc.)
+        # we hand the request off to TaskType.KLING_VIDEO so the actual Kling
+        # provider method runs. Without this short-circuit, _resolve_video_model
+        # in piapi_provider would fall through to Seedance and the user would
+        # silently get a Seedance video instead of the Kling they selected.
+        is_kling_model = bool(request.model_id) and "kling" in str(request.model_id).lower()
+        if is_kling_model:
+            # Map model_id → Kling tier. "kling_omni" / "kling_v3" / "kling3"
+            # all hit the new Omni tier (3.0 multimodal). Older Kling v2 /
+            # v1.5 picks land on the default tier (2.6).
+            mid = str(request.model_id).lower()
+            if "omni" in mid or "_v3" in mid or "kling3" in mid or "kling-3" in mid:
+                kling_tier = "omni"
+            elif "master" in mid or "flagship" in mid:
+                kling_tier = "flagship"
+            else:
+                kling_tier = "default"
+            result = await provider_router.route(
+                TaskType.KLING_VIDEO,
+                {
+                    **task_params,
+                    "tier": kling_tier,
+                },
+            )
+        else:
+            result = await provider_router.route(
+                TaskType.I2V,
+                task_params
+            )
 
         if not result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "short_video")
@@ -3979,6 +4028,15 @@ class MidjourneyImagineRequest(BaseModel):
         default=None,
         description="relax | fast | turbo. Defaults to PIAPI_MIDJOURNEY_PROCESS_MODE."
     )
+    model: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional T2I model family. Falls back to Flux when omitted. "
+            "Accepted values: 'flux' (default), 'qwen', 'z-image'. "
+            "Maps to piapi_provider.text_to_image() dispatch (verified "
+            "against PiAPI's live catalog 2026-05-20)."
+        ),
+    )
 
 
 @router.post("/midjourney-imagine", response_model=ToolResponse)
@@ -4028,13 +4086,17 @@ async def midjourney_imagine(
 
     try:
         provider_router = get_provider_router()
-        result = await provider_router.route(
-            TaskType.T2I,
-            {
-                "prompt": request.prompt,
-                "size": size,
-            },
-        )
+        route_params: Dict[str, Any] = {
+            "prompt": request.prompt,
+            "size": size,
+        }
+        if request.model and request.model.lower() != "flux":
+            # piapi_provider.text_to_image() picks the family by params["model"]:
+            # qwen → Qubico/qwen-image, z-image → Qubico/z-image, anything else
+            # falls back to Flux. No whitelist needed; the provider's else-branch
+            # is the safe default.
+            route_params["model"] = request.model
+        result = await provider_router.route(TaskType.T2I, route_params)
         if not result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
             return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
@@ -4068,7 +4130,11 @@ class KlingVideoRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2500)
     tier: str = Field(
         default="default",
-        description='"default" → Kling 2.6 (~100 credits); "flagship" → Kling 2.1-master pro mode (~500 credits)',
+        description=(
+            '"default" → Kling 2.6 (~100 credits); '
+            '"flagship" → Kling 2.1-master pro mode (~500 credits); '
+            '"omni" → Kling 3.0 multimodal with audio + lip-sync (~750 credits, 2026-05-19 tier addition)'
+        ),
     )
     aspect_ratio: str = Field(default="16:9", description="T2V only: 16:9 / 9:16 / 1:1")
     duration: int = Field(default=5, description="5 or 10")
@@ -4085,15 +4151,23 @@ async def kling_video(
     current_user=Depends(get_current_user_optional),
 ):
     """
-    Premium Kling video generation. Single endpoint, two tiers:
+    Premium Kling video generation. Three tiers:
       - tier="default"  → Kling 2.6 std mode, video_generation_standard pricing
       - tier="flagship" → Kling 2.1-master pro mode, video_flagship pricing
+      - tier="omni"     → Kling 3.0 / Omni (multimodal, includes audio + lip-sync)
     """
     tier = (request.tier or "default").lower()
-    if tier not in {"default", "flagship"}:
-        return ToolResponse(success=False, message="tier must be 'default' or 'flagship'")
+    if tier not in {"default", "flagship", "omni"}:
+        return ToolResponse(success=False, message="tier must be 'default', 'flagship', or 'omni'")
 
-    if tier == "flagship":
+    if tier == "omni":
+        # Kling 3.0 / Omni — 2026-05-19 owner-approved premium tier
+        # (頂級品質 + audio). Priced above flagship because the multimodal
+        # output is the most expensive Kling task per PiAPI's price sheet.
+        service_type = "video_kling_omni"
+        credit_cost_fallback = 750
+        demo_cta = "Subscribe to unlock Kling 3.0 / Omni multimodal videos."
+    elif tier == "flagship":
         service_type = "video_flagship"
         credit_cost_fallback = 500
         demo_cta = "Subscribe to unlock Kling 2.1-master flagship videos."
@@ -4168,130 +4242,9 @@ async def kling_video(
         return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 
 
-class LumaVideoRequest(BaseModel):
-    """Luma Dream Machine via PiAPI. T2V / I2V / first-last frame."""
-    prompt: str = Field(..., min_length=1, max_length=2000)
-    duration: int = Field(default=5, description="5 or 9 seconds (PiAPI: $0.2 / $0.4)")
-    aspect_ratio: str = Field(default="16:9")
-    start_image: Optional[str] = Field(default=None, description="First frame URL (enables I2V)")
-    end_image: Optional[str] = Field(default=None, description="Last frame URL (for first-last transition)")
-    loop: bool = Field(default=False)
-
-
-@router.post("/luma-video", response_model=ToolResponse)
-async def luma_video(
-    request: LumaVideoRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user_optional),
-):
-    """
-    Professional video via Luma Dream Machine (PiAPI).
-    Credit cost: video_generation_professional tier (~300 credits per ServicePricing).
-    """
-    if not is_subscribed_user(current_user):
-        return await _demo_response(
-            db,
-            "video_generation_professional",
-            cta="Subscribe to generate Luma videos.",
-            input_image_url=request.start_image,
-            effect_prompt=request.prompt[:200],
-        )
-
-    if request.start_image:
-        request.start_image = await _ensure_public_image_url(
-            request.start_image, user_id=str(current_user.id) if current_user else None
-        )
-    if request.end_image:
-        request.end_image = await _ensure_public_image_url(
-            request.end_image, user_id=str(current_user.id) if current_user else None
-        )
-
-    CREDIT_COST = 300
-    ok, err = await _check_and_deduct_credits(
-        db, current_user, CREDIT_COST, "video_generation_professional"
-    )
-    if not ok:
-        return ToolResponse(success=False, message=err)
-
-    try:
-        provider_router = get_provider_router()
-        result = await provider_router.route(
-            TaskType.LUMA_VIDEO,
-            {
-                "prompt": request.prompt,
-                "duration": request.duration,
-                "aspect_ratio": request.aspect_ratio,
-                "start_image": request.start_image,
-                "end_image": request.end_image,
-                "loop": request.loop,
-            },
-        )
-        if not result.get("success"):
-            await _refund_credits(db, current_user, CREDIT_COST, "video_generation_professional")
-            return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
-
-        output = result.get("output") or {}
-        video_url = output.get("video_url")
-        video_url = await _persist_provider_url(video_url, "video", current_user)
-        if not video_url:
-            await _refund_credits(db, current_user, CREDIT_COST, "video_generation_professional")
-            return ToolResponse(success=False, message="Luma returned no video URL. Please try again.")
-
-        return ToolResponse(
-            success=True,
-            result_url=video_url,
-            video_url=video_url,
-            credits_used=CREDIT_COST,
-            message="Video generated via Luma Dream Machine.",
-        )
-    except Exception as exc:
-        # When PiAPI's Luma model is globally rate-limited (code 10001),
-        # PiAPI rejects retries within the same window. Auto-fall back to
-        # Kling — same provider, different model, separate quota — so the
-        # paid user still gets a video instead of a friendly error.
-        err_msg = str(exc).lower()
-        is_rate_limited = (
-            "too many requests" in err_msg
-            or "rate limit" in err_msg
-            or "10001" in err_msg
-        )
-        if is_rate_limited:
-            logger.warning("luma_video rate-limited upstream; falling back to Kling: %s", exc)
-            try:
-                provider_router = get_provider_router()
-                fb = await provider_router.route(
-                    TaskType.KLING_VIDEO,
-                    {
-                        "prompt": request.prompt,
-                        "duration": request.duration,
-                        "aspect_ratio": request.aspect_ratio,
-                        "image_url": request.start_image,
-                        "image_tail_url": request.end_image,
-                        "tier": "default",
-                    },
-                )
-                output = (fb or {}).get("output") or {}
-                video_url = output.get("video_url")
-                video_url = await _persist_provider_url(video_url, "video", current_user)
-                if video_url:
-                    return ToolResponse(
-                        success=True,
-                        result_url=video_url,
-                        video_url=video_url,
-                        credits_used=CREDIT_COST,
-                        message="Video generated via Kling (Luma was temporarily rate-limited).",
-                    )
-            except Exception as fb_exc:  # noqa: BLE001
-                logger.error("luma_video Kling fallback also failed: %s", fb_exc)
-                exc = fb_exc
-
-        logger.error("luma_video error: %s", exc, exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "video_generation_professional")
-        _notify_admin_of_tool_failure("luma_video", exc, current_user)
-        # Surface the upstream message so users see the real reason
-        # (e.g. PiAPI's "experiencing technical difficulties") instead of
-        # the generic mask.
-        return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
+# /luma-video endpoint removed 2026-05-19. Use /tools/short-video with
+# model_id="seedance" (default tier), "hailuo", "hunyuan", or "wan" — or
+# /tools/kling-video with tier="omni" for Kling 3.0 premium output.
 
 
 # ============================================================================

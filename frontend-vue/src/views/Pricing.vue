@@ -412,10 +412,14 @@ function isTestPlan(plan: PlanInfo): boolean {
 
 // Recommended overseas USD pricing for international PayPal checkout.
 // Keep aligned with the locale `paypalPricingStrategy` copy and PayPal Plan IDs.
+// Values mirror backend DEFAULT_VIDGO_PLANS.price_usd so the full plan grid
+// (basic / pro / premium / enterprise) shows USD on non-zh locales — without
+// enterprise, the card silently fell back to NT$15000 on EN/JA/KO/ES.
 const OVERSEAS_USD_MONTHLY: Record<string, number> = {
-  basic: 19.99,
-  pro: 49.99,
-  premium: 99.99,
+  basic: 22,
+  pro: 32,
+  premium: 55,
+  enterprise: 485,
 }
 
 // USD pricing for the three official credit packs, used when the visitor is

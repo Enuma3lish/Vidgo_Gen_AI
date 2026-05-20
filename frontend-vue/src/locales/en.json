@@ -25,9 +25,9 @@
   },
   "topics": {
     "pattern": {
-      "name": "Pattern Design",
+      "name": "Packaging Pattern",
       "desc": "AI-powered pattern generation and transfer",
-      "longDesc": "Use AI to quickly generate unique patterns, supporting seamless, floral, geometric and more styles",
+      "longDesc": "Generate tileable, print-ready patterns for packaging, gift wrap, and social backdrops.",
       "ctaTitle": "Start Creating Unique Patterns",
       "ctaDesc": "Use AI to generate professional patterns, with multiple styles to choose from"
     },
@@ -67,23 +67,23 @@
       "recentlyUsed": "Recently Used",
       "createWithAi": "Create with AI",
       "tiles": {
-        "recolor": "Recolor",
-        "productBeautifier": "Product Beautifier",
-        "virtualModel": "Virtual Model",
-        "productStaging": "Product Staging",
-        "editWithAi": "Edit with AI",
-        "flatLay": "Flat lay",
-        "ghostMannequin": "Ghost Mannequin",
-        "videoGenerator": "Video Generator",
-        "ironing": "Ironing",
-        "logo": "Logo",
-        "text": "Text",
-        "instagramStory": "Instagram story",
-        "background": "Background",
-        "threeDIllustration": "3D illustration",
-        "productPhotography": "Product photography",
-        "productPackaging": "Product packaging",
-        "createAnyImage": "Create any image"
+        "recolor": "Product Recolor",
+        "productBeautifier": "Product Upscale & Polish",
+        "virtualModel": "Model Try-On",
+        "productStaging": "Product Scene",
+        "editWithAi": "AI Image Edit",
+        "flatLay": "Flat-Lay Shot",
+        "ghostMannequin": "Ghost-Mannequin Apparel",
+        "videoGenerator": "Product Promo Video",
+        "ironing": "Apparel Wrinkle Remove",
+        "logo": "Brand Logo",
+        "text": "Image Text",
+        "instagramStory": "IG / TikTok Reel",
+        "background": "Background Cutout",
+        "threeDIllustration": "Cinematic 3D Video",
+        "productPhotography": "E-commerce Product Photo",
+        "productPackaging": "Packaging Pattern",
+        "createAnyImage": "Marketing Hero Image"
       }
     },
     "tryOnLayout": {
@@ -226,7 +226,7 @@
       "longDesc": "Convert space photos, raw rooms, design sketches, or floor plans into proposal-grade interior visuals with style transfer, commercial scene output, and 3D presentation workflows."
     },
     "shortVideo": {
-      "name": "Product Dynamic Shorts (Image-to-Video)",
+      "name": "Product Reel",
       "desc": "Image-only workflow for stable, credit-efficient product motion videos",
       "longDesc": "Focused on Image-to-Video only. Upload a product image to generate natural motion for ads and social content.",
       "tryExamples": "Please try our amazing examples",
@@ -551,7 +551,8 @@
     "promotionCodeHint": "Optional. Valid codes add 40 bonus credits after email verification.",
     "registerBtn": "Start free — Get 40 credits",
     "termsAgree": "By clicking \"Start free\" you agree to our Terms and Privacy Policy",
-    "fillAllFields": "Please fill in all fields"
+    "fillAllFields": "Please fill in all fields",
+    "login": "Log in"
   },
   "dashboard": {
     "welcome": "Welcome back",
@@ -575,12 +576,12 @@
     "noWorksDesc": "Start creating with any AI tool!",
     "startCreating": "Start Creating Now",
     "tools": {
-      "shortVideo": "Product Dynamic Shorts (Image-to-Video)",
+      "shortVideo": "Product Reel",
       "avatar": "AI Avatar",
-      "tryOn": "Virtual Try-On",
-      "productScene": "Product Scene",
-      "bgRemoval": "Background Removal",
-      "roomRedesign": "Room Redesign"
+      "tryOn": "Model Try-On",
+      "productScene": "Product Scene Photo",
+      "bgRemoval": "Background Cutout",
+      "roomRedesign": "Interior Design Mockup"
     },
     "time": {
       "justNow": "Just now",
@@ -839,7 +840,12 @@
     "backToPricing": "Back to Pricing",
     "mockComplete": "Demo payment complete",
     "redirecting": "Redirecting to dashboard...",
-    "goNow": "Go now"
+    "goNow": "Go now",
+    "paymentUnsuccessful": "Payment unsuccessful",
+    "paymentUnsuccessfulDesc": "Your subscription payment didn't go through. Please try again.",
+    "pleaseRetry": "Please retry payment",
+    "retryFailed": "Retry failed",
+    "retrySamePlan": "Retry with the same plan"
   },
   "footer": {
     "tagline": "VidGo AI — Making visual content creation simple, efficient, and creative.",
@@ -1292,6 +1298,36 @@
       "lumaVideo": {
         "name": "Luma Dream Machine",
         "desc": "Professional AI video with Luma Ray"
+      },
+      "productScenePhoto": {
+        "name": "Product Scene Photo"
+      },
+      "bgCutout": {
+        "name": "Background Cutout"
+      },
+      "modelTryOn": {
+        "name": "Model Try-On"
+      },
+      "productReel": {
+        "name": "Product Reel"
+      },
+      "productPromoVideo": {
+        "name": "Product Promo Video"
+      },
+      "packagingPattern": {
+        "name": "Packaging Pattern"
+      },
+      "marketingHeroImage": {
+        "name": "Marketing Hero Image"
+      },
+      "productImageTranslator": {
+        "name": "Product Image Translator"
+      },
+      "interiorMockup": {
+        "name": "Interior Design Mockup"
+      },
+      "aiSpokesperson": {
+        "name": "AI Spokesperson"
       }
     },
     "categories": {
@@ -1301,7 +1337,13 @@
       "ecommerceAIDesc": "Clean backgrounds, professional product scenes, and crystal-clear images — everything you need for listings that convert.",
       "designAI": "Design & Content AI",
       "designAIDesc": "Transform empty rooms or rough sketches into photorealistic interior designs your clients will love.",
-      "proAi": "Pro AI Studio"
+      "proAi": "Pro AI Studio",
+      "productShots": "Product Shots",
+      "marketingVideo": "Marketing Video",
+      "brandPackaging": "Brand & Packaging",
+      "spatialVisuals": "Spatial Visuals",
+      "aiSpokesperson": "AI Spokesperson",
+      "quickFixes": "Quick Fixes"
     },
     "seasons": {
       "spring": "Spring Sale",
@@ -1604,8 +1646,8 @@
     }
   },
   "midjourney": {
-    "title": "Premium AI Image",
-    "subtitle": "High-quality image generation via Flux on PiAPI.",
+    "title": "Marketing Hero Image",
+    "subtitle": "Premium product marketing visuals via Flux / Seedance / Hunyuan.",
     "demoCta": "Subscribe to generate your own premium AI images.",
     "presetLabel": "Prompt template",
     "presetCustom": "Custom (write your own)",
@@ -1639,15 +1681,16 @@
     },
     "toasts": {
       "success": "Image generated successfully.",
-      "demoReady": "Demo image ready."
+      "demoReady": "Demo image ready.",
+      "demoPlaceholder": "This is a demo image (not generated from your prompt). Subscribe to generate from your own prompt."
     },
     "errors": {
       "generic": "Generation failed. Please try again."
     }
   },
   "klingVideo": {
-    "title": "Kling Video",
-    "subtitle": "Cinematic AI video via Kling on PiAPI. Standard or flagship pro mode.",
+    "title": "Product Promo Video (Kling)",
+    "subtitle": "Premium product promo videos powered by Kling (incl. 3.0 / Omni multimodal).",
     "demoCta": "Subscribe to generate your own Kling videos.",
     "presetLabel": "Prompt template (T2V or I2V)",
     "presetCustom": "Custom (write your own)",
@@ -1775,5 +1818,16 @@
       "loadFailed": "Failed to load model registry.",
       "saveFailed": "Failed to save override."
     }
+  },
+  "admin": {
+    "payment": {
+      "title": "Payment Management",
+      "subtitle": "View subscription and top-up transactions"
+    }
+  },
+  "vision": {
+    "weSee": "We see in your image:",
+    "textOverridden": "Your text conflicted with the image; the image content was used instead.",
+    "gapGeneric": "Output was adjusted to better match your uploaded image."
   }
 }

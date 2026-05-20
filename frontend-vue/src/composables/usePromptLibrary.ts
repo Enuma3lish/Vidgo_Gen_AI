@@ -52,7 +52,6 @@ export type PromptToolKey =
   | 'background_removal_ai_scene'
   | 'premium_image'
   | 'kling_video'
-  | 'luma_video'
 
 function normalizeLocale(raw: string): LocaleKey {
   const l = String(raw || '').toLowerCase()

@@ -114,8 +114,7 @@ CREDIT_COSTS = {
     "video_extend":         {"default": 15},
     "video_transform":      {"default": 15},
 
-    # Premium — future expansion (Sora-tier)
-    "ultra_hd_video":       {"sora": 50},
+    # Premium — future expansion (e.g. Veo 3.1 / Kling Omni-tier upgrades).
 }
 
 # Map plan names → tier strings
@@ -134,7 +133,7 @@ PLAN_TIER_MAP = {
 TIER_ALLOWED_MODELS = {
     "free":  ["default"],
     "basic": ["default"],
-    "pro":   ["default", "wan_pro", "gemini_pro", "sora"],
+    "pro":   ["default", "wan_pro", "gemini_pro", "veo"],
 }
 
 

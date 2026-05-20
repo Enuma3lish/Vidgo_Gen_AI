@@ -536,9 +536,15 @@ async def generate_3d_model(
             user_tier="paid",
         )
     except Exception as exc:
+        # provider_router.route already wraps the upstream failure in a
+        # user-friendly message via _get_user_friendly_error. Prefixing it
+        # again with "Failed to generate 3D model:" doubles the noise and
+        # buries the actionable text ("Service credits are currently
+        # depleted." / "3D model generation is temporarily unavailable.")
+        # under boilerplate, so we surface the inner message as-is.
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate 3D model: {exc}"
+            detail=str(exc) or "3D model generation failed."
         ) from exc
 
     output = result.get("output") or {}
@@ -615,9 +621,12 @@ async def generate_3d_from_floorplan(
             user_tier="paid",
         )
     except Exception as exc:
+        # See note on /3d-model — provider_router already produces a user-
+        # friendly message. Surface it directly so the caller sees the real
+        # reason (e.g. credit depletion) instead of generic prose.
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Floor-plan interior render failed: {exc}"
+            detail=str(exc) or "Floor-plan interior render failed."
         ) from exc
 
     rendered_url = (
@@ -644,7 +653,7 @@ async def generate_3d_from_floorplan(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate 3D model from floor plan: {exc}"
+            detail=str(exc) or "3D reconstruction failed after floor-plan render."
         ) from exc
 
     output = result.get("output") or {}

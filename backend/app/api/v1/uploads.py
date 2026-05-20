@@ -93,10 +93,12 @@ TOOL_MODELS = {
         {"id": "wan_pro", "name": "Pro (Flux Kontext)", "name_zh": "進階 (Flux Kontext)", "credit_multiplier": 3},
     ],
     "short_video": [
-        {"id": "pixverse_v4.5", "name": "Fast (Pixverse v4.5)", "name_zh": "快速 (Pixverse v4.5)", "credit_multiplier": 1},
-        {"id": "pixverse_v5", "name": "Creative (Pixverse v5)", "name_zh": "創意 (Pixverse v5)", "credit_multiplier": 1.5},
-        {"id": "kling_v2", "name": "High Quality (Kling v2)", "name_zh": "高品質 (Kling v2)", "credit_multiplier": 3},
-        {"id": "luma_ray2", "name": "Cinematic (Luma Ray2)", "name_zh": "電影級 (Luma Ray2)", "credit_multiplier": 3},
+        # 2026-05-19 tier revision — owner-approved SaaS model table.
+        {"id": "seedance",   "name": "Seedance 2.0 Fast (default)", "name_zh": "Seedance 2.0 Fast (預設推薦)", "credit_multiplier": 1},
+        {"id": "kling_omni", "name": "Kling 3.0 / Omni (premium)",   "name_zh": "Kling 3.0 / Omni (高階付費)", "credit_multiplier": 3},
+        {"id": "hailuo",     "name": "Hailuo Fast (cheap & fast)",   "name_zh": "Hailuo Fast (快速 / 低價)",   "credit_multiplier": 1},
+        {"id": "hunyuan",    "name": "Hunyuan (Chinese-strong)",     "name_zh": "Hunyuan (中文強)",            "credit_multiplier": 1.5},
+        {"id": "wan",        "name": "Wan 2.6 (specialty)",          "name_zh": "Wan 2.6 (利基)",              "credit_multiplier": 2},
     ],
     "video_transform": [
         {"id": "default", "name": "Standard (Wan VACE)", "name_zh": "標準 (Wan VACE)", "credit_multiplier": 1},

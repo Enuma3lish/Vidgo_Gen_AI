@@ -301,6 +301,10 @@ class PatternGenerateRequest(BaseModel):
     style: str = "seamless"  # seamless, floral, geometric, abstract, traditional
     width: int = 1024
     height: int = 1024
+    # 2026-05-20 tier addition — opt-in T2I model family. Falls back to
+    # Flux when omitted; ``qwen`` / ``z-image`` pick the alternative T2I
+    # models verified on PiAPI (see piapi_provider.text_to_image dispatch).
+    model: Optional[str] = Field(default=None, description="flux | qwen | z-image (default flux)")
 
 
 class PatternTransferRequest(BaseModel):
@@ -414,13 +418,16 @@ async def generate_pattern(
             logger.warning("Pattern prompt refinement skipped: %s", refine_exc)
             final_prompt = base_prompt
 
-        result = await provider_router.route(
-            TaskType.T2I,
-            {
-                "prompt": final_prompt,
-                "size": f"{request.width}*{request.height}"
-            }
-        )
+        route_params = {
+            "prompt": final_prompt,
+            "size": f"{request.width}*{request.height}",
+        }
+        if request.model and request.model.lower() != "flux":
+            # Forward the model family to piapi_provider.text_to_image() —
+            # qwen → Qubico/qwen-image, z-image → Qubico/z-image. Anything
+            # unrecognized falls back to Flux there (safe default).
+            route_params["model"] = request.model
+        result = await provider_router.route(TaskType.T2I, route_params)
 
         if result.get("success"):
             output = result.get("output", {})
@@ -1060,16 +1067,18 @@ AVAILABLE_MODELS = [
         "resolution": "1080p",
         "quality": "premium",
     },
+    # 2026-05-19 — Luma removed; Seedance default / Kling Omni premium /
+    # Hailuo cheap / Hunyuan 中文 / Wan specialty replaces it.
     {
-        "id": "luma_ray2",
-        "name": "Luma Ray 2.0",
-        "description": "Cinematic quality, best results",
+        "id": "seedance",
+        "name": "Seedance 2.0 Fast",
+        "description": "Best CP value · stable · default recommendation",
         "type": "video",
-        "credit_cost": 30,
-        "min_plan": "pro",
+        "credit_cost": 20,
+        "min_plan": "starter",
         "max_length": 10,
         "resolution": "1080p",
-        "quality": "cinematic",
+        "quality": "default",
     },
     {
         "id": "wan_t2i",

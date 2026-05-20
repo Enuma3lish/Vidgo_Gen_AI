@@ -10,6 +10,10 @@ export interface PatternGenerateRequest {
   style?: string
   width?: number
   height?: number
+  // 2026-05-20 tier addition — optional T2I model family override
+  // (flux / qwen / z-image). Empty/omitted = Flux default. Verified
+  // against PiAPI's live catalog 2026-05-20.
+  model?: 'flux' | 'qwen' | 'z-image'
 }
 
 export interface PatternTransferRequest {

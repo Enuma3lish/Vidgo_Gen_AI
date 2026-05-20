@@ -51,7 +51,9 @@ class TaskType(str, Enum):
     # task type itself.
     MIDJOURNEY_T2I = "midjourney_imagine"
     KLING_VIDEO    = "kling_video_generation"
-    LUMA_VIDEO     = "luma_video_generation"
+    # NOTE: LUMA_VIDEO was removed 2026-05-19. The /tools/luma-video endpoint
+    # and its tier-table slot are gone; short-video / kling-video / the new
+    # Seedance / Hailuo / Hunyuan / Wan tiers cover every prior use case.
 
 
 class ProviderStatus(str, Enum):
@@ -105,8 +107,11 @@ class ProviderRouter:
         # to a cheaper substitute (would defeat the purpose of charging the
         # flagship credit cost).
         TaskType.MIDJOURNEY_T2I: {"primary": "piapi", "backup": None, "tertiary": None, "fallback": None},
-        TaskType.KLING_VIDEO:    {"primary": "piapi", "backup": None, "tertiary": None, "fallback": None},
-        TaskType.LUMA_VIDEO:     {"primary": "piapi", "backup": None, "tertiary": None, "fallback": None},
+        # Kling: PiAPI primary, Pollo fallback for I2V mode (Pollo exposes
+        # kling_v1.5/kling_v2 via its image_to_video endpoint). T2V mode lacks
+        # an image_url so the Pollo branch soft-fails and the router surfaces
+        # the PiAPI error — same UX as before for that path.
+        TaskType.KLING_VIDEO:    {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
     }
 
     POLLO_VIDEO_MODEL_IDS = {
@@ -115,11 +120,23 @@ class ProviderRouter:
         "kling_v1.5",
         "kling_v1_5",
         "kling_v2",
-        "luma_ray2",
         "kling2.5",
+        "kling_v3",
+        "kling_omni",
         "hailuo",
+        "hailuo_fast",
+        "minimax",
         "wan2.6",
+        "wan",
         "pollo-v1-6",
+        # 2026-05-19 — explicit model-id picks for the new tier so the
+        # router can fall through to Pollo when PiAPI's matching model
+        # errors out. The Seedance / Hunyuan model_id flowing from the
+        # ShortVideo tier dropdown lands here.
+        "seedance",
+        "seedance_v2",
+        "hunyuan",
+        "hunyuan_v1",
     }
 
     SYSTEM_FAILURE_HINTS = (
@@ -168,6 +185,10 @@ class ProviderRouter:
         self.piapi = PiAPIProvider()
         self.pollo = PolloProvider()
         self.a2e = A2EProvider()
+        # 2026-05-20: OpenAI / Sora 2 provider removed per owner rule
+        # "no provider unless it's in PiAPI or Pollo." Sora is OpenAI-direct
+        # so it didn't belong here. Veo 3.1 still ships via Vertex AI; Wan
+        # 2.6 covers the niche specialty slot in the SaaS tier table.
 
         self._status_cache: Dict[str, Dict] = {}
         self._last_health_check: Dict[str, datetime] = {}
@@ -657,8 +678,6 @@ class ProviderRouter:
             return await self.piapi.midjourney_imagine(params)
         elif task_type == TaskType.KLING_VIDEO:
             return await self.piapi.kling_video_generation(params)
-        elif task_type == TaskType.LUMA_VIDEO:
-            return await self.piapi.luma_video_generation(params)
         else:
             raise ValueError(f"PiAPI doesn't support: {task_type}")
 
@@ -676,6 +695,22 @@ class ProviderRouter:
             # Pollo has no native V2V endpoint; route through video_style_transfer,
             # which feeds the first frame (image_url) into per-model I2V.
             return await self.pollo.video_style_transfer(params)
+        elif task_type == TaskType.KLING_VIDEO:
+            # Pollo as a backup when PiAPI Kling is out of credit or rate-limited.
+            # Pollo only exposes Kling via its I2V endpoint, so a true T2V Kling
+            # request (no image_url) returns success=false here and the soft-fail
+            # path surfaces PiAPI's original error to the user.
+            if not (params.get("image_url") or params.get("image")):
+                return {
+                    "success": False,
+                    "error": "Pollo Kling backup requires image_url (T2V Kling not supported by Pollo REST).",
+                }
+            # Map tier → Pollo model. "flagship" picks kling_v2; "default" picks
+            # kling_v1.5 since that's the closest analog Pollo exposes.
+            tier = (params.get("tier") or "default").lower()
+            pollo_model = "kling_v2" if tier == "flagship" else "kling_v1.5"
+            pollo_params = {**params, "model": pollo_model}
+            return await self.pollo.image_to_video(pollo_params)
         else:
             raise ValueError(f"Pollo doesn't support: {task_type}")
 
@@ -686,6 +721,8 @@ class ProviderRouter:
         if task_type == TaskType.AVATAR:
             return await self.a2e.generate_avatar(params)
         raise ValueError(f"A2E doesn't support: {task_type}")
+
+    # _execute_openai removed 2026-05-20 (OpenAI/Sora 2 not in PiAPI or Pollo).
 
     # ─────────────────────────────────────────────────────────────────────────
     # HEALTH CHECKING
@@ -861,18 +898,25 @@ class ProviderRouter:
         backup_provider: Optional[str],
         error: str,
     ) -> str:
-        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.V2V}
-        if task_type in video_tasks:
-            return "Video generation services are experiencing issues on all providers. Please try again in a few minutes."
-        if task_type == TaskType.AVATAR:
-            return "Avatar generation services are experiencing issues. Please try again in a few minutes."
-        image_tasks = {TaskType.T2I, TaskType.I2I, TaskType.INTERIOR, TaskType.BACKGROUND_REMOVAL, TaskType.UPSCALE, TaskType.EFFECTS}
-        if task_type in image_tasks:
-            return "Image generation services are experiencing issues. Please try again in a few minutes."
+        # Credit/balance issues from upstream win over the task-type generic
+        # message — without this branch first, INTERIOR_3D / KLING_VIDEO /
+        # LUMA_VIDEO failures from PiAPI's account being out of credit got
+        # rewritten to the vague "experiencing issues" text below, hiding
+        # the actionable reason from the user.
         if "credit" in error.lower() or "balance" in error.lower():
             return "Service credits are currently depleted. Please try again later."
         if "timeout" in error.lower():
             return "The request timed out. Please try again with a simpler prompt."
+        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.V2V, TaskType.KLING_VIDEO}
+        if task_type in video_tasks:
+            return "Video generation services are experiencing issues on all providers. Please try again in a few minutes."
+        if task_type == TaskType.AVATAR:
+            return "Avatar generation services are experiencing issues. Please try again in a few minutes."
+        if task_type == TaskType.INTERIOR_3D:
+            return "3D model generation is temporarily unavailable. Please try again in a few minutes."
+        image_tasks = {TaskType.T2I, TaskType.I2I, TaskType.INTERIOR, TaskType.BACKGROUND_REMOVAL, TaskType.UPSCALE, TaskType.EFFECTS, TaskType.MIDJOURNEY_T2I}
+        if task_type in image_tasks:
+            return "Image generation services are experiencing issues. Please try again in a few minutes."
         return "Our service is currently experiencing technical difficulties. Please wait a moment and try again!"
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -964,16 +1008,24 @@ class ProviderRouter:
             mode = params.get("process_mode") or "fast"
             return f"midjourney-{mode}"
         if task_type == TaskType.KLING_VIDEO:
+            tier = params.get("tier") or "default"
             version = params.get("version") or (
-                "2.1-master" if params.get("tier") == "flagship" else "2.6"
+                "3.0" if tier == "omni" else "2.1-master" if tier == "flagship" else "2.6"
             )
             return f"kling-{version}"
-        if task_type == TaskType.LUMA_VIDEO:
-            return f"luma-{params.get('model_name') or 'ray-v2'}"
         if task_type == TaskType.INTERIOR_3D:
             return f"trellis-{params.get('model_version') or 'v1'}"
         if task_type in (TaskType.I2V, TaskType.T2V):
-            return "wan-2.6"
+            # Tier-revision default is Seedance 2.0 Fast; piapi_provider's
+            # _resolve_video_model() maps params["model"] to the family.
+            model = (params.get("model") or "").lower()
+            if "hailuo" in model or "minimax" in model:
+                return "hailuo-fast"
+            if "hunyuan" in model:
+                return "hunyuan"
+            if model.startswith("wan"):
+                return "wan-2.6"
+            return "seedance-2-fast"
         if task_type == TaskType.AVATAR:
             return "kling-avatar"
         if task_type == TaskType.BACKGROUND_REMOVAL:

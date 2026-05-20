@@ -24,7 +24,7 @@ TEST_PRO_PLAN_DEFAULTS = {
     "monthly_credits": TEST_PRO_PLAN_CREDITS,
     "weekly_credits": TEST_PRO_PLAN_CREDITS,
     "credits_per_month": TEST_PRO_PLAN_CREDITS,
-    "allowed_models": ["default", "wan_pro", "gemini_pro", "sora"],
+    "allowed_models": ["default", "wan_pro", "gemini_pro", "veo"],
     "max_resolution": "4k",
     "max_video_length": 60,
     "max_concurrent_generations": 10,

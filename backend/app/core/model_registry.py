@@ -84,6 +84,13 @@ PIAPI_MODELS: Dict[str, str] = {
     "flux_i2i":            os.environ.get("PIAPI_FLUX_I2I_MODEL",      "Qubico/flux1-schnell"),
     "flux_kontext":        os.environ.get("PIAPI_FLUX_KONTEXT_MODEL",  "Qubico/flux1-dev-advanced"),
 
+    # Additional PiAPI T2I models verified against live PiAPI catalog 2026-05-20:
+    # Qwen Image  — Alibaba's flagship T2I, strong on Chinese prompts ($0.015/img)
+    # Z-Image     — Alibaba's fast/cheap T2I, Z-Image Turbo backend  ($0.004/img)
+    # Both accept task_type="txt2img".
+    "qwen_t2i":            os.environ.get("PIAPI_QWEN_T2I_MODEL",      "Qubico/qwen-image"),
+    "z_image_t2i":         os.environ.get("PIAPI_Z_IMAGE_T2I_MODEL",   "Qubico/z-image"),
+
     # Wan video (model="Wan"; version encoded in task_type)
     "wan_video":           os.environ.get("PIAPI_WAN_VIDEO_MODEL",     "Wan"),
     "wan_i2v_task":        os.environ.get("PIAPI_WAN_I2V_TASK",        "wan26-img2video"),
@@ -99,20 +106,41 @@ PIAPI_MODELS: Dict[str, str] = {
     # Midjourney (alias only; PiAPI auto-routes to current MJ version)
     "midjourney":          os.environ.get("PIAPI_MIDJOURNEY_MODEL",    "midjourney"),
 
-    # Luma Dream Machine. model="luma"; model_name (in input) selects the
-    # Ray family. Ray1 is sunset, Ray3 is in dev, so ray-v2 is current.
-    "luma_video":          os.environ.get("PIAPI_LUMA_VIDEO_MODEL",    "luma"),
-    "luma_ray_version":    os.environ.get("PIAPI_LUMA_RAY_VERSION",    "ray-v2"),
+    # ── New tier-based video models (2026-05-19 revision) ──
+    # Picked from the SaaS tier table the owner approved:
+    #   主力     Seedance 2.0 Fast      (default / best CP value)
+    #   高階付費 Kling 3.0 / Omni       (premium)
+    #   快速     Hailuo Fast            (cheapest + fastest)
+    #   特色補充 Hunyuan                (中文 prompts + dynamic motion)
+    #   利基     Wan 2.5/2.6, Veo 3.1  (specialty/high-end via PiAPI + Vertex)
+    #
+    # PiAPI is mandatory primary; Pollo (below) is the backup that mirrors
+    # the same model family. Model IDs are env-overridable because PiAPI
+    # has a history of renaming aliases without notice.
+    "seedance_video":      os.environ.get("PIAPI_SEEDANCE_VIDEO_MODEL", "Doubao/seedance"),
+    "seedance_t2v_task":   os.environ.get("PIAPI_SEEDANCE_T2V_TASK",    "seedance2-fast-txt2video"),
+    "seedance_i2v_task":   os.environ.get("PIAPI_SEEDANCE_I2V_TASK",    "seedance2-fast-img2video"),
+    "seedance_t2i_task":   os.environ.get("PIAPI_SEEDANCE_T2I_TASK",    "seedance2-txt2img"),
+
+    "hailuo_video":        os.environ.get("PIAPI_HAILUO_VIDEO_MODEL",   "minimax"),
+    "hailuo_t2v_task":     os.environ.get("PIAPI_HAILUO_T2V_TASK",      "hailuo-fast-txt2video"),
+    "hailuo_i2v_task":     os.environ.get("PIAPI_HAILUO_I2V_TASK",      "hailuo-fast-img2video"),
+
+    "hunyuan_video":       os.environ.get("PIAPI_HUNYUAN_VIDEO_MODEL",  "hunyuan"),
+    "hunyuan_t2v_task":    os.environ.get("PIAPI_HUNYUAN_T2V_TASK",     "hunyuan-txt2video"),
+    "hunyuan_i2v_task":    os.environ.get("PIAPI_HUNYUAN_I2V_TASK",     "hunyuan-img2video"),
+    "hunyuan_t2i_task":    os.environ.get("PIAPI_HUNYUAN_T2I_TASK",     "hunyuan-txt2img"),
 }
 
 
 # Kling video_generation tasks accept a ``version`` field (1.5 / 1.6 / 2.1 /
-# 2.1-master / 2.5 / 2.6). Try-on, avatar, lip_sync do NOT. Pin explicitly
-# rather than relying on PiAPI's silent default so a vendor-side version
-# bump never lands in prod without us deciding.
+# 2.1-master / 2.5 / 2.6 / 3.0). Try-on, avatar, lip_sync do NOT. Pin
+# explicitly rather than relying on PiAPI's silent default so a vendor-side
+# version bump never lands in prod without us deciding.
 PIAPI_KLING_VERSIONS: Dict[str, str] = {
     "default":  os.environ.get("PIAPI_KLING_VIDEO_VERSION",          "2.6"),
     "flagship": os.environ.get("PIAPI_KLING_VIDEO_FLAGSHIP_VERSION", "2.1-master"),
+    "omni":     os.environ.get("PIAPI_KLING_OMNI_VERSION",           "3.0"),
 }
 
 
@@ -137,6 +165,13 @@ POLLO_MODELS: Dict[str, str] = {
     "pixverse_creative": os.environ.get("POLLO_PIXVERSE_CREATIVE_MODEL", "pixverse_v5"),
     "kling_video":       os.environ.get("POLLO_KLING_VIDEO_MODEL",      "kling_v2"),
     "mcp_default_video": os.environ.get("POLLO_MCP_DEFAULT_MODEL",      "pollo-v1-6"),
+    # 2026-05-19 new tier — Pollo is the backup for PiAPI on these models.
+    # Names match Pollo's endpoint slugs (verify against pollo.ai/docs when
+    # the platform renames). All env-overridable for ops rotation.
+    "seedance_default":  os.environ.get("POLLO_SEEDANCE_MODEL",         "seedance_v2"),
+    "hailuo_default":    os.environ.get("POLLO_HAILUO_MODEL",           "hailuo_fast"),
+    "hunyuan_default":   os.environ.get("POLLO_HUNYUAN_MODEL",          "hunyuan_v1"),
+    "kling_omni":        os.environ.get("POLLO_KLING_OMNI_MODEL",       "kling_v3"),
 }
 
 

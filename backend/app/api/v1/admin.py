@@ -1020,6 +1020,61 @@ async def get_ai_services_status(
     }
 
 
+@router.get("/provider-balances")
+async def get_provider_balances(
+    admin: User = Depends(require_admin),
+):
+    """
+    Live upstream-vendor balances for VidGo's own accounts at PiAPI / Pollo
+    / Vertex AI / A2E.
+
+    2026-05-20 — replaces the env-var-only flow that surfaced via
+    /ai-services. Calls vendor APIs where they exist (PiAPI does, the
+    rest don't have public balance endpoints) and returns a manual-check
+    URL for the rest so the dashboard widget can render a "Visit account"
+    button per provider.
+
+    Cached in-process for PROVIDER_BALANCE_CACHE_SECONDS (default 5 min)
+    so opening the dashboard doesn't slam vendor APIs.
+    """
+    from app.services.provider_account_status import (
+        as_dict,
+        get_all_provider_status,
+    )
+
+    statuses = await get_all_provider_status()
+    return {
+        "providers": [as_dict(s) for s in statuses],
+        # Aggregate rollup for a single "service health" pill on the user
+        # dashboard. "ok" iff every configured provider is healthy.
+        "summary": _summarize_provider_statuses(statuses),
+    }
+
+
+def _summarize_provider_statuses(statuses):  # type: ignore[no-untyped-def]
+    """Return {"level": "ok|warning|critical", "label": <i18n key>}.
+
+    - critical: any *configured* provider is depleted.
+    - warning : any *configured* provider is low.
+    - ok      : everything else (including providers we can't measure).
+    """
+    level = "ok"
+    for s in statuses:
+        if not s.configured:
+            continue
+        if s.status == "depleted":
+            level = "critical"
+            break
+        if s.status == "low" and level == "ok":
+            level = "warning"
+    label = {
+        "ok": "service.status.ok",
+        "warning": "service.status.warning",
+        "critical": "service.status.critical",
+    }[level]
+    return {"level": level, "label": label}
+
+
 @router.get("/generations")
 async def get_recent_generations(
     limit: int = Query(default=50, ge=1, le=200),

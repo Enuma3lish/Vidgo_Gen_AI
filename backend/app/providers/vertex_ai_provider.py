@@ -65,7 +65,11 @@ class VertexAIProvider(BaseProvider):
         # Imagen and Veo are only available in us-central1.
         self.image_location = os.getenv("VERTEX_AI_IMAGE_LOCATION", "us-central1")
         self.video_location = os.getenv("VEO_LOCATION", "us-central1")
-        # Default to Veo 2 GA; set VEO_MODEL=veo-3.0-generate-preview when your project has access.
+        # Veo version pin. 2026-05-19 owner-approved tier: production runs
+        # VEO_MODEL=veo-3.1-generate (set in gcp/deploy.sh COMMON_ENV) for the
+        # 利基 (specialty) high-end slot. Falls back to Veo 2 GA when unset
+        # (local dev) so we don't hard-fail when the project hasn't been
+        # whitelisted for 3.1.
         self.veo_model = os.getenv("VEO_MODEL", "veo-2.0-generate-001")
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
         self.gemini_image_model = os.getenv(

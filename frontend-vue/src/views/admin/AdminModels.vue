@@ -43,8 +43,18 @@ const SERVICE_META: Record<string, { family: string; label: string }> = {
   tts_f5:                   { family: 'TTS',           label: 'F5-TTS (voice cloning)' },
   tts_openai:               { family: 'TTS',           label: 'OpenAI-compat TTS (tts-1)' },
   midjourney:               { family: 'Midjourney',    label: 'Midjourney (alias)' },
-  luma_video:               { family: 'Luma',          label: 'Luma Dream Machine' },
-  luma_ray_version:         { family: 'Luma',          label: 'Luma Ray version' },
+  // 2026-05-19 tier revision — Seedance / Hailuo / Hunyuan replace Luma.
+  seedance_video:           { family: 'Seedance',      label: 'Seedance 2.0 Fast (default tier)' },
+  seedance_t2v_task:        { family: 'Seedance',      label: 'Seedance text-to-video task_type' },
+  seedance_i2v_task:        { family: 'Seedance',      label: 'Seedance image-to-video task_type' },
+  seedance_t2i_task:        { family: 'Seedance',      label: 'Seedance text-to-image task_type' },
+  hailuo_video:             { family: 'Hailuo',        label: 'Hailuo Fast (cheap / fast tier)' },
+  hailuo_t2v_task:          { family: 'Hailuo',        label: 'Hailuo text-to-video task_type' },
+  hailuo_i2v_task:          { family: 'Hailuo',        label: 'Hailuo image-to-video task_type' },
+  hunyuan_video:            { family: 'Hunyuan',       label: 'Hunyuan (中文 strong)' },
+  hunyuan_t2v_task:         { family: 'Hunyuan',       label: 'Hunyuan text-to-video task_type' },
+  hunyuan_i2v_task:         { family: 'Hunyuan',       label: 'Hunyuan image-to-video task_type' },
+  hunyuan_t2i_task:         { family: 'Hunyuan',       label: 'Hunyuan text-to-image task_type' },
 }
 
 function metaFor(key: string) {
@@ -73,7 +83,7 @@ const groupedEntries = computed(() => {
     groups[family].push(entry)
   }
   // Preserve a stable family order; "Other" sinks to the bottom
-  const order = ['Kling', 'Flux', 'Wan', 'Midjourney', 'Luma', 'Trellis (3D)', 'Image toolkit', 'TTS', 'Other']
+  const order = ['Seedance', 'Kling', 'Hailuo', 'Hunyuan', 'Flux', 'Wan', 'Midjourney', 'Trellis (3D)', 'Image toolkit', 'TTS', 'Other']
   return order
     .filter(f => groups[f])
     .map(f => ({ family: f, items: groups[f] }))

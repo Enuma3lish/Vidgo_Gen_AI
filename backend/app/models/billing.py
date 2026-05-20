@@ -37,7 +37,7 @@ class Plan(Base):
     topup_discount_rate = Column(DECIMAL(3, 2), default=0)  # 0.00 = no discount, 0.20 = 20% off
 
     # Model Access Control
-    allowed_models = Column(JSON, default=["default"])  # List of allowed models: default, wan_pro, gemini_pro, sora
+    allowed_models = Column(JSON, default=["default"])  # List of allowed models: default, wan_pro, gemini_pro, veo
     
     # Feature flags
     can_use_effects = Column(Boolean, default=False)  # Can access VidGo Effects (GoEnhance)
@@ -365,7 +365,7 @@ class ServicePricing(Base):
     api_cost_usd = Column(DECIMAL(10, 4), nullable=False)  # Actual API cost in USD
 
     # Model and Tool Classification
-    model_type = Column(String(50), default="default")  # default, wan_pro, gemini_pro, sora
+    model_type = Column(String(50), default="default")  # default, wan_pro, gemini_pro, veo
     tool_category = Column(String(50), default="static")  # static, dynamic, premium
     
     # Access Control

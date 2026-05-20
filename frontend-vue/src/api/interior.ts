@@ -217,15 +217,24 @@ export const interiorApi = {
   },
 
   async generate3DModel(request: Generate3DRequest): Promise<Generate3DResponse> {
+    // Backend Trellis polling caps at ~10 min (120 attempts × 5s in
+    // piapi_provider._submit_and_poll). The client timeout MUST exceed that
+    // window — at 5 min the axios call was aborting while the server was
+    // still polling a healthy task, so users saw "an error occurred" on
+    // generations that would have succeeded a couple minutes later.
     const response = await apiClient.post('/api/v1/interior/3d-model', request, {
-      timeout: 300000 // 5 minutes for 3D generation
+      timeout: 720000 // 12 minutes
     })
     return response.data
   },
 
   async generate3DFromFloorplan(request: Generate3DFromFloorplanRequest): Promise<Generate3DResponse> {
+    // Two-stage pipeline (Gemini/PiAPI interior render + Trellis2). Both
+    // stages can sit at the upper end of their polling windows on a cold
+    // queue, so we give the request a 15 min wall-clock budget — same
+    // reasoning as /3d-model above.
     const response = await apiClient.post('/api/v1/interior/3d-from-floorplan', request, {
-      timeout: 420000 // 7 minutes (Gemini render + Trellis2)
+      timeout: 900000 // 15 minutes
     })
     return response.data
   }

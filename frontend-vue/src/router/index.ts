@@ -132,15 +132,11 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
-  // Luma Dream Machine — video_generation_professional tier (~300 credits)
-  {
-    path: '/tools/luma-video',
-    name: 'luma-video',
-    component: () => import('@/views/tools/LumaVideo.vue'),
-    meta: { requiresAuth: false }
-  },
-
   // ===== Redirects for removed/aliased routes =====
+  // 2026-05-19: Luma removed in favor of the new tier (Seedance Fast default,
+  // Kling Omni premium, Hailuo Fast cheap, Hunyuan 中文, Wan specialty).
+  // Redirect to /tools/short-video so old bookmarks land on the closest tool.
+  { path: '/tools/luma-video', redirect: '/tools/short-video' },
   { path: '/tools/remove-watermark', redirect: '/tools/effects' },
   {
     path: '/tools/image-translator',

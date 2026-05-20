@@ -230,10 +230,19 @@ function toolDesc(tool: LandingTool): string {
 }
 
 // ── Seasonal marketing scenarios ──
+// Season → demo-material topic mapping for the "依照通路與檔期快速換場景"
+// section. 2026-05-20 — dropped the generic `seasonal` fallback from
+// spring/valentines/blackFriday. The materials DB currently has exactly
+// one row tagged `topic=seasonal` and it's autumn-themed; before this
+// change clicking 春季特賣 surfaced an autumn maple-leaf product shot,
+// which read as a bug. Each tab now resolves against its own topic
+// (plus the broader `holiday` group for the gift-driven seasons) and
+// falls through to an honest empty state when no matching material
+// exists — better than misleading the user with off-season imagery.
 const seasons = ref([
-  { id: 'spring', topics: ['spring', 'seasonal'], active: false },
-  { id: 'valentines', topics: ['valentines', 'seasonal', 'holiday'], active: false },
-  { id: 'blackFriday', topics: ['black_friday', 'holiday', 'seasonal'], active: false },
+  { id: 'spring', topics: ['spring'], active: false },
+  { id: 'valentines', topics: ['valentines', 'holiday'], active: false },
+  { id: 'blackFriday', topics: ['black_friday', 'holiday'], active: false },
   { id: 'christmas', topics: ['christmas', 'holiday'], active: false },
   { id: 'newYear', topics: ['new_year', 'holiday'], active: true },
 ])

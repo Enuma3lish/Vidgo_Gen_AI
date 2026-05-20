@@ -54,11 +54,22 @@ KEY_TO_ENV_VAR: Dict[str, str] = {
     "tts_f5":              "PIAPI_TTS_F5_MODEL",
     "tts_openai":          "PIAPI_TTS_OPENAI_MODEL",
     "midjourney":          "PIAPI_MIDJOURNEY_MODEL",
-    "luma_video":          "PIAPI_LUMA_VIDEO_MODEL",
-    "luma_ray_version":    "PIAPI_LUMA_RAY_VERSION",
+    # 2026-05-19 tier revision — Seedance / Hailuo / Hunyuan replace Luma.
+    "seedance_video":      "PIAPI_SEEDANCE_VIDEO_MODEL",
+    "seedance_t2v_task":   "PIAPI_SEEDANCE_T2V_TASK",
+    "seedance_i2v_task":   "PIAPI_SEEDANCE_I2V_TASK",
+    "seedance_t2i_task":   "PIAPI_SEEDANCE_T2I_TASK",
+    "hailuo_video":        "PIAPI_HAILUO_VIDEO_MODEL",
+    "hailuo_t2v_task":     "PIAPI_HAILUO_T2V_TASK",
+    "hailuo_i2v_task":     "PIAPI_HAILUO_I2V_TASK",
+    "hunyuan_video":       "PIAPI_HUNYUAN_VIDEO_MODEL",
+    "hunyuan_t2v_task":    "PIAPI_HUNYUAN_T2V_TASK",
+    "hunyuan_i2v_task":    "PIAPI_HUNYUAN_I2V_TASK",
+    "hunyuan_t2i_task":    "PIAPI_HUNYUAN_T2I_TASK",
     # Kling video version pin (separate from model field which is always "kling")
     "kling_video_version":  "PIAPI_KLING_VIDEO_VERSION",
     "kling_flagship_version": "PIAPI_KLING_VIDEO_FLAGSHIP_VERSION",
+    "kling_omni_version":   "PIAPI_KLING_OMNI_VERSION",
 }
 
 

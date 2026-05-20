@@ -25,9 +25,9 @@
   },
   "topics": {
     "pattern": {
-      "name": "パターンデザイン",
+      "name": "包装パターンデザイン",
       "desc": "AIパワードパターン生成と転写",
-      "longDesc": "AIを使って独自のパターンを素早く生成。シームレス、花柄、幾何学など多様なスタイルに対応",
+      "longDesc": "包装・ラッピング・SNS背景用のタイル可能なパターンを生成。",
       "ctaTitle": "ユニークなパターンを作成開始",
       "ctaDesc": "AIでプロフェッショナルなパターンを生成、多様なスタイルから選択"
     },
@@ -140,7 +140,7 @@
       "longDesc": "AIパワードのインテリアデザイン提案で任意の部屋をリデザイン"
     },
     "shortVideo": {
-      "name": "ショート動画",
+      "name": "商品リール",
       "desc": "魅力的なショート動画を作成",
       "longDesc": "テキスト説明や画像から魅力的なショート動画を生成",
       "aiModelSelection": "AI モデル選択",
@@ -215,6 +215,65 @@
         "name": "カスタム",
         "desc": "独自のプロンプト"
       }
+    },
+    "hub": {
+      "aiTools": "AI ツール",
+      "createWithAi": "AI で画像を作成",
+      "pageTitle": "何が必要ですか？",
+      "recentlyUsed": "最近使用",
+      "tiles": {
+        "recolor": "商品の色替え",
+        "productBeautifier": "商品画像の高画質化",
+        "virtualModel": "モデル試着",
+        "productStaging": "商品シーン",
+        "editWithAi": "AI 画像編集",
+        "flatLay": "フラットレイ撮影",
+        "ghostMannequin": "ゴーストマネキン",
+        "videoGenerator": "商品プロモ動画",
+        "ironing": "服のシワ除去",
+        "logo": "ブランドロゴ",
+        "text": "画像テキスト",
+        "instagramStory": "IG / TikTok リール",
+        "background": "商品の背景切替",
+        "threeDIllustration": "立体感のある動画",
+        "productPhotography": "ECサイト用商品写真",
+        "productPackaging": "パッケージパターン",
+        "createAnyImage": "マーケティングメインビジュアル"
+      }
+    },
+    "interiorLayout": {
+      "amenities": "設備",
+      "custom": "カスタム",
+      "moodboard": "ムードボード",
+      "presetStyle": "プリセットスタイル",
+      "primary": "メイン",
+      "secondary": "サブ",
+      "stylesStep": "2. タイプとスタイル",
+      "tabIndoor": "室内",
+      "tabLandscape": "ランドスケープ",
+      "tabOutdoor": "屋外",
+      "uploadMultiple": "複数",
+      "uploadSingle": "1枚",
+      "uploadStep": "1. 画像を1枚以上アップロード"
+    },
+    "tryOnLayout": {
+      "applyBrandStyle": "ブランドスタイルを適用",
+      "background": "背景",
+      "backgroundOutdoor": "屋外",
+      "backgroundRandom": "ランダム",
+      "backgroundStudio": "スタジオ",
+      "backgroundWhite": "ホワイト",
+      "describePrompt": "希望する画像を説明（任意）",
+      "generateOne": "1枚の画像を生成",
+      "quality": "品質",
+      "qualityPro": "プロ",
+      "qualityStandard": "標準",
+      "selectModel": "モデル",
+      "size": "サイズ",
+      "sizeLandscape": "横長 (16:9)",
+      "sizePortrait": "縦長 (2:3)",
+      "sizeSquare": "正方形 (1:1)",
+      "uploadOwn": "自分でアップロード"
     }
   },
   "styles": {
@@ -463,7 +522,8 @@
     "signUpFree": "無料登録 — 40 クレジット獲得",
     "signingIn": "ログイン中…",
     "signingUp": "登録中…",
-    "termsAgree": "「無料で始める」をクリックすると、利用規約とプライバシーポリシーに同意したものとみなされます"
+    "termsAgree": "「無料で始める」をクリックすると、利用規約とプライバシーポリシーに同意したものとみなされます",
+    "login": "ログイン"
   },
   "dashboard": {
     "welcome": "おかえりなさい",
@@ -487,12 +547,12 @@
     "noWorksDesc": "AIツールで作品を作りましょう！",
     "startCreating": "今すぐ作成開始",
     "tools": {
-      "shortVideo": "AIショート動画",
+      "shortVideo": "商品リール",
       "avatar": "AIアバター",
-      "tryOn": "バーチャル試着",
-      "productScene": "商品シーン",
-      "bgRemoval": "背景除去",
-      "roomRedesign": "ルームリデザイン"
+      "tryOn": "モデル試着",
+      "productScene": "商品シーン撮影",
+      "bgRemoval": "商品の背景切り抜き",
+      "roomRedesign": "インテリアデザイン"
     },
     "time": {
       "justNow": "たった今",
@@ -1099,6 +1159,36 @@
       "lumaVideo": {
         "name": "Luma Dream Machine",
         "desc": "Luma Ray プロフェッショナル AI 動画"
+      },
+      "productScenePhoto": {
+        "name": "商品シーン撮影"
+      },
+      "bgCutout": {
+        "name": "商品の背景切り抜き"
+      },
+      "modelTryOn": {
+        "name": "モデル試着"
+      },
+      "productReel": {
+        "name": "商品リール"
+      },
+      "productPromoVideo": {
+        "name": "商品プロモ動画"
+      },
+      "packagingPattern": {
+        "name": "包装パターン"
+      },
+      "marketingHeroImage": {
+        "name": "メインビジュアル"
+      },
+      "productImageTranslator": {
+        "name": "商品画像テキスト翻訳"
+      },
+      "interiorMockup": {
+        "name": "インテリアデザイン"
+      },
+      "aiSpokesperson": {
+        "name": "AI スポークスマン"
       }
     },
     "categories": {
@@ -1108,7 +1198,13 @@
       "ecommerceAIDesc": "商品シーン生成、背景除去、AIシャドウ — すべてのプラットフォームで商品を際立たせる。",
       "designAI": "デザイン＆コンテンツAI",
       "designAIDesc": "ルームリデザイン、スタイルクローン、画像翻訳 — クリエイティブデザインワークフローのための強力なツール。",
-      "proAi": "Pro AI Studio"
+      "proAi": "Pro AI Studio",
+      "productShots": "商品撮影",
+      "marketingVideo": "マーケティング動画",
+      "brandPackaging": "ブランド・包装",
+      "spatialVisuals": "空間ビジュアル",
+      "aiSpokesperson": "AI スポークスマン",
+      "quickFixes": "クイック修整"
     },
     "seasons": {
       "spring": "春セール",
@@ -1434,7 +1530,12 @@
     "paymentSuccess": "決済が成功しました",
     "paymentSuccessDesc": "サブスクリプションが有効になりました。すべての機能をご利用いただけます。",
     "redirecting": "ダッシュボードへリダイレクト中…",
-    "viewPlans": "プランを見る"
+    "viewPlans": "プランを見る",
+    "paymentUnsuccessful": "決済が完了しませんでした",
+    "paymentUnsuccessfulDesc": "サブスク支払いが完了しませんでした。後ほど再試行してください。",
+    "pleaseRetry": "支払いを再試行してください",
+    "retryFailed": "再試行に失敗しました",
+    "retrySamePlan": "同じプランで再試行"
   },
   "upload": {
     "credits": "クレジット",
@@ -1516,8 +1617,8 @@
     }
   },
   "midjourney": {
-    "title": "Midjourney AI 画像",
-    "subtitle": "PiAPI 経由で Midjourney によるプレミアム画像生成。",
+    "title": "マーケティングメインビジュアル",
+    "subtitle": "Flux / Seedance / Hunyuanで商品マーケティング用ビジュアルを生成。",
     "demoCta": "サブスクすると Midjourney 画像を生成できます。",
     "presetLabel": "プロンプトテンプレート",
     "presetCustom": "カスタム（自分で書く）",
@@ -1551,15 +1652,16 @@
     },
     "toasts": {
       "success": "画像の生成が完了しました。",
-      "demoReady": "デモ画像の準備ができました。"
+      "demoReady": "デモ画像の準備ができました。",
+      "demoPlaceholder": "これはデモ画像です（プロンプトから生成されていません）。サブスク登録でプロンプト通りに生成されます。"
     },
     "errors": {
       "generic": "生成に失敗しました。もう一度お試しください。"
     }
   },
   "klingVideo": {
-    "title": "Kling 動画",
-    "subtitle": "PiAPI 経由で Kling によるシネマティック AI 動画。標準または旗艦 Pro モード。",
+    "title": "商品プロモ動画 (Kling)",
+    "subtitle": "Klingエンジンで高品質な商品プロモ動画（3.0 / Omniマルチモーダル対応）。",
     "demoCta": "サブスクすると Kling 動画を生成できます。",
     "presetLabel": "プロンプトテンプレート (T2V / I2V)",
     "presetCustom": "カスタム（自分で書く）",
@@ -1687,5 +1789,16 @@
     "errors": {
       "generic": "生成に失敗しました。もう一度お試しください。"
     }
+  },
+  "admin": {
+    "payment": {
+      "title": "決済管理",
+      "subtitle": "サブスクとチャージの取引履歴"
+    }
+  },
+  "vision": {
+    "weSee": "あなたの画像から認識：",
+    "textOverridden": "テキストが画像と矛盾していたため、画像内容を優先しました。",
+    "gapGeneric": "アップロード画像に合わせて生成を調整しました。"
   }
 }

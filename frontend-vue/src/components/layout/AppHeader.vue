@@ -26,45 +26,56 @@ const showPublicGalleryLinks = computed(() => !authStore.isAdmin)
 interface ToolEntry { to: string; emoji: string; key: string }
 interface ToolGroup { titleKey: string; items: ToolEntry[] }
 
+// 2026-05-20 — e-commerce-driven regrouping per owner request "make each
+// group name a sense and so does each tool name." Old groups (fashionAI /
+// ecommerceAI / designAI / proAi) were model-centric (Kling, MJ, ...) and
+// confused small-shop owners. New buckets map to the workflow they care
+// about: 商品攝影 / 行銷影片 / 品牌與包裝 / 空間視覺 / AI 代言 / 快速修圖.
+// Tool labels live under lp.allTools.<key>.name — see frontend-vue/
+// src/locales/*.json for the full bilingual+ja+ko+es strings.
 const toolGroups: ToolGroup[] = [
   {
-    titleKey: 'lp.categories.fashionAI',
+    titleKey: 'lp.categories.productShots',
     items: [
-      { to: '/tools/try-on',      emoji: '👗', key: 'lp.allTools.tryOn.name' },
-      { to: '/tools/short-video', emoji: '🎬', key: 'lp.allTools.fashionReels.name' },
-      { to: '/tools/avatar',      emoji: '🗣️', key: 'lp.allTools.productAvatars.name' },
-    ],
-  },
-  {
-    titleKey: 'lp.categories.ecommerceAI',
-    items: [
-      { to: '/tools/product-scene',      emoji: '📸', key: 'lp.allTools.productAnyshoot.name' },
-      { to: '/tools/background-removal', emoji: '✂️', key: 'lp.allTools.bgRemoval.name' },
+      { to: '/tools/product-scene',      emoji: '📸', key: 'lp.allTools.productScenePhoto.name' },
+      { to: '/tools/background-removal', emoji: '✂️', key: 'lp.allTools.bgCutout.name' },
+      { to: '/tools/try-on',             emoji: '👗', key: 'lp.allTools.modelTryOn.name' },
       { to: '/tools/upscale',            emoji: '🔍', key: 'lp.allTools.hdUpscale.name' },
-      { to: '/tools/pattern-generate',   emoji: '▦',  key: 'lp.allTools.patternGenerate.name' },
     ],
   },
   {
-    titleKey: 'lp.categories.designAI',
+    titleKey: 'lp.categories.marketingVideo',
     items: [
-      { to: '/tools/room-redesign',  emoji: '🏠',  key: 'lp.allTools.roomRedesign.name' },
+      { to: '/tools/short-video',     emoji: '🎬', key: 'lp.allTools.productReel.name' },
+      { to: '/tools/kling-video',     emoji: '🎥', key: 'lp.allTools.productPromoVideo.name' },
       { to: '/tools/video-transform', emoji: '🎞️', key: 'lp.allTools.videoTransform.name' },
-      { to: '/gallery',               emoji: '🖼️', key: 'gallery.title' },
+      { to: '/tools/video-dubbing',   emoji: '🎙️', key: 'lp.videoDubbing.title' },
     ],
   },
   {
-    titleKey: 'lp.imageTranslation.title',
+    titleKey: 'lp.categories.brandPackaging',
     items: [
-      { to: '/tools/image-translator', emoji: '文',  key: 'lp.allTools.imageTranslator.name' },
-      { to: '/tools/video-dubbing',    emoji: '🎙️', key: 'lp.videoDubbing.title' },
+      { to: '/tools/pattern-generate',   emoji: '▦',  key: 'lp.allTools.packagingPattern.name' },
+      { to: '/tools/midjourney-imagine', emoji: '🎨', key: 'lp.allTools.marketingHeroImage.name' },
+      { to: '/tools/image-translator',   emoji: '文', key: 'lp.allTools.productImageTranslator.name' },
     ],
   },
   {
-    titleKey: 'lp.categories.proAi',
+    titleKey: 'lp.categories.spatialVisuals',
     items: [
-      { to: '/tools/midjourney-imagine', emoji: '🎨', key: 'lp.allTools.midjourney.name' },
-      { to: '/tools/kling-video',        emoji: '🎥', key: 'lp.allTools.klingVideo.name' },
-      { to: '/tools/luma-video',         emoji: '✨', key: 'lp.allTools.lumaVideo.name' },
+      { to: '/tools/room-redesign', emoji: '🏠', key: 'lp.allTools.interiorMockup.name' },
+    ],
+  },
+  {
+    titleKey: 'lp.categories.aiSpokesperson',
+    items: [
+      { to: '/tools/avatar', emoji: '🗣️', key: 'lp.allTools.aiSpokesperson.name' },
+    ],
+  },
+  {
+    titleKey: 'lp.categories.quickFixes',
+    items: [
+      { to: '/gallery', emoji: '🖼️', key: 'gallery.title' },
     ],
   },
 ]

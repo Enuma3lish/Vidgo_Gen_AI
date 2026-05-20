@@ -8,6 +8,7 @@ import CreditCost from '@/components/tools/CreditCost.vue'
 import { generationApi } from '@/api/generation'
 import { useLocalized, useDemoMode, usePromptLibrary } from '@/composables'
 import { useUIStore } from '@/stores'
+import { downloadAsset } from '@/utils/downloadAsset'
 
 const { t, locale } = useI18n()
 // L is the 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
@@ -128,6 +129,18 @@ const STYLE_TO_CATEGORIES: Record<string, string[] | null> = {
 const selectedStyle = ref('seamless')
 const prompt = ref('')
 
+// 2026-05-20 revision — three-tier T2I picker, verified against live PiAPI:
+//   flux     Qubico/flux1-schnell  premium / balanced default
+//   qwen     Qubico/qwen-image     best for Chinese prompts (Alibaba)
+//   z-image  Qubico/z-image        cheap & fast (Alibaba)
+// Hunyuan / Seedance were removed — PiAPI exposes them only for video.
+const selectedT2IModel = ref<'flux' | 'qwen' | 'z-image'>('flux')
+const t2iModelOptions = [
+  { id: 'flux' as const,    labelZh: 'Flux',          labelEn: 'Flux' },
+  { id: 'qwen' as const,    labelZh: 'Qwen 通義',     labelEn: 'Qwen' },
+  { id: 'z-image' as const, labelZh: 'Z-Image 極速',  labelEn: 'Z-Image' },
+]
+
 // Filter the prompt-library dropdown by the currently-selected style band.
 const filteredPromptOptions = computed(() => {
   const cats = STYLE_TO_CATEGORIES[selectedStyle.value]
@@ -150,8 +163,14 @@ watch(selectedStyle, () => {
   }
 })
 
-watch([selectedPatternPromptId, locale], () => {
+watch([selectedPatternPromptId, locale], ([newId, _newLocale], [oldId, _oldLocale]) => {
   prompt.value = selectedPatternPromptId.value ? patternPromptTextFor(selectedPatternPromptId.value) : ''
+  // Clear stale result when the dropdown selection actually changes —
+  // skip when only the locale flipped (same prompt, different language),
+  // since the existing result is still valid for the new prompt text.
+  if (newId !== oldId) {
+    result.value = null
+  }
 })
 const isGenerating = ref(false)
 const result = ref<string | null>(null)
@@ -382,7 +401,10 @@ async function generatePattern() {
       locale: String(locale.value || ''),
       style: selectedStyle.value,
       width: 1024,
-      height: 1024
+      height: 1024,
+      // Only forward when the user actively picked something other than
+      // Flux — keeps the wire payload identical to old clients.
+      ...(selectedT2IModel.value !== 'flux' ? { model: selectedT2IModel.value } : {}),
     })
 
     if (response.success && response.result_url) {
@@ -510,6 +532,26 @@ onMounted(() => {
           </div>
         </div>
 
+        <!-- AI model picker (2026-05-20 tier addition). Default Flux is the
+             baseline the curated prompt library is calibrated for; Seedance /
+             Hunyuan let users explore alternative renderings of the same prompt. -->
+        <div class="mb-6">
+          <label class="block text-sm text-gray-400 mb-2">
+            {{ L('AI 模型', 'AI Model', 'AIモデル', 'AI 모델', 'Modelo IA') }}
+          </label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="m in t2iModelOptions"
+              :key="m.id"
+              @click="selectedT2IModel = m.id; result = null"
+              class="px-4 py-2 rounded-xl text-sm font-medium transition-all"
+              :class="selectedT2IModel === m.id
+                ? 'bg-primary-500 text-white'
+                : 'bg-dark-700 text-gray-400 hover:text-white'"
+            >{{ L(m.labelZh, m.labelEn, m.labelEn, m.labelEn, m.labelEn) }}</button>
+          </div>
+        </div>
+
         <!-- Prompt Selection (locked dropdown — no free-form input) -->
         <!-- The legacy "Example Prompts" pill row was removed: it submitted
              free-form text that bypassed the curated prompt library and the
@@ -571,7 +613,11 @@ onMounted(() => {
             >
               {{ L('訂閱以下載', 'Subscribe to Download', 'サブスクでダウンロード', '구독으로 다운로드', 'Suscríbete para descargar') }}
             </RouterLink>
-            <button v-else class="btn-secondary">
+            <button
+              v-else
+              class="btn-secondary"
+              @click="downloadAsset(result!, 'vidgo_pattern.png')"
+            >
               {{ t('common.download') }}
             </button>
           </div>

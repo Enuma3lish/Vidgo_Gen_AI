@@ -25,9 +25,9 @@
   },
   "topics": {
     "pattern": {
-      "name": "Diseño de Patrones",
+      "name": "Diseño de Patrón de Empaque",
       "desc": "Generación y transferencia de patrones con IA",
-      "longDesc": "Usa IA para generar patrones únicos rápidamente. Soporta sin costuras, florales, geométricos y más estilos",
+      "longDesc": "Genera patrones tileable y listos para imprimir para empaque, envoltura y fondos sociales.",
       "ctaTitle": "Comienza a crear patrones únicos",
       "ctaDesc": "Genera patrones profesionales con IA, múltiples estilos para elegir"
     },
@@ -140,7 +140,7 @@
       "longDesc": "Rediseña cualquier habitación con sugerencias de decoración interior con IA"
     },
     "shortVideo": {
-      "name": "Video Corto",
+      "name": "Reel de Producto",
       "desc": "Crea videos cortos atractivos",
       "longDesc": "Genera videos cortos cautivadores a partir de descripciones de texto o imágenes",
       "aiModelSelection": "Selección de Modelo IA",
@@ -215,6 +215,65 @@
         "name": "Personalizado",
         "desc": "Tu propio prompt"
       }
+    },
+    "hub": {
+      "aiTools": "Herramientas IA",
+      "createWithAi": "Crear con IA",
+      "pageTitle": "¿Qué necesitas?",
+      "recentlyUsed": "Usado recientemente",
+      "tiles": {
+        "recolor": "Cambio de color",
+        "productBeautifier": "Mejora del producto",
+        "virtualModel": "Probador Virtual",
+        "productStaging": "Escena del producto",
+        "editWithAi": "Edición IA",
+        "flatLay": "Toma plana",
+        "ghostMannequin": "Maniquí invisible",
+        "videoGenerator": "Video promocional",
+        "ironing": "Eliminar arrugas",
+        "logo": "Logo de marca",
+        "text": "Texto en imagen",
+        "instagramStory": "Reel IG / TikTok",
+        "background": "Cambio de fondo",
+        "threeDIllustration": "Video 3D cinemático",
+        "productPhotography": "Foto producto e-commerce",
+        "productPackaging": "Patrón de empaque",
+        "createAnyImage": "Imagen hero de marketing"
+      }
+    },
+    "interiorLayout": {
+      "amenities": "Servicios",
+      "custom": "Personalizado",
+      "moodboard": "Moodboard",
+      "presetStyle": "Estilo predefinido",
+      "primary": "Principal",
+      "secondary": "Secundario",
+      "stylesStep": "2. Tipo y estilo",
+      "tabIndoor": "Interior",
+      "tabLandscape": "Paisaje",
+      "tabOutdoor": "Exterior",
+      "uploadMultiple": "Varias",
+      "uploadSingle": "Una",
+      "uploadStep": "1. Sube una o más imágenes"
+    },
+    "tryOnLayout": {
+      "applyBrandStyle": "Aplicar estilo de marca",
+      "background": "Fondo",
+      "backgroundOutdoor": "Exterior",
+      "backgroundRandom": "Aleatorio",
+      "backgroundStudio": "Estudio",
+      "backgroundWhite": "Blanco",
+      "describePrompt": "Describe la imagen que quieres (opcional)",
+      "generateOne": "Generar 1 imagen",
+      "quality": "Calidad",
+      "qualityPro": "Pro",
+      "qualityStandard": "Estándar",
+      "selectModel": "Modelo",
+      "size": "Tamaño",
+      "sizeLandscape": "Apaisado (16:9)",
+      "sizePortrait": "Retrato (2:3)",
+      "sizeSquare": "Cuadrado (1:1)",
+      "uploadOwn": "Subir el tuyo"
     }
   },
   "styles": {
@@ -463,7 +522,8 @@
     "signUpFree": "Regístrate gratis — Obtén 40 créditos",
     "signingIn": "Iniciando sesión...",
     "signingUp": "Registrando...",
-    "termsAgree": "Al hacer clic en \"Empieza gratis\" aceptas nuestros Términos y Política de Privacidad"
+    "termsAgree": "Al hacer clic en \"Empieza gratis\" aceptas nuestros Términos y Política de Privacidad",
+    "login": "Iniciar sesión"
   },
   "dashboard": {
     "welcome": "Bienvenido de vuelta",
@@ -487,12 +547,12 @@
     "noWorksDesc": "¡Empieza a crear con cualquier herramienta de IA!",
     "startCreating": "Empezar a crear ahora",
     "tools": {
-      "shortVideo": "Video corto IA",
+      "shortVideo": "Reel de Producto",
       "avatar": "Avatar IA",
-      "tryOn": "Prueba virtual",
-      "productScene": "Escena de producto",
-      "bgRemoval": "Eliminar fondo",
-      "roomRedesign": "Rediseño de espacio"
+      "tryOn": "Probador Virtual",
+      "productScene": "Foto de Escena de Producto",
+      "bgRemoval": "Recorte de Fondo",
+      "roomRedesign": "Maqueta de Interior"
     },
     "time": {
       "justNow": "Ahora mismo",
@@ -1099,6 +1159,36 @@
       "lumaVideo": {
         "name": "Luma Dream Machine",
         "desc": "Video IA profesional con Luma Ray"
+      },
+      "productScenePhoto": {
+        "name": "Foto de Escena de Producto"
+      },
+      "bgCutout": {
+        "name": "Recorte de Fondo"
+      },
+      "modelTryOn": {
+        "name": "Probador Virtual"
+      },
+      "productReel": {
+        "name": "Reel de Producto"
+      },
+      "productPromoVideo": {
+        "name": "Video Promocional"
+      },
+      "packagingPattern": {
+        "name": "Patrón de Empaque"
+      },
+      "marketingHeroImage": {
+        "name": "Imagen Hero de Marketing"
+      },
+      "productImageTranslator": {
+        "name": "Traductor de Imagen"
+      },
+      "interiorMockup": {
+        "name": "Maqueta de Interior"
+      },
+      "aiSpokesperson": {
+        "name": "Portavoz IA"
       }
     },
     "categories": {
@@ -1108,7 +1198,13 @@
       "ecommerceAIDesc": "Generación de escenas de productos, eliminación de fondos y sombras IA — haz que tus productos destaquen en cada plataforma.",
       "designAI": "IA de Diseño y Contenido",
       "designAIDesc": "Rediseño de habitaciones, clonación de estilos y traducción de imágenes — herramientas poderosas para flujos de trabajo de diseño creativo.",
-      "proAi": "Pro AI Studio"
+      "proAi": "Pro AI Studio",
+      "productShots": "Fotos de Producto",
+      "marketingVideo": "Video de Marketing",
+      "brandPackaging": "Marca y Empaque",
+      "spatialVisuals": "Visualización Espacial",
+      "aiSpokesperson": "Portavoz IA",
+      "quickFixes": "Ediciones Rápidas"
     },
     "seasons": {
       "spring": "Rebajas de Primavera",
@@ -1434,7 +1530,12 @@
     "paymentSuccess": "Pago exitoso",
     "paymentSuccessDesc": "Tu suscripción está ahora activa. Puedes empezar a usar todas las funciones.",
     "redirecting": "Redirigiendo al panel...",
-    "viewPlans": "Ver planes"
+    "viewPlans": "Ver planes",
+    "paymentUnsuccessful": "Pago no completado",
+    "paymentUnsuccessfulDesc": "Tu pago de suscripción no se completó. Inténtalo más tarde.",
+    "pleaseRetry": "Intenta el pago de nuevo",
+    "retryFailed": "Reintento fallido",
+    "retrySamePlan": "Reintentar con el mismo plan"
   },
   "upload": {
     "credits": "créditos",
@@ -1516,8 +1617,8 @@
     }
   },
   "midjourney": {
-    "title": "Imagen IA Midjourney",
-    "subtitle": "Generación de imágenes premium con Midjourney vía PiAPI.",
+    "title": "Imagen Hero de Marketing",
+    "subtitle": "Visuales de marketing premium con Flux / Seedance / Hunyuan.",
     "demoCta": "Suscríbete para generar tus propias imágenes Midjourney.",
     "presetLabel": "Plantilla de prompt",
     "presetCustom": "Personalizado (escribe el tuyo)",
@@ -1551,15 +1652,16 @@
     },
     "toasts": {
       "success": "Imagen generada correctamente.",
-      "demoReady": "Imagen de demostración lista."
+      "demoReady": "Imagen de demostración lista.",
+      "demoPlaceholder": "Esta es una imagen demo (no generada con tu prompt). Suscríbete para generar con tu prompt."
     },
     "errors": {
       "generic": "Falló la generación. Inténtalo de nuevo."
     }
   },
   "klingVideo": {
-    "title": "Video Kling",
-    "subtitle": "Video IA cinematográfico vía Kling en PiAPI. Modo estándar o flagship Pro.",
+    "title": "Video Promocional (Kling)",
+    "subtitle": "Videos promocionales premium con Kling (incl. 3.0 / Omni multimodal).",
     "demoCta": "Suscríbete para generar tus propios videos Kling.",
     "presetLabel": "Plantilla de prompt (T2V o I2V)",
     "presetCustom": "Personalizado (escribe el tuyo)",
@@ -1687,5 +1789,16 @@
     "errors": {
       "generic": "Falló la generación. Inténtalo de nuevo."
     }
+  },
+  "admin": {
+    "payment": {
+      "title": "Gestión de pagos",
+      "subtitle": "Transacciones de suscripción y recargas"
+    }
+  },
+  "vision": {
+    "weSee": "Vemos en tu imagen:",
+    "textOverridden": "Tu texto contradecía la imagen; se usó el contenido visual.",
+    "gapGeneric": "El resultado se ajustó para coincidir con tu imagen subida."
   }
 }

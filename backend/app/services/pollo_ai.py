@@ -45,10 +45,32 @@ POLLO_MODELS = {
         "description": "Fast generation, good quality",
         "lengths": [5, 10]
     },
-    "luma_ray2": {
-        "endpoint": "/generation/luma/luma-ray-2-0",
-        "name": "Luma Ray 2.0",
-        "description": "Cinematic quality",
+    # ── New tier (2026-05-19) — Pollo as backup to PiAPI on these models.
+    # Endpoint slugs follow Pollo's documented pattern /generation/<vendor>/<slug>.
+    # If Pollo renames any of these we rotate via the env vars in
+    # core/model_registry.py — code stays unchanged.
+    "seedance_v2": {
+        "endpoint": "/generation/seedance/seedance-2-fast",
+        "name": "Seedance 2.0 Fast",
+        "description": "Best CP value / stable / high-success default",
+        "lengths": [5, 10]
+    },
+    "hailuo_fast": {
+        "endpoint": "/generation/minimax/hailuo-fast",
+        "name": "Hailuo Fast",
+        "description": "Cheapest, fastest tier",
+        "lengths": [5, 6]
+    },
+    "hunyuan_v1": {
+        "endpoint": "/generation/hunyuan/hunyuan-v1",
+        "name": "Hunyuan",
+        "description": "Strong Chinese prompts + rich dynamic motion",
+        "lengths": [5, 8]
+    },
+    "kling_v3": {
+        "endpoint": "/generation/kling-ai/kling-v3",
+        "name": "Kling AI 3.0 / Omni",
+        "description": "Premium tier — top quality + audio",
         "lengths": [5, 10]
     },
 }

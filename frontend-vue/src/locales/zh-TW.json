@@ -25,9 +25,9 @@
   },
   "topics": {
     "pattern": {
-      "name": "圖案設計",
+      "name": "包裝圖案設計",
       "desc": "AI 智能圖案生成與轉印",
-      "longDesc": "運用 AI 技術快速生成獨特圖案，支援無縫圖案、花卉、幾何等多種風格",
+      "longDesc": "為包裝、襯紙、社群背景生成可平鋪、可印刷的設計圖案。",
       "ctaTitle": "開始創建獨特圖案",
       "ctaDesc": "使用 AI 生成專業圖案，多種風格可供選擇"
     },
@@ -67,23 +67,23 @@
       "recentlyUsed": "最近使用",
       "createWithAi": "運用 AI 建立圖片",
       "tiles": {
-        "recolor": "重新上色",
-        "productBeautifier": "商品優化",
-        "virtualModel": "虛擬模特",
-        "productStaging": "商品情境",
-        "editWithAi": "AI 編輯",
-        "flatLay": "平拍",
-        "ghostMannequin": "隱形人台",
-        "videoGenerator": "影片生成",
-        "ironing": "去皺整燙",
-        "logo": "Logo",
-        "text": "文字設計",
-        "instagramStory": "Instagram 限動",
-        "background": "背景",
-        "threeDIllustration": "3D 插畫",
-        "productPhotography": "商品攝影",
-        "productPackaging": "商品包裝",
-        "createAnyImage": "建立任意圖片"
+        "recolor": "商品換色",
+        "productBeautifier": "商品圖優化放大",
+        "virtualModel": "虛擬模特試穿",
+        "productStaging": "商品場景圖",
+        "editWithAi": "AI 圖片修飾",
+        "flatLay": "商品平拍",
+        "ghostMannequin": "服飾去人台",
+        "videoGenerator": "商品動態廣告",
+        "ironing": "服飾去皺",
+        "logo": "品牌 Logo",
+        "text": "圖片文字",
+        "instagramStory": "IG / TikTok 短片",
+        "background": "商品去背 / 換景",
+        "threeDIllustration": "立體感影片",
+        "productPhotography": "商品電商照",
+        "productPackaging": "包裝圖案設計",
+        "createAnyImage": "行銷主視覺"
       }
     },
     "tryOnLayout": {
@@ -226,7 +226,7 @@
       "longDesc": "將空間照片、毛胚屋、設計草圖或平面圖快速整理成提案級室內視覺，支援風格轉換、商用情境圖與 3D 展示流程。"
     },
     "shortVideo": {
-      "name": "商品動態短影音（圖生影片）",
+      "name": "商品影音 · Product Reel",
       "desc": "僅支援上傳圖片生成動態影片，穩定、省點數、轉換率高",
       "longDesc": "以 Image-to-Video 為核心：上傳商品圖後生成自然動態（如海浪、布料飄動），不開放純文字生影片。",
       "tryExamples": "請試試我們精彩的範例",
@@ -551,7 +551,8 @@
     "promotionCodeHint": "選填。有效推廣碼會在驗證信箱後加贈 40 點。",
     "registerBtn": "免費開始 — 獲得 40 點",
     "termsAgree": "點擊「免費開始」即表示您同意我們的服務條款與隱私政策",
-    "fillAllFields": "請填寫所有欄位"
+    "fillAllFields": "請填寫所有欄位",
+    "login": "登入"
   },
   "dashboard": {
     "welcome": "歡迎回來",
@@ -575,12 +576,12 @@
     "noWorksDesc": "從任意 AI 工具開始創作吧！",
     "startCreating": "立即開始創作",
     "tools": {
-      "shortVideo": "商品動態短影音（圖生影片）",
+      "shortVideo": "商品影音 (Product Reel)",
       "avatar": "AI 數位人",
-      "tryOn": "AI 模特換裝",
-      "productScene": "AI 商品情境攝影棚",
-      "bgRemoval": "智能去背（基礎）",
-      "roomRedesign": "毛胚屋/線稿秒渲染"
+      "tryOn": "模特試穿",
+      "productScene": "商品場景圖",
+      "bgRemoval": "商品去背",
+      "roomRedesign": "室內設計提案"
     },
     "time": {
       "justNow": "剛剛",
@@ -839,7 +840,12 @@
     "backToPricing": "返回定價方案",
     "mockComplete": "示範付款完成",
     "redirecting": "正在前往控制台...",
-    "goNow": "立即前往"
+    "goNow": "立即前往",
+    "paymentUnsuccessful": "付款未完成",
+    "paymentUnsuccessfulDesc": "您的訂閱付款未完成。請稍後再試。",
+    "pleaseRetry": "請重新嘗試付款",
+    "retryFailed": "重新付款失敗",
+    "retrySamePlan": "使用相同方案重新付款"
   },
   "footer": {
     "tagline": "VidGo AI — 讓影片與視覺創作變得簡單、高效、有創意。",
@@ -1292,6 +1298,36 @@
       "lumaVideo": {
         "name": "Luma Dream Machine",
         "desc": "Luma Ray 專業 AI 影片"
+      },
+      "productScenePhoto": {
+        "name": "商品場景圖"
+      },
+      "bgCutout": {
+        "name": "商品去背"
+      },
+      "modelTryOn": {
+        "name": "模特試穿"
+      },
+      "productReel": {
+        "name": "商品影音"
+      },
+      "productPromoVideo": {
+        "name": "商品動態廣告"
+      },
+      "packagingPattern": {
+        "name": "包裝圖案設計"
+      },
+      "marketingHeroImage": {
+        "name": "行銷主視覺"
+      },
+      "productImageTranslator": {
+        "name": "商品圖文翻譯"
+      },
+      "interiorMockup": {
+        "name": "室內設計提案"
+      },
+      "aiSpokesperson": {
+        "name": "AI 代言人"
       }
     },
     "categories": {
@@ -1301,7 +1337,13 @@
       "ecommerceAIDesc": "乾淨去背、專業商品場景、高清圖片一次搞定，讓商品上架轉化率倍增。",
       "designAI": "設計與內容 AI",
       "designAIDesc": "將空屋或粗糙草圖轉化為讓客戶心動的寫實室內設計圖。",
-      "proAi": "Pro AI Studio"
+      "proAi": "Pro AI Studio",
+      "productShots": "商品攝影",
+      "marketingVideo": "行銷影片",
+      "brandPackaging": "品牌與包裝",
+      "spatialVisuals": "空間視覺",
+      "aiSpokesperson": "AI 代言與口播",
+      "quickFixes": "快速修圖"
     },
     "seasons": {
       "spring": "春季特賣",
@@ -1604,8 +1646,8 @@
     }
   },
   "midjourney": {
-    "title": "高品質 AI 圖片",
-    "subtitle": "透過 PiAPI 使用 Flux 進行高品質圖片生成。",
+    "title": "行銷主視覺",
+    "subtitle": "使用 Flux / Seedance / Hunyuan 生成高品質商品廣告主視覺。",
     "demoCta": "訂閱後即可生成你自己的高品質 AI 圖片。",
     "presetLabel": "範例提示詞",
     "presetCustom": "自訂（自己輸入）",
@@ -1639,15 +1681,16 @@
     },
     "toasts": {
       "success": "圖片生成完成。",
-      "demoReady": "範例圖片已準備好。"
+      "demoReady": "範例圖片已準備好。",
+      "demoPlaceholder": "此為示範圖（非依您提示詞生成）— 登入並訂閱後即可用您的提示詞實際生成。"
     },
     "errors": {
       "generic": "生成失敗，請再試一次。"
     }
   },
   "klingVideo": {
-    "title": "Kling 影片",
-    "subtitle": "透過 PiAPI 使用 Kling 生成電影級 AI 影片。可選標準或旗艦 Pro 模式。",
+    "title": "商品動態廣告 (Kling)",
+    "subtitle": "高品質商品動態廣告，使用 Kling 引擎（含 3.0 / Omni 多模態）。",
     "demoCta": "訂閱後即可生成你自己的 Kling 影片。",
     "presetLabel": "範例提示詞（T2V 或 I2V）",
     "presetCustom": "自訂（自己輸入）",
@@ -1775,5 +1818,16 @@
     "errors": {
       "generic": "生成失敗，請再試一次。"
     }
+  },
+  "admin": {
+    "payment": {
+      "title": "付款管理",
+      "subtitle": "查看訂閱與儲值交易記錄"
+    }
+  },
+  "vision": {
+    "weSee": "我們在您的圖片中看到：",
+    "textOverridden": "您的文字描述與圖片不一致，已根據圖片內容調整。",
+    "gapGeneric": "生成已調整以更貼近您上傳的圖片內容。"
   }
 }

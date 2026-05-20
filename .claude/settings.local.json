@@ -328,7 +328,17 @@
       "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/python *)",
       "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/playwright install *)",
       "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/python3 *)",
-      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/pip install *)"
+      "Bash(/Users/mlw/Desktop/Vidgo_Gen_AI/.venv/bin/pip install *)",
+      "Bash(sed -n '270,310p' /Users/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/src/views/tools/ProductSceneClassic.vue)",
+      "Bash(sed -n '285,300p' /Users/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/src/views/tools/AIAvatar.vue)",
+      "Bash(PATH=/usr/local/bin:__TRACKED_VAR__ command -v node)",
+      "Bash(PATH=/usr/local/bin:__TRACKED_VAR__ node --version)",
+      "Bash(PATH=/usr/local/bin:/opt/homebrew/bin:__TRACKED_VAR__ which npx)",
+      "Bash(find /opt/homebrew /usr/local -name \"node\" -type f 2>/dev/null | head -3; ls -la ~/.nvm/versions/node 2>/dev/null | head -5; find / -name \"npx\" -type f 2>/dev/null | head -3)",
+      "Read(//opt/**)",
+      "Bash(docker rm *)",
+      "Bash(sed -n '108,135p' /Users/mlw/Desktop/Vidgo_Gen_AI/backend/app/api/v1/admin.py)",
+      "Bash(sed -n '985,1030p' /Users/mlw/Desktop/Vidgo_Gen_AI/backend/app/api/v1/admin.py)"
     ],
     "additionalDirectories": [
       "/private/tmp"

@@ -39,7 +39,10 @@ export const toolHubTiles: ToolHubTile[] = [
   { id: 'product-photography', labelKey: 'tools.hub.tiles.productPhotography', to: '/tools/product-scene-classic',  thumb: `${T}/product-photography.png` },
   { id: 'product-packaging',   labelKey: 'tools.hub.tiles.productPackaging',   to: '/tools/pattern-generate',       thumb: `${T}/product-packaging.png` },
   { id: 'background',          labelKey: 'tools.hub.tiles.background',         to: '/tools/background-removal',     thumb: `${T}/background.png` },
-  { id: 'three-d-illustration',labelKey: 'tools.hub.tiles.threeDIllustration', to: '/tools/luma-video',             thumb: `${T}/three-d-illustration.png` },
+  // 2026-05-19: Luma retired. Point this tile at Kling-video (premium
+  // tier supports Omni / 3.0 for the cinematic-3D look the original Luma
+  // slot covered).
+  { id: 'three-d-illustration',labelKey: 'tools.hub.tiles.threeDIllustration', to: '/tools/kling-video',            thumb: `${T}/three-d-illustration.png` },
   // Row 5
   { id: 'video-generator',     labelKey: 'tools.hub.tiles.videoGenerator',     to: '/tools/kling-video',            thumb: `${T}/video-generator.png` },
 ]

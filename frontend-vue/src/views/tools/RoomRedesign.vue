@@ -1007,6 +1007,35 @@ async function handleRedesignVariants(n: number) {
   }
 }
 
+// Bulk download for the multi-variant grid. Two reasons this exists:
+//   1) Without it the user had to click each card's Download button
+//      individually, and Chrome/Safari throttle multiple programmatic
+//      downloads fired from the same gesture, silently dropping all but
+//      the first file. Sequential `await` + a 600ms stagger sidesteps that
+//      throttling — same trick BackgroundRemoval's downloadAllBatchResults
+//      uses for its batch grid.
+//   2) GCS-hosted result URLs are cross-origin, so the same downloadAsset
+//      helper that the single-variant button uses (fetch → blob → <a>
+//      click) is reused here so users always get a real download even
+//      when the `download` attribute would otherwise be ignored.
+const isDownloadingAllVariants = ref(false)
+async function downloadAllVariants() {
+  if (isDownloadingAllVariants.value || variantResults.value.length === 0) return
+  isDownloadingAllVariants.value = true
+  try {
+    for (let i = 0; i < variantResults.value.length; i++) {
+      await downloadAsset(variantResults.value[i], `vidgo_room_design_v${i + 1}.png`)
+      // Stagger the next download so the browser doesn't suppress it as
+      // a duplicate of the previous one.
+      if (i < variantResults.value.length - 1) {
+        await new Promise(r => setTimeout(r, 600))
+      }
+    }
+  } finally {
+    isDownloadingAllVariants.value = false
+  }
+}
+
 async function selectProposalExample(example: { styleId: string; templateId: string | null }) {
   selectedStyle.value = example.styleId
   clearGeneratedResult()
@@ -1870,9 +1899,24 @@ watch(selectedRoomType, (newType) => {
                   >📥 {{ L(`下載變體 ${i+1}`, `Download variant ${i+1}`, `バリアント${i+1}をダウンロード`, `변형 ${i+1} 다운로드`, `Descargar variante ${i+1}`) }}</button>
                 </div>
               </div>
-              <button @click="reset" class="btn-ghost w-full">
-                🔄 {{ t('interior.tryAnother') }}
-              </button>
+              <div class="flex gap-3">
+                <button
+                  @click="downloadAllVariants"
+                  :disabled="isDownloadingAllVariants"
+                  class="btn-primary flex-1 text-center py-3 flex items-center justify-center disabled:opacity-60"
+                >
+                  <span class="mr-2">📥</span>
+                  <span v-if="isDownloadingAllVariants">
+                    {{ L(`下載中… (${variantResults.length})`, `Downloading… (${variantResults.length})`, `ダウンロード中… (${variantResults.length})`, `다운로드 중… (${variantResults.length})`, `Descargando… (${variantResults.length})`) }}
+                  </span>
+                  <span v-else>
+                    {{ L(`下載全部 ${variantResults.length} 個`, `Download all ${variantResults.length}`, `すべてダウンロード (${variantResults.length})`, `전체 다운로드 (${variantResults.length})`, `Descargar las ${variantResults.length}`) }}
+                  </span>
+                </button>
+                <button @click="reset" class="btn-ghost flex-1">
+                  🔄 {{ t('interior.tryAnother') }}
+                </button>
+              </div>
             </div>
 
             <div v-else-if="resultImage && uploadedImage && activeTab !== 'generate'" class="space-y-4">

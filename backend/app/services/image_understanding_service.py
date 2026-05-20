@@ -28,9 +28,9 @@ Used by:
     - /api/v1/tools/product-scene
     - /api/v1/tools/effect
     - /api/v1/tools/kling-video (I2V branch)
-    - /api/v1/tools/luma-video  (I2V branch)
-    - /api/v1/tools/short-video
+    - /api/v1/tools/short-video (Seedance/Hailuo/Hunyuan/Wan I2V)
     - /api/v1/tools/avatar (face photo + script)
+    (Luma I2V branch dropped 2026-05-19 with the Luma tool itself.)
 
 Fail-open policy: if the Gemini call errors out, we return the user's
 original prompt unchanged with `used_user_prompt=True` and

@@ -238,8 +238,23 @@
         "threeDIllustration": "Video 3D cinemático",
         "productPhotography": "Foto producto e-commerce",
         "productPackaging": "Patrón de empaque",
-        "createAnyImage": "Imagen hero de marketing"
-      }
+        "createAnyImage": "Imagen hero de marketing",
+        "roomRedesign": "Rediseño de Interiores",
+        "interiorTemplates": "Plantillas de Interiores",
+        "videoBgRemove": "Quitar fondo video",
+        "claymation": "Claymation IA",
+        "aiAvatar": "Avatar IA / Portavoz",
+        "videoDubbing": "Doblaje de Vídeo"
+      },
+      "categories": {
+        "all": "Todos",
+        "advertising": "Publicidad",
+        "interior": "Diseño de interiores",
+        "branding": "Marca",
+        "other": "Más herramientas IA"
+      },
+      "categoryAria": "Filtrar herramientas por categoría",
+      "emptyCategory": "Aún no hay herramientas en esta categoría"
     },
     "interiorLayout": {
       "amenities": "Servicios",
@@ -254,7 +269,33 @@
       "tabOutdoor": "Exterior",
       "uploadMultiple": "Varias",
       "uploadSingle": "Una",
-      "uploadStep": "1. Sube una o más imágenes"
+      "uploadStep": "1. Sube una o más imágenes",
+      "amenityGym": "Gimnasio doméstico",
+      "amenityHomeTheater": "Cine en casa",
+      "amenityPool": "Piscina",
+      "amenityWineCellar": "Bodega de vinos",
+      "extGardenStudio": "Estudio de jardín",
+      "extIndustrialLoft": "Loft industrial",
+      "extMedVilla": "Villa mediterránea",
+      "extModernFacade": "Fachada moderna de vidrio",
+      "extRanch": "Casa rancho mid-century",
+      "extStoneCabin": "Cabaña rústica de piedra",
+      "extStorefront": "Escaparate boutique",
+      "extTownhouse": "Casa adosada urbana",
+      "extTropicalResort": "Resort tropical",
+      "extWarehouse": "Almacén reconvertido",
+      "extWoodHouse": "Casa nórdica de madera",
+      "extZenCourtyard": "Patio japonés",
+      "roomBathroom": "Baño",
+      "roomBedroom": "Dormitorio",
+      "roomDiningRoom": "Comedor",
+      "roomHomeOffice": "Oficina en casa",
+      "roomKitchen": "Cocina",
+      "roomLivingRoom": "Salón",
+      "roomMudroom": "Vestíbulo",
+      "roomStudy": "Estudio",
+      "roomToilet": "Aseo",
+      "roomWalkInCloset": "Vestidor"
     },
     "tryOnLayout": {
       "applyBrandStyle": "Aplicar estilo de marca",
@@ -273,7 +314,8 @@
       "sizeLandscape": "Apaisado (16:9)",
       "sizePortrait": "Retrato (2:3)",
       "sizeSquare": "Cuadrado (1:1)",
-      "uploadOwn": "Subir el tuyo"
+      "uploadOwn": "Subir el tuyo",
+      "applyBrandStyleOff": "Desactivado"
     }
   },
   "styles": {
@@ -455,6 +497,13 @@
     "edit": "Editar",
     "loading": "Cargando...",
     "processing": "Procesando...",
+    "loadingOverlay": {
+      "title": "Generando…",
+      "estimated": "Tiempo estimado",
+      "elapsed": "Transcurrido",
+      "almostDone": "Casi listo, finalizando…",
+      "keepOpen": "Mantén esta página abierta."
+    },
     "success": "Éxito",
     "error": "Error",
     "dragDrop": "Arrastra y suelta archivos aquí o haz clic para subir",
@@ -474,7 +523,9 @@
     "dropFilesHere": "Suelta los archivos aquí",
     "insufficient": "(Insuficiente)",
     "curatedNotice": "Por calidad y seguridad, los prompts están seleccionados. Elige uno de la lista de abajo.",
-    "curatedPickToPreview": "— Selecciona un prompt arriba y su contenido aparecerá aquí —"
+    "curatedPickToPreview": "— Selecciona un prompt arriba y su contenido aparecerá aquí —",
+    "off": "Desactivado",
+    "on": "Activado"
   },
   "auth": {
     "email": "Correo electrónico",
@@ -654,6 +705,11 @@
     "testOnly": "Solo prueba",
     "unlimitedCredits": "Créditos ilimitados/mes",
     "creditsPerMonth": "{credits} créditos/mes",
+    "customCredits": "Créditos personalizados",
+    "contactUs": "Contáctanos",
+    "contactPrice": "Consultar precio",
+    "refundUsageBlocked": "Has usado el {pct}% de los créditos del mes — superado el umbral de reembolso del 5%",
+    "refundHqExportBlocked": "Ya has exportado contenido en alta calidad sin marca de agua — coste de API consumido, sin reembolso",
     "ecpayPaymentLabel": "Pago con tarjeta (ECPay)",
     "testPaymentLabel": "Pago de prueba (US$1 / aprox. NT$32)",
     "paypalPaymentLabel": "Pago internacional (PayPal)",
@@ -668,24 +724,54 @@
         "useCase": "Casos de uso recomendados"
       },
       "rows": {
+        "standardImage": {
+          "feature": "Imagen AI estándar",
+          "cost": "1 crédito",
+          "output": "100 imágenes",
+          "useCase": "Imágenes de producto, portadas sociales, rellenos"
+        },
+        "premiumImage": {
+          "feature": "Imagen AI premium (Flux / Qwen)",
+          "cost": "5 créditos",
+          "output": "20 imágenes",
+          "useCase": "Visual principal de marca, hero de anuncios, impresión"
+        },
+        "standardVideo": {
+          "feature": "Video AI estándar (5-10s)",
+          "cost": "20 créditos",
+          "output": "5 videos",
+          "useCase": "Hailuo / Hunyuan / Kling 1.6 clips cortos"
+        },
         "proLong": {
-          "feature": "Video largo profesional (10s+)",
-          "cost": "35 créditos",
-          "output": "aprox. 3 videos",
-          "useCase": "Calidad cinematográfica, Luma/Kling de alta calidad"
+          "feature": "Video largo pro (Kling 10s)",
+          "cost": "60 créditos",
+          "output": "aprox. 1 video",
+          "useCase": "Clips Kling de 10 segundos de alta calidad"
         },
         "restore": {
-          "feature": "Restauración / mejora de video",
+          "feature": "Restauración / escalado",
           "cost": "15 créditos",
-          "output": "aprox. 6 videos",
-          "useCase": "Renovar material antiguo, pasar de baja resolución a HD"
+          "output": "aprox. 6 ejecuciones",
+          "useCase": "Renovar material antiguo, baja resolución a 1080p / 4K"
+        },
+        "veo3": {
+          "feature": "Video Veo 3.1 (5s) 🆕",
+          "cost": "200 créditos",
+          "output": "—",
+          "useCase": "Clip insignia exclusivo del plan Advanced"
+        },
+        "seedanceWan": {
+          "feature": "Video Seedance / Wan 🆕",
+          "cost": "40 créditos",
+          "output": "aprox. 2 videos",
+          "useCase": "Video dinámico de gama media, vertical TikTok"
         }
       },
       "scenarios": {
         "title": "🚀 ¿Qué puedes hacer con 100 créditos? (Ejemplos)",
         "intro": "Para que el valor sea más claro para los usuarios, puedes añadir estos paquetes de escenario:",
-        "creatorStarter": "\"Starter de Creadores\": 5 videos cortos estándar + 50 imágenes de portada.",
-        "proDesigner": "\"Diseñador Pro\": 2 videos profesionales en alta calidad + 6 imágenes comerciales.",
+        "creatorStarter": "\"Starter de Creadores\": 3 videos cortos estándar + 40 imágenes de portada.",
+        "proDesigner": "\"Diseñador Pro\": 1 video profesional en alta calidad + 8 imágenes comerciales.",
         "imageSprint": "\"Sprint solo imágenes\": 100 imágenes AI estándar."
       }
     },
@@ -693,7 +779,7 @@
       "sectionBadge": "Compra única de créditos",
       "title": "Compra créditos directamente, sin suscripción",
       "subtitle": "Tres paquetes oficiales en TWD para propuestas puntuales, renders de interiores, imágenes de producto por lotes y videos adicionales. Los créditos comprados no se reinician mensualmente.",
-      "checkoutNote": "Pago con ECPay (Taiwán)",
+      "checkoutNote": "Pago internacional con PayPal",
       "badges": {
         "bestValue": "Mejor valor",
         "popular": "Popular"
@@ -706,6 +792,7 @@
       "noBonus": "Sin bonificación, ideal para pruebas ligeras",
       "featureCrossTool": "Funciona con imágenes, video, interiores y escenas de producto",
       "featureNoReset": "Los créditos comprados no se reinician mensualmente, ideal para picos de proyecto",
+      "nonRefundable": "⚠ Los paquetes de créditos son bienes digitales y no son reembolsables.",
       "cta": {
         "buy": "Comprar créditos",
         "buyCard": "Pagar con tarjeta",
@@ -748,7 +835,7 @@
       },
       "rollover": {
         "q": "¿Se acumulan los créditos no usados?",
-        "a": "Los créditos mensuales se reinician al final de cada período de facturación. Los paquetes de créditos comprados nunca expiran."
+        "a": "Los créditos de suscripción se reinician cada mes y NO se acumulan. Los paquetes de créditos de pago único nunca expiran."
       },
       "change": {
         "q": "¿Puedo mejorar o degradar mi plan?",
@@ -756,7 +843,7 @@
       },
       "refund": {
         "q": "¿Cuál es la política de reembolso?",
-        "a": "Puedes solicitar un reembolso completo dentro de los 7 días de la suscripción. Después de 7 días, aún puedes cancelar pero mantendrás acceso hasta el final de tu período de facturación."
+        "a": "Puedes solicitar un reembolso dentro de los 7 días de tu suscripción si se cumplen AMBAS condiciones: (1) has usado menos del 5% de tu asignación mensual de créditos (p. ej. <22 créditos en Standard); (2) aún no has exportado un resultado en alta calidad sin marca de agua. De lo contrario, el coste de API se considera consumido y no hay reembolso. Los paquetes de créditos son bienes digitales y no son reembolsables tras la compra."
       }
     },
     "confirmCancel": "Sí, cancelar suscripción",
@@ -874,15 +961,15 @@
       "creditPacks": [
         {
           "name": "Pack Ligero",
-          "credits": "3,000 créditos"
+          "credits": "250 créditos"
         },
         {
           "name": "Pack Estándar",
-          "credits": "5,500 créditos"
+          "credits": "416 créditos"
         },
         {
           "name": "Pack Pesado",
-          "credits": "12,000 créditos"
+          "credits": "833 créditos"
         }
       ]
     }
@@ -1319,7 +1406,21 @@
         "value": "90%",
         "label": "Ahorro de Tiempo"
       }
-    ]
+    ],
+    "interior": {
+      "eyebrow": "Destacado · Diseño de Interiores",
+      "title": "Rediseña Cualquier Habitación con Una Sola Foto",
+      "body": "Sube una sala, dormitorio, espacio comercial o foto de propiedad — la IA aplica más de 20 estilos de diseño en segundos (escandinavo, japandi, industrial, lujo). Para agentes inmobiliarios, diseñadores, marcas de muebles y propietarios.",
+      "bullet1": "+20 estilos de interior, exterior y comercial",
+      "bullet2": "Modo Magic: regenera con prompt libre",
+      "bullet3": "Comparación antes/después con salida HD",
+      "ctaPrimary": "Prueba Rediseño de Habitación Gratis",
+      "ctaSecondary": "Ver Plantillas de Diseño",
+      "beforeAlt": "Habitación antes del rediseño",
+      "beforeLabel": "Antes",
+      "afterAlt": "Habitación después del rediseño con IA",
+      "afterLabel": "Rediseño IA"
+    }
   },
   "einvoice": {
     "title": "Factura Electrónica",

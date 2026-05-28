@@ -965,13 +965,16 @@ async def get_presets(
         "digital_human": "ai_avatar",
     }
     # Tool types that exist as features but have no Material presets in the
-    # DB (e.g. upscale is a paid-only operation, not a demo gallery). Return
-    # an empty preset list so the client renders gracefully instead of 404.
-    # `image_translation` was 404'ing because the frontend uses the long form
-    # while the registry uses `effect`; we accept both names and return empty.
+    # DB. Return an empty preset list so the client renders gracefully.
+    #
+    # 2026-05-26: removed upscale + image_translate/image_translation from
+    # this list — those tools now have seeded demo presets, so they should
+    # query the DB like any other tool. video_upscale + video_dubbing remain
+    # blocked because we have not seeded examples for them yet (video gen
+    # cost too high for demo gallery).
     _NO_PRESET_TOOL_TYPES = {
-        "upscale", "image_upscale", "video_upscale",
-        "image_translate", "image_translation", "video_dubbing",
+        "video_upscale",
+        "video_dubbing",
     }
 
     if tool_type in _LEGACY_TOOL_TYPE_ALIASES:
@@ -1034,15 +1037,30 @@ async def get_presets(
     # hero fall back to placeholder images. We use a 5-minute cached blob
     # listing so hot read paths stay fast.
     if gcs.enabled and presets:
-        # Combine blob listings for both prefixes we use:
-        #   • generated/  — pregen / runtime AI outputs (most rows)
-        #   • examples/   — curated bg/fx/ps/room/avatar pairs that the
-        #                   reseed_background_removal_inputs script remaps
-        #                   bg_removal rows onto. Without this prefix the
-        #                   filter dropped every reseeded row.
+        # Combine blob listings for the four prefixes our outputs land under:
+        #   • generated/      — pregen / runtime AI outputs (most pregen rows)
+        #   • examples/       — curated bg/fx/ps/room/avatar pairs that the
+        #                       reseed_background_removal_inputs script remaps
+        #                       bg_removal rows onto.
+        #   • users/          — runtime tool outputs are stored per-user under
+        #                       users/<user_id>/<tool>/<file>. Without this
+        #                       prefix every short_video / ai_avatar /
+        #                       live-generated seed row gets dropped.
+        #   • static/         — admin-curated demo pairs (e.g. room_redesign
+        #                       Scandinavian / Industrial / Japandi rendered
+        #                       from static/examples/_inputs/room-empty.jpg).
+        #                       Without this prefix the curated seeds were
+        #                       silently filtered out (audit 2026-05-26).
         existing_gen = gcs.list_blob_names_cached("generated/", ttl_seconds=300)
         existing_examples = gcs.list_blob_names_cached("examples/", ttl_seconds=300)
-        existing = (existing_gen or set()) | (existing_examples or set())
+        existing_users = gcs.list_blob_names_cached("users/", ttl_seconds=300)
+        existing_static = gcs.list_blob_names_cached("static/", ttl_seconds=300)
+        existing = (
+            (existing_gen or set())
+            | (existing_examples or set())
+            | (existing_users or set())
+            | (existing_static or set())
+        )
         if existing:
             def _row_has_live_blob(p) -> bool:
                 # A row is keepable if at least one of its result URLs either

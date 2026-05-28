@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useBrandingStore } from '@/stores/branding'
 import { subscriptionApi } from '@/api'
 import apiClient from '@/api/client'
 import ConfirmModal from '@/components/molecules/ConfirmModal.vue'
@@ -11,6 +12,24 @@ import type { PlanInfo, SubscriptionStatus } from '@/api'
 const { t, te, locale } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
+const brandingStore = useBrandingStore()
+
+// Admin-editable pricing copy (added 2026-05-23). When the admin types a
+// title/body/footnote in /admin/branding, these computed props render it on
+// the public Pricing page so the edits actually appear. Empty/null falls
+// back to the built-in i18n strings so unconfigured installs still look OK.
+const pricingIntroTitle = computed(() => {
+  const s = brandingStore.settings
+  return (isZh.value ? s.pricing_intro_title_zh : s.pricing_intro_title_en) || ''
+})
+const pricingIntroBody = computed(() => {
+  const s = brandingStore.settings
+  return (isZh.value ? s.pricing_intro_body_zh : s.pricing_intro_body_en) || ''
+})
+const pricingFootnote = computed(() => {
+  const s = brandingStore.settings
+  return (isZh.value ? s.pricing_footnote_zh : s.pricing_footnote_en) || ''
+})
 
 interface CreditTopUpPackage {
   id: string
@@ -28,6 +47,19 @@ interface CreditTopUpPackage {
 const billingPeriod = ref<'monthly' | 'yearly'>('monthly')
 const plans = ref<PlanInfo[]>([])
 const subscriptionStatus = ref<SubscriptionStatus | null>(null)
+// v2.1: Refund eligibility now incorporates the 5% usage gate on top of the
+// 7-day window. The /refund-eligibility endpoint computes both server-side
+// so the UI can't be tricked by stale subscriptionStatus data.
+const refundEligibility = ref<{
+  eligible: boolean
+  days_remaining: number
+  used?: number
+  allowance?: number
+  used_pct?: number
+  has_hq_export?: boolean
+  reason?: string | null
+  code?: string
+} | null>(null)
 const loading = ref(false)
 const subscribing = ref<string | null>(null)
 const cancelling = ref(false)
@@ -45,8 +77,12 @@ const isLoggedIn = computed(() => authStore.isAuthenticated)
 const isZh = computed(() => locale.value.startsWith('zh'))
 const visiblePlans = computed(() => plans.value.filter(plan => !isHiddenDisplayPlan(plan)))
 const currentPlanId = computed(() => subscriptionStatus.value?.plan?.id)
-const isRefundEligible = computed(() => subscriptionStatus.value?.refund_eligible ?? false)
-const refundDaysRemaining = computed(() => subscriptionStatus.value?.refund_days_remaining ?? 0)
+// Prefer the dedicated /refund-eligibility endpoint when its value has
+// loaded; fall back to subscriptionStatus.refund_eligible (which is only the
+// 7-day check) so the button still renders during the fetch race.
+const isRefundEligible = computed(() => refundEligibility.value?.eligible ?? subscriptionStatus.value?.refund_eligible ?? false)
+const refundDaysRemaining = computed(() => refundEligibility.value?.days_remaining ?? subscriptionStatus.value?.refund_days_remaining ?? 0)
+const refundUsedPct = computed(() => refundEligibility.value?.used_pct ?? 0)
 
 // Plan name mapping for display
 const planDisplayNames: Record<string, string> = {
@@ -70,12 +106,22 @@ const planDisplayNames: Record<string, string> = {
 }
 
 function fallbackCreditPackages(): CreditTopUpPackage[] {
+  // SECURITY/CORRECTNESS: these values MUST mirror what
+  // backend/scripts/seed_new_pricing_tiers.py inserts into credit_packages.
+  // Owner directive 2026-05-25 enforces a strict NT$1.20/credit floor:
+  //   light:     299 / 250 = NT$1.196/cr
+  //   standard:  499 / 416 = NT$1.200/cr
+  //   heavy:     999 / 833 = NT$1.200/cr
+  // The previous fallback (3000/5500/12000) reflected the pre-2026-05-20
+  // pack sizes that sold below cost; even the intermediate (450/1000)
+  // values violated the floor. Keep this table in lock-step with the
+  // backend seed — a mismatch is a bait-and-switch hazard.
   return [
     {
       id: 'light_pack',
       name: 'light_pack',
       displayName: t('pricing.creditPacks.fallbackNames.light'),
-      credits: 3000,
+      credits: 250,
       price: 299,
       currency: 'TWD',
       bonusCredits: 0,
@@ -87,23 +133,23 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
       id: 'standard_pack',
       name: 'standard_pack',
       displayName: t('pricing.creditPacks.fallbackNames.standard'),
-      credits: 5500,
+      credits: 416,
       price: 499,
       currency: 'TWD',
-      bonusCredits: 500,
-      bonusPct: 10,
+      bonusCredits: 0,
+      bonusPct: 0,
       isPopular: true,
-      isBestValue: true,
+      isBestValue: false,
     },
     {
       id: 'heavy_pack',
       name: 'heavy_pack',
       displayName: t('pricing.creditPacks.fallbackNames.heavy'),
-      credits: 12000,
+      credits: 833,
       price: 999,
       currency: 'TWD',
-      bonusCredits: 2000,
-      bonusPct: 20,
+      bonusCredits: 0,
+      bonusPct: 0,
       isPopular: false,
       isBestValue: true,
     },
@@ -124,7 +170,16 @@ function normalizeCreditPackage(raw: any): CreditTopUpPackage {
     price,
     currency: 'TWD',
     bonusCredits: Number(raw.bonus_credits ?? fallback?.bonusCredits ?? 0),
-    bonusPct: raw.name === 'standard_pack' ? 10 : raw.name === 'heavy_pack' ? 20 : 0,
+    // bonusPct is derived from the actual returned bonus_credits — the old
+    // hard-coded 10/20% values were tied to the pre-2026-05-20 pack sizes
+    // (3000/5500/12000) where standard_pack shipped with +500 bonus and
+    // heavy_pack with +2000. v2.1 packs have no bonus, so this collapses
+    // to 0 unless the API explicitly returns a bonus_credits value.
+    bonusPct: (() => {
+      const base = Number(raw.credits ?? fallback?.credits ?? 0)
+      const bonus = Number(raw.bonus_credits ?? fallback?.bonusCredits ?? 0)
+      return base > 0 && bonus > 0 ? Math.round((bonus / base) * 100) : 0
+    })(),
     isPopular: Boolean(raw.is_popular ?? fallback?.isPopular),
     isBestValue: Boolean(raw.is_best_value ?? fallback?.isBestValue),
   }
@@ -157,38 +212,48 @@ async function fetchPlans() {
     plans.value = await subscriptionApi.getPlans()
   } catch (err) {
     console.error('Failed to fetch plans:', err)
-    // Fallback when /api/v1/subscriptions/plans is unreachable.
-    // Values MUST match backend DEFAULT_VIDGO_PLANS (TWD per month / per year
-    // TOTAL) so the UI never disagrees with what the backend would charge.
+    // Fallback when /api/v1/subscriptions/plans is unreachable. Values match
+    // backend NEW_PLAN_DATA / v2.1 migration so the offline UI never lies
+    // about what the user would actually pay.
     plans.value = [
       {
-        id: 'standard',
-        name: 'standard',
-        display_name: 'Standard',
-        description: '適合成長中的中小型企業',
+        id: 'basic',
+        name: 'basic',
+        display_name: '標準版 Standard',
+        description: '入門首選 — 1080p HD、無浮水印',
         price_monthly: 399,
         price_yearly: 3990,
-        monthly_credits: 150,
-        features: { max_video_length: 60, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: true, custom_styles: false }
+        monthly_credits: 450,
+        features: { max_video_length: 60, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: false, custom_styles: false }
       },
       {
         id: 'pro',
         name: 'pro',
-        display_name: 'Pro',
-        description: '專業團隊首選，最高畫質輸出',
-        price_monthly: 599,
-        price_yearly: 5990,
-        monthly_credits: 250,
+        display_name: '專業版 Pro',
+        description: '主力銷售方案 — 4K、進階模型',
+        price_monthly: 999,
+        price_yearly: 9990,
+        monthly_credits: 1200,
+        features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: false, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
+      },
+      {
+        id: 'premium',
+        name: 'premium',
+        display_name: '進階版 Advanced',
+        description: '重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1',
+        price_monthly: 1699,
+        price_yearly: 16990,
+        monthly_credits: 2200,
         features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
       },
       {
-        id: 'pro_plus',
-        name: 'pro_plus',
-        display_name: 'Pro+',
-        description: '大型企業專屬，客製化服務',
-        price_monthly: 999,
-        price_yearly: 9990,
-        monthly_credits: 500,
+        id: 'enterprise',
+        name: 'enterprise',
+        display_name: '企業版 Enterprise',
+        description: '企業客製方案 — 詢價、全功能解鎖、客製點數',
+        price_monthly: 0,  // 0 triggers "Contact Us" UI per isContactUsPlan()
+        price_yearly: 0,
+        monthly_credits: -1,  // -1 → "客製化點數" in formatCredits()
         features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
       }
     ]
@@ -203,6 +268,20 @@ async function fetchSubscriptionStatus() {
 
   try {
     subscriptionStatus.value = await subscriptionApi.getStatus()
+    // After the status is known, also pull the dedicated refund-eligibility
+    // payload. The backend joins the 7-day check with the 5% usage gate so
+    // the UI cannot show "refund available" when usage has already crossed
+    // the threshold (v2.1 spec).
+    if (subscriptionStatus.value?.has_subscription) {
+      try {
+        refundEligibility.value = await subscriptionApi.checkRefundEligibility() as any
+      } catch (e) {
+        console.error('Failed to fetch refund eligibility:', e)
+        refundEligibility.value = null
+      }
+    } else {
+      refundEligibility.value = null
+    }
   } catch (err) {
     console.error('Failed to fetch subscription status:', err)
   }
@@ -378,6 +457,20 @@ function getPlanDisplayKey(name: string): string {
 }
 
 function getLocalizedPlanName(name?: string | null, fallback?: string | null): string {
+  // Priority (revised 2026-05-23): admin-edited DB value > i18n translation > raw slug.
+  //
+  // Before this change, i18n won over the admin's edit because the lookup
+  // `pricing.<slug>` exists for every plan, so editing `plans.display_name`
+  // in /admin/plans had no visible effect on the EN locale (which kept the
+  // hardcoded i18n string) while ZH/etc. fell back to the DB value — that's
+  // the "EN changes but ZH stays" behaviour the operator saw 2026-05-23.
+  //
+  // New rule: if the admin has set a non-empty display_name, respect it
+  // everywhere. i18n is now only the fallback for plans whose display_name
+  // is empty (legacy rows before the v2.1 seed).
+  const trimmed = (fallback || '').trim()
+  if (trimmed) return trimmed
+
   const displayKey = getPlanDisplayKey(name || fallback || '')
   const translationKey = `pricing.${displayKey}`
   if (te(translationKey)) {
@@ -387,15 +480,35 @@ function getLocalizedPlanName(name?: string | null, fallback?: string | null): s
 }
 
 function getPlanDisplayName(plan: PlanInfo): string {
+  // 2026-05-24 — prefer locale-matched bilingual admin edit, then fall back
+  // to the single-locale `display_name`, then i18n. Mirrors the same split
+  // already used for plan features_text_zh/en.
+  const bilingual = isZh.value ? (plan as any).display_name_zh : (plan as any).display_name_en
+  if (bilingual && String(bilingual).trim()) {
+    return String(bilingual).trim()
+  }
   return getLocalizedPlanName(plan.name, plan.display_name)
 }
 
 function getCurrentPlanDisplayName(): string {
   const plan = subscriptionStatus.value?.plan
-  return plan ? getLocalizedPlanName(plan.name, plan.display_name || plan.name) : ''
+  if (!plan) return ''
+  const bilingual = isZh.value ? (plan as any).display_name_zh : (plan as any).display_name_en
+  if (bilingual && String(bilingual).trim()) {
+    return String(bilingual).trim()
+  }
+  return getLocalizedPlanName(plan.name, plan.display_name || plan.name)
 }
 
+// NOTE — locale-matched plan description helper omitted on purpose: the
+// Pricing card body renders features_text_zh/en (not the short description),
+// so no getter is needed today. Wire one up here when description_zh/en
+// gets a render site (e.g., a card subtitle row above features_text).
+
 function getCreditsPerMonthLabel(plan: PlanInfo): string {
+  // Enterprise (Contact Us tier) → "客製化點數". -1 still maps to unlimited
+  // for any internal/test plans that use that sentinel.
+  if (isContactUsPlan(plan)) return t('pricing.customCredits', '客製化點數')
   return plan.monthly_credits === -1
     ? t('pricing.unlimitedCredits')
     : t('pricing.creditsPerMonth', { credits: plan.monthly_credits })
@@ -415,16 +528,18 @@ function isTestPlan(plan: PlanInfo): boolean {
 // Values mirror backend DEFAULT_VIDGO_PLANS.price_usd so the full plan grid
 // (basic / pro / premium / enterprise) shows USD on non-zh locales — without
 // enterprise, the card silently fell back to NT$15000 on EN/JA/KO/ES.
+// Hardcoded USD per plan (修正單 v2.1, 2026-05-22). Must NOT be FX-converted
+// at runtime — PayPal reads these literal values to keep the margin honest
+// when TWD/USD drifts. Match backend NEW_PLAN_DATA.price_usd exactly.
 const OVERSEAS_USD_MONTHLY: Record<string, number> = {
-  basic: 22,
-  pro: 32,
-  premium: 55,
-  enterprise: 485,
+  basic: 19.99,
+  pro: 49.99,
+  premium: 89.99,
+  enterprise: 0,  // Contact Us — render contact CTA, no buy button
 }
 
-// USD pricing for the three official credit packs, used when the visitor is
-// on a non-zh locale (i.e. paying via PayPal, not ECPay/TWD). Values picked
-// at psychological price points (~TWD/30) so they read naturally.
+// USD pricing for the three official credit packs (v2.1 spec).
+// Hardcoded — never auto-converted. Mirrors backend NEW_CREDIT_PACKAGE_DATA.
 const CREDIT_PACK_USD_PRICE: Record<string, number> = {
   light_pack: 9.99,
   standard_pack: 16.99,
@@ -448,7 +563,17 @@ function formatOverseasUsd(plan: PlanInfo, period: 'monthly' | 'yearly'): string
 
 function isHiddenDisplayPlan(plan: PlanInfo): boolean {
   const name = (plan.name || plan.display_name || '').toLowerCase()
+  // v2.1: Enterprise has price_monthly=0 but should remain VISIBLE as a
+  // "Contact Us" tier. Only hide truly-internal plans (demo / free / starter
+  // / NT$299 starter promo). The price_monthly<=0 rule used to hide
+  // enterprise too — fixed 2026-05-22.
+  if (name === 'enterprise') return false
   return name === 'demo' || name === 'free' || name === 'starter' || plan.price_monthly <= 0 || plan.price_monthly === 299
+}
+
+function isContactUsPlan(plan: PlanInfo): boolean {
+  const name = (plan.name || plan.display_name || '').toLowerCase()
+  return name === 'enterprise'
 }
 
 function getCurrencySymbol(plan: PlanInfo): string {
@@ -554,10 +679,13 @@ onMounted(async () => {
 <template>
   <div class="min-h-screen pt-24 pb-20" style="background: #09090b;">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <!-- Header -->
+      <!-- Header. Admin-editable title/body override the i18n defaults when
+           set in /admin/branding (pricing_intro_title_* / pricing_intro_body_*).
+           Falls back to t('pricing.title' / 'pricing.subtitle') so legacy
+           installs render the built-in copy. -->
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ t('pricing.title') }}</h1>
-        <p class="text-xl" style="color: #9494b0;">{{ t('pricing.subtitle') }}</p>
+        <h1 class="text-4xl font-bold mb-4" style="color: #f5f5fa;">{{ pricingIntroTitle || t('pricing.title') }}</h1>
+        <p class="text-xl whitespace-pre-line" style="color: #9494b0;">{{ pricingIntroBody || t('pricing.subtitle') }}</p>
 
         <!-- Billing Toggle -->
         <div class="mt-8 inline-flex items-center rounded-lg p-1" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
@@ -599,7 +727,8 @@ onMounted(async () => {
                 </span>
               </p>
             </div>
-            <div class="flex gap-2">
+            <div class="flex flex-col items-end gap-1">
+              <div class="flex gap-2">
               <button
                 v-if="isRefundEligible"
                 @click="askCancel(true)"
@@ -619,6 +748,26 @@ onMounted(async () => {
               >
                 {{ cancelling ? t('pricing.processing') : t('pricing.cancelSubscription') }}
               </button>
+              </div>
+              <!-- v2.1 refund-blocker hint. Two distinct block reasons:
+                   (a) 5% usage exceeded → show used %.
+                   (b) HQ watermark-free export produced → spec condition #2.
+                   Both render in yellow so support can identify the case
+                   immediately without inspecting backend logs. -->
+              <p
+                v-if="refundEligibility && !refundEligibility.eligible && refundEligibility.code === 'REFUND_USAGE_EXCEEDED'"
+                class="text-xs text-right max-w-xs leading-relaxed"
+                style="color: #facc15;"
+              >
+                {{ t('pricing.refundUsageBlocked', { pct: refundUsedPct.toFixed(1) }) }}
+              </p>
+              <p
+                v-else-if="refundEligibility && !refundEligibility.eligible && refundEligibility.code === 'REFUND_HQ_EXPORT_PRODUCED'"
+                class="text-xs text-right max-w-xs leading-relaxed"
+                style="color: #facc15;"
+              >
+                {{ t('pricing.refundHqExportBlocked') }}
+              </p>
             </div>
           </div>
         </div>
@@ -723,6 +872,16 @@ onMounted(async () => {
                 </li>
               </ul>
 
+              <!-- v2.1 spec: prominent non-refundable notice on every pack
+                   card so the buyer can't claim it was hidden after they
+                   try to dispute via PayPal/ECPay. -->
+              <p
+                class="text-xs leading-relaxed mb-4 rounded px-3 py-2"
+                style="background: rgba(250,204,21,0.10); color: #facc15; border: 1px solid rgba(250,204,21,0.30);"
+              >
+                {{ t('pricing.creditPacks.nonRefundable', '⚠ 點數包屬虛擬商品，購買後不予退款') }}
+              </p>
+
               <div class="space-y-2">
                 <button
                   v-if="isZh"
@@ -778,17 +937,11 @@ onMounted(async () => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.proLong.feature') }}</td>
-                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.proLong.cost') }}</td>
-                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.proLong.output') }}</td>
-                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.proLong.useCase') }}</td>
-                  </tr>
-                  <tr>
-                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.restore.feature') }}</td>
-                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.restore.cost') }}</td>
-                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.restore.output') }}</td>
-                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t('pricing.creditReference.rows.restore.useCase') }}</td>
+                  <tr v-for="key in ['standardImage','premiumImage','standardVideo','proLong','restore','veo3','seedanceWan']" :key="key">
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t(`pricing.creditReference.rows.${key}.feature`) }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t(`pricing.creditReference.rows.${key}.cost`) }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t(`pricing.creditReference.rows.${key}.output`) }}</td>
+                    <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t(`pricing.creditReference.rows.${key}.useCase`) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -859,8 +1012,14 @@ onMounted(async () => {
 
           <!-- Price -->
           <div class="mb-6">
+            <!-- Enterprise (Contact Us) — show "詢價" instead of $0 -->
+            <template v-if="isContactUsPlan(plan)">
+              <span class="text-4xl font-bold" style="color: #facc15;">
+                {{ t('pricing.contactPrice', '詢價') }}
+              </span>
+            </template>
             <!-- zh-TW: 顯示新台幣 (ECPay) 價格 -->
-            <template v-if="isZh">
+            <template v-else-if="isZh">
               <span class="text-4xl font-bold" style="color: #f5f5fa;">
                 {{ formatPlanPrice(plan) }}
               </span>
@@ -909,9 +1068,20 @@ onMounted(async () => {
 
           <!-- CTA Button -->
           <div v-if="!isCurrentPlan(plan.id)">
+            <!-- Enterprise → Contact Us mailto (v2.1 spec). Pricing is
+                 negotiated and provisioned via the admin panel; no buy
+                 button to keep accidental purchases from happening. -->
+            <a
+              v-if="isContactUsPlan(plan)"
+              href="mailto:hi@vidgo.co?subject=Enterprise%20Plan%20Inquiry"
+              class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 text-white hover:opacity-90"
+              style="background: #1677ff;"
+            >
+              {{ t('pricing.contactUs', 'Contact Us') }}
+            </a>
             <!-- ECPay (TWD) — only shown to zh-TW visitors -->
             <button
-              v-if="isZh && plan.price_monthly > 0 && isLoggedIn"
+              v-if="!isContactUsPlan(plan) && isZh && plan.price_monthly > 0 && isLoggedIn"
               @click="handleSubscribe(plan, 'ecpay')"
               :disabled="subscribing === plan.id"
               class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 disabled:opacity-50 text-white hover:opacity-90"
@@ -933,7 +1103,7 @@ onMounted(async () => {
             </button>
             <!-- PayPal (USD) — only shown to non-zh-TW visitors -->
             <button
-              v-if="!isZh && paypalEnabled && plan.price_monthly > 0 && isLoggedIn && !isTestPlan(plan)"
+              v-if="!isContactUsPlan(plan) && !isZh && paypalEnabled && plan.price_monthly > 0 && isLoggedIn && !isTestPlan(plan)"
               @click="handleSubscribe(plan, 'paypal')"
               :disabled="subscribing === plan.id"
               class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 disabled:opacity-50"
@@ -954,7 +1124,7 @@ onMounted(async () => {
               {{ t('pricing.paypalPricingStrategy') }}
             </p>
             <button
-              v-if="!(plan.price_monthly > 0 && isLoggedIn)"
+              v-if="!isContactUsPlan(plan) && !(plan.price_monthly > 0 && isLoggedIn)"
               @click="handleSubscribe(plan, isZh ? 'ecpay' : 'paypal')"
               :disabled="subscribing === plan.id"
               class="block w-full text-center py-3 rounded font-medium transition-all duration-200 mb-2 disabled:opacity-50"
@@ -1022,6 +1192,18 @@ onMounted(async () => {
             <p class="text-sm" style="color: #9494b0;">{{ t('pricing.faq.refund.a') }}</p>
           </div>
         </div>
+      </div>
+
+      <!-- Admin-editable footnote (set in /admin/branding →
+           pricing_footnote_zh / _en). Renders below the FAQ so the operator
+           can drop legal / regulatory / disclaimer copy without code changes.
+           Hidden entirely when both locale variants are empty. -->
+      <div
+        v-if="pricingFootnote"
+        class="mt-12 max-w-3xl mx-auto text-center text-xs leading-relaxed whitespace-pre-line"
+        style="color: #6b6b8a;"
+      >
+        {{ pricingFootnote }}
       </div>
     </div>
   </div>

@@ -17,7 +17,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import UUID
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func, and_
+from sqlalchemy import select, desc, func, and_, update
 
 
 from app.core.config import get_settings
@@ -176,6 +176,14 @@ class CreditService:
         ``SELECT ... FOR UPDATE`` so concurrent deduct calls serialize at the
         DB level even if Redis is unavailable or its lock TTL expired. This is
         defense-in-depth: the Redis lock above is still the primary mutex.
+
+        Concurrency guarantee: the balance check below runs *inside* the
+        row lock, so two simultaneous /tools/short-video requests for the
+        same user cannot both succeed when only one wallet has funds. The
+        second caller acquires the lock after the first commits, reads the
+        post-deduction balance, sees it's insufficient, and returns the
+        ``Insufficient credits`` error. The balance is provably never
+        driven negative. (Risk reported by ops 2026-05-20 — verified safe.)
         """
         result = await self.db.execute(
             select(User).where(User.id == user_id).with_for_update()
@@ -232,6 +240,49 @@ class CreditService:
         )
         self.db.add(transaction)
         await self.db.commit()
+
+        # Eager refund-eligibility lock: if this single generation crossed
+        # the HQ-export threshold, flip the active subscription's
+        # ``is_refundable`` flag to FALSE *before* the user can race to
+        # /subscription/cancel?refund=true. The lazy check inside the
+        # refund endpoint also runs, but doing it here closes the window
+        # between "HQ render delivered" and "refund requested". Cheap:
+        # one UPDATE on a single subscription row, only on HQ spend.
+        try:
+            from app.services.subscription_service import REFUND_HQ_EXPORT_THRESHOLD
+            if amount >= REFUND_HQ_EXPORT_THRESHOLD:
+                from app.models.billing import Subscription
+                from datetime import datetime, timezone
+                await self.db.execute(
+                    update(Subscription)
+                    .where(
+                        Subscription.user_id == user_id,
+                        Subscription.status.in_(["active", "pending"]),
+                        Subscription.is_refundable.is_(True),
+                    )
+                    .values(
+                        is_refundable=False,
+                        refund_blocked_at=datetime.now(timezone.utc),
+                        refund_blocked_reason="HQ_EXPORT_PRODUCED",
+                    )
+                )
+                await self.db.commit()
+        except Exception as exc:
+            # Refund-flag write is best-effort. The lazy check at refund
+            # time will catch any miss, so a failure here must NOT raise
+            # back to the caller (it would block a successful generation).
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
+            # Use module logger if available; fall back to print.
+            try:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"is_refundable eager-flip failed for user {user_id}: {exc}"
+                )
+            except Exception:
+                pass
 
         return True, {**new_balance, "deducted": deducted}
 

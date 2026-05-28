@@ -140,14 +140,9 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_background_init())
 
-    # Start MCP servers (Pollo.ai + PiAPI)
-    try:
-        from app.services.mcp_client import get_mcp_manager
-        mcp_manager = get_mcp_manager()
-        await mcp_manager.startup()
-        logger.info("[MCP] MCP client manager started")
-    except Exception as e:
-        logger.warning(f"[MCP] Failed to start MCP servers (non-fatal, REST fallback active): {e}")
+    # MCP startup removed 2026-05-26 — both Pollo MCP and PiAPI MCP
+    # providers were deleted in favor of their REST equivalents. No
+    # subprocess to launch, no MCP manager to manage.
 
     # Start hourly background tasks
     cleanup_task = asyncio.create_task(_media_cleanup_loop())
@@ -188,11 +183,7 @@ async def lifespan(app: FastAPI):
             await model_registry_task
         except asyncio.CancelledError:
             pass
-    try:
-        from app.services.mcp_client import get_mcp_manager
-        await get_mcp_manager().shutdown()
-    except Exception:
-        pass
+    # MCP shutdown removed 2026-05-26 alongside MCP startup.
     logger.info("VidGo AI Backend shutting down...")
 
 

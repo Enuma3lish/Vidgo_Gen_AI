@@ -14,26 +14,16 @@ ENV PYTHONPATH=/app
 RUN apt-get update && apt-get install -y \
     curl postgresql-client redis-tools ffmpeg dos2unix gnupg \
     fonts-noto-cjk fonts-noto-cjk-extra \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify Node.js
-RUN node --version && npm --version
+# Node.js + MCP server build removed 2026-05-26 — both MCP providers
+# (Pollo MCP + PiAPI MCP) deleted in favor of their REST equivalents.
+# This trims the image by ~150-200 MB (Node 20 + npm + the
+# piapi-mcp-server build artifacts) and shaves ~30-60s off every build.
+# Re-introducing MCP would require restoring this block + apt installing
+# nodejs from deb.nodesource.com.
 
-# ── 1. Install Pollo MCP server (npm global) ──
-RUN npm install -g pollo-mcp && \
-    echo "✅ pollo-mcp installed"
-
-# ── 2. Build PiAPI MCP server (from source) ──
-# Build context is project root (.), so mcp-servers/ is at the top level
-COPY mcp-servers/piapi-mcp-server /app/mcp-servers/piapi-mcp-server
-RUN cd /app/mcp-servers/piapi-mcp-server && \
-    npm install && \
-    npm run build && \
-    echo "✅ piapi-mcp-server built: $(ls dist/index.js)"
-
-# ── 3. Python dependencies ──
+# ── Python dependencies ──
 # Build context is project root; requirements.txt is in backend/
 COPY backend/requirements.txt .
 

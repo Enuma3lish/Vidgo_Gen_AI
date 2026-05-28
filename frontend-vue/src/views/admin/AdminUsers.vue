@@ -20,6 +20,16 @@ const promotionCodeInput = ref('')
 const promotingUserId = ref<string | null>(null)
 const testingUserId = ref<string | null>(null)
 
+// Admin Grant Credits modal (2026-05-23). Wired to the long-standing
+// POST /api/v1/admin/users/{user_id}/credits backend endpoint, which lands
+// the amount in bonus_credits (never expires) and logs a CreditTransaction
+// with transaction_type='admin_adjustment'. Negative amounts deduct.
+const showGrantCreditsModal = ref(false)
+const grantCreditsTarget = ref<AdminUser | null>(null)
+const grantCreditsAmount = ref<number>(100)
+const grantCreditsReason = ref<string>('')
+const grantingCreditsUserId = ref<string | null>(null)
+
 const plans = ['demo', 'basic', 'pro', 'premium', 'enterprise', 'test_pro_usd_1']
 
 const registeredUsersTotal = computed(() => adminStore.dashboardStats?.users?.total ?? adminStore.usersTotal)
@@ -101,6 +111,38 @@ async function submitPromotionCode() {
     showPromotionModal.value = false
     promotionTarget.value = null
     await loadUsers(adminStore.usersPage)
+  }
+}
+
+function openGrantCreditsModal(user: AdminUser) {
+  grantCreditsTarget.value = user
+  grantCreditsAmount.value = 100
+  grantCreditsReason.value = ''
+  showGrantCreditsModal.value = true
+}
+
+async function submitGrantCredits() {
+  const target = grantCreditsTarget.value
+  if (!target) return
+  const amount = Number(grantCreditsAmount.value)
+  if (!Number.isFinite(amount) || amount === 0) {
+    alert(localized('請輸入非零點數', 'Please enter a non-zero amount'))
+    return
+  }
+  if (!grantCreditsReason.value.trim()) {
+    alert(localized('請輸入調整原因（會記錄於審計表）', 'Please enter a reason (recorded in the audit log)'))
+    return
+  }
+  grantingCreditsUserId.value = target.id
+  try {
+    await adminStore.adjustCredits(target.id, Math.round(amount), grantCreditsReason.value.trim())
+    showGrantCreditsModal.value = false
+    grantCreditsTarget.value = null
+    await loadUsers(adminStore.usersPage)
+  } catch (err: any) {
+    alert(err?.response?.data?.detail || err?.message || localized('調整失敗', 'Adjustment failed'))
+  } finally {
+    grantingCreditsUserId.value = null
   }
 }
 
@@ -273,6 +315,14 @@ function activeLabel(isActive: boolean): string {
                   {{ testingUserId === user.id ? localized('設定中...', 'Setting...') : testAccountActionLabel(user) }}
                 </button>
                 <button
+                  @click="openGrantCreditsModal(user)"
+                  class="btn-icon grant-credits"
+                  :disabled="grantingCreditsUserId === user.id"
+                  :title="localized('贈送 / 調整點數', 'Grant / adjust credits')"
+                >
+                  {{ grantingCreditsUserId === user.id ? localized('調整中…', 'Adjusting…') : localized('贈點', 'Grant Credits') }}
+                </button>
+                <button
                   @click="toggleBan(user.id, user.is_active)"
                   class="btn-icon"
                   :class="{ danger: user.is_active }"
@@ -390,6 +440,66 @@ function activeLabel(isActive: boolean): string {
           </div>
           <button @click="submitPromotionCode" class="btn-primary">
             {{ localized('儲存推廣帳號', 'Save Promotion Account') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grant / Adjust Credits modal (added 2026-05-23) -->
+    <div v-if="showGrantCreditsModal" class="modal-overlay" @click.self="showGrantCreditsModal = false">
+      <div class="modal small">
+        <div class="modal-header">
+          <h2>{{ localized('贈送 / 調整點數', 'Grant / Adjust Credits') }}</h2>
+          <button @click="showGrantCreditsModal = false" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body" v-if="grantCreditsTarget">
+          <p class="modal-copy">
+            {{ localized(
+              '正數為贈送、負數為扣除。贈送點數會落在「永不過期」的 bonus 餘額；扣除時優先扣 bonus、再扣訂閱點數。每筆都會記錄在 CreditTransaction 審計表。',
+              'Positive = grant, negative = deduct. Grants land in the never-expiring bonus balance; deductions hit bonus first then subscription. Every adjustment is logged in the CreditTransaction audit table.'
+            ) }}
+          </p>
+          <div class="target-user">
+            <span>{{ grantCreditsTarget.email }}</span>
+            <span class="plan-badge" :class="planClass(grantCreditsTarget.plan)">{{ formatPlan(grantCreditsTarget.plan) }}</span>
+          </div>
+          <div class="form-group">
+            <label>{{ localized('點數', 'Amount') }}</label>
+            <input
+              v-model.number="grantCreditsAmount"
+              type="number"
+              step="1"
+              class="form-input"
+              :placeholder="localized('正數贈送，負數扣除', 'positive grants, negative deducts')"
+            />
+            <p class="form-hint">
+              {{ localized(
+                '例：100 = 贈 100 點；-50 = 扣 50 點',
+                'e.g. 100 grants 100 credits; -50 deducts 50 credits'
+              ) }}
+            </p>
+          </div>
+          <div class="form-group">
+            <label>{{ localized('原因（必填）', 'Reason (required)') }}</label>
+            <input
+              v-model="grantCreditsReason"
+              type="text"
+              class="form-input"
+              :placeholder="localized('例：客戶補償 / 活動贈點 / 客服處理', 'e.g. customer comp / campaign grant / support ticket #')"
+              maxlength="200"
+            />
+            <p class="form-hint">
+              {{ localized('會寫入 CreditTransaction.description，方便日後對帳。', 'Written to CreditTransaction.description for audit.') }}
+            </p>
+          </div>
+          <button
+            @click="submitGrantCredits"
+            class="btn-primary"
+            :disabled="grantingCreditsUserId === grantCreditsTarget.id"
+          >
+            {{ grantingCreditsUserId === grantCreditsTarget.id
+                ? localized('調整中…', 'Adjusting…')
+                : localized('確認調整', 'Confirm Adjustment') }}
           </button>
         </div>
       </div>
@@ -645,6 +755,15 @@ function activeLabel(isActive: boolean): string {
 
 .btn-icon.tester:hover {
   background: rgba(245,158,11,0.12);
+}
+
+.btn-icon.grant-credits {
+  border-color: rgba(16,185,129,0.45);
+  color: #34d399;
+}
+
+.btn-icon.grant-credits:hover {
+  background: rgba(16,185,129,0.12);
 }
 
 .pagination {

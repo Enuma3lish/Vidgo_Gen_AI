@@ -677,7 +677,16 @@ async def generate_3d_from_floorplan(
 
 @router.post("/demo/redesign", response_model=DesignResponse)
 async def demo_redesign(
-    prompt: str = Form(..., description="Description of desired changes"),
+    # 2026-05-26: made `prompt` optional. The endpoint composes the final
+    # prompt from style preset + lighting + material chips downstream, so
+    # the user's free-text addition is purely additive. Previously this
+    # was Form(...) required, which made the redesign / stage flows on
+    # /tools/room-redesign 422 with the cryptic
+    #   [{type:"missing", loc:["body","prompt"], input:null}]
+    # whenever the user picked a style and clicked Generate without
+    # typing anything extra. Now: empty string is accepted; the style
+    # preset alone produces a usable render.
+    prompt: str = Form("", description="Optional extra description of desired changes; empty is fine when a style preset is selected."),
     style_id: Optional[str] = Form(None, description="Design style to apply"),
     room_type: Optional[str] = Form(None, description="Type of room"),
     image: UploadFile = File(..., description="Room image file"),
@@ -748,19 +757,29 @@ async def demo_redesign(
     lighting_clause = LIGHTING_CLAUSES.get((lighting_tone or "").lower(), "")
     material_clause = MATERIAL_CLAUSES.get((material_accent or "").lower(), "")
 
-    # 2026-05-18 — image-understanding fusion BEFORE assembling the
-    # final prompt. Drops the user's text when it contradicts the
-    # uploaded room photo so we don't render a kitchen on a bedroom.
-    from app.services.image_understanding_service import (
-        get_image_understanding_service,
-    )
-
-    fusion = await get_image_understanding_service().describe_and_fuse(
-        image_bytes=contents,
-        user_prompt=prompt,
-        tool_context=f"room_redesign:{(space_kind or 'interior')}:{(mode or 'redesign')}",
-        language="zh-TW",
-    )
+    # 2026-05-18 — image-understanding fusion BEFORE assembling the final
+    # prompt. Drops the user's text when it contradicts the uploaded room
+    # photo so we don't render a kitchen on a bedroom.
+    #
+    # Only run fusion when the user actually provided free-form text.
+    # When `prompt` is empty (user picked only a style preset), fusion
+    # was synthesising a "rewritten" prompt with no anchor signal, which
+    # sometimes drifted away from the chosen style. Matches the gating
+    # in tools.py:room_redesign (subscriber path).
+    user_text = (prompt or "").strip()
+    fusion = None
+    fused_text = user_text
+    if user_text:
+        from app.services.image_understanding_service import (
+            get_image_understanding_service,
+        )
+        fusion = await get_image_understanding_service().describe_and_fuse(
+            image_bytes=contents,
+            user_prompt=user_text,
+            tool_context=f"room_redesign:{(space_kind or 'interior')}:{(mode or 'redesign')}",
+            language="zh-TW",
+        )
+        fused_text = fusion.fused_prompt or user_text
 
     # 2026-05-18 — hard "no people" constraint. Architectural / staging
     # renders must show the space, not occupants. Redundant phrasing
@@ -770,7 +789,28 @@ async def demo_redesign(
         "NO photographer in frame, NO occupants — render the space only, "
         "as a clean unpopulated architectural proposal."
     )
-    final_prompt = f"{fusion.fused_prompt}{stage_clause}{lighting_clause}{material_clause}{no_people_clause}".strip()
+    final_prompt = f"{fused_text}{stage_clause}{lighting_clause}{material_clause}{no_people_clause}".strip()
+
+    # Resolve the style preset against the catalog matching `space_kind`.
+    # tools.py owns INTERIOR_STYLES / EXTERIOR_STYLES / COMMERCIAL_STYLES;
+    # imported locally to avoid a top-level circular dependency (interior.py
+    # → tools.py → … tools registry → interior router).
+    style_prompt_suffix: Optional[str] = None
+    if style_id:
+        from app.api.v1.tools import (
+            INTERIOR_STYLES,
+            EXTERIOR_STYLES,
+            COMMERCIAL_STYLES,
+        )
+        if (space_kind or "").lower() == "exterior":
+            catalog = EXTERIOR_STYLES
+        elif (space_kind or "").lower() == "commercial":
+            catalog = COMMERCIAL_STYLES
+        else:
+            catalog = INTERIOR_STYLES
+        match = next((s for s in catalog if s.get("id") == style_id), None)
+        if match and match.get("prompt"):
+            style_prompt_suffix = match["prompt"]
 
     service = get_interior_design_service()
 
@@ -779,7 +819,8 @@ async def demo_redesign(
         prompt=final_prompt,
         style_id=style_id,
         room_type=room_type,
-        keep_layout=True
+        keep_layout=True,
+        style_prompt_suffix=style_prompt_suffix,
     )
 
     if not result.get("success"):
@@ -793,9 +834,9 @@ async def demo_redesign(
         image_url=result.get("image_url"),
         description=result.get("description"),
         space_kind=space_kind if space_kind in ("interior", "exterior", "commercial") else None,
-        vision_summary=fusion.image_summary or None,
-        user_prompt_used=fusion.used_user_prompt,
-        prompt_gap_reason=fusion.gap_reason,
+        vision_summary=(fusion.image_summary if fusion else None) or None,
+        user_prompt_used=(fusion.used_user_prompt if fusion else None),
+        prompt_gap_reason=(fusion.gap_reason if fusion else None),
     )
 
 

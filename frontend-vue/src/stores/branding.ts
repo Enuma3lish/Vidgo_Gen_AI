@@ -8,6 +8,15 @@ export interface PublicBrandingSettings {
   brand_name: string | null
   brand_tagline_zh: string | null
   brand_tagline_en: string | null
+  // Pricing-page editable copy (added 2026-05-23 — backend already
+  // serialised these via /admin/branding/public but the store was dropping
+  // them, so AdminBranding saves had no public effect).
+  pricing_intro_title_zh: string | null
+  pricing_intro_title_en: string | null
+  pricing_intro_body_zh: string | null
+  pricing_intro_body_en: string | null
+  pricing_footnote_zh: string | null
+  pricing_footnote_en: string | null
 }
 
 // Default admin-editable branding fields fall through to NULL until the
@@ -20,6 +29,12 @@ const EMPTY: PublicBrandingSettings = {
   brand_name: null,
   brand_tagline_zh: null,
   brand_tagline_en: null,
+  pricing_intro_title_zh: null,
+  pricing_intro_title_en: null,
+  pricing_intro_body_zh: null,
+  pricing_intro_body_en: null,
+  pricing_footnote_zh: null,
+  pricing_footnote_en: null,
 }
 
 export const useBrandingStore = defineStore('branding', {

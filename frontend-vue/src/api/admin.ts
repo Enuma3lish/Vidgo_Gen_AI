@@ -544,6 +544,12 @@ export interface AdminPlan {
   display_name: string | null
   plan_type: string | null
   description: string | null
+  // 2026-05-24 — bilingual admin-editable copy. Pricing.vue prefers the
+  // locale-matched value, falls back to display_name/description.
+  display_name_zh: string | null
+  display_name_en: string | null
+  description_zh: string | null
+  description_en: string | null
   price_twd: number | null
   price_usd: number | null
   price_monthly: number | null

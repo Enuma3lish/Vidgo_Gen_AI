@@ -110,9 +110,7 @@ def _normalize_promotion_code(code: Optional[str]) -> Optional[str]:
 
 
 _PROVIDER_ACCOUNT_ENV = {
-    "piapi_mcp": ("PIAPI_REMAINING_CREDITS", "PIAPI_SUBSCRIPTION_STATUS"),
     "piapi": ("PIAPI_REMAINING_CREDITS", "PIAPI_SUBSCRIPTION_STATUS"),
-    "pollo_mcp": ("POLLO_REMAINING_CREDITS", "POLLO_SUBSCRIPTION_STATUS"),
     "pollo": ("POLLO_REMAINING_CREDITS", "POLLO_SUBSCRIPTION_STATUS"),
     "a2e": ("A2E_REMAINING_CREDITS", "A2E_SUBSCRIPTION_STATUS"),
     "vertex_ai": ("VERTEX_AI_REMAINING_CREDITS", "VERTEX_AI_SUBSCRIPTION_STATUS"),
@@ -120,9 +118,9 @@ _PROVIDER_ACCOUNT_ENV = {
 
 
 def _provider_configured(provider_name: str) -> bool:
-    if provider_name in {"piapi", "piapi_mcp"}:
+    if provider_name == "piapi":
         return bool(getattr(settings, "PIAPI_KEY", ""))
-    if provider_name in {"pollo", "pollo_mcp"}:
+    if provider_name == "pollo":
         return bool(getattr(settings, "POLLO_API_KEY", ""))
     if provider_name == "a2e":
         return bool(getattr(settings, "A2E_API_KEY", ""))
@@ -310,6 +308,54 @@ async def get_finance_manual_actions(
     """List refund/invoice cases that still require manual finance action."""
     subscription_service = get_subscription_service()
     return await subscription_service.get_manual_action_queue(db=db, limit=limit)
+
+
+@router.patch("/subscriptions/{subscription_id}/refund-eligibility")
+async def set_subscription_refund_eligibility(
+    subscription_id: str,
+    is_refundable: bool = Query(..., description="True to re-enable, False to block"),
+    reason: Optional[str] = Query(None, max_length=64, description="Audit reason for the change"),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Admin override for a subscription's persisted refund-eligibility flag.
+
+    Once a subscription's ``is_refundable`` has been auto-flipped to FALSE
+    by the 5%-usage or HQ-export gate, only this endpoint can re-enable
+    the refund path. Used by support when a customer disputes a gate
+    decision in good faith (e.g. their HQ export was an accidental
+    double-click).
+    """
+    from uuid import UUID as _UUID
+    from datetime import datetime, timezone as _tz
+    from app.models.billing import Subscription as _Sub
+    try:
+        sub_uuid = _UUID(subscription_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid subscription_id")
+
+    sub = await db.get(_Sub, sub_uuid)
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+
+    previous = sub.is_refundable
+    sub.is_refundable = bool(is_refundable)
+    if is_refundable:
+        sub.refund_blocked_at = None
+        sub.refund_blocked_reason = None
+    else:
+        sub.refund_blocked_at = datetime.now(_tz.utc)
+        sub.refund_blocked_reason = reason or "ADMIN_BLOCK"
+    await db.commit()
+
+    return {
+        "success": True,
+        "subscription_id": str(sub.id),
+        "is_refundable": sub.is_refundable,
+        "previous": previous,
+        "reason": sub.refund_blocked_reason,
+        "admin_id": str(admin.id),
+    }
 
 
 @router.get("/stats/api-costs")
@@ -908,6 +954,99 @@ async def seed_material_readiness(
     }
 
 
+class SeedDemoMaterialRequest(BaseModel):
+    """Payload for inserting a pre-generated demo example into prod.
+
+    The seeder script generates assets by calling the prod /api/v1/tools/*
+    endpoints, then posts the resulting URL here so the Material row lives
+    in the prod DB (not the seeder's local DB).
+    """
+    tool_type: str
+    topic: str
+    topic_zh: Optional[str] = None
+    prompt: str
+    prompt_zh: Optional[str] = None
+    input_image_url: Optional[str] = None
+    input_video_url: Optional[str] = None
+    input_params: Optional[Dict[str, Any]] = None
+    result_image_url: Optional[str] = None
+    result_video_url: Optional[str] = None
+    result_thumbnail_url: Optional[str] = None
+    title_en: Optional[str] = None
+    title_zh: Optional[str] = None
+    lookup_hash: str  # caller computes — used for idempotency
+
+
+@router.post("/materials/seed-demo")
+async def seed_demo_material(
+    payload: SeedDemoMaterialRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Insert one pre-built demo Material row. Idempotent on lookup_hash."""
+    from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
+
+    try:
+        tool_type_enum = ToolType(payload.tool_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown tool_type '{payload.tool_type}'. "
+                   f"Allowed: {[t.value for t in ToolType]}",
+        )
+
+    # Idempotent: if a row with this lookup_hash already exists, return it.
+    existing = await db.execute(
+        select(Material).where(Material.lookup_hash == payload.lookup_hash)
+    )
+    row = existing.scalar_one_or_none()
+    if row:
+        return {
+            "success": True,
+            "inserted": False,
+            "material_id": str(row.id),
+            "reason": "already exists (lookup_hash match)",
+        }
+
+    # Use watermarked_url == result_image_url so the ExampleGallery shows it
+    # even before any admin watermark pass.
+    result_watermarked = payload.result_image_url
+
+    material = Material(
+        lookup_hash=payload.lookup_hash,
+        tool_type=tool_type_enum,
+        topic=payload.topic,
+        topic_zh=payload.topic_zh,
+        language="en",
+        source=MaterialSource.SEED,
+        status=MaterialStatus.APPROVED,
+        prompt=payload.prompt,
+        prompt_zh=payload.prompt_zh,
+        input_image_url=payload.input_image_url,
+        input_video_url=payload.input_video_url,
+        input_params=payload.input_params or {},
+        result_image_url=payload.result_image_url,
+        result_video_url=payload.result_video_url,
+        result_thumbnail_url=payload.result_thumbnail_url,
+        result_watermarked_url=result_watermarked,
+        title_en=payload.title_en,
+        title_zh=payload.title_zh,
+        quality_score=0.85,
+        is_active=True,
+    )
+    db.add(material)
+    await db.commit()
+    await db.refresh(material)
+
+    return {
+        "success": True,
+        "inserted": True,
+        "material_id": str(material.id),
+        "tool_type": payload.tool_type,
+        "topic": payload.topic,
+    }
+
+
 @router.post("/materials/cleanup-gcs-404")
 async def cleanup_gcs_404_materials(
     current_user: User = Depends(require_admin),
@@ -1010,13 +1149,112 @@ async def get_ai_services_status(
     return {
         "services": services,
         "rescue_config": {
-            "t2i": {"primary": "piapi_mcp/piapi", "rescue": "pollo", "final": "vertex_ai/gemini"},
-            "i2v": {"primary": "piapi_mcp/piapi", "rescue": "pollo_mcp/pollo", "final": "vertex_ai/veo"},
-            "t2v": {"primary": "piapi_mcp/piapi", "rescue": "pollo_mcp/pollo", "final": "vertex_ai/veo"},
-            "v2v": {"primary": "piapi_mcp", "rescue": "pollo/pollo_mcp", "final": "vertex_ai/veo"},
-            "interior": {"primary": "piapi_mcp/piapi", "rescue": None, "final": "vertex_ai/gemini"},
+            "t2i": {"primary": "piapi", "rescue": "pollo", "final": "vertex_ai/gemini"},
+            "i2v": {"primary": "piapi", "rescue": "pollo", "final": "vertex_ai/veo"},
+            "t2v": {"primary": "piapi", "rescue": "pollo", "final": "vertex_ai/veo"},
+            "v2v": {"primary": "piapi", "rescue": "pollo", "final": "vertex_ai/veo"},
+            "interior": {"primary": "piapi", "rescue": None, "final": "vertex_ai/gemini"},
             "avatar": {"primary": "piapi", "rescue": "a2e", "final": None}
         }
+    }
+
+
+@router.get("/model-health")
+async def get_model_health(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+    window_hours: int = 24,
+):
+    """
+    Per-model health roll-up for the admin dashboard.
+
+    Aggregates ``generation_metrics`` over the last ``window_hours`` hours
+    (default 24h) and returns one row per (provider, model) pair with:
+
+      * total_calls
+      * success_rate  (0..1)
+      * avg_duration_ms
+      * latest_error  (most recent error message, if any)
+
+    Used by the admin Dashboard's "Model Health" panel — gives ops a single
+    place to spot a provider going dark before users notice. Requires
+    is_superuser.
+
+    Added 2026-05-23 as part of the catalog expansion (Nano Banana 2 / Pro /
+    Seedream 5 Lite / Veo 3.1 Fast). Lets ops verify the new vendor-API
+    proxies stay healthy before broader rollout.
+    """
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import select, func, and_, case
+    from app.models.model_registry import GenerationMetrics
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, min(window_hours, 24 * 30)))
+
+    # Aggregate per (provider, model_used). NULL model_used is kept distinct
+    # so the dashboard can flag "unidentified model" calls. Using a CASE
+    # expression rather than CAST(bool TO int) so the query is portable.
+    grp = await db.execute(
+        select(
+            GenerationMetrics.provider_used.label("provider"),
+            func.coalesce(GenerationMetrics.model_used, "default").label("model"),
+            GenerationMetrics.task_type,
+            func.count().label("total"),
+            func.sum(case((GenerationMetrics.success.is_(True), 1), else_=0)).label("successes"),
+            func.avg(GenerationMetrics.duration_ms).label("avg_ms"),
+        )
+        .where(GenerationMetrics.created_at >= cutoff)
+        .group_by(
+            GenerationMetrics.provider_used,
+            GenerationMetrics.model_used,
+            GenerationMetrics.task_type,
+        )
+        .order_by(func.count().desc())
+    )
+
+    rows: list[dict] = []
+    for r in grp.all():
+        total = int(r.total or 0)
+        succ = int(r.successes or 0)
+        rows.append(
+            {
+                "provider": r.provider,
+                "model": r.model,
+                "task_type": r.task_type,
+                "total_calls": total,
+                "successes": succ,
+                "success_rate": (succ / total) if total else 0.0,
+                "avg_duration_ms": int(r.avg_ms or 0),
+                "latest_error": None,  # filled below by a second targeted query
+            }
+        )
+
+    # For any row with at least one failure, fetch the most recent error to
+    # surface in the UI. One small follow-up query per failing model — cheap
+    # and avoids dragging huge error blobs into the main aggregation.
+    for row in rows:
+        if row["successes"] < row["total_calls"]:
+            latest = await db.execute(
+                select(GenerationMetrics.error_message, GenerationMetrics.created_at)
+                .where(
+                    and_(
+                        GenerationMetrics.provider_used == row["provider"],
+                        func.coalesce(GenerationMetrics.model_used, "default") == row["model"],
+                        GenerationMetrics.task_type == row["task_type"],
+                        GenerationMetrics.success.is_(False),
+                        GenerationMetrics.created_at >= cutoff,
+                    )
+                )
+                .order_by(GenerationMetrics.created_at.desc())
+                .limit(1)
+            )
+            err = latest.first()
+            if err and err.error_message:
+                row["latest_error"] = err.error_message[:300]
+
+    return {
+        "window_hours": window_hours,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "rows": rows,
     }
 
 
@@ -1553,6 +1791,10 @@ async def prewarm_example_cache(
 # columns like `id` or `created_at`. Keep in sync with `_serialize_plan`.
 _PLAN_EDITABLE_FIELDS = {
     "name", "slug", "display_name", "plan_type", "description",
+    # 2026-05-24 — bilingual plan copy. Admin edits both languages
+    # independently. Pricing.vue prefers the locale-matched value.
+    "display_name_zh", "display_name_en",
+    "description_zh", "description_en",
     "price_twd", "price_usd", "price_monthly", "price_yearly",
     "currency", "billing_cycle",
     "monthly_credits", "weekly_credits", "topup_discount_rate",
@@ -1589,6 +1831,10 @@ def _serialize_plan(plan: Plan) -> Dict[str, Any]:
         "display_name": plan.display_name,
         "plan_type": plan.plan_type,
         "description": plan.description,
+        "display_name_zh": plan.display_name_zh,
+        "display_name_en": plan.display_name_en,
+        "description_zh": plan.description_zh,
+        "description_en": plan.description_en,
         "price_twd": _f(plan.price_twd),
         "price_usd": _f(plan.price_usd),
         "price_monthly": plan.price_monthly,
@@ -1855,8 +2101,8 @@ async def admin_costs_infrastructure(
     2. PiAPI — image / video provider, billed per-call. Reuses the existing
        ServicePricing per-call cost (provider='piapi') aggregated this
        month.
-    3. Pollo — primary video provider. Same per-call aggregation, scoped
-       to provider='pollo' / 'pollo_mcp'.
+    3. Pollo — REST video fallback provider. Same per-call aggregation,
+       scoped to provider='pollo' (Pollo MCP removed 2026-05-26).
     4. A2E — talking-avatar provider. Same per-call aggregation, scoped
        to provider='a2e'.
 

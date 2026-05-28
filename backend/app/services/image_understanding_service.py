@@ -139,99 +139,18 @@ class ImageUnderstandingService:
         language: str = "zh-TW",
         mime_type: str = "image/jpeg",
     ) -> ImageFusionResult:
-        """Run one Gemini Vision call. Returns ImageFusionResult.
+        """Disabled 2026-05-24 (owner directive — PiAPI prompt-fidelity parity).
+        Previously ran the image + user text through Gemini Vision, which
+        was free to drop or rewrite the user's prompt whenever it judged
+        the text "misaligned" with the image. That made the platform feel
+        like it was ignoring what users typed (matched the symptom
+        "I prompt but get a different effect"). The Gemini call is now
+        skipped entirely — we return the user's prompt verbatim, exactly
+        like piapi.ai does.
 
-        Pass exactly one of `image_bytes` (raw bytes) or `image_url`
-        (publicly reachable HTTP/HTTPS URL — the model fetches it).
-
-        On any error, returns a fail-open result that keeps the user's
-        original prompt unchanged. The caller's tool flow always works.
+        Same dataclass shape so all 8+ callers keep working without edits.
         """
-        if not image_bytes and not image_url:
-            return self._fail_open(user_prompt)
-
-        try:
-            import httpx  # type: ignore
-            from google.genai import types  # type: ignore
-
-            # Vertex AI's Part.from_uri only accepts gs:// URIs, not https.
-            # When given an https URL, fetch the bytes ourselves (matches the
-            # rest of vertex_ai_provider.py which does the same).
-            if not image_bytes and image_url:
-                async with httpx.AsyncClient(timeout=20.0) as http:
-                    resp = await http.get(image_url)
-                if resp.status_code != 200:
-                    logger.warning(
-                        "image_understanding fetch failed: %s -> HTTP %s",
-                        image_url,
-                        resp.status_code,
-                    )
-                    return self._fail_open(user_prompt)
-                image_bytes = resp.content
-                detected_mime = (
-                    resp.headers.get("content-type", "image/jpeg")
-                    .split(";")[0]
-                    .strip()
-                )
-                if detected_mime in {"image/jpeg", "image/png", "image/webp"}:
-                    mime_type = detected_mime
-
-            client = self._provider._get_gemini_text_client()
-
-            user_prompt_clean = (user_prompt or "").strip()
-            language_hint = (
-                "Respond with image_summary, gap_reason, and fused_prompt in zh-TW (繁體中文)."
-                if language.startswith("zh")
-                else f"Respond in {language}."
-            )
-
-            parts: list = [
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                (
-                    f"Tool context: {tool_context}\n"
-                    f"User text prompt: {user_prompt_clean or '(none)'}\n"
-                    f"{language_hint}"
-                ),
-            ]
-
-            response = await client.aio.models.generate_content(
-                model=self._provider.gemini_model,
-                contents=[types.Content(role="user", parts=parts)],
-                config=types.GenerateContentConfig(
-                    system_instruction=_SYSTEM_INSTRUCTION,
-                    response_mime_type="application/json",
-                    temperature=0.2,
-                ),
-            )
-
-            text = (getattr(response, "text", None) or "").strip()
-            if not text:
-                return self._fail_open(user_prompt)
-
-            data = json.loads(text)
-
-        except Exception as exc:  # pragma: no cover — exercised in prod
-            logger.warning(
-                "image_understanding_fail_open tool=%s err=%s",
-                tool_context,
-                exc,
-            )
-            return self._fail_open(user_prompt)
-
-        aligned = bool(data.get("user_prompt_aligned", True))
-        return ImageFusionResult(
-            image_summary=str(data.get("image_summary", "")).strip(),
-            fused_prompt=(
-                str(data.get("fused_prompt", "")).strip() or user_prompt
-            ),
-            used_user_prompt=aligned,
-            gap_reason=(
-                str(data["gap_reason"]).strip()
-                if not aligned and data.get("gap_reason")
-                else None
-            ),
-            confidence=float(data.get("confidence", 0.5)),
-        )
+        return self._fail_open(user_prompt)
 
     @staticmethod
     def _fail_open(user_prompt: str) -> ImageFusionResult:

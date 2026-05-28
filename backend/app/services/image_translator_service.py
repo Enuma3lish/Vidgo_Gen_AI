@@ -120,6 +120,7 @@ _OCR_BBOX_PROMPT_TEMPLATE = (
     "Group visually-separated text blocks (one signage line, one product label, "
     "one sticker) as separate items. Inside a single block, preserve line "
     "breaks as '\\n' inside the source/translated strings.\n\n"
+    "{instructions_hint}"
     "Return ONLY a JSON array — no prose, no markdown fences — of objects with "
     "this exact shape:\n"
     '  [{{"source": "<original text>", "translated": "<target-language text>", '
@@ -135,12 +136,24 @@ async def _ocr_translate(
     mime: str,
     target_language: str,
     source_language: Optional[str],
+    instructions: Optional[str] = None,
 ) -> List[TextRegion]:
     from google.genai import types
 
     source_hint = f" from {source_language}" if source_language else ""
+    # The user's tone/brand guidance (e.g. "keep prices unchanged", "casual
+    # tone", "keep brand name in English") shapes HOW each block is
+    # translated. Previously it was collected in the UI and then dropped on
+    # the floor; now it reaches the translation model.
+    instructions_hint = (
+        f"Follow these additional translation instructions: {instructions.strip()}\n\n"
+        if instructions and instructions.strip()
+        else ""
+    )
     prompt = _OCR_BBOX_PROMPT_TEMPLATE.format(
-        source_hint=source_hint, target_language=target_language
+        source_hint=source_hint,
+        target_language=target_language,
+        instructions_hint=instructions_hint,
     )
     response = await asyncio.to_thread(
         client.models.generate_content,
@@ -261,6 +274,36 @@ def _color_distance(a: Tuple[int, int, int], b: Tuple[int, int, int]) -> float:
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
 
 
+def _background_is_textured(img: Image.Image, box: Tuple[int, int, int, int], threshold: float = 22.0) -> bool:
+    """True when the area around the text box has high colour spread (gradient,
+    photo, or pattern). For those a flat fill leaves an obvious rectangle, so
+    the caller blurs the region instead of stamping a solid slab."""
+    width, height = img.size
+    x0, y0, x1, y1 = box
+    margin = max(4, min((x1 - x0), (y1 - y0)) // 6)
+    fx0, fy0 = max(0, x0 - margin), max(0, y0 - margin)
+    fx1, fy1 = min(width, x1 + margin), min(height, y1 + margin)
+    crop = img.crop((fx0, fy0, fx1, fy1)).convert("RGB").resize((32, 32))
+    px = list(crop.getdata())
+    if len(px) < 8:
+        return False
+    n = len(px)
+    mean = (
+        sum(p[0] for p in px) / n,
+        sum(p[1] for p in px) / n,
+        sum(p[2] for p in px) / n,
+    )
+    spread = sum(_color_distance(p, mean) for p in px) / n
+    return spread > threshold
+
+
+def _outline_for(text_color: Tuple[int, int, int]) -> Tuple[int, int, int]:
+    """Pick a contrasting outline colour so the translated text stays legible
+    whether it lands on a flat fill or a blurred photo region."""
+    luminance = 0.299 * text_color[0] + 0.587 * text_color[1] + 0.114 * text_color[2]
+    return (0, 0, 0) if luminance > 140 else (255, 255, 255)
+
+
 def _fit_font(
     text: str, box_width: int, box_height: int, font_path: Optional[str]
 ) -> ImageFont.FreeTypeFont:
@@ -325,7 +368,16 @@ def render_translation(img_bytes: bytes, regions: List[TextRegion]) -> bytes:
         )
         bg = _sample_background_color(img, padded)
         text_color = _sample_text_color(img, box, bg)
-        draw.rectangle(padded, fill=bg)
+        # Cover the original glyphs. On a uniform background a flat fill is the
+        # cleanest result; on a gradient / photo / pattern a flat slab leaves an
+        # obvious rectangle, so blur the region instead — the old text smears
+        # into the surrounding colours while the gradient/texture survives.
+        if _background_is_textured(img, box):
+            blur_radius = max(6, min(padded[3] - padded[1], padded[2] - padded[0]) // 3)
+            region_crop = img.crop(padded).filter(ImageFilter.GaussianBlur(radius=blur_radius))
+            img.paste(region_crop, (padded[0], padded[1]))
+        else:
+            draw.rectangle(padded, fill=bg)
 
         font = _fit_font(
             region.translated,
@@ -339,11 +391,15 @@ def render_translation(img_bytes: bytes, regions: List[TextRegion]) -> bytes:
         line_height = font.size + 4
         total_h = line_height * len(lines)
         cy = padded[1] + max(0, (padded[3] - padded[1] - total_h) // 2)
+        # A thin contrasting outline keeps the text readable on top of a
+        # blurred photo region (where there's no flat backing colour).
+        stroke_w = max(1, font.size // 14)
+        outline = _outline_for(text_color)
         for line in lines:
             text_box = font.getbbox(line)
             tw = text_box[2] - text_box[0]
             cx = padded[0] + max(0, (padded[2] - padded[0] - tw) // 2)
-            draw.text((cx, cy), line, font=font, fill=text_color)
+            draw.text((cx, cy), line, font=font, fill=text_color, stroke_width=stroke_w, stroke_fill=outline)
             cy += line_height
 
     buf = io.BytesIO()
@@ -363,6 +419,7 @@ async def translate_image_pil(
     mime: str,
     target_language: str,
     source_language: Optional[str] = None,
+    instructions: Optional[str] = None,
 ) -> bytes:
     """End-to-end: take source PNG/JPEG bytes, return translated PNG bytes.
 
@@ -371,7 +428,7 @@ async def translate_image_pil(
     caller can decide whether that's success or a soft error.
     """
     regions = await _ocr_translate(
-        text_client, text_model, img_bytes, mime, target_language, source_language
+        text_client, text_model, img_bytes, mime, target_language, source_language, instructions
     )
     if not regions:
         logger.info("[image_translator] no text regions returned; returning source unchanged")

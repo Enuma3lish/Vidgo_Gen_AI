@@ -15,8 +15,17 @@ import asyncio
 import logging
 import os
 
-from app.providers.piapi_mcp_provider import PiAPIMCPProvider
-from app.providers.pollo_mcp_provider import PolloMCPProvider
+# Both MCP providers (Pollo MCP + PiAPI MCP) deleted 2026-05-26.
+#   * Pollo MCP — tool catalog drifted; every img2video_seedance call
+#     returned 404. Killed first.
+#   * PiAPI MCP — had been disabled in prod via PIAPI_MCP_ENABLED=false
+#     for weeks; REST `piapi` was already primary for every task. Kept
+#     wasting build time on the npm install + node subprocess for no
+#     production benefit. Owner directive (2026-05-26): migrate fully
+#     to the REST `piapi` provider, drop the MCP code path.
+# Re-enabling would mean restoring app/providers/piapi_mcp_provider.py,
+# app/services/mcp_client.py, mcp-servers/piapi-mcp-server/, and the
+# Dockerfile build step — see git history for the exact files.
 from app.providers.piapi_provider import PiAPIProvider
 from app.providers.vertex_ai_provider import VertexAIProvider
 from app.providers.pollo_provider import PolloProvider
@@ -78,24 +87,53 @@ class ProviderRouter:
     # ── Routing config ──
     # "primary" is tried first, then "backup", "tertiary", "fallback".
     # REST-first exceptions are handled in _get_providers_for_task.
+    #
+    # 2026-05-25 — MCP removal (owner directive):
+    #   * piapi_mcp was disabled in prod via PIAPI_MCP_ENABLED=false weeks
+    #     ago and was being silently filtered out by _route_candidates on
+    #     every request. Leaving it in `primary` just confused the routing
+    #     logs without affecting behaviour.
+    #   * pollo_mcp's tool catalog is stale — it has only `img2video_pollo-v1-6`
+    #     while the frontend now sends `seedance`, `kling_omni`, etc. Every
+    #     I2V/T2V request burned 0-300ms tripping over MCP before falling
+    #     through to the REST provider.
+    #   The fix: REST `piapi` is primary for everything PiAPI covers
+    #   (which is most tasks), `pollo` is kept only where it actually works
+    #   (Kling I2V via Pollo's image_to_video endpoint), and `vertex_ai`
+    #   remains the final fallback for video tasks. MCP provider files
+    #   stay on disk so we can re-enable later by editing this config only.
     ROUTING_CONFIG = {
-        # Video tasks — PiAPI first, then Pollo.ai, then Vertex AI/Veo.
-        TaskType.I2V: {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "pollo_mcp", "fallback": "pollo", "final": "vertex_ai"},
-        TaskType.T2V: {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "pollo_mcp", "fallback": "pollo", "final": "vertex_ai"},
-        TaskType.V2V: {"primary": "piapi_mcp", "backup": "pollo", "tertiary": "pollo_mcp", "fallback": "vertex_ai"},
+        # Video tasks — PiAPI REST first, Vertex AI/Veo as backup.
+        # Pollo REST has narrow coverage (kling_v1.5/v2 + pixverse + hailuo +
+        # minimax + wan + pollo-v1-6) and only for image_to_video. The
+        # _get_providers_for_task model-aware override at line ~378 already
+        # promotes Pollo to PRIMARY when those specific model_ids are
+        # requested (see POLLO_VIDEO_MODEL_IDS); the ROUTING_CONFIG below is
+        # the generic chain when no Pollo-supported model is specified.
+        #
+        # 2026-05-26 — added Pollo as I2V tertiary so that even when an
+        # un-listed model_id is used, if PiAPI + Vertex both fail we still
+        # take one last shot at Pollo (it will soft-fail fast for unknown
+        # models, costing only ~200 ms; for known Kling models it actually
+        # serves a video). T2V/V2V chain stays Pollo-free because Pollo REST
+        # has no T2V endpoint at all ("not implemented" 404 every call).
+        TaskType.I2V: {"primary": "piapi", "backup": "vertex_ai", "tertiary": "pollo", "fallback": None},
+        TaskType.T2V: {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        TaskType.V2V: {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
 
-        # Image tasks — PiAPI first. Pollo is included where useful, then Gemini via Vertex AI.
-        TaskType.T2I:                {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "pollo", "fallback": "vertex_ai"},
-        TaskType.I2I:                {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
-        TaskType.EFFECTS:            {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
-        TaskType.UPSCALE:            {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
-        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
+        # Image tasks — PiAPI REST → Vertex AI fallback. Pollo image
+        # generation overlapped with PiAPI's catalog and added no value.
+        TaskType.T2I:                {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        TaskType.I2I:                {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        TaskType.EFFECTS:            {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        TaskType.UPSCALE:            {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
 
-        # Specialized tasks — MCP primary except REST-only 3D
-        TaskType.INTERIOR:    {"primary": "piapi_mcp", "backup": "piapi", "tertiary": "vertex_ai", "fallback": None},
-        TaskType.INTERIOR_3D: {"primary": "piapi",     "backup": None,    "tertiary": None,        "fallback": None},
+        # Specialized tasks
+        TaskType.INTERIOR:    {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        TaskType.INTERIOR_3D: {"primary": "piapi", "backup": None,        "tertiary": None, "fallback": None},
         # Avatar uses PiAPI first, then A2E.ai for avatar/digital-human fallback.
-        TaskType.AVATAR:      {"primary": "piapi",     "backup": "a2e",   "tertiary": None,        "fallback": None},
+        TaskType.AVATAR:      {"primary": "piapi", "backup": "a2e",       "tertiary": None, "fallback": None},
 
         # Vertex AI-only tasks
         TaskType.MODERATION:          {"primary": "vertex_ai", "backup": None, "fallback": None},
@@ -114,6 +152,12 @@ class ProviderRouter:
         TaskType.KLING_VIDEO:    {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
     }
 
+    # Models Pollo's REST endpoint actually covers. Trimmed 2026-05-25 to
+    # remove entries that were 404ing in prod (the 2026-05-19 batch added
+    # `seedance`, `seedance_v2`, `hunyuan`, `hunyuan_v1` speculatively;
+    # log audit on 2026-05-25 showed Pollo returning HTTP 404 for every
+    # `seedance` attempt and "not implemented" for any T2V mode). Keeping
+    # only the IDs whose Pollo endpoint actually returns a video.
     POLLO_VIDEO_MODEL_IDS = {
         "pixverse_v4.5",
         "pixverse_v5",
@@ -129,14 +173,6 @@ class ProviderRouter:
         "wan2.6",
         "wan",
         "pollo-v1-6",
-        # 2026-05-19 — explicit model-id picks for the new tier so the
-        # router can fall through to Pollo when PiAPI's matching model
-        # errors out. The Seedance / Hunyuan model_id flowing from the
-        # ShortVideo tier dropdown lands here.
-        "seedance",
-        "seedance_v2",
-        "hunyuan",
-        "hunyuan_v1",
     }
 
     SYSTEM_FAILURE_HINTS = (
@@ -174,9 +210,8 @@ class ProviderRouter:
     )
 
     def __init__(self):
-        # MCP providers
-        self.pollo_mcp = PolloMCPProvider()
-        self.piapi_mcp = PiAPIMCPProvider()
+        # MCP providers removed entirely 2026-05-26 — see import block
+        # header for the migration story.
 
         # Vertex AI (replaces old GeminiProvider)
         self.vertex_ai = VertexAIProvider()
@@ -359,9 +394,14 @@ class ProviderRouter:
 
         if has_explicit_model:
             if task_type in {TaskType.I2V, TaskType.T2V, TaskType.V2V} and model_id in self.POLLO_VIDEO_MODEL_IDS:
+                # Pollo's REST coverage is patchy (HTTP 404 for `seedance`,
+                # "not implemented" for T2V). When a model_id IS one Pollo
+                # genuinely supports (kling_v1.5 / kling_v2 I2V, pixverse,
+                # pollo-v1-6), try Pollo first then fall back to PiAPI / Vertex.
+                # MCP entries removed 2026-05-25 — see ROUTING_CONFIG header.
                 return self._provider_order_with_first(
                     "pollo",
-                    ["pollo_mcp", "piapi_mcp", "piapi", "vertex_ai"],
+                    ["piapi", "vertex_ai"],
                 )
 
             if task_type in {
@@ -421,12 +461,9 @@ class ProviderRouter:
         return [], skipped
 
     def _is_provider_disabled_by_config(self, provider: str) -> bool:
-        if provider == "piapi_mcp":
-            enabled = os.getenv("PIAPI_MCP_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
-            return not enabled or not os.getenv("PIAPI_KEY", "")
         if provider == "piapi":
             return not os.getenv("PIAPI_KEY", "")
-        if provider in {"pollo", "pollo_mcp"}:
+        if provider == "pollo":
             return not os.getenv("POLLO_API_KEY", "")
         if provider == "a2e":
             return not os.getenv("A2E_API_KEY", "")
@@ -551,15 +588,10 @@ class ProviderRouter:
         params: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Execute task on specific provider."""
-        # MCP providers
-        if provider == "piapi_mcp":
-            return await self._execute_piapi_mcp(task_type, params)
-        elif provider == "pollo_mcp":
-            return await self._execute_pollo_mcp(task_type, params)
-        # Vertex AI (Gemini + Veo)
-        elif provider == "vertex_ai":
+        # MCP providers removed entirely 2026-05-26. The dispatch now only
+        # touches REST providers + Vertex AI.
+        if provider == "vertex_ai":
             return await self._execute_vertex_ai(task_type, params)
-        # Legacy REST providers
         elif provider == "piapi":
             return await self._execute_piapi(task_type, params)
         elif provider == "pollo":
@@ -569,49 +601,9 @@ class ProviderRouter:
         else:
             raise ValueError(f"Unknown provider: {provider}")
 
-    # ── MCP Providers ──
-
-    async def _execute_piapi_mcp(
-        self, task_type: TaskType, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Execute on PiAPI MCP — primary for video + image/specialized."""
-        if task_type == TaskType.T2I:
-            return await self.piapi_mcp.text_to_image(params)
-        elif task_type == TaskType.I2I:
-            return await self.piapi_mcp.image_to_image(params)
-        elif task_type == TaskType.I2V:
-            return await self.piapi_mcp.image_to_video(params)
-        elif task_type == TaskType.T2V:
-            return await self.piapi_mcp.text_to_video(params)
-        elif task_type == TaskType.V2V:
-            return await self.piapi_mcp.video_style_transfer(params)
-        elif task_type == TaskType.INTERIOR:
-            return await self.piapi_mcp.doodle_interior(params)
-        elif task_type == TaskType.UPSCALE:
-            return await self.piapi_mcp.upscale(params)
-        elif task_type == TaskType.BACKGROUND_REMOVAL:
-            return await self.piapi_mcp.background_removal(params)
-        elif task_type == TaskType.EFFECTS:
-            return await self.piapi_mcp.image_to_image(params)
-        elif task_type == TaskType.INTERIOR_3D:
-            return await self.piapi_mcp.trellis_3d(params)
-        elif task_type == TaskType.AVATAR:
-            return await self.piapi_mcp.generate_avatar(params)
-        else:
-            raise ValueError(f"PiAPI MCP doesn't support: {task_type}")
-
-    async def _execute_pollo_mcp(
-        self, task_type: TaskType, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Execute on Pollo MCP — backup for video."""
-        if task_type == TaskType.I2V:
-            return await self.pollo_mcp.image_to_video(params)
-        elif task_type == TaskType.T2V:
-            return await self.pollo_mcp.text_to_video(params)
-        elif task_type == TaskType.V2V:
-            return await self.pollo_mcp.video_style_transfer(params)
-        else:
-            raise ValueError(f"Pollo MCP doesn't support: {task_type}")
+    # _execute_piapi_mcp + _execute_pollo_mcp deleted 2026-05-26 along
+    # with their provider classes. Video fallback chain is now:
+    #   piapi (REST) → vertex_ai → pollo (REST, Kling I2V only).
 
     # ── Vertex AI (Gemini + Veo) ──
 
@@ -778,16 +770,11 @@ class ProviderRouter:
             return False
 
     async def is_piapi_healthy(self) -> bool:
-        # Check MCP first, then REST fallback
-        mcp_ok = await self._check_provider_health("piapi_mcp")
-        if mcp_ok:
-            return True
+        # PiAPI REST is the only path now — MCP wrapper removed 2026-05-26.
         return await self._check_provider_health("piapi")
 
     def _get_provider_instance(self, provider: str):
         providers = {
-            "pollo_mcp": self.pollo_mcp,
-            "piapi_mcp": self.piapi_mcp,
             "vertex_ai": self.vertex_ai,
             "piapi": self.piapi,
             "pollo": self.pollo,
@@ -925,7 +912,7 @@ class ProviderRouter:
 
     async def get_all_status(self) -> Dict[str, Any]:
         status = {}
-        for provider in ["piapi_mcp", "pollo_mcp", "vertex_ai", "piapi", "pollo", "a2e"]:
+        for provider in ["vertex_ai", "piapi", "pollo", "a2e"]:
             await self._check_provider_health(provider)
             cached = self._status_cache.get(provider, {})
             status[provider] = {
@@ -953,27 +940,14 @@ class ProviderRouter:
     async def check_service_status(self) -> Dict[str, Any]:
         status = {}
         all_providers = [
-            ("piapi_mcp", self.piapi_mcp),
-            ("pollo_mcp", self.pollo_mcp),
             ("vertex_ai", self.vertex_ai),
             ("piapi", self.piapi),
             ("pollo", self.pollo),
             ("a2e", self.a2e),
         ]
-        # Treat MCP providers as 'disabled' (not an error) when their
-        # underlying MCP server is intentionally not started — this avoids
-        # spamming admin alerts for a deliberately-off optional provider.
-        mcp_disabled = {
-            "piapi_mcp": os.getenv("PIAPI_MCP_ENABLED", "false").lower() not in {"1", "true", "yes", "on"},
-            "pollo_mcp": not os.getenv("POLLO_API_KEY", ""),
-        }
+        # MCP provider entries removed 2026-05-26 — both Pollo MCP and
+        # PiAPI MCP deleted in favor of their REST counterparts.
         for name, provider in all_providers:
-            if mcp_disabled.get(name):
-                status[name] = {
-                    "status": "disabled",
-                    "message": f"{name} is disabled (MCP server not enabled)",
-                }
-                continue
             try:
                 is_healthy = await provider.health_check()
                 status[name] = {

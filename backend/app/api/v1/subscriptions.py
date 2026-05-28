@@ -118,6 +118,13 @@ class PlanInfo(BaseModel):
     name: str
     display_name: Optional[str]
     description: Optional[str]
+    # 2026-05-24 bilingual additions — Pricing.vue prefers the locale-matched
+    # value, falling back to display_name / description when NULL. Mirrors
+    # the existing features_text_zh/en split.
+    display_name_zh: Optional[str] = None
+    display_name_en: Optional[str] = None
+    description_zh: Optional[str] = None
+    description_en: Optional[str] = None
     price_monthly: float
     price_yearly: float
     currency: str = "TWD"
@@ -130,22 +137,42 @@ class PlanInfo(BaseModel):
 # ENDPOINTS
 # =============================================================================
 
-# Default production plans to ensure pricing page always has data (TWD for NT$ display).
-# Keep this aligned with scripts.seed_new_pricing_tiers.NEW_PLAN_DATA.
+# Default production plans (v2.1, 修正單 2026-05-22). ensure_vidgo_plans()
+# overwrites the DB rows from this list on every /plans request, so this
+# MUST stay in lockstep with scripts.seed_new_pricing_tiers.NEW_PLAN_DATA —
+# otherwise the live API silently reverts the migration's UPDATE values.
 DEFAULT_VIDGO_PLANS = [
-    {"name": "basic", "display_name": "基礎進階版", "slug": "basic", "plan_type": "basic", "price_monthly": 699.0, "price_yearly": 6990.0, "price_twd": 699, "price_usd": 22, "monthly_credits": 7000, "weekly_credits": 0, "max_resolution": "720p", "has_watermark": True, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False, "social_media_batch_posting": False, "enterprise_features": False, "max_concurrent_generations": 1, "allowed_models": ["default"], "pollo_limit": 0, "goenhance_limit": 0, "description": "引流款，讓用戶體驗基本圖文生成，僅限 default 模型"},
-    {"name": "pro", "display_name": "專業版", "slug": "pro", "plan_type": "pro", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "price_usd": 32, "monthly_credits": 10000, "weekly_credits": 0, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 3, "allowed_models": ["default", "wan_pro", "gemini_pro"], "pollo_limit": 50, "goenhance_limit": None, "description": "主力銷售方案，開放高級模型與社交媒體一鍵批次發布"},
-    {"name": "premium", "display_name": "尊榮版", "slug": "premium", "plan_type": "premium", "price_monthly": 1699.0, "price_yearly": 16990.0, "price_twd": 1699, "price_usd": 55, "monthly_credits": 18000, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 5, "allowed_models": ["default", "wan_pro", "gemini_pro"], "pollo_limit": 100, "goenhance_limit": None, "description": "針對重度創作者，包含 Pro 所有功能，外加優先任務處理佇列"},
-    {"name": "enterprise", "display_name": "企業旗艦版", "slug": "enterprise", "plan_type": "enterprise", "price_monthly": 15000.0, "price_yearly": 150000.0, "price_twd": 15000, "price_usd": 485, "monthly_credits": 160000, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True, "social_media_batch_posting": True, "enterprise_features": True, "max_concurrent_generations": 10, "allowed_models": ["default", "wan_pro", "gemini_pro", "veo"], "pollo_limit": None, "goenhance_limit": None, "description": "全功能解鎖、專屬企業素材庫、自訂浮水印"},
+    {"name": "basic", "display_name": "標準版 Standard", "slug": "basic", "plan_type": "basic", "price_monthly": 399.0, "price_yearly": 3990.0, "price_twd": 399, "price_usd": 19.99, "monthly_credits": 450, "weekly_credits": 0, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False, "social_media_batch_posting": False, "enterprise_features": False, "max_concurrent_generations": 1, "allowed_models": ["flux", "seedance", "z-image"], "pollo_limit": 0, "goenhance_limit": 0, "description": "標準入門方案 — 1080p HD、無浮水印、450 點/月"},
+    {"name": "pro", "display_name": "專業版 Pro", "slug": "pro", "plan_type": "pro", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "price_usd": 49.99, "monthly_credits": 1200, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 3, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan"], "pollo_limit": 50, "goenhance_limit": None, "description": "主力方案 — 4K、無浮水印、進階模型、1,200 點/月"},
+    {"name": "premium", "display_name": "進階版 Advanced", "slug": "premium", "plan_type": "premium", "price_monthly": 1699.0, "price_yearly": 16990.0, "price_twd": 1699, "price_usd": 89.99, "monthly_credits": 2200, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 5, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo"], "pollo_limit": 100, "goenhance_limit": None, "description": "重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1、2,200 點/月"},
+    # Enterprise: Contact-Us tier. price_monthly=0 makes the frontend render
+    # the contact CTA instead of a buy button (isContactUsPlan helper in
+    # Pricing.vue). monthly_credits=0 — provisioned per contract.
+    {"name": "enterprise", "display_name": "企業版 Enterprise", "slug": "enterprise", "plan_type": "enterprise", "price_monthly": 0.0, "price_yearly": 0.0, "price_twd": 0, "price_usd": 0, "monthly_credits": 0, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": True, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": True, "social_media_batch_posting": True, "enterprise_features": True, "max_concurrent_generations": 10, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"], "pollo_limit": None, "goenhance_limit": None, "description": "企業客製方案 — 詢價，全功能解鎖、專屬企業素材庫、客製點數"},
     TEST_PRO_PLAN_DEFAULTS,
 ]
 
 
 async def ensure_vidgo_plans(db: AsyncSession) -> None:
     """
-    Ensure every production plan in DEFAULT_VIDGO_PLANS exists and deactivate
-    legacy public plans so PayPal plan mapping only needs basic/pro/premium/
-    enterprise keys.
+    Ensure every production plan in DEFAULT_VIDGO_PLANS exists, and that
+    legacy public plans (not in the official basic/pro/premium/enterprise
+    list) stay deactivated so PayPal plan mapping is clean.
+
+    Pre-2026-05-23 this function ALSO overwrote every field of every
+    existing plan from the hardcoded constant on every /plans request,
+    which silently wiped admin edits made in /admin/plans (display_name,
+    description, prices, credits, features_text, …) — the operator could
+    save a change in the admin UI, refresh /pricing, and see their edit
+    reverted. Pure auto-heal turned out to be incompatible with letting
+    the admin own plan content.
+
+    The fix is to make this an **insert-only** seed: rows missing from the
+    DB get created from the constant; existing rows are left untouched
+    except for re-activation (so a one-click "restore official plan" still
+    works). DB ALWAYS wins over the constant for content fields once the
+    plan exists. Operators reset by deleting the row or editing it in
+    /admin/plans.
     """
     existing_result = await db.execute(select(Plan))
     existing_plans = existing_result.scalars().all()
@@ -158,13 +185,14 @@ async def ensure_vidgo_plans(db: AsyncSession) -> None:
         name = data["name"]
         if name in existing_by_name:
             existing = existing_by_name[name]
+            # Re-activate an official plan that someone deactivated by
+            # mistake. This is the only field we keep auto-healing because
+            # a deactivated official plan would break checkout for everyone.
             if not existing.is_active:
                 existing.is_active = True
                 changed = True
-            for key, value in data.items():
-                if getattr(existing, key, None) != value:
-                    setattr(existing, key, value)
-                    changed = True
+            # DO NOT overwrite any other field. Admin edits in /admin/plans
+            # are the source of truth for plan content from this point on.
             continue
         plan = Plan(**data)
         db.add(plan)
@@ -211,8 +239,16 @@ async def list_available_plans(
     Prices are in TWD for NT$ display on frontend.
     """
     await ensure_vidgo_plans(db)
+    # Sort by display_order if set, else by price_monthly. Plans with
+    # price_monthly=0 (Enterprise / Contact Us tier) must sort LAST, not first,
+    # so the pricing grid reads cheap → expensive → contact-us.
+    from sqlalchemy import case
+    sort_key = case(
+        (Plan.price_monthly <= 0, 1),
+        else_=0,
+    )
     result = await db.execute(
-        select(Plan).where(Plan.is_active == True).order_by(Plan.price_monthly)
+        select(Plan).where(Plan.is_active == True).order_by(sort_key, Plan.price_monthly)
     )
     plans = result.scalars().all()
     can_view_test_plan = can_access_test_pro_plan(current_user.email if current_user else None)
@@ -239,6 +275,10 @@ async def list_available_plans(
             name=plan.name,
             display_name=plan.display_name,
             description=plan.description,
+            display_name_zh=getattr(plan, "display_name_zh", None),
+            display_name_en=getattr(plan, "display_name_en", None),
+            description_zh=getattr(plan, "description_zh", None),
+            description_en=getattr(plan, "description_en", None),
             price_monthly=_monthly(plan),
             price_yearly=_yearly(plan),
             currency=plan.currency or "TWD",
@@ -714,14 +754,16 @@ async def check_refund_eligibility(
     """
     Check if current subscription is eligible for refund.
 
-    **Refund Policy:**
-    - Refunds are available within 7 days of subscription start
-    - After 7 days, cancellation is still possible but no refund
+    **v2.1 Refund Policy:** All three must hold:
+    1. Within 7 days of subscription start
+    2. Used credits < 5% of monthly allowance
+    3. (Watermark-free export gate enforced separately — TBD)
 
     Returns:
-    - eligible: Whether refund is possible
-    - days_remaining: Days left in refund window
-    - reason: Explanation if not eligible
+    - eligible: True only if all gates pass
+    - days_remaining: Days left in the 7-day window
+    - used_pct: Current usage as percentage (for UI display)
+    - reason / code: Why ineligible if not eligible
     """
     subscription_service = get_subscription_service()
 
@@ -734,12 +776,60 @@ async def check_refund_eligibility(
         return {
             "eligible": False,
             "reason": "No active subscription",
-            "days_remaining": 0
+            "days_remaining": 0,
+            "code": "NO_SUBSCRIPTION",
+        }
+
+    # Gate 1: 7-day window
+    if not status.get("refund_eligible", False):
+        return {
+            "eligible": False,
+            "days_remaining": status.get("refund_days_remaining", 0),
+            "reason": f"Refund window ({REFUND_ELIGIBILITY_DAYS} days) has expired",
+            "code": "REFUND_WINDOW_EXPIRED",
+            "subscription_id": status.get("subscription_id"),
+        }
+
+    # Gates 2 + 3: 5% usage rule AND HQ-export rule (v2.1 spec).
+    # Both come from the same helper so the UI can render one clear reason.
+    subscription = await subscription_service._get_active_subscription(db, current_user.id)
+    usage = await subscription_service._refund_usage_allowed(db, current_user, subscription)
+
+    if not usage["allowed"]:
+        if usage["code"] == "HQ_EXPORT_PRODUCED":
+            reason = (
+                "Refund unavailable — you have already exported watermark-free "
+                "high-quality output. Per the v2.1 refund policy, that counts "
+                "as services rendered."
+            )
+            code = "REFUND_HQ_EXPORT_PRODUCED"
+        else:
+            reason = (
+                f"You have used {usage['used_pct']:.1f}% of this month's credits "
+                f"(threshold: 5%). Refund unavailable."
+            )
+            code = "REFUND_USAGE_EXCEEDED"
+
+        return {
+            "eligible": False,
+            "days_remaining": status.get("refund_days_remaining", 0),
+            "used": usage["used"],
+            "allowance": usage["allowance"],
+            "used_pct": usage["used_pct"],
+            "has_hq_export": usage["has_hq_export"],
+            "reason": reason,
+            "code": code,
+            "subscription_id": status.get("subscription_id"),
         }
 
     return {
-        "eligible": status.get("refund_eligible", False),
+        "eligible": True,
         "days_remaining": status.get("refund_days_remaining", 0),
-        "reason": None if status.get("refund_eligible") else f"Refund window ({REFUND_ELIGIBILITY_DAYS} days) has expired",
-        "subscription_id": status.get("subscription_id")
+        "used": usage["used"],
+        "allowance": usage["allowance"],
+        "used_pct": usage["used_pct"],
+        "has_hq_export": usage["has_hq_export"],
+        "reason": None,
+        "code": "OK",
+        "subscription_id": status.get("subscription_id"),
     }

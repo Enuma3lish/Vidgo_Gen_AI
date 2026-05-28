@@ -27,6 +27,12 @@ function blankPlan(): AdminPlan {
     display_name: null,
     plan_type: 'pro',
     description: null,
+    // 2026-05-24 — bilingual fields. Admin edits both languages
+    // independently; Pricing.vue picks the locale-matched value.
+    display_name_zh: null,
+    display_name_en: null,
+    description_zh: null,
+    description_en: null,
     price_twd: 0,
     price_usd: 0,
     price_monthly: 0,
@@ -229,8 +235,21 @@ onMounted(loadPlans)
           <input v-model="editing.name" placeholder="basic / pro / premium" />
         </label>
         <label>
-          <span>{{ L('顯示名稱', 'Display name') }}</span>
+          <span>{{ L('顯示名稱（共用 / 後備）', 'Display name (fallback)') }}</span>
           <input v-model="editing.display_name" />
+        </label>
+
+        <!-- 2026-05-24 — bilingual display copy. The two single-locale
+             fields below override `display_name` when set; Pricing.vue picks
+             the locale-matched value. Leave one blank to fall back to the
+             above generic Display name. -->
+        <label>
+          <span>{{ L('顯示名稱（中文）', 'Display name (中文)') }}</span>
+          <input v-model="editing.display_name_zh" :placeholder="L('例：標準版', 'e.g. 標準版')" />
+        </label>
+        <label>
+          <span>{{ L('顯示名稱（English）', 'Display name (English)') }}</span>
+          <input v-model="editing.display_name_en" :placeholder="L('例：Standard', 'e.g. Standard')" />
         </label>
 
         <label>
@@ -317,9 +336,23 @@ onMounted(loadPlans)
       </div>
 
       <label class="full-width">
-        <span>{{ L('簡短描述（卡片副標）', 'Short description (card subtitle)') }}</span>
+        <span>{{ L('簡短描述（共用 / 後備）', 'Short description (fallback)') }}</span>
         <input v-model="editing.description" />
       </label>
+
+      <!-- 2026-05-24 — bilingual description fields. Override the fallback
+           above when set; the public pricing page picks the locale-matched
+           value at render time. -->
+      <div class="grid-2col">
+        <label>
+          <span>{{ L('描述（中文）', 'Description (中文)') }}</span>
+          <input v-model="editing.description_zh" :placeholder="L('例：1080p HD、無浮水印、450 點/月', 'e.g. 1080p HD, no watermark, 450 cr/mo')" />
+        </label>
+        <label>
+          <span>{{ L('描述（English）', 'Description (English)') }}</span>
+          <input v-model="editing.description_en" :placeholder="L('例：1080p HD, no watermark, 450 cr/mo', 'e.g. 1080p HD, no watermark, 450 cr/mo')" />
+        </label>
+      </div>
 
       <div class="editor-actions">
         <button class="btn-ghost" :disabled="saving" @click="cancelEdit">{{ L('取消', 'Cancel') }}</button>

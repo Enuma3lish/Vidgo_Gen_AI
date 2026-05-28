@@ -43,9 +43,11 @@ from app.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
-# Polling config for Veo long-running operations
+# Polling config for Veo long-running operations.
+# 20-minute ceiling — Veo 3.1 video generation regularly runs 8-15 min on
+# longer prompts; the previous 10-minute cap was aborting healthy jobs.
 VEO_POLL_INTERVAL = 10
-VEO_POLL_MAX_ATTEMPTS = 60  # 10 minutes max
+VEO_POLL_MAX_ATTEMPTS = 120  # 20 minutes max
 
 
 class VertexAIProvider(BaseProvider):
@@ -550,6 +552,7 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
 
             target_language = params.get("target_language") or "English"
             source_language = params.get("source_language")
+            instructions = (params.get("instructions") or "").strip() or None
 
             # ── Deterministic CJK-safe path ────────────────────────────────
             # Gemini 2.5 Flash Image renders CJK glyphs as visual shape-
@@ -566,6 +569,7 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
                 mime=mime,
                 target_language=target_language,
                 source_language=source_language,
+                instructions=instructions,
             )
 
             from app.services.gcs_storage_service import get_gcs_storage

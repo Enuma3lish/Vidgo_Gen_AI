@@ -35,8 +35,8 @@ from app.models.demo import ToolShowcase, PromptCache
 from app.models.material import Material, ToolType
 from app.models.user_generation import UserGeneration
 from app.services.demo_cache_service import DemoCacheService
+from app.services.plan_gates import require_model_access
 from app.services.gcs_storage_service import get_gcs_storage
-from app.services.prompt_refinement_service import PromptRefinementService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -305,6 +305,15 @@ class PatternGenerateRequest(BaseModel):
     # Flux when omitted; ``qwen`` / ``z-image`` pick the alternative T2I
     # models verified on PiAPI (see piapi_provider.text_to_image dispatch).
     model: Optional[str] = Field(default=None, description="flux | qwen | z-image (default flux)")
+    # 2026-05-24 (QA item #6) — let users target a specific product type so
+    # the generated pattern reads as "<style> pattern for <product>" instead
+    # of a generic surface. The product_name is prepended to the final
+    # prompt to steer the model toward applicable packaging / textile / etc.
+    product_name: Optional[str] = Field(
+        default=None,
+        max_length=120,
+        description="Optional product the pattern is for (e.g. 'a coffee bag', 'silk scarf', 'wall tile').",
+    )
 
 
 class PatternTransferRequest(BaseModel):
@@ -388,6 +397,10 @@ async def generate_pattern(
     if not is_subscribed_user(current_user):
         return await _gen_demo_response(db, ToolType.PATTERN_GENERATE, topic=request.style, cta="Subscribe to generate custom patterns.")
 
+    # Plan-tier gate for the T2I model dropdown — Qwen is pro+, Flux/Z-Image
+    # are basic. Skipped when no model is sent (Flux default).
+    await require_model_access(db, current_user, request.model)
+
     # Subscriber path: call real API
     try:
         style_prompts = {
@@ -402,21 +415,20 @@ async def generate_pattern(
         }
         style_desc = style_prompts.get(request.style, "seamless pattern")
 
-        # Refine the combined user+style prompt with Gemini for tighter pattern
-        # specificity (palette, motif scale, tile-friendly edges, no text/logos).
-        base_prompt = f"{request.prompt}, {style_desc}, high quality, detailed"
-        try:
-            refinement = await PromptRefinementService().refine_for_tool(
-                prompt=base_prompt,
-                tool_name="pattern_generate",
-                prompt_role="text-to-image pattern prompt",
-                user_prompt=True,
-                context={"style": request.style, "width": request.width, "height": request.height},
-            )
-            final_prompt = refinement.refined_prompt or base_prompt
-        except Exception as refine_exc:  # noqa: BLE001 - refinement is best-effort
-            logger.warning("Pattern prompt refinement skipped: %s", refine_exc)
-            final_prompt = base_prompt
+        # Pass the user's prompt + style descriptor verbatim to the model
+        # (parity with piapi.ai — see _refine_generation_prompt removal in
+        # tools.py, owner directive 2026-05-23, and ImageUnderstandingService
+        # disable, 2026-05-24). The trailing "high quality, detailed" was
+        # also stripped 2026-05-24 because it nudged every result towards a
+        # generic stock-photo aesthetic regardless of what the user typed.
+        # product_name (QA item #6, 2026-05-24) when present is prepended so
+        # the model designs the pattern *for* that product rather than as a
+        # generic surface — e.g. "for a coffee bag, <user prompt>, <style>".
+        product_clause = (request.product_name or "").strip()
+        if product_clause:
+            final_prompt = f"for {product_clause}, {request.prompt}, {style_desc}"
+        else:
+            final_prompt = f"{request.prompt}, {style_desc}"
 
         route_params = {
             "prompt": final_prompt,

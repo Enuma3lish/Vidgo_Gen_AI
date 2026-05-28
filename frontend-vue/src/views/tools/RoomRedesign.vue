@@ -1,2147 +1,584 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+/**
+ * RoomRedesign — ReRoom.ai-style refactor (2026-05-24).
+ *
+ * Owner directive: "interior design please reference https://tw.reroom.ai/
+ * and please deep dive it." Layout strategy mirrors ReRoom's "inspire first,
+ * generator second" approach:
+ *
+ *   ┌──── Hero with before/after slider ──────────────────────┐
+ *   │ "室內渲染，你所想像的任何風格"                            │
+ *   │ [免費試用]  [查看方案]                                   │
+ *   ├─────────────────────────────────────────────────────────┤
+ *   │  Generator (single clean form, login-gated)             │
+ *   │  ┌──── Upload ────┬──── Result preview ───┐             │
+ *   │  │ drag a photo   │ before/after slider   │             │
+ *   │  │ mode: redesign │                       │             │
+ *   │  │      / stage   │                       │             │
+ *   │  │      / magic   │                       │             │
+ *   │  │ style: pick    │                       │             │
+ *   │  │ [Generate]     │                       │             │
+ *   │  └────────────────┴───────────────────────┘             │
+ *   ├─────────────────────────────────────────────────────────┤
+ *   │ Latest renders portfolio grid (40+ examples from        │
+ *   │ Templates Gallery — clicking pre-fills the form above)  │
+ *   ├─────────────────────────────────────────────────────────┤
+ *   │ How it works (4-step explainer)                         │
+ *   │ FAQ                                                     │
+ *   └─────────────────────────────────────────────────────────┘
+ *
+ * Hidden behind a small "more modes" dropdown: the old generate / 3D /
+ * styleTransfer / transform tabs. Default flow is the simple redesign +
+ * stage + magic — matching ReRoom's minimal-form expectation.
+ *
+ * Colors preserved per owner directive: #0a0a0f bg, #141420 panels,
+ * #7c3aed→#a78bfa violet accents, #f5f5fa/#94949f text. Only the SHAPE
+ * changes — palette stays.
+ */
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
-import { useUIStore } from '@/stores'
-import { useDemoMode, usePromptLibrary, useLocalized } from '@/composables'
-import { interiorApi, effectsApi, demoApi } from '@/api'
-import type { DesignStyle, RoomType } from '@/api'
+import { useRouter, useRoute } from 'vue-router'
+import { useUIStore, useCreditsStore } from '@/stores'
+import { useDemoMode, useLocalized } from '@/composables'
+import { demoApi, toolsApi } from '@/api'
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
-import ThreeViewer from '@/components/tools/ThreeViewer.vue'
-import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
-import HowToUseHint from '@/components/common/HowToUseHint.vue'
-import ProToolHero from '@/components/tools/ProToolHero.vue'
-import VisionFusionInfo from '@/components/tools/VisionFusionInfo.vue'
-import { downloadAsset } from '@/utils/downloadAsset'
-
-// FastAPI returns 422 / 415 validation errors as `detail: [{msg, loc, ...}]`.
-// A bare `error.response.data.detail` then renders as "[object Object]" in
-// the toast (or no toast at all), which is what makes failed uploads look
-// like a silent "404". This helper flattens the array into a readable
-// single line so the user actually sees the reason.
-function explainBackendError(error: any, fallback: string): string {
-  const detail = error?.response?.data?.detail
-  if (!detail) return error?.message || fallback
-  if (typeof detail === 'string') return detail
-  if (Array.isArray(detail)) {
-    const lines = detail
-      .map((d: any) => (typeof d === 'string' ? d : d?.msg || d?.message))
-      .filter(Boolean)
-    if (lines.length) return lines.join('; ')
-  }
-  if (typeof detail === 'object') {
-    if (typeof detail.message === 'string') return detail.message
-    if (typeof detail.error === 'string') return detail.error
-  }
-  return fallback
-}
+import ExampleGallery from '@/components/tools/ExampleGallery.vue'
+import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import apiClient from '@/api/client'
+import { extractApiError } from '@/utils/apiError'
 
 const { t, locale } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const uiStore = useUIStore()
-const isZh = computed(() => locale.value.startsWith('zh'))
-// L(zh, en, ja?, ko?, es?) — 5-language inline string picker. Replaces
-// the legacy `isZh ? zh : en` ternary that always fell back to English
-// for ja/ko/es users (BUG-017).
+const creditsStore = useCreditsStore()
+const { isDemoUser } = useDemoMode()
 const { L } = useLocalized()
+const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
-// Demo mode
-const {
-  isDemoUser,
-  loadDemoTemplates,
-  demoTemplates,
-  resolveDemoTemplateResultUrl,
-  useDemoTemplate,
-  getDemoResultUrl,
-  checkSubscription,
-  subscriptionChecked,
-  loadInputLibrary,
-  inputLibrary,
-} = useDemoMode()
+// ─── State ────────────────────────────────────────────────────────────
+type Mode = 'redesign' | 'stage' | 'magic'
+type SpaceKind = 'interior' | 'exterior' | 'commercial'
 
-// Curated prompt library — dropdown options for both Custom Prompt and
-// Transform Description (no free-form text in MVP).
-const { options: roomPromptOptions, promptFor: roomPromptTextFor } = usePromptLibrary('room_redesign')
-// Two independent selects (Redesign tab + AI Transform tab) each bind to
-// their own prompt-id ref so we can re-derive text on locale switch.
-const selectedRoomPromptId = ref('')
-const selectedTransformPromptId = ref('')
-
-// Data
-const styles = ref<DesignStyle[]>([])
-const roomTypes = ref<RoomType[]>([])
-
-// State
-const activeTab = ref<'redesign' | 'stage' | 'generate' | 'styleTransfer' | '3dModel' | 'transform'>('redesign')
-// Tab list: subscriber-only tabs (generate, 3dModel, transform, stage) are hidden for visitors
-// so they never see locked chrome or error toasts.
-const visibleTabs = computed(() => {
-  const all = [
-    { id: 'redesign' as const,      icon: '🔄', label: t('interior.tabs.redesign'),      subOnly: false },
-    // 2026-05-18 ReRoom-inspired: AI Virtual Staging — empty room → furnished.
-    { id: 'stage' as const,         icon: '🛋️', label: L('AI 空間佈置', 'AI Virtual Staging', 'AIバーチャルステージ', 'AI 가상 스테이징', 'Staging Virtual AI'), subOnly: true },
-    { id: 'generate' as const,      icon: '✨', label: t('interior.tabs.generate'),      subOnly: true },
-    { id: 'styleTransfer' as const, icon: '🎨', label: t('interior.tabs.styleTransfer'), subOnly: false },
-    { id: 'transform' as const,     icon: '🪄', label: L('AI 自由變換', 'AI Transform', 'AI 自由変換', 'AI 자유 변환', 'AI Transformación'), subOnly: true },
-    { id: '3dModel' as const,       icon: '🧊', label: L('3D 模型', '3D Model', '3Dモデル', '3D 모델', 'Modelo 3D'), subOnly: true },
-  ]
-  return all.filter(tab => !(tab.subOnly && isDemoUser.value))
-})
-
-const studioCapabilities = computed(() => [
-  {
-    icon: '📷',
-    title: L('照片 / 空屋改造', 'Photo / Empty-room Redesign', '写真 / 空室リデザイン', '사진 / 빈 방 리디자인', 'Foto / Rediseño de sala vacía'),
-    text: L('從現況照、空屋照或家具空間開始，保留房型比例並生成可比較的改造視覺。', 'Start from room photos, empty spaces, or furniture contexts and create comparable redesign visuals while preserving spatial proportion.', '現況写真、空室写真、家具のある空間から開始し、間取り比率を保ったまま比較可能なリデザインビジュアルを生成します。', '실제 사진, 빈 방 사진 또는 가구가 있는 공간에서 시작하여 공간 비율을 유지하면서 비교 가능한 리디자인 비주얼을 생성합니다.', 'Empieza con fotos de habitaciones, espacios vacíos o ambientes amueblados y crea visuales de rediseño comparables conservando las proporciones del espacio.'),
-    proof: L('房仲刊登、出租物件、裝修前後對照', 'Listings, rental visuals, before/after renovation', '不動産掲載、賃貸ビジュアル、リフォーム前後比較', '부동산 등록, 임대 비주얼, 리노베이션 전후 비교', 'Anuncios inmobiliarios, alquileres, antes/después de reforma'),
-  },
-  {
-    icon: '✏️',
-    title: L('草圖到提案圖', 'Sketch to Proposal', 'スケッチから提案図へ', '스케치에서 제안서까지', 'De boceto a propuesta'),
-    text: L('把手繪概念、參考圖與設計描述整理成客戶看得懂的視覺方向。', 'Turn sketches, references, and design notes into client-readable visual directions.', '手描きコンセプト、参考画像、設計メモを顧客が理解できるビジュアル方向にまとめます。', '손으로 그린 컨셉, 참고 이미지, 디자인 메모를 클라이언트가 이해할 수 있는 비주얼 방향으로 정리합니다.', 'Convierte bocetos, referencias y notas de diseño en direcciones visuales que el cliente pueda entender.'),
-    proof: L('初步簡報、風格溝通、提案比稿', 'Pitch decks, style alignment, concept options', 'プレゼン資料、スタイル合意、コンセプト比較', '제안 자료, 스타일 합의, 컨셉 비교', 'Presentaciones, alineación de estilo, comparativa de conceptos'),
-  },
-  {
-    icon: '📐',
-    title: L('平面圖到渲染', 'Plan to Render', '平面図からレンダーへ', '평면도에서 렌더링까지', 'De plano a render'),
-    text: L('先鎖定空間類型、採光與材質語言，再建立寫實室內視角並延伸 3D 流程。', 'Lock room type, daylight, and material language before creating realistic interior views and extending into 3D.', '部屋タイプ、採光、素材言語をまず固めてから、写実的な室内ビューを作成し、3Dフローへと展開します。', '먼저 공간 유형, 채광, 자재 언어를 정한 다음 사실적인 인테리어 뷰를 생성하고 3D 워크플로우로 확장합니다.', 'Fija el tipo de habitación, la iluminación y los materiales antes de crear vistas interiores realistas y extenderlas a 3D.'),
-    proof: L('建案簡報、空間配置、3D 展示素材', 'Architecture decks, layouts, 3D presentation assets', '建築プレゼン、レイアウト、3D提示素材', '건축 프레젠테이션, 레이아웃, 3D 시연 자료', 'Presentaciones de arquitectura, distribuciones, recursos 3D'),
-  },
-  {
-    icon: '✨',
-    title: L('提案級輸出', 'Proposal-grade Output', '提案グレードの出力', '제안서 수준의 출력', 'Salida apta para propuesta'),
-    text: L('以材質、燈光、鏡頭、比例與品牌調性檢查結果，降低粗糙 AI 感。', 'Review material realism, lighting, camera language, proportion, and brand tone to reduce the AI look.', '素材のリアリティ、ライティング、カメラ言語、比率、ブランドトーンを確認し、AIっぽさを抑えます。', '자재 사실감, 조명, 카메라 언어, 비율, 브랜드 톤을 검토하여 AI 느낌을 줄입니다.', 'Revisa el realismo de materiales, iluminación, lenguaje de cámara, proporciones y tono de marca para reducir el aspecto AI.'),
-    proof: L('設計提案、家具情境圖、社群素材', 'Design proposals, furniture scenes, social content', '設計提案、家具シーン、SNS素材', '디자인 제안, 가구 씬, SNS 콘텐츠', 'Propuestas de diseño, escenas de mobiliario, contenido social'),
-  },
-])
-
-const proposalWorkflow = computed(() => [
-  {
-    step: '01',
-    title: L('輸入空間', 'Bring a Space', '空間を入力', '공간 입력', 'Aporta un espacio'),
-    text: L('照片、空屋、草圖或平面圖都能作為起點。', 'Start from a photo, empty room, sketch, or floor plan.', '写真、空室、スケッチ、平面図のいずれもスタート地点になります。', '사진, 빈 방, 스케치, 평면도 모두 시작점이 될 수 있습니다.', 'Empieza con una foto, una habitación vacía, un boceto o un plano.'),
-  },
-  {
-    step: '02',
-    title: L('鎖定風格', 'Lock the Direction', '方向性を固める', '방향 정하기', 'Define la dirección'),
-    text: L('選擇空間類型、設計風格與材質/燈光描述。', 'Choose room type, design style, materials, and lighting notes.', '部屋タイプ、デザインスタイル、素材／ライティングの説明を選びます。', '공간 유형, 디자인 스타일, 자재/조명 설명을 선택합니다.', 'Elige tipo de habitación, estilo de diseño, materiales y notas de iluminación.'),
-  },
-  {
-    step: '03',
-    title: L('生成提案圖', 'Generate Proposal Visuals', '提案ビジュアルを生成', '제안 비주얼 생성', 'Genera la propuesta'),
-    text: L('輸出可放進簡報、刊登頁或客戶溝通的寫實視覺。', 'Create realistic visuals for decks, listings, and client alignment.', 'プレゼン、掲載ページ、顧客とのすり合わせに使える写実的ビジュアルを出力します。', '프레젠테이션, 등록 페이지, 클라이언트 협의에 사용할 사실적인 비주얼을 출력합니다.', 'Crea visuales realistas para presentaciones, anuncios y alineación con el cliente.'),
-  },
-  {
-    step: '04',
-    title: L('延伸 3D', 'Extend to 3D', '3Dへ展開', '3D로 확장', 'Llévalo a 3D'),
-    text: L('訂閱用戶可把完成圖延伸為 GLB 3D 展示素材。', 'Subscribers can turn approved renders into GLB presentation assets.', 'サブスク会員は完成画像をGLB 3D提示素材へ展開できます。', '구독자는 완성된 이미지를 GLB 3D 시연 자료로 확장할 수 있습니다.', 'Los suscriptores pueden convertir los renders en activos GLB 3D para presentación.'),
-  },
-])
-
-const deliverableStandards = computed(() => [
-  L('保留主要房型、窗戶位置與空間比例', 'Preserve core layout, windows, and spatial proportion', '主要な間取り、窓の位置、空間比率を保持', '주요 간추, 창문 위치, 공간 비율 유지', 'Conserva la distribución, las ventanas y las proporciones'),
-  L('強化材質細節、自然光、陰影與鏡頭透視', 'Improve material detail, natural light, shadow, and camera perspective', '素材の細部、自然光、影、カメラパースを強化', '자재 디테일, 자연광, 그림자, 카메라 원근을 강화', 'Mejora detalle de materiales, luz natural, sombra y perspectiva'),
-  L('適合房仲刊登、室內設計提案與家具情境圖', 'Useful for real estate listings, design proposals, and furniture scenes', '不動産掲載、インテリア提案、家具シーンに最適', '부동산 등록, 인테리어 제안, 가구 씬에 적합', 'Ideal para anuncios, propuestas de diseño y escenas de mobiliario'),
-  L('可搭配 3D 模型與批次素材製作流程', 'Works with 3D model and batch content workflows', '3Dモデルおよびバッチ素材制作フローに対応', '3D 모델 및 배치 콘텐츠 제작 워크플로우 지원', 'Compatible con flujos de modelo 3D y producción por lotes'),
-])
-
-const roomCreditPackages = computed(() => [
-  { name: L('輕量包', 'Light Pack', 'ライトパック', '라이트 팩', 'Pack ligero'), price: 'NT$299', credits: L('3,000 點', '3,000 credits', '3,000ポイント', '3,000 포인트', '3,000 créditos'), note: L('小量測試', 'Light testing', '少量テスト', '소량 테스트', 'Prueba ligera') },
-  { name: L('標準包', 'Standard Pack', 'スタンダードパック', '스탠다드 팩', 'Pack estándar'), price: 'NT$499', credits: L('5,500 點', '5,500 credits', '5,500ポイント', '5,500 포인트', '5,500 créditos'), note: L('多送 10%', '10% bonus', '10%ボーナス', '10% 보너스', '10% extra') },
-  { name: L('重度包', 'Heavy Pack', 'ヘビーパック', '헤비 팩', 'Pack intensivo'), price: 'NT$999', credits: L('12,000 點', '12,000 credits', '12,000ポイント', '12,000 포인트', '12,000 créditos'), note: L('多送 20%', '20% bonus', '20%ボーナス', '20% 보너스', '20% extra') },
-])
+const mode = ref<Mode>('redesign')
+const spaceKind = ref<SpaceKind>('interior')
 const uploadedImage = ref<string | undefined>(undefined)
-// True when a demo user clicked Generate but the selected tile isn't backed
-// by a real Material DB preset (db_empty fallback or missing preset id).
-// Surfaces a persistent in-block message instead of a silent no-op.
-const demoEmptyState = ref(false)
 const uploadedFile = ref<File | null>(null)
-const resultImage = ref<string | null>(null)
-const resultDescription = ref<string>('')
-// 2026-05-18 — image-understanding fusion fields surfaced by VisionFusionInfo
-const visionSummary = ref<string | null>(null)
-const userPromptUsed = ref<boolean | null>(null)
-const promptGapReason = ref<string | null>(null)
-const isProcessing = ref(false)
 const selectedStyle = ref<string>('')
-const selectedRoomType = ref<string>('living_room')
-const prompt = ref<string>('')
+const customPrompt = ref<string>('')          // magic-mode prompt
+const styleStrength = ref<number>(0.7)
+const lightingTone = ref<'' | 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'>('')
+const materialAccent = ref<'' | 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'>('')
 
-// Conversation for iterative editing
-const conversationId = ref<string | null>(null)
-const editHistory = ref<Array<{ prompt: string; image: string }>>([])
+const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
+const statusText = ref('')
+const resultImage = ref<string | null>(null)
 
-// 3D Model state
-const modelUrl = ref<string | null>(null)
-const is3DProcessing = ref(false)
-const textureSize = ref(1024)
-const meshSimplify = ref(0.95)
-const modelQuality = ref<'v1' | 'v2'>('v2') // v2 = Trellis2 (HD)
-const isFloorPlan = ref(false)               // when true, use Floor Plan -> 3D pipeline
-const floorplanRoomType = ref<string>('living_room')
+// ─── Style catalog (loaded from backend) ─────────────────────────────
+interface StyleCard { id: string; name: string; name_zh: string; preview_url?: string; prompt?: string }
+const styles = ref<Record<SpaceKind, StyleCard[]>>({ interior: [], commercial: [], exterior: [] })
 
-// AI Transform state (merged from ImageEffects)
-const transformPrompt = ref('')
-// Keep `prompt` and `transformPrompt` in sync with the active locale whenever
-// the user picks a new preset OR toggles EN/ZH.
-watch([selectedRoomPromptId, locale], () => {
-  prompt.value = selectedRoomPromptId.value ? roomPromptTextFor(selectedRoomPromptId.value) : ''
+async function loadStyles(kind: SpaceKind) {
+  if (styles.value[kind].length > 0) return
+  try {
+    const resp = await apiClient.get(`/api/v1/tools/templates/interior-styles?space_kind=${kind}`)
+    styles.value[kind] = (resp.data || []) as StyleCard[]
+  } catch (e) {
+    console.warn(`[room-redesign] failed to load ${kind} styles:`, e)
+  }
+}
+
+// Disable Generate when required inputs are missing.
+const disabled = computed(() => {
+  if (!uploadedFile.value) return true
+  if (mode.value === 'magic') return !customPrompt.value.trim()
+  return !selectedStyle.value
 })
-watch([selectedTransformPromptId, locale], () => {
-  transformPrompt.value = selectedTransformPromptId.value ? roomPromptTextFor(selectedTransformPromptId.value) : ''
-})
-const transformStrength = ref(0.75)
+const creditCost = computed(() => 20)
+const isRunning = computed(() => status.value === 'running')
 
-// Style icons mapping
-const styleIcons: Record<string, string> = {
-  modern_minimalist: '🏢',
-  scandinavian: '🌲',
-  japanese: '🎋',
-  industrial: '🏭',
-  bohemian: '🎨',
-  mediterranean: '🌊',
-  art_deco: '✨',
-  mid_century_modern: '🪑',
-  coastal: '🏖️',
-  farmhouse: '🏡'
-}
-
-// Room type icons
-const roomTypeIcons: Record<string, string> = {
-  living_room: '🛋️',
-  bedroom: '🛏️',
-  kitchen: '🍳',
-  bathroom: '🚿',
-  dining_room: '🍽️',
-  home_office: '💻',
-  balcony: '🌿'
-}
-
-// Compact "mockup-style" flow state. The flow is purely an alternative
-// presentation of the same data (uploadedImage, selectedRoomType, etc.),
-// so toggling between the compact and detailed sections never strands
-// user input.
-const compactUploadMode = ref<'single' | 'multiple'>('single')
-const compactStyleMode = ref<'moodboard' | 'preset'>('preset')
-// 'commercial' added 2026-05-18 (ReRoom-inspired). Maps to backend
-// space_kind='commercial' which surfaces the restaurant / retail / hotel /
-// office / café / gym style presets via COMMERCIAL_STYLES.
-const compactSpaceTab = ref<'indoor' | 'outdoor' | 'landscape' | 'commercial'>('indoor')
-
-// ReRoom-inspired modifiers (2026-05-18). All optional — backend defaults
-// preserve original behavior when nothing is picked.
-type LightingTone = 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'
-type MaterialAccent = 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'
-const lightingTone = ref<LightingTone | null>(null)
-const materialAccent = ref<MaterialAccent | null>(null)
-const variationCount = ref<1 | 2 | 3>(1)
-// All result URLs when variation_count > 1 (primary is index 0). Empty
-// during single-result flows so the legacy `resultImage` rendering still
-// works unchanged.
-const variantResults = ref<string[]>([])
-
-interface CompactRoomTile {
-  id: string
-  labelKey: string
-  thumb: string
-}
-
-const COMPACT_PRIMARY_ROOMS: CompactRoomTile[] = [
-  { id: 'living_room', labelKey: 'tools.interiorLayout.roomLivingRoom', thumb: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=400&h=300&fit=crop' },
-  { id: 'kitchen',     labelKey: 'tools.interiorLayout.roomKitchen',    thumb: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=400&h=300&fit=crop' },
-  { id: 'bedroom',     labelKey: 'tools.interiorLayout.roomBedroom',    thumb: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=400&h=300&fit=crop' },
-  { id: 'bathroom',    labelKey: 'tools.interiorLayout.roomBathroom',   thumb: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=400&h=300&fit=crop' },
-  { id: 'mudroom',     labelKey: 'tools.interiorLayout.roomMudroom',    thumb: 'https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?w=400&h=300&fit=crop' },
-  { id: 'dining_room', labelKey: 'tools.interiorLayout.roomDiningRoom', thumb: 'https://images.unsplash.com/photo-1617806118233-18e1de247200?w=400&h=300&fit=crop' },
-]
-
-const COMPACT_SECONDARY_ROOMS: CompactRoomTile[] = [
-  { id: 'home_office',     labelKey: 'tools.interiorLayout.roomStudy',        thumb: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&h=300&fit=crop' },
-  { id: 'home_office_alt', labelKey: 'tools.interiorLayout.roomHomeOffice',   thumb: 'https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?w=400&h=300&fit=crop' },
-  { id: 'walk_in_closet',  labelKey: 'tools.interiorLayout.roomWalkInCloset', thumb: 'https://images.unsplash.com/photo-1558997519-3c3b32afb5f6?w=400&h=300&fit=crop' },
-  { id: 'toilet',          labelKey: 'tools.interiorLayout.roomToilet',       thumb: 'https://images.unsplash.com/photo-1564540583246-934409427776?w=400&h=300&fit=crop' },
-]
-
-// Amenities — secondary spaces commonly found in larger homes. These all
-// map back to `living_room` on the backend until dedicated room types
-// exist; the labels just give designers a sharper starting point.
-const COMPACT_AMENITIES: CompactRoomTile[] = [
-  { id: 'gym',          labelKey: 'tools.interiorLayout.amenityGym',         thumb: 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=400&h=300&fit=crop' },
-  { id: 'pool',         labelKey: 'tools.interiorLayout.amenityPool',        thumb: 'https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?w=400&h=300&fit=crop' },
-  { id: 'wine_cellar',  labelKey: 'tools.interiorLayout.amenityWineCellar',  thumb: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=400&h=300&fit=crop' },
-  { id: 'home_theater', labelKey: 'tools.interiorLayout.amenityHomeTheater', thumb: 'https://images.unsplash.com/photo-1489599162946-648c0d8d59e2?w=400&h=300&fit=crop' },
-]
-
-// Outdoor / exterior catalog — id values match the backend
-// EXTERIOR_STYLES entries so the same selectCompactRoom() callsite can
-// drive interior or exterior generation depending on compactSpaceTab.
-const COMPACT_EXTERIOR_PRIMARY: CompactRoomTile[] = [
-  { id: 'modern_glass_facade',  labelKey: 'tools.interiorLayout.extModernFacade',  thumb: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&h=300&fit=crop' },
-  { id: 'scandi_wood_house',    labelKey: 'tools.interiorLayout.extWoodHouse',     thumb: 'https://images.unsplash.com/photo-1604014237800-1c9102c219da?w=400&h=300&fit=crop' },
-  { id: 'mediterranean_villa',  labelKey: 'tools.interiorLayout.extMedVilla',      thumb: 'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=400&h=300&fit=crop' },
-  { id: 'tropical_resort',      labelKey: 'tools.interiorLayout.extTropicalResort',thumb: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?w=400&h=300&fit=crop' },
-  { id: 'midcentury_ranch',     labelKey: 'tools.interiorLayout.extRanch',         thumb: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=300&fit=crop' },
-  { id: 'urban_townhouse',      labelKey: 'tools.interiorLayout.extTownhouse',     thumb: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&h=300&fit=crop' },
-]
-const COMPACT_EXTERIOR_SECONDARY: CompactRoomTile[] = [
-  { id: 'japanese_zen_courtyard',   labelKey: 'tools.interiorLayout.extZenCourtyard', thumb: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400&h=300&fit=crop' },
-  { id: 'industrial_loft_facade',   labelKey: 'tools.interiorLayout.extIndustrialLoft', thumb: 'https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=400&h=300&fit=crop' },
-  { id: 'rustic_stone_cabin',       labelKey: 'tools.interiorLayout.extStoneCabin',  thumb: 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=400&h=300&fit=crop' },
-  { id: 'garden_studio',            labelKey: 'tools.interiorLayout.extGardenStudio',thumb: 'https://images.unsplash.com/photo-1591389703635-e15a07b842d7?w=400&h=300&fit=crop' },
-]
-const COMPACT_EXTERIOR_AMENITY: CompactRoomTile[] = [
-  { id: 'commercial_storefront',    labelKey: 'tools.interiorLayout.extStorefront', thumb: 'https://images.unsplash.com/photo-1481437156560-3205f6a55735?w=400&h=300&fit=crop' },
-  { id: 'warehouse_loft_exterior',  labelKey: 'tools.interiorLayout.extWarehouse',  thumb: 'https://images.unsplash.com/photo-1542310229-c4ff6f4128a0?w=400&h=300&fit=crop' },
-]
-
-const compactPrimaryRooms = computed(() =>
-  (compactSpaceTab.value === 'outdoor' ? COMPACT_EXTERIOR_PRIMARY : COMPACT_PRIMARY_ROOMS)
-    .map(r => ({ ...r, label: t(r.labelKey) })),
-)
-const compactSecondaryRooms = computed(() =>
-  (compactSpaceTab.value === 'outdoor' ? COMPACT_EXTERIOR_SECONDARY : COMPACT_SECONDARY_ROOMS)
-    .map(r => ({ ...r, label: t(r.labelKey) })),
-)
-const compactAmenities = computed(() =>
-  (compactSpaceTab.value === 'outdoor' ? COMPACT_EXTERIOR_AMENITY : COMPACT_AMENITIES)
-    .map(r => ({ ...r, label: t(r.labelKey) })),
-)
-
-function selectCompactRoom(roomId: string) {
-  // Outdoor mode: tiles drive `selectedStyle` (a row in EXTERIOR_STYLES)
-  // rather than the interior room-type axis. Selection is sent to the
-  // backend with space_kind="exterior" at generate time.
-  if (compactSpaceTab.value === 'outdoor') {
-    selectedStyle.value = roomId
+// ─── Generate (3 paths: redesign | stage | magic) ────────────────────
+async function generate() {
+  if (isDemoUser.value) {
+    uiStore.showInfo(isZh.value ? '請先訂閱再使用此工具' : 'Please subscribe to use this tool.')
     return
   }
-  // Bridge mockup-only ids back to backend-known types so generation still
-  // works after the user clicks a tile from the compact grid.
-  const SUPPORTED = new Set(['living_room', 'bedroom', 'kitchen', 'bathroom', 'dining_room', 'home_office', 'balcony'])
-  selectedRoomType.value = SUPPORTED.has(roomId) ? roomId : 'living_room'
-}
+  if (disabled.value || isRunning.value) return
 
-// Default room images for demo users
-// Rooms and styles are independent - any room can be combined with any style
-interface DemoRoom {
-  id: string
-  type_id: string
-  input: string
-  name: string
-  nameZh: string
-}
-
-// Static fallback room images — the previous kitchen photo
-// (1556909114-f6e7ad7d3136) had people working in the foreground and the
-// AI was echoing them into the redesign output. Swapped to a well-known
-// empty modern kitchen Unsplash photo. Other rooms retained — user only
-// flagged the kitchen and the others have rendered cleanly in past runs.
-const STATIC_ROOM_FALLBACKS: Record<string, string> = {
-  living_room: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800',
-  bedroom: 'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800',
-  kitchen: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=800',
-  bathroom: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800',
-  dining_room: 'https://images.unsplash.com/photo-1617806118233-18e1de247200?w=800',
-  home_office: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800',
-  balcony: 'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=800',
-}
-
-const STATIC_ROOM_DEFS: Array<{ id: string; type_id: string; name: string; nameZh: string }> = [
-  { id: 'room-1', type_id: 'living_room', name: 'Living Room', nameZh: '客廳' },
-  { id: 'room-2', type_id: 'bedroom',     name: 'Bedroom',     nameZh: '臥室' },
-  { id: 'room-3', type_id: 'kitchen',     name: 'Kitchen',     nameZh: '廚房' },
-  { id: 'room-4', type_id: 'bathroom',    name: 'Bathroom',    nameZh: '浴室' },
-  { id: 'room-5', type_id: 'dining_room', name: 'Dining Room', nameZh: '餐廳' },
-  { id: 'room-6', type_id: 'home_office', name: 'Home Office', nameZh: '書房' },
-  { id: 'room-7', type_id: 'balcony',     name: 'Balcony',     nameZh: '陽台' },
-]
-
-// Room picker list — the pregenerated Vertex input library wins when rows
-// exist for the given type_id; otherwise we use the static Unsplash fallback
-// so the view always renders something.
-const defaultRooms = computed<DemoRoom[]>(() => {
-  return STATIC_ROOM_DEFS.map(def => {
-    const libRow = inputLibrary.value.find(
-      (item: any) => item.topic === def.type_id,
-    )
-    return {
-      ...def,
-      input: (libRow?.input_image_url as string) || STATIC_ROOM_FALLBACKS[def.type_id] || '',
-    }
-  })
-})
-
-// Demo design styles - only relevant interior design styles for demo users
-// These are the style IDs that make sense for interior design transformation
-const allowedDemoStyleIds = [
-  'modern_minimalist',
-  'scandinavian',
-  'japanese',
-  'industrial',
-  'mediterranean',
-  'mid_century_modern'
-]
-
-// Filtered styles for display - in demo mode, only show relevant styles
-const displayStyles = computed(() => {
-  if (isDemoUser.value) {
-    return styles.value.filter(s => allowedDemoStyleIds.includes(s.id))
-  }
-  return styles.value
-})
-
-// Track which demo room is selected
-const selectedDemoRoomId = ref<string | null>('room-1')
-
-// Pre-generated preset cache: key = "room-id_roomType_style", value = preset ID
-const preGeneratedTemplateIds = ref<Record<string, string>>({})
-// Get result key for current selection
-const currentResultKey = computed(() => {
-  return `${selectedDemoRoomId.value}_${selectedRoomType.value}_${selectedStyle.value}`
-})
-
-// Get pre-generated preset ID for current combination
-const currentPreGeneratedTemplateId = computed(() => {
-  return preGeneratedTemplateIds.value[currentResultKey.value] || null
-})
-
-// Computed
-const styleName = computed(() => {
-  return (style: DesignStyle) => locale.value === 'zh-TW' ? style.name_zh : style.name
-})
-
-const roomTypeName = computed(() => {
-  return (room: RoomType) => locale.value === 'zh-TW' ? room.name_zh : room.name
-})
-
-const selectedRoomLabel = computed(() => {
-  const room = roomTypes.value.find(r => r.id === selectedRoomType.value)
-  if (room) return roomTypeName.value(room)
-  const fallback = defaultRooms.value.find(r => r.type_id === selectedRoomType.value)
-  return isZh.value
-    ? (fallback?.nameZh || '空間')
-    : L('空間', fallback?.name || 'Space', '空間', '공간', 'Espacio')
-})
-
-const proposalExamples = computed(() => {
-  return allowedDemoStyleIds.map(styleId => {
-    const style = styles.value.find(s => s.id === styleId)
-    const template = demoTemplates.value.find(t => {
-      const params = (t as any).input_params || {}
-      const templateRoomType = params.room_type || t.topic
-      return templateRoomType === selectedRoomType.value && params.style_id === styleId
-    })
-    const fallbackRoom = defaultRooms.value.find(r => r.type_id === selectedRoomType.value)
-    const image = template?.thumbnail_url
-      || template?.result_watermarked_url
-      || template?.result_image_url
-      || fallbackRoom?.input
-      || ''
-
-    return {
-      styleId,
-      templateId: template?.id || null,
-      image,
-      styleName: style ? styleName.value(style) : styleId.replace(/_/g, ' '),
-      ready: Boolean(template?.id),
-    }
-  })
-})
-
-const showCustomPrompt = computed(() => !isDemoUser.value && ['redesign', 'generate', 'styleTransfer'].includes(activeTab.value))
-
-const customPromptLabel = computed(() => {
-  if (activeTab.value === 'generate') return t('interior.prompt')
-  if (activeTab.value === 'styleTransfer') return L('補充描述（可選）', 'Additional Notes (Optional)', '追加メモ（任意）', '추가 메모 (선택)', 'Notas adicionales (opcional)')
-  return L('自訂描述（可選）', 'Custom Prompt (Optional)', 'カスタムプロンプト（任意）', '커스텀 프롬프트 (선택)', 'Prompt personalizado (opcional)')
-})
-
-const pendingTitle = computed(() => isZh.value
-  ? '我正在為您重新設計空間，這可能需要幾分鐘，請稍後再回來查看是否已完成。'
-  : 'Redesigning your space — this may take a minute, please check back shortly.')
-const pendingDetail = computed(() => L('正在生成室內設計圖...', 'Generating interior design...', 'インテリアデザインを生成中...', '인테리어 디자인 생성 중...', 'Generando diseño de interior...'))
-const pendingDuration = computed(() => L('需要 1 至 2 分鐘', 'Usually takes 1 to 2 minutes', '通常1〜2分かかります', '보통 1~2분 소요', 'Suele tardar 1-2 minutos'))
-
-function buildInteriorPrompt(): string {
-  const styleInfo = styles.value.find(s => s.id === selectedStyle.value)
-  const roomInfo = roomTypes.value.find(r => r.id === selectedRoomType.value)
-  const styleLabel = styleInfo?.name || selectedStyle.value.replace(/_/g, ' ') || 'selected'
-  const roomLabel = roomInfo?.name || selectedRoomType.value.replace(/_/g, ' ') || 'room'
-
-  // Common constraints attached to every interior request so the output
-  // always reads as a real-estate / staging photo and not an aspirational
-  // lifestyle scene. Without these the model frequently invented people,
-  // pets, or open floor plans that didn't match the uploaded room — which
-  // is what users were reporting for the kitchen demo.
-  const CONSTRAINTS = (
-    'No people, no humans, no faces, no hands, no pets. '
-    + 'Preserve the original walls, windows, doors, ceiling height, and overall room footprint. '
-    + 'Empty interior staged only with furniture, decor, and lighting. '
-    + 'Photorealistic real-estate interior photography, sharp focus, balanced exposure.'
-  )
-
-  const trimmedPrompt = prompt.value.trim()
-  if (trimmedPrompt) {
-    return `${trimmedPrompt}. ${CONSTRAINTS}`
-  }
-
-  return (
-    `Redesign this ${roomLabel} in ${styleLabel} style while preserving the main room layout. `
-    + CONSTRAINTS
-  )
-}
-
-function clearGeneratedResult() {
+  status.value = 'running'
+  statusText.value = isZh.value ? '生成中… 通常需要 30 秒至 2 分鐘' : 'Generating… typically 30s to 2 minutes'
   resultImage.value = null
-  resultDescription.value = ''
-  conversationId.value = null
-  editHistory.value = []
-  modelUrl.value = null
-  demoEmptyState.value = false
-}
 
-function handleRoomFileSelected(file: File) {
-  // The Generate button's :disabled binding reads `uploadedImage` (the
-  // display-URL ref), so we MUST set it here when a subscriber uploads a
-  // real file. Without this the button stayed disabled after upload and
-  // clicks were silently dropped — which is why the e2e bot logged
-  // "no_api_observed" on Room Redesign cases (see bug.md FT-010).
-  if (uploadedImage.value && uploadedImage.value.startsWith('blob:')) {
-    URL.revokeObjectURL(uploadedImage.value)
+  try {
+    // All three modes route through the subscriber endpoint
+    // /tools/room-redesign so they share the provider_router fallback
+    // chain (PiAPI Kontext primary → Vertex backup) and respect the
+    // full RoomRedesignRequest contract (styleStrength, space_kind,
+    // lighting/material chips, variation_count). Previously redesign +
+    // stage went to /interior/demo/redesign which uses Gemini-only with
+    // no fallback — that path produced inconsistent results (sometimes
+    // unchanged input, sometimes text-only) and silently dropped the
+    // styleStrength slider, the exterior/commercial style catalogs,
+    // and the variation_count knob.
+    const uploaded = await demoApi.uploadImage(uploadedFile.value!)
+    const result = await toolsApi.roomRedesign(
+      uploaded.url,
+      mode.value === 'magic' ? '' : selectedStyle.value,
+      customPrompt.value.trim(),
+      undefined,
+      undefined,
+      {
+        mode: mode.value,
+        spaceKind: spaceKind.value,
+        styleStrength: styleStrength.value,
+        lightingTone: lightingTone.value || undefined,
+        materialAccent: materialAccent.value || undefined,
+      },
+    )
+    if (result.success && (result.image_url || result.result_url)) {
+      const u = result.image_url || result.result_url || ''
+      resultImage.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
+      status.value = 'done'
+      statusText.value = isZh.value ? '完成' : 'Done'
+      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
+      uiStore.showSuccess(t('common.success') || 'Success')
+    } else {
+      status.value = 'error'
+      statusText.value = isZh.value ? '生成失敗' : 'Failed'
+      uiStore.showError((result as any).message || (result as any).error || 'Generation failed.')
+    }
+  } catch (e: any) {
+    status.value = 'error'
+    statusText.value = isZh.value ? '錯誤' : 'Error'
+    uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Generation failed'))
   }
-  uploadedFile.value = file
-  uploadedImage.value = URL.createObjectURL(file)
-  clearGeneratedResult()
 }
 
-// Load styles and room types
+function handleRoomFileSelected(file: File | null) {
+  uploadedFile.value = file
+}
 
+// Pre-fill from query params (Templates Gallery deeplink).
+async function applyDeeplink() {
+  const qStyle = String(route.query.style || '').trim()
+  const qSpaceKind = String(route.query.space_kind || '').trim()
+  if (qSpaceKind === 'exterior' || qSpaceKind === 'commercial') {
+    spaceKind.value = qSpaceKind
+  }
+  await loadStyles(spaceKind.value)
+  if (qStyle) selectedStyle.value = qStyle
+}
+
+// Portfolio grid — flatten the loaded styles into a uniform card list.
+const portfolioGrid = computed<StyleCard[]>(() => {
+  const arr: StyleCard[] = []
+  arr.push(...styles.value.interior)
+  arr.push(...styles.value.commercial)
+  arr.push(...styles.value.exterior)
+  return arr
+})
+
+function pickFromPortfolio(card: StyleCard) {
+  // Find which catalog the card came from
+  for (const k of ['interior', 'commercial', 'exterior'] as const) {
+    if (styles.value[k].some(s => s.id === card.id)) {
+      spaceKind.value = k
+      break
+    }
+  }
+  selectedStyle.value = card.id
+  mode.value = 'redesign'
+  // scroll to upload form
+  window.scrollTo({ top: 600, behavior: 'smooth' })
+}
+
+watch(spaceKind, (k) => {
+  loadStyles(k)
+})
+
+onMounted(async () => {
+  await loadStyles('interior')
+  loadStyles('commercial')
+  loadStyles('exterior')
+  await applyDeeplink()
+})
+
+function gotoPricing() { router.push('/pricing') }
+function gotoTemplates() { router.push('/tools/interior-templates') }
+function scrollToGenerator() {
+  // Plain DOM access — Vue template can't reference `document` directly
+  // under vue-tsc strict mode, so we proxy through a script-side helper.
+  const el = (globalThis as any).document?.querySelector?.('#generator')
+  if (el) el.scrollIntoView({ behavior: 'smooth' })
+}
+
+// Demo before/after sample for the hero. Pulled from /demo/presets so the
+// hero always shows a real, existing example — the previous hard-coded
+// `vidgo-media-vidgo-ai/demo/interior_before.jpg` pair was 403ing (the
+// `demo/` folder was never populated in prod), which collapsed the slider
+// into stacked broken-image icons (audit 2026-05-26).
+const heroBefore = ref<string>('')
+const heroAfter  = ref<string>('')
 
 onMounted(async () => {
   try {
-    if (!subscriptionChecked.value) {
-      await checkSubscription()
+    const { data } = await apiClient.get('/api/v1/demo/presets/room_redesign', { params: { limit: 1 } })
+    const first = (data?.presets || [])[0]
+    if (first) {
+      heroBefore.value = first.input_image_url || ''
+      heroAfter.value  = first.result_watermarked_url || first.result_image_url || ''
     }
-
-    const [stylesData, roomTypesData] = await Promise.all([
-      interiorApi.getStyles(),
-      interiorApi.getRoomTypes()
-    ])
-    styles.value = stylesData
-    roomTypes.value = roomTypesData
-
-    // Load demo templates for demo users plus the Vertex-pregenerated room
-    // input library. Demo clicks resolve real Material presets only.
-    await Promise.all([
-      loadDemoTemplates('room_redesign'),
-      loadInputLibrary('room_redesign'),
-    ])
-
-    // For demo users, auto-select first default room
-    if (isDemoUser.value && defaultRooms.value.length > 0) {
-      const firstRoom = defaultRooms.value[0]
-      selectedRoomType.value = firstRoom.type_id
-      selectedDemoRoomId.value = firstRoom.id
-      uploadedImage.value = firstRoom.input
-      selectedStyle.value = 'modern_minimalist'  // Default style
-
-      // Load all pre-generated results for room×roomType×style combinations
-      loadAllPreGeneratedResults()
-    } else if (stylesData.length > 0) {
-      selectedStyle.value = stylesData[0].id
-    }
-  } catch (error) {
-    console.error('Failed to load interior design data:', error)
+  } catch {
+    // Leave slider hidden if the lookup fails — better than broken images.
   }
 })
-
-// Load pre-generated preset IDs for ALL room×roomType×style combinations from database
-function loadAllPreGeneratedResults() {
-  preGeneratedTemplateIds.value = {}
-
-  // For demo, we'll check templates that match room input + room type + style
-  for (const room of defaultRooms.value) {
-    for (const roomType of roomTypes.value) {
-      for (const style of displayStyles.value) {
-        const resultKey = `${room.id}_${roomType.id}_${style.id}`
-
-        // Find matching preset in database
-        const template = demoTemplates.value.find(t =>
-          ((t as any).input_params?.room_id === room.id ||
-           (t as any).input_params?.input_url === room.input ||
-           t.input_image_url === room.input) &&
-          ((t as any).input_params?.room_type === roomType.id ||
-           t.topic === roomType.id) &&
-          (t as any).input_params?.style_id === style.id
-        )
-
-        if (template?.id) {
-          preGeneratedTemplateIds.value[resultKey] = template.id
-        }
-      }
-    }
-  }
-}
-
-// Handlers
-async function handleRedesign() {
-  // Reset multi-variant grid on every single-shot call so the result
-  // panel doesn't leak the previous run's variants.
-  variantResults.value = []
-  // For demo users, resolve the exact room×roomType×style preset through backend lookup
-  if (isDemoUser.value) {
-    isProcessing.value = true
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
-
-      const preGeneratedTemplateId = currentPreGeneratedTemplateId.value
-      if (preGeneratedTemplateId) {
-        const demoResultUrl = await resolveDemoTemplateResultUrl(preGeneratedTemplateId)
-        if (demoResultUrl) {
-          resultImage.value = demoResultUrl
-          resultDescription.value = ''
-          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
-          return
-        }
-      }
-
-      const selectedRoom = defaultRooms.value.find(r => r.id === selectedDemoRoomId.value)
-      const template = demoTemplates.value.find(t => {
-        const params = (t as any).input_params || {}
-        const matchesRoom = params.room_id === selectedDemoRoomId.value ||
-                            params.input_url === selectedRoom?.input ||
-                            t.input_image_url === selectedRoom?.input
-        const matchesRoomType = params.room_type === selectedRoomType.value || t.topic === selectedRoomType.value
-        const matchesStyle = params.style_id === selectedStyle.value
-        return matchesRoom && matchesRoomType && matchesStyle
-      })
-
-      if (template?.id) {
-        const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
-        if (demoResultUrl) {
-          resultImage.value = demoResultUrl
-          resultDescription.value = (template as any).result_description || ''
-          preGeneratedTemplateIds.value[currentResultKey.value] = template.id
-          uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
-          return
-        }
-      }
-
-      demoEmptyState.value = true
-      uiStore.showError(L('此組合尚未預生成，請先選擇有範例的空間與風格。', 'This combination is not pre-generated yet. Please pick an available room and style example.', 'この組み合わせはまだ事前生成されていません。利用可能な部屋とスタイルの例を選んでください。', '이 조합은 아직 사전 생성되지 않았습니다. 사용 가능한 공간과 스타일 예시를 선택해 주세요.', 'Esta combinación aún no está pregenerada. Elige un ejemplo de habitación y estilo disponible.'))
-    } finally {
-      isProcessing.value = false
-    }
-    return
-  }
-
-  if (!uploadedFile.value) {
-    uiStore.showError(t('interior.errors.imageRequired'))
-    return
-  }
-
-  isProcessing.value = true
-  try {
-    const effectivePrompt = buildInteriorPrompt()
-    const result = await interiorApi.demoRedesign(
-      uploadedFile.value,
-      effectivePrompt,
-      selectedStyle.value,
-      selectedRoomType.value,
-      {
-        spaceKind: compactSpaceTab.value === 'outdoor' ? 'exterior'
-                 : compactSpaceTab.value === 'commercial' ? 'commercial'
-                 : 'interior',
-        // ReRoom-inspired knobs. Stage mode only kicks in on the Stage tab.
-        mode: activeTab.value === 'stage' ? 'stage' : 'redesign',
-        lightingTone: lightingTone.value || undefined,
-        materialAccent: materialAccent.value || undefined,
-      },
-    )
-
-    if (result.success && result.image_url) {
-      resultImage.value = result.image_url.startsWith('http')
-        ? result.image_url
-        : `${window.location.origin}${result.image_url}`
-      resultDescription.value = result.description || ''
-      conversationId.value = result.conversation_id || null
-      visionSummary.value = result.vision_summary ?? null
-      userPromptUsed.value = result.user_prompt_used ?? null
-      promptGapReason.value = result.prompt_gap_reason ?? null
-
-      // Add to history
-      editHistory.value.push({
-        prompt: effectivePrompt,
-        image: resultImage.value
-      })
-
-      uiStore.showSuccess(t('interior.success.redesigned'))
-    } else {
-      uiStore.showError(result.error || t('interior.errors.failed'))
-    }
-  } catch (error: any) {
-    console.error('Redesign failed:', error)
-    uiStore.showError(explainBackendError(error, t('interior.errors.failed')))
-  } finally {
-    isProcessing.value = false
-  }
-}
-
-async function handleGenerate() {
-  // Demo users cannot use Generate tab
-  if (isDemoUser.value) {
-    uiStore.showError(L('請訂閱以使用文字生成功能', 'Please subscribe to use text generation', 'テキスト生成機能を使うにはサブスク登録してください', '텍스트 생성 기능을 사용하려면 구독해 주세요', 'Suscríbete para usar la generación de texto'))
-    return
-  }
-
-  if (!prompt.value.trim()) {
-    uiStore.showError(t('interior.errors.promptRequired'))
-    return
-  }
-
-  isProcessing.value = true
-  try {
-    const result = await interiorApi.demoGenerate({
-      prompt: prompt.value,
-      style_id: selectedStyle.value,
-      room_type: selectedRoomType.value
-    })
-
-    if (result.success && result.image_url) {
-      resultImage.value = result.image_url.startsWith('http')
-        ? result.image_url
-        : `${window.location.origin}${result.image_url}`
-      resultDescription.value = result.description || ''
-      uiStore.showSuccess(t('interior.success.generated'))
-    } else {
-      uiStore.showError(result.error || t('interior.errors.failed'))
-    }
-  } catch (error: any) {
-    console.error('Generate failed:', error)
-    uiStore.showError(explainBackendError(error, t('interior.errors.failed')))
-  } finally {
-    isProcessing.value = false
-  }
-}
-
-async function handleStyleTransfer() {
-  // For demo users, resolve the exact room×roomType×style preset through backend lookup
-  if (isDemoUser.value) {
-    isProcessing.value = true
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
-
-      const preGeneratedTemplateId = currentPreGeneratedTemplateId.value
-      if (preGeneratedTemplateId) {
-        const demoResultUrl = await resolveDemoTemplateResultUrl(preGeneratedTemplateId)
-        if (demoResultUrl) {
-          resultImage.value = demoResultUrl
-          resultDescription.value = ''
-          uiStore.showSuccess(L('風格轉換成功（示範）', 'Style applied successfully (Demo)', 'スタイル適用に成功（デモ）', '스타일 적용 성공 (데모)', 'Estilo aplicado correctamente (demo)'))
-          return
-        }
-      }
-
-      const selectedRoom = defaultRooms.value.find(r => r.id === selectedDemoRoomId.value)
-      const template = demoTemplates.value.find(t => {
-        const params = (t as any).input_params || {}
-        const matchesRoom = params.room_id === selectedDemoRoomId.value ||
-                            params.input_url === selectedRoom?.input ||
-                            t.input_image_url === selectedRoom?.input
-        const matchesStyle = params.style_id === selectedStyle.value
-        return matchesRoom && matchesStyle
-      })
-
-      if (template?.id) {
-        const demoResultUrl = await resolveDemoTemplateResultUrl(template.id)
-        if (demoResultUrl) {
-          resultImage.value = demoResultUrl
-          resultDescription.value = (template as any).result_description || ''
-          preGeneratedTemplateIds.value[currentResultKey.value] = template.id
-          uiStore.showSuccess(L('風格轉換成功（示範）', 'Style applied successfully (Demo)', 'スタイル適用に成功（デモ）', '스타일 적용 성공 (데모)', 'Estilo aplicado correctamente (demo)'))
-          return
-        }
-      }
-
-      demoEmptyState.value = true
-      uiStore.showError(L('此組合尚未預生成，請先選擇有範例的空間與風格。', 'This combination is not pre-generated yet. Please pick an available room and style example.', 'この組み合わせはまだ事前生成されていません。利用可能な部屋とスタイルの例を選んでください。', '이 조합은 아직 사전 생성되지 않았습니다. 사용 가능한 공간과 스타일 예시를 선택해 주세요.', 'Esta combinación aún no está pregenerada. Elige un ejemplo de habitación y estilo disponible.'))
-    } finally {
-      isProcessing.value = false
-    }
-    return
-  }
-
-  if (!uploadedFile.value) {
-    uiStore.showError(t('interior.errors.imageRequired'))
-    return
-  }
-
-  if (!selectedStyle.value) {
-    uiStore.showError(t('interior.errors.styleRequired'))
-    return
-  }
-
-  isProcessing.value = true
-  try {
-    // For style transfer, use the redesign endpoint with style-focused prompt
-    const styleInfo = styles.value.find(s => s.id === selectedStyle.value)
-    const extraPrompt = prompt.value.trim()
-    const stylePrompt = `Apply ${styleInfo?.name || selectedStyle.value} style to this room. ${styleInfo?.description || ''}${extraPrompt ? ` ${extraPrompt}` : ''}`
-
-    const result = await interiorApi.demoRedesign(
-      uploadedFile.value,
-      stylePrompt,
-      selectedStyle.value,
-      selectedRoomType.value,
-      {
-        spaceKind: compactSpaceTab.value === 'outdoor' ? 'exterior'
-                 : compactSpaceTab.value === 'commercial' ? 'commercial'
-                 : 'interior',
-        // ReRoom-inspired knobs. Stage mode only kicks in on the Stage tab.
-        mode: activeTab.value === 'stage' ? 'stage' : 'redesign',
-        lightingTone: lightingTone.value || undefined,
-        materialAccent: materialAccent.value || undefined,
-      },
-    )
-
-    if (result.success && result.image_url) {
-      resultImage.value = result.image_url.startsWith('http')
-        ? result.image_url
-        : `${window.location.origin}${result.image_url}`
-      resultDescription.value = result.description || ''
-      uiStore.showSuccess(t('interior.success.styleApplied'))
-    } else {
-      uiStore.showError(result.error || t('interior.errors.failed'))
-    }
-  } catch (error: any) {
-    console.error('Style transfer failed:', error)
-    uiStore.showError(explainBackendError(error, t('interior.errors.failed')))
-  } finally {
-    isProcessing.value = false
-  }
-}
-
-async function handle3DGenerate() {
-  if (isDemoUser.value) {
-    uiStore.showInfo(L('請訂閱以使用 3D 模型生成', 'Subscribe to use 3D model generation', '3Dモデル生成を使うにはサブスク登録してください', '3D 모델 생성을 사용하려면 구독해 주세요', 'Suscríbete para usar la generación de modelos 3D'))
-    return
-  }
-
-  // Use the generated 2D result or the uploaded image as source
-  let sourceUrl = resultImage.value || uploadedImage.value
-  if (!sourceUrl) {
-    uiStore.showError(L('請先上傳房間圖片或生成 2D 設計', 'Please upload a room image or generate a 2D design first', '先に部屋の画像をアップロードするか、2Dデザインを生成してください', '먼저 방 이미지를 업로드하거나 2D 디자인을 생성해 주세요', 'Sube primero una imagen de la habitación o genera un diseño 2D'))
-    return
-  }
-
-  is3DProcessing.value = true
-  isProcessing.value = true
-  try {
-    if (sourceUrl.startsWith('data:')) {
-      const blob = await fetch(sourceUrl).then(response => response.blob())
-      const uploadFile = new File([blob], 'vidgo-3d-source.png', { type: blob.type || 'image/png' })
-      const uploaded = await demoApi.uploadImage(uploadFile)
-      sourceUrl = uploaded.url
-    }
-
-    const result = isFloorPlan.value
-      ? await interiorApi.generate3DFromFloorplan({
-          image_url: sourceUrl,
-          style_id: selectedStyle.value || undefined,
-          room_type: floorplanRoomType.value,
-          prompt: prompt.value || undefined,
-          model_version: modelQuality.value
-        })
-      : await interiorApi.generate3DModel({
-          image_url: sourceUrl,
-          texture_size: textureSize.value,
-          mesh_simplify: meshSimplify.value,
-          model_version: modelQuality.value
-        })
-
-    if (result.success && result.model_url) {
-      modelUrl.value = result.model_url
-      if (isFloorPlan.value && result.preview_image_url) {
-        resultImage.value = result.preview_image_url
-      }
-      uiStore.showSuccess(L('3D 模型生成成功', '3D model generated successfully', '3Dモデル生成に成功', '3D 모델 생성 성공', 'Modelo 3D generado correctamente'))
-    } else {
-      uiStore.showError(result.error || L('3D 模型生成失敗', '3D model generation failed', '3Dモデル生成に失敗', '3D 모델 생성 실패', 'Falló la generación del modelo 3D'))
-    }
-  } catch (error: any) {
-    console.error('3D generation failed:', error)
-    const detail = error.response?.data?.detail
-    if (typeof detail === 'object' && detail?.error === 'insufficient_credits') {
-      uiStore.showError(L('點數不足，請儲值', 'Insufficient credits', 'ポイント不足です。チャージしてください', '포인트가 부족합니다. 충전해 주세요', 'Créditos insuficientes. Recarga'))
-    } else {
-      uiStore.showError(typeof detail === 'string' ? detail : L('生成過程中發生錯誤', 'An error occurred', '生成中にエラーが発生しました', '생성 중 오류가 발생했습니다', 'Ocurrió un error durante la generación'))
-    }
-  } finally {
-    is3DProcessing.value = false
-    isProcessing.value = false
-  }
-}
-
-async function handleTransform() {
-  if (isDemoUser.value) {
-    uiStore.showError(L('請訂閱以使用 AI 自由變換', 'Please subscribe to use AI Transform', 'AI自由変換を使うにはサブスク登録してください', 'AI 자유 변환을 사용하려면 구독해 주세요', 'Suscríbete para usar AI Transformación'))
-    return
-  }
-  if (!uploadedImage.value) {
-    uiStore.showError(L('請先上傳圖片', 'Please upload an image first', '先に画像をアップロードしてください', '먼저 이미지를 업로드해 주세요', 'Sube primero una imagen'))
-    return
-  }
-  if (!transformPrompt.value.trim()) {
-    uiStore.showError(L('請輸入變換描述', 'Please enter a transform description', '変換の説明を入力してください', '변환 설명을 입력해 주세요', 'Introduce una descripción de transformación'))
-    return
-  }
-
-  isProcessing.value = true
-  try {
-    let transformUrl = uploadedImage.value
-    if (uploadedImage.value.startsWith('data:')) {
-      const blob = await fetch(uploadedImage.value).then(r => r.blob())
-      const uploaded = await demoApi.uploadImage(blob as File)
-      transformUrl = uploaded.url
-    }
-
-    const response = await effectsApi.imageTransform({
-      image_url: transformUrl,
-      prompt: transformPrompt.value,
-      strength: transformStrength.value
-    })
-
-    if (response.success && response.result_url) {
-      resultImage.value = response.result_url
-      uiStore.showSuccess(L('變換成功', 'Transform applied successfully', '変換に成功', '변환 성공', 'Transformación aplicada correctamente'))
-    } else {
-      uiStore.showError(L('變換失敗', 'Transform failed', '変換に失敗', '변환 실패', 'Falló la transformación'))
-    }
-  } catch (error: any) {
-    console.error('Image transform failed:', error)
-    const detail = error.response?.data?.detail
-    if (typeof detail === 'object' && detail?.error === 'insufficient_credits') {
-      uiStore.showError(L('點數不足，請儲值', 'Insufficient credits', 'ポイント不足です。チャージしてください', '포인트가 부족합니다. 충전해 주세요', 'Créditos insuficientes. Recarga'))
-    } else {
-      uiStore.showError(L('處理過程中發生錯誤', 'An error occurred while processing', '処理中にエラーが発生しました', '처리 중 오류가 발생했습니다', 'Ocurrió un error durante el procesamiento'))
-    }
-  } finally {
-    isProcessing.value = false
-  }
-}
-
-function handleSubmit() {
-  // variation_count > 1 fires N parallel handleRedesign() calls so the
-  // user gets a 3-up grid of distinct renders in one click. Same backend
-  // endpoint, no server change needed. Only enabled on the redesign /
-  // stage tabs because the other tabs have their own flows.
-  if (variationCount.value > 1 && (activeTab.value === 'redesign' || activeTab.value === 'stage')) {
-    return handleRedesignVariants(variationCount.value)
-  }
-  switch (activeTab.value) {
-    case 'redesign':
-    case 'stage':
-      handleRedesign()
-      break
-    case 'generate':
-      handleGenerate()
-      break
-    case 'styleTransfer':
-      handleStyleTransfer()
-      break
-    case 'transform':
-      handleTransform()
-      break
-    case '3dModel':
-      handle3DGenerate()
-      break
-  }
-}
-
-// Fire N parallel demoRedesign calls; accumulate the URLs into variantResults
-// so the result panel renders them as a grid. Reuses the same prompt
-// pipeline; each call gets a small diversifier so the outputs differ.
-async function handleRedesignVariants(n: number) {
-  if (!uploadedFile.value) {
-    uiStore.showError(t('interior.errors.imageRequired'))
-    return
-  }
-  isProcessing.value = true
-  variantResults.value = []
-  try {
-    const basePrompt = buildInteriorPrompt()
-    const diversifiers = [
-      '',
-      ' Choose an alternate camera composition and lens choice (wider angle, slight reframing); keep room geometry unchanged.',
-      ' Choose a different time of day and lighting mood and slightly different decor accents; keep room geometry unchanged.',
-    ]
-    const spaceKind = compactSpaceTab.value === 'outdoor' ? 'exterior'
-                    : compactSpaceTab.value === 'commercial' ? 'commercial'
-                    : 'interior'
-    const calls = Array.from({ length: Math.min(n, 3) }, (_, i) =>
-      interiorApi.demoRedesign(
-        uploadedFile.value!,
-        basePrompt + diversifiers[i],
-        selectedStyle.value,
-        selectedRoomType.value,
-        {
-          spaceKind,
-          mode: activeTab.value === 'stage' ? 'stage' : 'redesign',
-          lightingTone: lightingTone.value || undefined,
-          materialAccent: materialAccent.value || undefined,
-        },
-      ).then(r => r.success ? r.image_url : null).catch(() => null)
-    )
-    const settled = await Promise.all(calls)
-    const urls = settled.filter((u): u is string => !!u)
-    if (urls.length === 0) {
-      uiStore.showError(L('全部變體都生成失敗', 'All variants failed to generate', 'すべてのバリアント生成に失敗', '모든 변형 생성 실패', 'Todas las variantes fallaron'))
-      return
-    }
-    variantResults.value = urls.map(u => u.startsWith('http') ? u : `${window.location.origin}${u}`)
-    resultImage.value = variantResults.value[0]
-    uiStore.showSuccess(L(`生成 ${urls.length} 個變體成功`, `Generated ${urls.length} variants`, `${urls.length}個のバリアントを生成`, `${urls.length}개 변형 생성 성공`, `${urls.length} variantes generadas`))
-  } finally {
-    isProcessing.value = false
-  }
-}
-
-// Bulk download for the multi-variant grid. Two reasons this exists:
-//   1) Without it the user had to click each card's Download button
-//      individually, and Chrome/Safari throttle multiple programmatic
-//      downloads fired from the same gesture, silently dropping all but
-//      the first file. Sequential `await` + a 600ms stagger sidesteps that
-//      throttling — same trick BackgroundRemoval's downloadAllBatchResults
-//      uses for its batch grid.
-//   2) GCS-hosted result URLs are cross-origin, so the same downloadAsset
-//      helper that the single-variant button uses (fetch → blob → <a>
-//      click) is reused here so users always get a real download even
-//      when the `download` attribute would otherwise be ignored.
-const isDownloadingAllVariants = ref(false)
-async function downloadAllVariants() {
-  if (isDownloadingAllVariants.value || variantResults.value.length === 0) return
-  isDownloadingAllVariants.value = true
-  try {
-    for (let i = 0; i < variantResults.value.length; i++) {
-      await downloadAsset(variantResults.value[i], `vidgo_room_design_v${i + 1}.png`)
-      // Stagger the next download so the browser doesn't suppress it as
-      // a duplicate of the previous one.
-      if (i < variantResults.value.length - 1) {
-        await new Promise(r => setTimeout(r, 600))
-      }
-    }
-  } finally {
-    isDownloadingAllVariants.value = false
-  }
-}
-
-async function selectProposalExample(example: { styleId: string; templateId: string | null }) {
-  selectedStyle.value = example.styleId
-  clearGeneratedResult()
-
-  if (!example.templateId) return
-
-  isProcessing.value = true
-  try {
-    const presetResult = await useDemoTemplate(example.templateId)
-    const demoResultUrl = getDemoResultUrl(presetResult)
-    if (demoResultUrl) {
-      // Also set uploadedImage from the preset's input so the
-      // BeforeAfterSlider (which requires both before+after) renders for
-      // admins/subscribers who haven't uploaded their own room photo yet.
-      // Without this, clicking a proposal example silently set resultImage
-      // but the result panel kept showing the placeholder because its
-      // v-if is `resultImage && uploadedImage && activeTab !== 'generate'`.
-      const presetInputUrl = (presetResult as any)?.input_image_url
-      if (presetInputUrl && !uploadedImage.value) {
-        uploadedImage.value = presetInputUrl
-      }
-      resultImage.value = demoResultUrl
-      uiStore.showSuccess(L('已套用示範範例', 'Example applied', 'デモ例を適用しました', '데모 예시 적용됨', 'Ejemplo aplicado'))
-    }
-  } finally {
-    isProcessing.value = false
-  }
-}
-
-function reset() {
-  uploadedImage.value = undefined
-  uploadedFile.value = null
-  resultImage.value = null
-  resultDescription.value = ''
-  prompt.value = ''
-  conversationId.value = null
-  editHistory.value = []
-  modelUrl.value = null
-
-  // For demo users, re-select first default room
-  if (isDemoUser.value && defaultRooms.value.length > 0) {
-    const firstRoom = defaultRooms.value[0]
-    selectedDemoRoomId.value = firstRoom.id
-    uploadedImage.value = firstRoom.input
-    selectedRoomType.value = 'living_room'  // Reset to default
-    selectedStyle.value = 'modern_minimalist'  // Reset to default
-  }
-}
-
-
-
-// Update demo room pattern when room type changes
-watch(selectedRoomType, (newType) => {
-  if (isDemoUser.value) {
-    const matchingRoom = defaultRooms.value.find(r => r.type_id === newType)
-    if (matchingRoom) {
-      selectedDemoRoomId.value = matchingRoom.id
-      uploadedImage.value = matchingRoom.input
-    } else {
-      selectedDemoRoomId.value = null
-      uploadedImage.value = undefined
-    }
-    resultImage.value = null
-    resultDescription.value = ''
-    demoEmptyState.value = false
-  }
-})
-
-// Demo-user tab guarding is now handled by `visibleTabs` above — locked
-// tabs are hidden entirely, so there's no need for a watch + error toast.
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
-    <LoadingOverlay
-      :show="isProcessing"
-      icon="🏠"
-      :title="pendingTitle"
-      :detail="pendingDetail"
-      :duration="pendingDuration"
-    />
+  <div class="min-h-screen" style="background: #0a0a0f;">
+    <!-- Unified full-screen loading overlay (same as every other tool). -->
+    <LoadingOverlay :show="isRunning" :eta-seconds="60" :title="statusText || undefined" />
+    <!-- ═══ HERO with before/after slider ═══════════════════════════════ -->
+    <!-- pt-24 clears the 64px fixed AppHeader (was pt-12 → title clipped). -->
+    <section class="px-4 sm:px-6 lg:px-8 pt-24 pb-10 max-w-7xl mx-auto">
+      <div class="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-8 items-center">
+        <div>
+          <p class="text-xs font-mono tracking-[0.3em] uppercase mb-3" style="color: #a78bfa;">
+            {{ L('AI 室內渲染', 'AI INTERIOR RENDERING', 'AIインテリアレンダリング', 'AI 인테리어 렌더링', 'RENDERIZADO IA') }}
+          </p>
+          <h1 class="text-4xl sm:text-5xl font-bold leading-tight mb-4" style="color: #f5f5fa;">
+            {{ L('室內渲染，你所想像的任何風格', 'Interior rendering, in any style you imagine', 'インテリアレンダリング、思い描くどんなスタイルでも', '인테리어 렌더링, 상상하는 모든 스타일', 'Renderizado interior, en cualquier estilo que imagines') }}
+          </h1>
+          <p class="text-base mb-6" style="color: #94949f;">
+            {{ L('以驚豔的建築與室內渲染打動客戶。將靈感化為作品，讓每個概念發光。', 'Impress clients with stunning architectural renders. Transform inspiration into work — make every concept shine.', '驚きの建築インテリアレンダリングで顧客を魅了。インスピレーションを作品に。', '놀라운 건축 인테리어 렌더링으로 고객을 사로잡으세요. 영감을 작품으로.', 'Impresiona a tus clientes con renderizados impactantes.') }}
+          </p>
+          <div class="flex flex-wrap gap-3">
+            <button
+              @click="scrollToGenerator"
+              class="px-6 py-3 rounded-xl font-semibold text-sm"
+              style="background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff;"
+            >
+              {{ L('免費試用', 'Try for free', '無料で試す', '무료 체험', 'Prueba gratis') }}
+            </button>
+            <button
+              @click="gotoTemplates"
+              class="px-6 py-3 rounded-xl font-semibold text-sm"
+              style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
+            >
+              {{ L('瀏覽範本', 'Browse Templates', 'テンプレートを見る', '템플릿 보기', 'Ver plantillas') }}
+            </button>
+            <button
+              @click="gotoPricing"
+              class="px-6 py-3 rounded-xl font-semibold text-sm"
+              style="background: transparent; color: #94949f; border: 1px solid rgba(255,255,255,0.08);"
+            >
+              {{ L('查看方案', 'View Plans', 'プランを見る', '플랜 보기', 'Ver planes') }}
+            </button>
+          </div>
+        </div>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <!-- Back Button -->
-      <button
-        @click="router.back()"
-        class="mb-6 flex items-center gap-2 text-dark-300 hover:text-dark-50 transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
-        {{ t('common.back') }}
-      </button>
-
-      <!-- Pro hero (ReRoom-inspired) — outcome headline + KPI strip
-           tuned to interior designers / real estate / furniture brands.
-           Keeps existing dark theme + amber accent. -->
-      <ProToolHero
-        :badge="L('AI 室內設計渲染', 'AI Interior Rendering', 'AI インテリアレンダリング', 'AI 인테리어 렌더링', 'Renderizado interior AI')"
-        :title="L('一張房間照片，秒變寫實設計提案圖', 'From one room photo to proposal-ready photoreal renders', '部屋写真1枚から、写実的な提案ビジュアルへ', '한 장의 사진을 사실적인 제안 렌더링으로', 'De una foto a renders fotorrealistas listos')"
-        :subtitle="L('把照片、空屋、草圖或平面圖轉成可交付的寫實視覺。適用於室內設計提案、房仲刊登、家具品牌情境與 3D 展示。', 'Turn photos, empty rooms, sketches, or floor plans into deliverable photoreal visuals — perfect for design proposals, real-estate listings, furniture brands, and 3D presentation assets.', '写真、空室、スケッチ、平面図を、提案・不動産掲載・家具・3D展示に使える写実ビジュアルへ。', '사진·빈 방·스케치·평면도를 제안·부동산 등록·가구·3D 시연용 사실적인 비주얼로.', 'Fotos, salas vacías, bocetos o planos a visuales fotorrealistas para propuestas, anuncios y 3D.')"
-        :rating="{ score: '4.9', label: L('受設計事務所與品牌信賴', 'Trusted by studios and brands', 'デザイン事務所・ブランドに信頼', '디자인 스튜디오·브랜드 신뢰', 'Avalado por estudios y marcas') }"
-        :trust-line="L('支援室內 / 室外 / 景觀 / 平面圖到 3D 模型輸出', 'Indoor / outdoor / landscape / floor-plan → 3D model export', '屋内 / 屋外 / ランドスケープ / 平面図 → 3Dモデル出力', '실내·실외·조경·평면도 → 3D 모델 출력', 'Interior / exterior / paisaje / planos → modelo 3D')"
-        :stats="[
-          { value: '24', label: L('種預設室內風格', 'Preset interior styles', '室内スタイルプリセット', '인테리어 스타일 프리셋', 'Estilos interiores') },
-          { value: '~30s', label: L('每張渲染交付', 'Per render delivery', '1枚あたり納品速度', '렌더링당 납품 속도', 'Por render') },
-          { value: '3D', label: L('GLB 模型可選輸出', 'GLB 3D model export', 'GLB 3Dモデル書き出し', 'GLB 3D 모델 출력', 'Exporta modelo GLB 3D') },
-        ]"
-        :steps="[
-          { icon: '📷', title: L('上傳空間素材', 'Upload your space', '空間素材をアップロード', '공간 자료 업로드', 'Sube el espacio'), body: L('現況照、空屋、草圖、平面圖都接受', 'Room photos, empty rooms, sketches, floor plans all welcome', '現況写真・空室・スケッチ・平面図に対応', '실내 사진·빈 방·스케치·평면도 모두 가능', 'Fotos, salas vacías, bocetos o planos') },
-          { icon: '🎨', title: L('選擇空間類型與風格', 'Pick room type and style', '部屋タイプとスタイルを選択', '공간 유형과 스타일 선택', 'Elige tipo y estilo'), body: L('客廳 / 廚房 / 臥室 + 24 種風格 + 自訂', 'Living / kitchen / bedroom + 24 styles + custom', 'リビング / キッチン / ベッドルーム + 24スタイル + カスタム', '거실·주방·침실 + 24 스타일 + 자유 설정', 'Salón / cocina / dormitorio + 24 estilos') },
-          { icon: '🏠', title: L('交付提案級成品', 'Deliver proposal-grade renders', '提案グレードのレンダーを納品', '제안 수준의 렌더 납품', 'Entrega un render apto') },
-        ]"
-      />
-
-      <!-- Subscribe Notice for Demo Users -->
-      <div v-if="isDemoUser" class="text-center mb-8">
-        <RouterLink to="/pricing" class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm hover:underline">
-          {{ L('訂閱以解鎖完整功能', 'Subscribe to unlock full features', 'サブスク登録で全機能を解禁', '구독으로 전체 기능 해제', 'Suscríbete para desbloquear todo') }}
-        </RouterLink>
+        <!-- Before/After slider (proof of quality). Only render once we've
+             fetched a real preset — empty URLs render two broken-image icons
+             stacked on top of each other (audit 2026-05-26). -->
+        <div
+          v-if="heroBefore && heroAfter"
+          class="rounded-2xl overflow-hidden"
+          style="background: #141420; border: 1px solid rgba(255,255,255,0.06);"
+        >
+          <BeforeAfterSlider
+            :before-image="heroBefore"
+            :after-image="heroAfter"
+            :before-label="L('原始', 'Before', 'オリジナル', '원본', 'Antes')"
+            :after-label="L('AI 渲染', 'After AI', 'AI後', 'AI 후', 'Después')"
+          />
+        </div>
+        <div
+          v-else
+          class="rounded-2xl flex items-center justify-center text-xs"
+          style="background: #141420; border: 1px solid rgba(255,255,255,0.06); min-height: 280px; color: #94949f;"
+        >
+          {{ L('載入範例中…', 'Loading example…', 'サンプルを読み込み中…', '예시 로딩 중…', 'Cargando ejemplo…') }}
+        </div>
       </div>
+    </section>
 
-      <!-- Compact mockup flow (Step 1 upload + Step 2 type & style + amenities).
-           Sits at the top of the page so users can start working immediately;
-           shares state with the detailed flow below, so a selection in
-           either area is reflected everywhere. -->
-      <section class="space-y-6 mb-10">
-        <!-- Step 1: Upload -->
-        <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <h3 class="text-lg font-semibold text-dark-50">
-              {{ t('tools.interiorLayout.uploadStep') }}
-            </h3>
-            <div class="inline-flex rounded-full p-1 text-xs" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
+    <!-- ═══ GENERATOR (single clean form) ═══════════════════════════════ -->
+    <section id="generator" class="px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl mx-auto">
+      <div class="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
+        <!-- Left: Inputs -->
+        <aside class="rounded-2xl p-5 space-y-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+          <!-- Space kind tabs -->
+          <div>
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('空間類型', 'Space Type', '空間タイプ', '공간 유형', 'Tipo de espacio') }}
+            </p>
+            <div class="grid grid-cols-3 gap-1.5">
               <button
-                @click="compactUploadMode = 'single'"
-                class="px-3 py-1.5 rounded-full transition-all"
-                :class="compactUploadMode === 'single' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
-              >📷 {{ t('tools.interiorLayout.uploadSingle') }}</button>
-              <button
-                @click="compactUploadMode = 'multiple'"
-                class="px-3 py-1.5 rounded-full transition-all"
-                :class="compactUploadMode === 'multiple' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
-              >🖼️ {{ t('tools.interiorLayout.uploadMultiple') }}</button>
+                v-for="opt in [
+                  { id: 'interior' as const,   icon: '🛋️', label: L('室內', 'Interior', '室内', '실내', 'Interior') },
+                  { id: 'commercial' as const, icon: '🏪', label: L('商業', 'Commercial', '商業', '상업', 'Comercial') },
+                  { id: 'exterior' as const,   icon: '🏛️', label: L('外觀', 'Exterior', '外観', '외관', 'Exterior') },
+                ]"
+                :key="opt.id"
+                type="button"
+                @click="spaceKind = opt.id"
+                class="py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                :style="spaceKind === opt.id
+                  ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff;'
+                  : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
+              >
+                <span>{{ opt.icon }}</span> {{ opt.label }}
+              </button>
             </div>
           </div>
 
-          <div v-if="uploadedImage" class="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <img :src="uploadedImage" alt="Source" class="w-full aspect-[4/3] object-cover rounded-xl" />
-            <div class="text-2xl text-dark-400 text-center" aria-hidden="true">»</div>
-            <div class="w-full aspect-[4/3] rounded-xl overflow-hidden flex items-center justify-center" style="background: #0f0f17; border: 1px dashed rgba(255,255,255,0.08);">
-              <img v-if="resultImage" :src="resultImage" alt="Result" class="w-full h-full object-cover" />
-              <span v-else class="text-xs text-dark-400 px-4 text-center">{{ L('生成結果將顯示於此', 'Result will appear here', '生成結果はここに表示', '결과가 여기에 표시됩니다', 'El resultado aparecerá aquí') }}</span>
+          <!-- Mode tabs -->
+          <div>
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('模式', 'Mode', 'モード', '모드', 'Modo') }}
+            </p>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button
+                v-for="opt in [
+                  { id: 'redesign' as const, label: L('改造', 'Redesign', 'リデザイン', '리디자인', 'Rediseño') },
+                  { id: 'stage' as const,    label: L('佈置', 'Stage', 'ステージング', '스테이징', 'Staging') },
+                  { id: 'magic' as const,    label: L('魔法', 'Magic', 'マジック', '매직', 'Mágico') },
+                ]"
+                :key="opt.id"
+                type="button"
+                @click="mode = opt.id"
+                class="py-2 rounded-lg text-xs font-medium transition-colors"
+                :style="mode === opt.id
+                  ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff;'
+                  : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
+              >{{ opt.label }}</button>
             </div>
+            <p class="text-[11px] mt-1.5" style="color: #6b6b7a;">
+              {{ mode === 'redesign'
+                ? L('改造現有空間，保留結構', 'Restyle existing space, preserve structure', '既存空間を改造、構造維持', '기존 공간 개조, 구조 유지', 'Rediseña conservando la estructura')
+                : mode === 'stage'
+                ? L('空房間 → AI 自動佈置家具', 'Empty room → AI furnishes it', '空室 → AIが家具配置', '빈 방 → AI 가구 배치', 'Habitación vacía → AI amuebla')
+                : L('用一段話描述你想要的房間', 'Describe the room you want in plain text', '欲しい部屋を一文で記述', '원하는 방을 한 문단으로 설명', 'Describe la habitación en texto') }}
+            </p>
           </div>
-          <div v-else>
+
+          <!-- Upload -->
+          <div>
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('上傳房間照片', 'Upload Room Photo', '部屋の写真をアップロード', '방 사진 업로드', 'Sube foto de la habitación') }}
+            </p>
             <ImageUploader
               tool-type="room_redesign"
               v-model="uploadedImage"
-              :label="L('拖曳檔案或選擇圖片', 'Drag a file or choose an image', 'ファイルをドラッグまたは選択', '파일을 드래그하거나 선택', 'Arrastra un archivo o elige una imagen')"
+              :label="L('點擊或拖放照片', 'Click or drag a photo', 'クリックまたはドロップ', '클릭 또는 드롭', 'Haz clic o arrastra')"
               @file-selected="handleRoomFileSelected"
             />
           </div>
-        </div>
 
-        <!-- Step 2: Type & Style -->
-        <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <h3 class="text-lg font-semibold text-dark-50">
-              {{ t('tools.interiorLayout.stylesStep') }}
-            </h3>
-            <div class="inline-flex rounded-full p-1 text-xs" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
-              <button
-                @click="compactStyleMode = 'moodboard'"
-                class="px-3 py-1.5 rounded-full transition-all"
-                :class="compactStyleMode === 'moodboard' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
-              >🖼️ {{ t('tools.interiorLayout.moodboard') }}</button>
-              <button
-                @click="compactStyleMode = 'preset'"
-                class="px-3 py-1.5 rounded-full transition-all"
-                :class="compactStyleMode === 'preset' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
-              >⚙️ {{ t('tools.interiorLayout.presetStyle') }}</button>
+          <!-- Style picker (hidden in magic mode) -->
+          <div v-if="mode !== 'magic'">
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('設計風格', 'Design Style', 'デザインスタイル', '디자인 스타일', 'Estilo') }}
+              <span class="ml-2" style="color: #6b6b7a;">({{ styles[spaceKind].length }})</span>
+            </p>
+            <select
+              v-model="selectedStyle"
+              class="w-full rounded-lg px-3 py-2.5 text-sm"
+              style="background: #0a0a0f; color: #f5f5fa; border: 1px solid rgba(255,255,255,0.08);"
+            >
+              <option value="">{{ L('— 請選擇 —', '— Select —', '— 選択 —', '— 선택 —', '— Seleccionar —') }}</option>
+              <option v-for="s in styles[spaceKind]" :key="s.id" :value="s.id">
+                {{ isZh ? s.name_zh : s.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Magic prompt textarea -->
+          <div v-if="mode === 'magic'">
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('描述你想要的房間', 'Describe the room you want', '欲しい部屋を記述', '원하는 방을 설명', 'Describe la habitación') }}
+            </p>
+            <textarea
+              v-model="customPrompt"
+              rows="5"
+              maxlength="2000"
+              :placeholder="L('例：把這間客廳改成北歐風，淺色木地板，灰色亞麻沙發，黃銅落地燈，下午自然光。', 'e.g. Redesign this living room in Scandinavian style — pale oak floors, grey linen sofa, brass floor lamp, soft afternoon daylight.', '例：このリビングを北欧スタイルに、淡いオーク床、グレーリネンソファ、ブラスフロアランプ、午後の自然光。', '예: 이 거실을 북유럽 스타일로, 옅은 오크 바닥, 회색 리넨 소파, 황동 플로어 램프, 부드러운 오후 햇살.', 'Ej: Rediseña esta sala en estilo escandinavo.')"
+              class="w-full rounded-lg p-3 text-sm"
+              style="background: #0a0a0f; color: #f5f5fa; border: 1px solid rgba(255,255,255,0.08);"
+            ></textarea>
+            <p class="text-[11px] mt-1" style="color: #6b6b7a;">
+              {{ L('魔法模式：你的描述會原封不動傳給 AI，風格選項與材質燈光按鈕都不會生效。', 'Magic mode: your description goes to the AI verbatim. Style picker, lighting, and material chips are ignored.', 'マジックモード：説明はそのままAIに渡されます。', '매직 모드: 설명이 그대로 AI에 전달됩니다.', 'Modo mágico: tu descripción va literal a la IA.') }}
+            </p>
+          </div>
+
+          <!-- Strength slider (redesign / stage only) -->
+          <div v-if="mode !== 'magic'">
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('風格強度', 'Style Strength', 'スタイル強度', '스타일 강도', 'Fuerza del estilo') }}
+              <span class="ml-2" style="color: #a78bfa;">{{ Math.round(styleStrength * 100) }}%</span>
+            </p>
+            <input
+              type="range"
+              min="0.3"
+              max="1"
+              step="0.05"
+              v-model.number="styleStrength"
+              class="w-full"
+              style="accent-color: #a78bfa;"
+            />
+            <div class="flex justify-between text-[10px] mt-0.5" style="color: #6b6b7a;">
+              <span>{{ L('保留原貌', 'Preserve', '保持', '보존', 'Conservar') }}</span>
+              <span>{{ L('完全重塑', 'Reinvent', '完全再構築', '완전 재구성', 'Reinventar') }}</span>
             </div>
           </div>
 
-          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <div class="inline-flex gap-1 rounded-full p-1 text-xs" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
-              <button
-                @click="compactSpaceTab = 'indoor'"
-                class="px-4 py-1.5 rounded-full transition-all"
-                :class="compactSpaceTab === 'indoor' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
-              >{{ t('tools.interiorLayout.tabIndoor') }}</button>
-              <button
-                @click="compactSpaceTab = 'outdoor'"
-                class="px-4 py-1.5 rounded-full transition-all"
-                :class="compactSpaceTab === 'outdoor' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
-              >{{ t('tools.interiorLayout.tabOutdoor') }}</button>
-              <!-- 2026-05-18 ReRoom-inspired: Commercial / hospitality
-                   tab surfaces restaurant, retail, hotel, office, café,
-                   gym style presets via COMMERCIAL_STYLES on the backend. -->
-              <button
-                @click="compactSpaceTab = 'commercial'"
-                class="px-4 py-1.5 rounded-full transition-all"
-                :class="compactSpaceTab === 'commercial' ? 'bg-primary-500/15 text-primary-300' : 'text-dark-300'"
-              >{{ L('商業空間', 'Commercial', '商業スペース', '상업 공간', 'Comercial') }}</button>
-              <button
-                disabled
-                class="px-4 py-1.5 rounded-full text-dark-500 inline-flex items-center gap-1.5"
-                :title="L('景觀模式即將推出', 'Landscape mode coming soon', 'ランドスケープモードは近日公開', '랜드스케이프 모드 곧 출시', 'Modo paisaje próximamente')"
-              >🔒 {{ t('tools.interiorLayout.tabLandscape') }}</button>
+          <!-- Cost badge — extracted from the button (was "Generate (X cr)")
+               2026-05-25 to match the PiapiPlayground pattern. Keeps the
+               button copy a clean action verb while still surfacing the
+               per-run cost prominently. -->
+          <div
+            v-if="creditCost !== undefined"
+            class="flex items-center justify-between rounded-xl px-3 py-2"
+            style="background: rgba(124,58,237,0.10); border: 1px solid rgba(124,58,237,0.25);"
+          >
+            <span class="text-xs font-medium" style="color: #c4b5fd;">
+              {{ L('單次消耗', 'Cost per run', '1回コスト', '1회 비용', 'Coste por uso') }}
+            </span>
+            <span class="text-sm font-bold tabular-nums" style="color: #fff;">
+              {{ creditCost }}
+              <span class="text-xs opacity-70 font-normal ml-0.5">{{ L('點', 'credits', 'クレジット', '크레딧', 'créditos') }}</span>
+            </span>
+          </div>
+
+          <!-- Generate -->
+          <button
+            @click="generate"
+            :disabled="disabled || isRunning || isDemoUser"
+            class="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+            :style="(disabled || isRunning || isDemoUser)
+              ? 'background: rgba(124,58,237,0.4); color: rgba(255,255,255,0.6); cursor: not-allowed;'
+              : 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff; box-shadow: 0 6px 20px rgba(124,58,237,0.35);'"
+          >
+            <span v-if="isRunning" class="inline-flex items-center gap-2 justify-center">
+              <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              {{ L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…') }}
+            </span>
+            <span v-else>{{ L('開始生成', 'Generate', '生成', '생성', 'Generar') }}</span>
+          </button>
+
+          <p v-if="isDemoUser" class="text-[11px]" style="color: #fbbf24;">
+            {{ L('訂閱後即可生成你自己的渲染。', 'Subscribe to generate your own renders.', 'サブスク登録で生成可能。', '구독하면 생성 가능합니다.', 'Suscríbete para generar.') }}
+            <button @click="gotoPricing" class="underline ml-1">{{ L('查看方案', 'View Plans', 'プランを見る', '플랜 보기', 'Ver planes') }} →</button>
+          </p>
+        </aside>
+
+        <!-- Right: Result preview -->
+        <main class="rounded-2xl p-5 flex flex-col" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06); min-height: 480px;">
+          <div class="flex items-center justify-between mb-4">
+            <span
+              class="px-3 py-1 rounded-full text-xs font-medium border"
+              :style="status === 'running' ? 'background: rgba(168,85,247,0.15); color: #c4b5fd; border-color: rgba(168,85,247,0.3);'
+                : status === 'done' ? 'background: rgba(16,185,129,0.15); color: #6ee7b7; border-color: rgba(16,185,129,0.3);'
+                : status === 'error' ? 'background: rgba(239,68,68,0.15); color: #fca5a5; border-color: rgba(239,68,68,0.3);'
+                : 'background: rgba(255,255,255,0.06); color: #94949f; border-color: rgba(255,255,255,0.08);'"
+            >
+              {{ statusText || (status === 'idle' ? (isZh ? '待機中' : 'Idle') : status) }}
+            </span>
+          </div>
+
+          <div class="flex-1 rounded-xl overflow-hidden flex items-center justify-center" style="background: #0a0a0f; border: 1px dashed rgba(255,255,255,0.08); min-height: 360px;">
+            <BeforeAfterSlider
+              v-if="resultImage && uploadedImage"
+              :before-image="uploadedImage"
+              :after-image="resultImage"
+              :before-label="L('原始', 'Before', 'オリジナル', '원본', 'Antes')"
+              :after-label="L('AI 渲染', 'After', 'AI後', 'AI 후', 'Después')"
+            />
+            <div v-else class="text-center px-6 py-10">
+              <p class="text-5xl mb-3 opacity-40">🏠</p>
+              <p class="text-sm" style="color: #94949f;">
+                {{ L('上傳房間照片並選擇風格後，渲染結果會出現在這裡。', 'Upload a room photo and pick a style — the rendered result will appear here.', '部屋の写真をアップロードしてスタイルを選ぶと、結果がここに表示されます。', '방 사진을 업로드하고 스타일을 선택하면 결과가 여기에 표시됩니다.', 'Sube una foto y elige un estilo; el resultado aparecerá aquí.') }}
+              </p>
             </div>
-            <button
-              type="button"
-              @click="activeTab = 'redesign'"
-              class="text-xs font-medium px-3 py-1.5 rounded-full transition-all"
-              style="border: 1px solid rgba(255,255,255,0.12); color: #b4b4cf;"
-            >{{ t('tools.interiorLayout.custom') }}</button>
           </div>
+        </main>
+      </div>
+    </section>
 
-          <!-- Primary rooms -->
-          <p class="text-xs font-semibold uppercase tracking-wide text-dark-400 mb-2">
-            {{ t('tools.interiorLayout.primary') }}
+    <!-- ═══ PORTFOLIO grid — clicking pre-fills the form ═════════════════ -->
+    <section class="px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl mx-auto">
+      <div class="flex items-end justify-between mb-5">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-bold" style="color: #f5f5fa;">
+            {{ L('最新渲染作品', 'Latest Rendered Work', '最新レンダリング作品', '최신 렌더링 작품', 'Trabajos Recientes') }}
+          </h2>
+          <p class="text-sm mt-1" style="color: #94949f;">
+            {{ L(`${portfolioGrid.length} 個範本，點擊任意一個套用到上方的編輯器。`, `${portfolioGrid.length} templates — click any to apply to the editor above.`, `${portfolioGrid.length}個のテンプレート、クリックして上のエディタに適用。`, `${portfolioGrid.length}개의 템플릿, 클릭해 위 편집기에 적용.`, `${portfolioGrid.length} plantillas; haz clic para aplicar.`) }}
           </p>
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-5">
-            <button
-              v-for="room in compactPrimaryRooms"
-              :key="room.id"
-              @click="selectCompactRoom(room.id)"
-              class="room-tile"
-              :class="selectedRoomType === room.id ? 'room-tile--active' : ''"
-            >
-              <div class="room-tile-thumb">
-                <img :src="room.thumb" :alt="room.label" />
-              </div>
-              <span class="room-tile-label">{{ room.label }}</span>
-            </button>
-          </div>
-
-          <!-- Secondary rooms -->
-          <p class="text-xs font-semibold uppercase tracking-wide text-dark-400 mb-2">
-            {{ t('tools.interiorLayout.secondary') }}
-          </p>
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-5">
-            <button
-              v-for="room in compactSecondaryRooms"
-              :key="room.id"
-              @click="selectCompactRoom(room.id)"
-              class="room-tile"
-              :class="selectedRoomType === room.id ? 'room-tile--active' : ''"
-            >
-              <div class="room-tile-thumb">
-                <img :src="room.thumb" :alt="room.label" />
-              </div>
-              <span class="room-tile-label">{{ room.label }}</span>
-            </button>
-          </div>
-
-          <!-- Amenities -->
-          <p class="text-xs font-semibold uppercase tracking-wide text-dark-400 mb-2">
-            {{ t('tools.interiorLayout.amenities') }}
-          </p>
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <button
-              v-for="room in compactAmenities"
-              :key="room.id"
-              @click="selectCompactRoom(room.id)"
-              class="room-tile"
-              :class="selectedRoomType === room.id ? 'room-tile--active' : ''"
-            >
-              <div class="room-tile-thumb">
-                <img :src="room.thumb" :alt="room.label" />
-              </div>
-              <span class="room-tile-label">{{ room.label }}</span>
-            </button>
-          </div>
         </div>
-      </section>
+        <button @click="gotoTemplates" class="text-xs font-medium" style="color: #c4b5fd;">
+          {{ L('查看全部 →', 'View All →', 'すべて見る →', '전체 보기 →', 'Ver todo →') }}
+        </button>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+        <button
+          v-for="card in portfolioGrid.slice(0, 20)"
+          :key="card.id"
+          @click="pickFromPortfolio(card)"
+          class="group rounded-xl overflow-hidden text-left"
+          style="background: #141420; border: 1px solid rgba(255,255,255,0.06);"
+        >
+          <div class="aspect-[4/5] relative overflow-hidden" style="background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(244,114,182,0.1));">
+            <img
+              v-if="card.preview_url"
+              :src="card.preview_url"
+              :alt="(isZh ? card.name_zh : card.name)"
+              class="w-full h-full object-cover transition-transform group-hover:scale-105"
+              loading="lazy"
+              @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }"
+            />
+            <div v-else class="absolute inset-0 flex items-center justify-center text-3xl">🏠</div>
+          </div>
+          <div class="p-3">
+            <p class="text-xs font-semibold" style="color: #f5f5fa;">
+              {{ isZh ? card.name_zh : card.name }}
+            </p>
+          </div>
+        </button>
+      </div>
+    </section>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <!-- ═══ How it works ════════════════════════════════════════════════ -->
+    <section class="px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl mx-auto">
+      <h2 class="text-xl font-semibold mb-5" style="color: #f5f5fa;">
+        {{ L('運作方式', 'How It Works', '使い方', '작동 방식', 'Cómo funciona') }}
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div
-          v-for="item in studioCapabilities"
-          :key="item.title"
+          v-for="(step, i) in [
+            { en: 'Upload a room photo or sketch', zh: '上傳房間照片或草圖' },
+            { en: 'Pick a mode + style (or describe in text)', zh: '選擇模式與風格（或用文字描述）' },
+            { en: 'Adjust strength, lighting, material', zh: '微調強度、燈光、材質' },
+            { en: 'Generate & download proposal-grade renders', zh: '生成並下載提案級渲染' },
+          ]"
+          :key="i"
           class="rounded-xl p-4"
           style="background: #141420; border: 1px solid rgba(255,255,255,0.06);"
         >
-          <div class="flex items-center gap-2 mb-2">
-            <span class="text-xl">{{ item.icon }}</span>
-            <div class="text-sm font-semibold text-dark-50">{{ item.title }}</div>
-          </div>
-          <p class="text-xs leading-relaxed text-dark-300 mb-3">{{ item.text }}</p>
-          <p class="text-[11px] leading-relaxed text-dark-500">{{ item.proof }}</p>
+          <p class="text-xs font-mono mb-1" style="color: #a78bfa;">0{{ i + 1 }}</p>
+          <p class="text-sm" style="color: #f5f5fa;">
+            {{ isZh ? step.zh : step.en }}
+          </p>
         </div>
       </div>
+    </section>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
-        <section class="rounded-2xl p-5" style="background: #11111b; border: 1px solid rgba(82,196,26,0.18);">
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wide" style="color: #95de64;">
-                {{ L('專業提案流程', 'Professional Proposal Flow', 'プロ提案フロー', '전문 제안 프로세스', 'Flujo de propuesta profesional') }}
-              </p>
-              <h2 class="text-xl font-bold text-dark-50 mt-1">
-                {{ L('像室內設計團隊一樣交付視覺方向', 'Deliver visual direction like an interior team', 'インテリアチームのようにビジュアル方向を提供', '인테리어 팀처럼 비주얼 방향 전달', 'Ofrece dirección visual como un equipo de interiorismo') }}
-              </h2>
-            </div>
-            <RouterLink to="/tools/room-redesign" class="hidden sm:inline-flex text-xs font-semibold px-3 py-2 rounded-lg" style="background: rgba(82,196,26,0.1); color: #95de64; border: 1px solid rgba(82,196,26,0.22);">
-              {{ L('開始試用', 'Start', '試してみる', '시작하기', 'Empezar') }}
-            </RouterLink>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div v-for="step in proposalWorkflow" :key="step.step" class="rounded-xl p-3" style="background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);">
-              <div class="text-xs font-bold mb-2" style="color: #95de64;">{{ step.step }}</div>
-              <div class="text-sm font-semibold text-dark-50 mb-1">{{ step.title }}</div>
-              <p class="text-xs leading-relaxed text-dark-400">{{ step.text }}</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="rounded-2xl p-5" style="background: #11111b; border: 1px solid rgba(22,119,255,0.18);">
-          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wide" style="color: #69b1ff;">
-                {{ L('單買點數收費', 'One-time Credit Pricing', '都度ポイント購入', '단건 포인트 결제', 'Compra de créditos puntual') }}
-              </p>
-              <h2 class="text-xl font-bold text-dark-50 mt-1">
-                {{ L('不用訂閱，也能為專案補點數', 'Top up credits for project work', 'サブスクなしでプロジェクト向けにポイント追加', '구독 없이 프로젝트용 포인트 충전', 'Recarga créditos para proyectos sin suscripción') }}
-              </h2>
-              <p class="text-xs leading-relaxed text-dark-400 mt-2">
-                {{ L('點數包適合臨時室內提案、批次渲染、房仲素材與家具情境圖補量。', 'Credit packs are ideal for ad hoc proposals, batch renders, listing visuals, and furniture scene production.', 'ポイントパックは臨時のインテリア提案、バッチレンダリング、不動産素材、家具シーン補充に最適です。', '포인트 팩은 임시 인테리어 제안, 일괄 렌더링, 부동산 자료, 가구 씬 추가에 적합합니다.', 'Los paquetes de créditos son ideales para propuestas puntuales, renders por lotes, anuncios y escenas de mobiliario.') }}
-              </p>
-            </div>
-            <RouterLink to="/pricing#credit-packs" class="inline-flex justify-center text-xs font-semibold px-3 py-2 rounded-lg" style="background: #1677ff; color: white;">
-              {{ L('查看與購買', 'View Packs', 'パックを見る', '팩 보기', 'Ver paquetes') }}
-            </RouterLink>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div v-for="pkg in roomCreditPackages" :key="pkg.name" class="rounded-xl p-3" style="background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);">
-              <div class="text-sm font-semibold text-dark-50">{{ pkg.name }}</div>
-              <div class="text-xl font-bold mt-1" style="color: #f5f5fa;">{{ pkg.price }}</div>
-              <div class="text-xs text-dark-300 mt-1">{{ pkg.credits }}</div>
-              <div class="text-[11px] text-dark-500 mt-2">{{ pkg.note }}</div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <HowToUseHint
-        tool-type="room_redesign"
-        media-kind="image"
-        :i18n-keys="[
-          'howTo.room_redesign.step1',
-          'howTo.room_redesign.step2',
-          'howTo.room_redesign.step3',
-        ]"
-      />
-
-      <div class="flex justify-center mb-8">
-        <div class="inline-flex rounded-xl p-1" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <button
-            v-for="tab in visibleTabs"
-            :key="tab.id"
-            @click="activeTab = tab.id"
-            class="px-6 py-3 rounded-lg font-medium transition-all"
-            :class="activeTab === tab.id
-              ? 'bg-primary-500 text-dark-50'
-              : 'text-dark-300 hover:text-dark-50'"
-          >
-            <span class="mr-2">{{ tab.icon }}</span>
-            {{ tab.label }}
-          </button>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Left Panel - Input -->
-        <div class="space-y-6">
-          <!-- 1. Room Type Selection -->
-          <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
-              <span>🏠</span>
-              {{ t('interior.roomType') }}
-            </h3>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <button
-                v-for="room in roomTypes"
-                :key="room.id"
-                @click="selectedRoomType = room.id"
-                class="p-3 rounded-xl border-2 transition-all text-center"
-                :class="selectedRoomType === room.id
-                  ? 'border-primary-500 bg-primary-500/10'
-                  : 'hover:border-dark-500'"
-                style="border-color: rgba(255,255,255,0.08);"
-              >
-                <span class="text-2xl block">{{ roomTypeIcons[room.id] || '🏠' }}</span>
-                <p class="text-xs text-dark-300 mt-1 truncate">{{ roomTypeName(room) }}</p>
-              </button>
-            </div>
-          </div>
-
-          <!-- 2. Room Image -->
-          <div v-if="activeTab !== 'generate'" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
-              <span>📷</span>
-              {{ L('房間圖片', 'Room Image', '部屋の画像', '방 이미지', 'Imagen de la habitación') }}
-            </h3>
-
-            <!-- For Demo users: automatically show the image based on selected room type -->
-            <div v-if="isDemoUser" class="mb-4">
-              <div v-if="selectedDemoRoomId && uploadedImage" class="relative aspect-[4/3] rounded-lg overflow-hidden border-2 border-primary-500">
-                <img :src="uploadedImage" alt="Room" class="w-full h-full object-cover" />
-                <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                  <span class="text-xs text-white">
-                    {{ isZh ? defaultRooms.find(r => r.id === selectedDemoRoomId)?.nameZh : defaultRooms.find(r => r.id === selectedDemoRoomId)?.name }}
-                  </span>
-                </div>
-              </div>
-              <div v-else class="flex flex-col items-center justify-center p-8 rounded-lg text-dark-400" style="background: #141420;">
-                <span class="text-4xl mb-2">📷</span>
-                <p class="text-sm text-center">
-                  {{ L('目前所選擇的空間類型尚未有示範圖片，請切換至其他空間類型。', 'No demo image available for this space type. Please select another room type.', '現在選択中の部屋タイプにはデモ画像がありません。別のタイプを選択してください。', '현재 선택한 공간 유형에 데모 이미지가 없습니다. 다른 유형을 선택해 주세요.', 'No hay imagen demo para este tipo de espacio. Selecciona otro tipo.') }}
-                </p>
-              </div>
-            </div>
-
-            <!-- For Paid Users: Upload Zone -->
-            <div v-else class="mb-6">
-               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ L('上傳房間照片', 'Upload Room Photo', '部屋の写真をアップロード', '방 사진 업로드', 'Subir foto de la habitación') }}</h4>
-               <ImageUploader 
-                 tool-type="room_redesign"
-                 v-model="uploadedImage" 
-                 :label="L('點擊上傳或拖放房間照片', 'Drop room photo here', 'クリックまたは部屋の写真をドロップ', '클릭 또는 방 사진을 드롭', 'Sube o arrastra una foto de la habitación')"
-                 class="mb-4"
-                 @file-selected="handleRoomFileSelected"
-               />
-               <div v-if="uploadedImage" class="mt-4 space-y-2">
-                 <img :src="uploadedImage" alt="Selected Room" class="w-full rounded-xl" />
-               </div>
-            </div>
-          </div>
-
-          <!-- Style Selection -->
-          <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
-              <span>🎨</span>
-              {{ t('interior.designStyle') }}
-            </h3>
-            <div class="grid grid-cols-2 gap-3">
-              <button
-                v-for="style in displayStyles"
-                :key="style.id"
-                @click="selectedStyle = style.id"
-                class="p-4 rounded-xl border-2 transition-all text-left"
-                :class="selectedStyle === style.id
-                  ? 'border-primary-500 bg-primary-500/10'
-                  : 'hover:border-dark-500'"
-                style="border-color: rgba(255,255,255,0.08);"
-              >
-                <span class="text-2xl">{{ styleIcons[style.id] || '🏠' }}</span>
-                <p class="font-medium text-dark-50 mt-2">{{ styleName(style) }}</p>
-                <p class="text-xs text-dark-400 line-clamp-2">{{ style.description }}</p>
-              </button>
-            </div>
-          </div>
-
-          <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <div class="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <h3 class="text-lg font-semibold text-dark-50 flex items-center gap-2">
-                  <span>🧩</span>
-                  {{ isZh ? `${selectedRoomLabel}示範提案` : `${selectedRoomLabel} Proposal Examples` }}
-                </h3>
-                <p class="text-xs text-dark-400 mt-1">
-                  {{ L('每個空間類型提供 6 種常用室內風格，方便比較方向。', 'Each room type includes 6 common interior style examples for quick direction comparison.', '各部屋タイプに6つの代表的なインテリアスタイル例を用意し、方向性を比較しやすくしています。', '각 공간 유형마다 대표적인 인테리어 스타일 6가지를 제공하여 방향성을 비교하기 쉽습니다.', 'Cada tipo de habitación incluye 6 ejemplos de estilo comunes para comparar direcciones rápidamente.') }}
-                </p>
-              </div>
-              <span class="text-xs font-semibold px-2 py-1 rounded-lg" style="background: rgba(82,196,26,0.12); color: #95de64;">
-                {{ proposalExamples.filter(item => item.ready).length }}/6
-              </span>
-            </div>
-
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <button
-                v-for="example in proposalExamples"
-                :key="example.styleId"
-                type="button"
-                @click="selectProposalExample(example)"
-                class="text-left rounded-xl overflow-hidden border transition-all"
-                :class="selectedStyle === example.styleId ? 'border-primary-500 bg-primary-500/10' : 'hover:border-dark-500'"
-                style="border-color: rgba(255,255,255,0.08);"
-              >
-                <div class="aspect-[4/3] bg-dark-900 overflow-hidden">
-                  <img v-if="example.image" :src="example.image" :alt="example.styleName" class="w-full h-full object-cover" />
-                </div>
-                <div class="p-2">
-                  <p class="text-xs font-semibold text-dark-50 truncate">{{ example.styleName }}</p>
-                  <p class="text-[11px] mt-0.5" :class="example.ready ? 'text-primary-400' : 'text-dark-500'">
-                    {{ example.ready ? L('可預覽範例', 'Ready example', 'プレビュー可', '미리보기 가능', 'Ejemplo listo') : L('預生成中', 'Preparing', '事前生成中', '사전 생성 중', 'Preparando') }}
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <!-- Curated Prompt Dropdown (replaces free-text in MVP) -->
-          <div v-if="showCustomPrompt" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-             <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
-               <span>✏️</span>
-               {{ customPromptLabel }}
-             </h3>
-             <select
-               v-model="selectedRoomPromptId"
-               class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500"
-               style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
-             >
-               <option value="">{{ L('— 請選擇設計風格 —', '— Select a design style —', '— デザインスタイルを選択 —', '— 디자인 스타일 선택 —', '— Selecciona un estilo —') }}</option>
-               <option v-for="opt in roomPromptOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
-             </select>
-          </div>
-
-          <!-- 3D Model Settings -->
-          <div v-if="activeTab === '3dModel' && !isDemoUser" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
-              <span>🧊</span>
-              {{ L('3D 模型設定', '3D Model Settings', '3Dモデル設定', '3D 모델 설정', 'Ajustes del modelo 3D') }}
-            </h3>
-
-            <!-- Input requirements notice (helps users avoid the floor-plan pitfall) -->
-            <div v-if="!isFloorPlan" class="notice mb-4">
-              <span class="notice-icon">i</span>
-              <div class="space-y-1.5">
-                <p class="font-semibold" style="color: var(--text-primary);">
-                  {{ L('什麼樣的圖片適合？', 'What kind of image works?', 'どんな画像が適切？', '어떤 이미지가 적합한가요?', '¿Qué tipo de imagen funciona?') }}
-                </p>
-                <p style="color: var(--text-secondary);">
-                  {{ isZh
-                    ? '請上傳真實「房間照片」或「立體物件照片」（有光影、深度）。系統會用 AI 重建為可旋轉的 3D 模型。'
-                    : 'Upload a real photo of a room or a 3D object (with lighting and depth). Our AI will reconstruct it into a rotatable 3D model.' }}
-                </p>
-              </div>
-            </div>
-            <div v-if="!isFloorPlan" class="notice notice-warn mb-4">
-              <span class="notice-icon">!</span>
-              <div class="space-y-1.5">
-                <p class="font-semibold" style="color: var(--text-primary);">
-                  {{ L('上傳的是平面圖 / 設計圖？', 'Uploaded a floor plan / blueprint?', 'アップロードしたのは平面図／設計図？', '평면도 / 도면을 업로드하셨나요?', '¿Subiste un plano / blueprint?') }}
-                </p>
-                <p style="color: var(--text-secondary);">
-                  {{ isZh
-                    ? '純線稿平面圖沒有立體資訊。開啟「平面圖模式」後，系統會先用 AI 渲染成寫實室內視角，再生成 3D 模型。'
-                    : 'Flat line drawings have no depth. Turn on Floor Plan Mode and we will first render a photorealistic interior, then build the 3D mesh.' }}
-                </p>
-                <button
-                  type="button"
-                  class="text-xs font-semibold mt-1"
-                  style="color: #fbbf24;"
-                  @click="isFloorPlan = true"
-                >
-                  {{ L('→ 開啟平面圖 → 3D 模式', '→ Enable Floor Plan → 3D mode', '→ 平面図→3Dモードを有効化', '→ 평면도→3D 모드 활성화', '→ Activar modo plano → 3D') }}
-                </button>
-              </div>
-            </div>
-
-            <!-- Floor Plan mode active notice -->
-            <div v-if="isFloorPlan" class="notice mb-4" style="border-color: rgba(168, 85, 247, 0.45); background: rgba(168, 85, 247, 0.08);">
-              <span class="notice-icon" style="background: var(--color-accent); color: #fff;">⌂</span>
-              <div class="space-y-1.5 flex-1">
-                <p class="font-semibold" style="color: var(--text-primary);">
-                  {{ L('平面圖 → 3D 模式已啟用', 'Floor Plan → 3D Mode Active', '平面図→3Dモードを有効化済み', '평면도→3D 모드 활성화됨', 'Modo plano → 3D activo') }}
-                </p>
-                <p style="color: var(--text-secondary);">
-                  {{ isZh
-                    ? '兩階段流程：① Gemini 將平面圖渲染成寫實等角室內視覺圖；② Trellis2 重建為高品質 GLB 模型（約 3-7 分鐘）。'
-                    : 'Two-stage pipeline: (1) Gemini renders the floor plan as a photorealistic isometric interior; (2) Trellis2 reconstructs it into a high-quality GLB mesh (~3-7 min).' }}
-                </p>
-                <button
-                  type="button"
-                  class="text-xs font-semibold mt-1"
-                  style="color: var(--text-muted);"
-                  @click="isFloorPlan = false"
-                >
-                  {{ L('× 關閉，使用一般房間照片', '× Disable, use a normal room photo', '× 無効化、通常の部屋の写真を使用', '× 비활성화, 일반 방 사진 사용', '× Desactivar, usar foto normal') }}
-                </button>
-              </div>
-            </div>
-
-            <div class="space-y-4">
-              <div>
-                <p class="text-sm text-dark-200 mb-2">
-                  {{ isFloorPlan
-                    ? L('已選的平面圖將先渲染為寫實室內，再生成 3D 模型。', 'The selected floor plan will be rendered to a photorealistic interior, then turned into a 3D model.', '選択した平面図はまず写実的なインテリアにレンダリングされ、その後3Dモデルに変換されます。', '선택한 평면도는 먼저 사실적인 인테리어로 렌더링된 후 3D 모델로 변환됩니다.', 'El plano seleccionado se renderiza primero como interior fotorrealista y luego se convierte en modelo 3D.')
-                    : L('將 2D 圖片轉換為可互動的 3D 模型（GLB 格式）。', 'Convert a 2D image into an interactive 3D model (GLB format).', '2D画像をインタラクティブな3Dモデル（GLB形式）に変換します。', '2D 이미지를 인터랙티브한 3D 모델(GLB 형식)로 변환합니다.', 'Convierte una imagen 2D en un modelo 3D interactivo (formato GLB).') }}
-                </p>
-                <p v-if="resultImage && !isFloorPlan" class="text-xs text-primary-400">
-                  {{ L('將使用上方的 2D 設計結果作為來源', 'Will use the 2D design result above as source', '上記の2Dデザイン結果をソースとして使用します', '위의 2D 디자인 결과를 소스로 사용합니다', 'Se usará el resultado 2D anterior como origen') }}
-                </p>
-                <p v-else class="text-xs text-dark-400">
-                  {{ L('將使用已選擇的圖片作為來源', 'Will use the selected image as source', '選択した画像をソースとして使用します', '선택한 이미지를 소스로 사용합니다', 'Se usará la imagen seleccionada como origen') }}
-                </p>
-              </div>
-
-              <!-- Model Quality (Trellis v1 vs v2) -->
-              <div>
-                <label class="text-sm font-medium text-dark-200 mb-1 block">
-                  {{ L('模型品質', 'Model Quality', 'モデル品質', '모델 품질', 'Calidad del modelo') }}
-                </label>
-                <div class="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    @click="modelQuality = 'v1'"
-                    class="p-3 rounded-lg border-2 text-left transition-all"
-                    :class="modelQuality === 'v1' ? 'border-primary-500 bg-primary-500/10' : 'hover:border-dark-500'"
-                    style="border-color: rgba(255,255,255,0.08);"
-                  >
-                    <p class="text-sm font-semibold" style="color: var(--text-primary);">{{ L('標準', 'Standard', '標準', '표준', 'Estándar') }}</p>
-                    <p class="text-xs" style="color: var(--text-muted);">Trellis · {{ L('快速', 'Fast', '高速', '빠름', 'Rápido') }}</p>
-                  </button>
-                  <button
-                    type="button"
-                    @click="modelQuality = 'v2'"
-                    class="p-3 rounded-lg border-2 text-left transition-all"
-                    :class="modelQuality === 'v2' ? 'border-primary-500 bg-primary-500/10' : 'hover:border-dark-500'"
-                    style="border-color: rgba(255,255,255,0.08);"
-                  >
-                    <p class="text-sm font-semibold" style="color: var(--text-primary);">{{ L('高品質 HD', 'High Quality', '高品質 HD', '고품질 HD', 'Alta calidad') }}</p>
-                    <p class="text-xs" style="color: var(--text-muted);">Trellis2 · {{ L('精細網格', 'Finer mesh', '精細メッシュ', '정밀 메시', 'Malla refinada') }}</p>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Floor-plan extras: room type hint -->
-              <div v-if="isFloorPlan">
-                <label class="text-sm font-medium text-dark-200 mb-1 block">
-                  {{ L('房間類型（提示）', 'Room Type (hint)', '部屋タイプ（ヒント）', '공간 유형 (힌트)', 'Tipo de habitación (pista)') }}
-                </label>
-                <select
-                  v-model="floorplanRoomType"
-                  class="w-full rounded-lg px-3 py-2 focus:outline-none focus:border-primary-500"
-                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
-                >
-                  <option value="living_room">{{ L('客廳', 'Living Room', 'リビング', '거실', 'Sala') }}</option>
-                  <option value="bedroom">{{ L('臥室', 'Bedroom', '寝室', '침실', 'Dormitorio') }}</option>
-                  <option value="kitchen">{{ L('廚房', 'Kitchen', 'キッチン', '주방', 'Cocina') }}</option>
-                  <option value="bathroom">{{ L('浴室', 'Bathroom', 'バスルーム', '욕실', 'Baño') }}</option>
-                  <option value="office">{{ L('辦公室', 'Office', 'オフィス', '사무실', 'Oficina') }}</option>
-                  <option value="dining_room">{{ L('餐廳', 'Dining Room', 'ダイニング', '다이닝', 'Comedor') }}</option>
-                </select>
-              </div>
-
-              <!-- Texture quality (only relevant for non-floorplan path; Trellis2 ignores) -->
-              <div v-if="!isFloorPlan && modelQuality === 'v1'">
-                <label class="text-sm font-medium text-dark-200 mb-1 block">
-                  {{ L('貼圖品質', 'Texture Quality', 'テクスチャ品質', '텍스처 품질', 'Calidad de textura') }}
-                </label>
-                <select
-                  v-model.number="textureSize"
-                  class="w-full rounded-lg px-3 py-2 focus:outline-none focus:border-primary-500"
-                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
-                >
-                  <option :value="512">512px ({{ L('較快', 'Faster', '高速', '빠름', 'Más rápido') }})</option>
-                  <option :value="1024">1024px ({{ L('高品質', 'High Quality', '高品質', '고품질', 'Alta calidad') }})</option>
-                </select>
-              </div>
-
-              <div v-if="!isFloorPlan && modelQuality === 'v1'">
-                <div class="flex justify-between items-center mb-1">
-                  <label class="text-sm font-medium text-dark-200">
-                    {{ L('網格精細度', 'Mesh Detail', 'メッシュ精細度', '메시 정밀도', 'Detalle de malla') }}
-                  </label>
-                  <span class="text-xs text-dark-300">{{ Math.round(meshSimplify * 100) }}%</span>
-                </div>
-                <input
-                  v-model.number="meshSimplify"
-                  type="range"
-                  min="0.5"
-                  max="1"
-                  step="0.05"
-                  class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary-500" style="background: #1e1e32;">
-                />
-              </div>
-
-              <p class="text-xs text-dark-400">
-                {{ isFloorPlan
-                  ? L('平面圖 → 3D 約需 3-7 分鐘', 'Floor Plan → 3D takes about 3-7 minutes', '平面図→3Dは約3〜7分かかります', '평면도→3D는 약 3-7분 소요됩니다', 'El plano → 3D tarda unos 3-7 minutos')
-                  : L('3D 模型生成可能需要 2-5 分鐘', '3D model generation may take 2-5 minutes', '3Dモデル生成には2〜5分かかる場合があります', '3D 모델 생성은 2-5분 소요될 수 있습니다', 'La generación 3D puede tardar 2-5 minutos') }}
-              </p>
-            </div>
-          </div>
-
-          <!-- AI Transform Settings (merged from ImageEffects) -->
-          <div v-if="activeTab === 'transform' && !isDemoUser" class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
-              <span>🪄</span>
-              {{ L('AI 自由變換設定', 'AI Transform Settings', 'AI自由変換設定', 'AI 자유 변환 설정', 'Ajustes de AI Transformación') }}
-            </h3>
-            <div class="space-y-4">
-              <div>
-                <label class="text-sm font-medium text-dark-200 mb-1 block">
-                  {{ L('變換描述', 'Transform Description', '変換の説明', '변환 설명', 'Descripción de transformación') }}
-                </label>
-                <select
-                  v-model="selectedTransformPromptId"
-                  class="w-full rounded-lg p-3 focus:outline-none focus:border-primary-500"
-                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
-                >
-                  <option value="">{{ L('— 請選擇 —', '— Select —', '— 選択 —', '— 선택 —', '— Seleccionar —') }}</option>
-                  <option v-for="opt in roomPromptOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
-                </select>
-              </div>
-
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <label class="text-sm font-medium text-dark-200">
-                    {{ L('變換強度', 'Transform Strength', '変換強度', '변환 강도', 'Intensidad de transformación') }}
-                  </label>
-                  <span class="text-xs text-dark-300">{{ Math.round(transformStrength * 100) }}%</span>
-                </div>
-                <input
-                  v-model.number="transformStrength"
-                  type="range"
-                  min="0.1"
-                  max="1"
-                  step="0.05"
-                  class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary-500"
-                  style="background: #1e1e32;"
-                />
-                <div class="flex justify-between text-xs text-dark-400 mt-1">
-                  <span>{{ L('微調', 'Subtle', '微調整', '미세 조정', 'Sutil') }}</span>
-                  <span>{{ L('大幅變換', 'Strong', '大幅な変換', '큰 변환', 'Fuerte') }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ReRoom-inspired chip rows: Lighting + Material + Variations.
-               Each chip is optional. Picking a chip appends a clause to
-               the prompt; clearing it (clicking the active chip again)
-               removes the override. Variations fires N parallel calls
-               for client-deck workflows. (2026-05-18) -->
-          <div
-            v-if="!isDemoUser && (activeTab === 'redesign' || activeTab === 'stage')"
-            class="card"
-            style="background: #141420; border: 1px solid rgba(255,255,255,0.06);"
-          >
-            <h3 class="text-sm font-semibold text-dark-200 mb-3">
-              {{ L('進階風格調整（選填）', 'Fine-tune (optional)', '細かい調整（任意）', '세부 조정 (선택)', 'Ajustes finos (opcional)') }}
-            </h3>
-
-            <!-- Lighting chips -->
-            <p class="text-[11px] font-mono tracking-wider uppercase text-dark-500 mb-2">
-              {{ L('燈光氛圍', 'Lighting', '照明', '조명', 'Iluminación') }}
-            </p>
-            <div class="flex flex-wrap gap-2 mb-4">
-              <button
-                v-for="opt in [
-                  { id: null,                  label: L('預設', 'Default', '既定', '기본', 'Predeterm.') },
-                  { id: 'daylight' as const,           label: L('柔和日光', 'Daylight', '柔らかい日光', '부드러운 일광', 'Luz de día') },
-                  { id: 'warm_evening' as const,       label: L('暖色夜燈', 'Warm Evening', '暖色の夜光', '따뜻한 저녁', 'Tarde cálida') },
-                  { id: 'dramatic_spotlight' as const, label: L('戲劇聚光', 'Dramatic Spotlight', 'ドラマチックスポット', '드라마틱 스팟', 'Foco dramático') },
-                  { id: 'golden_hour' as const,        label: L('黃金時刻', 'Golden Hour', 'ゴールデンアワー', '골든 아워', 'Hora dorada') },
-                  { id: 'moody' as const,              label: L('低調氛圍', 'Moody', 'ムーディー', '무드 있는', 'Atmosférico') },
-                ]"
-                :key="String(opt.id)"
-                @click="lightingTone = opt.id"
-                class="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-                :style="lightingTone === opt.id
-                  ? 'background: #f59e0b; color: #0a0a0a;'
-                  : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.08);'"
-              >{{ opt.label }}</button>
-            </div>
-
-            <!-- Material accent chips -->
-            <p class="text-[11px] font-mono tracking-wider uppercase text-dark-500 mb-2">
-              {{ L('主材質', 'Material Accent', '主素材', '주재료', 'Material principal') }}
-            </p>
-            <div class="flex flex-wrap gap-2 mb-4">
-              <button
-                v-for="opt in [
-                  { id: null,                  label: L('預設', 'Default', '既定', '기본', 'Predeterm.') },
-                  { id: 'wood' as const,       label: L('木質', 'Wood', '木材', '나무', 'Madera') },
-                  { id: 'marble' as const,     label: L('大理石', 'Marble', '大理石', '대리석', 'Mármol') },
-                  { id: 'concrete' as const,   label: L('清水模', 'Concrete', 'コンクリート', '콘크리트', 'Hormigón') },
-                  { id: 'linen' as const,      label: L('亞麻', 'Linen', 'リネン', '리넨', 'Lino') },
-                  { id: 'brass' as const,      label: L('黃銅', 'Brass', '真鍮', '황동', 'Latón') },
-                  { id: 'leather' as const,    label: L('皮革', 'Leather', 'レザー', '가죽', 'Cuero') },
-                  { id: 'terrazzo' as const,   label: L('磨石子', 'Terrazzo', 'テラゾー', '테라조', 'Terrazo') },
-                ]"
-                :key="String(opt.id)"
-                @click="materialAccent = opt.id"
-                class="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-                :style="materialAccent === opt.id
-                  ? 'background: #f59e0b; color: #0a0a0a;'
-                  : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.08);'"
-              >{{ opt.label }}</button>
-            </div>
-
-            <!-- Variation count -->
-            <p class="text-[11px] font-mono tracking-wider uppercase text-dark-500 mb-2">
-              {{ L('一次生成幾張', 'Generate How Many', '一度に生成する枚数', '한 번에 생성 매수', 'Cuántas variantes') }}
-            </p>
-            <div class="flex gap-2">
-              <button
-                v-for="n in [1, 2, 3] as const"
-                :key="n"
-                @click="variationCount = n"
-                class="flex-1 px-3 py-2 rounded text-xs font-semibold transition-all"
-                :style="variationCount === n
-                  ? 'background: #f59e0b; color: #0a0a0a;'
-                  : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.08);'"
-              >{{ n }}{{ L(' 張', ' image' + (n > 1 ? 's' : ''), ' 枚', ' 장', ' imagen' + (n > 1 ? 'es' : '')) }}</button>
-            </div>
-            <p v-if="variationCount > 1" class="text-[10px] mt-2" style="color: #fbbf24;">
-              {{ L(`會花費 ${variationCount}× 點數，多張結果並排顯示`, `Uses ${variationCount}× credits; results shown side-by-side`, `${variationCount}×ポイントを消費、結果は横並び表示`, `${variationCount}× 포인트 사용, 결과는 나란히 표시`, `Usa ${variationCount}× créditos; resultados lado a lado`) }}
-            </p>
-          </div>
-
-          <!-- Generate Button -->
-          <div class="card" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <button
-              @click="handleSubmit"
-              :disabled="isProcessing || (activeTab !== 'generate' && !uploadedImage)"
-              class="btn-primary cta-glow w-full py-4 text-lg font-semibold"
-            >
-              <span v-if="isProcessing" class="flex items-center justify-center gap-2">
-                <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                {{ t('interior.processing') }}
-              </span>
-              <span v-else class="flex items-center justify-center gap-2">
-                <span>✨</span>
-                {{ activeTab === 'redesign' ? t('interior.actions.redesign') :
-                   activeTab === 'generate' ? t('interior.actions.generate') :
-                   activeTab === '3dModel' ? L('生成 3D 模型', 'Generate 3D Model', '3Dモデルを生成', '3D 모델 생성', 'Generar modelo 3D') :
-                   activeTab === 'transform' ? L('AI 變換', 'AI Transform', 'AI変換', 'AI 변환', 'AI Transformación') :
-                   t('interior.actions.applyStyle') }}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Right Panel - Results -->
-        <div class="space-y-6">
-          <div class="card backdrop-blur h-fit sticky top-24" style="background: #0f0f17; border: 1px solid rgba(255,255,255,0.06);">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4 flex items-center gap-2">
-              <span>🖼️</span>
-              {{ t('interior.result') }}
-            </h3>
-
-            <!-- Multi-variant grid — shown when variation_count > 1. -->
-            <div v-if="variantResults.length > 1" class="space-y-4">
-              <p class="text-xs font-mono tracking-wider uppercase text-dark-400">
-                {{ L(`${variantResults.length} 種變體`, `${variantResults.length} variants`, `${variantResults.length}種類のバリアント`, `${variantResults.length}개 변형`, `${variantResults.length} variantes`) }}
-              </p>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div v-for="(url, i) in variantResults" :key="i" class="space-y-2">
-                  <img :src="url" :alt="`Variant ${i+1}`" class="w-full rounded-lg" />
-                  <button
-                    @click="downloadAsset(url, `vidgo_room_design_v${i+1}.png`)"
-                    class="btn-ghost text-xs w-full"
-                  >📥 {{ L(`下載變體 ${i+1}`, `Download variant ${i+1}`, `バリアント${i+1}をダウンロード`, `변형 ${i+1} 다운로드`, `Descargar variante ${i+1}`) }}</button>
-                </div>
-              </div>
-              <div class="flex gap-3">
-                <button
-                  @click="downloadAllVariants"
-                  :disabled="isDownloadingAllVariants"
-                  class="btn-primary flex-1 text-center py-3 flex items-center justify-center disabled:opacity-60"
-                >
-                  <span class="mr-2">📥</span>
-                  <span v-if="isDownloadingAllVariants">
-                    {{ L(`下載中… (${variantResults.length})`, `Downloading… (${variantResults.length})`, `ダウンロード中… (${variantResults.length})`, `다운로드 중… (${variantResults.length})`, `Descargando… (${variantResults.length})`) }}
-                  </span>
-                  <span v-else>
-                    {{ L(`下載全部 ${variantResults.length} 個`, `Download all ${variantResults.length}`, `すべてダウンロード (${variantResults.length})`, `전체 다운로드 (${variantResults.length})`, `Descargar las ${variantResults.length}`) }}
-                  </span>
-                </button>
-                <button @click="reset" class="btn-ghost flex-1">
-                  🔄 {{ t('interior.tryAnother') }}
-                </button>
-              </div>
-            </div>
-
-            <div v-else-if="resultImage && uploadedImage && activeTab !== 'generate'" class="space-y-4">
-              <BeforeAfterSlider
-                :before-image="uploadedImage"
-                :after-image="resultImage"
-                :before-label="t('interior.before')"
-                :after-label="t('interior.after')"
-              />
-
-              <VisionFusionInfo
-                :vision-summary="visionSummary"
-                :user-prompt-used="userPromptUsed"
-                :prompt-gap-reason="promptGapReason"
-              />
-
-              <p v-if="resultDescription" class="text-sm text-dark-300 italic">
-                {{ resultDescription }}
-              </p>
-
-              <!-- Watermark badge -->
-              <div class="text-center text-xs text-dark-400">vidgo.ai</div>
-
-              <!-- Download / Action Buttons -->
-              <div class="flex gap-3">
-                 <button
-                   v-if="!isDemoUser"
-                   @click="downloadAsset(resultImage!, 'vidgo_room_design.png')"
-                   class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
-                 >
-                   <span class="mr-2">📥</span> {{ t('common.download') }}
-                 </button>
-
-                 <RouterLink
-                   v-else
-                   to="/pricing"
-                   class="btn-primary flex-1 text-center"
-                 >
-                   {{ L('訂閱以獲得完整功能', 'Subscribe for Full Access', 'サブスクで全機能を解禁', '구독으로 전체 액세스', 'Suscríbete para acceso completo') }}
-                 </RouterLink>
-
-                 <button @click="reset" class="btn-ghost flex-1">
-                   <span class="mr-2">🔄</span>
-                   {{ t('interior.tryAnother') }}
-                 </button>
-              </div>
-            </div>
-
-            <div v-else-if="resultImage && activeTab === 'generate'" class="space-y-4">
-              <div class="rounded-xl overflow-hidden">
-                <img :src="resultImage" alt="Generated Design" class="w-full" />
-              </div>
-
-              <VisionFusionInfo
-                :vision-summary="visionSummary"
-                :user-prompt-used="userPromptUsed"
-                :prompt-gap-reason="promptGapReason"
-              />
-
-              <p v-if="resultDescription" class="text-sm text-dark-300 italic">
-                {{ resultDescription }}
-              </p>
-
-              <!-- Watermark badge -->
-              <div class="text-center text-xs text-dark-400">vidgo.ai</div>
-
-              <!-- Download / Action Buttons -->
-              <div class="flex gap-3">
-                 <button
-                   v-if="!isDemoUser"
-                   @click="downloadAsset(resultImage!, 'vidgo_room_design.png')"
-                   class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
-                 >
-                   <span class="mr-2">📥</span> {{ t('common.download') }}
-                 </button>
-
-                 <RouterLink
-                   v-else
-                   to="/pricing"
-                   class="btn-primary flex-1 text-center"
-                 >
-                   {{ L('訂閱以獲得完整功能', 'Subscribe for Full Access', 'サブスクで全機能を解禁', '구독으로 전체 액세스', 'Suscríbete para acceso completo') }}
-                 </RouterLink>
-
-                 <button @click="reset" class="btn-ghost flex-1">
-                   <span class="mr-2">🔄</span>
-                   {{ t('interior.tryAnother') }}
-                 </button>
-              </div>
-            </div>
-
-            <!-- 3D Model Result -->
-            <div v-else-if="modelUrl && activeTab === '3dModel'" class="space-y-4">
-              <ThreeViewer
-                :model-url="modelUrl"
-                :width="560"
-                :height="400"
-              />
-              <p class="text-sm text-dark-300 text-center">
-                {{ L('拖曳旋轉 / 滾輪縮放', 'Drag to rotate / Scroll to zoom', 'ドラッグで回転 / スクロールでズーム', '드래그로 회전 / 스크롤로 확대', 'Arrastra para rotar / Rueda para zoom') }}
-              </p>
-
-              <div class="flex gap-3">
-                <button
-                  @click="downloadAsset(modelUrl!, 'vidgo_3d_model.glb')"
-                  class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
-                >
-                  <span class="mr-2">📥</span> {{ L('下載 GLB 模型', 'Download GLB Model', 'GLBモデルをダウンロード', 'GLB 모델 다운로드', 'Descargar modelo GLB') }}
-                </button>
-                <button @click="reset" class="btn-ghost flex-1">
-                  <span class="mr-2">🔄</span>
-                  {{ t('interior.tryAnother') }}
-                </button>
-              </div>
-            </div>
-
-            <div v-else-if="demoEmptyState" class="h-80 flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
-              <span class="text-2xl">🔒</span>
-              <p class="text-sm text-dark-200">
-                {{ L('此範例尚未預生成結果', 'No pre-generated result for this example yet', 'この例はまだ事前生成されていません', '이 예시는 아직 사전 생성되지 않았습니다', 'Aún no hay resultado pregenerado') }}
-              </p>
-              <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
-                {{ L('訂閱以使用完整 AI 功能', 'Subscribe to use the real AI', 'サブスクで実AI機能を解禁', '구독으로 실제 AI 사용', 'Suscríbete para usar la IA real') }}
-              </RouterLink>
-            </div>
-
-            <div v-else class="h-80 flex items-center justify-center">
-              <div class="text-center">
-                <span class="text-6xl block mb-4">🏠</span>
-                <p class="text-dark-400">{{ t('interior.resultPlaceholder') }}</p>
-                <p class="text-dark-400 text-sm mt-2">{{ t('interior.resultHint') }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Features Info -->
-          <div class="card bg-gradient-to-br from-primary-500/10 to-purple-500/10 border border-primary-500/20">
-            <h4 class="font-semibold text-dark-50 mb-3 flex items-center gap-2">
-              <span>✓</span>
-              {{ L('提案級輸出標準', 'Proposal-grade output standards', '提案グレードの出力基準', '제안서 수준의 출력 기준', 'Estándares de salida para propuestas') }}
-            </h4>
-            <ul class="space-y-2 text-sm text-dark-300">
-              <li v-for="item in deliverableStandards" :key="item" class="flex items-start gap-2">
-                <span class="text-primary-400">✓</span>
-                {{ item }}
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
+    <section class="px-4 sm:px-6 lg:px-8 pb-16 max-w-7xl mx-auto">
+      <ExampleGallery tool-key="room-redesign" />
+    </section>
   </div>
 </template>
-
-<style scoped>
-.card {
-  @apply p-6 rounded-2xl;
-  background: #141420;
-  border: 1px solid rgba(255,255,255,0.06);
-}
-
-.btn-primary {
-  @apply px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-dark-50 font-medium rounded-xl
-         hover:from-primary-600 hover:to-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed;
-}
-
-.btn-ghost {
-  @apply px-6 py-3 text-dark-200 font-medium rounded-xl
-         hover:text-dark-50 transition-all;
-  background: #1e1e32;
-}
-
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.room-tile {
-  position: relative;
-  border-radius: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.06);
-  background: #141420;
-  overflow: hidden;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-  text-align: left;
-  display: block;
-  width: 100%;
-}
-.room-tile:hover {
-  transform: translateY(-1px);
-  border-color: rgba(82, 196, 26, 0.4);
-}
-.room-tile--active {
-  border-color: #95de64;
-  box-shadow: 0 0 0 3px rgba(149, 222, 100, 0.18);
-}
-.room-tile-thumb {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  width: 100%;
-  background: #0f0f17;
-  overflow: hidden;
-}
-.room-tile-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.room-tile-thumb::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 50%);
-  pointer-events: none;
-}
-.room-tile-label {
-  position: absolute;
-  left: 12px;
-  bottom: 10px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #ffffff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-  z-index: 1;
-}
-</style>

@@ -1,0 +1,10 @@
+# Generated; ignore for Cloud Build uploads.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+*.log

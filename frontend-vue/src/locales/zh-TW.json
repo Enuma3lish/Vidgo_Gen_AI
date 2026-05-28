@@ -66,6 +66,15 @@
       "aiTools": "AI 工具",
       "recentlyUsed": "最近使用",
       "createWithAi": "運用 AI 建立圖片",
+      "categoryAria": "工具分類篩選",
+      "emptyCategory": "目前這個分類還沒有工具",
+      "categories": {
+        "all": "全部",
+        "advertising": "廣告宣傳",
+        "interior": "室內設計",
+        "branding": "品牌設計",
+        "other": "其他酷炫 AI 功能"
+      },
       "tiles": {
         "recolor": "商品換色",
         "productBeautifier": "商品圖優化放大",
@@ -83,7 +92,13 @@
         "threeDIllustration": "立體感影片",
         "productPhotography": "商品電商照",
         "productPackaging": "包裝圖案設計",
-        "createAnyImage": "行銷主視覺"
+        "createAnyImage": "行銷主視覺",
+        "roomRedesign": "室內設計改造",
+        "interiorTemplates": "室內設計範本",
+        "videoBgRemove": "影片去背",
+        "claymation": "黏土風生成",
+        "aiAvatar": "AI 數位人 / 代言人",
+        "videoDubbing": "影片配音翻譯"
       }
     },
     "tryOnLayout": {
@@ -484,6 +499,13 @@
     "edit": "編輯",
     "loading": "載入中...",
     "processing": "處理中...",
+    "loadingOverlay": {
+      "title": "生成中…",
+      "estimated": "預估時間",
+      "elapsed": "已用時間",
+      "almostDone": "即將完成，正在收尾…",
+      "keepOpen": "請保持此頁面開啟。"
+    },
     "success": "成功",
     "error": "錯誤",
     "dragDrop": "拖放檔案到此處或點擊上傳",
@@ -718,6 +740,11 @@
     "testOnly": "測試專用",
     "unlimitedCredits": "無限制點數/月",
     "creditsPerMonth": "{credits} 點數/月",
+    "customCredits": "客製化點數",
+    "contactUs": "聯絡我們",
+    "contactPrice": "詢價",
+    "refundUsageBlocked": "本月已使用 {pct}% 點數，超過 5% 退款門檻",
+    "refundHqExportBlocked": "您已導出無浮水印的高畫質成品，視同已產生 API 成本，不予退款",
     "ecpayPaymentLabel": "信用卡付款 (ECPay)",
     "testPaymentLabel": "測試付款 (US$1 / 約 NT$32)",
     "paypalPaymentLabel": "國際付款 (PayPal)",
@@ -732,24 +759,54 @@
         "useCase": "建議適用場景"
       },
       "rows": {
+        "standardImage": {
+          "feature": "標準 AI 圖片",
+          "cost": "1 點",
+          "output": "100 張",
+          "useCase": "電商商品圖、社群封面、配圖"
+        },
+        "premiumImage": {
+          "feature": "高品質 AI 圖片 (Flux / Qwen)",
+          "cost": "5 點",
+          "output": "20 張",
+          "useCase": "品牌主視覺、廣告主圖、印刷品"
+        },
+        "standardVideo": {
+          "feature": "標準 AI 影片 (5-10s)",
+          "cost": "20 點",
+          "output": "5 支",
+          "useCase": "Hailuo / Hunyuan / Kling 1.6 短影片"
+        },
         "proLong": {
-          "feature": "專業級長影片 (10s+)",
-          "cost": "35 點",
-          "output": "約 3 支",
-          "useCase": "電影質感、高品質 Luma/Kling"
+          "feature": "專業長影片 (Kling 10s)",
+          "cost": "60 點",
+          "output": "約 1 支",
+          "useCase": "Kling 高品質 10 秒影片"
         },
         "restore": {
-          "feature": "影片畫質修復 / 增強",
+          "feature": "畫質修復 / 增強",
           "cost": "15 點",
-          "output": "約 6 支",
-          "useCase": "舊片翻新、低解析度轉 HD"
+          "output": "約 6 次",
+          "useCase": "舊片翻新、低解析度轉 1080p / 4K"
+        },
+        "veo3": {
+          "feature": "Veo 3.1 影片 (5s) 🆕",
+          "cost": "200 點",
+          "output": "—",
+          "useCase": "進階版專屬旗艦影片"
+        },
+        "seedanceWan": {
+          "feature": "Seedance / Wan 影片 🆕",
+          "cost": "40 點",
+          "output": "約 2 支",
+          "useCase": "中價位動態影片、抖音直式內容"
         }
       },
       "scenarios": {
         "title": "🚀 100 點數能為您做什麼？（情境舉例）",
         "intro": "為了讓用戶更有感，您可以增加一個「情境套餐」說明：",
-        "creatorStarter": "「自媒體新手包」：生成 5 支 標準短影片 + 50 張 封面配圖。",
-        "proDesigner": "「專業設計師包」：生成 2 支 高畫質專業影片 + 6 張 商業級圖片。",
+        "creatorStarter": "「自媒體新手包」：生成 3 支 標準短影片 + 40 張 封面配圖。",
+        "proDesigner": "「專業設計師包」：生成 1 支 高畫質專業影片 + 8 張 商業級圖片。",
         "imageSprint": "「純圖片創作季」：生成 100 張 標準 AI 圖片。"
       }
     },
@@ -770,6 +827,7 @@
       "noBonus": "無加贈，適合小量測試",
       "featureCrossTool": "可用於圖片、影片、室內設計與商品場景生成",
       "featureNoReset": "購買點數不會每月歸零，適合專案補量",
+      "nonRefundable": "⚠ 點數包屬虛擬商品，購買後不予退款",
       "cta": {
         "buy": "購買點數",
         "buyCard": "信用卡付款",
@@ -818,7 +876,7 @@
       },
       "rollover": {
         "q": "未使用的點數會累計嗎？",
-        "a": "每月點數會在計費週期結束時重置。購買的點數包則永不過期。"
+        "a": "訂閱方案的月配點數每月重置，不累計至下月，月底未使用即清空。單次購買的點數包永不過期。"
       },
       "change": {
         "q": "可以升級或降級嗎？",
@@ -826,7 +884,7 @@
       },
       "refund": {
         "q": "退款政策是什麼？",
-        "a": "您可以在訂閱後 7 天內申請全額退款。7 天後仍可取消訂閱，但將保留存取權限直到計費週期結束。"
+        "a": "您可以在訂閱後 7 天內申請退款，但須同時符合：(1) 該月消耗點數低於月配發量的 5%（例：標準版消耗低於 22 點）；(2) 尚未導出過無浮水印的高畫質成品。超過門檻或超過 7 天視同已產生 API 成本，不予退款。單次購買的點數包屬虛擬商品，購買後不予退款。"
       }
     }
   },
@@ -955,15 +1013,15 @@
       "creditPacks": [
         {
           "name": "輕量包",
-          "credits": "3,000 點"
+          "credits": "250 點"
         },
         {
           "name": "標準包",
-          "credits": "5,500 點"
+          "credits": "416 點"
         },
         {
           "name": "重度包",
-          "credits": "12,000 點"
+          "credits": "833 點"
         }
       ]
     }
@@ -1186,6 +1244,20 @@
     "trust2": "無需信用卡",
     "trust3": "隨時取消",
     "trustBrands": "為電商、餐飲、服飾與生活品牌打造穩定視覺工作流",
+    "interior": {
+      "eyebrow": "重點功能 · 室內設計",
+      "title": "一張照片，重新設計整個房間",
+      "body": "上傳客廳、臥室、商業空間或建案實景照，AI 立刻換上 20 多種設計風格 — 從北歐極簡、日式禪意到工業風皆可一鍵預覽。專為房仲、室內設計師、家具品牌與個人屋主打造。",
+      "bullet1": "20+ 室內、外觀與商業空間風格",
+      "bullet2": "Magic 模式：輸入自訂指令重新繪製",
+      "bullet3": "支援前後對照與高畫質輸出",
+      "ctaPrimary": "免費試做室內設計",
+      "ctaSecondary": "瀏覽設計範本",
+      "beforeLabel": "原圖",
+      "afterLabel": "AI 重新設計",
+      "beforeAlt": "改造前的房間",
+      "afterAlt": "AI 改造後的房間"
+    },
     "heroDemo": {
       "tabs": {
         "product_scene": "商品情境",

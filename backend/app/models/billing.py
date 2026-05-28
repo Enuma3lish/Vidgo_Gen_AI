@@ -15,9 +15,18 @@ class Plan(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     name = Column(String(50), nullable=False)  # basic, pro, premium, enterprise
     slug = Column(String, unique=True, index=True, nullable=True)
-    display_name = Column(String(100), nullable=True)  # Display name (i18n key)
+    display_name = Column(String(100), nullable=True)  # Legacy/single-locale display name
     plan_type = Column(String, nullable=False, default="free")  # free, basic, pro, enterprise
     description = Column(String, nullable=True)
+    # 2026-05-24 — bilingual display copy. Mirrors the existing
+    # features_text_zh/en split pattern so the admin can edit each
+    # language independently. Pricing.vue picks the locale-matched
+    # value at render time; falls back to `display_name` / `description`
+    # if the per-locale field is empty.
+    display_name_zh = Column(String(100), nullable=True)
+    display_name_en = Column(String(100), nullable=True)
+    description_zh = Column(String, nullable=True)
+    description_en = Column(String, nullable=True)
 
     # Pricing (TWD based)
     price = Column(DECIMAL(10, 2), nullable=True)  # Legacy field
@@ -91,15 +100,25 @@ class Subscription(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     plan_id = Column(UUID(as_uuid=True), ForeignKey("plans.id"), nullable=False)
-    
+
     status = Column(String, default="pending") # active, pending, cancelled, expired
     start_date = Column(DateTime(timezone=True))
     end_date = Column(DateTime(timezone=True))
     auto_renew = Column(Boolean, default=True)
-    
+
+    # Persisted refund-eligibility flag. Owner directive 2026-05-25.
+    # Starts TRUE on subscribe; auto-flipped to FALSE the first time the
+    # user crosses any refund gate (>5% allowance used OR a watermark-free
+    # HQ export). Once FALSE, no refund attempt can pass — even if the
+    # user later reverses charges or transactions are deleted.
+    # Admin can manually re-enable via /admin endpoint.
+    is_refundable = Column(Boolean, nullable=False, default=True, server_default="true")
+    refund_blocked_at = Column(DateTime(timezone=True), nullable=True)
+    refund_blocked_reason = Column(String(64), nullable=True)  # USAGE_EXCEEDED | HQ_EXPORT_PRODUCED | ADMIN_BLOCK
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     user = relationship("app.models.user.User", backref="subscription_list")
     plan = relationship("Plan")

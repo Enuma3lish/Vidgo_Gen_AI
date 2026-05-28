@@ -7,6 +7,10 @@ from app.core.test_plans import is_test_pro_plan
 
 HIDDEN_PUBLIC_PLAN_NAMES = {"demo", "free", "starter"}
 HIDDEN_PUBLIC_PLAN_PRICE_TWD = 299
+# Contact-Us tiers carry price_monthly=0 because the price is negotiated
+# off-platform. The hide-when-price-zero rule below must NOT swallow them —
+# the Pricing.vue page renders a Contact Us CTA from these rows.
+CONTACT_US_PLAN_NAMES = {"enterprise"}
 
 
 def normalize_plan_key(value: Any) -> str:
@@ -42,6 +46,11 @@ def is_hidden_public_plan(plan: Any) -> bool:
     display_name = normalize_plan_key(getattr(plan, "display_name", ""))
     if {name, slug, display_name} & HIDDEN_PUBLIC_PLAN_NAMES:
         return True
+
+    # Contact-Us tiers (enterprise) must stay visible even with price=0,
+    # because the frontend renders a "Contact Us" CTA based on them.
+    if {name, slug} & CONTACT_US_PLAN_NAMES:
+        return False
 
     monthly_price = plan_monthly_price(plan)
     return monthly_price <= 0 or int(round(monthly_price)) == HIDDEN_PUBLIC_PLAN_PRICE_TWD

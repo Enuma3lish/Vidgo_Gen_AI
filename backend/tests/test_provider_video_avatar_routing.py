@@ -13,7 +13,14 @@ from app.providers.provider_router import ProviderRouter, TaskType
 pytestmark = pytest.mark.asyncio
 
 
-async def test_v2v_routes_to_piapi_mcp_without_unsupported_piapi_rest() -> None:
+async def test_v2v_routes_to_piapi_rest_then_vertex() -> None:
+    """V2V routing post-MCP-removal (2026-05-26).
+
+    Both MCP providers were deleted; PiAPI REST's video_style_transfer
+    method now delegates to Seedance I2V via the first frame
+    (see piapi_provider.video_style_transfer). Routing chain trims to
+    piapi → vertex_ai per ROUTING_CONFIG.
+    """
     router = ProviderRouter()
     try:
         providers = router._get_providers_for_task(
@@ -23,9 +30,8 @@ async def test_v2v_routes_to_piapi_mcp_without_unsupported_piapi_rest() -> None:
     finally:
         await router.close()
 
-    assert providers[0] == "piapi_mcp"
-    assert "pollo" in providers
-    assert "piapi" not in providers
+    assert providers[0] == "piapi"
+    assert "vertex_ai" in providers
 
 
 async def test_piapi_avatar_accepts_text_alias_and_normalizes_video_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -36,7 +42,7 @@ async def test_piapi_avatar_accepts_text_alias_and_normalizes_video_url(monkeypa
         captured["tts_params"] = params
         return {"success": True, "output": {"audio_url": "https://cdn.example.com/speech.mp3"}}
 
-    async def fake_submit_and_poll(payload: dict[str, Any]) -> dict[str, Any]:
+    async def fake_submit_and_poll(payload: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
         captured["avatar_payload"] = payload
         return {
             "success": True,
@@ -65,7 +71,12 @@ async def test_piapi_avatar_accepts_text_alias_and_normalizes_video_url(monkeypa
     assert captured["avatar_payload"]["task_type"] == "avatar"
     assert captured["avatar_payload"]["input"]["batch_size"] == 1
     assert captured["avatar_payload"]["input"]["local_dubbing_url"] == "https://cdn.example.com/speech.mp3"
-    assert captured["avatar_payload"]["input"]["prompt"] == "Text alias should be spoken."
+    # BUG-005: the spoken script must NOT leak into Kling's visual `prompt`
+    # (that rendered the words as on-screen captions). The script reaches Kling
+    # via local_dubbing_url (asserted above); `prompt` is a clean talking-head
+    # visual brief that explicitly forbids on-screen text.
+    assert "Text alias should be spoken." not in captured["avatar_payload"]["input"]["prompt"]
+    assert "no text" in captured["avatar_payload"]["input"]["prompt"].lower()
     assert result["output"]["video_url"] == "https://cdn.example.com/avatar.mp4"
 
 

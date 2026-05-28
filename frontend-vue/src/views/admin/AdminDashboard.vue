@@ -21,47 +21,71 @@ const isZh = computed(() => locale.value === 'zh-TW')
 function localized(zh: string, en: string): string {
   return isZh.value ? zh : en
 }
-const topCostApiMonth = computed(() => {
-  const services = adminStore.apiCosts?.by_service || []
-  if (!services.length) return null
-  return services.reduce((max, item) => (item.month_cost > max.month_cost ? item : max), services[0])
+// 2026-05-26 — removed `topCostApi{Month,Week,Year}` + their trend ratios.
+// They only powered the 3 "Highest-Cost API" stat cards that the new
+// headline strip + the existing API Cost Breakdown table now cover better.
+
+// ─── Headline "Money & Status at a glance" (2026-05-26 redesign) ────
+// Surfaces revenue / API cost / net profit / margin at the top of the
+// page so admins see the bottom-line number first, then drill into the
+// per-tool / per-month breakdown below. Previously this required
+// scrolling past 8+ stat cards and 3 charts.
+const monthRevenue = computed(() => Number(adminStore.earnings?.month ?? 0))
+const monthApiCost = computed(() => Number(adminStore.apiCosts?.month_total ?? 0))
+const monthNetProfit = computed(() => monthRevenue.value - monthApiCost.value)
+const monthMarginPct = computed(() => {
+  const rev = monthRevenue.value
+  return rev > 0 ? Math.round((monthNetProfit.value / rev) * 1000) / 10 : 0
 })
-const topCostApiWeek = computed(() => {
-  const services = adminStore.apiCosts?.by_service || []
-  if (!services.length) return null
-  return services.reduce((max, item) => (item.week_cost > max.week_cost ? item : max), services[0])
+const prevMonthRevenue = computed(() => {
+  // monthly_breakdown is ordered oldest → newest; previous = second-to-last.
+  const m = adminStore.earnings?.monthly_breakdown
+  if (!m || m.length < 2) return 0
+  return Number(m[m.length - 2]?.revenue ?? 0)
 })
-const topCostApiYear = computed(() => {
-  const services = adminStore.apiCosts?.by_service || []
-  if (!services.length) return null
-  return services.reduce((max, item) => (item.year_cost > max.year_cost ? item : max), services[0])
+const prevMonthApiCost = computed(() => {
+  // Sum of prev_month_cost across all services in the api-costs payload.
+  const svcs = adminStore.apiCosts?.by_service || []
+  return svcs.reduce((sum, s) => sum + Number(s.prev_month_cost ?? 0), 0)
 })
-const topCostMonthTrendRatio = computed(() => {
-  if (!topCostApiMonth.value) return 1
-  return trendRatio(topCostApiMonth.value.month_cost, topCostApiMonth.value.prev_month_cost)
+const monthRevenueTrend = computed(() => trendRatio(monthRevenue.value, prevMonthRevenue.value))
+const monthApiCostTrend = computed(() => trendRatio(monthApiCost.value, prevMonthApiCost.value))
+const monthNetProfitTrend = computed(() =>
+  trendRatio(monthNetProfit.value, prevMonthRevenue.value - prevMonthApiCost.value),
+)
+
+// Provider health summary for the headline row — compact 4-dot strip.
+// Reads the same /admin/ai-services payload the detailed cards below use.
+const providerHealthSummary = computed(() => {
+  const services = adminStore.aiServices?.services || {}
+  return PROVIDER_ORDER
+    .filter(key => services[key])
+    .map(key => {
+      const s = services[key] || {}
+      const norm = normalizeProviderStatus(s.status)
+      return {
+        key,
+        label: PROVIDER_LABELS[key] || key,
+        status: norm,
+        message: s.message || '',
+      }
+    })
 })
-const topCostWeekTrendRatio = computed(() => {
-  if (!topCostApiWeek.value) return 1
-  return trendRatio(topCostApiWeek.value.week_cost, topCostApiWeek.value.prev_week_cost)
-})
-const topCostYearTrendRatio = computed(() => {
-  if (!topCostApiYear.value) return 1
-  return trendRatio(topCostApiYear.value.year_cost, topCostApiYear.value.prev_year_cost)
-})
-const PROVIDER_ORDER = ['piapi_mcp', 'piapi', 'pollo_mcp', 'pollo', 'vertex_ai', 'a2e']
+const providersHealthyCount = computed(() => providerHealthSummary.value.filter(p => p.status === 'ok').length)
+const providersTotalCount = computed(() => providerHealthSummary.value.length)
+const providersAllHealthy = computed(() => providersTotalCount.value > 0 && providersHealthyCount.value === providersTotalCount.value)
+
+// Both MCP providers removed 2026-05-26 — REST covers everything.
+const PROVIDER_ORDER = ['piapi', 'pollo', 'vertex_ai', 'a2e']
 const PROVIDER_LABELS: Record<string, string> = {
-  piapi_mcp: 'PiAPI MCP',
   piapi: 'PiAPI REST',
-  pollo_mcp: 'Pollo MCP',
   pollo: 'Pollo REST',
   vertex_ai: 'Vertex AI / Gemini',
   a2e: 'A2E.ai',
 }
 function providerDetail(key: string): string {
   const details: Record<string, string> = {
-    piapi_mcp: localized('圖片、影片、去背、放大與備援工具', 'Image, video, background removal, upscaling, and fallback tools'),
-    piapi: localized('PiAPI REST 備援與特殊模型', 'PiAPI REST fallback and specialty models'),
-    pollo_mcp: localized('主要影片生成與動態模型', 'Primary video generation and motion models'),
+    piapi: localized('主要 AI 模型與所有工具', 'Primary AI models — covers every tool'),
     pollo: localized('影片模型 REST 備援', 'Video model REST fallback'),
     vertex_ai: localized('Gemini / Veo 最終備援與審核', 'Gemini / Veo final fallback and moderation'),
     a2e: localized('數位人與口播影片備援', 'AI avatar and talking video fallback'),
@@ -434,6 +458,69 @@ function exportToolUsage() {
       </div>
     </header>
 
+    <!-- ===== HEADLINE: Money & Status at a Glance (top, 2026-05-26) ===== -->
+    <!-- Single most-important row: this-month net profit + revenue + cost +
+         margin, plus a compact provider-health badge strip. Surfaces the
+         numbers an admin actually needs to make decisions without scrolling. -->
+    <section class="headline-strip" v-if="adminStore.earnings && adminStore.apiCosts">
+      <div class="headline-cards">
+        <div class="headline-card" :class="monthNetProfit >= 0 ? 'profit' : 'loss'">
+          <span class="headline-label">{{ localized('本月淨利', 'Net Profit (Month)') }}</span>
+          <span class="headline-value">{{ formatCurrency(monthNetProfit) }}</span>
+          <span class="headline-trend" :class="trendDirection(monthNetProfitTrend)">
+            {{ trendArrow(monthNetProfitTrend) }}
+            {{ trendLabel(monthNetProfitTrend, 'month') }}
+          </span>
+        </div>
+        <div class="headline-card revenue">
+          <span class="headline-label">{{ localized('本月收入', 'Revenue (Month)') }}</span>
+          <span class="headline-value">{{ formatCurrency(monthRevenue) }}</span>
+          <span class="headline-trend" :class="trendDirection(monthRevenueTrend)">
+            {{ trendArrow(monthRevenueTrend) }}
+            {{ trendDeltaText(monthRevenue, prevMonthRevenue) }}
+          </span>
+        </div>
+        <div class="headline-card cost">
+          <span class="headline-label">{{ localized('本月 API 成本', 'API Cost (Month)') }}</span>
+          <span class="headline-value">{{ formatCurrency(monthApiCost) }}</span>
+          <!-- Cost trending UP is bad (red), DOWN is good (green) — inverted -->
+          <span class="headline-trend" :class="monthApiCostTrend > 1 ? 'down' : monthApiCostTrend < 1 ? 'up' : 'flat'">
+            {{ trendArrow(monthApiCostTrend) }}
+            {{ trendDeltaText(monthApiCost, prevMonthApiCost) }}
+          </span>
+        </div>
+        <div class="headline-card margin">
+          <span class="headline-label">{{ localized('利潤率', 'Margin') }}</span>
+          <span class="headline-value">{{ monthMarginPct }}%</span>
+          <span class="headline-trend neutral">
+            {{ localized('收入 - 成本 / 收入', '(rev − cost) ÷ rev') }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Compact provider-health strip — green/red dot per provider -->
+      <div class="provider-pulse" v-if="providersTotalCount > 0">
+        <div class="provider-pulse-header">
+          <span class="provider-pulse-title">{{ localized('AI 供應商狀態', 'AI Provider Status') }}</span>
+          <span class="provider-pulse-summary" :class="providersAllHealthy ? 'ok' : 'warn'">
+            {{ providersHealthyCount }} / {{ providersTotalCount }} {{ localized('正常運作', 'operational') }}
+          </span>
+        </div>
+        <div class="provider-pulse-row">
+          <div
+            v-for="p in providerHealthSummary"
+            :key="p.key"
+            class="provider-pulse-dot"
+            :class="p.status"
+            :title="p.message || p.label"
+          >
+            <span class="dot"></span>
+            <span class="provider-pulse-label">{{ p.label }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== Error Banner ===== -->
     <div v-if="adminStore.error" class="error-banner">
       <span>{{ adminStore.error }}</span>
@@ -521,53 +608,12 @@ function exportToolUsage() {
         </div>
       </div>
 
-      <div class="stat-card top-cost" v-if="topCostApiMonth">
-        <div class="stat-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M7 8.5C7 6.6 8.6 5 10.5 5h3C15.4 5 17 6.6 17 8.5S15.4 12 13.5 12h-3C8.6 12 7 13.6 7 15.5S8.6 19 10.5 19h3C15.4 19 17 17.4 17 15.5"/></svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-value">{{ formatCurrency(topCostApiMonth.month_cost) }}</span>
-          <span class="stat-label">{{ localized('最高成本 API（本月）', 'Highest-Cost API (Month)') }}</span>
-          <span class="stat-subvalue">{{ topCostApiMonth.display_name }} · {{ localized(`${formatNumber(topCostApiMonth.month_calls)} 次`, `${formatNumber(topCostApiMonth.month_calls)} calls`) }}</span>
-          <span class="stat-trend" :class="trendDirection(topCostMonthTrendRatio)">
-            {{ trendArrow(topCostMonthTrendRatio) }}
-            {{ trendLabel(topCostMonthTrendRatio, 'month') }}
-            {{ trendDeltaText(topCostApiMonth.month_cost, topCostApiMonth.prev_month_cost) }}
-          </span>
-        </div>
-      </div>
-
-      <div class="stat-card top-cost-week" v-if="topCostApiWeek">
-        <div class="stat-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M7 8.5C7 6.6 8.6 5 10.5 5h3C15.4 5 17 6.6 17 8.5S15.4 12 13.5 12h-3C8.6 12 7 13.6 7 15.5S8.6 19 10.5 19h3C15.4 19 17 17.4 17 15.5"/></svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-value">{{ formatCurrency(topCostApiWeek.week_cost) }}</span>
-          <span class="stat-label">{{ localized('最高成本 API（本週）', 'Highest-Cost API (Week)') }}</span>
-          <span class="stat-subvalue">{{ topCostApiWeek.display_name }} · {{ localized(`${formatNumber(topCostApiWeek.week_calls)} 次`, `${formatNumber(topCostApiWeek.week_calls)} calls`) }}</span>
-          <span class="stat-trend" :class="trendDirection(topCostWeekTrendRatio)">
-            {{ trendArrow(topCostWeekTrendRatio) }}
-            {{ trendLabel(topCostWeekTrendRatio, 'week') }}
-            {{ trendDeltaText(topCostApiWeek.week_cost, topCostApiWeek.prev_week_cost) }}
-          </span>
-        </div>
-      </div>
-
-      <div class="stat-card top-cost-year" v-if="topCostApiYear">
-        <div class="stat-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M7 8.5C7 6.6 8.6 5 10.5 5h3C15.4 5 17 6.6 17 8.5S15.4 12 13.5 12h-3C8.6 12 7 13.6 7 15.5S8.6 19 10.5 19h3C15.4 19 17 17.4 17 15.5"/></svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-value">{{ formatCurrency(topCostApiYear.year_cost) }}</span>
-          <span class="stat-label">{{ localized('最高成本 API（今年）', 'Highest-Cost API (Year)') }}</span>
-          <span class="stat-subvalue">{{ topCostApiYear.display_name }} · {{ localized(`${formatNumber(topCostApiYear.year_calls)} 次`, `${formatNumber(topCostApiYear.year_calls)} calls`) }}</span>
-          <span class="stat-trend" :class="trendDirection(topCostYearTrendRatio)">
-            {{ trendArrow(topCostYearTrendRatio) }}
-            {{ trendLabel(topCostYearTrendRatio, 'year') }}
-            {{ trendDeltaText(topCostApiYear.year_cost, topCostApiYear.prev_year_cost) }}
-          </span>
-        </div>
-      </div>
+      <!-- 2026-05-26 — removed 3 "Highest-Cost API for week / month / year"
+           cards from the stats grid. The new headline strip above already
+           shows the month aggregate cost, and the full API Cost Breakdown
+           table below shows per-service week/month/year columns. The 3
+           "top-cost" cards just duplicated the same single max-cost service
+           in 3 different formats, taking 3 grid cells with low signal. -->
     </div>
 
     <!-- ===== Charts: Generation Trend + Revenue Trend ===== -->
@@ -841,6 +887,115 @@ function exportToolUsage() {
 /* AdminLayout already provides the sticky top strip + nav. The page just
    needs vertical breathing room from that strip — no header offset. */
 .admin-dashboard { padding: 1.5rem 2rem 2rem; max-width: 1400px; margin: 0 auto; }
+
+/* ─── Headline strip (2026-05-26 redesign) ──────────────────────────
+   Top-of-page money + provider health at-a-glance. Designed to be the
+   only thing an admin needs to glance at to know "are we making money
+   today + is anything broken?" Everything else is drill-down detail. */
+.headline-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1.4fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+@media (max-width: 980px) { .headline-strip { grid-template-columns: 1fr; } }
+
+.headline-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+@media (max-width: 820px) { .headline-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.headline-card {
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #141420 0%, #1a1a28 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex; flex-direction: column; gap: 0.35rem;
+  min-height: 110px;
+  position: relative;
+  overflow: hidden;
+}
+.headline-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: #4b5563;
+}
+.headline-card.profit::before { background: linear-gradient(180deg, #10b981, #34d399); }
+.headline-card.loss::before   { background: linear-gradient(180deg, #ef4444, #f87171); }
+.headline-card.revenue::before{ background: linear-gradient(180deg, #1677ff, #3b8aff); }
+.headline-card.cost::before   { background: linear-gradient(180deg, #f59e0b, #fbbf24); }
+.headline-card.margin::before { background: linear-gradient(180deg, #7c3aed, #a78bfa); }
+
+.headline-label {
+  font-size: 0.75rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: #9494b0;
+}
+.headline-value {
+  font-size: 1.85rem; font-weight: 700; color: #f5f5fa;
+  tab-stop: tabular-nums; font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.headline-card.profit .headline-value { color: #6ee7b7; }
+.headline-card.loss .headline-value   { color: #fca5a5; }
+
+.headline-trend {
+  font-size: 0.78rem; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  margin-top: auto;
+}
+.headline-trend.up      { color: #34d399; }
+.headline-trend.down    { color: #f87171; }
+.headline-trend.flat,
+.headline-trend.neutral { color: #9494b0; }
+
+/* Compact provider health pulse — companion panel to the money cards. */
+.provider-pulse {
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #141420 0%, #1a1a28 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex; flex-direction: column; gap: 0.7rem;
+}
+.provider-pulse-header { display: flex; justify-content: space-between; align-items: center; }
+.provider-pulse-title {
+  font-size: 0.75rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: #9494b0;
+}
+.provider-pulse-summary {
+  font-size: 0.78rem; font-weight: 700;
+  padding: 0.2rem 0.55rem; border-radius: 999px;
+}
+.provider-pulse-summary.ok   { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+.provider-pulse-summary.warn { background: rgba(239,68,68,0.15);  color: #fca5a5; }
+
+.provider-pulse-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 0.75rem;
+}
+.provider-pulse-dot {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.8rem; color: #c2c2d5;
+}
+.provider-pulse-dot .dot {
+  width: 8px; height: 8px; border-radius: 999px; background: #6b6b7a;
+  box-shadow: 0 0 0 0 rgba(0,0,0,0);
+  flex-shrink: 0;
+}
+.provider-pulse-dot.ok .dot {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16,185,129,0.55);
+}
+.provider-pulse-dot.error .dot {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239,68,68,0.55);
+}
+.provider-pulse-label { font-weight: 500; }
+.provider-pulse-dot.error .provider-pulse-label { color: #fca5a5; }
+
 
 .dashboard-header { margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
 .dashboard-header h1 { font-size: 2rem; font-weight: 700; color: #f5f5fa; margin: 0; }

@@ -216,7 +216,7 @@ class PolloAIClient:
     async def wait_for_completion(
         self,
         task_id: str,
-        timeout: int = 300,
+        timeout: int = 1200,
         poll_interval: int = 5
     ) -> Dict[str, Any]:
         """
@@ -224,7 +224,9 @@ class PolloAIClient:
 
         Args:
             task_id: Task ID from generate_video
-            timeout: Max wait time in seconds (default 5 min for video generation)
+            timeout: Max wait time in seconds (default 20 min — short-video
+                jobs on Kling / Seedance / Wan can idle 8-15 min before
+                yielding a video; lower defaults aborted healthy renders)
             poll_interval: Seconds between status checks
 
         Returns:
@@ -258,7 +260,7 @@ class PolloAIClient:
         image_url: str,
         prompt: str,
         model: str = DEFAULT_MODEL,
-        timeout: int = 300
+        timeout: int = 1200
     ) -> Dict[str, Any]:
         """
         Generate video and wait for completion.

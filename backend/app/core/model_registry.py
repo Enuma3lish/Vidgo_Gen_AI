@@ -91,6 +91,21 @@ PIAPI_MODELS: Dict[str, str] = {
     "qwen_t2i":            os.environ.get("PIAPI_QWEN_T2I_MODEL",      "Qubico/qwen-image"),
     "z_image_t2i":         os.environ.get("PIAPI_Z_IMAGE_T2I_MODEL",   "Qubico/z-image"),
 
+    # New PiAPI catalog models 2026-05-23 — verified end-to-end with real
+    # generations that returned working image/video URLs. All are vendor-API
+    # proxies (Google Gemini / ByteDance / Google Veo), not Qubico-hosted,
+    # so latency + reliability tracks the vendor's own SLA, not PiAPI's
+    # internal GPU pool. Dropped: Veo 3 (2× "too many requests" in probes),
+    # Seedream 4.0 (not exposed on PiAPI), Nano Banana v1 (only v2/Pro live).
+    "nano_banana_2_model":     os.environ.get("PIAPI_NANO_BANANA_2_MODEL",     "gemini"),
+    "nano_banana_2_task":      os.environ.get("PIAPI_NANO_BANANA_2_TASK",      "nano-banana-2"),
+    "nano_banana_pro_model":   os.environ.get("PIAPI_NANO_BANANA_PRO_MODEL",   "gemini"),
+    "nano_banana_pro_task":    os.environ.get("PIAPI_NANO_BANANA_PRO_TASK",    "nano-banana-pro"),
+    "seedream_5_lite_model":   os.environ.get("PIAPI_SEEDREAM_5_LITE_MODEL",   "seedream"),
+    "seedream_5_lite_task":    os.environ.get("PIAPI_SEEDREAM_5_LITE_TASK",    "seedream-5-lite"),
+    "veo_31_fast_model":       os.environ.get("PIAPI_VEO_31_FAST_MODEL",       "veo3.1"),
+    "veo_31_fast_task":        os.environ.get("PIAPI_VEO_31_FAST_TASK",        "veo3.1-video-fast"),
+
     # Wan video (model="Wan"; version encoded in task_type)
     "wan_video":           os.environ.get("PIAPI_WAN_VIDEO_MODEL",     "Wan"),
     "wan_i2v_task":        os.environ.get("PIAPI_WAN_I2V_TASK",        "wan26-img2video"),
@@ -117,19 +132,38 @@ PIAPI_MODELS: Dict[str, str] = {
     # PiAPI is mandatory primary; Pollo (below) is the backup that mirrors
     # the same model family. Model IDs are env-overridable because PiAPI
     # has a history of renaming aliases without notice.
-    "seedance_video":      os.environ.get("PIAPI_SEEDANCE_VIDEO_MODEL", "Doubao/seedance"),
-    "seedance_t2v_task":   os.environ.get("PIAPI_SEEDANCE_T2V_TASK",    "seedance2-fast-txt2video"),
-    "seedance_i2v_task":   os.environ.get("PIAPI_SEEDANCE_I2V_TASK",    "seedance2-fast-img2video"),
-    "seedance_t2i_task":   os.environ.get("PIAPI_SEEDANCE_T2I_TASK",    "seedance2-txt2img"),
+    # All four families' model/task strings were originally educated guesses
+    # and ALL were rejected by PiAPI with "invalid model" / "invalid task type"
+    # (verified 2026-05-22 via live probes). Updated to the values shown in
+    # PiAPI's official docs + a working 200-response curl probe:
+    #
+    #   Seedance: model="seedance",      task_type="seedance-2-fast-preview"
+    #             input.image_urls=[…]   (array, NOT image_url)
+    #   Hailuo:   model="hailuo",        task_type="video_generation"
+    #             input.model="i2v-01" or "t2v-01"  (NESTED variant id)
+    #   Hunyuan:  model="Qubico/hunyuan", task_type="img2video-concat" / "txt2video"
+    #   Wan:      model="Wan",           task_type="wan26-img2video" / "wan26-txt2video"
+    #             input.image=…          (string, NOT image_url / image_urls)
+    #
+    # Per-family input-shape variance is handled in piapi_provider.image_to_video
+    # / text_to_video — these env vars only carry the top-level model+task_type.
+    "seedance_video":      os.environ.get("PIAPI_SEEDANCE_VIDEO_MODEL", "seedance"),
+    "seedance_t2v_task":   os.environ.get("PIAPI_SEEDANCE_T2V_TASK",    "seedance-2-fast-preview"),
+    "seedance_i2v_task":   os.environ.get("PIAPI_SEEDANCE_I2V_TASK",    "seedance-2-fast-preview"),
+    "seedance_t2i_task":   os.environ.get("PIAPI_SEEDANCE_T2I_TASK",    "seedance2-txt2img"),  # T2I not exposed on PiAPI — placeholder
 
-    "hailuo_video":        os.environ.get("PIAPI_HAILUO_VIDEO_MODEL",   "minimax"),
-    "hailuo_t2v_task":     os.environ.get("PIAPI_HAILUO_T2V_TASK",      "hailuo-fast-txt2video"),
-    "hailuo_i2v_task":     os.environ.get("PIAPI_HAILUO_I2V_TASK",      "hailuo-fast-img2video"),
+    "hailuo_video":        os.environ.get("PIAPI_HAILUO_VIDEO_MODEL",   "hailuo"),
+    "hailuo_t2v_task":     os.environ.get("PIAPI_HAILUO_T2V_TASK",      "video_generation"),
+    "hailuo_i2v_task":     os.environ.get("PIAPI_HAILUO_I2V_TASK",      "video_generation"),
+    # Hailuo's nested input.model variants (t2v-01 / i2v-01 / s2v-01 / ...).
+    # Override per environment if vendor changes the variant catalog.
+    "hailuo_t2v_variant":  os.environ.get("PIAPI_HAILUO_T2V_VARIANT",   "t2v-01"),
+    "hailuo_i2v_variant":  os.environ.get("PIAPI_HAILUO_I2V_VARIANT",   "i2v-01"),
 
-    "hunyuan_video":       os.environ.get("PIAPI_HUNYUAN_VIDEO_MODEL",  "hunyuan"),
-    "hunyuan_t2v_task":    os.environ.get("PIAPI_HUNYUAN_T2V_TASK",     "hunyuan-txt2video"),
-    "hunyuan_i2v_task":    os.environ.get("PIAPI_HUNYUAN_I2V_TASK",     "hunyuan-img2video"),
-    "hunyuan_t2i_task":    os.environ.get("PIAPI_HUNYUAN_T2I_TASK",     "hunyuan-txt2img"),
+    "hunyuan_video":       os.environ.get("PIAPI_HUNYUAN_VIDEO_MODEL",  "Qubico/hunyuan"),
+    "hunyuan_t2v_task":    os.environ.get("PIAPI_HUNYUAN_T2V_TASK",     "txt2video"),
+    "hunyuan_i2v_task":    os.environ.get("PIAPI_HUNYUAN_I2V_TASK",     "img2video-concat"),
+    "hunyuan_t2i_task":    os.environ.get("PIAPI_HUNYUAN_T2I_TASK",     "hunyuan-txt2img"),  # T2I not exposed on PiAPI — placeholder
 }
 
 
@@ -158,8 +192,8 @@ PIAPI_MIDJOURNEY_PROCESS_MODE: str = os.environ.get(
 # ─────────────────────────────────────────────────────────────────────────
 # Pollo's model field uses explicit version strings (``pixverse_v4.5``,
 # ``pixverse_v5``, ``kling_v2`` …). The defaults below match the values
-# previously hard-coded in providers/pollo_provider.py and
-# providers/pollo_mcp_provider.py; bump them as new versions ship.
+# previously hard-coded in providers/pollo_provider.py; bump them as new
+# versions ship. (pollo_mcp_provider.py was deleted 2026-05-26.)
 POLLO_MODELS: Dict[str, str] = {
     "pixverse_default": os.environ.get("POLLO_PIXVERSE_DEFAULT_MODEL", "pixverse_v4.5"),
     "pixverse_creative": os.environ.get("POLLO_PIXVERSE_CREATIVE_MODEL", "pixverse_v5"),

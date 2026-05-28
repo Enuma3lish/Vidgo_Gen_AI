@@ -1,0 +1,62 @@
+{
+  "midjourney-imagine": {
+    "mj-01": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-01.jpg",
+    "mj-02": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-02.jpg",
+    "mj-03": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-03.jpg",
+    "mj-04": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-04.jpg",
+    "mj-05": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-05.jpg",
+    "mj-06": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-06.jpg",
+    "mj-07": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-07.jpg",
+    "mj-08": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-08.jpg",
+    "mj-09": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-09.jpg",
+    "mj-10": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/midjourney-imagine/mj-10.jpg"
+  },
+  "pattern-generate": {
+    "pt-01": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-01.jpg",
+    "pt-02": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-02.jpg",
+    "pt-03": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-03.jpg",
+    "pt-04": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-04.jpg",
+    "pt-05": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-05.jpg",
+    "pt-06": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-06.jpg",
+    "pt-07": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-07.jpg",
+    "pt-08": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-08.jpg",
+    "pt-09": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-09.jpg",
+    "pt-10": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/pattern-generate/pt-10.jpg"
+  },
+  "claymation": {
+    "cl-01": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-01.jpg",
+    "cl-02": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-02.jpg",
+    "cl-03": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-03.jpg",
+    "cl-04": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-04.jpg",
+    "cl-05": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-05.jpg",
+    "cl-06": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-06.jpg",
+    "cl-07": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-07.jpg",
+    "cl-08": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-08.jpg",
+    "cl-09": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-09.jpg",
+    "cl-10": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/claymation/cl-10.jpg"
+  },
+  "product-scene-classic": {
+    "ps-01": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-01.jpg",
+    "ps-02": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-02.jpg",
+    "ps-03": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-03.jpg",
+    "ps-04": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-04.jpg",
+    "ps-05": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-05.jpg",
+    "ps-06": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-06.jpg",
+    "ps-07": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-07.jpg",
+    "ps-08": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-08.jpg",
+    "ps-09": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-09.jpg",
+    "ps-10": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/product-scene-classic/ps-10.jpg"
+  },
+  "room-redesign": {
+    "rr-01": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-01.jpg",
+    "rr-02": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-02.jpg",
+    "rr-03": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-03.jpg",
+    "rr-05": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-05.jpg",
+    "rr-07": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-07.jpg",
+    "rr-08": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-08.jpg",
+    "rr-09": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-09.jpg",
+    "rr-10": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-10.jpg",
+    "rr-04": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-04.jpg",
+    "rr-06": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/examples/room-redesign/rr-06.jpg"
+  }
+}

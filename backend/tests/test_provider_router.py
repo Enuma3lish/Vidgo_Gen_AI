@@ -37,9 +37,13 @@ class TestProviderRouterModelAwareRouting:
             {"model": "pixverse_v4.5"},
         )
 
-        assert providers == ["pollo", "pollo_mcp", "piapi_mcp", "piapi", "vertex_ai"]
+        # Pollo MCP removed 2026-05-26; PiAPI MCP de-listed from primary
+        # routing 2026-05-25 (was being silently filtered by env-var disable
+        # on every request). Override chain is now: Pollo REST → PiAPI REST
+        # → Vertex AI.
+        assert providers == ["pollo", "piapi", "vertex_ai"]
 
-    def test_i2v_without_model_uses_piapi_then_pollo_then_vertex_chain(self):
+    def test_i2v_without_model_uses_piapi_then_vertex_chain(self):
         router = ProviderRouter.__new__(ProviderRouter)
 
         providers = router._get_providers_for_task(
@@ -47,7 +51,10 @@ class TestProviderRouterModelAwareRouting:
             {},
         )
 
-        assert providers == ["piapi_mcp", "piapi", "pollo_mcp", "pollo", "vertex_ai"]
+        # ROUTING_CONFIG[I2V] gained a Pollo tertiary on 2026-05-26 (one last
+        # Kling I2V attempt when PiAPI + Vertex both fail) — see the
+        # provider_router.py ROUTING_CONFIG note.
+        assert providers == ["piapi", "vertex_ai", "pollo"]
 
     def test_avatar_uses_piapi_then_a2e(self):
         router = ProviderRouter.__new__(ProviderRouter)
@@ -77,7 +84,9 @@ class TestProviderRouterModelAwareRouting:
             {"prompt": "studio product shot", "model": "flux-dev"},
         )
 
-        assert providers == ["piapi", "piapi_mcp", "pollo", "vertex_ai"]
+        # MCP providers (pollo_mcp + piapi_mcp) removed 2026-05-26 —
+        # ROUTING_CONFIG simplified to REST + Vertex AI only.
+        assert providers == ["piapi", "vertex_ai"]
 
 
 @pytest.mark.asyncio
@@ -289,9 +298,7 @@ async def test_check_provider_health_alerts_when_provider_is_unhealthy(monkeypat
     router._last_provider_alert = {}
     router._provider_alert_cooldown = timedelta(minutes=15)
     router.pollo = types.SimpleNamespace(health_check=AsyncMock(return_value=False))
-    router.pollo_mcp = types.SimpleNamespace(health_check=AsyncMock(return_value=True))
     router.piapi = types.SimpleNamespace(health_check=AsyncMock(return_value=True))
-    router.piapi_mcp = types.SimpleNamespace(health_check=AsyncMock(return_value=True))
     router.vertex_ai = types.SimpleNamespace(health_check=AsyncMock(return_value=True))
     router.a2e = types.SimpleNamespace(health_check=AsyncMock(return_value=True))
 

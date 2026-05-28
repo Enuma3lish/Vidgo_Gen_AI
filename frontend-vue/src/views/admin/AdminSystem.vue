@@ -59,10 +59,10 @@ function formatTime(date: Date | null): string {
 }
 
 function getServiceDisplayName(key: string): string {
+  // Both MCP providers (pollo_mcp + piapi_mcp) removed 2026-05-26.
+  // REST providers cover everything they used to handle.
   const names: Record<string, string> = {
-    piapi_mcp: 'PiAPI MCP',
     piapi: 'PiAPI REST',
-    pollo_mcp: 'Pollo MCP',
     pollo: 'Pollo REST',
     vertex_ai: 'Vertex AI / Gemini',
     wan: localized('Wan AI（圖片 / 影片主要服務）', 'Wan AI (primary image/video)'),

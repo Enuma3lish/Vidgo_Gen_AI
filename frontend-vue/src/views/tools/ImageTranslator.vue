@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode, useLocalized } from '@/composables'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import HowToUseHint from '@/components/common/HowToUseHint.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import { downloadAsset } from '@/utils/downloadAsset'
+import { extractApiError } from '@/utils/apiError'
 
 const { locale } = useI18n()
 const uiStore = useUIStore()
@@ -22,8 +24,8 @@ const uploadedImage = ref<string | undefined>(undefined)
 const resultImage = ref<string | undefined>(undefined)
 const sourceLanguage = ref('Auto')
 const targetLanguage = ref('Traditional Chinese')
-// Curated tone presets — replaces the previous free-text textarea so the
-// model gets a tightly bounded instruction (lower hallucination risk).
+// Tone presets seed the editable instructions box. Users can pick one and
+// then refine, or write their own — the text reaches the model verbatim.
 const TONE_PRESETS = [
   { id: 'tw_ecommerce', labelEn: 'Taiwan e-commerce tone (default)', labelZh: '台灣電商語氣（預設）',
     text: 'Use a friendly Taiwan e-commerce tone. Keep brand names, model numbers and prices unchanged. Preserve the original layout, fonts and colors of the source image as closely as possible.' },
@@ -39,7 +41,11 @@ const TONE_PRESETS = [
     text: 'Translate the visible text literally with no localization or rewriting. Preserve all numbers, brand names and proper nouns.' },
 ]
 const selectedToneId = ref('tw_ecommerce')
-const instructions = computed(() => TONE_PRESETS.find(t => t.id === selectedToneId.value)?.text || '')
+const instructions = ref<string>(TONE_PRESETS.find(t => t.id === 'tw_ecommerce')?.text || '')
+watch(selectedToneId, (id) => {
+  const preset = TONE_PRESETS.find(t => t.id === id)
+  if (preset) instructions.value = preset.text
+})
 const isProcessing = ref(false)
 
 const languageOptions = [
@@ -112,8 +118,7 @@ async function handleTranslate() {
       uiStore.showError(result.message || L('圖片翻譯失敗', 'Image translation failed', '画像翻訳に失敗', '이미지 번역 실패', 'Falló la traducción de imagen'))
     }
   } catch (err: any) {
-    const detail = err?.response?.data?.detail || err?.response?.data?.message || err?.message
-    uiStore.showError(detail || L('圖片翻譯失敗', 'Image translation failed', '画像翻訳に失敗', '이미지 번역 실패', 'Falló la traducción de imagen'))
+    uiStore.showError(extractApiError(err, L('圖片翻譯失敗', 'Image translation failed', '画像翻訳に失敗', '이미지 번역 실패', 'Falló la traducción de imagen')))
   } finally {
     isProcessing.value = false
   }
@@ -189,14 +194,27 @@ async function handleTranslate() {
               </div>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ L('翻譯語氣', 'Translation Tone', '翻訳トーン', '번역 톤', 'Tono de traducción') }}</label>
+              <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">
+                {{ L('翻譯語氣預設', 'Tone Preset', '翻訳トーン', '번역 톤', 'Tono preestablecido') }}
+                <span style="color: #6b6b8a;">({{ L('選填', 'optional', '任意', '선택', 'opcional') }})</span>
+              </label>
               <select v-model="selectedToneId" class="control-select">
                 <option v-for="t in TONE_PRESETS" :key="t.id" :value="t.id">{{ isZh ? t.labelZh : t.labelEn }}</option>
               </select>
-              <p class="mt-2 text-[11px] text-dark-500">
-                {{ isZh
-                  ? '為確保翻譯品質與一致性，目前僅提供精選語氣預設。'
-                  : 'For consistent results, only curated tone presets are available.' }}
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">
+                {{ L('翻譯指示詞', 'Translation Instructions', '翻訳指示', '번역 지시', 'Instrucciones de traducción') }}
+              </label>
+              <textarea
+                v-model="instructions"
+                rows="4"
+                maxlength="500"
+                class="control-textarea"
+                :placeholder="L('例如：保留品牌名稱、價格不翻譯，使用台灣電商口語。', 'e.g. Keep brand names and prices unchanged, use Taiwan e-commerce tone.', '例：ブランド名と価格はそのまま、丁寧な口調で翻訳。', '예: 브랜드명과 가격은 유지, 친근한 톤으로 번역.', 'Ej: Mantén marcas y precios, usa tono amistoso.')"
+              ></textarea>
+              <p class="mt-2 text-[11px]" style="color: #6b6b8a;">
+                {{ L('挑選預設後可自由修改，內容會原封不動傳給模型。', 'Pick a preset above and refine — the text reaches the model verbatim.', 'プリセット選択後に自由に編集できます。', '프리셋 선택 후 자유롭게 편집할 수 있습니다.', 'Elige un preset y edítalo — el texto se envía tal cual al modelo.') }}
               </p>
             </div>
           </div>
@@ -212,7 +230,7 @@ async function handleTranslate() {
         </div>
 
         <div class="rounded-xl p-4 flex items-center justify-center min-h-[460px] relative" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <LoadingOverlay :show="isProcessing" :message="L('正在翻譯圖片文字...', 'Translating image text...', '画像内テキストを翻訳中...', '이미지 텍스트 번역 중...', 'Traduciendo texto de la imagen...')" />
+          <LoadingOverlay :show="isProcessing" :eta-seconds="30" :message="L('正在翻譯圖片文字...', 'Translating image text...', '画像内テキストを翻訳中...', '이미지 텍스트 번역 중...', 'Traduciendo texto de la imagen...')" />
           <div v-if="!isProcessing && resultImage" class="w-full">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ L('翻譯結果', 'Translated Result', '翻訳結果', '번역 결과', 'Resultado traducido') }}</label>
             <img :src="resultImage" class="w-full rounded-lg" style="max-height: 520px; object-fit: contain;" />
@@ -239,6 +257,10 @@ async function handleTranslate() {
           </div>
         </div>
       </div>
+
+      <section class="mt-12">
+        <ExampleGallery tool-key="image-translator" />
+      </section>
     </div>
   </div>
 </template>

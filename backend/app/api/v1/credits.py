@@ -210,7 +210,14 @@ async def purchase_credits(
             },
         )
 
-    # Determine amount based on payment method
+    # Determine amount based on payment method.
+    #
+    # IMPORTANT: PayPal must always use ``package.price_usd`` as a hardcoded
+    # value — do NOT compute it from ``price_twd`` via runtime FX conversion.
+    # PayPal's ~3% processing fee plus exchange-rate margin (~8% spread vs
+    # mid-market) means an auto-converted price quietly eats the margin
+    # every time the rate drifts. Each pack carries its own USD column so
+    # the price the customer sees is the price ops decided, period.
     if purchase.payment_method == "ecpay":
         amount = package.price_twd or package.price
         currency = "TWD"

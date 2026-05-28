@@ -16,7 +16,16 @@ from app.core.database import Base
 
 
 class ToolType(str, enum.Enum):
-    """Core Tools for VidGo Platform"""
+    """Core Tools for VidGo Platform.
+
+    Added 2026-05-26: claymation, kling_video, upscale, image_translator,
+    midjourney_imagine. These tools shipped without entries in this enum
+    or the topic_registry, which made /demo/presets/<tool> reject them
+    with `invalid_tool_type` and the ExampleGallery on those tool pages
+    render empty (no demo, no learn-by-example). Matching alembic
+    migration `p5q6r7s8t9u0_extend_tooltype_for_new_demos.py` adds the
+    new values to the Postgres enum.
+    """
     BACKGROUND_REMOVAL = "background_removal"
     PRODUCT_SCENE = "product_scene"
     TRY_ON = "try_on"
@@ -25,6 +34,12 @@ class ToolType(str, enum.Enum):
     AI_AVATAR = "ai_avatar"  # AI Avatar video generation
     PATTERN_GENERATE = "pattern_generate"  # Pattern design generation
     EFFECT = "effect"  # Style transfer / artistic effects
+    # 2026-05-26 demo-coverage additions
+    CLAYMATION = "claymation"
+    KLING_VIDEO = "kling_video"
+    UPSCALE = "upscale"
+    IMAGE_TRANSLATOR = "image_translator"
+    MIDJOURNEY_IMAGINE = "midjourney_imagine"
 
 
 class MaterialSource(str, enum.Enum):

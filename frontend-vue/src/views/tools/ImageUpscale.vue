@@ -1,187 +1,160 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+/**
+ * ImageUpscale — PiAPI-style playground (Deploy 4, 2026-05-24).
+ * Backed by /api/v1/tools/upscale (PiAPI image-toolkit super-resolution).
+ */
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode } from '@/composables'
+import { useDemoMode, useLocalized } from '@/composables'
 import { toolsApi } from '@/api'
+import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
+import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
-import HowToUseHint from '@/components/common/HowToUseHint.vue'
-import CreditCost from '@/components/tools/CreditCost.vue'
-import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
+import { dataURItoBlob } from '@/utils/dataUri'
 import { downloadAsset } from '@/utils/downloadAsset'
+import { extractApiError } from '@/utils/apiError'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
-
+const { L } = useLocalized()
 const { isDemoUser } = useDemoMode()
+const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
-const uploadedImage = ref<string | undefined>(undefined)
-const resultImage = ref<string | undefined>(undefined)
-const isProcessing = ref(false)
-const scale = ref(2)
+const imageInput = ref<string | undefined>(undefined)
+const scale = ref<2 | 4 | 8>(2)
 
-const demoExamples = [
-  { id: 'upscale-1', url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=600&q=80', labelKey: 'upscale.demoLabels.landscape' },
-  { id: 'upscale-2', url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&q=80', labelKey: 'upscale.demoLabels.forest' },
-  { id: 'upscale-3', url: 'https://images.unsplash.com/photo-1494526585095-c41746248156?w=600&q=80', labelKey: 'upscale.demoLabels.interior' },
-  { id: 'upscale-4', url: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=600&q=80', labelKey: 'upscale.demoLabels.ocean' }
-]
+const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
+const statusText = ref('')
+const resultUrl = ref<string | null>(null)
 
-function selectDemoExample(example: { id: string; url: string }) {
-  uploadedImage.value = example.url
-  resultImage.value = undefined
+const disabled = computed(() => !imageInput.value)
+// Backend tools.py upscale handler is flat 10 credits regardless of scale
+// (line ~3963 CREDIT_COST=10, no scale-based variation, no per-scale
+// service_pricing row). Frontend previously advertised 20/30 for 4x/8x —
+// pre-pricing-v2.1 draft that never landed in the backend. Showing the
+// true 10 to match what's actually deducted.
+const creditCost = computed(() => 10)
+
+async function ensureImageUrl(): Promise<string | null> {
+  if (!imageInput.value) return null
+  if (!imageInput.value.startsWith('data:')) return imageInput.value
+  const blob = dataURItoBlob(imageInput.value)
+  if (!blob) return null
+  const up = await toolsApi.uploadImage(blob as File)
+  return up.url
 }
 
-async function handleUpscale() {
-  if (!uploadedImage.value) {
-    uiStore.showWarning(t('upscale.warnings.selectImage'))
+async function generate() {
+  if (disabled.value || status.value === 'running') return
+  if (isDemoUser.value) {
+    uiStore.showInfo(L('請訂閱以使用此工具', 'Please subscribe to use this tool', 'サブスク登録してください', '구독해 주세요', 'Suscríbete'))
     return
   }
-
-  isProcessing.value = true
-  resultImage.value = undefined
-
+  status.value = 'running'
+  statusText.value = isZh.value ? '提升中…' : 'Upscaling…'
+  resultUrl.value = null
   try {
-    // Always call the backend. For unsubscribed visitors the API returns a
-    // cached demo result (a distinct preset image), not the input echoed back
-    // — this avoids the earlier "result image identical to source" bug where
-    // demo users couldn't tell if upscaling had actually happened.
-    const result = await toolsApi.upscale(uploadedImage.value, scale.value)
-    if (result.success && result.result_url) {
-      resultImage.value = result.result_url
-      if (isDemoUser.value) {
-        uiStore.showSuccess(t('upscale.toasts.demoReady', { scale: scale.value }))
-      } else {
-        creditsStore.fetchBalance()
-        uiStore.showSuccess(t('upscale.toasts.success', { scale: scale.value }))
-      }
+    const url = await ensureImageUrl()
+    if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+    const result = await toolsApi.upscale(url, scale.value)
+    if (result.success && (result.image_url || result.result_url)) {
+      resultUrl.value = result.image_url || result.result_url || null
+      status.value = 'done'
+      statusText.value = isZh.value ? '完成' : 'Done'
+      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
+      uiStore.showSuccess(t('common.success') || 'Success')
     } else {
-      uiStore.showError(result.message || t('upscale.errors.generic'))
+      status.value = 'error'
+      uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '提升失敗' : 'Upscale failed'))
     }
-  } catch (err: any) {
-    const detail = err?.response?.data?.detail || err?.message || t('upscale.errors.generic')
-    uiStore.showError(detail)
-  } finally {
-    isProcessing.value = false
+  } catch (e: any) {
+    status.value = 'error'
+    uiStore.showError(extractApiError(e, isZh.value ? '提升失敗' : 'Upscale failed'))
   }
 }
 
+function gotoPricing() { router.push('/pricing') }
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #09090b;">
-    <div class="max-w-5xl mx-auto px-4">
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold mb-2" style="color: #f5f5fa;">{{ t('upscale.title') }}</h1>
-        <p style="color: #9494b0;">{{ t('upscale.subtitle') }}</p>
-        <CreditCost :cost="10" class="mt-2" />
-        <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
-          <RouterLink to="/pricing" class="hover:underline">
-            {{ t('upscale.demoCta') }}
-          </RouterLink>
-        </div>
+  <PiapiPlayground
+    :eta-seconds="30"
+    :title="isZh ? '圖片高清放大' : 'Image Upscale (Super Resolution)'"
+    :subtitle="isZh
+      ? '把任何圖片放大 2x、4x、8x，保留邊緣與細節。'
+      : 'Upscale any image by 2x, 4x, or 8x while preserving edges and detail.'"
+    :status="status"
+    :status-text="statusText"
+    :credit-cost="creditCost"
+    :generate-label="isZh ? '開始放大' : 'Upscale'"
+    :generate-label-running="isZh ? '處理中…' : 'Upscaling…'"
+    :disabled="disabled || isDemoUser"
+    @generate="generate"
+  >
+    <template #inputs>
+      <div>
+        <label class="pp-field-label">{{ isZh ? '模型 *' : 'Model *' }}</label>
+        <select class="pp-select" disabled>
+          <option>Image Upscale (Super Resolution) — Qubico image-toolkit</option>
+        </select>
       </div>
 
-      <HowToUseHint
-        media-kind="image"
-        :i18n-keys="[
-          'howTo.upscale.step1',
-          'howTo.upscale.step2',
-          'howTo.upscale.step3',
-        ]"
-      />
+      <div>
+        <label class="pp-field-label">{{ isZh ? '任務類型 *' : 'Task Type *' }}</label>
+        <select class="pp-select" disabled>
+          <option>upscale</option>
+        </select>
+      </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="space-y-4">
-          <!-- Examples grid (always visible so users can see what the tool does) -->
-          <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <label class="block text-sm font-medium mb-3" style="color: #e8e8f0;">{{ t('upscale.tryDemo') }}</label>
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                v-for="example in demoExamples"
-                :key="example.id"
-                @click="selectDemoExample(example)"
-                class="aspect-video rounded-lg overflow-hidden border-2 transition-all"
-                :class="uploadedImage === example.url ? 'border-primary-500' : 'hover:border-dark-500'"
-                style="border-color: rgba(255,255,255,0.08);"
-              >
-                <img :src="example.url" :alt="t(example.labelKey)" class="w-full h-full object-cover" />
-              </button>
-            </div>
-          </div>
+      <div>
+        <label class="pp-field-label">{{ isZh ? '圖片 *' : 'Image *' }}</label>
+        <ImageUploader
+          tool-type="upscale"
+          v-model="imageInput"
+          :label="isZh ? '點擊或拖放 JPG / PNG（最大 2048×2048）' : 'Click or drag JPG / PNG (max 2048×2048)'"
+        />
+      </div>
 
-          <!-- Paid: upload zone -->
-          <div v-if="!isDemoUser" class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <label class="block text-sm font-medium mb-3" style="color: #e8e8f0;">{{ t('upscale.uploadOwn') }}</label>
-            <ImageUploader tool-type="upscale" v-model="uploadedImage" />
-          </div>
-
-          <div v-if="uploadedImage" class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('upscale.original') }}</label>
-            <img :src="uploadedImage" class="w-full rounded-lg" style="max-height: 300px; object-fit: contain;" />
-          </div>
-
-          <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('upscale.scaleFactor') }}</label>
-            <div class="flex gap-3">
-              <button
-                @click="scale = 2"
-                class="flex-1 py-2 rounded-lg text-sm font-medium transition-all"
-                :style="scale === 2 ? 'background: #1677ff; color: white;' : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.1);'"
-              >
-                2x
-              </button>
-              <button
-                @click="scale = 4"
-                class="flex-1 py-2 rounded-lg text-sm font-medium transition-all"
-                :style="scale === 4 ? 'background: #1677ff; color: white;' : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.1);'"
-              >
-                4x
-              </button>
-            </div>
-          </div>
-
+      <div>
+        <label class="pp-field-label">{{ isZh ? '放大倍率 *' : 'Scale *' }}</label>
+        <div class="grid grid-cols-3 gap-1.5">
           <button
-            @click="handleUpscale"
-            :disabled="isProcessing || !uploadedImage"
-            class="w-full py-3 rounded-xl font-semibold text-white transition-all disabled:opacity-50"
-            style="background: #1677ff;"
-          >
-            {{ isProcessing ? t('upscale.processing') : t('upscale.action', { scale }) }}
-          </button>
+            v-for="opt in [2, 4, 8] as const"
+            :key="opt"
+            type="button"
+            @click="scale = opt"
+            class="py-2 rounded-lg text-xs font-medium transition-colors"
+            :style="scale === opt
+              ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff;'
+              : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
+          >{{ opt }}x</button>
         </div>
-
-        <div class="rounded-xl p-4 flex items-center justify-center min-h-[400px]" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <LoadingOverlay :show="isProcessing" :message="t('upscale.loading')" />
-          <div v-if="!isProcessing && resultImage" class="w-full">
-            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('upscale.resultLabel', { scale }) }}</label>
-            <img :src="resultImage" class="w-full rounded-lg" style="max-height: 500px; object-fit: contain;" />
-            <button
-              v-if="!isDemoUser"
-              @click="downloadAsset(resultImage!, `vidgo_upscale_${scale}x.png`)"
-              class="block w-full mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
-              style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
-            >
-              {{ t('upscale.downloadHd') }}
-            </button>
-            <RouterLink
-              v-else
-              to="/pricing"
-              class="block mt-3 text-center py-2 rounded-lg text-sm font-medium transition-colors"
-              style="background: rgba(22,119,255,0.08); color: #1677ff; border: 1px solid rgba(22,119,255,0.2);"
-            >
-              {{ t('upscale.subscribeDownload') }}
-            </RouterLink>
-          </div>
-          <div v-if="!isProcessing && !resultImage" class="text-center" style="color: #6b6b8a;">
-            <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <p class="text-sm">{{ isDemoUser ? t('upscale.placeholderDemo') : t('upscale.placeholderPaid') }}</p>
-          </div>
-        </div>
+        <p class="pp-field-help">{{ isZh ? '倍率越高，輸出像素越多，點數消耗越高。' : 'Higher scales use more pixels and cost more credits.' }}</p>
       </div>
-    </div>
-  </div>
+
+      <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
+        {{ isZh ? '訂閱後即可使用。' : 'Subscribe to use this tool.' }}
+        <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
+      </p>
+    </template>
+
+    <template v-if="resultUrl" #result>
+      <img :src="resultUrl" alt="Upscaled" class="max-w-full max-h-[520px] object-contain rounded-lg" />
+    </template>
+
+    <template v-if="resultUrl" #result-actions>
+      <button @click="downloadAsset(resultUrl!, `vidgo_upscale_${scale}x_${Date.now()}.png`)"
+        class="px-3 py-1.5 rounded text-xs font-medium"
+        style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
+      >📥 {{ isZh ? '下載' : 'Download' }}</button>
+    </template>
+
+    <template #examples>
+      <ExampleGallery tool-key="image-upscale" />
+    </template>
+  </PiapiPlayground>
 </template>

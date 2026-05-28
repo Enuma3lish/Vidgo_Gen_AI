@@ -233,6 +233,110 @@ class InteriorDesignService:
     def _get_headers(self) -> Dict[str, str]:
         return {"Content-Type": "application/json"}
 
+    @staticmethod
+    def _extract_block_reason(data: Dict[str, Any]) -> Optional[str]:
+        """Pull a human-meaningful reason out of a Gemini response that came
+        back 200 but produced no image: candidate.finishReason and/or
+        promptFeedback.blockReason. Returns None for a normal STOP finish
+        (i.e. the model just chose to reply with text-only this time)."""
+        feedback = data.get("promptFeedback") or {}
+        block = feedback.get("blockReason")
+        candidates = data.get("candidates") or []
+        finish = candidates[0].get("finishReason") if candidates else None
+        parts: List[str] = []
+        if finish and finish not in ("STOP", "MAX_TOKENS"):
+            parts.append(f"finishReason={finish}")
+        if block:
+            parts.append(f"blockReason={block}")
+        return ", ".join(parts) if parts else None
+
+    async def _generate_image(
+        self,
+        request_body: Dict[str, Any],
+        prefix: str,
+        attempts: int = 3,
+    ) -> Dict[str, Any]:
+        """POST a generateContent body and extract the image, retrying when the
+        model returns a 200 with text-but-no-image.
+
+        gemini-2.5-flash-image does NOT reliably emit an image on every call —
+        at the temperatures we use it sometimes replies with only a text part
+        (a description, a clarifying question, a soft refusal). A single shot
+        therefore failed intermittently for the same input. We retry those
+        empty responses; on the final miss we surface the real finishReason /
+        blockReason instead of the generic "No image in response" so a safety
+        block is distinguishable from a transient miss.
+
+        Hard blocks (SAFETY / PROHIBITED / RECITATION / BLOCKLIST) won't change
+        on retry, so we bail out of the loop early for those.
+        """
+        last_result: Dict[str, Any] = {"success": False, "error": "No image generated"}
+
+        for attempt in range(attempts):
+            try:
+                headers, endpoint_url = await self._get_headers_and_url()
+                params: Dict[str, str] = {}
+                if "generativelanguage.googleapis.com" in endpoint_url and self.api_key:
+                    params = {"key": self.api_key}
+
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    response = await client.post(
+                        endpoint_url,
+                        params=params,
+                        headers=headers,
+                        json=request_body,
+                    )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    result = await self._process_image_response(data, prefix)
+                    if result.get("success") and result.get("image_url"):
+                        return result
+
+                    # 200 but no image — figure out why and decide whether a
+                    # retry could help.
+                    reason = self._extract_block_reason(data)
+                    last_result = {
+                        "success": False,
+                        "error": (
+                            f"Image generation was blocked ({reason})."
+                            if reason
+                            else "The model did not return an image. Please try again."
+                        ),
+                        "finish_reason": reason,
+                    }
+                    if reason and any(
+                        token in reason.upper()
+                        for token in ("SAFETY", "PROHIBITED", "RECITATION", "BLOCKLIST")
+                    ):
+                        # Deterministic block — retrying wastes a call.
+                        break
+                    logger.warning(
+                        "[InteriorDesign] %s: 200 but no image (reason=%s) — attempt %d/%d",
+                        prefix, reason, attempt + 1, attempts,
+                    )
+                else:
+                    error_text = response.text[:500]
+                    logger.error("Gemini API error: %s - %s", response.status_code, error_text)
+                    last_result = {
+                        "success": False,
+                        "error": f"API error: {response.status_code}",
+                        "details": error_text,
+                    }
+                    # 4xx (bad request, auth, quota) won't fix on retry; only
+                    # retry 5xx upstream blips.
+                    if response.status_code < 500:
+                        break
+
+            except Exception as e:  # noqa: BLE001
+                logger.error("[InteriorDesign] %s attempt %d failed: %s", prefix, attempt + 1, e)
+                last_result = {"success": False, "error": str(e)}
+
+            if attempt < attempts - 1:
+                await asyncio.sleep(1.5 * (attempt + 1))
+
+        return last_result
+
     async def _fetch_image_as_base64(self, image_url: str) -> Tuple[str, str]:
         """Fetch image from URL and return as base64 with mime type."""
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -283,7 +387,8 @@ class InteriorDesignService:
         prompt: str = "",
         style_id: Optional[str] = None,
         room_type: Optional[str] = None,
-        keep_layout: bool = True
+        keep_layout: bool = True,
+        style_prompt_suffix: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Redesign a room based on image and text prompt.
@@ -294,9 +399,14 @@ class InteriorDesignService:
             room_image_base64: Base64-encoded room image
             room_image_url: URL of room image (alternative)
             prompt: Text description of desired changes
-            style_id: Optional design style to apply
+            style_id: Optional design style to apply (looked up in DESIGN_STYLES)
             room_type: Type of room for context
             keep_layout: Whether to preserve room layout
+            style_prompt_suffix: Pre-resolved style prompt. When provided,
+                bypasses the DESIGN_STYLES lookup — lets the caller resolve
+                the style against EXTERIOR_STYLES / COMMERCIAL_STYLES (which
+                live in tools.py) and pass the prompt through directly so
+                non-residential style picks aren't silently dropped.
 
         Returns:
             Dict with redesigned image URL and description
@@ -332,61 +442,35 @@ class InteriorDesignService:
             room_context = ROOM_TYPES[room_type]["context"]
             full_prompt += f"This is a {room_context}. "
 
-        if style_id and style_id in DESIGN_STYLES:
+        # Style resolution: caller-supplied suffix wins (covers exterior /
+        # commercial catalogs in tools.py); otherwise fall back to the
+        # residential DESIGN_STYLES dict here. Without the override path
+        # an exterior/commercial style_id silently produced a generic
+        # residential render — see room-redesign analysis 2026-05-27.
+        if style_prompt_suffix:
+            full_prompt += f"Apply {style_prompt_suffix}. "
+        elif style_id and style_id in DESIGN_STYLES:
             style_suffix = DESIGN_STYLES[style_id]["prompt_suffix"]
             full_prompt += f"Apply {style_suffix}. "
 
         full_prompt += prompt
 
-        try:
-            headers, endpoint_url = await self._get_headers_and_url()
-            # For Google AI API (non-Vertex), append ?key= param
-            params = {}
-            if "generativelanguage.googleapis.com" in endpoint_url and self.api_key:
-                params = {"key": self.api_key}
-
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    endpoint_url,
-                    params=params,
-                    headers=headers,
-                    json={
-                        "contents": [
-                            {
-                                "role": "user",
-                                "parts": [
-                                    {
-                                        "inline_data": {
-                                            "mime_type": mime_type,
-                                            "data": room_image_base64
-                                        }
-                                    },
-                                    {"text": full_prompt}
-                                ]
-                            }
-                        ],
-                        "generationConfig": {
-                            "responseModalities": ["TEXT", "IMAGE"],
-                            "temperature": 0.8
-                        }
-                    }
-                )
-
-                if response.status_code == 200:
-                    data = response.json()
-                    return await self._process_image_response(data, "redesign")
-                else:
-                    error_text = response.text[:500]
-                    logger.error(f"Gemini API error: {response.status_code} - {error_text}")
-                    return {
-                        "success": False,
-                        "error": f"API error: {response.status_code}",
-                        "details": error_text
-                    }
-
-        except Exception as e:
-            logger.error(f"Interior design error: {e}")
-            return {"success": False, "error": str(e)}
+        request_body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {"mime_type": mime_type, "data": room_image_base64}},
+                        {"text": full_prompt},
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "temperature": 0.8,
+            },
+        }
+        return await self._generate_image(request_body, "redesign")
 
     async def render_from_floorplan(
         self,
@@ -437,41 +521,22 @@ class InteriorDesignService:
             f"{room_hint}{style_hint}{extra_prompt}"
         ).strip()
 
-        try:
-            _headers, _url = await self._get_headers_and_url()
-            _params = {"key": self.api_key} if "generativelanguage.googleapis.com" in _url and self.api_key else {}
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    _url,
-                    params=_params,
-                    headers=_headers,
-                    json={
-                        "contents": [
-                            {
-                                "role": "user",
-                                "parts": [
-                                    {"inline_data": {"mime_type": mime_type, "data": floorplan_image_base64}},
-                                    {"text": primary_prompt},
-                                ],
-                            }
-                        ],
-                        "generationConfig": {
-                            "responseModalities": ["TEXT", "IMAGE"],
-                            "temperature": 0.7,
-                        },
-                    },
-                )
-
-            if response.status_code == 200:
-                return await self._process_image_response(response.json(), "floorplan_render")
-
-            error_text = response.text[:500]
-            logger.error(f"Gemini floor-plan render error: {response.status_code} - {error_text}")
-            return {"success": False, "error": f"API error {response.status_code}", "details": error_text}
-
-        except Exception as exc:
-            logger.error(f"Floor-plan render error: {exc}")
-            return {"success": False, "error": str(exc)}
+        request_body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {"mime_type": mime_type, "data": floorplan_image_base64}},
+                        {"text": primary_prompt},
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "temperature": 0.7,
+            },
+        }
+        return await self._generate_image(request_body, "floorplan_render")
 
     async def generate_design(
         self,
@@ -512,43 +577,19 @@ class InteriorDesignService:
         full_prompt += prompt
         full_prompt += " Professional interior architectural photography, correct perspective, realistic material textures, natural lighting."
 
-        try:
-            _headers, _url = await self._get_headers_and_url()
-            _params = {"key": self.api_key} if "generativelanguage.googleapis.com" in _url and self.api_key else {}
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    _url,
-                    params=_params,
-                    headers=_headers,
-                    json={
-                        "contents": [
-                            {
-                                "role": "user",
-                                "parts": [{"text": full_prompt}]
-                            }
-                        ],
-                        "generationConfig": {
-                            "responseModalities": ["TEXT", "IMAGE"],
-                            "temperature": 0.9
-                        }
-                    }
-                )
-
-                if response.status_code == 200:
-                    data = response.json()
-                    return await self._process_image_response(data, "generate")
-                else:
-                    error_text = response.text[:500]
-                    logger.error(f"Gemini API error: {response.status_code} - {error_text}")
-                    return {
-                        "success": False,
-                        "error": f"API error: {response.status_code}",
-                        "details": error_text
-                    }
-
-        except Exception as e:
-            logger.error(f"Interior design generation error: {e}")
-            return {"success": False, "error": str(e)}
+        request_body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": full_prompt}],
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "temperature": 0.9,
+            },
+        }
+        return await self._generate_image(request_body, "generate")
 
     async def fusion_design(
         self,
@@ -608,57 +649,23 @@ Apply the furniture style, color palette, and decorative elements from the secon
 
 Generate a photorealistic result."""
 
-        try:
-            _headers, _url = await self._get_headers_and_url()
-            _params = {"key": self.api_key} if "generativelanguage.googleapis.com" in _url and self.api_key else {}
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    _url,
-                    params=_params,
-                    headers=_headers,
-                    json={
-                        "contents": [
-                            {
-                                "role": "user",
-                                "parts": [
-                                    {
-                                        "inline_data": {
-                                            "mime_type": room_mime,
-                                            "data": room_image_base64
-                                        }
-                                    },
-                                    {
-                                        "inline_data": {
-                                            "mime_type": style_mime,
-                                            "data": style_image_base64
-                                        }
-                                    },
-                                    {"text": full_prompt}
-                                ]
-                            }
-                        ],
-                        "generationConfig": {
-                            "responseModalities": ["TEXT", "IMAGE"],
-                            "temperature": 0.8
-                        }
-                    }
-                )
-
-                if response.status_code == 200:
-                    data = response.json()
-                    return await self._process_image_response(data, "fusion")
-                else:
-                    error_text = response.text[:500]
-                    logger.error(f"Gemini API error: {response.status_code} - {error_text}")
-                    return {
-                        "success": False,
-                        "error": f"API error: {response.status_code}",
-                        "details": error_text
-                    }
-
-        except Exception as e:
-            logger.error(f"Fusion design error: {e}")
-            return {"success": False, "error": str(e)}
+        request_body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {"mime_type": room_mime, "data": room_image_base64}},
+                        {"inline_data": {"mime_type": style_mime, "data": style_image_base64}},
+                        {"text": full_prompt},
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "temperature": 0.8,
+            },
+        }
+        return await self._generate_image(request_body, "fusion")
 
     async def iterative_edit(
         self,
@@ -717,59 +724,35 @@ Generate a photorealistic result."""
             "parts": user_parts
         })
 
-        try:
-            _headers, _url = await self._get_headers_and_url()
-            _params = {"key": self.api_key} if "generativelanguage.googleapis.com" in _url and self.api_key else {}
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    _url,
-                    params=_params,
-                    headers=_headers,
-                    json={
-                        "contents": history,
-                        "generationConfig": {
-                            "responseModalities": ["TEXT", "IMAGE"],
-                            "temperature": 0.7
-                        },
-                        "systemInstruction": {
-                            "parts": [{
-                                "text": "You are an expert interior designer. Help the user refine their room design through iterative edits. Generate updated images based on their requests. Keep previous changes unless specifically asked to revert."
-                            }]
-                        }
-                    }
-                )
+        request_body = {
+            "contents": history,
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "temperature": 0.7,
+            },
+            "systemInstruction": {
+                "parts": [{
+                    "text": "You are an expert interior designer. Help the user refine their room design through iterative edits. Generate updated images based on their requests. Keep previous changes unless specifically asked to revert."
+                }]
+            },
+        }
+        result = await self._generate_image(request_body, f"edit_{conversation_id[:8]}")
 
-                if response.status_code == 200:
-                    data = response.json()
-                    result = await self._process_image_response(data, f"edit_{conversation_id[:8]}")
+        if result.get("success"):
+            # Add model response to history (text only, not the image)
+            history.append({
+                "role": "model",
+                "parts": [{"text": result.get("description", "Design updated.")}]
+            })
 
-                    if result.get("success"):
-                        # Add model response to history (text only, not the image)
-                        history.append({
-                            "role": "model",
-                            "parts": [{"text": result.get("description", "Design updated.")}]
-                        })
+            # Limit history to last 10 turns
+            if len(history) > 20:
+                self._conversations[conversation_id] = history[-20:]
 
-                        # Limit history to last 10 turns
-                        if len(history) > 20:
-                            self._conversations[conversation_id] = history[-20:]
+            result["conversation_id"] = conversation_id
+            result["turn_count"] = len(history) // 2
 
-                        result["conversation_id"] = conversation_id
-                        result["turn_count"] = len(history) // 2
-
-                    return result
-                else:
-                    error_text = response.text[:500]
-                    logger.error(f"Gemini API error: {response.status_code} - {error_text}")
-                    return {
-                        "success": False,
-                        "error": f"API error: {response.status_code}",
-                        "details": error_text
-                    }
-
-        except Exception as e:
-            logger.error(f"Iterative edit error: {e}")
-            return {"success": False, "error": str(e)}
+        return result
 
     async def transfer_style(
         self,

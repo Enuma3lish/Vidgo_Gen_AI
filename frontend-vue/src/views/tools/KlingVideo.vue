@@ -7,8 +7,10 @@ import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
+import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import { downloadAsset } from '@/utils/downloadAsset'
+import { extractApiError } from '@/utils/apiError'
 
 const { t, locale } = useI18n()
 const uiStore = useUIStore()
@@ -50,10 +52,15 @@ watch(locale, () => {
 // Backend hardcoded fallback per tier (matches seeded ServicePricing).
 // Admin overrides via /admin/models still affect the actual deduction
 // regardless of what's displayed here.
+// Mirror of backend KlingVideo handler's credit_cost_fallback ladder
+// (tools.py line ~4905). Default tier = video_generation_professional
+// service_pricing row = 60 credits; flagship = 500; omni = 750. Frontend
+// previously showed 100 for the default tier, which was a pre-2026-05-20
+// pricing draft — backend never deducted more than 60. Aligning now.
 const displayCost = computed(() => {
   if (tier.value === 'omni') return 750
   if (tier.value === 'flagship') return 500
-  return 100
+  return 60
 })
 
 async function handleGenerate() {
@@ -85,8 +92,7 @@ async function handleGenerate() {
       uiStore.showError(result.message || t('klingVideo.errors.generic'))
     }
   } catch (err: any) {
-    const detail = err?.response?.data?.detail || err?.message || t('klingVideo.errors.generic')
-    uiStore.showError(detail)
+    uiStore.showError(extractApiError(err, t('klingVideo.errors.generic')))
   } finally {
     isProcessing.value = false
   }
@@ -135,38 +141,34 @@ async function handleGenerate() {
             </div>
           </div>
 
-          <!-- Curated prompt picker — locked, no free-form input. The
-               kling_video library carries 40 hand-validated prompts. Users
-               pick one from the dropdown; the resolved prompt text shows
-               below as a read-only preview so they know exactly what's
-               being submitted, but they cannot edit it. Same enforcement
-               pattern as /tools/pattern-generate. -->
+          <!-- Prompt — free-form editable. The curated library remains as
+               an optional dropdown that populates the textarea, but users
+               can write or edit anything. Text reaches Kling verbatim. -->
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.presetLabel') }}</label>
-            <div class="mb-2 p-2 rounded-lg" style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.18);">
-              <p class="text-[11px]" style="color: #fbbf24;">
-                {{ t('common.curatedNotice') }}
-              </p>
-            </div>
+            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">
+              {{ t('klingVideo.presetLabel') }} <span style="color: #6b6b8a;">({{ L('選填', 'optional', '任意', '선택', 'opcional') }})</span>
+            </label>
             <select
               v-model="selectedPresetId"
               @change="applyPreset"
-              size="8"
-              class="w-full px-3 py-2 rounded-lg text-sm mb-3"
+              class="w-full px-3 py-2 rounded-lg text-sm mb-4"
               style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1);"
             >
+              <option value="">{{ L('— 自行輸入提示詞 —', '— Write my own prompt —', '— 自分で入力 —', '— 직접 입력 —', '— Escribe el tuyo —') }}</option>
               <option v-for="opt in presetOptions" :key="opt.id" :value="opt.id">
                 {{ opt.label }}
               </option>
             </select>
 
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.promptLabel') }}</label>
-            <div
-              class="w-full px-3 py-2 rounded-lg text-xs whitespace-pre-wrap"
-              style="background: #0d0d15; color: #b4b4cf; border: 1px solid rgba(255,255,255,0.08); min-height: 70px;"
-            >
-              {{ prompt || t('common.curatedPickToPreview') }}
-            </div>
+            <textarea
+              v-model="prompt"
+              rows="5"
+              maxlength="2500"
+              class="w-full px-3 py-2 rounded-lg text-sm"
+              style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1); resize: vertical;"
+              :placeholder="t('klingVideo.promptPlaceholder')"
+            ></textarea>
           </div>
 
           <!-- Start frame (I2V) -->
@@ -222,7 +224,7 @@ async function handleGenerate() {
         </div>
 
         <div class="rounded-xl p-4 flex items-center justify-center min-h-[400px]" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <LoadingOverlay :show="isProcessing" :message="t('klingVideo.loading')" />
+          <LoadingOverlay :show="isProcessing" :eta-seconds="180" :message="t('klingVideo.loading')" />
           <div v-if="!isProcessing && resultVideo" class="w-full">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('klingVideo.resultLabel') }}</label>
             <video :src="resultVideo" controls class="w-full rounded-lg" style="max-height: 500px;" />
@@ -238,6 +240,10 @@ async function handleGenerate() {
           </div>
         </div>
       </div>
+
+      <section class="mt-12">
+        <ExampleGallery tool-key="kling-video" />
+      </section>
     </div>
   </div>
 </template>

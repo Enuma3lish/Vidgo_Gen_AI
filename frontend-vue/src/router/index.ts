@@ -64,6 +64,36 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
+  // Interior Templates Gallery — Pippit-style browsable style cards
+  // (added 2026-05-24). Clicking a card deeplinks to /tools/room-redesign
+  // with style + space_kind preselected via query params.
+  {
+    path: '/tools/interior-templates',
+    name: 'interior-templates',
+    component: () => import('@/views/tools/InteriorTemplates.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // Video Background Remove — Qubico video-toolkit (added 2026-05-24,
+  // verified healthy via stability probe). Sibling Qubico video tools
+  // upscale + watermark-remove dropped per same probe.
+  {
+    path: '/tools/video-bg-remove',
+    name: 'video-bg-remove',
+    component: () => import('@/views/tools/VideoBackgroundRemove.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // Claymation AI — multi-mode (T2I / I2I / T2V / V2V) routed to
+  // Seedream 5 Lite / Flux Kontext / Kling Omni 3.0 / Seedance 2.0 Fast.
+  // Matches piapi.ai/zh-TW/claymation-ai-generator layout.
+  {
+    path: '/tools/claymation',
+    name: 'claymation',
+    component: () => import('@/views/tools/Claymation.vue'),
+    meta: { requiresAuth: false }
+  },
+
   // Image-to-Video — PiAPI Wan 2.6 I2V
   {
     path: '/tools/short-video',

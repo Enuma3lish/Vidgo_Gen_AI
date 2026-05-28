@@ -46,7 +46,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""             # Gemini API key (preferred; get from aistudio.google.com)
     GEMINI_MODEL: str = "gemini-2.5-pro"  # gemini-2.5-pro is more capable than flash
     GEMINI_IMAGE_MODEL: str = "gemini-2.5-flash-image"
-    GEMINI_PROMPT_REFINEMENT_ENABLED: bool = True
+    # Removed 2026-05-23: prompt_refinement_service was deleted entirely
+    # because it silently rewrote user-typed prompts and diverged the
+    # downstream output from what the user asked for. PiAPI passes prompts
+    # verbatim; we now match. Setting kept commented for grep-discoverability:
+    # GEMINI_PROMPT_REFINEMENT_ENABLED: bool  (no longer used)
 
     # Vertex AI (GCP) — Imagen for image generation, Veo for video (not available via Gemini API)
     VERTEX_AI_PROJECT: str = ""          # GCP project ID (required for Imagen/Veo only)

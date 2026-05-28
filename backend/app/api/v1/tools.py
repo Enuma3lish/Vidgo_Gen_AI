@@ -50,10 +50,10 @@ from app.api.deps import get_current_user_optional, get_current_user, get_db, ge
 from app.models.user_generation import UserGeneration
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
 from app.services.credit_service import CreditService
+from app.services.plan_gates import require_model_access
 from app.services.demo_cache_service import DemoCacheService
 from app.services.gcs_storage_service import get_gcs_storage
 from app.services.email_service import send_admin_tool_failure_email
-from app.services.prompt_refinement_service import get_prompt_refinement_service
 from app.services.prompt_library import lookup_prompt as _lookup_curated_prompt
 import logging
 import os
@@ -235,20 +235,20 @@ async def _refine_generation_prompt(
     user_prompt: bool = False,
     context: Optional[Dict[str, Any]] = None,
 ) -> tuple[str, Dict[str, Any]]:
-    """Refine a provider prompt with Gemini, falling back to the original text."""
-    service = get_prompt_refinement_service()
-    result = await service.refine_for_tool(
-        prompt=prompt,
-        tool_name=tool_name,
-        prompt_role=prompt_role,
-        user_prompt=user_prompt,
-        context=context or {},
-    )
-    if result.changed:
-        logger.info("Gemini refined %s %s", tool_name, prompt_role)
-    elif result.error:
-        logger.warning("Gemini prompt refinement skipped for %s: %s", tool_name, result.error)
-    return result.refined_prompt, result.to_metadata()
+    """No-op prompt pass-through (owner directive 2026-05-23).
+
+    The original implementation ran every prompt through a Gemini-powered
+    rewriter, which silently diverged the generated output from what the
+    user typed (e.g. "a red apple" → "a single ripe red apple, 50mm lens,
+    soft natural lighting, shallow depth of field, photorealistic, no
+    watermark, no logos"). PiAPI passes prompts verbatim; we now match.
+
+    The helper signature is retained so the 8 call sites in tools.py don't
+    need touching — they get the literal prompt back and an empty metadata
+    blob. ``tool_name`` / ``prompt_role`` / ``context`` are accepted only
+    for backward-compat and discarded.
+    """
+    return (prompt or "").strip(), {"changed": False, "skipped": True, "reason": "refinement_disabled"}
 
 PRODUCT_SCENE_MAX_DIMENSION = 1536
 PRODUCT_SCENE_CUSTOM_PROMPT_MAX_CHARS = 300
@@ -665,10 +665,10 @@ async def _run_ffmpeg_voiceover_mux(video_url: str, audio_url: str, user_id: str
 async def _extract_first_frame_to_gcs(video_url: str, user_id: str | None) -> str:
     """Extract the first frame of a video and persist it as a public JPEG.
 
-    Used by video_transform: every V2V provider in the chain (piapi_mcp's
-    Wan referenceImage, Pollo, Vertex AI) actually wants a still image — none
-    of them accept an MP4 URL — so we hand them a first-frame still and let
-    the prompt drive the style.
+    Used by video_transform: every V2V provider in the chain (PiAPI's
+    Seedance I2V, Pollo, Vertex AI) actually wants a still image — none
+    of them accept an MP4 URL — so we hand them a first-frame still and
+    let the prompt drive the style.
     """
     with tempfile.TemporaryDirectory(prefix="vidgo-firstframe-") as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -836,6 +836,17 @@ async def _check_plan_resolution(
 ) -> tuple:
     """Check if user's plan allows the requested resolution.
     Returns (allowed: bool, error_msg: str | None)
+
+    v2.1 quality gate (修正單 spec, 2026-05-22):
+        Standard (basic)   → max 1080p HD
+        Pro / Advanced     → max 4K
+        Enterprise         → max 4K (custom)
+
+    The plan's max_resolution column is the source of truth, set by the v2.1
+    migration (basic="1080p"). Together with ``plan_gates.require_model_access``
+    — which already prevents Standard users from picking 4K-capable models
+    (Veo / Kling Omni / Kling Flagship) — this fully enforces the spec's
+    "Standard plan must be 1080p-only" requirement at the backend layer.
 
     Admin (superuser) accounts bypass resolution checks.
     """
@@ -1057,8 +1068,18 @@ class ProductSceneRequest(BaseModel):
 
 
 class TryOnRequest(BaseModel):
-    """AI Try-On - virtual clothing try-on"""
-    garment_image_url: Optional[str] = Field(None, description="Garment image URL to place on the model. Use this or image_url.")
+    """AI Try-On — two modes:
+
+      mode="garment" (default, legacy): image+image via Kling Try-On.
+          Requires garment_image_url + model.
+
+      mode="prompt" (added 2026-05-24, owner directive — Kling 3.0
+          prompt-template parity): image+text via Flux Kontext I2I on
+          the model photo. Requires prompt + model. No garment image.
+          The user's text reaches Kontext verbatim; we add only the
+          Kling-style "outfit drift" negative-prompt baseline.
+    """
+    garment_image_url: Optional[str] = Field(None, description="Garment image URL to place on the model. Used in mode='garment'.")
     image_url: Optional[str] = Field(None, description="Alias for garment_image_url for client compatibility.")
     model_image_url: Optional[str] = Field(None, description="Optional explicit model image URL. If omitted, the API falls back to model_id or a preset model.")
     model_id: Optional[str] = Field(None, description="Optional preset model identifier such as female-1 or male-1.")
@@ -1073,6 +1094,36 @@ class TryOnRequest(BaseModel):
             "'upper_body' → upper_input, 'lower_body' → lower_input, "
             "'dress' / 'full_body' → dress_input (full-body or dress garment). "
             "Defaults to 'dress' to preserve existing behavior."
+        ),
+    )
+    mode: str = Field(
+        "garment",
+        pattern="^(garment|prompt)$",
+        description=(
+            "'garment' (default) → Kling AI Try-On (image+image). "
+            "'prompt' → Flux Kontext I2I on the model photo (image+text). "
+            "Use 'prompt' to describe the outfit in words when you don't "
+            "have a garment photo (Kling 3.0 prompt-template style)."
+        ),
+    )
+    prompt: Optional[str] = Field(
+        None,
+        max_length=2000,
+        description=(
+            "Required when mode='prompt'. Describe the new outfit. "
+            "Reaches Kontext verbatim — no Gemini rewrite, no template "
+            "wrapping. Example: 'Keep the person and pose, change outfit "
+            "to a luxurious emerald velvet evening gown with realistic "
+            "fabric folds and studio lighting'."
+        ),
+    )
+    negative_prompt: Optional[str] = Field(
+        None,
+        max_length=500,
+        description=(
+            "Optional negatives appended to a baseline 'outfit drift' "
+            "guard (clothing changing mid-image, color shifting, glitched "
+            "texture). Only used when mode='prompt'."
         ),
     )
 
@@ -1094,8 +1145,18 @@ class RoomRedesignRequest(BaseModel):
     )
     mode: str = Field(
         "redesign",
-        pattern="^(redesign|stage)$",
-        description="'redesign' (default) restyles an existing furnished room. 'stage' is AI Virtual Staging: takes an empty room photo and furnishes it in the chosen style. The selected style still drives the look; mode controls whether existing furniture is preserved or generated.",
+        pattern="^(redesign|stage|magic)$",
+        description=(
+            "'redesign' (default) restyles an existing furnished room. "
+            "'stage' is AI Virtual Staging — takes an empty room photo and "
+            "furnishes it in the chosen style. "
+            "'magic' (added 2026-05-24, owner directive — HomeDesignsAI "
+            "Magic-Redesign parity) drops the style preset entirely and "
+            "passes `custom_prompt` to Kontext I2I VERBATIM. No clause "
+            "injection, no style mixing — the user's text is the entire "
+            "instruction. Lighting / material chips, style_strength, and "
+            "style preset are all ignored in magic mode."
+        ),
     )
     prompt_id: Optional[str] = Field(
         None,
@@ -1151,6 +1212,16 @@ class ShortVideoRequest(BaseModel):
         ),
     )
     style: Optional[str] = Field(None, description="Optional visual style or effect hint to steer the motion result.")
+    prompt: Optional[str] = Field(
+        None,
+        max_length=2000,
+        description=(
+            "Free-form motion prompt added 2026-05-24 (QA item #2). When provided, "
+            "the user's text reaches the I2V model VERBATIM and overrides the "
+            "auto-generated motion_desc (which was driven only by motion_strength). "
+            "Same prompt-fidelity principle as the rest of the platform."
+        ),
+    )
     prompt_id: Optional[str] = Field(
         None,
         description="Curated motion prompt id (e.g. 'sv_001'). Server resolves canonical text; supersedes free-form motion prompts.",
@@ -1199,17 +1270,33 @@ class VideoDubbingRequest(BaseModel):
 class AvatarRequest(BaseModel):
     """AI Avatar - Photo-to-Avatar with lip sync"""
     image_url: str = Field(..., description="Clear frontal headshot URL used to generate the speaking avatar.")
-    script: Optional[str] = Field(None, description="Exact speech content. Optional when prompt_id is provided — the server resolves the canonical script text from the curated library.")
+    # QA #3 防呆 (2026-05-24): bound the script so empty/whitespace OR overly
+    # long inputs (> 2000 chars — past Kling Avatar / TTS reliable range) are
+    # rejected at the Pydantic layer instead of failing deep in the provider.
+    script: Optional[str] = Field(
+        None,
+        max_length=2000,
+        description=(
+            "Exact speech content. Optional when prompt_id is provided — the "
+            "server resolves the canonical script text from the curated library. "
+            "Hard cap 2000 chars (Kling Avatar / TTS reliable window)."
+        ),
+    )
     prompt_id: Optional[str] = Field(
         None,
+        max_length=40,
         description="Curated avatar-script id from prompt_library.json (e.g. 'av_001'). Server resolves canonical script and overrides any free-form `script`.",
     )
     locale: Optional[str] = Field(None, max_length=10, description="UI locale hint for prompt_id resolution.")
-    language: str = Field("en", description="Speech language code, for example 'en' or 'zh-TW'.")
-    voice_id: Optional[str] = Field(None, description="Optional voice identifier. If omitted, the first supported voice for the selected language is used.")
-    duration: int = Field(30, ge=1, le=120, description="Target video duration in seconds.")
-    aspect_ratio: str = Field("9:16", description="Target video aspect ratio: 9:16, 16:9, or 1:1.")
-    resolution: str = Field("720p", description="Output resolution: 720p or 1080p.")
+    language: str = Field(
+        "en",
+        pattern="^(en|zh-TW)$",
+        description="Speech language code. Allowed: 'en' or 'zh-TW' (other locales rejected at parse time — QA #3).",
+    )
+    voice_id: Optional[str] = Field(None, max_length=80, description="Optional voice identifier. If omitted, the first supported voice for the selected language is used.")
+    duration: int = Field(30, ge=5, le=120, description="Target video duration in seconds. Floor raised from 1→5 because Kling Avatar drops <5s requests (QA #3).")
+    aspect_ratio: str = Field("9:16", pattern="^(9:16|16:9|1:1)$", description="Target video aspect ratio.")
+    resolution: str = Field("720p", pattern="^(720p|1080p)$", description="Output resolution: 720p or 1080p.")
 
 
 class ToolResponse(BaseModel):
@@ -1314,6 +1401,39 @@ INTERIOR_STYLES = [
      "prompt": "desert modern interior, warm white plaster walls, sun-bleached oak floors, low-slung sand-toned linen sofa, saguaro and barrel cactus in matte black planters, terracotta and rust accent textiles, Palm-Springs-inspired butterfly chair, golden hour sunlight raking across walls, calm minimalist Southwestern aesthetic, photorealistic interior render, empty room no people no person no human"},
     {"id": "cyberpunk_loft", "name": "Cyberpunk Loft", "name_zh": "賽博龐克 Loft",
      "prompt": "cyberpunk loft interior, dark concrete walls with magenta and cyan neon LED accents, glossy black modular sofa, holographic pendant fixtures, exposed cable trays, floor-to-ceiling rain-slicked window overlooking neon cityscape, deep navy and electric pink palette, atmospheric haze, photorealistic dystopian architectural render, empty room no people no person no human"},
+    # 2026-05-24 — interior style expansion (19 → 34) for HomeDesignsAI /
+    # Reimagine competitor parity. Same prompt grammar so demo + curated
+    # pipelines treat them uniformly.
+    {"id": "parisian_haussmann", "name": "Parisian Haussmann", "name_zh": "巴黎奧斯曼風",
+     "prompt": "classical Parisian Haussmann apartment interior, herringbone oak parquet floor with decorative inlay border, ornate plaster crown moulding and ceiling rose, original marble fireplace with gilt mirror above, tall French casement windows with wrought iron balcony, restored cremone bolt hardware, soft eggshell walls, deep emerald velvet sofa with brass studs, antique crystal chandelier, photorealistic editorial interior photography, empty room no people no person no human"},
+    {"id": "dark_academia", "name": "Dark Academia", "name_zh": "暗黑學院",
+     "prompt": "dark academia library interior, floor-to-ceiling walnut bookshelves filled with leather-bound volumes, brass ladder on rail, oxblood Chesterfield reading chair, tartan throw, vintage globe on pedestal, green banker's desk lamp, oil-rubbed bronze sconces, deep burgundy and forest green palette, dusty warm window light, photorealistic interior render, empty room no people no person no human"},
+    {"id": "biophilic", "name": "Biophilic", "name_zh": "親自然風",
+     "prompt": "biophilic interior with extensive indoor plantings, living moss wall feature, mature fiddle leaf fig and bird of paradise, natural stone floor, raw oak slab dining table, hanging trailing pothos from beam, soft skylight and clerestory windows for filtered daylight, neutral earthy palette accented by deep green foliage, photorealistic architectural visualization, empty room no people no person no human"},
+    {"id": "tropical_resort", "name": "Tropical Resort", "name_zh": "熱帶度假",
+     "prompt": "tropical resort villa interior, vaulted thatched cane ceiling with bamboo accents, white-washed shiplap walls, rattan peacock chair with cream linen cushions, polished travertine floor, open glass doors to ocean breeze with sheer linen drapery, monstera and palm plants, brass and rope detail accents, golden afternoon light, photorealistic interior render, empty room no people no person no human"},
+    {"id": "tudor_revival", "name": "Tudor Revival", "name_zh": "都鐸復興",
+     "prompt": "Tudor revival interior with exposed dark oak ceiling beams over white stucco panels, leaded diamond-pane casement windows, sandstone fireplace with carved mantel, tapestry wall hanging, deep crimson Persian rug on wide-plank oak flooring, wrought iron chandelier, heavy carved oak refectory table, warm hearth glow, photorealistic interior photography, empty room no people no person no human"},
+    {"id": "moroccan_riad", "name": "Moroccan Riad", "name_zh": "摩洛哥庭院",
+     "prompt": "Moroccan riad interior, ornate hand-cut zellige mosaic tile floor and dado, carved cedar mashrabiya screens, horseshoe arch doorways, brass pierced lanterns casting intricate shadows, jewel-tone silk cushions on low banquette, central tiled fountain, terracotta and indigo palette with gold accents, soft filtered courtyard light, photorealistic interior render, empty room no people no person no human"},
+    {"id": "rustic_modern_cabin", "name": "Rustic Modern Cabin", "name_zh": "現代鄉村小屋",
+     "prompt": "rustic modern cabin interior, exposed reclaimed timber beams over white plaster cathedral ceiling, full-height blackened steel and stone fireplace, chunky wool throw on charcoal linen sectional, wide-plank knot-pine floor, vintage hide rug, oversized picture window framing forest view, warm Edison filament pendants, photorealistic architectural visualization, empty room no people no person no human"},
+    {"id": "transitional", "name": "Transitional", "name_zh": "過渡風",
+     "prompt": "transitional interior blending classic and modern, neutral linen-upholstered sofa with clean tailored lines, dark walnut accent chair, brass and crystal pendant chandelier, oversized abstract canvas above mantel, herringbone hardwood floor with neutral wool rug, ivory and charcoal palette with brass accents, refined yet livable, photorealistic interior render, empty room no people no person no human"},
+    {"id": "shabby_chic", "name": "Shabby Chic", "name_zh": "鄉村優雅",
+     "prompt": "shabby chic interior, distressed white-painted vintage wooden furniture, layered pastel pink and cream linen and lace textiles, antique chandelier with crystal drops, hand-painted floral wallpaper accent wall, weathered French armoire, soft window light through gauzy curtains, photorealistic interior photography, empty room no people no person no human"},
+    {"id": "atomic_age_mid_century", "name": "Atomic Age", "name_zh": "原子時代",
+     "prompt": "atomic age mid-century interior circa 1958, boomerang-pattern formica countertop, butterfly molded chair, starburst clock on aqua accent wall, Sputnik chandelier, walnut credenza on hairpin legs, vintage record player, mustard and seafoam palette, retro futuristic atmosphere, photorealistic interior render, empty room no people no person no human"},
+    {"id": "japandi_zen_balcony", "name": "Japandi Balcony", "name_zh": "日式北歐陽台",
+     "prompt": "Japandi balcony interior, low-profile pale ash bench with linen cushions, miniature zen rock garden in cedar tray, single bonsai, paper lantern, light grey microcement floor, glass railing, distant cityscape soft-blurred at dusk, soothing minimalist palette of cream, taupe, and matcha green, photorealistic architectural render, empty no people no person no human"},
+    {"id": "english_cottage", "name": "English Cottage", "name_zh": "英式鄉村",
+     "prompt": "English country cottage interior, exposed dark oak beams across whitewashed plaster ceiling, deep window seat under leaded glass casement, chintz floral upholstered armchair, antique pine farmhouse table, hand-thrown stoneware on dresser, warm hearth fire glow, dried herbs hung from beam, photorealistic interior photography, empty room no people no person no human"},
+    {"id": "modern_organic", "name": "Modern Organic", "name_zh": "現代有機",
+     "prompt": "modern organic interior, curved limestone fireplace, bouclé-upholstered curvilinear sofa in oat tone, raw-edge walnut coffee table, hand-thrown ceramic vessels, woven wool rug in warm sand, sculptural alabaster pendant, natural linen drapery, soft north light, warm minimalist palette, photorealistic architectural render, empty room no people no person no human"},
+    {"id": "scandi_dark", "name": "Scandi Dark", "name_zh": "暗色北歐",
+     "prompt": "dark Scandinavian interior, charcoal-painted walls with white trim, smoked oak wide-plank floor, pale boucle armchair as bright accent, matte black pendant lamp, layered grey and cream wool throws, single dried pampas in clear glass vessel, north-facing window with soft overcast light, moody minimalist palette, photorealistic interior photography, empty room no people no person no human"},
+    {"id": "miami_pastel_deco", "name": "Miami Pastel Deco", "name_zh": "邁阿密粉彩裝飾",
+     "prompt": "Miami pastel art deco interior, soft mint and blush curved walls, terrazzo floor with confetti pattern, scalloped pink velvet bench, oversized rounded mirror in pale gold frame, palm frond in ribbed planter, slim brass pendant lamp, sunlight filtering through louvered shutters, photorealistic interior render, empty room no people no person no human"},
 ]
 
 # 2026-05-18 — Commercial / hospitality space catalog (ReRoom-inspired).
@@ -2277,6 +2397,20 @@ async def ai_try_on(
 
     Credits: 15 per generation
     """
+    # Mode validation up front so the rest of the flow can assume invariants.
+    if request.mode == "prompt":
+        if not (request.prompt and request.prompt.strip()):
+            return ToolResponse(
+                success=False,
+                message="mode='prompt' requires a 'prompt' field describing the outfit.",
+            )
+        # Garment image is unused in prompt mode; ensure we have a model photo.
+        if not request.model_image_url and not request.model_id:
+            return ToolResponse(
+                success=False,
+                message="mode='prompt' requires model_image_url or model_id.",
+            )
+
     try:
         garment_media_url = request.get_garment_url()
     except ValueError:
@@ -2319,6 +2453,119 @@ async def ai_try_on(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "virtual_try_on")
     if not ok:
         return ToolResponse(success=False, message=err)
+
+    # ─── PROMPT MODE (Flux Kontext I2I on the model photo) ────────────────
+    # Added 2026-05-24 (owner directive): PiAPI Kling Try-On has no prompt
+    # field, so the Kling-3.0-style outfit prompt formulas can't reach it.
+    # This branch routes the model image + verbatim user prompt through
+    # Kontext I2I (the same I2I model product-scene uses), which preserves
+    # the person's identity and re-paints only the outfit per the prompt.
+    if request.mode == "prompt":
+        logger.info("Subscriber: Starting prompt-mode Try-On (Kontext I2I)")
+        try:
+            model_url = None
+            if request.model_image_url:
+                model_url = _resolve_public_url(str(request.model_image_url))
+            elif request.model_id:
+                model_url = TRYON_MODELS.get(request.model_id)
+            if not model_url:
+                await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+                return ToolResponse(
+                    success=False,
+                    message="mode='prompt' requires a valid model_image_url or model_id.",
+                )
+
+            # 2026-05-24 bug fix — Kontext I2I expects INSTRUCTION-style
+            # prompts ("change the outfit to X"). When the user typed a
+            # descriptive prompt like "紅色洋裝" / "red velvet dress" without
+            # an instruction verb, Kontext was generating a fresh image
+            # instead of editing the person's outfit (reported "result is
+            # fault"). Detect whether the prompt already contains an edit
+            # verb (keep / change / edit / 保持 / 改成 / 換成 / 把…換 / 變成);
+            # if not, prefix with a minimal "Edit this image: keep the
+            # person and pose, change the outfit to:" instruction.
+            #
+            # Negative prompt was being silently dropped because Kontext
+            # doesn't accept a negative_prompt input field. We instead bake
+            # the "don't change the person" guardrail into the instruction
+            # itself, which Kontext honors.
+            user_text = request.prompt.strip()
+            edit_verbs = (
+                "keep", "change", "edit", "replace", "transform",
+                "保持", "改成", "換成", "換上", "變成", "把", "讓",
+            )
+            lower = user_text.lower()
+            has_edit_verb = any(v.lower() in lower for v in edit_verbs)
+            if has_edit_verb:
+                final_prompt = user_text
+            else:
+                final_prompt = (
+                    f"Keep the person's face, body, pose, and background "
+                    f"exactly the same. Change the outfit to: {user_text}. "
+                    f"Realistic fabric texture, natural fit, consistent "
+                    f"studio lighting."
+                )
+
+            provider_router = get_provider_router()
+            i2i_params = {
+                "image_url": model_url,
+                "prompt": final_prompt,
+                "model": "flux_kontext",
+                "width": 1024,
+                "height": 1024,
+            }
+            result = await provider_router.route(TaskType.I2I, i2i_params)
+            if not result.get("success"):
+                await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+                return ToolResponse(
+                    success=False,
+                    message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE,
+                )
+
+            output = result.get("output") or {}
+            result_url = output.get("image_url")
+            if not result_url:
+                imgs = output.get("image_urls") or output.get("images") or []
+                if isinstance(imgs, list) and imgs:
+                    first = imgs[0]
+                    result_url = first if isinstance(first, str) else first.get("url") or first.get("image_url")
+            result_url = await _persist_provider_url(result_url, "image", current_user)
+            if not result_url:
+                await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+                return ToolResponse(
+                    success=False,
+                    message="Try-on returned no result. Please try again.",
+                )
+
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.TRY_ON,
+                input_image_url=model_url,
+                input_params={
+                    "mode": "prompt",
+                    "user_prompt": user_text,
+                    "kontext_prompt": final_prompt,  # post-wrapper, what reached the model
+                    "model_id": request.model_id,
+                    "model_image_url": str(request.model_image_url) if request.model_image_url else None,
+                },
+                result_image_url=result_url,
+                credits_used=CREDIT_COST,
+            )
+            user_gen.set_expiry()
+            db.add(user_gen)
+            await db.commit()
+
+            return ToolResponse(
+                success=True,
+                result_url=result_url,
+                credits_used=CREDIT_COST,
+                message="Virtual try-on successful (prompt mode).",
+            )
+        except Exception as e:
+            logger.error(f"Try-On (prompt mode) error: {e}", exc_info=True)
+            await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+            _notify_admin_of_tool_failure("try_on_prompt", e, current_user)
+            return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
 
     logger.info(f"Subscriber: Starting real-time Try-On")
 
@@ -2543,6 +2790,99 @@ async def room_redesign(
     if not ok:
         return ToolResponse(success=False, message=err)
 
+    # ─── MAGIC REDESIGN (single plain-language prompt → Kontext I2I) ──────
+    # Added 2026-05-24 (HomeDesignsAI Magic-Redesign parity). When the user
+    # picks "Magic" mode, we send the room photo + their prompt to Kontext
+    # I2I VERBATIM — no style preset, no chip clauses, no fusion. The user
+    # is fully in control of what changes. Matches the "I prompt, model
+    # honors prompt" expectation set by piapi.ai / pippit.ai.
+    if request.mode == "magic":
+        if not (request.custom_prompt and request.custom_prompt.strip()):
+            await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
+            return ToolResponse(
+                success=False,
+                message="mode='magic' requires custom_prompt describing the redesign.",
+            )
+        try:
+            room_url = _resolve_public_url(str(request.get_room_url()))
+            provider_router = get_provider_router()
+            magic_prompt = request.custom_prompt.strip()
+
+            def _extract_image_url(res: Dict[str, Any]) -> Optional[str]:
+                out = res.get("output") or {}
+                url = out.get("image_url") or res.get("image_url")
+                if not url:
+                    imgs = out.get("image_urls") or out.get("images") or []
+                    if isinstance(imgs, list) and imgs:
+                        first = imgs[0]
+                        url = first if isinstance(first, str) else (first.get("url") or first.get("image_url"))
+                return url
+
+            # Primary: Flux Kontext I2I — sends the user's prompt verbatim.
+            result = await provider_router.route(TaskType.I2I, {
+                "image_url": room_url,
+                "prompt": magic_prompt,
+                "model": "flux_kontext",
+                "width": 1024,
+                "height": 1024,
+            })
+            primary_error = None if result.get("success") else (result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
+            result_url = _extract_image_url(result) if result.get("success") else None
+
+            # Fallback: the standard interior redesign pipeline. Its Vertex
+            # backup uses a DIFFERENT method (doodle_interior) than I2I's
+            # (image_to_image), so a Kontext-specific outage on both PiAPI and
+            # Vertex no longer dead-ends the user — they still get a redesigned
+            # room from the prompt instead of a bare error.
+            if not result_url:
+                logger.warning(
+                    "[room_redesign] magic Kontext I2I produced no image (%s); falling back to INTERIOR redesign",
+                    primary_error,
+                )
+                fb = await provider_router.route(TaskType.INTERIOR, {
+                    "image_url": room_url,
+                    "prompt": magic_prompt,
+                    "style": request.style or "modern",
+                })
+                if fb.get("success"):
+                    result_url = _extract_image_url(fb)
+
+            result_url = await _persist_provider_url(result_url, "image", current_user)
+            if not result_url:
+                await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
+                # Surface the real upstream error (e.g. credit depletion) rather
+                # than a generic "no result" so the user knows what went wrong.
+                return ToolResponse(
+                    success=False,
+                    message=primary_error or "Magic redesign returned no result. Please try again.",
+                )
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.ROOM_REDESIGN,
+                input_image_url=room_url,
+                input_params={
+                    "mode": "magic",
+                    "prompt": request.custom_prompt.strip(),
+                    "space_kind": request.space_kind,
+                },
+                result_image_url=result_url,
+                credits_used=CREDIT_COST,
+            )
+            user_gen.set_expiry()
+            db.add(user_gen)
+            await db.commit()
+            return ToolResponse(
+                success=True,
+                result_url=result_url,
+                credits_used=CREDIT_COST,
+                message="Magic redesign successful.",
+            )
+        except Exception as exc:
+            logger.error(f"Magic redesign error: {exc}", exc_info=True)
+            await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
+            _notify_admin_of_tool_failure("room_redesign_magic", exc, current_user)
+            return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
+
     interior = next((s for s in _catalog if s["id"] == request.style), None)
     if not interior:
         interior = _catalog[0]
@@ -2641,9 +2981,15 @@ async def room_redesign(
     try:
         router = get_provider_router()
         # Map style_strength (0-1, UI slider) to denoising_strength.
-        # Floor at 0.6 because Kontext/Flux below ~0.55 often returns the
-        # original image with cosmetic-only deltas, defeating the redesign.
-        denoising_strength = max(0.6, min(0.85, 0.5 + request.style_strength * 0.4))
+        # Linear span 0.30 .. 0.90 — covers genuinely subtle edits at the
+        # low end (the previous 0.6 floor flattened the slider's bottom
+        # half, leaving users with no way to get a soft restyle) and
+        # caps just below 1.0 at the top to avoid Kontext hallucinating
+        # the room geometry away. intensity_clause in the prompt also
+        # communicates the chosen tier in natural language so the model
+        # behaves consistently even when its numeric strength param is
+        # ignored.
+        denoising_strength = max(0.30, min(0.90, 0.30 + request.style_strength * 0.60))
 
         # variation_count > 1 fires N parallel calls. The user pays N×
         # the base cost. Each variant gets a small prompt diversifier so
@@ -2828,8 +3174,52 @@ async def _generate_short_video_inner(
         )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
-    CREDIT_COST = 25
-    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "short_video")
+    # Plan-tier gate: reject premium models (kling_omni, veo, etc.) before
+    # billing if the user's plan doesn't include them. Without this, a basic
+    # subscriber could call the API directly with model_id="kling_omni" and
+    # consume 750-credit-tier generation while paying 25 short-video credits.
+    await require_model_access(db, current_user, request.model_id)
+
+    # Per-model credit cost (v2.1 spec + 2026-05-23 Veo 3.1 addition):
+    #   standard I2V (Hailuo / Hunyuan / Kling 1.6 short)  = 20 pt
+    #   Seedance / Wan (mid-tier I2V)                       = 40 pt
+    #   Veo 3.1 Fast (Google premium)                       = 200 pt
+    # ServicePricing rows override these via service_type lookup so ops can
+    # fine-tune without a redeploy. The fallback constants here are the
+    # safety net when a service_pricing row is missing or out of date.
+    mid_lower = (request.model_id or "").lower()
+    # 2026-05-26 — added Kling tiers + hunyuan to the cost-resolution chain.
+    # Previously a user could pick "kling_omni" from the ShortVideo I2V
+    # dropdown, the UI would show 200 credits, and the backend would
+    # silently deduct 20 because Kling wasn't matched — a hard money-loss
+    # bug (Kling Omni costs PiAPI ~$0.30/render but we charged for cheap
+    # Hailuo). The handler still routes Kling models to TaskType.KLING_VIDEO
+    # downstream (line ~3280), so the cost calc just needed to learn the
+    # same tiers KlingVideo itself uses.
+    if "veo" in mid_lower:
+        CREDIT_COST  = 200
+        service_type = "veo3_video"
+    elif "kling" in mid_lower and ("omni" in mid_lower or "_v3" in mid_lower or "kling3" in mid_lower or "kling-3" in mid_lower):
+        CREDIT_COST  = 750
+        service_type = "video_kling_omni"
+    elif "kling" in mid_lower and ("flagship" in mid_lower or "master" in mid_lower or "2.1" in mid_lower):
+        CREDIT_COST  = 500
+        service_type = "video_flagship"
+    elif "kling" in mid_lower:
+        # Standard Kling (2.6 / 1.6) — pro tier
+        CREDIT_COST  = 60
+        service_type = "video_generation_professional"
+    elif "seedance" in mid_lower or "doubao" in mid_lower or "wan" in mid_lower or "hunyuan" in mid_lower or "tencent" in mid_lower:
+        # Mid-tier I2V — Seedance / Wan / Hunyuan all priced together
+        # (hunyuan was missing before 2026-05-26, leaking ~20 credits/call).
+        CREDIT_COST  = 40
+        service_type = "seedance_wan_video"
+    else:
+        # Hailuo / minimax / unknown fallback — cheapest tier
+        CREDIT_COST  = 20
+        service_type = "short_video"
+
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, service_type)
     if not ok:
         return ToolResponse(success=False, message=err)
 
@@ -2865,15 +3255,23 @@ async def _generate_short_video_inner(
                 "high-energy fashion commercial or product launch campaign feel, 60fps smooth slow-motion"
             )
         style_hint = get_style_prompt(request.style) if request.style else None
-        motion_prompt_base = (
-            f"{motion_desc}. Visual style guidance: {style_hint or request.style}"
-            if request.style else motion_desc
-        )
+        # 2026-05-24 — when the user typed a free-form prompt (QA item #2),
+        # it WINS over the auto-generated motion_desc. The I2V model receives
+        # the user's exact text. motion_strength still controls fidelity /
+        # motion_bucket downstream so the slider isn't useless.
+        user_free_prompt = (request.prompt or "").strip()
+        if user_free_prompt:
+            motion_prompt_base = user_free_prompt
+        else:
+            motion_prompt_base = (
+                f"{motion_desc}. Visual style guidance: {style_hint or request.style}"
+                if request.style else motion_desc
+            )
         motion_prompt, prompt_refinement = await _refine_generation_prompt(
             motion_prompt_base,
             "short_video",
             "image-to-video motion prompt",
-            user_prompt=bool(request.style),
+            user_prompt=bool(user_free_prompt or request.style),
             context={"motion_strength": strength, "style": request.style},
         )
 
@@ -2917,6 +3315,10 @@ async def _generate_short_video_inner(
             # and motion_bucket down for subtle motion settings.
             "image_fidelity": 0.95 if strength <= 3 else 0.90 if strength <= 5 else 0.85 if strength <= 7 else 0.80,
             "motion_bucket_id": 60 if strength <= 3 else 100 if strength <= 5 else 150 if strength <= 7 else 200,
+            # 20-minute provider wait (Kling Omni / Veo 3.1 / Wan can idle for
+            # 8-15 min before yielding a video). Default upstream is 10 min,
+            # which intermittently aborts healthy jobs mid-render.
+            "timeout": 1200,
         }
 
         if request.model_id:
@@ -3206,6 +3608,365 @@ async def _video_transform_inner(
 
 
 # ============================================================================
+# Claymation AI Generator — multi-mode (T2I / I2I / T2V / V2V) NEW 2026-05-24
+# ============================================================================
+# Mirrors piapi.ai/zh-TW/claymation-ai-generator. Routes mode to the right
+# underlying model:
+#   text-to-image  → Seedream 5 Lite (already in PIAPI_MODELS catalog)
+#   image-to-image → Seedream 5 Lite with image input (Kontext I2I as
+#                    fallback for now; Seedream I2I path will follow when
+#                    PiAPI exposes it as a separate task_type)
+#   text-to-video  → Kling 3.0 (kling_omni)
+#   video-to-video → Seedance 2.0 Fast (seedance_video)
+#
+# A single "claymation style" instruction is prepended to whatever the user
+# typed, so the result reliably reads as clay regardless of prompt content.
+# User prompt still flows through verbatim (no Gemini rewrite — consistent
+# with the rest of the platform per the 2026-05-24 prompt-fidelity rule).
+
+class ClaymationRequest(BaseModel):
+    """Multi-mode claymation generator."""
+    mode: str = Field(
+        "text_to_image",
+        pattern="^(text_to_image|image_to_image|text_to_video|video_to_video)$",
+        description="text_to_image | image_to_image | text_to_video | video_to_video",
+    )
+    prompt: str = Field(..., min_length=1, max_length=2000, description="What to clay-ify; appended to the baseline 'claymation style' instruction.")
+    image_url: Optional[str] = Field(None, description="Required for image_to_image and video_to_video (first-frame). MP4 / JPEG / PNG public URL.")
+    video_url: Optional[str] = Field(None, description="Required for video_to_video. Public MP4 URL.")
+    aspect_ratio: Optional[str] = Field("1:1", description="Aspect ratio for image modes (1:1, 16:9, 9:16, 4:3, 3:4).")
+
+
+# Baseline claymation instruction — keeps results consistent regardless of
+# what the user typed. Wraps but doesn't replace the user's prompt.
+_CLAYMATION_PREFIX = (
+    "handcrafted claymation style, rounded features, miniature stop-motion "
+    "scene with soft studio lighting, visible clay texture and fingerprints, "
+    "pastel color palette, photorealistic clay sculpture, "
+)
+
+
+@router.post("/claymation", response_model=ToolResponse)
+async def claymation_generate(
+    request: ClaymationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """Generate claymation-style image or video.
+
+    Pricing (per call): image modes 8 cr, video modes 50 cr (matches
+    upstream cost ratio).
+    """
+    is_video = request.mode in ("text_to_video", "video_to_video")
+    needs_image = request.mode in ("image_to_image", "video_to_video")
+
+    if needs_image and not (request.image_url or request.video_url):
+        return ToolResponse(
+            success=False,
+            message=f"mode={request.mode} requires image_url (or video_url for video_to_video).",
+        )
+
+    if not is_subscribed_user(current_user):
+        return await _demo_response(
+            db,
+            ToolType.SHORT_VIDEO if is_video else ToolType.EFFECT,
+            cta="Subscribe to use the claymation generator.",
+            effect_prompt=request.prompt[:200],
+        )
+
+    CREDIT_COST = 50 if is_video else 8
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "claymation")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    # User prompt reaches the model verbatim (just prefixed with the
+    # claymation styling). No Gemini rewrite, no fusion.
+    final_prompt = _CLAYMATION_PREFIX + request.prompt.strip()
+
+    try:
+        provider_router = get_provider_router()
+        if request.mode == "text_to_image":
+            # Seedream 5 Lite — added in the 2026-05-23 catalog expansion.
+            result = await provider_router.route(
+                TaskType.T2I,
+                {
+                    "prompt": final_prompt,
+                    "model": "seedream",
+                    "aspect_ratio": request.aspect_ratio or "1:1",
+                },
+            )
+            output_key, output_kind = "image_url", "image"
+
+        elif request.mode == "image_to_image":
+            # Flux Kontext I2I — keeps the source identity while restyling
+            # to claymation. Switch to Seedream-I2I if PiAPI exposes that
+            # task_type separately in the future.
+            result = await provider_router.route(
+                TaskType.I2I,
+                {
+                    "image_url": str(request.image_url),
+                    "prompt": final_prompt,
+                    "model": "flux_kontext",
+                    "width": 1024,
+                    "height": 1024,
+                },
+            )
+            output_key, output_kind = "image_url", "image"
+
+        elif request.mode == "text_to_video":
+            # Kling Omni 3.0 — premium video tier; supports clay/cinematic
+            # style prompts reliably (verified against PiAPI catalog).
+            #
+            # Route via KLING_VIDEO (dedicated piapi.kling_video_generation),
+            # NOT generic T2V. The generic path's _VIDEO_MODEL_MAP only
+            # covers seedance/hailuo/hunyuan/wan/veo, so passing
+            # `model="kling_omni"` there silently falls back to Seedance,
+            # which then returns either a Seedance-shaped response (wrong
+            # URL key) or nothing at all — surfacing as "Claymation
+            # generation returned no result." Bug found 2026-05-25 after
+            # the user reported T2V mode broken in prod.
+            result = await provider_router.route(
+                TaskType.KLING_VIDEO,
+                {
+                    "prompt": final_prompt,
+                    "tier":   "omni",   # → mode="omni" with enable_audio=true
+                    "duration": 5,
+                    "aspect_ratio": request.aspect_ratio or "16:9",
+                },
+            )
+            output_key, output_kind = "video_url", "video"
+
+        else:  # video_to_video
+            # Seedance 2.0 Fast — image_to_video with the V2V variant takes
+            # the first frame + prompt; full V2V isn't on the catalog yet.
+            # Fall back to first-frame I2V which is the closest available
+            # primitive for "transform this video into claymation."
+            src = str(request.video_url or request.image_url)
+            result = await provider_router.route(
+                TaskType.I2V,
+                {
+                    "image_url": src,
+                    "prompt": final_prompt,
+                    "model": "seedance",
+                    "duration": 5,
+                },
+            )
+            output_key, output_kind = "video_url", "video"
+
+        if not result.get("success"):
+            await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+            return ToolResponse(
+                success=False,
+                message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE,
+            )
+
+        # URL extraction — provider responses vary by family. Confirmed
+        # shapes (audited via diagnostic logging 2026-05-25 + the AI avatar
+        # handler's existing extraction code):
+        #
+        #   Seedream / Flux Kontext (T2I, I2I):
+        #     result.output = {"image_url": "https://..."}
+        #     result.output = {"image_urls": ["https://...", ...]}
+        #
+        #   Seedance / Hailuo / Wan (T2V, I2V) — generic text_to_video path:
+        #     result.output = {"video_url": "https://..."}
+        #
+        #   Kling 3.0 / Omni (KLING_VIDEO path) — different shape than the
+        #   generic T2V family! ← was the 2026-05-25 bug:
+        #     result.output = {"video": "https://..."}          # bare key
+        #     result.output = {"video": {"url": "https://..."}} # dict variant
+        #     result.output = {"works": [{"video": {...}}]}     # multi-output
+        #
+        #   Always-on belt-and-suspenders fallbacks:
+        #     result.video_url      (top-level)
+        #     result.output_url     (PiAPI's older normalised key)
+        output = result.get("output") or {}
+        url = (
+            output.get(output_key)
+            or output.get("url")
+            or result.get(output_key)            # top-level
+            or result.get("output_url")          # PiAPI normalised key
+        )
+        if not url and output_kind == "video":
+            # Kling bare "video" key — string OR dict.
+            video = output.get("video")
+            if isinstance(video, str):
+                url = video
+            elif isinstance(video, dict):
+                url = video.get("url") or video.get("video_url")
+        if not url and output_kind == "image":
+            imgs = output.get("image_urls") or output.get("images") or []
+            if isinstance(imgs, list) and imgs:
+                first = imgs[0]
+                url = first if isinstance(first, str) else first.get("url") or first.get("image_url")
+        if not url and output_kind == "video":
+            # Kling multi-output: output.works[].video.url. Same shape the
+            # AI avatar handler unpacks via lip_output.works[].video.url.
+            works = output.get("works") or output.get("video_urls") or []
+            if isinstance(works, list):
+                for work in works:
+                    if isinstance(work, str):
+                        url = work
+                        break
+                    if isinstance(work, dict):
+                        video = work.get("video") or work
+                        if isinstance(video, dict):
+                            url = video.get("url") or video.get("video_url")
+                        elif isinstance(video, str):
+                            url = video
+                        if url:
+                            break
+        url = await _persist_provider_url(url, output_kind, current_user)
+        if not url:
+            await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+            logger.warning(
+                "claymation %s succeeded at provider but yielded no URL — "
+                "result keys=%s output keys=%s",
+                request.mode,
+                list(result.keys()),
+                list(output.keys()) if isinstance(output, dict) else type(output).__name__,
+            )
+            return ToolResponse(
+                success=False,
+                message="Claymation generation returned no result. Please try again.",
+            )
+
+        user_gen = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.SHORT_VIDEO if is_video else ToolType.EFFECT,
+            input_text=request.prompt,
+            input_image_url=str(request.image_url) if request.image_url else None,
+            input_video_url=str(request.video_url) if request.video_url else None,
+            input_params={
+                "tool": "claymation",
+                "mode": request.mode,
+                "final_prompt": final_prompt,
+            },
+            result_image_url=url if output_kind == "image" else None,
+            result_video_url=url if output_kind == "video" else None,
+            credits_used=CREDIT_COST,
+        )
+        user_gen.set_expiry()
+        db.add(user_gen)
+        await db.commit()
+
+        return ToolResponse(
+            success=True,
+            result_url=url,
+            image_url=url if output_kind == "image" else None,
+            video_url=url if output_kind == "video" else None,
+            credits_used=CREDIT_COST,
+            message="Claymation generated.",
+        )
+    except Exception as exc:
+        logger.error("claymation error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+        _notify_admin_of_tool_failure("claymation", exc, current_user)
+        return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+# ============================================================================
+# Video Background Remove — PiAPI Qubico/video-toolkit (NEW 2026-05-24)
+# ============================================================================
+# Per the stability probe (2026-05-24), this is the only Qubico video tool
+# in healthy state. Upscale + watermark-remove were dropped because they
+# either timed out or returned "invalid task type". See piapi_provider
+# .video_background_remove for the full payload format.
+
+class VideoBackgroundRemoveRequest(BaseModel):
+    """Remove the background from a video — Qubico video-toolkit."""
+    video_url: str = Field(..., description="Public URL to source MP4 (base64 not accepted by PiAPI).")
+    invert_output: bool = Field(
+        False,
+        description="When True, return the background instead of the subject (alpha-inverted output).",
+    )
+
+
+@router.post("/video-background-remove", response_model=ToolResponse)
+async def video_background_remove(
+    request: VideoBackgroundRemoveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """Remove the background from a video.
+
+    Constraints (PiAPI Qubico video-toolkit, verified 2026-05-24 probe):
+      - MP4 only, max 20 MB, max 1024×2048, 10-2000 frames
+      - Pricing $0.0004 / frame upstream; charged at 50 cr / call here
+        (covers up to ~2000-frame inputs at our margin).
+
+    Returns the processed video URL persisted to GCS so it survives
+    PiAPI's 14-day CDN expiry.
+    """
+    validate_media_url_or_raise(str(request.video_url), "video", "Video BG remove input")
+
+    if not is_subscribed_user(current_user):
+        return await _demo_response(
+            db,
+            ToolType.SHORT_VIDEO,
+            cta="Subscribe to remove video backgrounds.",
+            input_video_url=request.video_url,
+        )
+
+    CREDIT_COST = 50
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "video_background_remove")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        # Route directly through PiAPIProvider — no fallback chain because
+        # no other vendor in our routing graph offers this primitive yet.
+        from app.providers.piapi_provider import PiAPIProvider
+        provider = PiAPIProvider()
+        result = await provider.video_background_remove({
+            "video_url": str(request.video_url),
+            "invert_output": bool(request.invert_output),
+        })
+
+        if not result.get("success"):
+            await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+            return ToolResponse(
+                success=False,
+                message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE,
+            )
+
+        output = result.get("output") or {}
+        video_url = output.get("video_url") or output.get("url")
+        video_url = await _persist_provider_url(video_url, "video", current_user)
+        if not video_url:
+            await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+            return ToolResponse(
+                success=False,
+                message="Video background remove returned no result. Please try again.",
+            )
+
+        user_gen = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.SHORT_VIDEO,
+            input_video_url=str(request.video_url),
+            input_params={"tool": "video_background_remove", "invert_output": request.invert_output},
+            result_video_url=video_url,
+            credits_used=CREDIT_COST,
+        )
+        user_gen.set_expiry()
+        db.add(user_gen)
+        await db.commit()
+
+        return ToolResponse(
+            success=True,
+            result_url=video_url,
+            video_url=video_url,
+            credits_used=CREDIT_COST,
+            message="Background removed.",
+        )
+    except Exception as exc:
+        logger.error("video_background_remove error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+        _notify_admin_of_tool_failure("video_background_remove", exc, current_user)
+        return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+# ============================================================================
 # Image Upscale — PiAPI image-toolkit
 # ============================================================================
 
@@ -3363,6 +4124,33 @@ async def _generate_avatar_inner(
             status_code=400,
             detail="Either 'script' or 'prompt_id' is required for the avatar tool.",
         )
+    # QA #3 防呆 (2026-05-24): script content must have at least one renderable
+    # character beyond whitespace. Earlier deploy had a user submit "  " and
+    # got a confusing TTS error 90 seconds in. Bail fast with a clear message.
+    if len(request.script.strip()) < 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Avatar script is too short (need at least 5 characters of speech content).",
+        )
+    # Soft sanity check: when the picked language is zh-TW but the script
+    # contains zero CJK characters, the TTS will produce romanised gibberish.
+    # Don't hard-reject (users sometimes script in pinyin on purpose), but
+    # surface a clear warning by routing through HTTPException so the UI
+    # toast tells them exactly what to fix instead of waiting 5min for a bad
+    # video. Tunable: comment out if it ever blocks a legitimate use case.
+    if request.language == "zh-TW":
+        cjk_count = sum(
+            1 for ch in request.script if "一" <= ch <= "鿿"
+        )
+        if cjk_count == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Language is zh-TW but the script contains no Chinese "
+                    "characters. Switch language to 'en', or write the script "
+                    "in Traditional Chinese."
+                ),
+            )
 
     # ========== DEMO USER: Return cached demo example ==========
     if not is_subscribed_user(current_user):
@@ -3391,12 +4179,15 @@ async def _generate_avatar_inner(
         return ToolResponse(success=False, message=err)
 
     try:
-        # Validate language
-        if request.language not in ["en", "zh-TW", "ja", "ko"]:
+        # Validate language. TTS-1 voices are multilingual so we COULD accept
+        # more, but the spec (修正單 v2.1) restricts the avatar to en + zh-TW
+        # — the only two markets we ship voices for. Reject other languages
+        # so a tech-savvy user can't bypass the UI picker via direct API call.
+        if request.language not in ["en", "zh-TW"]:
             await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported language: {request.language}. Supported: en, zh-TW, ja, ko"
+                detail=f"Unsupported language: {request.language}. Supported: en, zh-TW",
             )
 
         # Validate duration
@@ -3420,6 +4211,10 @@ async def _generate_avatar_inner(
                 "voice_id": request.voice_id,
                 "duration": request.duration,
                 "user_id": str(current_user.id),
+                # 20-minute provider wait. Kling Avatar lip-sync polling can
+                # idle 8-15 min on long scripts; default 10 min was tripping
+                # on healthy jobs that just needed a few more poll cycles.
+                "timeout": 1200,
             }
         )
 
@@ -4065,7 +4860,12 @@ async def midjourney_imagine(
             effect_prompt=request.prompt[:200],
         )
 
-    CREDIT_COST = 50
+    # Plan-tier gate for the optional T2I model dropdown — Qwen is pro+,
+    # Flux/Z-Image are basic. Skipped when no model is sent (Flux default).
+    await require_model_access(db, current_user, request.model)
+
+    # v2.1 spec: 高品質 AI 圖片 = 5pt. ServicePricing overrides if seeded.
+    CREDIT_COST = 5
     ok, err = await _check_and_deduct_credits(
         db, current_user, CREDIT_COST, "image_generation_premium"
     )
@@ -4144,12 +4944,29 @@ class KlingVideoRequest(BaseModel):
     cfg_scale: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
-@router.post("/kling-video", response_model=ToolResponse)
+@router.post("/kling-video")
 async def kling_video(
     request: KlingVideoRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional),
 ):
+    """Streaming wrapper around the real kling-video work. Kling tasks take
+    60-300s; without heartbeat bytes flowing the connection can be cut by
+    intermediate proxies (user corp firewalls especially) and the user sees
+    504. Wrapping in `_stream_with_heartbeat` puts a single space on the
+    wire every 25s so the connection stays warm (2026-05-26)."""
+    async def _do_kling_video() -> Dict[str, Any]:
+        result = await _kling_video_inner(request, db, current_user)
+        return result.model_dump() if hasattr(result, "model_dump") else result
+
+    return _stream_with_heartbeat(_do_kling_video)
+
+
+async def _kling_video_inner(
+    request: KlingVideoRequest,
+    db: AsyncSession,
+    current_user,
+) -> ToolResponse:
     """
     Premium Kling video generation. Three tiers:
       - tier="default"  → Kling 2.6 std mode, video_generation_standard pricing
@@ -4172,8 +4989,10 @@ async def kling_video(
         credit_cost_fallback = 500
         demo_cta = "Subscribe to unlock Kling 2.1-master flagship videos."
     else:
-        service_type = "video_generation_standard"
-        credit_cost_fallback = 100
+        # v2.1 spec: 專業長影片 (Kling 10s) = 60 pt. Omni/Flagship are
+        # premium tiers and keep their higher costs above.
+        service_type = "video_generation_professional"
+        credit_cost_fallback = 60
         demo_cta = "Subscribe to generate Kling videos."
 
     if not is_subscribed_user(current_user):
@@ -4184,6 +5003,11 @@ async def kling_video(
             input_image_url=request.image_url,
             effect_prompt=request.prompt[:200],
         )
+
+    # Plan-tier gate: flagship (Kling 2.5) and omni (Kling 3.0) require the
+    # premium plan. A basic-plan subscriber could otherwise hit this endpoint
+    # with tier="omni" and burn 750 premium credits.
+    await require_model_access(db, current_user, tier)
 
     if request.image_url:
         request.image_url = await _ensure_public_image_url(

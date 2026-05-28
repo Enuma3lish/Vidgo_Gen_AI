@@ -4,7 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useBrandingStore, useCreditsStore } from '@/stores'
 import LanguageSelector from './LanguageSelector.vue'
-import { toolHubTiles, getRecentTiles, pushRecentTool, type ToolHubTile } from '@/data/toolHub'
+import { toolHubTiles, getRecentTiles, pushRecentTool, TOOL_HUB_CATEGORIES, type ToolHubTile, type ToolHubCategory } from '@/data/toolHub'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -23,70 +23,23 @@ const toolsOpen = ref(false)
 const showCreditBadge = computed(() => authStore.isAuthenticated && !authStore.isAdmin)
 const showPublicGalleryLinks = computed(() => !authStore.isAdmin)
 
-interface ToolEntry { to: string; emoji: string; key: string }
-interface ToolGroup { titleKey: string; items: ToolEntry[] }
+// 2026-05-29 — tools regrouped into the four "big topic" buckets the owner
+// asked for (廣告宣傳 / 室內設計 / 品牌設計 / 其他酷炫的AI功能). Both the
+// desktop dropdown and the mobile menu now derive their groups from the
+// single toolHub catalog (data/toolHub.ts) so the header, the hub page, and
+// the catalog never drift apart again. Labels live under
+// tools.hub.categories.<cat> — see frontend-vue/src/locales/*.json.
+function categoryLabel(cat: ToolHubCategory): string {
+  const key = `tools.hub.categories.${cat}`
+  const translated = t(key)
+  return translated === key ? cat : translated
+}
 
-// 2026-05-20 — e-commerce-driven regrouping per owner request "make each
-// group name a sense and so does each tool name." Old groups (fashionAI /
-// ecommerceAI / designAI / proAi) were model-centric (Kling, MJ, ...) and
-// confused small-shop owners. New buckets map to the workflow they care
-// about: 商品攝影 / 行銷影片 / 品牌與包裝 / 空間視覺 / AI 代言 / 快速修圖.
-// Tool labels live under lp.allTools.<key>.name — see frontend-vue/
-// src/locales/*.json for the full bilingual+ja+ko+es strings.
-const toolGroups: ToolGroup[] = [
-  {
-    titleKey: 'lp.categories.productShots',
-    items: [
-      { to: '/tools/product-scene',      emoji: '📸', key: 'lp.allTools.productScenePhoto.name' },
-      { to: '/tools/background-removal', emoji: '✂️', key: 'lp.allTools.bgCutout.name' },
-      { to: '/tools/try-on',             emoji: '👗', key: 'lp.allTools.modelTryOn.name' },
-      { to: '/tools/upscale',            emoji: '🔍', key: 'lp.allTools.hdUpscale.name' },
-    ],
-  },
-  {
-    titleKey: 'lp.categories.marketingVideo',
-    items: [
-      { to: '/tools/short-video',     emoji: '🎬', key: 'lp.allTools.productReel.name' },
-      { to: '/tools/kling-video',     emoji: '🎥', key: 'lp.allTools.productPromoVideo.name' },
-      { to: '/tools/video-transform', emoji: '🎞️', key: 'lp.allTools.videoTransform.name' },
-      { to: '/tools/video-dubbing',   emoji: '🎙️', key: 'lp.videoDubbing.title' },
-    ],
-  },
-  {
-    titleKey: 'lp.categories.brandPackaging',
-    items: [
-      { to: '/tools/pattern-generate',   emoji: '▦',  key: 'lp.allTools.packagingPattern.name' },
-      { to: '/tools/midjourney-imagine', emoji: '🎨', key: 'lp.allTools.marketingHeroImage.name' },
-      { to: '/tools/image-translator',   emoji: '文', key: 'lp.allTools.productImageTranslator.name' },
-    ],
-  },
-  {
-    titleKey: 'lp.categories.spatialVisuals',
-    items: [
-      { to: '/tools/room-redesign', emoji: '🏠', key: 'lp.allTools.interiorMockup.name' },
-    ],
-  },
-  {
-    titleKey: 'lp.categories.aiSpokesperson',
-    items: [
-      { to: '/tools/avatar', emoji: '🗣️', key: 'lp.allTools.aiSpokesperson.name' },
-    ],
-  },
-  {
-    titleKey: 'lp.categories.quickFixes',
-    items: [
-      { to: '/gallery', emoji: '🖼️', key: 'gallery.title' },
-    ],
-  },
-]
-
-const visibleToolGroups = computed(() =>
-  toolGroups.map(group => ({
-    ...group,
-    items: showPublicGalleryLinks.value
-      ? group.items
-      : group.items.filter(item => item.to !== '/gallery'),
-  })).filter(group => group.items.length > 0)
+// Mobile menu: every tile, grouped by topic (text-only list).
+const hubGroupsAll = computed(() =>
+  TOOL_HUB_CATEGORIES
+    .map(cat => ({ cat, tiles: toolHubTiles.filter(tile => tile.category === cat) }))
+    .filter(group => group.tiles.length > 0)
 )
 
 // Tool-hub data for the redesigned dropdown ("Recently Used" + "Create with
@@ -98,6 +51,14 @@ const hubCreateTiles = computed<ToolHubTile[]>(() => {
   const usedIds = new Set(hubRecent.value.map(tile => tile.id))
   return toolHubTiles.filter(tile => !usedIds.has(tile.id))
 })
+
+// Desktop dropdown: the "Create with AI" tiles (recents excluded), grouped
+// by topic so each bucket gets its own labelled section.
+const hubGroupsCreate = computed(() =>
+  TOOL_HUB_CATEGORIES
+    .map(cat => ({ cat, tiles: hubCreateTiles.value.filter(tile => tile.category === cat) }))
+    .filter(group => group.tiles.length > 0)
+)
 
 function refreshHubRecent() {
   hubRecent.value = getRecentTiles().slice(0, HEADER_RECENT_CAP)
@@ -215,25 +176,26 @@ onUnmounted(() => {
                     </div>
                   </div>
 
-                  <div class="px-5 pt-2 pb-4">
-                    <div class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color: var(--text-secondary, #6b6b8a);">
-                      {{ t('tools.hub.createWithAi') }}
-                    </div>
-                    <!-- 5-col grid on wide viewports fits 15 / 17 tiles
-                         above the fold; max-h bumped from 420 → 620 so the
-                         remaining rows are visible without scrolling on a
-                         typical 800-1000px-tall screen. -->
-                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[640px] overflow-y-auto pr-1">
-                      <button
-                        v-for="tile in hubCreateTiles"
-                        :key="tile.id"
-                        @click="handleHubTileClick(tile)"
-                        class="dropdown-tile dropdown-tile--compact"
-                      >
-                        <span class="dropdown-tile-label">{{ t(tile.labelKey) }}</span>
-                        <img :src="tile.thumb" :alt="t(tile.labelKey)" class="dropdown-tile-thumb" />
-                      </button>
-                    </div>
+                  <!-- Create with AI — grouped into the four big topics.
+                       max-h keeps the whole panel inside a typical
+                       800-1000px-tall screen; rows scroll within. -->
+                  <div class="px-5 pt-2 pb-4 max-h-[640px] overflow-y-auto pr-1">
+                    <template v-for="group in hubGroupsCreate" :key="group.cat">
+                      <div class="text-[11px] font-bold uppercase tracking-wider mb-2 mt-4 first:mt-0" style="color: var(--text-secondary, #6b6b8a);">
+                        {{ categoryLabel(group.cat) }}
+                      </div>
+                      <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-1">
+                        <button
+                          v-for="tile in group.tiles"
+                          :key="tile.id"
+                          @click="handleHubTileClick(tile)"
+                          class="dropdown-tile dropdown-tile--compact"
+                        >
+                          <span class="dropdown-tile-label">{{ t(tile.labelKey) }}</span>
+                          <img :src="tile.thumb" :alt="t(tile.labelKey)" class="dropdown-tile-thumb" />
+                        </button>
+                      </div>
+                    </template>
                   </div>
 
                   <div class="px-5 py-3 flex items-center justify-between" style="background: rgba(245,158,11,0.05); border-top: 1px solid var(--border-subtle);">
@@ -331,17 +293,16 @@ onUnmounted(() => {
           <RouterLink v-if="showPublicGalleryLinks" to="/gallery" class="dropdown-item w-full" @click="closeMobile">{{ t('gallery.title') }}</RouterLink>
           <RouterLink to="/pricing" class="dropdown-item w-full" @click="closeMobile">{{ t('nav.pricing') }}</RouterLink>
 
-          <template v-for="group in visibleToolGroups" :key="group.titleKey">
-            <div class="px-3 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted">{{ t(group.titleKey) }}</div>
+          <template v-for="group in hubGroupsAll" :key="group.cat">
+            <div class="px-3 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted">{{ categoryLabel(group.cat) }}</div>
             <RouterLink
-              v-for="item in group.items"
-              :key="item.to"
-              :to="item.to"
+              v-for="tile in group.tiles"
+              :key="tile.id"
+              :to="tile.to"
               class="dropdown-item w-full"
               @click="closeMobile"
             >
-              <span>{{ item.emoji }}</span>
-              <span>{{ t(item.key) }}</span>
+              <span>{{ t(tile.labelKey) }}</span>
             </RouterLink>
           </template>
 

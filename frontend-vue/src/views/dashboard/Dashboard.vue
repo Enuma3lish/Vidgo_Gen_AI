@@ -32,6 +32,25 @@ const providerStatuses = ref<ProviderStatus[]>([])
 const providerStatusLoading = ref(false)
 const providerStatusError = ref<string | null>(null)
 
+// Per-model health (operator-only). Populated from /admin/model-health, which
+// aggregates the last 24h of generation_metrics by (provider, model). Lets
+// ops spot a quietly-broken model (e.g. PiAPI rate-limiting Veo, F5-TTS
+// 500'ing) before user-visible failures pile up.
+interface ModelHealthRow {
+  provider: string
+  model: string
+  task_type: string
+  total_calls: number
+  successes: number
+  success_rate: number
+  avg_duration_ms: number
+  latest_error: string | null
+}
+const modelHealthRows = ref<ModelHealthRow[]>([])
+const modelHealthLoading = ref(false)
+const modelHealthError = ref<string | null>(null)
+const modelHealthGeneratedAt = ref<string | null>(null)
+
 const { t } = useI18n()
 const authStore = useAuthStore()
 const creditsStore = useCreditsStore()
@@ -153,6 +172,29 @@ async function loadProviderStatus() {
   }
 }
 
+async function loadModelHealth() {
+  if (!isOperator.value) return
+  modelHealthLoading.value = true
+  modelHealthError.value = null
+  try {
+    const { data } = await apiClient.get('/api/v1/admin/model-health?window_hours=24')
+    modelHealthRows.value = data?.rows ?? []
+    modelHealthGeneratedAt.value = data?.generated_at ?? null
+  } catch (err: any) {
+    modelHealthError.value = err?.response?.data?.detail || err?.message || 'Failed to load model health'
+  } finally {
+    modelHealthLoading.value = false
+  }
+}
+
+function healthBadgeColor(rate: number): string {
+  // Threshold ladder for the "health pill" colour. Anything < 80% success
+  // gets red so a quietly-degrading model jumps out.
+  if (rate >= 0.95) return '#10b981'   // green
+  if (rate >= 0.80) return '#facc15'   // yellow
+  return '#ef4444'                      // red
+}
+
 onMounted(async () => {
   if (!authStore.user) {
     await authStore.fetchUser()
@@ -165,9 +207,10 @@ onMounted(async () => {
     // Handle error silently
   }
 
-  // Operator-only widget — fetched in parallel with the rest so it doesn't
-  // delay the user-facing portions if the vendor APIs are slow.
+  // Operator-only widgets — fetched in parallel with the rest so they
+  // don't delay the user-facing portions when vendor APIs / DB are slow.
   loadProviderStatus()
+  loadModelHealth()
 
   loadingWorks.value = true
   try {
@@ -324,6 +367,72 @@ onMounted(async () => {
                 : L('開啟供應商頁面查看 ↗', 'Open vendor page to check ↗', 'プロバイダーページで確認 ↗', '공급자 페이지에서 확인 ↗', 'Abrir página del proveedor ↗') }}
             </a>
           </div>
+        </div>
+      </div>
+
+      <!-- Model Health (operator-only) — added 2026-05-23 alongside the
+           Nano Banana / Seedream / Veo 3.1 rollout so ops can spot a
+           quietly-degraded model before users notice. -->
+      <div v-if="isOperator" class="mb-8">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-bold" style="color: #f5f5fa;">
+            {{ L('模型健康度（24h）', 'Model Health (24h)', 'モデル健康度 (24h)', '모델 상태 (24h)', 'Estado del modelo (24h)') }}
+          </h2>
+          <button
+            @click="loadModelHealth"
+            :disabled="modelHealthLoading"
+            class="text-xs px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+            style="color: #9494b0; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);"
+          >
+            {{ modelHealthLoading ? L('讀取中…', 'Refreshing…', '更新中…', '새로 고침 중…', 'Cargando…') : L('重新整理', 'Refresh', '更新', '새로 고침', 'Actualizar') }}
+          </button>
+        </div>
+        <p
+          v-if="modelHealthError"
+          class="text-sm mb-3 rounded px-3 py-2"
+          style="color: #ff7875; background: rgba(255,77,79,0.08); border: 1px solid rgba(255,77,79,0.2);"
+        >{{ modelHealthError }}</p>
+        <div
+          v-else-if="modelHealthRows.length === 0 && !modelHealthLoading"
+          class="rounded-xl text-center py-6 text-sm"
+          style="background: #141420; border: 1px solid rgba(255,255,255,0.06); color: #6b6b8a;"
+        >
+          {{ L('過去 24 小時尚無生成紀錄', 'No generations in the last 24h.', '過去24時間に生成履歴なし', '최근 24시간 생성 없음', 'Sin generaciones en 24 h.') }}
+        </div>
+        <div v-else class="rounded-xl overflow-x-auto" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr style="color: #6b6b8a; background: rgba(255,255,255,0.02);">
+                <th class="text-left px-3 py-2 font-medium">{{ L('提供者', 'Provider', 'プロバイダー', '제공자', 'Proveedor') }}</th>
+                <th class="text-left px-3 py-2 font-medium">{{ L('模型', 'Model', 'モデル', '모델', 'Modelo') }}</th>
+                <th class="text-left px-3 py-2 font-medium">{{ L('任務', 'Task', 'タスク', '작업', 'Tarea') }}</th>
+                <th class="text-right px-3 py-2 font-medium">{{ L('呼叫數', 'Calls', '呼出数', '호출수', 'Llamadas') }}</th>
+                <th class="text-right px-3 py-2 font-medium">{{ L('成功率', 'Success', '成功率', '성공률', 'Éxito') }}</th>
+                <th class="text-right px-3 py-2 font-medium">{{ L('平均時間', 'Avg ms', '平均ms', '평균 ms', 'Tiempo medio') }}</th>
+                <th class="text-left px-3 py-2 font-medium">{{ L('最近錯誤', 'Latest error', '最近のエラー', '최근 오류', 'Último error') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in modelHealthRows"
+                :key="row.provider + ':' + row.model + ':' + row.task_type"
+                style="border-top: 1px solid rgba(255,255,255,0.04); color: #e8e8f0;"
+              >
+                <td class="px-3 py-2 whitespace-nowrap" style="color: #9494b0;">{{ row.provider }}</td>
+                <td class="px-3 py-2 whitespace-nowrap font-medium">{{ row.model }}</td>
+                <td class="px-3 py-2 whitespace-nowrap" style="color: #6b6b8a;">{{ row.task_type }}</td>
+                <td class="px-3 py-2 text-right tabular-nums">{{ row.total_calls }}</td>
+                <td class="px-3 py-2 text-right tabular-nums">
+                  <span
+                    class="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                    :style="`color: ${healthBadgeColor(row.success_rate)}; background: ${healthBadgeColor(row.success_rate)}1a;`"
+                  >{{ (row.success_rate * 100).toFixed(0) }}%</span>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums" style="color: #9494b0;">{{ row.avg_duration_ms.toLocaleString() }}</td>
+                <td class="px-3 py-2 text-[11px] max-w-md truncate" :title="row.latest_error || ''" style="color: #ff7875;">{{ row.latest_error || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

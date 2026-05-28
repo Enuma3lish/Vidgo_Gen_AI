@@ -28,34 +28,33 @@ STATIC_DIR = Path("/app/static/materials")
 # A2E.ai API base URL (video.a2e.ai is the actual API, api.a2e.ai is just docs)
 A2E_BASE_URL = "https://video.a2e.ai"
 
-# Available voices for each language (A2E.ai provides 50+ voices)
+# Voice list revised 2026-05-22. A2E was on a free tier returning 403 on
+# every API call, so the avatar pipeline silently falls through to PiAPI's
+# OpenAI-compatible TTS-1 (the only working TTS surface). TTS-1 accepts ONLY
+# these 6 voice IDs — anything else gets silently coerced to "alloy", which
+# speaks Chinese with a thick English accent and was the source of the
+# "avatar can't speak my content" report.
+#
+# IDs below are the literal strings TTS-1 accepts; names are translated for
+# UI display per language. All 6 voices are multilingual (en, zh, ja, ko,
+# es, fr, …), so we surface the same set for every language.
+_OPENAI_TTS_VOICES = [
+    {"id": "alloy",   "gender": "neutral", "style": "professional"},
+    {"id": "echo",    "gender": "male",    "style": "professional"},
+    {"id": "fable",   "gender": "female",  "style": "friendly"},
+    {"id": "onyx",    "gender": "male",    "style": "warm"},
+    {"id": "nova",    "gender": "female",  "style": "warm"},
+    {"id": "shimmer", "gender": "female",  "style": "professional"},
+]
+
+_VOICE_NAMES = {
+    "en":    {"alloy": "Alloy",  "echo": "Echo",  "fable": "Fable",  "onyx": "Onyx",  "nova": "Nova",  "shimmer": "Shimmer"},
+    "zh-TW": {"alloy": "Alloy",  "echo": "Echo (男声)",  "fable": "Fable (女声)",  "onyx": "Onyx (沉穩男聲)",  "nova": "Nova (溫暖女聲)",  "shimmer": "Shimmer (專業女聲)"},
+}
+
 A2E_VOICES = {
-    "en": [
-        {"id": "en-US-alloy", "name": "Alloy", "gender": "neutral", "style": "professional"},
-        {"id": "en-US-echo", "name": "Echo", "gender": "male", "style": "professional"},
-        {"id": "en-US-fable", "name": "Fable", "gender": "female", "style": "friendly"},
-        {"id": "en-US-onyx", "name": "Onyx", "gender": "male", "style": "casual"},
-        {"id": "en-US-nova", "name": "Nova", "gender": "female", "style": "professional"},
-        {"id": "en-US-shimmer", "name": "Shimmer", "gender": "female", "style": "warm"},
-    ],
-    "zh-TW": [
-        {"id": "zh-TW-xiaoxiao", "name": "小曉", "gender": "female", "style": "professional"},
-        {"id": "zh-TW-xiaochen", "name": "小晨", "gender": "female", "style": "friendly"},
-        {"id": "zh-TW-xiaomeng", "name": "曉夢", "gender": "female", "style": "warm"},
-        {"id": "zh-TW-xiaoxuan", "name": "小萱", "gender": "female", "style": "casual"},
-        {"id": "zh-TW-yunxi", "name": "雲熙", "gender": "male", "style": "professional"},
-        {"id": "zh-TW-yunyang", "name": "雲揚", "gender": "male", "style": "casual"},
-        {"id": "zh-TW-yunjie", "name": "雲傑", "gender": "male", "style": "friendly"},
-        {"id": "zh-TW-yunhao", "name": "雲皓", "gender": "male", "style": "professional"},
-    ],
-    "ja": [
-        {"id": "ja-JP-nanami", "name": "七海", "gender": "female", "style": "professional"},
-        {"id": "ja-JP-keita", "name": "慶太", "gender": "male", "style": "professional"},
-    ],
-    "ko": [
-        {"id": "ko-KR-sunhi", "name": "선희", "gender": "female", "style": "professional"},
-        {"id": "ko-KR-injoon", "name": "인준", "gender": "male", "style": "professional"},
-    ],
+    lang: [{**v, "name": _VOICE_NAMES[lang].get(v["id"], v["id"])} for v in _OPENAI_TTS_VOICES]
+    for lang in ("en", "zh-TW")
 }
 
 # Default avatar images - SYNCED with frontend AIAvatar.vue (Asian/Chinese, color)
@@ -378,7 +377,7 @@ class A2EAvatarService:
     async def wait_for_completion(
         self,
         task_id: str,
-        timeout: int = 300,
+        timeout: int = 1200,
         poll_interval: int = 5
     ) -> Dict[str, Any]:
         """
@@ -386,7 +385,9 @@ class A2EAvatarService:
 
         Args:
             task_id: Task ID from generate_avatar_video
-            timeout: Max wait time in seconds
+            timeout: Max wait time in seconds (default 20 min — A2E avatar
+                renders with lip-sync on long scripts can run 8-15 min;
+                lower defaults aborted healthy jobs mid-render)
             poll_interval: Seconds between status checks
 
         Returns:
@@ -422,7 +423,7 @@ class A2EAvatarService:
         language: str = "en",
         voice_id: Optional[str] = None,
         duration: int = 30,
-        timeout: int = 300,
+        timeout: int = 1200,
         save_locally: bool = True
     ) -> Dict[str, Any]:
         """

@@ -10,6 +10,7 @@ API Documentation: https://piapi.ai/docs/wan-api
 """
 import httpx
 import asyncio
+import json
 from typing import Dict, Any, Optional
 import logging
 import base64
@@ -73,11 +74,11 @@ class PiAPIProvider(BaseProvider):
             logger.warning("PIAPI_KEY not set in environment")
 
         self.client = httpx.AsyncClient(
-            # 10 minutes per individual HTTP call. Kling Avatar polling can
-            # idle for several minutes between status transitions and the
-            # default 5 minutes was tripping on long jobs even when the task
-            # was still healthy server-side.
-            timeout=600.0,
+            # 20 minutes per individual HTTP call. Kling Avatar / Veo 3.1 /
+            # Kling Omni polling can idle for 8-15 minutes between status
+            # transitions on long jobs; the previous 10-minute ceiling was
+            # tripping on healthy renders that just needed more poll cycles.
+            timeout=1200.0,
             headers={
                 "X-API-Key": self.api_key,
                 "Content-Type": "application/json"
@@ -542,7 +543,41 @@ class PiAPIProvider(BaseProvider):
         # actually exposes via /api/v1/task. Hunyuan/Seedance were guesses
         # in the prior revision and silently returned default-model output.
         model_id = str(params.get("model") or "").lower().strip()
-        if "qwen" in model_id:
+        aspect = str(params.get("aspect_ratio") or "1:1")
+        if "nano-banana-pro" in model_id or "nano_banana_pro" in model_id:
+            # Nano Banana Pro (Google Gemini 2.5 Flash Image Pro via PiAPI).
+            # Input shape is aspect_ratio + resolution string, not w/h.
+            payload = {
+                "model": PIAPI_MODELS["nano_banana_pro_model"],
+                "task_type": PIAPI_MODELS["nano_banana_pro_task"],
+                "input": {
+                    "prompt": params["prompt"],
+                    "aspect_ratio": aspect,
+                    "resolution": params.get("resolution") or "2K",
+                },
+            }
+        elif "nano-banana" in model_id or "nano_banana" in model_id or "nanobanana" in model_id:
+            payload = {
+                "model": PIAPI_MODELS["nano_banana_2_model"],
+                "task_type": PIAPI_MODELS["nano_banana_2_task"],
+                "input": {
+                    "prompt": params["prompt"],
+                    "aspect_ratio": aspect,
+                    "resolution": params.get("resolution") or "1K",
+                },
+            }
+        elif "seedream" in model_id:
+            # Seedream 5 Lite (ByteDance) — supports up to 3K, free-form aspect.
+            payload = {
+                "model": PIAPI_MODELS["seedream_5_lite_model"],
+                "task_type": PIAPI_MODELS["seedream_5_lite_task"],
+                "input": {
+                    "prompt": params["prompt"],
+                    "aspect_ratio": aspect,
+                    "size": params.get("size") or "2K",
+                },
+            }
+        elif "qwen" in model_id:
             payload = {
                 "model": PIAPI_MODELS["qwen_t2i"],
                 "task_type": "txt2img",
@@ -576,7 +611,32 @@ class PiAPIProvider(BaseProvider):
                 },
             }
 
-        return await self._submit_and_poll(payload)
+        result = await self._submit_and_poll(payload)
+
+        # Normalise the output shape so downstream callers can always read
+        # ``output["image_url"]`` regardless of which model produced the result.
+        # Flux returns ``image_url`` (singular); Qubico/z-image (and some other
+        # Qubico models) return ``image_urls`` (an array). Without this
+        # normalisation the midjourney-imagine + pattern-generate endpoints
+        # see no ``image_url``, refund the credits and tell the user "no
+        # result", even though the image was actually generated. Reported
+        # 2026-05-22 (live https://piapi.ai/workspace/z-image runs OK but the
+        # vidgo.co T2I picker reported failure).
+        if result.get("success"):
+            output = result.get("output") or {}
+            if not output.get("image_url"):
+                imgs = output.get("image_urls") or output.get("images") or []
+                first: Optional[str] = None
+                if isinstance(imgs, list) and imgs:
+                    first_item = imgs[0]
+                    if isinstance(first_item, str):
+                        first = first_item
+                    elif isinstance(first_item, dict):
+                        first = first_item.get("url") or first_item.get("image_url")
+                if first:
+                    output["image_url"] = first
+                    result["output"] = output
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # IMAGE TO IMAGE (using Flux via PiAPI)
@@ -908,32 +968,110 @@ class PiAPIProvider(BaseProvider):
 
         family = self._resolve_video_model(params.get("model"))
         model_key, _, i2v_task_key = self._VIDEO_MODEL_MAP[family]
-        payload = {
-            "model": PIAPI_MODELS[model_key],
-            "task_type": PIAPI_MODELS[i2v_task_key],
-            "input": {
-                "image": self._resolve_image_url(params["image_url"]),
-                "prompt": params.get("prompt", "smooth natural motion"),
-                "negative_prompt": params.get("negative_prompt", ""),
-                "duration": params.get("duration", 5),
-                "resolution": params.get("resolution", "1080P"),
-                # image_fidelity (0.0-1.0): how strictly the generated video
-                # must preserve the source image's subject. We default high
-                # (0.85) because product/short-video flows depend on the
-                # original product staying recognizable; callers can tune
-                # down for more creative motion.
-                "image_fidelity": float(params.get("image_fidelity", 0.85)),
-                "watermark": False,
-            },
-        }
-        # motion_bucket_id (1-255 in SVD-style models, ~127 default). Lower =
-        # less motion = more product preservation. We expose it as an optional
-        # param; only forward when set so older PiAPI variants that ignore it
-        # do not error on the extra key.
-        if params.get("motion_bucket_id") is not None:
-            payload["input"]["motion_bucket_id"] = int(params["motion_bucket_id"])
+        model_id   = PIAPI_MODELS[model_key]
+        task_type  = PIAPI_MODELS[i2v_task_key]
+        image_url  = self._resolve_image_url(params["image_url"])
+        prompt     = params.get("prompt", "smooth natural motion")
+        duration   = params.get("duration", 5)
 
-        return await self._submit_and_poll(payload)
+        # PiAPI's "unified" task endpoint actually accepts a DIFFERENT input
+        # shape per model family. Verified by 200-response curl probes
+        # against api.piapi.ai 2026-05-22. Sending the wrong shape returns
+        # either "invalid model" or "invalid request" and the entire short-
+        # video flow falls through provider_router to "all providers failed".
+        if family == "seedance":
+            input_payload: Dict[str, Any] = {
+                "prompt":       prompt,
+                "image_urls":   [image_url],
+                "duration":     duration,
+                "aspect_ratio": params.get("aspect_ratio", "16:9"),
+            }
+        elif family == "hailuo":
+            input_payload = {
+                "prompt":       prompt,
+                "image_url":    image_url,
+                "model":        PIAPI_MODELS["hailuo_i2v_variant"],
+                "duration":     duration,
+            }
+        elif family == "hunyuan":
+            input_payload = {
+                "prompt":       prompt,
+                "image_url":    image_url,
+            }
+        elif family == "veo":
+            # Veo 3.1 I2V (verified 2026-05-23). Input takes image_urls[]
+            # like Seedance. Duration is a string with unit ("5s" / "8s").
+            input_payload = {
+                "prompt":          prompt,
+                "image_urls":      [image_url],
+                "negative_prompt": params.get("negative_prompt", ""),
+                "aspect_ratio":    params.get("aspect_ratio", "16:9"),
+                "duration":        f"{int(duration)}s" if isinstance(duration, (int, float)) else str(duration),
+                "resolution":      params.get("resolution", "720p"),
+                "generate_audio":  bool(params.get("generate_audio", False)),
+            }
+        else:  # "wan"
+            input_payload = {
+                "prompt":          prompt,
+                "image":           image_url,
+                "negative_prompt": params.get("negative_prompt", ""),
+                "duration":        duration,
+                "resolution":      params.get("resolution", "1080P"),
+                "image_fidelity":  float(params.get("image_fidelity", 0.85)),
+                "watermark":       False,
+            }
+            if params.get("motion_bucket_id") is not None:
+                input_payload["motion_bucket_id"] = int(params["motion_bucket_id"])
+
+        payload = {"model": model_id, "task_type": task_type, "input": input_payload}
+        # Honour caller's timeout (set to 1200 s for short-video / avatar
+        # in tools.py); default 600 s for ad-hoc internal callers.
+        max_wait = int(params.get("timeout") or 600)
+        # Retry transient PiAPI stalls (queue stall, rate limit, upload timeout)
+        # on the SAME model before the provider_router falls back to Vertex/Veo
+        # or Pollo. Without this, a one-off Seedance/Wan hiccup silently served
+        # the user a different-looking video from a different model — the main
+        # cause of "I2V result is inconsistent run-to-run". attempts=2 bounds
+        # the worst case to a single retry (a full-timeout retry is expensive).
+        result = await self._retry_transient(
+            "image_to_video",
+            lambda: self._submit_and_poll(payload, max_wait_seconds=max_wait),
+            attempts=2,
+        )
+
+        # Normalise the output shape — PiAPI is wildly inconsistent across
+        # families. Verified field names (2026-05-22 live probe):
+        #   Seedance: output["video"]            (singular, NO _url)
+        #   Hailuo:   output["video_url"] or output["download_url"]
+        #   Wan:      output["video_url"]
+        #   Hunyuan:  output["video_url"] or output["video_urls"][0]
+        # Pick the first non-empty among the known fields and promote to
+        # ``video_url`` so tools.py + generation.py read uniformly. Without
+        # this Seedance specifically silently returns a successful task with
+        # no displayable URL → user sees "no result".
+        if result.get("success"):
+            output = result.get("output") or {}
+            if not output.get("video_url"):
+                resolved: Optional[str] = None
+                # 1) Singular alternates Seedance / others use
+                for k in ("video", "url", "download_url"):
+                    v = output.get(k)
+                    if isinstance(v, str) and v:
+                        resolved = v
+                        break
+                # 2) Array variants
+                if not resolved:
+                    arrs = output.get("video_urls") or output.get("urls") or output.get("videos") or []
+                    if isinstance(arrs, list) and arrs:
+                        first = arrs[0]
+                        if isinstance(first, str):
+                            resolved = first
+                        elif isinstance(first, dict):
+                            resolved = first.get("url") or first.get("video_url") or first.get("video")
+                if resolved:
+                    output["video_url"] = resolved
+                    result["output"] = output
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # TEXT TO VIDEO (Wan 2.6 via PiAPI)
@@ -948,6 +1086,10 @@ class PiAPIProvider(BaseProvider):
         "hailuo":   ("hailuo_video",   "hailuo_t2v_task",   "hailuo_i2v_task"),
         "hunyuan":  ("hunyuan_video",  "hunyuan_t2v_task",  "hunyuan_i2v_task"),
         "wan":      ("wan_video",      "wan_t2v_task",      "wan_i2v_task"),
+        # Veo 3.1 Fast (Google via PiAPI). Verified stable 2026-05-23.
+        # Same model+task for both T2V and I2V; presence of image_urls in the
+        # input switches Google's pipeline into I2V mode automatically.
+        "veo":      ("veo_31_fast_model", "veo_31_fast_task", "veo_31_fast_task"),
     }
 
     @staticmethod
@@ -966,6 +1108,8 @@ class PiAPIProvider(BaseProvider):
             return "hailuo"
         if "hunyuan" in m or "tencent" in m:
             return "hunyuan"
+        if "veo" in m:
+            return "veo"
         if m.startswith("wan") or "wan2" in m or m.startswith("wan_"):
             return "wan"
         # Unknown alias → fall back to default tier (Seedance Fast).
@@ -985,20 +1129,67 @@ class PiAPIProvider(BaseProvider):
 
         family = self._resolve_video_model(params.get("model"))
         model_key, t2v_task_key, _ = self._VIDEO_MODEL_MAP[family]
-        payload = {
-            "model": PIAPI_MODELS[model_key],
-            "task_type": PIAPI_MODELS[t2v_task_key],
-            "input": {
-                "prompt": params["prompt"],
-                "negative_prompt": params.get("negative_prompt", ""),
-                "duration": params.get("duration", 5),
-                "resolution": params.get("resolution", "1080P"),
-                "aspect_ratio": params.get("aspect_ratio", "16:9"),
-                "watermark": False
-            }
-        }
+        model_id   = PIAPI_MODELS[model_key]
+        task_type  = PIAPI_MODELS[t2v_task_key]
+        prompt     = params["prompt"]
+        duration   = params.get("duration", 5)
 
-        return await self._submit_and_poll(payload)
+        # Per-family input shape (see image_to_video for context).
+        if family == "seedance":
+            input_payload: Dict[str, Any] = {
+                "prompt":       prompt,
+                "duration":     duration,
+                "aspect_ratio": params.get("aspect_ratio", "16:9"),
+            }
+        elif family == "hailuo":
+            input_payload = {
+                "prompt":   prompt,
+                "model":    PIAPI_MODELS["hailuo_t2v_variant"],
+                "duration": duration,
+            }
+        elif family == "hunyuan":
+            input_payload = {"prompt": prompt}
+        elif family == "veo":
+            # Veo 3.1 Fast input shape (verified 2026-05-23). Duration is a
+            # string with unit suffix ("5s" / "8s"). resolution=720p saves
+            # credits; 1080p available on premium plan only.
+            input_payload = {
+                "prompt":          prompt,
+                "negative_prompt": params.get("negative_prompt", ""),
+                "aspect_ratio":    params.get("aspect_ratio", "16:9"),
+                "duration":        f"{int(duration)}s" if isinstance(duration, (int, float)) else str(duration),
+                "resolution":      params.get("resolution", "720p"),
+                "generate_audio":  bool(params.get("generate_audio", False)),
+            }
+        else:  # "wan"
+            input_payload = {
+                "prompt":          prompt,
+                "negative_prompt": params.get("negative_prompt", ""),
+                "duration":        duration,
+                "resolution":      params.get("resolution", "1080P"),
+                "aspect_ratio":    params.get("aspect_ratio", "16:9"),
+                "watermark":       False,
+            }
+
+        payload = {"model": model_id, "task_type": task_type, "input": input_payload}
+        max_wait = int(params.get("timeout") or 600)
+        result = await self._submit_and_poll(payload, max_wait_seconds=max_wait)
+
+        # Normalise output (same logic as image_to_video).
+        if result.get("success"):
+            output = result.get("output") or {}
+            if not output.get("video_url"):
+                urls = output.get("video_urls") or output.get("urls") or []
+                if isinstance(urls, list) and urls:
+                    first = urls[0]
+                    if isinstance(first, str):
+                        output["video_url"] = first
+                    elif isinstance(first, dict):
+                        output["video_url"] = first.get("url") or first.get("video_url")
+                elif output.get("url"):
+                    output["video_url"] = output["url"]
+                result["output"] = output
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # KLING VIDEO GENERATION (text-to-video + image-to-video, with version pin)
@@ -1091,9 +1282,10 @@ class PiAPIProvider(BaseProvider):
             "config": {"service_mode": "public"},
         }
 
+        max_wait = int(params.get("timeout") or 600)
         result = await self._retry_transient(
             "kling_video_generation",
-            lambda: self._submit_and_poll(payload),
+            lambda: self._submit_and_poll(payload, max_wait_seconds=max_wait),
         )
         output = result.get("output") or {}
         if isinstance(output, dict):
@@ -1201,12 +1393,54 @@ class PiAPIProvider(BaseProvider):
         return await self._submit_and_poll(payload)
 
     # ─────────────────────────────────────────────────────────────────────────
+    # VIDEO BACKGROUND REMOVE (Qubico video-toolkit via PiAPI)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def video_background_remove(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Remove the background from a video via PiAPI Qubico video-toolkit.
+
+        Added 2026-05-24 after a live probe of Qubico's video endpoints
+        showed this is the only one in healthy state:
+          - video-toolkit `background-remove`  → HEALTHY (returns mp4 URL)
+          - video-toolkit `upscale`            → DROPPED (timed out 5 min)
+          - video-toolkit `watermark-remove`   → DROPPED (endpoint missing)
+
+        PiAPI docs (https://piapi.ai/zh-TW/video-remove-background):
+          model      = "Qubico/video-toolkit"
+          task_type  = "background-remove"
+          input.video = public URL of the source MP4
+          input.invert_output = bool (default false; true returns the
+                                background instead of the subject)
+          Max 20MB, 10-2000 frames, max 1024x2048 resolution.
+          Pricing: $0.0004 / frame.
+
+        Args:
+            params: {
+                "video_url": str,  # public URL — base64 not accepted
+                "invert_output": bool (optional, default False),
+            }
+        Returns:
+            {"success": True, "task_id": str, "output": {"video_url": str}}
+        """
+        self._log_request("video_background_remove", params)
+
+        payload = {
+            "model": "Qubico/video-toolkit",
+            "task_type": "background-remove",
+            "input": {
+                "video": params["video_url"],
+                "invert_output": bool(params.get("invert_output", False)),
+            },
+        }
+        return await self._submit_and_poll(payload)
+
+    # ─────────────────────────────────────────────────────────────────────────
     # VIDEO STYLE TRANSFER (Wan VACE via PiAPI)
     # ─────────────────────────────────────────────────────────────────────────
 
     async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Apply style transfer to video using Wan 2.1 VACE via PiAPI.
+        Apply style transfer to video.
 
         Args:
             params: {
@@ -1217,13 +1451,54 @@ class PiAPIProvider(BaseProvider):
 
         Returns:
             {"success": True, "task_id": str, "output": {"video_url": str}}
+
+        Implementation note (2026-05-25): Wan 2.1 VACE (the original
+        true V2V path) was removed from PiAPI's catalog — every call
+        returned "wan21-vace is not accepted by the current PiAPI API".
+        For months this method just returned that error verbatim,
+        which surfaced to users as "tool temporarily unavailable" with
+        no path to success.
+
+        Replacement: delegate to Seedance 2.0 Fast I2V — the same
+        first-frame primitive the Claymation V2V mode uses. The caller
+        (tools.py video_transform handler) already extracts the first
+        frame via _extract_first_frame_to_gcs and passes it under
+        `image_url` / `first_frame_url`, so we just hand that off to
+        Seedance I2V. Not identical to true per-frame style transfer,
+        but it preserves the source's opening composition and is the
+        closest primitive available end-to-end today.
         """
         self._log_request("video_style_transfer", params)
 
-        return {
-            "success": False,
-            "error": "PiAPI REST video style transfer is unavailable: wan21-vace is not accepted by the current PiAPI API.",
-        }
+        # Prefer the pre-extracted first frame (handler passes it as
+        # image_url / first_frame_url). Only fall back to video_url for
+        # ad-hoc callers that don't pre-extract — Seedance will still
+        # reject MP4 input, so this just produces a clearer error.
+        image_url = (
+            params.get("image_url")
+            or params.get("first_frame_url")
+            or params.get("video_url")
+        )
+        if not image_url:
+            return {
+                "success": False,
+                "error": "video_style_transfer requires image_url (first frame) or video_url.",
+            }
+
+        prompt = params.get("prompt") or ""
+        style = (params.get("style") or "").strip()
+        if style and style.lower() not in prompt.lower():
+            # Bake the style hint into the prompt so the first-frame I2V
+            # render reflects the chosen style preset.
+            prompt = f"{prompt}, {style} style" if prompt else f"{style} style"
+
+        return await self.image_to_video({
+            "image_url":    image_url,
+            "prompt":       prompt or "cinematic camera motion, matching original composition",
+            "model":        "seedance",
+            "duration":     params.get("duration", 5),
+            "aspect_ratio": params.get("aspect_ratio", "16:9"),
+        })
 
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1438,14 +1713,22 @@ class PiAPIProvider(BaseProvider):
         mode = params.get("mode", "std")
 
         # Step 1: Kling Avatar REQUIRES local_dubbing_url (audio file).
-        # Prompt-only mode is NOT supported. Generate audio via F5-TTS first.
+        # Prompt-only mode is NOT supported. Generate audio via TTS-1.
+        #
+        # voice_id arrives as one of the 6 OpenAI voices (alloy/echo/fable/
+        # onyx/nova/shimmer) — see a2e_service.A2E_VOICES. Pass it through
+        # as `voice`, NOT `ref_audio`. The old code stuck it into ref_audio,
+        # which forced F5-TTS (zero-shot voice cloning), which 500'd, and
+        # the fallback to tts-1 then coerced the voice to default "alloy".
+        # Result: every Chinese avatar spoke with a heavy English accent
+        # because alloy is English-leaning. Reported 2026-05-22.
         if script and not audio_url:
-            voice_ref = params.get("voice_id", "")
-            logger.info("[PiAPI] Avatar: generating speech with F5-TTS...")
+            voice_hint = params.get("voice_id") or ""
+            logger.info("[PiAPI] Avatar: generating speech via tts-1 (voice=%s)", voice_hint or "alloy")
             try:
                 tts_result = await self.text_to_speech({
                     "text": script,
-                    "ref_audio": voice_ref,  # Empty string uses default voice
+                    "voice": voice_hint,
                 })
             except Exception as e:
                 logger.warning("[PiAPI] Avatar: TTS raised, using visual fallback: %s", e)
@@ -1503,8 +1786,21 @@ class PiAPIProvider(BaseProvider):
             httpx.URL(audio_url).host if audio_url.startswith(("http://", "https://")) else "local",
             mode,
         )
+        max_wait = int(params.get("timeout") or 600)
+        # Retry transient Kling Avatar failures (upload_verify_timeout,
+        # kling-engine upload failed, queue stalls — all in the transient hint
+        # list) on the SAME path before degrading. Previously ANY failure
+        # dropped straight to _fallback_avatar_video, so a one-off ingestion
+        # stall left the user with a generic presenter clip or a static
+        # portrait+audio MP4 instead of a real lip-synced avatar — the main
+        # cause of "avatar is sometimes just a still image". attempts=2 keeps
+        # the extra wait bounded to one retry.
         try:
-            result = await self._submit_and_poll(payload)
+            result = await self._retry_transient(
+                "generate_avatar",
+                lambda: self._submit_and_poll(payload, max_wait_seconds=max_wait),
+                attempts=2,
+            )
         except Exception as e:
             logger.warning("[PiAPI] Avatar: dedicated Kling Avatar raised, using fallback: %s", e)
             return await self._fallback_avatar_video(image_url, audio_url, script)
@@ -1539,8 +1835,17 @@ class PiAPIProvider(BaseProvider):
     # INTERNAL METHODS
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def _submit_and_poll(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Submit task and poll for result."""
+    async def _submit_and_poll(
+        self,
+        payload: Dict[str, Any],
+        max_wait_seconds: int = 600,
+    ) -> Dict[str, Any]:
+        """Submit task and poll for result.
+
+        ``max_wait_seconds`` caps total polling time. Default 10 min; the
+        avatar / I2V / Kling video paths bump this to 1200 s (20 min) so
+        long Kling Omni / Veo / Wan jobs aren't aborted mid-render.
+        """
         # Submit task
         try:
             response = await self.client.post(
@@ -1573,8 +1878,8 @@ class PiAPIProvider(BaseProvider):
                 }
             raise Exception(f"Invalid PiAPI response: {data}")
 
-        # Poll for result
-        max_attempts = 120  # 10 minutes max
+        # Poll for result. 5-second cadence, so attempts ≈ seconds / 5.
+        max_attempts = max(1, max_wait_seconds // 5)
         for attempt in range(max_attempts):
             try:
                 status_response = await self.client.get(
@@ -1606,8 +1911,22 @@ class PiAPIProvider(BaseProvider):
                 # Still processing, wait and retry
                 await asyncio.sleep(5)
 
-            except httpx.HTTPStatusError as e:
+            # A transient blip while POLLING (network drop, 5xx error body that
+            # isn't valid JSON, connection reset) must NOT kill an otherwise
+            # healthy upstream task — the generation is still running on PiAPI's
+            # side. Swallow these and keep polling. Note: the deliberate
+            # ``raise Exception(error_msg)`` for a *failed task* above is a bare
+            # Exception and is intentionally NOT caught here, so genuine task
+            # failures still propagate to the caller (and _retry_transient).
+            except (httpx.HTTPStatusError, httpx.TransportError, json.JSONDecodeError) as e:
                 if attempt < max_attempts - 1:
+                    logger.warning(
+                        "[PiAPI] poll transient error for task %s (attempt %d/%d): %s — continuing",
+                        task_id,
+                        attempt + 1,
+                        max_attempts,
+                        str(e)[:160],
+                    )
                     await asyncio.sleep(5)
                     continue
                 raise Exception(f"Failed to poll task status: {e}")

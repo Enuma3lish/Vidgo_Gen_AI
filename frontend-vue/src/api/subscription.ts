@@ -9,6 +9,13 @@ export interface PlanInfo {
   name: string
   display_name: string | null
   description: string | null
+  // 2026-05-24 — bilingual admin-editable copy. Pricing.vue prefers the
+  // locale-matched value; legacy display_name/description still serve as
+  // fallback for plans that haven't been re-edited since the migration.
+  display_name_zh?: string | null
+  display_name_en?: string | null
+  description_zh?: string | null
+  description_en?: string | null
   price_monthly: number
   price_yearly: number
   currency?: string

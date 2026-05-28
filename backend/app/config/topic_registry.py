@@ -137,6 +137,50 @@ TOOL_TOPICS: Dict[str, List[TopicInfo]] = {
         {"id": "oil_painting", "name_en": "Oil Painting", "name_zh": "油畫風格"},
         {"id": "watercolor", "name_en": "Watercolor", "name_zh": "水彩風格"},
     ],
+
+    # =========================================================================
+    # 2026-05-26 demo-coverage expansion. Five tools shipped without topic
+    # entries, so /demo/presets/<tool_type> returned invalid_tool_type and
+    # their ExampleGallery rendered empty. Adding minimal topic sets so the
+    # demo pipeline can seed examples for each.
+    # =========================================================================
+
+    # Claymation — by mode (text → image, text → video, etc.) + a couple of
+    # vibe-driven topics so users see range.
+    "claymation": [
+        {"id": "product", "name_en": "Product Showcase", "name_zh": "商品展示"},
+        {"id": "character", "name_en": "Character", "name_zh": "角色塑造"},
+        {"id": "scene", "name_en": "Scene", "name_zh": "場景"},
+    ],
+
+    # Kling Video — covers the three tiers (default / flagship / omni) plus
+    # generic motion vibes.
+    "kling_video": [
+        {"id": "cinematic", "name_en": "Cinematic", "name_zh": "電影感"},
+        {"id": "product_motion", "name_en": "Product Motion", "name_zh": "商品動態"},
+        {"id": "atmosphere", "name_en": "Atmosphere", "name_zh": "氛圍鏡頭"},
+    ],
+
+    # Upscale — input categories the user is likely to upload.
+    "upscale": [
+        {"id": "product", "name_en": "Product Photo", "name_zh": "商品照"},
+        {"id": "portrait", "name_en": "Portrait", "name_zh": "人像照"},
+        {"id": "scenery", "name_en": "Scenery", "name_zh": "風景"},
+    ],
+
+    # Image Translator — common source-language → target-language pairs.
+    "image_translator": [
+        {"id": "menu", "name_en": "Menu", "name_zh": "菜單"},
+        {"id": "signage", "name_en": "Signage", "name_zh": "招牌看板"},
+        {"id": "poster", "name_en": "Poster", "name_zh": "海報"},
+    ],
+
+    # Midjourney Imagine — the T2I dropdown's main use-case buckets.
+    "midjourney_imagine": [
+        {"id": "logo", "name_en": "Logo", "name_zh": "品牌 Logo"},
+        {"id": "marketing", "name_en": "Marketing Visual", "name_zh": "行銷主視覺"},
+        {"id": "illustration", "name_en": "Illustration", "name_zh": "插畫"},
+    ],
 }
 
 

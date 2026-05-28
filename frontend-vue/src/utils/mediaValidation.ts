@@ -44,6 +44,22 @@ const toolRules: Record<string, ImageDimensionRule> = {
     guidance: 'Please choose a clear garment image, not an extreme panorama.',
     guidanceZh: '請選擇清楚的服飾圖片，避免過長或過窄的圖片。',
   },
+  // 2026-05-26 — mirror of backend TRY_ON_MODEL_IMAGE_DIMENSION_RULES
+  // (backend/app/core/upload_validation.py). Was missing here, so the
+  // ImageUploader fell back to the permissive `commonImageDimensionRule`
+  // (aspect 0.25-4.0) and accepted square photos that PiAPI's Kling
+  // Try-On then rejected with a cryptic 415 "unsupported aspect ratio".
+  // Tight portrait range matches the backend exactly.
+  try_on_model: {
+    ...commonImageDimensionRule,
+    label: 'Try-on model input',
+    minWidth: 384,
+    minHeight: 512,
+    minAspectRatio: 0.5,
+    maxAspectRatio: 0.9,
+    guidance: 'Please choose a full-body portrait model image, roughly 2:3 or 3:4. Square or landscape photos will be rejected by the try-on API.',
+    guidanceZh: '請選擇 2:3 或 3:4 的全身直式人像照。正方形或橫向照片會被試穿 API 拒絕。',
+  },
   room_redesign: {
     ...commonImageDimensionRule,
     label: 'Room redesign input',
@@ -94,6 +110,41 @@ const toolRules: Record<string, ImageDimensionRule> = {
     minHeight: 256,
     guidance: 'Please choose a clear image with readable text, at least 256px on each side.',
     guidanceZh: '請選擇文字清楚可讀、每邊至少 256px 的圖片。',
+  },
+  // 2026-05-26 — Kling I2V (KlingVideo.vue) uses the same image-to-video
+  // dimension contract as short-video. Without this entry, both the
+  // start frame uploader and the optional tail frame uploader fell
+  // through to the permissive commonImageDimensionRule.
+  kling_video: {
+    ...commonImageDimensionRule,
+    label: 'Kling video start frame',
+    minWidth: 256,
+    minHeight: 256,
+    minAspectRatio: 0.45,
+    maxAspectRatio: 2.2,
+    guidance: 'Please choose an image close to 16:9, 1:1, or 9:16, at least 256px on each side.',
+    guidanceZh: '請選擇接近 16:9、1:1 或 9:16 的圖片，每邊至少 256px。',
+  },
+  kling_video_tail: {
+    ...commonImageDimensionRule,
+    label: 'Kling video end frame',
+    minWidth: 256,
+    minHeight: 256,
+    minAspectRatio: 0.45,
+    maxAspectRatio: 2.2,
+    guidance: 'End frame should match the start frame aspect ratio for smooth interpolation.',
+    guidanceZh: '結束幀請與起始幀使用相同比例，影片才會流暢過渡。',
+  },
+  // Claymation I2I mode — Flux Kontext expects standard image input.
+  claymation: {
+    ...commonImageDimensionRule,
+    label: 'Claymation reference image',
+    minWidth: 256,
+    minHeight: 256,
+    minAspectRatio: 0.5,
+    maxAspectRatio: 2,
+    guidance: 'Please choose a clear image at least 256px on each side; extreme panoramas may be rejected.',
+    guidanceZh: '請選擇每邊至少 256px 的清楚圖片；過長或過窄的圖片可能會被拒絕。',
   },
 }
 

@@ -13,7 +13,10 @@ export interface PatternGenerateRequest {
   // 2026-05-20 tier addition — optional T2I model family override
   // (flux / qwen / z-image). Empty/omitted = Flux default. Verified
   // against PiAPI's live catalog 2026-05-20.
-  model?: 'flux' | 'qwen' | 'z-image'
+  model?: 'flux' | 'qwen' | 'z-image' | 'nano-banana' | 'nano-banana-pro' | 'seedream'
+  // 2026-05-24 QA #6: product the pattern is for (e.g. "coffee bag",
+  // "silk scarf"). Backend prepends "for <product>, ..." to the final prompt.
+  product_name?: string
 }
 
 export interface PatternTransferRequest {

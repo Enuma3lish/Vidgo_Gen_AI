@@ -3,10 +3,23 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
+import { useBrandingStore } from '@/stores/branding'
+import { TOOL_EXAMPLES, LANDING_HIGHLIGHTS } from '@/data/toolExamples'
 
 const { t, tm, locale } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
+const brandingStore = useBrandingStore()
+
+// Admin-editable hero tagline (added 2026-05-23). When the admin types
+// brand_tagline_zh / brand_tagline_en in /admin/branding, that string
+// replaces the hardcoded `t('lp.sub1')` headline subtitle. Empty/null
+// falls back to the i18n default so unconfigured installs render fine.
+const brandTagline = computed(() => {
+  const s = brandingStore.settings
+  const isZh = String(locale.value || '').startsWith('zh')
+  return (isZh ? s.brand_tagline_zh : s.brand_tagline_en) || ''
+})
 
 // ── Real demo data from API ──
 const demoImages = ref<Record<string, { before: string; after: string }[]>>({})
@@ -225,6 +238,62 @@ function toolName(tool: LandingTool): string {
   return t(tool.nameKey || `lp.allTools.${tool.id}.name`)
 }
 
+const isZhLocale = computed(() => String(locale.value || '').startsWith('zh'))
+
+const _toolRouteMap: Record<string, string> = {
+  'midjourney-imagine':     '/tools/midjourney-imagine',
+  'kling-video':            '/tools/kling-video',
+  'try-on':                 '/tools/try-on',
+  'room-redesign':          '/tools/room-redesign',
+  'pattern-generate':       '/tools/pattern-generate',
+  'product-scene-classic':  '/tools/product-scene-classic',
+  'short-video':            '/tools/short-video',
+  'claymation':             '/tools/claymation',
+  'ai-avatar':              '/tools/avatar',
+  'image-translator':       '/tools/image-translator',
+  'image-upscale':          '/tools/upscale',
+  'background-removal':     '/tools/background-removal',
+}
+
+const _toolDisplayName: Record<string, { zh: string; en: string }> = {
+  'midjourney-imagine':    { zh: 'AI 圖片生成',      en: 'AI Image Generation' },
+  'kling-video':           { zh: 'Kling 影片',       en: 'Kling Video' },
+  'try-on':                { zh: '虛擬試穿',         en: 'Virtual Try-On' },
+  'room-redesign':         { zh: '室內設計',         en: 'Room Redesign' },
+  'pattern-generate':      { zh: '花紋設計',         en: 'Pattern Design' },
+  'product-scene-classic': { zh: '商品場景',         en: 'Product Scene' },
+  'short-video':           { zh: '短影音',           en: 'Short Video' },
+  'claymation':            { zh: '黏土風',           en: 'Claymation' },
+  'ai-avatar':             { zh: 'AI 數位人',        en: 'AI Avatar' },
+  'image-translator':      { zh: '圖片翻譯',         en: 'Image Translator' },
+  'image-upscale':         { zh: '高清放大',         en: 'Image Upscale' },
+  'background-removal':    { zh: '去背',             en: 'Background Removal' },
+}
+
+interface HighlightCard {
+  toolKey: string
+  toolName: string
+  route: string
+  category: string
+  promptText: string
+}
+
+const landingHighlightCards = computed<HighlightCard[]>(() => {
+  return LANDING_HIGHLIGHTS.map(h => {
+    const list = TOOL_EXAMPLES[h.tool] || []
+    const ex = list.find(e => e.id === h.example_id) || list[0]
+    if (!ex) return null
+    const tn = _toolDisplayName[h.tool] || { zh: h.tool, en: h.tool }
+    return {
+      toolKey: h.tool,
+      toolName: isZhLocale.value ? tn.zh : tn.en,
+      route: _toolRouteMap[h.tool] || '/dashboard',
+      category: isZhLocale.value ? ex.category_zh : ex.category_en,
+      promptText: isZhLocale.value ? ex.prompt_zh : ex.prompt_en,
+    }
+  }).filter((x): x is HighlightCard => x !== null)
+})
+
 function toolDesc(tool: LandingTool): string {
   return t(tool.descKey || `lp.allTools.${tool.id}.desc`)
 }
@@ -419,7 +488,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
               <span class="hero-headline-main">{{ t('lp.headline') }}</span>
             </h1>
             <p class="hero-sub mb-6">
-              {{ t('lp.sub1') }}
+              {{ brandTagline || t('lp.sub1') }}
             </p>
             <p class="hero-sub-accent mb-8">
               {{ t('lp.sub2') }}
@@ -489,6 +558,75 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             <span v-for="(brand, i) in [...brands, ...brands]" :key="i"
               class="font-bold text-lg whitespace-nowrap flex-shrink-0"
               style="color: rgba(255,255,255,0.1);">{{ brand }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 2.5 — INTERIOR DESIGN FEATURED (reroom.ai inspiration)
+         Added 2026-05-25. Room redesign is a flagship high-margin tool
+         (premium-tier kling_omni / veo) that was buried in the generic
+         tools grid below. Promoting it above the grid mirrors the
+         conversion structure on tw.reroom.ai — visitors land, see a
+         concrete before/after, and click straight into the tool.
+    ============================================================= -->
+    <section class="section-padding" style="background: var(--bg-section);">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="interior-featured">
+          <!-- Left: copy + CTA -->
+          <div class="interior-copy">
+            <span class="interior-eyebrow">{{ t('lp.interior.eyebrow') }}</span>
+            <h2 class="interior-title">{{ t('lp.interior.title') }}</h2>
+            <p class="interior-body">{{ t('lp.interior.body') }}</p>
+            <ul class="interior-bullets">
+              <li>
+                <span class="interior-bullet-dot"></span>
+                <span>{{ t('lp.interior.bullet1') }}</span>
+              </li>
+              <li>
+                <span class="interior-bullet-dot"></span>
+                <span>{{ t('lp.interior.bullet2') }}</span>
+              </li>
+              <li>
+                <span class="interior-bullet-dot"></span>
+                <span>{{ t('lp.interior.bullet3') }}</span>
+              </li>
+            </ul>
+            <div class="interior-cta-row">
+              <RouterLink to="/tools/room-redesign" class="interior-cta-primary">
+                {{ t('lp.interior.ctaPrimary') }}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </RouterLink>
+              <RouterLink to="/tools/interior-templates" class="interior-cta-secondary">
+                {{ t('lp.interior.ctaSecondary') }}
+              </RouterLink>
+            </div>
+          </div>
+
+          <!-- Right: before/after preview. Static two-pane "BEFORE / AFTER"
+               for now; an interactive slider can be slotted into this same
+               .interior-preview slot in a future pass without touching the
+               surrounding layout. -->
+          <div class="interior-preview">
+            <div class="interior-preview-pane interior-preview-before">
+              <img
+                src="https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/room-before.jpg"
+                :alt="t('lp.interior.beforeAlt')"
+                @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+              />
+              <span class="interior-preview-label">{{ t('lp.interior.beforeLabel') }}</span>
+            </div>
+            <div class="interior-preview-pane interior-preview-after">
+              <img
+                src="https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/room-after.jpg"
+                :alt="t('lp.interior.afterAlt')"
+                @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+              />
+              <span class="interior-preview-label interior-preview-label-after">{{ t('lp.interior.afterLabel') }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -905,6 +1043,45 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             <div class="text-4xl md:text-5xl font-black mb-2 gradient-text">{{ stat.value }}</div>
             <div class="text-sm font-medium" style="color: #9494b0;">{{ stat.label }}</div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         PROMPT HIGHLIGHTS — one cherry-picked example per tool
+    ============================================================= -->
+    <section class="py-20 relative">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-10">
+          <h2 class="text-3xl md:text-4xl font-black mb-3" style="color: #f5f5fa;">
+            {{ isZhLocale ? '靈感範例 · 12 種一鍵試做' : 'Prompt Highlights · 12 Ideas to Try' }}
+          </h2>
+          <p class="text-base max-w-2xl mx-auto" style="color: #9494b0;">
+            {{ isZhLocale
+              ? '從每個工具精選一組提示詞，點擊卡片直接前往對應工具開始創作。'
+              : 'One cherry-picked prompt per tool — click any card to jump to that tool and start creating.' }}
+          </p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <RouterLink
+            v-for="h in landingHighlightCards"
+            :key="h.toolKey"
+            :to="h.route"
+            class="rounded-xl p-4 flex flex-col gap-2 transition-all hover:scale-[1.02]"
+            style="background: #141420; border: 1px solid rgba(255,255,255,0.08);"
+          >
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold uppercase tracking-wide" style="color: #a78bfa;">{{ h.toolName }}</span>
+              <span
+                class="px-2 py-0.5 rounded text-[10px] font-medium"
+                style="background: rgba(124,58,237,0.15); color: #c4b5fd;"
+              >{{ h.category }}</span>
+            </div>
+            <p class="text-sm leading-snug flex-1" style="color: #e8e8f0;">{{ h.promptText }}</p>
+            <span class="text-xs font-medium mt-1" style="color: #a78bfa;">
+              {{ isZhLocale ? '前往工具' : 'Open tool' }} →
+            </span>
+          </RouterLink>
         </div>
       </div>
     </section>
@@ -1417,5 +1594,175 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
   .commerce-hero { min-height: 0; }
   .hero-headline-main { font-size: 2rem; }
   .hero-demo-pane { aspect-ratio: 4 / 5; }
+}
+
+/* ─── Interior Design featured section (2026-05-25) ─────────────── */
+.interior-featured {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.interior-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.interior-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: linear-gradient(135deg, #1677ff 0%, #7c3aed 100%);
+  border-radius: 999px;
+}
+
+.interior-title {
+  font-size: clamp(1.85rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.15;
+  color: #f5f5fa;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.interior-body {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: #c2c2d5;
+  margin: 0;
+  max-width: 52ch;
+}
+
+.interior-bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.interior-bullets li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.9375rem;
+  color: #c2c2d5;
+  line-height: 1.5;
+}
+
+.interior-bullet-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #1677ff;
+  margin-top: 8px;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(22, 119, 255, 0.5);
+}
+
+.interior-cta-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.interior-cta-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: #ffffff;
+  background: linear-gradient(135deg, #1677ff 0%, #7c3aed 100%);
+  border-radius: 10px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 4px 16px rgba(22, 119, 255, 0.35);
+}
+
+.interior-cta-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(22, 119, 255, 0.45);
+}
+
+.interior-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 22px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: #f5f5fa;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.interior-cta-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(22, 119, 255, 0.45);
+}
+
+.interior-preview {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #141420 0%, #1a1a28 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+}
+
+.interior-preview-pane {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f0f17;
+}
+
+.interior-preview-pane img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.interior-preview-label {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+
+.interior-preview-label-after {
+  background: linear-gradient(135deg, #1677ff 0%, #7c3aed 100%);
+}
+
+@media (max-width: 900px) {
+  .interior-featured { grid-template-columns: 1fr; gap: 32px; }
+  .interior-preview-pane { aspect-ratio: 4 / 5; }
 }
 </style>

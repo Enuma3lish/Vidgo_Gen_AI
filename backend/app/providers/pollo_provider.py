@@ -86,7 +86,10 @@ class PolloProvider(BaseProvider):
             "blurry, distorted, low quality, jerky motion"
         )
         length = self._normalize_length(model, params.get("duration") or params.get("length"))
-        timeout = int(params.get("timeout", 600))
+        # 20-minute default — Kling / Pixverse / Hailuo / Seedance video
+        # jobs can idle 8-15 min on long prompts. tools.py passes this
+        # explicitly for short-video; ad-hoc callers also get 1200 now.
+        timeout = int(params.get("timeout", 1200))
 
         success, task_id, _ = await self._client.generate_video(
             image_url=image_url,

@@ -1,1175 +1,441 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+/**
+ * ShortVideo — PiAPI-style combined playground (Deploy 3c, 2026-05-24).
+ *
+ * One page covers THREE task types:
+ *   1. Image to Video  → /api/v1/tools/short-video    (image + prompt)
+ *   2. Text to Video   → /api/v1/tools/kling-video    (prompt only)
+ *   3. Video Style Transfer → /api/v1/tools/video-transform (video + prompt)
+ *
+ * Route mapping kept the same so existing bookmarks work:
+ *   /tools/short-video      → defaults to image_to_video
+ *   /tools/image-to-video   → image_to_video
+ *   /tools/text-to-video    → redirects to /tools/short-video
+ *   /tools/video-transform  → video_style_transfer (URL-driven)
+ *
+ * Layout: PiapiPlayground component (left config / right result / status
+ * pill / examples row below). Colors preserved (#0a0a0f bg, violet
+ * gradient buttons, #94949f text).
+ *
+ * Notable behavior:
+ *   - User's prompt reaches the model VERBATIM. No Gemini rewrite.
+ *   - Model dropdown filters by task type. Switching task type resets
+ *     selected model to the default for that type.
+ *   - motion_strength applies only to I2V (varies the auto-generated
+ *     motion description; user prompt still overrides when present).
+ *   - Demo users see a CTA to /pricing instead of a generate button.
+ */
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, usePromptLibrary, useLocalized } from '@/composables'
-import { toolsApi, effectsApi, uploadsApi } from '@/api'
-import type { Style } from '@/api/effects'
-import type { UploadStatusResponse } from '@/api/uploads'
-import CreditCost from '@/components/tools/CreditCost.vue'
-import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
-import { downloadAsset } from '@/utils/downloadAsset'
+import { useDemoMode, useLocalized } from '@/composables'
+import { usePromptLibrary } from '@/composables/usePromptLibrary'
+import { toolsApi, uploadsApi } from '@/api'
+import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
+import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
-import HowToUseHint from '@/components/common/HowToUseHint.vue'
-import { validateVideoFile, normalizeVideoFileForUpload } from '@/utils/mediaValidation'
+import { extractApiError } from '@/utils/apiError'
+import { dataURItoBlob } from '@/utils/dataUri'
+import { downloadAsset } from '@/utils/downloadAsset'
 
 const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
-const isZh = computed(() => locale.value.startsWith('zh'))
-// 5-language inline picker — fixes BUG-017 (ja/ko/es users were falling
-// into the English branch of the legacy `isZh ? zh : en` ternary).
 const { L } = useLocalized()
-// `route.name === 'video-transform'` covers /tools/video-transform. The QA
-// plan also expects /tools/short-video?mode=transform to land on the same
-// workflow, so we honor the query-string variant too.
-const isVideoTransformMode = computed(() =>
-  route.name === 'video-transform' || String(route.query.mode || '') === 'transform'
-)
-const pageTitle = computed(() => isVideoTransformMode.value
-  ? L('影片風格轉換', 'Video Style Transform', '動画スタイル変換', '비디오 스타일 변환', 'Transformación de estilo de video')
-  : t('tools.shortVideo.name'))
-const pageDescription = computed(() => isVideoTransformMode.value
-  ? L('上傳自己的影片，套用 AI 風格轉換效果。', 'Upload your own video and apply an AI video style transform.', '動画をアップロードし、AIスタイル変換を適用します。', '동영상을 업로드하고 AI 스타일 변환 효과를 적용하세요.', 'Sube tu video y aplica un efecto AI de transformación de estilo.')
-  : t('tools.shortVideo.longDesc'))
+const { isDemoUser } = useDemoMode()
+const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
-// PRESET-ONLY MODE: All users use presets, no custom input
-const {
-  isDemoUser,
-  canUseCustomInputs,
-  loadDemoTemplates,
-  demoTemplates,
-  isLoadingTemplates,
-  resolveDemoTemplateResultUrl,
-  generateOnDemand,
-  loadInputLibrary,
-  inputLibrary,
-  loadEffectCatalog,
-  effectCatalog,
-} = useDemoMode()
+// ─── Task type + model catalogs ──────────────────────────────────────
+type TaskType = 'image_to_video' | 'text_to_video' | 'video_style_transfer'
 
-// Curated prompt library — dropdown options for the video transform prompt.
-const { options: videoPromptOptions, promptFor: videoPromptTextFor } = usePromptLibrary('short_video')
-const selectedVideoPromptId = ref('')
+interface ModelOpt {
+  id: string
+  nameZh: string
+  nameEn: string
+  badge?: string
+}
+const I2V_MODELS: ModelOpt[] = [
+  { id: 'seedance',   nameZh: 'Seedance 2.0 Fast',         nameEn: 'Seedance 2.0 Fast',         badge: 'default' },
+  { id: 'kling_omni', nameZh: 'Kling 3.0 / Omni（含音訊）', nameEn: 'Kling 3.0 / Omni (with audio)', badge: 'premium' },
+  // id MUST stay 'kling_v2' (not 'kling_v3'): the backend cost/tier resolver
+  // routes any id containing "_v3"/"omni" to Kling 3.0/Omni at 750 credits.
+  // 'kling_v2' lands on the standard 2.6 tier (60 credits) so the label,
+  // the routed model, and the charged cost all agree.
+  { id: 'kling_v2',   nameZh: 'Kling 2.6（標準）',           nameEn: 'Kling 2.6 (standard)' },
+  { id: 'veo',        nameZh: 'Veo 3.1 Fast（Google 旗艦）', nameEn: 'Veo 3.1 Fast (Google flagship)', badge: 'premium' },
+  { id: 'hailuo',     nameZh: 'Hailuo（最便宜）',           nameEn: 'Hailuo (cheapest)' },
+  { id: 'hunyuan',    nameZh: 'Hunyuan（中文擅長）',         nameEn: 'Hunyuan (Chinese-friendly)' },
+  { id: 'wan',        nameZh: 'Wan 2.6',                   nameEn: 'Wan 2.6' },
+]
+const T2V_MODELS: ModelOpt[] = [
+  { id: 'default',    nameZh: 'Kling 2.6 (預設)',          nameEn: 'Kling 2.6 (default)' },
+  { id: 'flagship',   nameZh: 'Kling 2.1-master (旗艦)',   nameEn: 'Kling 2.1-master (flagship)', badge: 'premium' },
+  { id: 'omni',       nameZh: 'Kling 3.0 / Omni (含音訊)',  nameEn: 'Kling 3.0 / Omni (with audio)', badge: 'premium' },
+]
+const V2V_MODELS: ModelOpt[] = [
+  // V2V runs Seedance first-frame I2V server-side (Wan 2.1 VACE was pulled
+  // from PiAPI's catalog). Label it for what actually runs so the dropdown
+  // isn't promising a model we no longer call.
+  { id: 'seedance',   nameZh: 'Seedance 2.0 Fast（首幀風格轉換）', nameEn: 'Seedance 2.0 Fast (first-frame style)' },
+]
+function modelOptionsFor(tt: TaskType): ModelOpt[] {
+  return tt === 'image_to_video' ? I2V_MODELS
+       : tt === 'text_to_video'  ? T2V_MODELS
+       : V2V_MODELS
+}
 
-const isSubscribed = computed(() => !isDemoUser.value)
+// Default model per task type — chosen as the cheapest/most-reliable
+const DEFAULT_MODEL: Record<TaskType, string> = {
+  image_to_video: 'seedance',
+  text_to_video:  'default',
+  video_style_transfer: 'seedance',
+}
 
-const uploadedImage = ref<string | undefined>(undefined)
-const uploadedVideoFile = ref<File | null>(null)
-const uploadedVideoPreview = ref<string | null>(null)
-const transformPrompt = ref('')
-// Re-derive transform prompt when the user picks a new option OR switches
-// locale so the displayed prompt always matches the active language.
-watch([selectedVideoPromptId, locale], () => {
-  if (selectedVideoPromptId.value) {
-    transformPrompt.value = videoPromptTextFor(selectedVideoPromptId.value)
+// ─── State ───────────────────────────────────────────────────────────
+const taskType = ref<TaskType>('image_to_video')
+const modelId = ref<string>(DEFAULT_MODEL.image_to_video)
+
+const prompt = ref('')
+const negativePrompt = ref('')
+const motionStrength = ref<number>(5)
+const aspectRatio = ref<'16:9' | '9:16' | '1:1'>('16:9')
+const duration = ref<5 | 8 | 10>(5)
+
+const imageInput = ref<string | undefined>(undefined)   // data URI from ImageUploader (for I2V)
+const videoFile = ref<File | null>(null)                // raw File (for V2V)
+const videoPreviewUrl = ref<string | null>(null)
+
+const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
+const statusText = ref('')
+const resultUrl = ref<string | null>(null)
+
+// Curated prompt library (kv_*-style entries under `short_video` in
+// prompt_library.json). Same source the flagship video / image tools
+// already use — gives cold users a one-click way to populate the prompt
+// instead of staring at an empty textarea. (KlingVideo wired this 2026-05-23;
+// ShortVideo was left out and shipped as prompt-only — fixed 2026-05-25.)
+const { options: presetOptions, promptFor: presetPromptFor } = usePromptLibrary('short_video')
+const selectedPresetId = ref('')
+function applyPreset() {
+  if (!selectedPresetId.value) return
+  prompt.value = presetPromptFor(selectedPresetId.value)
+  // Clear any stale result so the right pane doesn't read as the new prompt.
+  resultUrl.value = null
+}
+// Re-fetch the localized prompt text when the UI locale changes so the
+// textarea swaps zh ↔ en in step with the chrome.
+watch(locale, () => {
+  if (selectedPresetId.value) prompt.value = presetPromptFor(selectedPresetId.value)
+})
+
+// Default task type from route
+function applyRouteToTaskType() {
+  const name = String(route.name || '')
+  const path = String(route.path || '')
+  if (name === 'video-transform' || path.endsWith('/video-transform')) {
+    taskType.value = 'video_style_transfer'
+  } else if (name === 'text-to-video' || path.endsWith('/text-to-video')) {
+    taskType.value = 'text_to_video'
   } else {
-    transformPrompt.value = ''
+    taskType.value = 'image_to_video'
   }
-})
-const resultVideo = ref<string | null>(null)
-const isProcessing = ref(false)
-const uploadProgress = ref(0)
-const processingStage = ref<string | null>(null)
-const currentUploadId = ref<string | null>(null)
-// True when a demo user clicked Generate but the selected tile isn't backed
-// by a real Material DB preset (db_empty fallback or missing preset id).
-// Surfaces a persistent in-block message instead of a silent no-op.
-const demoEmptyState = ref(false)
-// Settings - only for subscribed users
-const selectedDuration = ref(5)
-const selectedMotion = ref('auto')
-// 2026-05-19 tier revision — Seedance 2.0 Fast is the owner-approved
-// primary default (best CP value, stable, high success rate). Backend
-// piapi_provider._resolve_video_model() maps this through PiAPI; Pollo
-// is the auto-backup on failure.
-const selectedModel = ref('seedance')
-const selectedStyle = ref<string | null>(null)
-const videoStyles = ref<Style[]>([])
-
-const motionStrengthById: Record<string, number> = {
-  auto: 5,
-  'zoom-in': 4,
-  'zoom-out': 4,
-  'pan-left': 6,
-  'pan-right': 6,
-  rotate: 7,
+  modelId.value = DEFAULT_MODEL[taskType.value]
 }
 
-function normalizeMotionId(motion?: string | null): string {
-  return (motion || 'auto').replace(/_/g, '-')
+watch(taskType, (next, prev) => {
+  if (next !== prev) {
+    modelId.value = DEFAULT_MODEL[next]
+    resultUrl.value = null
+  }
+})
+
+onMounted(() => applyRouteToTaskType())
+
+// ─── Validation + cost ───────────────────────────────────────────────
+const disabled = computed(() => {
+  if (taskType.value === 'image_to_video') return !imageInput.value
+  if (taskType.value === 'text_to_video')  return !prompt.value.trim()
+  return !videoFile.value || !prompt.value.trim()  // V2V
+})
+const isRunning = computed(() => status.value === 'running')
+
+const creditCost = computed(() => {
+  if (taskType.value === 'video_style_transfer') return 35
+  if (taskType.value === 'text_to_video') {
+    if (modelId.value === 'omni') return 750
+    if (modelId.value === 'flagship') return 500
+    return 60
+  }
+  // I2V — must mirror the backend cost-resolution chain in tools.py
+  // (2026-05-26 sync). The previous mapping under-displayed Kling tiers,
+  // causing the UI to show 200 credits while the backend deducted 750 for
+  // kling_omni — a sticker-shock surprise on the user's balance.
+  const m = modelId.value || ''
+  if (m === 'veo') return 200
+  if (m === 'kling_omni' || m.includes('_v3') || m.includes('kling-3') || m.includes('kling3')) return 750
+  if (m.includes('kling') && (m.includes('flagship') || m.includes('master') || m.includes('2.1'))) return 500
+  if (m.includes('kling')) return 60                                 // generic Kling 2.6
+  if (m === 'seedance' || m === 'wan' || m === 'hunyuan') return 40
+  return 20  // hailuo / default fallback
+})
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+async function ensureImageUrl(): Promise<string | null> {
+  if (!imageInput.value) return null
+  if (!imageInput.value.startsWith('data:')) return imageInput.value
+  const blob = dataURItoBlob(imageInput.value)
+  if (!blob) return null
+  const up = await toolsApi.uploadImage(blob as File)
+  return up.url
 }
 
-// Duration options vary by model
-const durationOptions = computed(() => {
-  const modelInfo = aiModelOptions.find(m => m.id === selectedModel.value)
-  return modelInfo?.lengths || [5, 8]
-})
-
-// Motion types — bilingual labels extended with ja/ko/es so non-Chinese
-// locales no longer fall back to English (BUG-017).
-const motionOptions = [
-  { id: 'auto',      nameEn: 'Auto',       nameZh: '自動', nameJa: '自動',     nameKo: '자동',     nameEs: 'Auto',         descEn: 'AI decides motion',         descZh: 'AI 自動選擇動態', descJa: 'AIが動きを決定',         descKo: 'AI가 동작 결정',        descEs: 'La IA decide el movimiento' },
-  { id: 'zoom-in',   nameEn: 'Zoom In',    nameZh: '放大', nameJa: 'ズームイン', nameKo: '확대',    nameEs: 'Acercar',      descEn: 'Gradual zoom effect',       descZh: '逐漸放大效果',   descJa: '徐々にズーム',           descKo: '서서히 확대',           descEs: 'Efecto de zoom gradual' },
-  { id: 'zoom-out',  nameEn: 'Zoom Out',   nameZh: '縮小', nameJa: 'ズームアウト', nameKo: '축소',  nameEs: 'Alejar',       descEn: 'Pull back effect',          descZh: '拉遠效果',       descJa: '引いてズームアウト',     descKo: '뒤로 빠지는 효과',      descEs: 'Efecto de alejamiento' },
-  { id: 'pan-left',  nameEn: 'Pan Left',   nameZh: '左移', nameJa: '左にパン',   nameKo: '왼쪽 이동', nameEs: 'Pan izquierda', descEn: 'Horizontal movement left',  descZh: '向左平移',       descJa: '水平に左へ移動',         descKo: '수평으로 왼쪽 이동',    descEs: 'Movimiento horizontal a la izquierda' },
-  { id: 'pan-right', nameEn: 'Pan Right',  nameZh: '右移', nameJa: '右にパン',   nameKo: '오른쪽 이동', nameEs: 'Pan derecha', descEn: 'Horizontal movement right', descZh: '向右平移',       descJa: '水平に右へ移動',         descKo: '수평으로 오른쪽 이동',  descEs: 'Movimiento horizontal a la derecha' },
-  { id: 'rotate',    nameEn: 'Rotate',     nameZh: '旋轉', nameJa: '回転',     nameKo: '회전',     nameEs: 'Rotar',        descEn: 'Circular motion',           descZh: '旋轉動態',       descJa: '円運動',               descKo: '원형 운동',             descEs: 'Movimiento circular' }
-]
-
-// 2026-05-19 tier revision — Owner-approved SaaS model tier table.
-// Order intentionally puts Seedance first so the default radio lands
-// on the "best CP value" tier; Kling Omni / 3.0 is the premium up-sell;
-// Hailuo Fast / Hunyuan / Wan cover cheap / 中文 / legacy use cases.
-// id values match the aliases that piapi_provider._resolve_video_model
-// and pollo_provider's alias map both recognize, so a single string
-// flows correctly to whichever provider serves the request.
-const aiModelOptions = [
-  {
-    id: 'seedance',
-    nameEn: 'Seedance 2.0 Fast',
-    nameZh: 'Seedance 2.0 Fast',
-    descEn: 'Best CP value · Stable · Recommended default',
-    descZh: '最佳 CP 值 · 穩定 · 預設推薦',
-    descJa: '最高のCP値・安定・標準推奨',
-    descKo: '최고의 가성비 · 안정적 · 기본 추천',
-    descEs: 'Mejor relación calidad-precio · Estable · Predeterminado',
-    lengths: [5, 10],
-    badge: 'default'
-  },
-  {
-    id: 'kling_omni',
-    nameEn: 'Kling 3.0 / Omni',
-    nameZh: 'Kling 3.0 / Omni',
-    descEn: 'Premium tier — top quality + audio',
-    descZh: '高階付費 — 頂級品質含音訊',
-    descJa: 'プレミアム — 最高品質・音声付き',
-    descKo: '프리미엄 — 최고 품질 · 오디오 포함',
-    descEs: 'Premium — máxima calidad con audio',
-    lengths: [5, 10],
-    badge: 'premium'
-  },
-  {
-    id: 'hailuo',
-    nameEn: 'Hailuo Fast',
-    nameZh: 'Hailuo Fast',
-    descEn: 'Cheapest tier — fastest turnaround',
-    descZh: '快速 / 低價流量 — 速度最快、成本低',
-    descJa: '最安・最速のティア',
-    descKo: '가장 저렴 · 가장 빠름',
-    descEs: 'Más barato y rápido',
-    lengths: [5, 6],
-    badge: 'fast'
-  },
-  {
-    id: 'hunyuan',
-    nameEn: 'Hunyuan',
-    nameZh: '混元 Hunyuan',
-    descEn: 'Strong Chinese prompts + dynamic motion',
-    descZh: '中文強 · 動態豐富 · 性價比好',
-    descJa: '中国語に強く、ダイナミックな動き',
-    descKo: '중국어 강함 · 풍부한 동작',
-    descEs: 'Buen rendimiento en chino, movimiento dinámico',
-    lengths: [5, 8],
-    badge: 'feature'
-  },
-  {
-    id: 'wan',
-    nameEn: 'Wan 2.6',
-    nameZh: 'Wan 2.6',
-    descEn: 'Specialty / legacy tier',
-    descZh: '利基 · 特定需求',
-    descJa: 'スペシャルティ / レガシー',
-    descKo: '특수 / 레거시 티어',
-    descEs: 'Especializado / heredado',
-    lengths: [5, 10, 15],
-    badge: null
-  }
-]
-
-// Demo images for demo users
-const selectedDemoImageId = ref<string | null>(null)
-
-const demoImages = computed(() => {
-  // Some pregenerated rows store the finished video URL in `thumbnail_url`
-  // because no still-frame extraction step ran. Treat any video extension
-  // (.mp4/.webm/.mov) as a non-image and fall through to the real input
-  // frame. This is critical for short_video: selectDemoImage uses
-  // `preview` as the I2V source, and an .mp4 there gets rejected by the
-  // backend's `validate_media_url_or_raise(..., "image", ...)` guard.
-  const isImageUrl = (url: string | null | undefined): url is string => {
-    if (!url) return false
-    try {
-      const path = new URL(url, window.location.origin).pathname.toLowerCase()
-      if (path.endsWith('.mp4') || path.endsWith('.webm') || path.endsWith('.mov')) return false
-    } catch {
-      const lower = url.toLowerCase()
-      if (lower.includes('.mp4') || lower.includes('.webm') || lower.includes('.mov')) return false
-    }
-    return true
-  }
-  return demoTemplates.value
-    .filter(t => t.result_video_url || t.result_watermarked_url)
-    .map(t => {
-      const thumb = isImageUrl(t.thumbnail_url) ? t.thumbnail_url : undefined
-      const inputImg = isImageUrl(t.input_image_url) ? t.input_image_url : undefined
-      return {
-        id: t.id,
-        // Always show prompt in user's current language
-        name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
-        // Prefer the original input frame so I2V has a valid still image to
-        // start from. Fall back to thumbnail only if it's actually an image.
-        preview: inputImg || thumb || undefined,
-        video_url: t.result_video_url || t.result_watermarked_url,
-        watermarked_result: t.result_watermarked_url,
-        topic: t.topic,
-        // Extract motion type from input_params (API returns metadata in input_params)
-        motion: normalizeMotionId(t.input_params?.motion || t.topic || 'auto')
-      }
-    })
-})
-
-
-// Static fallback examples for ShortVideo (shown when backend DB is empty)
-const STATIC_VIDEO_EXAMPLES = [
-  {
-    id: 'static-sv-1',
-    name: 'Cherry blossom petals falling in slow motion, cinematic',
-    nameZh: '櫻花花瓣以慢動作飄落，電影感畫面',
-    preview: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=600&fit=crop',
-    video_url: undefined,
-    watermarked_result: undefined,
-    topic: 'nature',
-    motion: 'zoom_in'
-  },
-  {
-    id: 'static-sv-2',
-    name: 'Skincare product rotating on marble surface, studio lighting',
-    nameZh: '保養品在大理石檯面旋轉，棚拍燈光',
-    preview: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&fit=crop',
-    video_url: undefined,
-    watermarked_result: undefined,
-    topic: 'product',
-    motion: 'rotate'
-  },
-  {
-    id: 'static-sv-3',
-    name: 'Coffee being poured into a glass cup, overhead view',
-    nameZh: '咖啡倒入玻璃杯，俯拍視角',
-    preview: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&fit=crop',
-    video_url: undefined,
-    watermarked_result: undefined,
-    topic: 'food',
-    motion: 'pan_right'
-  },
-  {
-    id: 'static-sv-4',
-    name: 'Fashion model walking on city street, golden hour',
-    nameZh: '時尚模特在城市街道行走，金色時刻',
-    preview: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&fit=crop',
-    video_url: undefined,
-    watermarked_result: undefined,
-    topic: 'fashion',
-    motion: 'pan_left'
-  },
-  {
-    id: 'static-sv-5',
-    name: 'Mountain landscape with clouds moving, time lapse',
-    nameZh: '山景雲霧流動，縮時攝影感',
-    preview: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&fit=crop',
-    video_url: undefined,
-    watermarked_result: undefined,
-    topic: 'landscape',
-    motion: 'zoom_out'
-  },
-  {
-    id: 'static-sv-6',
-    name: 'Bubble tea shop interior, warm lighting, cozy atmosphere',
-    nameZh: '手搖飲店內景，溫暖燈光與舒適氛圍',
-    preview: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&fit=crop',
-    video_url: undefined,
-    watermarked_result: undefined,
-    topic: 'food',
-    motion: 'auto'
-  }
-]
-const effectiveDemoImages = computed(() =>
-  demoImages.value.length > 0
-    ? demoImages.value
-    : STATIC_VIDEO_EXAMPLES.map(example => ({
-        ...example,
-        name: isZh.value ? example.nameZh : example.name,
-      }))
-)
-const processingMessage = computed(() => {
-  if (!isVideoTransformMode.value) {
-    return L('正在生成影片... 這可能需要幾分鐘', 'Generating video... This may take a few minutes', '動画を生成中...数分かかる場合があります', '동영상 생성 중... 몇 분 소요될 수 있습니다', 'Generando video... puede tardar unos minutos')
-  }
-
-  if (uploadProgress.value > 0 && uploadProgress.value < 100) {
-    return isZh.value
-      ? `正在上傳影片... ${uploadProgress.value}%`
-      : `Uploading video... ${uploadProgress.value}%`
-  }
-
-  if (processingStage.value) {
-    return processingStage.value
-  }
-
-  return L('正在處理影片轉換... 這可能需要幾分鐘', 'Processing video transform... This may take a few minutes', '動画変換を処理中...数分かかる場合があります', '동영상 변환 처리 중... 몇 분 소요될 수 있습니다', 'Procesando transformación... puede tardar unos minutos')
-})
-const pendingTitle = computed(() => isVideoTransformMode.value
-  ? L('我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。', 'I am creating the requested video. This may take a few minutes, so please check back shortly.', 'リクエストされた動画を作成中です。数分かかる場合があるので、少ししてから再確認してください。', '요청하신 동영상을 생성 중입니다. 몇 분 소요될 수 있으니 잠시 후 다시 확인해 주세요.', 'Estamos creando el video solicitado. Puede tardar unos minutos; vuelve en un momento.')
-  : L('我正在產生所需的影片，這可能需要幾分鐘，請稍後再回來查看是否已完成。', 'I am generating the requested video. This may take a few minutes, so please check back shortly.', 'リクエストされた動画を生成中です。数分かかる場合があるので、少ししてから再確認してください。', '요청하신 동영상을 생성 중입니다. 몇 분 소요될 수 있으니 잠시 후 다시 확인해 주세요.', 'Estamos generando el video solicitado. Puede tardar unos minutos; vuelve en un momento.'))
-const pendingDetail = computed(() => isVideoTransformMode.value
-  ? L('正在轉換影片...', 'Transforming video...', '動画を変換中...', '동영상 변환 중...', 'Transformando video...')
-  : L('正在生成影片...', 'Generating video...', '動画を生成中...', '동영상 생성 중...', 'Generando video...'))
-const pendingDuration = computed(() => isVideoTransformMode.value
-  ? L('需要 2 至 5 分鐘', 'Usually takes 2 to 5 minutes', '通常2〜5分かかります', '보통 2-5분 소요', 'Suele tardar 2-5 minutos')
-  : L('需要 1 至 2 分鐘', 'Usually takes 1 to 2 minutes', '通常1〜2分かかります', '보통 1-2분 소요', 'Suele tardar 1-2 minutos'))
-
-// Load demo presets on mount
-onMounted(async () => {
-  await Promise.all([
-    loadDemoTemplates('short_video'),
-    // Pregenerated Vertex Veo T2V inputs as startable source frames/clips,
-    // plus the motion-flavor catalog whose `prompt` is cache-keyed alongside
-    // the picked input.
-    loadInputLibrary('short_video'),
-    loadEffectCatalog('short_video', locale.value),
-  ])
-  try {
-    const styles = await effectsApi.getStyles('professional')
-    videoStyles.value = styles.slice(0, 6)
-  } catch {
-    videoStyles.value = [
-      { id: 'cinematic', name: 'VidGo Cinematic', name_zh: '電影質感', category: 'professional', preview_url: '' },
-      { id: 'realistic', name: 'VidGo Realistic', name_zh: '寫實風格', category: 'modern', preview_url: '' },
-      { id: 'anime', name: 'VidGo Anime', name_zh: '動漫風格', category: 'artistic', preview_url: '' },
-      { id: 'watercolor', name: 'VidGo Watercolor', name_zh: '水彩風格', category: 'artistic', preview_url: '' },
-    ]
-  }
-})
-
-onBeforeUnmount(() => {
-  if (uploadedVideoPreview.value) {
-    URL.revokeObjectURL(uploadedVideoPreview.value)
-  }
-})
-
-watch(locale, () => loadEffectCatalog('short_video', locale.value))
-
-function selectDemoImage(item: { id: string; preview?: string; video_url?: string; motion?: string }) {
-  selectedDemoImageId.value = item.id
-  // Never use video_url as the I2V source — backend rejects .mp4 in image
-  // slots. If preview is missing, leave uploadedImage empty so the user
-  // is prompted to upload their own image instead of triggering a 415.
-  uploadedImage.value = item.preview || undefined
-  resultVideo.value = null
-  demoEmptyState.value = false
-}
-
-
-
-async function generateVideo() {
-  if (isVideoTransformMode.value) {
-    await generateVideoTransform()
+function handleVideoChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  if (!f) return
+  if (f.size > 100 * 1024 * 1024) {
+    uiStore.showError(L('檔案超過 100 MB 上限', 'File exceeds the 100 MB limit', '100MB上限', '100MB 한도', 'Excede 100 MB'))
     return
   }
+  videoFile.value = f
+  videoPreviewUrl.value = URL.createObjectURL(f)
+}
 
-  if (!uploadedImage.value) {
-    uiStore.showError(L('請選擇一個範例', 'Please select an example', '例を選択してください', '예시를 선택해 주세요', 'Selecciona un ejemplo'))
+// ─── Generate ────────────────────────────────────────────────────────
+async function generate() {
+  if (disabled.value || isRunning.value) return
+  if (isDemoUser.value) {
+    uiStore.showInfo(L('請訂閱以使用此工具', 'Please subscribe to use this tool', 'サブスク登録してください', '구독해 주세요', 'Suscríbete'))
     return
   }
+  status.value = 'running'
+  statusText.value = isZh.value ? '生成中… 通常需要 1-3 分鐘' : 'Generating… typically 1-3 min'
+  resultUrl.value = null
 
-  // Clear stale result so loading overlay is the only thing visible.
-  resultVideo.value = null
-  demoEmptyState.value = false
-  isProcessing.value = true
   try {
-    // For demo users, resolve the selected preset through backend lookup
-    if (isDemoUser.value && selectedDemoImageId.value) {
-      const demoResultUrl = await resolveDemoTemplateResultUrl(selectedDemoImageId.value)
-      if (demoResultUrl) {
-        resultVideo.value = demoResultUrl
-        uiStore.showSuccess(L('生成成功（示範）', 'Generated successfully (Demo)', '生成成功（デモ）', '생성 성공 (데모)', 'Generado correctamente (demo)'))
-        return
-      }
-
-      // VG-BUG-010 fix: cache-through on demand (Pollo MCP video generation
-      // takes 2-5 min — the longer client-side timeout in generateOnDemand
-      // accommodates this).
-      uiStore.showInfo(L('此影片尚未生成，正在為您即時生成（約 2-5 分鐘）...', 'Generating in real-time (2-5 min)...', 'リアルタイム生成中（約2〜5分）...', '실시간으로 생성 중 (약 2-5분)...', 'Generando en tiempo real (2-5 min)...'))
-      // Prefer the pregenerated Vertex input frame when the user picked one
-      // from the library; otherwise fall back to the finished-example input
-      // or the user-uploaded image.
-      const pickedFromLibrary = (inputLibrary.value.find((item: any) => item.id === selectedDemoImageId.value) as any)?.input_image_url
-      const pickedFromTemplate = (demoTemplates.value.find((t: any) => t.id === selectedDemoImageId.value) as any)?.input_image_url
-      const pickedFrame = pickedFromLibrary || pickedFromTemplate || uploadedImage.value || undefined
-      // Map the motion radio to a real effect prompt from the catalog so the
-      // cache key differentiates between "gentle" / "dramatic" / etc.
-      const motionId = normalizeMotionId(selectedMotion.value)
-      const motionPrompt = effectCatalog.value.find((e: any) =>
-        e.id === motionId
-        || e.id === (selectedStyle.value || '')
-      )?.prompt || selectedStyle.value || undefined
-      const onDemandUrl = await generateOnDemand('short_video', undefined, {
-        input_image_url: pickedFrame,
-        effect_prompt: motionPrompt,
+    let result: any
+    if (taskType.value === 'image_to_video') {
+      const imageUrl = await ensureImageUrl()
+      if (!imageUrl) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+      result = await toolsApi.shortVideo(imageUrl, {
+        motionStrength: motionStrength.value,
+        modelId: modelId.value,
+        prompt: prompt.value.trim() || undefined,
+        negativePrompt: negativePrompt.value.trim() || undefined,
+        locale: String(locale.value || ''),
       })
-      if (onDemandUrl) {
-        resultVideo.value = onDemandUrl
-        uiStore.showSuccess(L('生成成功', 'Generated successfully', '生成成功', '생성 성공', 'Generado correctamente'))
-        return
-      }
-      demoEmptyState.value = true
-      uiStore.showError(L('生成服務暫時無法使用，請稍後再試或訂閱解鎖完整功能', 'Generation service temporarily unavailable. Please try again later or subscribe.', '生成サービスは一時的に利用できません。後ほど再試行するか、サブスクで全機能を解禁してください。', '생성 서비스를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하거나 구독해 주세요.', 'Servicio temporalmente no disponible. Inténtalo más tarde o suscríbete.'))
-      return
-    }
-
-    let imageUrl: string | null = null
-    if (uploadedImage.value) {
-      if (uploadedImage.value.startsWith('data:')) {
-        const blob = dataURItoBlob(uploadedImage.value)
-        if (!blob) {
-          uiStore.showError(L('圖片格式無效，請重新上傳', 'Invalid image format. Please re-upload.', '画像形式が無効です。再アップロードしてください。', '이미지 형식이 올바르지 않습니다. 다시 업로드해 주세요.', 'Formato de imagen inválido. Súbela de nuevo.'))
-          return
-        }
-        const uploadResult = await toolsApi.uploadImage(blob as File)
-        imageUrl = uploadResult.url
-      } else {
-        imageUrl = uploadedImage.value
-      }
-    }
-
-    const result = await toolsApi.shortVideo(imageUrl!, {
-      motionStrength: motionStrengthById[normalizeMotionId(selectedMotion.value)] ?? 5,
-      modelId: selectedModel.value !== 'default' ? selectedModel.value : undefined,
-      style: selectedStyle.value || undefined,
-      promptId: selectedVideoPromptId.value || undefined,
-      locale: String(locale.value || ''),
-    })
-
-    if (result.success && (result.video_url || result.result_url)) {
-      resultVideo.value = result.video_url || result.result_url || null
-      creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success'))
+    } else if (taskType.value === 'text_to_video') {
+      // /api/v1/tools/kling-video accepts T2V when image_url is omitted.
+      // tier maps directly from modelId for T2V (default/flagship/omni).
+      // 2026-05-26: was raw fetch('/api/v1/tools/kling-video') — relative URL
+      // hit the wrong origin in prod and `credentials: 'include'` ignored the
+      // Bearer token the app actually uses for auth, so the text-to-video
+      // task silently failed for every logged-in user. Routed through
+      // toolsApi.klingVideo so it uses the configured apiClient base URL +
+      // Authorization header like every other tool call.
+      const tier = (modelId.value === 'flagship' || modelId.value === 'omni')
+        ? modelId.value
+        : 'default'
+      result = await toolsApi.klingVideo({
+        prompt: prompt.value.trim(),
+        tier,
+        aspectRatio: aspectRatio.value,
+        duration: duration.value as 5 | 10,
+        negativePrompt: negativePrompt.value.trim() || undefined,
+      })
     } else {
-      uiStore.showError(result.message || (result as any).error || L('影片生成失敗，請稍後再試', 'Video generation failed. Please try again.', '動画生成に失敗しました。後ほど再試行してください。', '동영상 생성에 실패했습니다. 나중에 다시 시도해 주세요.', 'Falló la generación de video. Inténtalo de nuevo.'))
-    }
-  } catch (error: any) {
-    const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || ''
-    uiStore.showError(detail || L('生成失敗', 'Generation failed', '生成に失敗', '생성 실패', 'Falló la generación'))
-  } finally {
-    isProcessing.value = false
-  }
-}
-
-async function handleVideoUpload(event: Event) {
-  const input = event.target as HTMLInputElement | null
-  const file = input?.files?.[0]
-  if (!file) return
-
-  // First-pass MIME / extension validation. Size we'll handle below via the
-  // browser re-encode path so an oversize but otherwise valid clip gets
-  // normalized instead of rejected outright.
-  const formatError = validateVideoFile(file, isZh.value, { maxSizeMb: Number.MAX_SAFE_INTEGER })
-  if (formatError) {
-    uiStore.showError(formatError)
-    if (input) input.value = ''
-    return
-  }
-
-  // Stale-state guard: if a previous upload is still in flight when the
-  // user picks a new file, clear the staged file before we kick off the
-  // new normalize so a mid-flight Generate click can't grab the old one.
-  uploadedVideoFile.value = null
-
-  // Auto-resize. Primary path is server-side ffmpeg via
-  // /api/v1/uploads/video-normalize — best quality, MP4 H.264 output,
-  // faster than realtime, no client compute. Falls back to the in-browser
-  // MediaRecorder pipeline if the network call fails so re-encode still
-  // works offline or when the backend is rate-limited.
-  let workingFile = file
-  let normalizedGcsUrl: string | null = null
-  const oversize = file.size > 20 * 1024 * 1024
-  if (oversize) {
-    isProcessing.value = true
-    processingStage.value = L('正在上傳並壓縮影片...', 'Uploading and compressing video...', '動画をアップロードして圧縮中...', '동영상 업로드 및 압축 중...', 'Subiendo y comprimiendo video...')
-    try {
-      const result = await uploadsApi.normalizeVideo(file, (percent) => {
-        processingStage.value = L(
-          `正在上傳影片 ${percent}%`,
-          `Uploading video ${percent}%`,
-          `動画をアップロード中 ${percent}%`,
-          `동영상 업로드 중 ${percent}%`,
-          `Subiendo video ${percent}%`,
-        )
-      })
-      normalizedGcsUrl = result.video_url
-      // Pull the normalized clip back as a File so the existing
-      // uploadAndGenerate flow uploads the small version, not the
-      // 100 MB original. Round-trip is bounded by VIDEO_NORMALIZE_TARGET_BYTES
-      // (~20 MB) so this is cheap relative to a re-upload of the source.
-      //
-      // If this refetch fails (CORS, network, opaque response) we MUST
-      // error out — silently falling through to the original file means
-      // /uploads/material then receives a 100+ MB upload and rejects it
-      // with a confusing 413, after the user just sat through a 60 s
-      // normalize. Better to surface the failure here so they can retry.
-      let refetched = false
-      try {
-        const blobResp = await fetch(result.video_url)
-        if (blobResp.ok) {
-          const blob = await blobResp.blob()
-          if (blob.size > 1024) {
-            workingFile = new File(
-              [blob],
-              file.name.replace(/\.[^.]+$/, '') + '.mp4',
-              { type: 'video/mp4', lastModified: Date.now() },
-            )
-            refetched = true
-          }
-        }
-      } catch (fetchErr) {
-        console.error('Refetch of normalized clip failed:', fetchErr)
-      }
-      if (!refetched) {
-        uiStore.showError(L('無法讀取已壓縮的影片，請重試。', 'Could not load the compressed video. Please retry.', '圧縮済み動画を読み込めませんでした。再試行してください。', '압축된 동영상을 불러올 수 없습니다. 다시 시도해 주세요.', 'No se pudo leer el video comprimido. Inténtalo de nuevo.'))
-        if (input) input.value = ''
-        isProcessing.value = false
-        processingStage.value = null
-        return
-      }
-    } catch (err: any) {
-      console.warn('Server-side normalize failed, falling back to browser:', err?.message)
-      try {
-        processingStage.value = L('正在於瀏覽器壓縮影片...', 'Compressing video in browser...', 'ブラウザで動画を圧縮中...', '브라우저에서 동영상 압축 중...', 'Comprimiendo video en el navegador...')
-        const fallback = await normalizeVideoFileForUpload(file, {
-          maxSizeMb: 20,
-          maxResolution: 720,
-          onProgress: (ratio) => {
-            processingStage.value = L(
-              `正在於瀏覽器壓縮影片 ${Math.round(ratio * 100)}%`,
-              `Compressing in browser ${Math.round(ratio * 100)}%`,
-              `ブラウザで圧縮中 ${Math.round(ratio * 100)}%`,
-              `브라우저에서 압축 중 ${Math.round(ratio * 100)}%`,
-              `Comprimiendo ${Math.round(ratio * 100)}%`,
-            )
-          },
-        })
-        if (fallback.normalized) {
-          workingFile = fallback.file
-        } else {
-          uiStore.showError(L('影片壓縮失敗，請改用較小的影片。', 'Video compression failed. Please upload a smaller video.', '動画の圧縮に失敗しました。より小さな動画を使用してください。', '동영상 압축에 실패했습니다. 더 작은 동영상을 사용해 주세요.', 'Falló la compresión del video. Sube un video más pequeño.'))
-          if (input) input.value = ''
-          isProcessing.value = false
-          processingStage.value = null
-          return
-        }
-      } catch (fallbackErr) {
-        console.error('Both server and browser video normalize failed:', fallbackErr)
-        uiStore.showError(L('影片壓縮失敗，請改用較小的影片。', 'Video compression failed. Please upload a smaller video.', '動画の圧縮に失敗しました。より小さな動画を使用してください。', '동영상 압축에 실패했습니다. 더 작은 동영상을 사용해 주세요.', 'Falló la compresión del video. Sube un video más pequeño.'))
-        if (input) input.value = ''
-        isProcessing.value = false
-        processingStage.value = null
-        return
-      }
-    } finally {
-      isProcessing.value = false
-      processingStage.value = null
-    }
-  }
-
-  if (uploadedVideoPreview.value) {
-    URL.revokeObjectURL(uploadedVideoPreview.value)
-  }
-
-  uploadedVideoFile.value = workingFile
-  uploadedVideoPreview.value = normalizedGcsUrl || URL.createObjectURL(workingFile)
-  resultVideo.value = null
-  demoEmptyState.value = false
-}
-
-function clearUploadedVideo() {
-  uploadedVideoFile.value = null
-  resultVideo.value = null
-  uploadProgress.value = 0
-  processingStage.value = null
-  currentUploadId.value = null
-  if (uploadedVideoPreview.value) {
-    URL.revokeObjectURL(uploadedVideoPreview.value)
-    uploadedVideoPreview.value = null
-  }
-}
-
-function playPreviewVideo(event: Event) {
-  const video = event.target as HTMLVideoElement | null
-  video?.play()
-}
-
-function resetPreviewVideo(event: Event) {
-  const video = event.target as HTMLVideoElement | null
-  if (!video) return
-  video.pause()
-  video.currentTime = 0
-}
-
-async function pollUploadStatus(uploadId: string): Promise<UploadStatusResponse> {
-  const maxAttempts = 120
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const status = await uploadsApi.getUploadStatus(uploadId)
-    if (status.status === 'completed' || status.status === 'failed') {
-      return status
-    }
-    processingStage.value = isZh.value
-      ? `伺服器正在處理中...（${status.status}）`
-      : `Server is processing... (${status.status})`
-    await new Promise(resolve => window.setTimeout(resolve, 3000))
-  }
-  throw new Error(L('影片轉換逾時，請稍後到作品紀錄查看', 'Video transform timed out. Please check My Works later.', '動画変換がタイムアウトしました。後ほど作品一覧で確認してください。', '동영상 변환 시간이 초과되었습니다. 나중에 작품에서 확인해 주세요.', 'Tiempo de espera agotado. Revisa Mis Obras más tarde.'))
-}
-
-async function generateVideoTransform() {
-  if (!isSubscribed.value) {
-    uiStore.showError(L('請先訂閱以使用影片上傳', 'Please subscribe to upload your own video', '動画アップロードを使うにはサブスク登録してください', '동영상 업로드를 사용하려면 먼저 구독해 주세요', 'Suscríbete para subir tu propio video'))
-    return
-  }
-
-  if (!uploadedVideoFile.value) {
-    uiStore.showError(L('請先上傳影片', 'Please upload a video first', '先に動画をアップロードしてください', '먼저 동영상을 업로드해 주세요', 'Sube primero un video'))
-    return
-  }
-
-  if (!transformPrompt.value.trim()) {
-    uiStore.showError(L('請輸入影片風格描述', 'Please enter a video style prompt', '動画スタイルの説明を入力してください', '동영상 스타일 설명을 입력해 주세요', 'Introduce un prompt de estilo'))
-    return
-  }
-
-  resultVideo.value = null
-  isProcessing.value = true
-  uploadProgress.value = 0
-  currentUploadId.value = null
-  processingStage.value = L('準備上傳影片...', 'Preparing upload...', 'アップロード準備中...', '업로드 준비 중...', 'Preparando subida...')
-  try {
-    const prompt = selectedStyle.value
-      ? `${transformPrompt.value.trim()}\nStyle preset: ${selectedStyle.value}`
-      : transformPrompt.value.trim()
-    const upload = await uploadsApi.uploadAndGenerate(
-      'video_transform',
-      uploadedVideoFile.value,
-      'default',
-      prompt,
-      (pct) => {
-        uploadProgress.value = pct
-        processingStage.value = isZh.value
-          ? `正在上傳影片... ${pct}%`
-          : `Uploading video... ${pct}%`
-      },
-    )
-    currentUploadId.value = upload.upload_id
-    uploadProgress.value = 100
-    processingStage.value = L('上傳完成，正在排入轉換...', 'Upload complete, queuing transform...', 'アップロード完了、変換キューに追加中...', '업로드 완료, 변환 대기 중...', 'Subida completa, encolando transformación...')
-    const status = await pollUploadStatus(upload.upload_id)
-
-    if (status.status === 'completed' && status.result_video_url) {
-      resultVideo.value = status.result_video_url
-      creditsStore.deductCredits(status.credits_used)
-      processingStage.value = L('影片轉換完成', 'Video transform completed', '動画変換が完了しました', '동영상 변환 완료', 'Transformación de video completa')
-      uiStore.showSuccess(L('影片轉換完成', 'Video transform completed', '動画変換が完了しました', '동영상 변환 완료', 'Transformación de video completa'))
-      return
+      // V2V
+      statusText.value = isZh.value ? '上傳影片中…' : 'Uploading video…'
+      const normalized = await uploadsApi.normalizeVideo(videoFile.value!)
+      statusText.value = isZh.value ? '套用風格中…' : 'Applying style…'
+      result = await toolsApi.videoTransform(normalized.video_url, prompt.value.trim())
     }
 
-    uiStore.showError(status.error_message || L('影片轉換失敗', 'Video transform failed', '動画変換に失敗', '동영상 변환 실패', 'Falló la transformación de video'))
-  } catch (error: any) {
-    const detail = error?.response?.data?.detail || error?.message || ''
-    uiStore.showError(detail || L('影片轉換失敗', 'Video transform failed', '動画変換に失敗', '동영상 변환 실패', 'Falló la transformación de video'))
-  } finally {
-    isProcessing.value = false
+    if (result?.success && (result.video_url || result.result_url)) {
+      resultUrl.value = result.video_url || result.result_url
+      status.value = 'done'
+      statusText.value = isZh.value ? '完成' : 'Done'
+      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
+      uiStore.showSuccess(t('common.success') || 'Success')
+    } else {
+      status.value = 'error'
+      statusText.value = isZh.value ? '生成失敗' : 'Failed'
+      uiStore.showError(result?.message || result?.error || (isZh.value ? '生成失敗' : 'Generation failed'))
+    }
+  } catch (e: any) {
+    status.value = 'error'
+    statusText.value = isZh.value ? '錯誤' : 'Error'
+    uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Generation failed'))
   }
 }
 
-function dataURItoBlob(dataURI: string): Blob | null {
-  if (!dataURI || !dataURI.includes(',') || !dataURI.startsWith('data:')) return null
-  try {
-    const byteString = atob(dataURI.split(',')[1])
-    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
-    const ab = new ArrayBuffer(byteString.length)
-    const ia = new Uint8Array(ab)
-    for (let i = 0; i < byteString.length; i++) { ia[i] = byteString.charCodeAt(i) }
-    return new Blob([ab], { type: mimeString })
-  } catch { return null }
-}
+// ─── UI label helpers ────────────────────────────────────────────────
+const pageTitle = computed(() => {
+  switch (taskType.value) {
+    case 'text_to_video':       return isZh.value ? 'AI 影片生成（文字）' : 'AI Video Generation (Text)'
+    case 'video_style_transfer': return isZh.value ? '影片風格轉換' : 'Video Style Transfer'
+    default:                    return isZh.value ? 'AI 影片生成（圖片）' : 'AI Video Generation (Image)'
+  }
+})
+const pageSubtitle = computed(() => {
+  switch (taskType.value) {
+    case 'text_to_video':       return isZh.value ? '輸入文字描述，AI 生成 5-10 秒影片。' : 'Describe a scene; AI generates a 5-10s video.'
+    case 'video_style_transfer': return isZh.value ? '上傳影片，AI 套用新風格（如水彩、像素、賽博龐克）。' : 'Upload a video; AI applies a new style (watercolor, pixel, cyberpunk…).'
+    default:                    return isZh.value ? '上傳圖片，AI 加入鏡頭與動作生成影片。' : 'Upload a still; AI adds camera + motion to create video.'
+  }
+})
 
-
+function gotoPricing() { router.push('/pricing') }
 </script>
 
 <template>
-  <div class="min-h-screen pt-24 pb-20" style="background: #09090b; color: #f5f5fa;">
-    <LoadingOverlay
-      :show="isProcessing"
-      icon="🎬"
-      :title="pendingTitle"
-      :detail="pendingDetail"
-      :duration="pendingDuration"
-    />
+  <PiapiPlayground
+    :eta-seconds="150"
+    :title="pageTitle"
+    :subtitle="pageSubtitle"
+    :status="status"
+    :status-text="statusText"
+    :credit-cost="creditCost"
+    :generate-label="isZh ? '開始生成' : 'Generate'"
+    :generate-label-running="isZh ? '生成中…' : 'Generating…'"
+    :disabled="disabled || isDemoUser"
+    @generate="generate"
+  >
+    <template #inputs>
+      <!-- Task type — 3 options switch the rest of the form -->
+      <div>
+        <label class="pp-field-label">{{ isZh ? '任務類型 *' : 'Task Type *' }}</label>
+        <select v-model="taskType" class="pp-select">
+          <option value="image_to_video">{{ isZh ? '圖片轉影片 (I2V)' : 'Image to Video' }}</option>
+          <option value="text_to_video">{{ isZh ? '文字生影片 (T2V)' : 'Text to Video' }}</option>
+          <option value="video_style_transfer">{{ isZh ? '影片風格轉換 (V2V)' : 'Video Style Transfer' }}</option>
+        </select>
+      </div>
 
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <!-- Back Button -->
+      <!-- Model dropdown — content depends on task type -->
+      <div>
+        <label class="pp-field-label">{{ isZh ? '模型 *' : 'Model *' }}</label>
+        <select v-model="modelId" class="pp-select">
+          <option v-for="m in modelOptionsFor(taskType)" :key="m.id" :value="m.id">
+            {{ (isZh ? m.nameZh : m.nameEn) }}{{ m.badge ? ` · ${m.badge}` : '' }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Image upload (I2V only) -->
+      <div v-if="taskType === 'image_to_video'">
+        <label class="pp-field-label">{{ isZh ? '起始圖片 *' : 'Starting Frame *' }}</label>
+        <ImageUploader
+          tool-type="short_video"
+          v-model="imageInput"
+          :label="isZh ? '點擊或拖放圖片' : 'Click or drag an image'"
+        />
+      </div>
+
+      <!-- Video upload (V2V only) -->
+      <div v-if="taskType === 'video_style_transfer'">
+        <label class="pp-field-label">{{ isZh ? '來源影片 *' : 'Source Video *' }}</label>
+        <input type="file" accept="video/mp4" class="pp-input" @change="handleVideoChange" />
+        <p class="pp-field-help">{{ L('MP4 · 最大 100 MB · 系統會先正規化再轉換', 'MP4 · max 100 MB · normalized server-side first', 'MP4 · 最大100MB · サーバー側で正規化', 'MP4 · 최대 100MB · 서버에서 정규화', 'MP4 · máx 100 MB · normalizado en servidor') }}</p>
+        <video v-if="videoPreviewUrl" :src="videoPreviewUrl" class="w-full mt-2 rounded-lg" controls />
+      </div>
+
+      <!-- Prompt -->
+      <div>
+        <label class="pp-field-label">
+          {{ taskType === 'image_to_video' ? (isZh ? '動作描述（選填）' : 'Motion Prompt (optional)')
+             : (isZh ? '描述 *' : 'Prompt *') }}
+        </label>
+
+        <!-- Preset picker — added 2026-05-25 to mirror KlingVideo's
+             curated dropdown. Lets cold visitors start with a working
+             one-click prompt instead of an empty textarea. -->
+        <div v-if="presetOptions.length > 0" class="mb-2">
+          <select v-model="selectedPresetId" @change="applyPreset" class="pp-select">
+            <option value="">{{ isZh ? '— 選擇範例（一鍵填入）—' : '— Pick a preset (one-click fill) —' }}</option>
+            <option v-for="opt in presetOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <textarea
+          v-model="prompt"
+          rows="4"
+          maxlength="2000"
+          class="pp-textarea"
+          :placeholder="isZh
+            ? (taskType === 'image_to_video' ? '例：相機緩慢推近，產品微微旋轉，黃金時段陽光柔和。' : '描述你想要的影片內容…')
+            : (taskType === 'image_to_video' ? 'e.g. Slow camera push-in, product slowly rotates, soft golden-hour light.' : 'Describe the video you want…')"
+        ></textarea>
+        <p class="pp-field-help">{{ isZh ? '提示會原封不動傳給模型；越具體越好。' : 'Your prompt reaches the model verbatim. The more specific, the better.' }}</p>
+      </div>
+
+      <!-- Negative prompt (I2V + T2V) -->
+      <div v-if="taskType !== 'video_style_transfer'">
+        <label class="pp-field-label">{{ isZh ? '負面提示（選填）' : 'Negative Prompt (optional)' }}</label>
+        <input v-model="negativePrompt" type="text" maxlength="500" class="pp-input"
+               :placeholder="isZh ? '例：模糊、變形、低品質' : 'e.g. blurry, distorted, low quality'" />
+      </div>
+
+      <!-- Motion strength slider (I2V only) -->
+      <div v-if="taskType === 'image_to_video'">
+        <label class="pp-field-label">{{ isZh ? '動態強度' : 'Motion Strength' }}
+          <span class="ml-2" style="color: #a78bfa;">{{ motionStrength }}/10</span>
+        </label>
+        <input type="range" min="1" max="10" step="1" v-model.number="motionStrength" class="w-full" style="accent-color: #a78bfa;" />
+        <div class="flex justify-between text-[10px] mt-0.5" style="color: #6b6b7a;">
+          <span>{{ isZh ? '微微動' : 'Subtle' }}</span>
+          <span>{{ isZh ? '大幅動' : 'Dramatic' }}</span>
+        </div>
+      </div>
+
+      <!-- Aspect ratio (T2V only) -->
+      <div v-if="taskType === 'text_to_video'">
+        <label class="pp-field-label">{{ isZh ? '比例' : 'Aspect Ratio' }}</label>
+        <select v-model="aspectRatio" class="pp-select">
+          <option value="16:9">16:9 (landscape)</option>
+          <option value="9:16">9:16 (portrait)</option>
+          <option value="1:1">1:1 (square)</option>
+        </select>
+      </div>
+
+      <!-- Duration (T2V only, V2V uses source video length) -->
+      <div v-if="taskType === 'text_to_video'">
+        <label class="pp-field-label">{{ isZh ? '影片長度（秒）' : 'Duration (seconds)' }}</label>
+        <select v-model.number="duration" class="pp-select">
+          <option :value="5">5s</option>
+          <option :value="8">8s</option>
+          <option :value="10">10s</option>
+        </select>
+      </div>
+
+      <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
+        {{ isZh ? '訂閱後即可使用此工具。' : 'Subscribe to generate your own videos.' }}
+        <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
+      </p>
+    </template>
+
+    <template v-if="resultUrl" #result>
+      <video :src="resultUrl" class="max-w-full max-h-[520px] rounded-lg" controls />
+    </template>
+
+    <template v-if="resultUrl" #result-actions>
       <button
-        @click="router.back()"
-        class="mb-6 flex items-center gap-2 text-dark-300 hover:text-dark-50 transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
-        {{ t('common.back') }}
-      </button>
+        @click="downloadAsset(resultUrl!, `vidgo_video_${Date.now()}.mp4`)"
+        class="px-3 py-1.5 rounded text-xs font-medium"
+        style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
+      >📥 {{ isZh ? '下載' : 'Download' }}</button>
+      <button
+        @click="generate"
+        class="px-3 py-1.5 rounded text-xs font-medium ml-2"
+        style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
+      >🔄 {{ isZh ? '重新生成' : 'Regenerate' }}</button>
+    </template>
 
-      <!-- Header -->
-      <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-dark-50 mb-4">
-          {{ pageTitle }}
-        </h1>
-        <p class="text-xl text-dark-300">
-          {{ pageDescription }}
-        </p>
-
-        <!-- Subscribe Notice for Demo Users -->
-        <div v-if="isDemoUser" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg text-sm">
-          <RouterLink to="/pricing" class="hover:underline">
-            {{ L('訂閱以解鎖進階設定與 AI 模型選擇', 'Subscribe to unlock advanced settings & AI model selection', 'サブスク登録で詳細設定とAIモデル選択を解禁', '구독으로 고급 설정과 AI 모델 선택 잠금 해제', 'Suscríbete para desbloquear ajustes avanzados y modelos AI') }}
-          </RouterLink>
-        </div>
-      </div>
-
-      <HowToUseHint
-        tool-type="short_video"
-        :media-kind="isVideoTransformMode ? 'video' : 'image'"
-        :i18n-keys="isVideoTransformMode
-          ? [
-              'howTo.short_video.v2v.step1',
-              'howTo.short_video.v2v.step2',
-              'howTo.short_video.v2v.step3',
-            ]
-          : [
-              'howTo.short_video.i2v.step1',
-              'howTo.short_video.i2v.step2',
-              'howTo.short_video.i2v.step3',
-            ]"
-      />
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Left Panel - Input -->
-        <div class="space-y-6">
-          <!-- Example Selection -->
-          <div class="card">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4">
-              {{ isVideoTransformMode
-                ? L('上傳你的影片', 'Upload Your Video', '動画をアップロード', '동영상 업로드', 'Sube tu video')
-                : L('請試試我們精彩的範例', 'Please try our amazing examples', '素晴らしい例をお試しください', '멋진 예시를 사용해 보세요', 'Prueba nuestros ejemplos') }}
-            </h3>
-
-            <!-- Subscriber Interface: Upload Zone -->
-            <div v-if="!isDemoUser && !isVideoTransformMode" class="mb-6">
-               <h4 class="text-sm font-medium text-dark-300 mb-2">{{ L('上傳圖片 (.jpg, .png)', 'Upload Image (.jpg, .png)', '画像をアップロード (.jpg, .png)', '이미지 업로드 (.jpg, .png)', 'Subir imagen (.jpg, .png)') }}</h4>
-               <ImageUploader
-                 tool-type="short_video"
-                 v-model="uploadedImage"
-                 :label="L('點擊上傳或拖放起始圖片', 'Drop starting image here', 'クリックまたは開始画像をドロップ', '클릭 또는 시작 이미지 드롭', 'Sube o arrastra una imagen inicial')"
-                 class="mb-4"
-                 @update:model-value="selectedDemoImageId = null"
-               />
-            </div>
-
-            <div v-if="isSubscribed && isVideoTransformMode" class="space-y-4 mb-6">
-              <div>
-                <label class="label">{{ L('上傳影片', 'Upload Video', '動画をアップロード', '동영상 업로드', 'Subir video') }}</label>
-                <label class="block rounded-xl border-2 border-dashed p-6 cursor-pointer transition-colors" style="border-color: rgba(255,255,255,0.08); background: #141420;">
-                  <input type="file" accept=".mp4,.webm,.mov,video/mp4,video/webm,video/quicktime" class="hidden" @change="handleVideoUpload" />
-                  <div class="text-center">
-                    <p class="text-dark-50 text-sm font-medium">{{ L('點擊或拖放 MP4 / WEBM / MOV', 'Click or drop MP4 / WEBM / MOV', 'クリックまたはMP4 / WEBM / MOVをドロップ', '클릭 또는 MP4 / WEBM / MOV 드롭', 'Toca o arrastra MP4 / WEBM / MOV') }}</p>
-                    <p class="text-dark-400 text-xs mt-1">{{ L('付費用戶可上傳自己的影片做風格轉換', 'Paid users can upload their own videos for style transfer', '有料ユーザーは自分の動画をスタイル変換できます', '유료 사용자는 본인 동영상으로 스타일 변환 가능', 'Los usuarios premium pueden subir su propio video') }}</p>
-                  </div>
-                </label>
-              </div>
-
-              <div v-if="uploadedVideoPreview" class="space-y-3">
-                <video :src="uploadedVideoPreview" controls playsinline preload="metadata" class="w-full rounded-xl" />
-                <button @click="clearUploadedVideo" class="btn-ghost text-sm w-full">
-                  {{ L('移除影片', 'Remove Video', '動画を削除', '동영상 제거', 'Quitar video') }}
-                </button>
-              </div>
-
-              <div>
-                <label class="label">{{ L('轉換描述', 'Transform Prompt', '変換プロンプト', '변환 프롬프트', 'Prompt de transformación') }}</label>
-                <select
-                  v-model="selectedVideoPromptId"
-                  class="w-full rounded-xl px-4 py-3 text-dark-50"
-                  style="background: #141420; border: 1px solid rgba(255,255,255,0.08);"
-                >
-                  <option value="">{{ L('— 請選擇影片動效 —', '— Select a motion effect —', '— モーション効果を選択 —', '— 모션 효과 선택 —', '— Selecciona un efecto —') }}</option>
-                  <option v-for="opt in videoPromptOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
-                </select>
-              </div>
-
-              <div v-if="isProcessing || currentUploadId || uploadProgress > 0" class="rounded-2xl p-4 border" style="background: linear-gradient(135deg, rgba(16,24,40,0.92), rgba(19,49,58,0.78)); border-color: rgba(93, 188, 210, 0.28);">
-                <div class="flex items-start justify-between gap-4 mb-3">
-                  <div>
-                    <p class="text-xs uppercase text-cyan-300/80">
-                      {{ L('轉換狀態', 'Transform Status', '変換ステータス', '변환 상태', 'Estado de transformación') }}
-                    </p>
-                    <p class="text-sm text-dark-50 mt-1">{{ processingMessage }}</p>
-                  </div>
-                  <div class="shrink-0 text-right">
-                    <p class="text-2xl font-semibold text-cyan-200">{{ uploadProgress }}%</p>
-                    <p class="text-[11px] text-dark-400">{{ L('上傳進度', 'Upload Progress', 'アップロード進捗', '업로드 진행률', 'Progreso de subida') }}</p>
-                  </div>
-                </div>
-
-                <div class="h-2 rounded-full overflow-hidden mb-3" style="background: rgba(255,255,255,0.08);">
-                  <div class="h-full rounded-full transition-all duration-300" :style="{ width: `${uploadProgress}%`, background: 'linear-gradient(90deg, #5dbcd2, #b4f0ff)' }" />
-                </div>
-
-                <div class="flex items-center justify-between text-xs text-dark-300 gap-3">
-                  <span>{{ L('大型影片通常需要數分鐘', 'Longer clips can take several minutes', '長いクリップは数分かかる場合があります', '긴 클립은 몇 분이 소요될 수 있습니다', 'Los clips largos pueden tardar varios minutos') }}</span>
-                  <span v-if="currentUploadId" class="font-mono text-cyan-200">#{{ currentUploadId.slice(0, 8) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div v-else-if="isVideoTransformMode" class="p-4 rounded-xl mb-6" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
-              <p class="text-sm text-dark-300">{{ L('訂閱後即可上傳自己的影片並進行風格轉換。', 'Subscribe to upload your own video and run style transfer.', 'サブスク登録で動画アップロードとスタイル変換が可能になります。', '구독하면 본인 동영상을 업로드해 스타일 변환을 할 수 있습니다.', 'Suscríbete para subir tu video y aplicar transferencia de estilo.') }}</p>
-            </div>
-
-            <!-- Demo Images for all users -->
-            <div v-if="!isVideoTransformMode && effectiveDemoImages.length > 0" class="mb-4">
-              <p class="text-sm text-dark-300 mb-3">
-                {{ L('點擊查看不同動態效果', 'Click to see different motion effects', 'クリックして異なるモーション効果を確認', '클릭하여 다양한 모션 효과 확인', 'Toca para ver diferentes efectos') }}
-              </p>
-              <div v-if="isLoadingTemplates" class="flex justify-center py-8">
-                <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
-              </div>
-              <div v-else class="grid grid-cols-2 gap-2">
-                <button
-                  v-for="item in effectiveDemoImages"
-                  :key="item.id"
-                  @click="selectDemoImage(item)"
-                  class="aspect-video rounded-lg overflow-hidden border-2 transition-all relative group"
-                  :class="selectedDemoImageId === item.id
-                    ? 'border-primary-500'
-                    : ''" style="border-color: rgba(255,255,255,0.08);">
-                >
-                  <!-- Video preview with poster image. The poster attribute
-                       makes mobile browsers (especially iOS Safari) show the
-                       still thumbnail even when they refuse to preload video
-                       metadata over a metered network (BUG-016). The <img>
-                       fallback below covers browsers that ignore both. -->
-                  <video
-                    v-if="item.video_url"
-                    :src="item.video_url"
-                    :poster="item.preview || undefined"
-                    class="w-full h-full object-cover"
-                    muted
-                    playsinline
-                    preload="metadata"
-                    @mouseenter="playPreviewVideo"
-                    @mouseleave="resetPreviewVideo"
-                  />
-                  <img
-                    v-else-if="item.preview"
-                    :src="item.preview"
-                    :alt="item.name"
-                    class="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  <div v-else class="w-full h-full flex items-center justify-center" style="background: #141420;">
-                    <span class="text-3xl">🎬</span>
-                  </div>
-                  <!-- BUG-002: the top-left badge and bottom-name caption
-                       leaked internal motion/topic identifiers into the
-                       publicly-shareable preview. Removed both so the tile
-                       shows only the actual content. Hover state below
-                       still tells users it's clickable. -->
-                  <!-- Play icon overlay -->
-                  <div class="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <span class="text-4xl">▶️</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <!-- Selected Image Preview -->
-            <div v-if="!isVideoTransformMode && uploadedImage" class="space-y-4 mt-4">
-              <img :src="uploadedImage" alt="Source" class="w-full rounded-xl" />
-              <button v-if="canUseCustomInputs" @click="uploadedImage = undefined; selectedDemoImageId = null" class="btn-ghost text-sm w-full">
-                {{ L('移除圖片', 'Remove Image', '画像を削除', '이미지 제거', 'Quitar imagen') }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Selected Video Info - shows when a preset is selected -->
-          <div v-if="!isVideoTransformMode && selectedDemoImageId" class="card">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4">
-              {{ L('已選擇的範例', 'Selected Example', '選択した例', '선택한 예시', 'Ejemplo seleccionado') }}
-            </h3>
-            <div class="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-              <p class="text-sm text-dark-50 mb-2">
-                <span class="text-primary-400 font-medium">{{ L('動態效果：', 'Motion Effect: ', 'モーション効果：', '모션 효과: ', 'Efecto de movimiento: ') }}</span>
-                {{ isZh
-                  ? motionOptions.find(m => m.id === demoImages.find(d => d.id === selectedDemoImageId)?.motion)?.nameZh || '自動'
-                  : motionOptions.find(m => m.id === demoImages.find(d => d.id === selectedDemoImageId)?.motion)?.nameEn || 'Auto'
-                }}
-              </p>
-              <p class="text-sm text-dark-200">
-                <span class="text-primary-400 font-medium">{{ L('描述：', 'Prompt: ', 'プロンプト：', '프롬프트: ', 'Prompt: ') }}</span>
-                {{ demoImages.find(d => d.id === selectedDemoImageId)?.name }}
-              </p>
-            </div>
-            <!-- Visitor/demo user: direct "View Result" button, no gated settings noise -->
-            <div v-if="!isSubscribed" class="mt-4">
-              <button
-                @click="generateVideo"
-                :disabled="isProcessing"
-                class="btn-primary w-full"
-              >
-                {{ L('查看結果', 'View Result', '結果を見る', '결과 보기', 'Ver resultado') }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Prompt to select - shows when nothing selected -->
-          <div v-else-if="!isVideoTransformMode" class="card">
-            <h3 class="text-lg font-semibold text-dark-50 mb-4">
-              {{ L('選擇一個範例', 'Select an Example', '例を選択', '예시 선택', 'Selecciona un ejemplo') }}
-            </h3>
-            <div class="p-3 rounded-lg" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-              <p class="text-sm text-dark-300">
-                {{ L('👆 從上方範例影片中選擇一個來查看效果', '👆 Select an example video above to see the result', '👆 上の例から動画を選択して結果を確認', '👆 위 예시 동영상에서 선택하여 결과 확인', '👆 Selecciona uno de los ejemplos para ver el resultado') }}
-              </p>
-            </div>
-          </div>
-
-          <!-- Video Settings / Transform CTA - Subscriber Only (hidden entirely for visitors) -->
-          <div v-if="isSubscribed" class="card">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-dark-50">
-                {{ isVideoTransformMode ? L('轉換設定', 'Transform Settings', '変換設定', '변환 설정', 'Ajustes de transformación') : L('影片設定', 'Video Settings', '動画設定', '동영상 설정', 'Ajustes de video') }}
-              </h3>
-            </div>
-
-            <!-- Duration - Subscriber only -->
-            <div v-if="!isVideoTransformMode" class="mb-6" :class="{ 'opacity-50 pointer-events-none': !isSubscribed }">
-              <label class="label">{{ L('影片長度', 'Duration', '長さ', '재생 시간', 'Duración') }}</label>
-              <div class="flex gap-3">
-                <button
-                  v-for="dur in durationOptions"
-                  :key="dur"
-                  @click="isSubscribed && (selectedDuration = dur)"
-                  class="flex-1 py-3 rounded-xl border-2 transition-all"
-                  :class="selectedDuration === dur
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : ''" style="border-color: rgba(255,255,255,0.08);">
-                >
-                  {{ dur }}s
-                </button>
-              </div>
-              <p v-if="!isSubscribed" class="text-xs text-dark-400 mt-2">
-                {{ L('訂閱後可自訂影片長度', 'Subscribe to customize video duration', 'サブスク登録で動画の長さをカスタマイズ可能', '구독하면 동영상 길이 사용자 설정 가능', 'Suscríbete para personalizar la duración') }}
-              </p>
-            </div>
-
-            <!-- Motion Type - Subscriber only -->
-            <div v-if="!isVideoTransformMode" :class="{ 'opacity-50 pointer-events-none': !isSubscribed }">
-              <label class="label">{{ L('動態類型', 'Motion Type', 'モーションタイプ', '모션 유형', 'Tipo de movimiento') }}</label>
-              <div class="grid grid-cols-3 gap-2">
-                <button
-                  v-for="motion in motionOptions"
-                  :key="motion.id"
-                  @click="isSubscribed && (selectedMotion = motion.id)"
-                  class="p-3 rounded-xl border-2 transition-all text-center"
-                  :class="selectedMotion === motion.id
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : ''" style="border-color: rgba(255,255,255,0.08);">
-                >
-                  <p class="text-sm font-medium">{{ L(motion.nameZh, motion.nameEn, motion.nameJa, motion.nameKo, motion.nameEs) }}</p>
-                  <p class="text-xs text-dark-400 mt-1">{{ L(motion.descZh, motion.descEn, motion.descJa, motion.descKo, motion.descEs) }}</p>
-                </button>
-              </div>
-              <p v-if="!isSubscribed" class="text-xs text-dark-400 mt-2">
-                {{ L('訂閱後可選擇動態效果', 'Subscribe to choose motion effects', 'サブスク登録でモーション効果を選択可能', '구독하면 모션 효과 선택 가능', 'Suscríbete para elegir efectos de movimiento') }}
-              </p>
-            </div>
-
-            <!-- Not subscribed notice -->
-            <div v-if="!isSubscribed" class="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-              <p class="text-sm text-amber-400">
-                {{ L('🔒 升級訂閱以使用自訂設定', '🔒 Upgrade to use custom settings', '🔒 アップグレードでカスタム設定を使用', '🔒 업그레이드로 사용자 설정 사용', '🔒 Actualiza para ajustes personalizados') }}
-              </p>
-              <RouterLink to="/pricing" class="text-sm text-primary-400 hover:underline mt-1 inline-block">
-                {{ L('查看方案 →', 'View Plans →', 'プランを見る →', '플랜 보기 →', 'Ver planes →') }}
-              </RouterLink>
-            </div>
-
-            <!-- Credit Cost & Generate -->
-            <div class="mt-6 pt-4" style="border-top: 1px solid rgba(255,255,255,0.06);">
-              <CreditCost :service="isVideoTransformMode ? undefined : 'short_video'" :cost="isVideoTransformMode ? 35 : undefined" />
-              <button
-                @click="generateVideo"
-                :disabled="isVideoTransformMode ? (!uploadedVideoFile || !transformPrompt.trim() || isProcessing) : (!(selectedDemoImageId || uploadedImage) || isProcessing)"
-                class="btn-primary w-full mt-4"
-              >
-                {{ isVideoTransformMode
-                  ? L('開始轉換', 'Start Transform', '変換を開始', '변환 시작', 'Iniciar transformación')
-                  : (isSubscribed ? L('確認生成', 'Confirm Generate', '生成を確定', '생성 확인', 'Confirmar generación') : L('查看結果', 'View Result', '結果を見る', '결과 보기', 'Ver resultado')) }}
-              </button>
-            </div>
-          </div>
-
-          <!-- AI Model Selection - Subscriber Only (hidden entirely for visitors) -->
-          <div v-if="isSubscribed && !isVideoTransformMode" class="card">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-dark-50">
-                {{ L('AI 模型選擇', 'AI Model Selection', 'AIモデル選択', 'AI 모델 선택', 'Selección de modelo AI') }}
-              </h3>
-            </div>
-
-            <div v-if="isSubscribed">
-              <p class="text-sm text-dark-300 mb-3">
-                {{ L('選擇不同的 AI 模型以獲得不同的生成效果', 'Choose different AI models for different generation effects', '異なるAIモデルで異なる生成効果', '다양한 AI 모델로 다양한 생성 효과', 'Elige diferentes modelos AI para distintos efectos') }}
-              </p>
-              <div class="space-y-2">
-                <button
-                  v-for="model in aiModelOptions"
-                  :key="model.id"
-                  @click="selectedModel = model.id"
-                  class="w-full p-3 rounded-xl border-2 transition-all text-left flex items-center justify-between"
-                  :class="selectedModel === model.id
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : ''" style="border-color: rgba(255,255,255,0.08);">
-                >
-                  <div>
-                    <p class="text-sm font-medium text-dark-50">{{ L(model.nameZh, model.nameEn, model.nameZh, model.nameZh, model.nameZh) }}</p>
-                    <p class="text-xs text-dark-400">{{ L(model.descZh, model.descEn, model.descJa, model.descKo, model.descEs) }}</p>
-                    <p class="text-xs text-dark-400 mt-1">
-                      {{ L(`支援長度: ${model.lengths.join('s, ')}s`, `Lengths: ${model.lengths.join('s, ')}s`, `対応長さ: ${model.lengths.join('s, ')}s`, `지원 길이: ${model.lengths.join('s, ')}s`, `Duraciones: ${model.lengths.join('s, ')}s`) }}
-                    </p>
-                  </div>
-                  <div v-if="model.badge" class="ml-2">
-                    <span v-if="model.badge === 'default'" class="text-xs px-2 py-0.5 bg-gray-500/20 text-dark-300 rounded">Default</span>
-                    <span v-else-if="model.badge === 'new'" class="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded">New</span>
-                    <span v-else-if="model.badge === 'pro'" class="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">Pro</span>
-                    <span v-else-if="model.badge === 'premium'" class="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">Premium</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <!-- Not subscribed notice -->
-            <div v-if="!isSubscribed" class="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-              <p class="text-sm text-amber-400">
-                {{ L('🔒 升級訂閱以選擇不同 AI 模型', '🔒 Upgrade to choose different AI models', '🔒 アップグレードで異なるAIモデルを選択', '🔒 업그레이드로 다른 AI 모델 선택', '🔒 Actualiza para elegir distintos modelos') }}
-              </p>
-              <RouterLink to="/pricing" class="text-sm text-primary-400 hover:underline mt-1 inline-block">
-                {{ L('查看方案 →', 'View Plans →', 'プランを見る →', '플랜 보기 →', 'Ver planes →') }}
-              </RouterLink>
-            </div>
-          </div>
-
-          <!-- Video Style Effects - Subscriber Only -->
-          <div v-if="isSubscribed" class="card">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-dark-50">
-                {{ isVideoTransformMode
-                  ? L('影片轉換風格', 'Video Transform Style', '動画変換スタイル', '동영상 변환 스타일', 'Estilo de transformación')
-                  : L('影片風格效果', 'Video Style Effects', '動画スタイル効果', '동영상 스타일 효과', 'Efectos de estilo') }}
-              </h3>
-              <button
-                v-if="selectedStyle"
-                @click="selectedStyle = null"
-                class="text-xs text-primary-400 hover:text-primary-300 transition-colors"
-              >
-                {{ L('清除效果', 'Clear Effect', '効果をクリア', '효과 제거', 'Quitar efecto') }}
-              </button>
-            </div>
-
-            <p class="text-sm text-dark-300 mb-3">
-              {{ isVideoTransformMode
-                ? L('可選擇一個風格預設，會附加到你的影片轉換描述中。', 'Optionally choose a style preset to append to your video transform prompt.', 'スタイルプリセットを選択して変換プロンプトに追加できます。', '스타일 프리셋을 선택하여 변환 프롬프트에 추가할 수 있습니다.', 'Elige un preset de estilo para añadir al prompt de transformación.')
-                : L('可選擇性套用第二段影片風格轉換。未選擇時只會進行一般圖片轉影片。', 'Optionally apply a second-pass video style transform. Leave empty to use standard image-to-video only.', 'オプションでセカンドパスのスタイル変換を適用できます。未選択の場合は通常の画像→動画のみ。', '선택적으로 2차 스타일 변환을 적용할 수 있습니다. 미선택 시 일반 이미지→동영상만 진행됩니다.', 'Aplica opcionalmente una segunda pasada. Si lo dejas vacío, solo imagen-a-video.') }}
-            </p>
-
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                v-for="style in videoStyles"
-                :key="style.id"
-                @click="selectedStyle = selectedStyle === style.id ? null : style.id"
-                class="p-3 rounded-xl border-2 transition-all text-left"
-                :class="selectedStyle === style.id ? 'border-primary-500 bg-primary-500/10' : ''"
-                style="border-color: rgba(255,255,255,0.08);"
-              >
-                <p class="text-sm font-medium text-dark-50">
-                  {{ L(style.name_zh, style.name, style.name_zh, style.name_zh, style.name) }}
-                </p>
-                <p class="text-xs text-dark-400 mt-1">{{ style.id }}</p>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Panel - Result -->
-        <div class="card h-fit sticky top-24">
-          <h3 class="text-lg font-semibold text-dark-50 mb-4">
-            {{ L('生成的影片', 'Generated Video', '生成された動画', '생성된 동영상', 'Video generado') }}
-          </h3>
-
-          <div v-if="resultVideo" class="space-y-4">
-            <video
-              :src="resultVideo"
-              controls
-              class="w-full rounded-xl"
-              autoplay
-              loop
-            />
-            <!-- Watermark badge -->
-            <div class="text-center text-xs text-dark-400">vidgo.ai</div>
-            <!-- Download / Action Buttons -->
-            <div class="flex gap-3">
-               <button
-                 v-if="!isDemoUser"
-                 @click="downloadAsset(resultVideo!, 'vidgo_short_video.mp4')"
-                 class="btn-primary flex-1 text-center py-3 flex items-center justify-center"
-               >
-                 <span class="mr-2">📥</span> {{ t('common.download') }}
-               </button>
-
-               <RouterLink v-else to="/pricing" class="btn-primary w-full text-center block">
-                 {{ L('訂閱以獲得完整功能', 'Subscribe for Full Access', 'サブスクで全機能を解禁', '구독으로 전체 액세스', 'Suscríbete para acceso completo') }}
-               </RouterLink>
-            </div>
-          </div>
-
-          <div v-else-if="demoEmptyState" class="aspect-video flex flex-col items-center justify-center rounded-xl text-center px-6 gap-3" style="background: #141420; border: 1px solid rgba(255,255,255,0.08);">
-            <span class="text-2xl">🔒</span>
-            <p class="text-sm text-dark-200">
-              {{ L('此範例尚未預生成結果', 'No pre-generated result for this example yet', 'この例はまだ事前生成されていません', '이 예시는 아직 사전 생성되지 않았습니다', 'Aún no hay resultado pregenerado') }}
-            </p>
-            <RouterLink to="/pricing" class="btn-primary text-sm px-4 py-2">
-              {{ L('訂閱以使用完整 AI 功能', 'Subscribe to use the real AI', 'サブスクで実AI機能を解禁', '구독으로 실제 AI 사용', 'Suscríbete para usar la IA real') }}
-            </RouterLink>
-          </div>
-
-          <div v-else class="aspect-video flex items-center justify-center rounded-xl text-dark-400" style="background: #141420;">
-            <div class="text-center">
-              <span class="text-5xl block mb-4">🎬</span>
-              <p>{{ L('生成的影片將顯示在這裡', 'Generated video will appear here', '生成された動画はここに表示されます', '생성된 동영상이 여기에 표시됩니다', 'El video generado aparecerá aquí') }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <template #examples>
+      <ExampleGallery tool-key="short-video" />
+    </template>
+  </PiapiPlayground>
 </template>

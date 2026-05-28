@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from uuid import UUID
-from sqlalchemy import select, and_, update
+from sqlalchemy import select, and_, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -36,6 +36,21 @@ settings = get_settings()
 
 # Refund eligibility period (7 days)
 REFUND_ELIGIBILITY_DAYS = 7
+
+# Anti-abuse: once a user has consumed more than this fraction of their
+# subscription's monthly credit allowance, the subscription becomes
+# non-refundable even if it's still within the 7-day window. Prevents the
+# "subscribe → drain credits on premium models → request refund" attack.
+# Owner directive 2026-05-20. Set as a fraction (0.05 = 5%).
+REFUND_USAGE_THRESHOLD = 0.05
+
+# Spec 修正單 v2.1 condition #2: "尚未導出過無浮水印的高畫質成品". A successful
+# generation whose per-run credit cost is at or above this threshold counts
+# as an HQ watermark-free export and disqualifies the subscription from
+# refund (all paid plans on v2.1 have has_watermark=false, so any premium
+# render IS a watermark-free deliverable). 1-credit standard images stay
+# below the bar so the user can experiment without burning refund rights.
+REFUND_HQ_EXPORT_THRESHOLD = 5
 
 # Work retention period after cancellation (7 days)
 WORK_RETENTION_DAYS = 7
@@ -807,6 +822,82 @@ class SubscriptionService:
                     "days_since_start": days_since_start
                 }
 
+            # Fast path: persisted is_refundable flag. Once flipped to
+            # FALSE by an earlier generation (see _refund_usage_allowed),
+            # the answer can never change back to TRUE without an admin
+            # override — so skip recomputing the gates.
+            if subscription.is_refundable is False:
+                reason = subscription.refund_blocked_reason or "USAGE_EXCEEDED"
+                if reason == "HQ_EXPORT_PRODUCED":
+                    error_msg = (
+                        "Refund unavailable — you have already exported "
+                        "watermark-free high-quality output during this "
+                        "subscription. Per the refund policy, deliverables "
+                        "are considered services rendered."
+                    )
+                    error_code = "REFUND_HQ_EXPORT_PRODUCED"
+                elif reason == "ADMIN_BLOCK":
+                    error_msg = (
+                        "Refund unavailable — this subscription has been "
+                        "flagged by support and is not eligible for "
+                        "self-service refund. Please contact support."
+                    )
+                    error_code = "REFUND_ADMIN_BLOCK"
+                else:
+                    error_msg = (
+                        f"Refund unavailable — usage already exceeds the "
+                        f"{REFUND_USAGE_THRESHOLD * 100:.0f}% threshold for "
+                        f"this billing period."
+                    )
+                    error_code = "REFUND_USAGE_EXCEEDED"
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "code": error_code,
+                    "refund_blocked_at": (
+                        subscription.refund_blocked_at.isoformat()
+                        if subscription.refund_blocked_at else None
+                    ),
+                }
+
+            # Usage gate: reject the refund if the user has already consumed
+            # more than REFUND_USAGE_THRESHOLD (5%) of their monthly allowance.
+            # This stops the "subscribe → generate 50 premium videos → refund"
+            # attack where the user keeps the outputs and pays nothing.
+            # The check ALSO persists is_refundable=False on the subscription
+            # row so subsequent attempts hit the fast path above.
+            usage_check = await self._refund_usage_allowed(db, user, subscription)
+            if not usage_check["allowed"]:
+                # Two distinct refusal reasons need distinct error messages so
+                # the user knows whether to (a) stop using premium tools and
+                # try again later, or (b) accept that they've already
+                # exported HQ work and the refund is gone.
+                if usage_check["code"] == "HQ_EXPORT_PRODUCED":
+                    error_msg = (
+                        "Refund unavailable — you have already exported "
+                        "watermark-free high-quality output during this "
+                        "subscription. Per the refund policy, deliverables "
+                        "are considered services rendered."
+                    )
+                    error_code = "REFUND_HQ_EXPORT_PRODUCED"
+                else:
+                    error_msg = (
+                        f"Refund unavailable — you have used {usage_check['used_pct']:.1f}% "
+                        f"of this month's credit allowance (threshold: "
+                        f"{REFUND_USAGE_THRESHOLD * 100:.0f}%)."
+                    )
+                    error_code = "REFUND_USAGE_EXCEEDED"
+
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "used_credits": usage_check["used"],
+                    "monthly_credits": usage_check["allowance"],
+                    "used_pct": usage_check["used_pct"],
+                    "has_hq_export": usage_check["has_hq_export"],
+                    "code": error_code,
+                }
+
             # Process refund
             refund_result = await self._process_refund(db, user, subscription, order)
 
@@ -1018,6 +1109,121 @@ class SubscriptionService:
             "success": True,
             "count": len(items),
             "items": items,
+        }
+
+    async def _refund_usage_allowed(
+        self,
+        db: AsyncSession,
+        user: User,
+        subscription: Subscription,
+    ) -> Dict[str, Any]:
+        """Check whether the user is still eligible for refund (v2.1 spec).
+
+        Two gates must both pass:
+        1. ``used / allowance < REFUND_USAGE_THRESHOLD`` (5% rule).
+        2. ``has_hq_export == False`` — the user has NOT yet produced any
+           watermark-free high-quality output (any generation with
+           credit_cost ≥ REFUND_HQ_EXPORT_THRESHOLD = 5).
+
+        Returns a rich dict so the API can surface ``code`` to the UI:
+            * ``allowed`` (bool)
+            * ``used`` / ``allowance`` / ``used_pct``
+            * ``has_hq_export`` (bool)
+            * ``code``  → "OK" | "USAGE_EXCEEDED" | "HQ_EXPORT_PRODUCED"
+
+        Edge cases:
+        * Plan with zero/null monthly_credits: refund allowed (no allowance
+          to abuse, and HQ-export gate is meaningless without a plan).
+        * No transactions at all: used=0, has_hq_export=False, allowed=True.
+        """
+        # Resolve plan for monthly allowance.
+        plan_result = await db.execute(
+            select(Plan).where(Plan.id == subscription.plan_id)
+        )
+        plan = plan_result.scalar_one_or_none()
+        allowance = int((plan.monthly_credits or 0) if plan else 0)
+
+        if allowance <= 0:
+            return {
+                "allowed": True,
+                "used": 0,
+                "allowance": 0,
+                "used_pct": 0.0,
+                "has_hq_export": False,
+                "code": "OK",
+            }
+
+        # SUM(-amount) of generation deductions since subscription start.
+        # We intentionally look at *generation* type only — admin grants,
+        # refunds, and bonus credits shouldn't count toward "usage".
+        used_result = await db.execute(
+            select(func.coalesce(func.sum(-CreditTransaction.amount), 0))
+            .where(
+                CreditTransaction.user_id == user.id,
+                CreditTransaction.amount < 0,
+                CreditTransaction.transaction_type == "generation",
+                CreditTransaction.created_at >= subscription.start_date,
+            )
+        )
+        used = int(used_result.scalar() or 0)
+        used_pct = (used / allowance) * 100.0 if allowance else 0.0
+
+        # Gate #2 — HQ watermark-free export check.
+        # COUNT(*) of generation transactions with single-call cost ≥ threshold.
+        # CreditTransaction.amount is the *negative* charge for that one call,
+        # so abs(amount) >= REFUND_HQ_EXPORT_THRESHOLD identifies HQ runs.
+        hq_count_result = await db.execute(
+            select(func.count(CreditTransaction.id))
+            .where(
+                CreditTransaction.user_id == user.id,
+                CreditTransaction.amount <= -REFUND_HQ_EXPORT_THRESHOLD,
+                CreditTransaction.transaction_type == "generation",
+                CreditTransaction.created_at >= subscription.start_date,
+            )
+        )
+        has_hq_export = (hq_count_result.scalar() or 0) > 0
+
+        usage_ok = used < (allowance * REFUND_USAGE_THRESHOLD)
+        export_ok = not has_hq_export
+
+        if not usage_ok:
+            code = "USAGE_EXCEEDED"
+        elif not export_ok:
+            code = "HQ_EXPORT_PRODUCED"
+        else:
+            code = "OK"
+
+        # Write-through persistence: once a gate fails, freeze the answer
+        # on the subscription row so future refund attempts skip the
+        # recomputation and so the rejection survives transaction cleanup.
+        # HQ_EXPORT_PRODUCED wins over USAGE_EXCEEDED if both are true,
+        # because it's the harder-to-reverse fact (the deliverable exists).
+        if code != "OK" and subscription.is_refundable is not False:
+            subscription.is_refundable = False
+            subscription.refund_blocked_at = utc_now()
+            subscription.refund_blocked_reason = code
+            try:
+                await db.commit()
+                logger.info(
+                    f"Subscription {subscription.id} flagged non-refundable: "
+                    f"{code} (used={used}/{allowance}, hq_export={has_hq_export})"
+                )
+            except Exception as exc:
+                # Don't let a persist failure block the refund decision —
+                # the in-memory return still reflects the correct gate.
+                logger.warning(
+                    f"Failed to persist is_refundable=False on "
+                    f"subscription {subscription.id}: {exc}"
+                )
+                await db.rollback()
+
+        return {
+            "allowed": usage_ok and export_ok,
+            "used": used,
+            "allowance": allowance,
+            "used_pct": used_pct,
+            "has_hq_export": has_hq_export,
+            "code": code,
         }
 
     async def _process_refund(

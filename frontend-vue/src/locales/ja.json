@@ -238,8 +238,23 @@
         "threeDIllustration": "立体感のある動画",
         "productPhotography": "ECサイト用商品写真",
         "productPackaging": "パッケージパターン",
-        "createAnyImage": "マーケティングメインビジュアル"
-      }
+        "createAnyImage": "マーケティングメインビジュアル",
+        "roomRedesign": "インテリアリデザイン",
+        "interiorTemplates": "インテリアテンプレート",
+        "videoBgRemove": "動画背景削除",
+        "claymation": "クレイメーション生成",
+        "aiAvatar": "AIアバター／スポークスパーソン",
+        "videoDubbing": "動画吹き替え"
+      },
+      "categories": {
+        "all": "全て",
+        "advertising": "広告宣伝",
+        "interior": "インテリアデザイン",
+        "branding": "ブランディング",
+        "other": "その他のAI機能"
+      },
+      "categoryAria": "カテゴリで絞り込み",
+      "emptyCategory": "このカテゴリにはまだツールがありません"
     },
     "interiorLayout": {
       "amenities": "設備",
@@ -254,7 +269,33 @@
       "tabOutdoor": "屋外",
       "uploadMultiple": "複数",
       "uploadSingle": "1枚",
-      "uploadStep": "1. 画像を1枚以上アップロード"
+      "uploadStep": "1. 画像を1枚以上アップロード",
+      "amenityGym": "ホームジム",
+      "amenityHomeTheater": "ホームシアター",
+      "amenityPool": "プール",
+      "amenityWineCellar": "ワインセラー",
+      "extGardenStudio": "ガーデンスタジオ",
+      "extIndustrialLoft": "インダストリアルロフト",
+      "extMedVilla": "地中海風ヴィラ",
+      "extModernFacade": "モダンガラスファサード",
+      "extRanch": "ミッドセンチュリーランチ",
+      "extStoneCabin": "素朴な石造りキャビン",
+      "extStorefront": "ブティック店舗",
+      "extTownhouse": "アーバンタウンハウス",
+      "extTropicalResort": "トロピカルリゾート",
+      "extWarehouse": "倉庫リノベーション",
+      "extWoodHouse": "北欧ウッドハウス",
+      "extZenCourtyard": "和風中庭",
+      "roomBathroom": "バスルーム",
+      "roomBedroom": "寝室",
+      "roomDiningRoom": "ダイニング",
+      "roomHomeOffice": "ホームオフィス",
+      "roomKitchen": "キッチン",
+      "roomLivingRoom": "リビング",
+      "roomMudroom": "土間収納",
+      "roomStudy": "書斎",
+      "roomToilet": "トイレ",
+      "roomWalkInCloset": "ウォークインクローゼット"
     },
     "tryOnLayout": {
       "applyBrandStyle": "ブランドスタイルを適用",
@@ -273,7 +314,8 @@
       "sizeLandscape": "横長 (16:9)",
       "sizePortrait": "縦長 (2:3)",
       "sizeSquare": "正方形 (1:1)",
-      "uploadOwn": "自分でアップロード"
+      "uploadOwn": "自分でアップロード",
+      "applyBrandStyleOff": "オフ"
     }
   },
   "styles": {
@@ -455,6 +497,13 @@
     "edit": "編集",
     "loading": "読み込み中...",
     "processing": "処理中...",
+    "loadingOverlay": {
+      "title": "生成中…",
+      "estimated": "予想時間",
+      "elapsed": "経過時間",
+      "almostDone": "まもなく完了します…",
+      "keepOpen": "このページを開いたままにしてください。"
+    },
     "success": "成功",
     "error": "エラー",
     "dragDrop": "ファイルをドラッグ＆ドロップまたはクリックしてアップロード",
@@ -474,7 +523,9 @@
     "dropFilesHere": "ここにファイルをドロップ",
     "insufficient": "（クレジット不足）",
     "curatedNotice": "品質と安全のため、プロンプトはシステムが厳選しています。下のリストから選んでください。",
-    "curatedPickToPreview": "— 上のリストからプロンプトを選ぶと内容がここに表示されます —"
+    "curatedPickToPreview": "— 上のリストからプロンプトを選ぶと内容がここに表示されます —",
+    "off": "オフ",
+    "on": "オン"
   },
   "auth": {
     "email": "メールアドレス",
@@ -654,6 +705,11 @@
     "testOnly": "テスト専用",
     "unlimitedCredits": "無制限クレジット/月",
     "creditsPerMonth": "{credits}クレジット/月",
+    "customCredits": "カスタムクレジット",
+    "contactUs": "お問い合わせ",
+    "contactPrice": "お問い合わせください",
+    "refundUsageBlocked": "今月 {pct}% のクレジットを使用済み — 5% の返金しきい値を超えています",
+    "refundHqExportBlocked": "ウォーターマークなしの高画質成果物を書き出し済み — APIコスト発生済みのため返金不可",
     "ecpayPaymentLabel": "クレジットカード決済 (ECPay)",
     "testPaymentLabel": "テスト決済 (US$1 / 約NT$32)",
     "paypalPaymentLabel": "国際決済 (PayPal)",
@@ -668,24 +724,54 @@
         "useCase": "推奨利用シーン"
       },
       "rows": {
+        "standardImage": {
+          "feature": "標準AI画像",
+          "cost": "1クレジット",
+          "output": "100枚",
+          "useCase": "ECサイト商品画像、SNSカバー、配置画像"
+        },
+        "premiumImage": {
+          "feature": "高品質AI画像 (Flux / Qwen)",
+          "cost": "5クレジット",
+          "output": "20枚",
+          "useCase": "ブランドメイン画像、広告主画像、印刷物"
+        },
+        "standardVideo": {
+          "feature": "標準AI動画 (5-10秒)",
+          "cost": "20クレジット",
+          "output": "5本",
+          "useCase": "Hailuo / Hunyuan / Kling 1.6 短尺動画"
+        },
         "proLong": {
-          "feature": "プロ向け長尺動画 (10秒+)",
-          "cost": "35クレジット",
-          "output": "約3本",
-          "useCase": "映画品質・高品質 Luma/Kling"
+          "feature": "プロ長尺動画 (Kling 10秒)",
+          "cost": "60クレジット",
+          "output": "約1本",
+          "useCase": "Kling 高品質10秒動画"
         },
         "restore": {
-          "feature": "動画画質の修復 / 強化",
+          "feature": "画質修復 / アップスケール",
           "cost": "15クレジット",
-          "output": "約6本",
-          "useCase": "古い映像の再生、低解像度をHD化"
+          "output": "約6回",
+          "useCase": "古い映像の再生、低解像度を1080p/4K化"
+        },
+        "veo3": {
+          "feature": "Veo 3.1 動画 (5秒) 🆕",
+          "cost": "200クレジット",
+          "output": "—",
+          "useCase": "Advancedプラン限定の旗艦動画"
+        },
+        "seedanceWan": {
+          "feature": "Seedance / Wan 動画 🆕",
+          "cost": "40クレジット",
+          "output": "約2本",
+          "useCase": "中価格帯の動的動画、縦型TikTok"
         }
       },
       "scenarios": {
         "title": "🚀 100クレジットで何ができる？（利用例）",
         "intro": "価値を分かりやすく伝えるため、次の「シナリオパック」を案内できます：",
-        "creatorStarter": "「クリエイター入門パック」：標準ショート動画5本 + カバー画像50枚。",
-        "proDesigner": "「プロデザイナーパック」：高画質プロ動画2本 + 商用画像6枚。",
+        "creatorStarter": "「クリエイター入門パック」：標準ショート動画3本 + カバー画像40枚。",
+        "proDesigner": "「プロデザイナーパック」：高画質プロ動画1本 + 商用画像8枚。",
         "imageSprint": "「画像制作スプリント」：標準AI画像100枚。"
       }
     },
@@ -693,7 +779,7 @@
       "sectionBadge": "クレジット単品購入",
       "title": "サブスクなしでもクレジットを直接購入できます",
       "subtitle": "3つの公式TWDパックを用意。スポット提案、インテリアレンダリング、商品画像のバッチ、動画の追加生成に最適です。購入したクレジットは月次でリセットされません。",
-      "checkoutNote": "台湾ECPay決済",
+      "checkoutNote": "PayPal 国際決済",
       "badges": {
         "bestValue": "最もお得",
         "popular": "人気"
@@ -706,6 +792,7 @@
       "noBonus": "ボーナスなし、お試しに最適",
       "featureCrossTool": "画像・動画・インテリア・商品シーンの生成に利用可能",
       "featureNoReset": "購入クレジットは毎月リセットされず、プロジェクトの補充に最適",
+      "nonRefundable": "⚠ クレジットパックはデジタル商品です。購入後の返金はいたしかねます。",
       "cta": {
         "buy": "クレジットを購入",
         "buyCard": "クレジットカードで支払う",
@@ -748,7 +835,7 @@
       },
       "rollover": {
         "q": "未使用のクレジットは繰り越されますか？",
-        "a": "月間クレジットは各請求期間の終わりにリセットされます。購入したクレジットパックは有効期限がありません。"
+        "a": "サブスクのクレジットは毎月リセットされ、翌月には繰り越されません。買い切りのクレジットパックは有効期限がありません。"
       },
       "change": {
         "q": "アップグレードまたはダウングレードできますか？",
@@ -756,7 +843,7 @@
       },
       "refund": {
         "q": "返金ポリシーは何ですか？",
-        "a": "登録後7日以内に全額返金をリクエストできます。7日後もキャンセルできますが、請求期間終了までアクセスを保持します。"
+        "a": "登録後7日以内、かつ (1) 当月のクレジット消費が配布量の5%未満（Standardなら22クレジット未満）、(2) ウォーターマークなしの高画質出力をまだ書き出していない、の両方を満たす場合のみ返金可能です。条件を超過した場合または7日を過ぎた場合はAPIコスト発生済みとみなし返金不可。買い切りのクレジットパックはデジタル商品のため購入後返金不可です。"
       }
     },
     "confirmCancel": "はい、サブスクリプションを解約します",
@@ -874,15 +961,15 @@
       "creditPacks": [
         {
           "name": "ライトパック",
-          "credits": "3,000 クレジット"
+          "credits": "250 クレジット"
         },
         {
           "name": "スタンダードパック",
-          "credits": "5,500 クレジット"
+          "credits": "416 クレジット"
         },
         {
           "name": "ヘビーパック",
-          "credits": "12,000 クレジット"
+          "credits": "833 クレジット"
         }
       ]
     }
@@ -1319,7 +1406,21 @@
         "value": "90%",
         "label": "時間コスト節約"
       }
-    ]
+    ],
+    "interior": {
+      "eyebrow": "特集 · インテリアデザイン",
+      "title": "1枚の写真から部屋全体を再デザイン",
+      "body": "リビング、寝室、商業空間、物件写真をアップロード — AIが20種類以上のデザインスタイル（北欧、ジャパンディ、インダストリアル、ラグジュアリーなど）に瞬時に変換。不動産業者、インテリアデザイナー、家具ブランド、施主向け。",
+      "bullet1": "20種類以上のインテリア・エクステリア・商業空間スタイル",
+      "bullet2": "Magicモード：自由入力プロンプトで再レンダリング",
+      "bullet3": "ビフォー／アフター比較 + HD出力対応",
+      "ctaPrimary": "ルームリデザインを無料で試す",
+      "ctaSecondary": "デザインテンプレートを見る",
+      "beforeAlt": "リデザイン前の部屋",
+      "beforeLabel": "ビフォー",
+      "afterAlt": "AIリデザイン後の部屋",
+      "afterLabel": "AIリデザイン"
+    }
   },
   "einvoice": {
     "title": "電子インボイス",

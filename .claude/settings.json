@@ -164,5 +164,8 @@
       "Bash(awk '/ToolResponse\\\\\\(/ && NR>2520 && NR<2750 {print NR\": \"$0}' /Users/mlw/Desktop/Vidgo_Gen_AI/backend/app/api/v1/tools.py)",
       "Bash(awk '/return ToolResponse\\\\\\(|return _provider_failure_response/ && NR>1900 && NR<2440 {print NR\": \"$0}' /Users/mlw/Desktop/Vidgo_Gen_AI/backend/app/api/v1/tools.py)"
     ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-code-plugins": true
   }
 }

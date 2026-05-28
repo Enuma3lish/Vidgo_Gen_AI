@@ -99,7 +99,7 @@ class A2EProvider(BaseProvider):
             language=language,
             voice_id=params.get("voice_id") or params.get("voice"),
             duration=int(params.get("duration", 30)),
-            timeout=int(params.get("timeout", 600)),
+            timeout=int(params.get("timeout", 1200)),
             save_locally=False,
         )
         if not result.get("success"):

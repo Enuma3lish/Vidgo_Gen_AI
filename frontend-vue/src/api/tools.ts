@@ -101,7 +101,22 @@ export const toolsApi = {
     return response.data
   },
 
-  async tryOn(garmentImageUrl: string, opts?: { modelImageUrl?: string; modelId?: string; angle?: string; templateId?: string; category?: 'upper_body' | 'lower_body' | 'dress' | 'full_body' }): Promise<ToolResponse> {
+  async tryOn(
+    garmentImageUrl: string,
+    opts?: {
+      modelImageUrl?: string
+      modelId?: string
+      angle?: string
+      templateId?: string
+      category?: 'upper_body' | 'lower_body' | 'dress' | 'full_body'
+      // Added 2026-05-24: prompt mode routes through Flux Kontext I2I on
+      // the model photo, with the user's text reaching the model verbatim.
+      // Used when there's no garment image (Kling 3.0 prompt-template UX).
+      mode?: 'garment' | 'prompt'
+      prompt?: string
+      negativePrompt?: string
+    },
+  ): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/try-on',
       {
@@ -115,6 +130,9 @@ export const toolsApi = {
         // outfit and improvises missing pieces, which produced the
         // jacket+pants hybrid bug when users uploaded jeans alone.
         category: opts?.category ?? 'dress',
+        mode: opts?.mode ?? 'garment',
+        prompt: opts?.prompt,
+        negative_prompt: opts?.negativePrompt,
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
@@ -132,7 +150,9 @@ export const toolsApi = {
       styleStrength?: number
       preserveStructure?: boolean
       // ReRoom-inspired knobs (2026-05-18). All optional.
-      mode?: 'redesign' | 'stage'
+      // 'magic' mode added 2026-05-24 — sends customPrompt verbatim to
+      // Kontext I2I; style preset + chips ignored server-side.
+      mode?: 'redesign' | 'stage' | 'magic'
       lightingTone?: 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'
       materialAccent?: 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'
       variationCount?: 1 | 2 | 3
@@ -159,7 +179,22 @@ export const toolsApi = {
     return response.data
   },
 
-  async shortVideo(imageUrl: string, opts?: { motionStrength?: number; modelId?: string; style?: string; script?: string; voiceId?: string; promptId?: string; locale?: string }): Promise<ToolResponse> {
+  async shortVideo(
+    imageUrl: string,
+    opts?: {
+      motionStrength?: number
+      modelId?: string
+      style?: string
+      script?: string
+      voiceId?: string
+      promptId?: string
+      locale?: string
+      // 2026-05-24 QA #2: free-form motion prompt overrides the auto-generated
+      // motion description when present. Reaches the I2V model verbatim.
+      prompt?: string
+      negativePrompt?: string
+    },
+  ): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/short-video',
       {
@@ -171,6 +206,8 @@ export const toolsApi = {
         voice_id: opts?.voiceId,
         prompt_id: opts?.promptId,
         locale: opts?.locale,
+        prompt: opts?.prompt,
+        negative_prompt: opts?.negativePrompt,
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
@@ -191,6 +228,46 @@ export const toolsApi = {
         video_url: videoUrl,
         prompt,
         style,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
+  // Claymation AI — multi-mode (T2I / I2I / T2V / V2V) via PiAPI.
+  // Backend dispatches by mode: Seedream 5 Lite (image) / Kling Omni
+  // 3.0 (T2V) / Seedance 2.0 Fast (V2V). User prompt reaches the model
+  // verbatim with only a baseline "claymation style" prefix.
+  async claymation(params: {
+    mode: 'text_to_image' | 'image_to_image' | 'text_to_video' | 'video_to_video'
+    prompt: string
+    imageUrl?: string
+    videoUrl?: string
+    aspectRatio?: string
+  }): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/claymation',
+      {
+        mode: params.mode,
+        prompt: params.prompt,
+        image_url: params.imageUrl,
+        video_url: params.videoUrl,
+        aspect_ratio: params.aspectRatio ?? '1:1',
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
+  // Video Background Remove — Qubico video-toolkit via PiAPI (added 2026-05-24
+  // after stability probe verified this endpoint healthy; sibling Qubico
+  // video tools upscale/watermark-remove dropped per probe results).
+  async videoBackgroundRemove(videoUrl: string, opts?: { invertOutput?: boolean }): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/video-background-remove',
+      {
+        video_url: videoUrl,
+        invert_output: opts?.invertOutput ?? false,
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
@@ -246,7 +323,7 @@ export const toolsApi = {
     prompt: string
     aspectRatio?: string
     processMode?: 'relax' | 'fast' | 'turbo'
-    model?: 'flux' | 'qwen' | 'z-image'
+    model?: 'flux' | 'qwen' | 'z-image' | 'nano-banana' | 'nano-banana-pro' | 'seedream'
   }): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/midjourney-imagine',
@@ -255,8 +332,9 @@ export const toolsApi = {
         aspect_ratio: params.aspectRatio ?? '1:1',
         process_mode: params.processMode,
         // Backend reads `model` and forwards it to provider_router.route(T2I).
-        // piapi_provider.text_to_image() dispatches Flux / Qwen / Z-Image
-        // (verified against PiAPI's live catalog 2026-05-20).
+        // piapi_provider.text_to_image() dispatches Flux / Qwen / Z-Image /
+        // Nano Banana (v2 + Pro) / Seedream 5 Lite. All verified end-to-end
+        // against PiAPI's live API.
         ...(params.model && params.model !== 'flux' ? { model: params.model } : {}),
       },
       { timeout: GENERATION_TIMEOUT_MS }

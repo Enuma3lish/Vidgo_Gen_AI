@@ -1111,20 +1111,9 @@ class MaterialGenerator:
                 if not source_video_url:
                     continue
 
-                await asyncio.sleep(5)
-
-                # Apply style effect using ProviderRouter V2V
-                from app.services.effects_service import get_style_prompt
-                style_prompt = get_style_prompt(example['style_id'])
-                style_result = await self.provider_router.route(
-                    TaskType.V2V,
-                    {
-                        "video_url": source_video_url,
-                        "prompt": style_prompt or example['source_prompt']
-                    }
-                )
-
-                result_video_url = style_result.get('video_url') or style_result.get('output_url')
+                # V2V style transfer removed 2026-05-31 — showcase now uses
+                # the base I2V output as the result.
+                result_video_url = source_video_url
 
                 showcase = ToolShowcase(
                     tool_category='video',

@@ -47,6 +47,7 @@ import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import apiClient from '@/api/client'
 import { extractApiError } from '@/utils/apiError'
+import { handleCardRequired } from '@/utils/toolGate'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -100,11 +101,10 @@ const isRunning = computed(() => status.value === 'running')
 
 // ─── Generate (3 paths: redesign | stage | magic) ────────────────────
 async function generate() {
-  if (isDemoUser.value) {
-    uiStore.showInfo(isZh.value ? '請先訂閱再使用此工具' : 'Please subscribe to use this tool.')
-    return
-  }
   if (disabled.value || isRunning.value) return
+  // Backend governs access: a free account gets the cached example for a
+  // style-only (preset) redesign; a custom prompt or Magic mode returns
+  // 'subscription_card_required', handled below.
 
   status.value = 'running'
   statusText.value = isZh.value ? '生成中… 通常需要 30 秒至 2 分鐘' : 'Generating… typically 30s to 2 minutes'
@@ -136,6 +136,11 @@ async function generate() {
         materialAccent: materialAccent.value || undefined,
       },
     )
+    if (handleCardRequired(result, uiStore, router, isZh.value)) {
+      status.value = 'idle'
+      statusText.value = ''
+      return
+    }
     if (result.success && (result.image_url || result.result_url)) {
       const u = result.image_url || result.result_url || ''
       resultImage.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
@@ -454,9 +459,9 @@ onMounted(async () => {
           <!-- Generate -->
           <button
             @click="generate"
-            :disabled="disabled || isRunning || isDemoUser"
+            :disabled="disabled || isRunning"
             class="w-full py-3 rounded-xl font-semibold text-sm transition-all"
-            :style="(disabled || isRunning || isDemoUser)
+            :style="(disabled || isRunning)
               ? 'background: rgba(124,58,237,0.4); color: rgba(255,255,255,0.6); cursor: not-allowed;'
               : 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff; box-shadow: 0 6px 20px rgba(124,58,237,0.35);'"
           >
@@ -471,7 +476,7 @@ onMounted(async () => {
           </button>
 
           <p v-if="isDemoUser" class="text-[11px]" style="color: #fbbf24;">
-            {{ L('訂閱後即可生成你自己的渲染。', 'Subscribe to generate your own renders.', 'サブスク登録で生成可能。', '구독하면 생성 가능합니다.', 'Suscríbete para generar.') }}
+            {{ L('免費帳號可用預設風格生成範例；自訂提示詞或 Magic 模式需訂閱並綁定信用卡。', 'Free accounts can render the preset styles as examples; custom prompts or Magic mode require a subscription with a bound card.', '無料アカウントはプリセットの例を生成できます。カスタムは要サブスク＋カード登録。', '무료 계정은 프리셋 예시를 생성할 수 있습니다. 맞춤 프롬프트는 구독+카드 등록 필요.', 'Las cuentas gratuitas pueden generar los ejemplos preestablecidos; los prompts personalizados requieren suscripción con tarjeta.') }}
             <button @click="gotoPricing" class="underline ml-1">{{ L('查看方案', 'View Plans', 'プランを見る', '플랜 보기', 'Ver planes') }} →</button>
           </p>
         </aside>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode, useLocalized } from '@/composables'
 import { usePromptLibrary } from '@/composables/usePromptLibrary'
@@ -11,8 +12,10 @@ import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import { downloadAsset } from '@/utils/downloadAsset'
 import { extractApiError } from '@/utils/apiError'
+import { handleCardRequired } from '@/utils/toolGate'
 
 const { t, locale } = useI18n()
+const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const { isDemoUser } = useDemoMode()
@@ -80,6 +83,9 @@ async function handleGenerate() {
       imageTailUrl: tailImage.value,
       negativePrompt: negativePrompt.value || undefined,
     })
+    if (handleCardRequired(result, uiStore, router, String(locale.value || '').startsWith('zh'))) {
+      return
+    }
     if (result.success && (result.video_url || result.result_url)) {
       resultVideo.value = result.video_url || result.result_url
       if (!isDemoUser.value) {

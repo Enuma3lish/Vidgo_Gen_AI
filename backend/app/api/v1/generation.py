@@ -29,6 +29,7 @@ from app.providers.provider_router import get_provider_router, TaskType
 from app.services.effects_service import VIDGO_STYLES, get_style_by_id, get_style_prompt
 from app.services.similarity import get_similarity_service
 from app.services.prompt_library import lookup_prompt as _lookup_curated_prompt
+from app.services.access_gate import custom_prompt_gate
 from app.api.deps import get_current_user_optional, get_db, get_redis, is_subscribed_user
 from app.core.upload_validation import image_dimension_rules_for_tool, validate_uploaded_content
 from app.models.demo import ToolShowcase, PromptCache
@@ -342,11 +343,7 @@ class ImageToVideoRequest(BaseModel):
     style: Optional[str] = None  # Optional style transformation
 
 
-class VideoToVideoRequest(BaseModel):
-    """Transform video with style"""
-    video_url: HttpUrl
-    style: str = "anime"  # Style ID from unified VIDGO_STYLES
-    prompt: Optional[str] = None
+# VideoToVideoRequest removed 2026-05-31 — V2V dropped repo-wide.
 
 
 class GenerationResponse(BaseModel):
@@ -356,6 +353,9 @@ class GenerationResponse(BaseModel):
     results: Optional[List[Dict]] = None
     credits_used: int = 0
     message: Optional[str] = None
+    # "subscription_card_required" → free account used a custom prompt; the UI
+    # pops a subscribe + add-payment CTA (same contract as ToolResponse).
+    error_code: Optional[str] = None
     cached: bool = False
     # Demo before/after pair — set when returning a pre-generated example
     is_demo: bool = False
@@ -383,18 +383,34 @@ async def generate_pattern(
     """
     # Resolve curated prompt (server-side validated). Overrides any free-form
     # `prompt` so a determined client cannot bypass the curated library.
-    if request.prompt_id:
-        curated = _lookup_curated_prompt("pattern_generate", request.prompt_id, request.locale)
-        if curated:
-            request.prompt = curated
+    curated = (
+        _lookup_curated_prompt("pattern_generate", request.prompt_id, request.locale)
+        if request.prompt_id
+        else None
+    )
+    if curated:
+        request.prompt = curated
     if not request.prompt or not request.prompt.strip():
         raise HTTPException(
             status_code=400,
             detail="Either 'prompt' or 'prompt_id' is required for pattern generation.",
         )
 
-    # Demo path: return cached demo example
-    if not is_subscribed_user(current_user):
+    # Access gate: an unmodified preset (prompt_id) is the free path (cached
+    # example); a custom prompt requires an active subscription + bound card.
+    # Admins / test accounts bypass.
+    _gate = await custom_prompt_gate(db, current_user, is_custom=not bool(curated))
+    if _gate == "blocked":
+        return GenerationResponse(
+            success=False,
+            error_code="subscription_card_required",
+            message=(
+                "自訂提示詞需要有效訂閱並綁定信用卡。免費帳號可直接使用範例下拉選單一鍵生成。"
+                " / Custom prompts require an active subscription with a bound credit card. "
+                "Free accounts can generate instantly using the example presets in the dropdown."
+            ),
+        )
+    if _gate == "demo":
         return await _gen_demo_response(db, ToolType.PATTERN_GENERATE, topic=request.style, cta="Subscribe to generate custom patterns.")
 
     # Plan-tier gate for the T2I model dropdown — Qwen is pro+, Flux/Z-Image
@@ -769,24 +785,7 @@ async def image_to_video(
                 video_url, "video", str(current_user.id)
             )
 
-            # Optional: Apply style transformation with PiAPI V2V
-            if request.style:
-                style_prompt = get_style_prompt(request.style) or request.style
-                try:
-                    style_result = await provider_router.route(
-                        TaskType.V2V,
-                        {
-                            "video_url": video_url,
-                            "prompt": style_prompt
-                        }
-                    )
-                    styled_url = style_result.get("video_url") or style_result.get("output_url")
-                    if styled_url:
-                        video_url = await get_gcs_storage().safe_persist_url(
-                            styled_url, "video", str(current_user.id)
-                        )
-                except Exception:
-                    pass  # Use original video if style transfer fails
+            # V2V style transfer removed 2026-05-31.
 
             # Save to UserGeneration
             generation = UserGeneration(
@@ -816,53 +815,7 @@ async def image_to_video(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/video/transform", response_model=GenerationResponse)
-async def transform_video(
-    request: VideoToVideoRequest,
-    current_user=Depends(get_current_user_optional)
-):
-    """
-    Transform video with artistic style
-
-    Available styles (unified with effects API):
-    - anime, ghibli, cartoon, 3d, clay, pixel
-    - oil_painting, watercolor, sketch
-    - cyberpunk, vintage, pop_art
-    - cinematic, product
-    """
-    style_def = get_style_by_id(request.style)
-    if not style_def:
-        available_styles = [s["id"] for s in VIDGO_STYLES]
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown style: {request.style}. Available: {available_styles}"
-        )
-
-    try:
-        style_prompt = style_def.get("prompt", request.prompt or "artistic style")
-        result = await provider_router.route(
-            TaskType.V2V,
-            {
-                "video_url": str(request.video_url),
-                "prompt": style_prompt
-            }
-        )
-
-        if result.get("success"):
-            return GenerationResponse(
-                success=True,
-                result_url=result.get("video_url"),
-                credits_used=30,
-                message=f"Video transformed to {style_def['name']} style"
-            )
-        else:
-            return GenerationResponse(
-                success=False,
-                message=result.get("error", "Video transformation failed")
-            )
-    except Exception as e:
-        logger.error(f"Video transform error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# /video/transform endpoint removed 2026-05-31 — V2V dropped repo-wide.
 
 
 @router.get("/video/styles")

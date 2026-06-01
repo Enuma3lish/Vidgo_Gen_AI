@@ -10,17 +10,17 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized, usePromptLibrary } from '@/composables'
+import { useDemoMode, usePromptLibrary } from '@/composables'
 import { generationApi } from '@/api/generation'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import { downloadAsset } from '@/utils/downloadAsset'
+import { handleCardRequired } from '@/utils/toolGate'
 
 const { t, locale } = useI18n()
 const router = useRouter()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
-const { L } = useLocalized()
 const { isDemoUser } = useDemoMode()
 const { options: patternPromptOptions, promptFor: patternPromptTextFor } = usePromptLibrary('pattern_generate')
 const isZh = computed(() => locale.value.startsWith('zh'))
@@ -60,6 +60,14 @@ const creditCost = computed(() => modelOptions.find(m => m.id === modelId.value)
 watch([selectedPromptId, locale], () => {
   if (selectedPromptId.value) prompt.value = patternPromptTextFor(selectedPromptId.value)
 })
+// Editing away from the chosen preset clears the preset id, so the backend
+// sees a CUSTOM prompt (subscription + bound card required) instead of a
+// free example.
+watch(prompt, (val) => {
+  if (selectedPromptId.value && val.trim() !== patternPromptTextFor(selectedPromptId.value).trim()) {
+    selectedPromptId.value = ''
+  }
+})
 
 function sizeForRatio(ratio: string): { width: number; height: number } {
   switch (ratio) {
@@ -73,10 +81,9 @@ function sizeForRatio(ratio: string): { width: number; height: number } {
 
 async function generate() {
   if (disabled.value || status.value === 'running') return
-  if (isDemoUser.value) {
-    uiStore.showInfo(L('請訂閱以使用此工具', 'Please subscribe to use this tool', 'サブスク登録してください', '구독해 주세요', 'Suscríbete'))
-    return
-  }
+  // Backend governs access: a free account gets the cached example for an
+  // unmodified preset; a custom prompt returns 'subscription_card_required',
+  // handled below.
   status.value = 'running'
   statusText.value = isZh.value ? '生成中…' : 'Generating…'
   resultUrl.value = null
@@ -92,6 +99,10 @@ async function generate() {
       ...(modelId.value !== 'flux' ? { model: modelId.value } : {}),
       ...(productName.value.trim() ? { product_name: productName.value.trim() } : {}),
     })
+    if (handleCardRequired(response, uiStore, router, isZh.value)) {
+      status.value = 'idle'
+      return
+    }
     if (response.success && response.result_url) {
       resultUrl.value = response.result_url
       status.value = 'done'
@@ -123,7 +134,7 @@ function gotoPricing() { router.push('/pricing') }
     :credit-cost="creditCost"
     :generate-label="isZh ? '生成圖案' : 'Generate'"
     :generate-label-running="isZh ? '生成中…' : 'Generating…'"
-    :disabled="disabled || isDemoUser"
+    :disabled="disabled"
     @generate="generate"
   >
     <template #inputs>
@@ -185,7 +196,9 @@ function gotoPricing() { router.push('/pricing') }
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
-        {{ isZh ? '訂閱後即可使用。' : 'Subscribe to use this tool.' }}
+        {{ isZh
+          ? '免費帳號可用範例下拉選單一鍵生成；自訂提示詞需訂閱並綁定信用卡。'
+          : 'Free accounts can generate from the example presets; custom prompts require a subscription with a bound card.' }}
         <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
       </p>
     </template>

@@ -1152,7 +1152,6 @@ async def get_ai_services_status(
             "t2i": {"primary": "piapi", "rescue": "pollo", "final": "vertex_ai/gemini"},
             "i2v": {"primary": "piapi", "rescue": "pollo", "final": "vertex_ai/veo"},
             "t2v": {"primary": "piapi", "rescue": "pollo", "final": "vertex_ai/veo"},
-            "v2v": {"primary": "piapi", "rescue": "pollo", "final": "vertex_ai/veo"},
             "interior": {"primary": "piapi", "rescue": None, "final": "vertex_ai/gemini"},
             "avatar": {"primary": "piapi", "rescue": "a2e", "final": None}
         }

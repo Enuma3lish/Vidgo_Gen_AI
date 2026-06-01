@@ -20,6 +20,7 @@ import ImageUploader from '@/components/common/ImageUploader.vue'
 import { dataURItoBlob } from '@/utils/dataUri'
 import { downloadAsset } from '@/utils/downloadAsset'
 import { extractApiError } from '@/utils/apiError'
+import { handleCardRequired } from '@/utils/toolGate'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -69,10 +70,9 @@ async function ensureImageUrl(): Promise<string | null> {
 
 async function generate() {
   if (disabled.value || status.value === 'running') return
-  if (isDemoUser.value) {
-    uiStore.showInfo(L('請訂閱以使用此工具', 'Please subscribe to use this tool', 'サブスク登録してください', '구독해 주세요', 'Suscríbete'))
-    return
-  }
+  // Backend governs access: a free account gets the cached example for a
+  // catalog scene (preset); a custom prompt returns
+  // 'subscription_card_required', handled below.
   status.value = 'running'
   statusText.value = isZh.value ? '生成中…' : 'Generating…'
   resultUrl.value = null
@@ -88,6 +88,10 @@ async function generate() {
       undefined,
       String(locale.value || ''),
     )
+    if (handleCardRequired(result, uiStore, router, isZh.value)) {
+      status.value = 'idle'
+      return
+    }
     if (result.success && (result.image_url || result.result_url)) {
       resultUrl.value = result.image_url || result.result_url || null
       status.value = 'done'
@@ -119,7 +123,7 @@ function gotoPricing() { router.push('/pricing') }
     :credit-cost="creditCost"
     :generate-label="isZh ? '生成場景' : 'Generate'"
     :generate-label-running="isZh ? '生成中…' : 'Generating…'"
-    :disabled="disabled || isDemoUser"
+    :disabled="disabled"
     @generate="generate"
   >
     <template #inputs>
@@ -178,7 +182,9 @@ function gotoPricing() { router.push('/pricing') }
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
-        {{ isZh ? '訂閱後即可使用。' : 'Subscribe to use this tool.' }}
+        {{ isZh
+          ? '免費帳號可用內建場景生成範例；自訂提示詞需訂閱並綁定信用卡。'
+          : 'Free accounts can render the built-in scenes as examples; custom prompts require a subscription with a bound card.' }}
         <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
       </p>
     </template>

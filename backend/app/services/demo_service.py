@@ -243,32 +243,9 @@ class DemoService:
             logger.warning(f"Video generation failed: {e}")
             video_url = None
 
-        # =========================================
-        # Step 3: Enhance Video (PiAPI Wan VACE) - Optional
-        # =========================================
-        enhanced_video_url = None
-        if video_url:
-            logger.info(f"Step 3: Enhancing video with PiAPI Wan VACE ({style_info['name']})...")
-
-            try:
-                enhance_result = await self.router.route(
-                    TaskType.V2V,
-                    {
-                        "video_url": video_url,
-                        "prompt": f"{analysis.normalized}, {style_info.get('prompt', '')}"
-                    }
-                )
-
-                if enhance_result.get("video_url") or enhance_result.get("output_url"):
-                    enhanced_video_url = enhance_result.get("video_url") or enhance_result.get("output_url")
-                    logger.info(f"Step 3 complete: Enhanced video at {enhanced_video_url}")
-                else:
-                    logger.warning("Video enhancement failed, using original video")
-                    enhanced_video_url = video_url
-            except Exception as e:
-                logger.warning(f"Video enhancement failed: {e}")
-                # Use original video if enhancement fails
-                enhanced_video_url = video_url
+        # Step 3 (V2V Wan VACE video enhancement) removed 2026-05-31 — the
+        # base I2V video is used directly as the final result.
+        enhanced_video_url = video_url
 
         # =========================================
         # Save to database
@@ -523,34 +500,8 @@ class DemoService:
         result["steps"][-1]["status"] = "completed"
         logger.info(f"Video generated: {video_url}")
 
-        # =========================================
-        # Step 3: Enhance Video (PiAPI Wan VACE) - Optional
-        # Current version: skip_v2v=True by default
-        # =========================================
-        if not skip_v2v and video_url:
-            logger.info(f"Enhancing video with PiAPI Wan VACE ({style_info['name']})...")
-            result["steps"].append({"step": 3, "name": "Video Enhancement", "status": "in_progress"})
-
-            try:
-                enhance_result = await self.router.route(
-                    TaskType.V2V,
-                    {
-                        "video_url": video_url,
-                        "prompt": f"{prompt}, {style_info.get('prompt', '')}"
-                    }
-                )
-
-                enhanced_url = enhance_result.get("video_url") or enhance_result.get("output_url")
-                if enhanced_url:
-                    result["enhanced_video_url"] = enhanced_url
-                    result["steps"][-1]["status"] = "completed"
-                    logger.info(f"Video enhanced: {result['enhanced_video_url']}")
-                else:
-                    result["steps"][-1]["status"] = "skipped"
-                    logger.warning("V2V enhancement failed, using original video")
-            except Exception as e:
-                result["steps"][-1]["status"] = "skipped"
-                logger.warning(f"V2V enhancement failed: {e}, using original video")
+        # Step 3 (V2V Wan VACE video enhancement) removed 2026-05-31 — the
+        # skip_v2v flag is preserved as a no-op for backward compatibility.
 
         result["success"] = True
         logger.info("Video generation complete!")

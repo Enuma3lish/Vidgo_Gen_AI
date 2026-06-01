@@ -117,19 +117,7 @@ class PolloProvider(BaseProvider):
             "error": result.get("error") or f"Pollo task ended with status={status}",
         }
 
-    async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Pollo doesn't expose a true V2V endpoint; approximate by feeding the
-        first frame (image_url) into I2V with a style prompt.
-        """
-        self._log_request("video_style_transfer", params)
-        image_url = params.get("image_url") or params.get("first_frame_url")
-        if not image_url:
-            return {
-                "success": False,
-                "error": "Pollo V2V requires image_url (first frame); no native V2V endpoint.",
-            }
-        return await self.image_to_video({**params, "image_url": image_url})
+    # video_style_transfer removed 2026-05-31 — V2V surface dropped repo-wide.
 
     async def keyframes(self, params: Dict[str, Any]) -> Dict[str, Any]:
         return {

@@ -79,6 +79,61 @@ class AbusePreventionService:
             60 * 60,
         )
 
+    # ── Per-account lockout ──────────────────────────────────────────────
+    # The IP limits above don't stop a distributed / credential-stuffing
+    # attack that rotates IPs against ONE account. These three methods track
+    # consecutive failures per email and lock that account for a fixed window
+    # once the threshold is crossed. The counter resets on a correct password,
+    # and the lock auto-expires (no extension during lockout) so a real user
+    # is never permanently locked out and an attacker can't weaponize the lock
+    # for indefinite DoS.
+    @staticmethod
+    def _account_key(email: str) -> str:
+        return f"abuse:login_fail:{(email or '').strip().lower()}"
+
+    async def check_login_account(self, email: str) -> AbuseCheckResult:
+        max_failures = settings.ABUSE_LOGIN_ACCOUNT_MAX_FAILURES
+        if max_failures <= 0 or not self.redis or not email:
+            return AbuseCheckResult(True)
+        try:
+            raw = await self.redis.get(self._account_key(email))
+            count = int(raw) if raw is not None else 0
+            if count >= max_failures:
+                ttl = await self.redis.ttl(self._account_key(email))
+                retry_after = ttl if ttl and ttl > 0 else settings.ABUSE_LOGIN_ACCOUNT_LOCKOUT_SECONDS
+                return AbuseCheckResult(
+                    allowed=False,
+                    message=(
+                        "Too many failed login attempts for this account. "
+                        "Please try again later or reset your password."
+                    ),
+                    retry_after_seconds=retry_after,
+                )
+        except Exception as exc:
+            logger.warning("Redis account lockout check failed for %s: %s", email, exc)
+        return AbuseCheckResult(True)
+
+    async def record_login_failure(self, email: str) -> None:
+        if settings.ABUSE_LOGIN_ACCOUNT_MAX_FAILURES <= 0 or not self.redis or not email:
+            return
+        key = self._account_key(email)
+        try:
+            count = await self.redis.incr(key)
+            # Set the lockout window only on the first failure; do NOT extend on
+            # later failures so the lock can't be held open indefinitely.
+            if count == 1:
+                await self.redis.expire(key, settings.ABUSE_LOGIN_ACCOUNT_LOCKOUT_SECONDS)
+        except Exception as exc:
+            logger.warning("Redis account failure record failed for %s: %s", email, exc)
+
+    async def reset_login_failures(self, email: str) -> None:
+        if not self.redis or not email:
+            return
+        try:
+            await self.redis.delete(self._account_key(email))
+        except Exception as exc:
+            logger.warning("Redis account failure reset failed for %s: %s", email, exc)
+
     async def check_generation_user(self, user_id: str) -> AbuseCheckResult:
         return await self._check_limit(
             f"abuse:generation:{user_id}",

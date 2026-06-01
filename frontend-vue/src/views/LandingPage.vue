@@ -220,7 +220,6 @@ const allTools: LandingTool[] = [
   { id: 'bgRemoval',       route: '/tools/background-removal', emoji: '✂️', color: '#08979c', tag: 'Free' },
   { id: 'roomRedesign',    route: '/tools/room-redesign',      emoji: '🏠', color: '#52c41a', tag: '' },
   { id: 'hdUpscale',       route: '/tools/upscale',            emoji: '🔍', color: '#13c2c2', tag: 'New' },
-  { id: 'videoTransform',  route: '/tools/video-transform',    emoji: '🎞️', color: '#2f54eb', tag: 'Pro' },
   { id: 'patternGenerate', route: '/tools/pattern-generate',   emoji: '▦', color: '#f759ab', tag: '' },
   { id: 'imageTranslator', route: '/tools/image-translator',   emoji: '文', color: '#faad14', tag: 'New' },
   {
@@ -770,10 +769,6 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
                 </RouterLink>
                 <RouterLink to="/gallery" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
                   <span>🖼️</span> {{ t('gallery.title') }}
-                  <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                </RouterLink>
-                <RouterLink to="/tools/video-transform" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
-                  <span>🎞️</span> {{ t('lp.allTools.videoTransform.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
               </div>

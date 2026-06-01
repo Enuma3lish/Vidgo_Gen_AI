@@ -65,42 +65,10 @@ async def test_upload_avatar_generation_routes_script_and_text(monkeypatch: pyte
     assert db.commits == 1
 
 
-async def test_upload_video_transform_uses_local_fallback_when_provider_fails(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeProviderRouter:
-        async def route(self, task_type: TaskType, params: dict[str, Any]) -> dict[str, Any]:
-            assert task_type == TaskType.V2V
-            raise Exception("Pollo effects endpoint unavailable")
-
-    async def fake_local_transform(source_url: str, upload: UserUpload) -> str:
-        assert source_url == "https://cdn.example.com/input.mp4"
-        return "https://cdn.example.com/transformed.mp4"
-
-    monkeypatch.setattr(uploads, "provider_router", FakeProviderRouter())
-    monkeypatch.setattr(uploads, "_run_ffmpeg_video_transform", fake_local_transform)
-
-    upload = UserUpload(
-        id=uuid.uuid4(),
-        user_id=uuid.uuid4(),
-        tool_type="video_transform",
-        original_filename="input.mp4",
-        file_url="https://cdn.example.com/input.mp4",
-        status=UploadStatus.PROCESSING,
-        credits_used=35,
-    )
-    db = FakeDb()
-
-    await uploads._trigger_generation(
-        upload=upload,
-        file_url="https://cdn.example.com/input.mp4",
-        tool_type="video_transform",
-        model_id="default",
-        prompt="cinematic warm grade",
-        db=db,
-    )
-
-    assert upload.status == UploadStatus.COMPLETED
-    assert upload.result_video_url == "https://cdn.example.com/transformed.mp4"
-    assert db.commits == 1
+# test_upload_video_transform_uses_local_fallback_when_provider_fails removed
+# 2026-05-31 — V2V dropped repo-wide (TaskType.V2V no longer exists,
+# _run_ffmpeg_video_transform helper deleted, video_transform tool_type
+# branch removed from uploads._trigger_generation).
 
 
 async def test_upload_generation_scheduler_detaches_from_response(monkeypatch: pytest.MonkeyPatch) -> None:

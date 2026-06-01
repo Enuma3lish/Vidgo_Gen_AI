@@ -1236,22 +1236,26 @@ class PiAPIProvider(BaseProvider):
             tier = (params.get("tier") or "default").lower()
             version = PIAPI_KLING_VERSIONS.get(tier, PIAPI_KLING_VERSIONS["default"])
 
-        # Mode selection: 2.1-master is pro-only; 3.0/Omni uses PiAPI's
-        # "omni" mode which unlocks the multimodal audio + lip-sync output
-        # the 高階付費 tier needs. Everything else stays on "std".
+        # Mode selection: PiAPI Kling accepts ONLY mode={std, pro}. The
+        # previous code sent mode="omni" for Kling 3.0/Omni, which PiAPI
+        # silently rejected — the upstream task either fell back to a lower
+        # version or produced no result, surfacing to users as "Kling 3.0
+        # broken." Fix (2026-05-31): for 3.0 / omni tier we send mode="pro"
+        # with version="3.0" (the standard PiAPI shape for the multimodal
+        # tier), and rely on enable_audio=true to flip on lip-sync output.
         if params.get("mode"):
             mode = params["mode"]
         elif version == "2.1-master":
             mode = "pro"
         elif version == "3.0" or (params.get("tier") or "").lower() == "omni":
-            mode = "omni"
+            mode = "pro"
         else:
             mode = "std"
 
-        # Kling Omni's whole point is the audio/lip-sync output, so flip
+        # Kling 3.0/Omni's whole point is the audio/lip-sync output, so flip
         # enable_audio on by default for that tier (callers can still pass
         # enable_audio=False if they want a silent 3.0 generation).
-        if mode == "omni" and params.get("enable_audio") is None:
+        if version == "3.0" and params.get("enable_audio") is None:
             params = {**params, "enable_audio": True}
 
         input_data: Dict[str, Any] = {
@@ -1289,9 +1293,26 @@ class PiAPIProvider(BaseProvider):
         )
         output = result.get("output") or {}
         if isinstance(output, dict):
-            # Kling returns video at one of several locations depending on
-            # task variant — same normalization pattern as generate_avatar.
+            # Kling returns the video at one of several locations depending on
+            # task variant and version. Expanded 2026-05-31 after a live probe
+            # confirmed Kling 3.0/Omni returns its URL under output.video.resource
+            # (or .resource_without_watermark) rather than the top-level
+            # video_url / works[] paths used by older Kling versions.
             video_url = output.get("video_url") or output.get("url") or ""
+            # Kling 3.0/Omni: output.video.resource (or _without_watermark)
+            if not video_url:
+                v = output.get("video")
+                if isinstance(v, dict):
+                    video_url = (
+                        v.get("resource_without_watermark")
+                        or v.get("resource")
+                        or v.get("url")
+                        or v.get("video_url")
+                        or ""
+                    )
+                elif isinstance(v, str):
+                    video_url = v
+            # Older variant: output.works[].video.url
             if not video_url:
                 works = output.get("works") or []
                 if isinstance(works, list):
@@ -1301,11 +1322,36 @@ class PiAPIProvider(BaseProvider):
                             if isinstance(v, dict) and v.get("url"):
                                 video_url = v["url"]
                                 break
+                            if isinstance(v, dict) and v.get("resource"):
+                                video_url = v["resource"]
+                                break
                             if isinstance(v, str):
                                 video_url = v
                                 break
+            # Catch-all: a 'videos' or 'video_urls' array.
+            if not video_url:
+                arrs = output.get("videos") or output.get("video_urls") or []
+                if isinstance(arrs, list) and arrs:
+                    first = arrs[0]
+                    if isinstance(first, str):
+                        video_url = first
+                    elif isinstance(first, dict):
+                        video_url = (
+                            first.get("url")
+                            or first.get("video_url")
+                            or first.get("resource_without_watermark")
+                            or first.get("resource")
+                            or ""
+                        )
             if video_url:
                 output["video_url"] = video_url
+            else:
+                # Diagnostic: log the keys we DID see so we can extend the
+                # normalizer next time PiAPI shifts the output shape.
+                logger.warning(
+                    "[PiAPI] kling_video_generation: success but no video URL — output keys=%s",
+                    list(output.keys()),
+                )
             result["output"] = output
         return result
 
@@ -1438,67 +1484,11 @@ class PiAPIProvider(BaseProvider):
     # VIDEO STYLE TRANSFER (Wan VACE via PiAPI)
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Apply style transfer to video.
-
-        Args:
-            params: {
-                "video_url": str,
-                "prompt": str,
-                "style": str (optional),
-            }
-
-        Returns:
-            {"success": True, "task_id": str, "output": {"video_url": str}}
-
-        Implementation note (2026-05-25): Wan 2.1 VACE (the original
-        true V2V path) was removed from PiAPI's catalog — every call
-        returned "wan21-vace is not accepted by the current PiAPI API".
-        For months this method just returned that error verbatim,
-        which surfaced to users as "tool temporarily unavailable" with
-        no path to success.
-
-        Replacement: delegate to Seedance 2.0 Fast I2V — the same
-        first-frame primitive the Claymation V2V mode uses. The caller
-        (tools.py video_transform handler) already extracts the first
-        frame via _extract_first_frame_to_gcs and passes it under
-        `image_url` / `first_frame_url`, so we just hand that off to
-        Seedance I2V. Not identical to true per-frame style transfer,
-        but it preserves the source's opening composition and is the
-        closest primitive available end-to-end today.
-        """
-        self._log_request("video_style_transfer", params)
-
-        # Prefer the pre-extracted first frame (handler passes it as
-        # image_url / first_frame_url). Only fall back to video_url for
-        # ad-hoc callers that don't pre-extract — Seedance will still
-        # reject MP4 input, so this just produces a clearer error.
-        image_url = (
-            params.get("image_url")
-            or params.get("first_frame_url")
-            or params.get("video_url")
-        )
-        if not image_url:
-            return {
-                "success": False,
-                "error": "video_style_transfer requires image_url (first frame) or video_url.",
-            }
-
-        prompt = params.get("prompt") or ""
-        style = (params.get("style") or "").strip()
-        if style and style.lower() not in prompt.lower():
-            # Bake the style hint into the prompt so the first-frame I2V
-            # render reflects the chosen style preset.
-            prompt = f"{prompt}, {style} style" if prompt else f"{style} style"
-
-        return await self.image_to_video({
-            "image_url":    image_url,
-            "prompt":       prompt or "cinematic camera motion, matching original composition",
-            "model":        "seedance",
-            "duration":     params.get("duration", 5),
-            "aspect_ratio": params.get("aspect_ratio", "16:9"),
-        })
+    # Video-style-transfer (V2V) removed 2026-05-31 — Wan 2.1 VACE was pulled
+    # from PiAPI's catalog and the Seedance first-frame fallback was a stand-in
+    # rather than a real per-frame style transfer. The whole V2V surface (this
+    # method, the TaskType.V2V enum, /api/v1/tools/video-transform endpoint,
+    # and the frontend tab) was removed per owner directive.
 
 
     # ─────────────────────────────────────────────────────────────────────────

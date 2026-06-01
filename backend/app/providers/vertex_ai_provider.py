@@ -1061,23 +1061,7 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             logger.error(f"[VertexAI:Veo] image_to_video failed: {e}")
             return {"success": False, "error": str(e)}
 
-    async def video_style_transfer(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Video style transfer via Veo — approximate with image-to-video.
-        Veo doesn't have a dedicated V2V tool.
-        """
-        self._log_request("video_style_transfer", params)
-
-        image_url = params.get("image_url") or params.get("first_frame_url") or params.get("video_url")
-        if not image_url:
-            raise ValueError("image_url or video_url required for style transfer")
-
-        return await self.image_to_video({
-            "image_url": image_url,
-            "prompt": params.get("prompt", "stylized video"),
-            "duration": params.get("duration", 6),
-            "aspect_ratio": params.get("aspect_ratio", "16:9"),
-        })
+    # video_style_transfer removed 2026-05-31 — V2V surface dropped repo-wide.
 
     async def _veo_generate(self, request_body: Dict[str, Any]) -> Dict[str, Any]:
         """

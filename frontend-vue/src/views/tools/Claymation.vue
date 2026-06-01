@@ -20,12 +20,13 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode, useLocalized } from '@/composables'
-import { toolsApi, uploadsApi } from '@/api'
+import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import { dataURItoBlob } from '@/utils/dataUri'
 import { downloadAsset } from '@/utils/downloadAsset'
+import { handleCardRequired } from '@/utils/toolGate'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -35,28 +36,25 @@ const { L } = useLocalized()
 const { isDemoUser } = useDemoMode()
 const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
-type Mode = 'text_to_image' | 'image_to_image' | 'text_to_video' | 'video_to_video'
+// video_to_video mode removed 2026-05-31 (V2V dropped repo-wide).
+type Mode = 'text_to_image' | 'image_to_image' | 'text_to_video'
 
 const mode = ref<Mode>('text_to_image')
 const prompt = ref('')
 const aspectRatio = ref<'1:1' | '16:9' | '9:16' | '4:3' | '3:4'>('1:1')
 const imageInput = ref<string | undefined>(undefined)   // data URI from ImageUploader
-const videoFile = ref<File | null>(null)
-const videoPreviewUrl = ref<string | null>(null)
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 const resultKind = ref<'image' | 'video'>('image')
 
-const isVideoMode = computed(() => mode.value === 'text_to_video' || mode.value === 'video_to_video')
+const isVideoMode = computed(() => mode.value === 'text_to_video')
 const needsImage = computed(() => mode.value === 'image_to_image')
-const needsVideo = computed(() => mode.value === 'video_to_video')
 
 const disabled = computed(() => {
   if (!prompt.value.trim()) return true
   if (needsImage.value && !imageInput.value) return true
-  if (needsVideo.value && !videoFile.value) return true
   return false
 })
 const creditCost = computed(() => isVideoMode.value ? 50 : 8)
@@ -66,17 +64,7 @@ function pickMode(next: Mode) {
   resultUrl.value = null
 }
 
-function handleVideoChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  const f = input.files?.[0]
-  if (!f) return
-  if (f.size > 20 * 1024 * 1024) {
-    uiStore.showError(L('檔案超過 20 MB 上限', 'File exceeds the 20 MB limit', '20MB上限', '20MB 한도', 'Excede 20 MB'))
-    return
-  }
-  videoFile.value = f
-  videoPreviewUrl.value = URL.createObjectURL(f)
-}
+// handleVideoChange removed 2026-05-31 — V2V dropped.
 
 // 7 outfit-style style presets — these are RENDERED into the prompt
 // textarea on click so the user sees + can edit the canonical text.
@@ -112,25 +100,21 @@ async function generate() {
   resultUrl.value = null
   try {
     let imageUrl: string | undefined
-    let videoUrl: string | undefined
     if (needsImage.value) {
       const u = await ensureUploadedImage()
       if (!u) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
       imageUrl = u
     }
-    if (needsVideo.value) {
-      statusText.value = isZh.value ? '上傳影片中…' : 'Uploading video…'
-      const normalized = await uploadsApi.normalizeVideo(videoFile.value!)
-      videoUrl = normalized.video_url
-      statusText.value = isZh.value ? '生成中…通常 1-3 分鐘' : 'Generating… 1-3 min'
-    }
     const result = await toolsApi.claymation({
       mode: mode.value,
       prompt: prompt.value.trim(),
       imageUrl,
-      videoUrl,
       aspectRatio: aspectRatio.value,
     })
+    if (handleCardRequired(result, uiStore, router, isZh.value)) {
+      status.value = 'idle'
+      return
+    }
     if (result.success && (result.image_url || result.video_url || result.result_url)) {
       const url = result.image_url || result.video_url || result.result_url || ''
       resultUrl.value = url.startsWith('http') ? url : `${window.location.origin}${url}`
@@ -177,7 +161,6 @@ function gotoPricing() { router.push('/pricing') }
           <option value="text_to_image">{{ isZh ? '文字生圖 (Seedream 5 Lite)' : 'Text to Image — Seedream 5 Lite' }}</option>
           <option value="image_to_image">{{ isZh ? '圖生圖 (Flux Kontext)' : 'Image to Image — Flux Kontext' }}</option>
           <option value="text_to_video">{{ isZh ? '文字生影片 (Kling 3.0)' : 'Text to Video — Kling 3.0' }}</option>
-          <option value="video_to_video">{{ isZh ? '影片轉黏土 (Seedance 2.0 Fast)' : 'Video to Video — Seedance 2.0 Fast' }}</option>
         </select>
       </div>
 
@@ -187,8 +170,7 @@ function gotoPricing() { router.push('/pricing') }
         <select class="pp-select" disabled>
           <option v-if="mode === 'text_to_image'">txt2img</option>
           <option v-else-if="mode === 'image_to_image'">img2img</option>
-          <option v-else-if="mode === 'text_to_video'">txt2video</option>
-          <option v-else>img2video (first-frame)</option>
+          <option v-else>txt2video</option>
         </select>
       </div>
 
@@ -202,13 +184,7 @@ function gotoPricing() { router.push('/pricing') }
         />
       </div>
 
-      <!-- Video upload (V2V) -->
-      <div v-if="mode === 'video_to_video'">
-        <label class="pp-field-label">{{ isZh ? '來源影片 *' : 'Source Video *' }}</label>
-        <input type="file" accept="video/mp4" class="pp-input" @change="handleVideoChange" />
-        <p class="pp-field-help">{{ L('MP4 · 最大 20 MB。系統會抽出第一幀並重塑為黏土感影片。', 'MP4 · max 20 MB. We extract the first frame and re-render the clip with claymation styling.', 'MP4 · 最大20MB。', 'MP4 · 최대 20MB.', 'MP4 · máx 20 MB.') }}</p>
-        <video v-if="videoPreviewUrl" :src="videoPreviewUrl" class="w-full mt-2 rounded-lg" controls />
-      </div>
+      <!-- V2V video upload removed 2026-05-31 -->
 
       <!-- Prompt -->
       <div>

@@ -61,6 +61,8 @@ export const toolHubTiles: ToolHubTile[] = [
   // entirely). Thumbnails reuse hub assets that visually match.
   { id: 'room-redesign',       labelKey: 'tools.hub.tiles.roomRedesign',       to: '/tools/room-redesign',          thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
   { id: 'interior-templates',  labelKey: 'tools.hub.tiles.interiorTemplates',  to: '/tools/interior-templates',     thumb: `${T}/product-photography.png`, category: 'interior'    },
+  // Floor-plan → 3D growth video (Gemini → render → Kling 3.0 → opt. Trellis).
+  { id: 'floorplan-video',     labelKey: 'tools.hub.tiles.floorplanVideo',     to: '/tools/floorplan-to-video',     thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
   // Row 7 — NEW Qubico-backed tools added 2026-05-24 after the stability
   // probe. Only video-background-remove was healthy; sibling video tools
   // upscale + watermark-remove dropped because they timed out or 404'd.

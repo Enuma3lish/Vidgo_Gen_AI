@@ -440,6 +440,41 @@ NEW_SERVICE_PRICING_DATA = [
         "allowed_models": ["kling_2_1_master", "sora2_pro", "veo"],
         "description": "極致旗艦影片 - 單次成本 > $0.5 USD 的頂級模型"
     },
+
+    # ── Interior "floor plan grows into a 3D room" pipeline (2026-06-01) ──
+    # Gemini analysis + 3D render + Kling 3.0/Omni first→last-frame growth video,
+    # with an optional Trellis2 interactive 3D model. Priced off upstream cost:
+    # Kling Omni render (~$0.30) + Gemini render/analysis, Trellis2 (~$0.10).
+    {
+        "service_type": "interior_growth_video",
+        "display_name": "平面圖長出房間影片 (Kling 3.0)",
+        "credit_cost": 800,
+        "api_cost_usd": Decimal("0.350"),
+        "model_type": "kling_omni",
+        "tool_category": "premium",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 10,
+        "subscribers_only": True,
+        "min_plan": "pro",
+        "allowed_models": ["kling_omni"],
+        "description": "室內設計管線 - 平面圖渲染 + Kling 3.0 成長動畫影片"
+    },
+    {
+        "service_type": "interior_growth_video_3d",
+        "display_name": "平面圖長出房間影片 + 3D 模型",
+        "credit_cost": 950,
+        "api_cost_usd": Decimal("0.450"),
+        "model_type": "kling_omni",
+        "tool_category": "premium",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 10,
+        "subscribers_only": True,
+        "min_plan": "pro",
+        "allowed_models": ["kling_omni", "trellis"],
+        "description": "室內設計管線 - 成長影片 + Trellis2 可旋轉 3D 模型 (.glb)"
+    },
 ]
 
 

@@ -410,6 +410,115 @@ class GeminiService:
             logger.error(f"Gemini image description error: {e}")
             return {"success": False, "description": "", "error": str(e)}
 
+    async def analyze_floorplan_for_growth(
+        self,
+        image_url: str = None,
+        image_base64: str = None,
+        style_label: str = "",
+        room_type_label: str = "",
+        extra_prompt: str = "",
+        language: str = "en",
+    ) -> Dict[str, Any]:
+        """Vision analysis of a 2D architectural floor plan for the
+        "floor plan grows into a 3D room" pipeline (Step 1 — the brain).
+
+        Returns two engineered production prompts derived from THIS plan:
+          - render_prompt        → the photorealistic 3D interior END frame
+          - video_motion_prompt  → the Kling first→last-frame growth animation
+        plus structure_notes (layout/lighting read off the plan).
+
+        Fail-soft: on any error returns ``{"success": False, ...}`` so the
+        orchestrator can fall back to style/room templates and still run.
+        Locally (where ADC is unavailable) it retries with the standalone
+        Gemini API key so the analysis still works off Cloud Run.
+        """
+        if not self.api_key and not self._use_vertex:
+            return {"success": False, "error": "No Gemini credentials configured"}
+        if not image_url and not image_base64:
+            return {"success": False, "error": "No image provided"}
+
+        style_hint = f" The user picked this design style: {style_label}." if style_label else ""
+        room_hint = f" Primary room type: {room_type_label}." if room_type_label else ""
+        extra_hint = f" Extra user request to honour: {extra_prompt}." if extra_prompt else ""
+
+        instruction = (
+            "You are an architectural-visualization director. The attached image is a "
+            "2D floor plan (top-down blueprint)."
+            f"{style_hint}{room_hint}{extra_hint}\n\n"
+            "Read the plan: infer room layout, wall positions, door/window openings, and the "
+            "most likely natural-light direction. Then write TWO production prompts that stay "
+            "faithful to THIS exact layout.\n\n"
+            "Respond ONLY with minified JSON, exactly these keys:\n"
+            '{"render_prompt": "<one detailed English prompt to render ONE photorealistic '
+            "interior of this exact layout: walls ~2.8m tall, realistic materials, the chosen "
+            "style, soft natural daylight from the correct side, correct perspective, no people, "
+            'no dimension labels>", "video_motion_prompt": "<one English prompt for a smooth 4-5s '
+            "animation where the flat 2D plan EXTRUDES and GROWS upward into the finished 3D room: "
+            "walls rise from the plan lines, materials and textures spread across floor and walls, "
+            'furniture and lighting materialize in place, gentle cinematic camera push-in>", '
+            '"structure_notes": "<one sentence on the layout/light you detected>"}'
+        )
+
+        def _run(use_api_key: bool):
+            from google import genai
+            from google.genai import types
+            import base64 as b64
+
+            if use_api_key:
+                client = genai.Client(api_key=self.api_key)
+            else:
+                client = self._get_genai_client()
+
+            parts = []
+            if image_base64:
+                mime = "image/png" if image_base64.startswith("iVBOR") else "image/jpeg"
+                parts.append(types.Part.from_bytes(data=b64.b64decode(image_base64), mime_type=mime))
+            else:
+                img = httpx.get(image_url, timeout=30.0, follow_redirects=True)
+                img.raise_for_status()
+                ct = img.headers.get("content-type", "image/jpeg").split(";")[0]
+                parts.append(types.Part.from_bytes(data=img.content, mime_type=ct))
+            parts.append(types.Part.from_text(text=instruction))
+
+            return client.models.generate_content(
+                model=self.model_name,
+                contents=parts,
+                config=types.GenerateContentConfig(temperature=0.4, max_output_tokens=800),
+            )
+
+        async def _attempt(use_api_key: bool) -> Dict[str, Any]:
+            response = await asyncio.to_thread(_run, use_api_key)
+            text = (response.text or "").strip()
+            start, end = text.find("{"), text.rfind("}") + 1
+            if start >= 0 and end > start:
+                data = json.loads(text[start:end])
+                rp = (data.get("render_prompt") or "").strip()
+                vp = (data.get("video_motion_prompt") or "").strip()
+                if rp and vp:
+                    return {
+                        "success": True,
+                        "render_prompt": rp,
+                        "video_motion_prompt": vp,
+                        "structure_notes": (data.get("structure_notes") or "").strip(),
+                        "backend": "vertex" if (self._use_vertex and not use_api_key) else "api_key",
+                    }
+            return {"success": False, "error": "Gemini returned no usable prompts", "raw": text[:200]}
+
+        try:
+            return await _attempt(use_api_key=False)
+        except Exception as primary_exc:  # noqa: BLE001
+            # On Cloud Run ADC works and this never fires. Locally the Vertex
+            # client 401s (no ADC) — retry with the standalone API key so the
+            # analysis still works in dev.
+            if self.api_key:
+                try:
+                    return await _attempt(use_api_key=True)
+                except Exception as fallback_exc:  # noqa: BLE001
+                    logger.warning("Floorplan growth analysis failed (api-key fallback): %s", fallback_exc)
+                    return {"success": False, "error": str(fallback_exc)}
+            logger.warning("Floorplan growth analysis failed: %s", primary_exc)
+            return {"success": False, "error": str(primary_exc)}
+
     async def generate_effect_prompt_for_image(
         self,
         image_url: str = None,

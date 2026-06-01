@@ -59,6 +59,37 @@ def _is_transient_piapi_error(err: BaseException | str) -> bool:
     return any(hint in msg for hint in _TRANSIENT_PIAPI_ERROR_HINTS)
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Polling-timeout floors (seconds)
+# ─────────────────────────────────────────────────────────────────────────
+# Image generation finishes well under 10 min; video generation — especially
+# Kling 3.0/Omni, Veo 3.1 and Wan — routinely idles 8-15 min between PiAPI
+# status transitions. These constants make "video waits longer than image" a
+# STRUCTURAL guarantee instead of something every call site must remember: the
+# video methods raise any caller-supplied timeout UP TO the matching floor, so
+# a forgotten `timeout=` can never silently apply the image-length 600 s ceiling
+# to a video job. That leak was the root cause of intermittent Kling 3.0
+# "no result" aborts (e.g. the claymation T2V and most TaskType.I2V call sites
+# routed video with no explicit timeout → 600 s). A caller that needs even
+# longer can still pass a larger explicit `timeout` — the floor is a minimum,
+# never a cap. All three are env-overridable for ops tuning without a redeploy.
+IMAGE_GEN_TIMEOUT_SEC = int(os.getenv("IMAGE_GEN_TIMEOUT_SEC", "600"))
+VIDEO_GEN_TIMEOUT_SEC = int(os.getenv("VIDEO_GEN_TIMEOUT_SEC", "1200"))
+# Kling 3.0/Omni is the slowest tier (multimodal + audio/lip-sync); give the
+# premium path users pay 750 credits for extra headroom over the generic floor.
+KLING_OMNI_TIMEOUT_SEC = int(os.getenv("KLING_OMNI_TIMEOUT_SEC", "1800"))
+
+
+def _video_poll_timeout(params: Dict[str, Any], floor: int = VIDEO_GEN_TIMEOUT_SEC) -> int:
+    """Resolve a video job's poll timeout: the larger of the caller's explicit
+    ``timeout`` and the video floor. Guarantees video ≥ floor > image (600 s)."""
+    try:
+        requested = int(params.get("timeout") or 0)
+    except (TypeError, ValueError):
+        requested = 0
+    return max(requested, floor)
+
+
 class PiAPIProvider(BaseProvider):
     """
     PiAPI Provider - Primary provider for VidGo.
@@ -1024,9 +1055,11 @@ class PiAPIProvider(BaseProvider):
                 input_payload["motion_bucket_id"] = int(params["motion_bucket_id"])
 
         payload = {"model": model_id, "task_type": task_type, "input": input_payload}
-        # Honour caller's timeout (set to 1200 s for short-video / avatar
-        # in tools.py); default 600 s for ad-hoc internal callers.
-        max_wait = int(params.get("timeout") or 600)
+        # Video floor (1200 s) applies even when the caller forgets `timeout`.
+        # short-video / avatar pass 1200 explicitly; the many internal I2V call
+        # sites (demo, material, rescue, uploads) previously fell through to the
+        # 600 s image default and aborted long Wan/Veo renders mid-flight.
+        max_wait = _video_poll_timeout(params)
         # Retry transient PiAPI stalls (queue stall, rate limit, upload timeout)
         # on the SAME model before the provider_router falls back to Vertex/Veo
         # or Pollo. Without this, a one-off Seedance/Wan hiccup silently served
@@ -1172,7 +1205,7 @@ class PiAPIProvider(BaseProvider):
             }
 
         payload = {"model": model_id, "task_type": task_type, "input": input_payload}
-        max_wait = int(params.get("timeout") or 600)
+        max_wait = _video_poll_timeout(params)
         result = await self._submit_and_poll(payload, max_wait_seconds=max_wait)
 
         # Normalise output (same logic as image_to_video).
@@ -1286,7 +1319,16 @@ class PiAPIProvider(BaseProvider):
             "config": {"service_mode": "public"},
         }
 
-        max_wait = int(params.get("timeout") or 600)
+        # Tier-aware floor: Kling 3.0/Omni gets the higher 1800 s ceiling since
+        # it's the slowest (multimodal + audio); every other Kling version uses
+        # the generic 1200 s video floor. Either way a video job can never inherit
+        # the 600 s image-length default the way it did before this fix.
+        _kling_floor = (
+            KLING_OMNI_TIMEOUT_SEC
+            if (version == "3.0" or (params.get("tier") or "").lower() == "omni")
+            else VIDEO_GEN_TIMEOUT_SEC
+        )
+        max_wait = _video_poll_timeout(params, _kling_floor)
         result = await self._retry_transient(
             "kling_video_generation",
             lambda: self._submit_and_poll(payload, max_wait_seconds=max_wait),
@@ -1828,13 +1870,15 @@ class PiAPIProvider(BaseProvider):
     async def _submit_and_poll(
         self,
         payload: Dict[str, Any],
-        max_wait_seconds: int = 600,
+        max_wait_seconds: int = IMAGE_GEN_TIMEOUT_SEC,
     ) -> Dict[str, Any]:
         """Submit task and poll for result.
 
-        ``max_wait_seconds`` caps total polling time. Default 10 min; the
-        avatar / I2V / Kling video paths bump this to 1200 s (20 min) so
-        long Kling Omni / Veo / Wan jobs aren't aborted mid-render.
+        ``max_wait_seconds`` caps total polling time. Default is the image
+        floor (600 s); the video paths (image_to_video / text_to_video /
+        kling_video_generation) resolve their own higher floor via
+        ``_video_poll_timeout`` — 1200 s generic, 1800 s for Kling 3.0/Omni —
+        so long Kling Omni / Veo / Wan jobs aren't aborted mid-render.
         """
         # Submit task
         try:

@@ -10,8 +10,9 @@ AI-powered interior design using Gemini 2.5 Flash Image:
 
 Access: All users (demo) or Subscribers (full features)
 """
+import logging
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,14 +20,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_current_active_user, get_current_user_optional, is_subscribed_user
 from app.core.upload_validation import ROOM_REDESIGN_IMAGE_DIMENSION_RULES, validate_uploaded_content
 from app.models.user import User
+from app.models.user_generation import UserGeneration
+from app.models.material import ToolType
 from app.providers.provider_router import TaskType, get_provider_router
 from app.services.interior_design_service import (
     get_interior_design_service,
     DESIGN_STYLES,
     ROOM_TYPES
 )
+from app.services.interior_growth_service import get_interior_growth_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/interior", tags=["interior"])
+
+# ── Floor-plan → 3D-growth-video pipeline pricing ──────────────────────────
+# Fallback credit costs; a ServicePricing row keyed by the same service_type
+# overrides these per the deduction-firewall pattern in
+# tools._check_and_deduct_credits, so ops can retune without a redeploy.
+#   Tier "video"     = Gemini analysis + 3D render + Kling 3.0/Omni growth video
+#   Tier "video_3d"  = + Trellis2 interactive GLB model
+GROWTH_VIDEO_CREDITS = 800
+GROWTH_VIDEO_3D_CREDITS = 950
+GROWTH_3D_DELTA = GROWTH_VIDEO_3D_CREDITS - GROWTH_VIDEO_CREDITS  # refunded if 3D add-on yields no model
 
 
 # ============ Schemas ============
@@ -121,6 +137,40 @@ class Generate3DResponse(BaseModel):
     preview_image_url: Optional[str] = None
     preview_video_url: Optional[str] = None
     task_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+class FloorplanToVideoRequest(BaseModel):
+    """Floor-plan → 3D-growth-video pipeline request."""
+    image_url: str = Field(..., description="Public URL of the 2D architectural floor plan image.")
+    style_id: Optional[str] = Field("modern_minimalist", description="Interior design style (see GET /interior/styles).")
+    room_type: Optional[str] = Field("living_room", description="Primary room type hint (see GET /interior/room-types).")
+    prompt: Optional[str] = Field(None, description="Optional extra request (materials, mood, dimensions).")
+    result_tier: str = Field(
+        "video",
+        pattern="^(video|video_3d)$",
+        description="What the user wants: 'video' = render + Kling 3.0 growth animation; "
+                    "'video_3d' = also reconstruct an interactive 3D model (.glb).",
+    )
+    duration: int = Field(5, ge=5, le=10, description="Growth-video length in seconds (5 or 10).")
+    model_version: str = Field("v2", description="Trellis version for the 3D model when result_tier='video_3d'.")
+    language: Optional[str] = Field("en", description="Language for the Gemini analysis ('en' | 'zh').")
+
+
+class FloorplanToVideoResponse(BaseModel):
+    success: bool
+    result_tier: str
+    render_image_url: Optional[str] = None       # photorealistic 3D render (video end frame)
+    video_url: Optional[str] = None              # Kling 3.0 growth animation MP4
+    model_url: Optional[str] = None              # interactive .glb (video_3d tier)
+    model_preview_video_url: Optional[str] = None
+    render_prompt: Optional[str] = None
+    video_motion_prompt: Optional[str] = None
+    structure_notes: Optional[str] = None
+    credits_used: int = 0
+    steps: Optional[Dict[str, Any]] = None       # per-stage status map
+    stage: Optional[str] = None                  # failing stage on error
+    model_3d_error: Optional[str] = None         # set when 3D add-on failed but video succeeded
     error: Optional[str] = None
 
 
@@ -670,6 +720,199 @@ async def generate_3d_from_floorplan(
         preview_image_url=rendered_url,
         preview_video_url=output.get("video_url") or output.get("combined_video"),
         task_id=result.get("task_id"),
+    )
+
+
+@router.get("/floorplan-options")
+async def floorplan_to_video_options():
+    """Result tiers + credit costs + styles for the floor-plan growth pipeline.
+
+    Lets the frontend render the "what result do you want?" picker. Credit
+    costs shown are the fallback constants; the live charge follows any
+    ServicePricing override for the same service_type.
+    """
+    return {
+        "tiers": [
+            {
+                "id": "video",
+                "name": "Growth Video",
+                "name_zh": "平面圖長出房間影片",
+                "description": "Gemini analyses your floor plan, renders a photorealistic 3D interior, "
+                               "then Kling 3.0 animates the 2D plan growing into the finished room (MP4 + render image).",
+                "service_type": "interior_growth_video",
+                "credits": GROWTH_VIDEO_CREDITS,
+                "outputs": ["render_image", "growth_video"],
+            },
+            {
+                "id": "video_3d",
+                "name": "Growth Video + 3D Model",
+                "name_zh": "成長影片 + 3D 模型",
+                "description": "Everything in Growth Video, plus a rotatable interactive 3D model (.glb) "
+                               "reconstructed from the rendered room.",
+                "service_type": "interior_growth_video_3d",
+                "credits": GROWTH_VIDEO_3D_CREDITS,
+                "outputs": ["render_image", "growth_video", "model_3d"],
+            },
+        ],
+        "video_engine": "kling_3.0_omni",
+        "styles": [
+            {"id": s["id"], "name": s["name"], "name_zh": s["name_zh"]}
+            for s in DESIGN_STYLES.values()
+        ],
+        "room_types": [
+            {"id": r["id"], "name": r["name"], "name_zh": r["name_zh"]}
+            for r in ROOM_TYPES.values()
+        ],
+    }
+
+
+@router.post("/floorplan-to-video")
+async def floorplan_to_video(
+    request: FloorplanToVideoRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Floor-plan → "grows into a 3D room" video pipeline (subscribers + superusers).
+
+    Gemini Vision → Imagen/Gemini render → Kling 3.0/Omni first→last-frame growth
+    video → (optional) Trellis2 interactive 3D model. The user picks how far the
+    pipeline runs via ``result_tier``; credits are charged per tier and refunded
+    on failure (and partially refunded if a requested 3D model can't be built).
+
+    The pipeline can run 10-20 min (Kling 3.0 + Trellis), so the long work is
+    streamed behind a 25 s keep-alive heartbeat — the same mechanism /short-video
+    uses to survive Cloudflare / GCLB / Cloud Run idle-connection timeouts. Auth
+    and validation are checked up front so they still return real HTTP statuses;
+    the final JSON body matches FloorplanToVideoResponse (it has leading-whitespace
+    that JSON.parse / httpx .json() ignore).
+    """
+    # Fast pre-checks BEFORE streaming so genuine 4xx statuses are preserved.
+    if not is_subscribed_user(current_user) and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Floor-plan growth video requires an active subscription",
+        )
+    if not request.image_url.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Floor plan image URL is required")
+
+    async def _work() -> Dict[str, Any]:
+        resp = await _floorplan_to_video_inner(request, current_user, db)
+        return resp.model_dump() if hasattr(resp, "model_dump") else resp
+
+    from app.api.v1.tools import _stream_with_heartbeat
+    return _stream_with_heartbeat(_work)
+
+
+async def _floorplan_to_video_inner(
+    request: "FloorplanToVideoRequest",
+    current_user: User,
+    db: AsyncSession,
+) -> FloorplanToVideoResponse:
+    """Run the floor-plan growth pipeline (credits + orchestration + record).
+    Returns a FloorplanToVideoResponse; the caller streams it with heartbeats.
+    """
+    include_3d = request.result_tier == "video_3d"
+    service_type = "interior_growth_video_3d" if include_3d else "interior_growth_video"
+    cost = GROWTH_VIDEO_3D_CREDITS if include_3d else GROWTH_VIDEO_CREDITS
+    is_admin = bool(getattr(current_user, "is_superuser", False))
+
+    # Credit deduction reuses the platform's deduction firewall (admins bypass,
+    # ServicePricing overrides the fallback `cost`). Imported lazily to avoid a
+    # tools.py ↔ interior.py circular import at module load.
+    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits
+
+    ok, err = await _check_and_deduct_credits(db, current_user, cost, service_type)
+    if not ok:
+        return FloorplanToVideoResponse(success=False, result_tier=request.result_tier, error=err)
+
+    try:
+        result = await get_interior_growth_service().run(
+            floorplan_url=request.image_url,
+            style_id=request.style_id,
+            room_type=request.room_type,
+            extra_prompt=request.prompt or "",
+            include_3d=include_3d,
+            duration=request.duration,
+            model_version=request.model_version,
+            language=request.language or "en",
+        )
+    except Exception as exc:
+        await _refund_credits(db, current_user, cost, service_type)
+        logger.error("floorplan-to-video pipeline raised: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc) or "Floor-plan growth pipeline failed",
+        ) from exc
+
+    if not result.get("success"):
+        await _refund_credits(db, current_user, cost, service_type)
+        return FloorplanToVideoResponse(
+            success=False,
+            result_tier=request.result_tier,
+            render_image_url=result.get("render_image_url"),
+            stage=result.get("stage"),
+            steps=result.get("steps"),
+            error=result.get("error"),
+        )
+
+    credits_used = 0 if is_admin else cost
+    # Partial refund: the user paid for a 3D model that couldn't be produced.
+    if include_3d and not result.get("model_url") and not is_admin:
+        await _refund_credits(db, current_user, GROWTH_3D_DELTA, service_type)
+        credits_used = cost - GROWTH_3D_DELTA
+
+    prompts = result.get("prompts") or {}
+
+    # Best-effort history record — never break the response on a persistence error.
+    try:
+        user_gen = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.ROOM_REDESIGN,
+            input_image_url=request.image_url,
+            input_params={
+                "pipeline": "floorplan_to_video",
+                "result_tier": request.result_tier,
+                "style_id": request.style_id,
+                "room_type": request.room_type,
+                "video_engine": "kling_3.0_omni",
+            },
+            input_text=prompts.get("video_motion_prompt"),
+            result_image_url=result.get("render_image_url"),
+            result_video_url=result.get("video_url"),
+            result_metadata={
+                "model_url": result.get("model_url"),
+                "model_preview_video_url": result.get("model_preview_video_url"),
+                "render_prompt": prompts.get("render_prompt"),
+                "video_motion_prompt": prompts.get("video_motion_prompt"),
+                "structure_notes": prompts.get("structure_notes"),
+                "steps": result.get("steps"),
+            },
+            credits_used=credits_used,
+        )
+        if hasattr(user_gen, "set_expiry"):
+            user_gen.set_expiry()
+        db.add(user_gen)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("floorplan-to-video: generation record skipped: %s", exc)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+
+    return FloorplanToVideoResponse(
+        success=True,
+        result_tier=request.result_tier,
+        render_image_url=result.get("render_image_url"),
+        video_url=result.get("video_url"),
+        model_url=result.get("model_url"),
+        model_preview_video_url=result.get("model_preview_video_url"),
+        render_prompt=prompts.get("render_prompt"),
+        video_motion_prompt=prompts.get("video_motion_prompt"),
+        structure_notes=prompts.get("structure_notes"),
+        credits_used=credits_used,
+        steps=result.get("steps"),
+        model_3d_error=result.get("model_3d_error"),
     )
 
 

@@ -102,6 +102,54 @@ export interface Generate3DResponse {
   error?: string
 }
 
+// ── Floor-plan → 3D-growth-video pipeline ──────────────────────────────────
+export type GrowthTier = 'video' | 'video_3d'
+
+export interface FloorplanToVideoRequest {
+  image_url: string
+  style_id?: string
+  room_type?: string
+  prompt?: string
+  result_tier: GrowthTier
+  duration?: 5 | 10
+  model_version?: 'v1' | 'v2'
+  language?: 'en' | 'zh'
+}
+
+export interface FloorplanToVideoResponse {
+  success: boolean
+  result_tier: GrowthTier
+  render_image_url?: string       // photorealistic 3D render (video end frame)
+  video_url?: string              // Kling 3.0 growth animation MP4
+  model_url?: string              // interactive .glb (video_3d tier) → <ThreeViewer>
+  model_preview_video_url?: string
+  render_prompt?: string
+  video_motion_prompt?: string
+  structure_notes?: string
+  credits_used?: number
+  steps?: Record<string, string>
+  stage?: string
+  model_3d_error?: string
+  error?: string
+}
+
+export interface FloorplanTier {
+  id: GrowthTier
+  name: string
+  name_zh: string
+  description: string
+  service_type: string
+  credits: number
+  outputs: string[]
+}
+
+export interface FloorplanOptions {
+  tiers: FloorplanTier[]
+  video_engine: string
+  styles: DesignStyle[]
+  room_types: RoomType[]
+}
+
 // API Functions
 export const interiorApi = {
   /**
@@ -235,6 +283,31 @@ export const interiorApi = {
     // reasoning as /3d-model above.
     const response = await apiClient.post('/api/v1/interior/3d-from-floorplan', request, {
       timeout: 900000 // 15 minutes
+    })
+    return response.data
+  },
+
+  /**
+   * Result tiers + credit costs + style/room catalog for the floor-plan
+   * growth-video picker. Drives the "what result do you want?" UI.
+   */
+  async getFloorplanOptions(): Promise<FloorplanOptions> {
+    const response = await apiClient.get('/api/v1/interior/floorplan-options')
+    return response.data
+  },
+
+  /**
+   * Floor-plan → "grows into a 3D room" video pipeline.
+   * Gemini analysis → 3D render → Kling 3.0/Omni first→last-frame growth video
+   * → (optional) Trellis2 interactive 3D model.
+   */
+  async floorplanToVideo(request: FloorplanToVideoRequest): Promise<FloorplanToVideoResponse> {
+    // Kling 3.0/Omni polling caps at 1800s server-side and the video_3d tier
+    // adds a Trellis pass afterwards, so give the request a generous 40-min
+    // wall-clock budget. The backend streams a 25s keep-alive heartbeat so
+    // proxies (Cloudflare / GCLB) hold the connection open in the meantime.
+    const response = await apiClient.post('/api/v1/interior/floorplan-to-video', request, {
+      timeout: 2_400_000 // 40 minutes
     })
     return response.data
   }

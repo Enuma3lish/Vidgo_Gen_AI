@@ -64,6 +64,16 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
+  // Floor plan → 3D growth video (Gemini → render → Kling 3.0 → opt. Trellis).
+  // Subscriber/superuser gated server-side; the page itself loads for all so
+  // visitors can see the tool before the auth wall on Generate.
+  {
+    path: '/tools/floorplan-to-video',
+    name: 'floorplan-to-video',
+    component: () => import('@/views/tools/FloorplanToVideo.vue'),
+    meta: { requiresAuth: false }
+  },
+
   // Interior Templates Gallery — Pippit-style browsable style cards
   // (added 2026-05-24). Clicking a card deeplinks to /tools/room-redesign
   // with style + space_kind preselected via query params.

@@ -9,6 +9,7 @@
 #    bash gcp/deploy.sh --step 3              # 只執行第 3 步
 #    bash gcp/deploy.sh --from 5              # 從第 5 步開始
 #    bash gcp/deploy.sh --step secrets        # 只執行 secrets 步驟
+#    bash gcp/deploy.sh --step fixmedia        # 只修復 GCS 影片 Content-Type
 #
 #  修改指南:
 #    1. 修改下方 ══ CONFIG ══ 區塊的變數
@@ -819,10 +820,47 @@ if should_run 12 "armor"; then
 fi
 
 ###############################################################################
-# STEP 13: Final Summary
+# STEP 13: Repair growth videos mis-stored as images in GCS
+#
+# Backfill for the KLING_VIDEO media-type fix (2026-06-02): growth MP4s that
+# were persisted under media_type="image" are served by GCS with an image
+# Content-Type, so the frontend <video> won't play them. This rewrites the
+# Content-Type IN PLACE (URLs unchanged) for any object whose bytes are really
+# a video. Runs inside the backend image (built in STEP 9) so it reuses the
+# google-cloud-storage dep and the repaired script. Best-effort: a failure here
+# must not abort the deploy.
 ###############################################################################
-if should_run 13 "summary"; then
-  step 13 "部署完成總結"
+if should_run 13 "fixmedia"; then
+  step 13 "修復 GCS 影片 Content-Type (growth video backfill)"
+
+  IMAGE_TAG=$(cat /tmp/vidgo-image-tag 2>/dev/null || echo "latest")
+  BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${BACKEND_SERVICE}:${IMAGE_TAG}"
+
+  # The script authenticates to GCS via Application Default Credentials. Mount
+  # the operator's gcloud config (which holds ADC) read-only into the container.
+  GCLOUD_CONFIG_DIR="${HOME}/.config/gcloud"
+  if [[ ! -f "${GCLOUD_CONFIG_DIR}/application_default_credentials.json" ]]; then
+    warn "No ADC found at ${GCLOUD_CONFIG_DIR}/application_default_credentials.json."
+    warn "Run 'gcloud auth application-default login', then re-run: bash gcp/deploy.sh --step fixmedia"
+  else
+    log "Repairing growth-video Content-Type in gs://${BUCKET_NAME} ..."
+    docker run --rm \
+      -e GCS_BUCKET="${BUCKET_NAME}" \
+      -e GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
+      -e CLOUDSDK_CORE_PROJECT="${PROJECT_ID}" \
+      -v "${GCLOUD_CONFIG_DIR}:/root/.config/gcloud:ro" \
+      --entrypoint python \
+      "${BACKEND_IMAGE}" \
+      scripts/fix_growth_video_content_type.py --apply \
+      || warn "growth-video Content-Type backfill failed (non-fatal) — see output above."
+  fi
+fi
+
+###############################################################################
+# STEP 14: Final Summary
+###############################################################################
+if should_run 14 "summary"; then
+  step 14 "部署完成總結"
 
   echo ""
   echo -e "${BOLD}━━━ 基礎設施 ━━━${NC}"

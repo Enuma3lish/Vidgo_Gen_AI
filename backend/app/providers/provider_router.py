@@ -514,7 +514,11 @@ class ProviderRouter:
         return result
 
     def _task_to_media_type(self, task_type: TaskType) -> str:
-        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.AVATAR}
+        # KLING_VIDEO must be classified as video: without it the Kling growth
+        # MP4 was persisted under media_type="image" and, when the Kling CDN
+        # returned octet-stream, stored as image/png — the <video> element then
+        # silently failed to play and the result appeared blank with no error.
+        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.AVATAR, TaskType.KLING_VIDEO}
         if task_type in video_tasks:
             return "video"
         if task_type == TaskType.INTERIOR_3D:

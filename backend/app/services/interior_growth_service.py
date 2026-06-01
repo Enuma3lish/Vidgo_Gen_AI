@@ -203,17 +203,24 @@ class InteriorGrowthService:
         steps["render"] = "ok"
 
         # ── Step 3: Kling 3.0/Omni first→last frame growth video ────────────
-        kling = await router.route(
-            TaskType.KLING_VIDEO,
-            {
-                "prompt": motion_prompt,
-                "image_url": public_floorplan,      # first frame: 2D plan
-                "image_tail_url": render_public,    # last frame: rendered room
-                "tier": "omni",                     # Kling 3.0 (multimodal + audio)
-                "duration": int(duration),
-                "timeout": KLING_OMNI_TIMEOUT_SEC,  # 1800s — premium tier headroom
-            },
-        )
+        # router.route() RAISES (it doesn't return success=False) when every
+        # provider in the chain fails, so wrap it to honor this method's
+        # "never raises for an upstream stage failure" contract.
+        try:
+            kling = await router.route(
+                TaskType.KLING_VIDEO,
+                {
+                    "prompt": motion_prompt,
+                    "image_url": public_floorplan,      # first frame: 2D plan
+                    "image_tail_url": render_public,    # last frame: rendered room
+                    "tier": "omni",                     # Kling 3.0 (multimodal + audio)
+                    "duration": int(duration),
+                    "timeout": KLING_OMNI_TIMEOUT_SEC,  # 1800s — premium tier headroom
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[InteriorGrowth] Kling growth video raised: %s", exc)
+            kling = {"success": False, "error": str(exc)}
         if not kling.get("success"):
             return {
                 "success": False,
@@ -228,6 +235,20 @@ class InteriorGrowthService:
             or (kling.get("output") or {}).get("video_url")
             or kling.get("output_url")
         )
+        # A success response with no resolvable video URL must NOT be reported
+        # as success — otherwise the endpoint charges full credits and the
+        # frontend renders a blank result (its <video> has an empty src).
+        if not video_url:
+            logger.error("[InteriorGrowth] Kling reported success but no video URL: keys=%s",
+                         list((kling.get("output") or {}).keys()))
+            return {
+                "success": False,
+                "stage": "video",
+                "error": "Kling returned no video URL",
+                "render_image_url": render_public,
+                "prompts": prompts,
+                "steps": steps,
+            }
         steps["video"] = "ok"
 
         result: Dict[str, Any] = {
@@ -239,11 +260,19 @@ class InteriorGrowthService:
         }
 
         # ── Step 4 (optional): Trellis2 interactive 3D model ────────────────
+        # This step is strictly optional: a failure here must not discard the
+        # already-generated growth video. router.route() RAISES on failure, so
+        # catch it and fall through to the graceful "model_3d failed" branch
+        # (the endpoint then returns the video + a partial 3D refund).
         if include_3d:
-            td = await router.route(
-                TaskType.INTERIOR_3D,
-                {"image_url": render_public, "model_version": model_version or "v2"},
-            )
+            try:
+                td = await router.route(
+                    TaskType.INTERIOR_3D,
+                    {"image_url": render_public, "model_version": model_version or "v2"},
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("[InteriorGrowth] Trellis 3D raised: %s", exc)
+                td = {"success": False, "error": str(exc)}
             if td.get("success"):
                 out = td.get("output") or {}
                 result["model_url"] = out.get("model_url") or out.get("model_file") or out.get("url")

@@ -20,6 +20,14 @@
 set -euo pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 確保從專案根目錄執行 (Anchor to repo root so build paths resolve regardless of CWD)
+# This script lives in gcp/, so the repo root is its parent directory.
+# ═══════════════════════════════════════════════════════════════════════════════
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${REPO_ROOT}"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CONFIG — 請修改這裡 (Modify these values)
 # ═══════════════════════════════════════════════════════════════════════════════
 

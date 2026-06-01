@@ -440,7 +440,11 @@
       "Bash(echo \"exit $?\")",
       "Bash(bash *)",
       "Bash(echo \"exit:$?\")",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(awk 'NR>=435 && /^\\\\]/{print NR\": \"$0; exit} NR>=435 && /service_type/{print NR\": \"$0}' scripts/seed_new_pricing_tiers.py)",
+      "Bash(echo \"=== exit status: $? ===\")",
+      "Bash(~/google-cloud-sdk/bin/gcloud --version)",
+      "Bash(~/google-cloud-sdk/bin/gcloud auth *)"
     ],
     "additionalDirectories": [
       "/private/tmp"

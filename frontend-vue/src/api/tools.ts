@@ -12,6 +12,10 @@ export interface ToolResponse {
   credits_used: number
   message?: string
   results?: any[]
+  // Machine-readable failure reason. "subscription_card_required" means the
+  // request used a custom/edited prompt but the account isn't a subscriber
+  // with a bound card — the UI should pop a subscribe + add-payment CTA.
+  error_code?: string
   // True when backend short-circuited to a static premium fallback
   // (non-subscribers on Midjourney/Kling/Luma/etc). The image/video
   // shown is NOT a real generation from the user's prompt.
@@ -221,28 +225,16 @@ export const toolsApi = {
     return response.data
   },
 
-  async videoTransform(videoUrl: string, prompt: string, style?: string): Promise<ToolResponse> {
-    const response = await apiClient.post(
-      '/api/v1/tools/video-transform',
-      {
-        video_url: videoUrl,
-        prompt,
-        style,
-      },
-      { timeout: GENERATION_TIMEOUT_MS }
-    )
-    return response.data
-  },
+  // videoTransform() removed 2026-05-31 — V2V dropped repo-wide.
 
   // Claymation AI — multi-mode (T2I / I2I / T2V / V2V) via PiAPI.
   // Backend dispatches by mode: Seedream 5 Lite (image) / Kling Omni
   // 3.0 (T2V) / Seedance 2.0 Fast (V2V). User prompt reaches the model
   // verbatim with only a baseline "claymation style" prefix.
   async claymation(params: {
-    mode: 'text_to_image' | 'image_to_image' | 'text_to_video' | 'video_to_video'
+    mode: 'text_to_image' | 'image_to_image' | 'text_to_video'
     prompt: string
     imageUrl?: string
-    videoUrl?: string
     aspectRatio?: string
   }): Promise<ToolResponse> {
     const response = await apiClient.post(
@@ -251,7 +243,6 @@ export const toolsApi = {
         mode: params.mode,
         prompt: params.prompt,
         image_url: params.imageUrl,
-        video_url: params.videoUrl,
         aspect_ratio: params.aspectRatio ?? '1:1',
       },
       { timeout: GENERATION_TIMEOUT_MS }

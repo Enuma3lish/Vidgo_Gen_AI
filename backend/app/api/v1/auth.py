@@ -88,23 +88,33 @@ async def login(
     redis_client = await get_redis_client()
     abuse = AbusePreventionService(redis_client)
     client_ip = get_client_ip(request)
-    await _enforce_abuse_check(await abuse.check_login_ip(client_ip))
-    recaptcha = await abuse.verify_recaptcha_token(login_data.recaptcha_token, client_ip)
-    if redis_client:
-        await redis_client.close()
-    if not recaptcha.allowed:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=recaptcha.message)
+    try:
+        await _enforce_abuse_check(await abuse.check_login_ip(client_ip))
+        # Per-account lockout: block early when this account is temporarily
+        # locked after repeated failures — stops credential-stuffing that
+        # rotates IPs against a single account (which the per-IP limit misses).
+        await _enforce_abuse_check(await abuse.check_login_account(login_data.email))
+        recaptcha = await abuse.verify_recaptcha_token(login_data.recaptcha_token, client_ip)
+        if not recaptcha.allowed:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=recaptcha.message)
 
-    # Find user by email
-    result = await db.execute(select(User).where(User.email == login_data.email))
-    user = result.scalars().first()
+        # Find user by email
+        result = await db.execute(select(User).where(User.email == login_data.email))
+        user = result.scalars().first()
 
-    # Verify credentials
-    if not user or not security.verify_password(login_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
-        )
+        # Verify credentials
+        if not user or not security.verify_password(login_data.password, user.hashed_password):
+            await abuse.record_login_failure(login_data.email)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password"
+            )
+
+        # Correct password → clear the per-account failure counter.
+        await abuse.reset_login_failures(login_data.email)
+    finally:
+        if redis_client:
+            await redis_client.close()
 
     # Check if email is verified
     if not user.email_verified:

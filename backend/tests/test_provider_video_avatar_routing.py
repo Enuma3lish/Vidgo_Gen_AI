@@ -13,25 +13,7 @@ from app.providers.provider_router import ProviderRouter, TaskType
 pytestmark = pytest.mark.asyncio
 
 
-async def test_v2v_routes_to_piapi_rest_then_vertex() -> None:
-    """V2V routing post-MCP-removal (2026-05-26).
-
-    Both MCP providers were deleted; PiAPI REST's video_style_transfer
-    method now delegates to Seedance I2V via the first frame
-    (see piapi_provider.video_style_transfer). Routing chain trims to
-    piapi → vertex_ai per ROUTING_CONFIG.
-    """
-    router = ProviderRouter()
-    try:
-        providers = router._get_providers_for_task(
-            TaskType.V2V,
-            {"video_url": "https://cdn.example.com/input.mp4", "prompt": "warm cinematic grade"},
-        )
-    finally:
-        await router.close()
-
-    assert providers[0] == "piapi"
-    assert "vertex_ai" in providers
+# test_v2v_routes_to_piapi_rest_then_vertex removed 2026-05-31 — V2V dropped.
 
 
 async def test_piapi_avatar_accepts_text_alias_and_normalizes_video_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,25 +62,8 @@ async def test_piapi_avatar_accepts_text_alias_and_normalizes_video_url(monkeypa
     assert result["output"]["video_url"] == "https://cdn.example.com/avatar.mp4"
 
 
-async def test_piapi_video_style_transfer_returns_soft_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    provider = PiAPIProvider()
-
-    async def fail_if_called(payload: dict[str, Any]) -> dict[str, Any]:
-        raise AssertionError(f"unsupported PiAPI V2V payload should not be submitted: {payload}")
-
-    monkeypatch.setattr(provider, "_submit_and_poll", fail_if_called)
-    try:
-        result = await provider.video_style_transfer(
-            {
-                "video_url": "https://cdn.example.com/input.mp4",
-                "prompt": "make it cinematic",
-            }
-        )
-    finally:
-        await provider.close()
-
-    assert result["success"] is False
-    assert "wan21-vace" in result["error"]
+# test_piapi_video_style_transfer_returns_soft_failure removed 2026-05-31 —
+# V2V dropped repo-wide (piapi_provider.video_style_transfer no longer exists).
 
 
 async def test_pollo_effects_sends_prompt_style_and_default_effect(monkeypatch: pytest.MonkeyPatch) -> None:

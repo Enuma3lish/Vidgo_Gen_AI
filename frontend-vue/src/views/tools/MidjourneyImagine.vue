@@ -20,6 +20,7 @@ import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import { downloadAsset } from '@/utils/downloadAsset'
 import { extractApiError } from '@/utils/apiError'
+import { handleCardRequired } from '@/utils/toolGate'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -77,6 +78,10 @@ async function generate() {
       processMode: processMode.value,
       model: modelId.value,
     })
+    if (handleCardRequired(result, uiStore, router, isZh.value)) {
+      status.value = 'idle'
+      return
+    }
     if (result.success && (result.image_url || result.result_url)) {
       resultUrl.value = result.image_url || result.result_url || null
       status.value = 'done'

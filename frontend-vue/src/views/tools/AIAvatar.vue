@@ -19,6 +19,7 @@ import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import { dataURItoBlob } from '@/utils/dataUri'
 import { downloadAsset } from '@/utils/downloadAsset'
+import { handleCardRequired } from '@/utils/toolGate'
 import { extractApiError } from '@/utils/apiError'
 
 const { t, locale } = useI18n()
@@ -75,6 +76,18 @@ watch(locale, () => {
   if (selectedScriptPresetId.value) script.value = scriptPresetPromptFor(selectedScriptPresetId.value)
 })
 
+// Editing the script away from the chosen preset clears the preset id, so a
+// custom script is gated (subscription + bound card) while an unmodified
+// preset stays free.
+watch(script, (val) => {
+  if (selectedScriptPresetId.value && val.trim() !== scriptPresetPromptFor(selectedScriptPresetId.value).trim()) {
+    selectedScriptPresetId.value = ''
+  }
+})
+const usingScriptPreset = computed(() =>
+  !!selectedScriptPresetId.value && script.value.trim() === scriptPresetPromptFor(selectedScriptPresetId.value).trim()
+)
+
 async function loadVoices() {
   try {
     const resp = await apiClient.get(`/api/v1/tools/avatar/voices?language=${language.value}`)
@@ -97,10 +110,9 @@ async function ensureImageUrl(): Promise<string | null> {
 
 async function generate() {
   if (disabled.value || status.value === 'running') return
-  if (isDemoUser.value) {
-    uiStore.showInfo(L('請訂閱以使用此工具', 'Please subscribe to use this tool', 'サブスク登録してください', '구독해 주세요', 'Suscríbete'))
-    return
-  }
+  // Backend governs access: a free account using an unmodified preset script
+  // gets the cached example; a custom script returns
+  // 'subscription_card_required', handled below.
   status.value = 'running'
   statusText.value = isZh.value ? '生成中…通常 2-5 分鐘' : 'Generating… typically 2-5 min'
   resultUrl.value = null
@@ -112,8 +124,13 @@ async function generate() {
       script: script.value.trim(),
       voice_id: voiceId.value || undefined,
       language: language.value,
+      prompt_id: usingScriptPreset.value ? selectedScriptPresetId.value : undefined,
       locale: String(locale.value || ''),
     })
+    if (handleCardRequired(result, uiStore, router, isZh.value)) {
+      status.value = 'idle'
+      return
+    }
     if (result.success && (result.video_url || result.result_url)) {
       resultUrl.value = result.video_url || result.result_url || null
       status.value = 'done'
@@ -151,7 +168,7 @@ function gotoPricing() { router.push('/pricing') }
     :credit-cost="creditCost"
     :generate-label="isZh ? '生成影片' : 'Generate'"
     :generate-label-running="isZh ? '生成中…' : 'Generating…'"
-    :disabled="disabled || isDemoUser"
+    :disabled="disabled"
     @generate="generate"
   >
     <template #inputs>
@@ -244,7 +261,9 @@ function gotoPricing() { router.push('/pricing') }
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
-        {{ isZh ? '訂閱後即可使用。' : 'Subscribe to use this tool.' }}
+        {{ isZh
+          ? '免費帳號可用範例腳本下拉選單一鍵生成；自訂腳本需訂閱並綁定信用卡。'
+          : 'Free accounts can generate from the example scripts; custom scripts require a subscription with a bound card.' }}
         <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
       </p>
     </template>

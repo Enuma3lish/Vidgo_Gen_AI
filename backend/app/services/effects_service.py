@@ -384,34 +384,7 @@ class VidGoEffectsService:
         if not has_access:
             return False, {"error": message}
 
-        try:
-            # Call PiAPI V2V for video enhancement
-            result = await self.router.route(
-                TaskType.V2V,
-                {
-                    "video_url": video_url,
-                    "prompt": "high quality enhanced video"
-                }
-            )
-
-            output_url = result.get("video_url") or result.get("output_url")
-            if output_url:
-                if not await self._is_superuser(user_id):
-                    credit_service = CreditService(self.db)
-                    await credit_service.deduct_credits(
-                        user_id=user_id,
-                        amount=12,  # vidgo_video_pro costs 12 credits
-                        service_type=service_type,
-                        description=f"VidGo Video Pro - {enhancement_type}"
-                    )
-
-                return True, {
-                    "output_url": output_url,
-                    "enhancement": enhancement_type,
-                    "credits_used": 12
-                }
-            else:
-                return False, {"error": result.get("error", "Video enhancement failed")}
-
-        except Exception as e:
-            return False, {"error": str(e)}
+        # V2V video enhancement removed 2026-05-31 — TaskType.V2V no longer
+        # exists. The VidGo Video Pro path is disabled until a replacement
+        # video-enhancement provider is wired in.
+        return False, {"error": "Video Pro enhancement is temporarily unavailable."}

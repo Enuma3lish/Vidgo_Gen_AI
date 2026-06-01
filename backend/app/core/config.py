@@ -162,6 +162,11 @@ class Settings(BaseSettings):
     ABUSE_REGISTRATION_IP_DAILY_LIMIT: int = 5
     ABUSE_LOGIN_IP_HOURLY_LIMIT: int = 10
     ABUSE_GENERATION_USER_PER_MINUTE_LIMIT: int = 10
+    # Per-account lockout: after N consecutive failed logins for one email,
+    # lock that account for the window below (seconds). Set MAX_FAILURES=0 to
+    # disable. Resets on a correct password.
+    ABUSE_LOGIN_ACCOUNT_MAX_FAILURES: int = 5
+    ABUSE_LOGIN_ACCOUNT_LOCKOUT_SECONDS: int = 900
 
     # Mock payment completion must never be accidentally available in production.
     PAYMENT_MOCK_COMPLETION_ENABLED: bool = False

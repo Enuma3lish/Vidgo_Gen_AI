@@ -1,17 +1,15 @@
 <script setup lang="ts">
 /**
- * ShortVideo — PiAPI-style combined playground (Deploy 3c, 2026-05-24).
+ * ShortVideo — PiAPI-style combined playground.
  *
- * One page covers THREE task types:
+ * One page covers two task types (V2V removed 2026-05-31):
  *   1. Image to Video  → /api/v1/tools/short-video    (image + prompt)
  *   2. Text to Video   → /api/v1/tools/kling-video    (prompt only)
- *   3. Video Style Transfer → /api/v1/tools/video-transform (video + prompt)
  *
- * Route mapping kept the same so existing bookmarks work:
+ * Route mapping:
  *   /tools/short-video      → defaults to image_to_video
  *   /tools/image-to-video   → image_to_video
  *   /tools/text-to-video    → redirects to /tools/short-video
- *   /tools/video-transform  → video_style_transfer (URL-driven)
  *
  * Layout: PiapiPlayground component (left config / right result / status
  * pill / examples row below). Colors preserved (#0a0a0f bg, violet
@@ -31,13 +29,14 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode, useLocalized } from '@/composables'
 import { usePromptLibrary } from '@/composables/usePromptLibrary'
-import { toolsApi, uploadsApi } from '@/api'
+import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import { extractApiError } from '@/utils/apiError'
 import { dataURItoBlob } from '@/utils/dataUri'
 import { downloadAsset } from '@/utils/downloadAsset'
+import { handleCardRequired } from '@/utils/toolGate'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -49,7 +48,8 @@ const { isDemoUser } = useDemoMode()
 const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
 // ─── Task type + model catalogs ──────────────────────────────────────
-type TaskType = 'image_to_video' | 'text_to_video' | 'video_style_transfer'
+// V2V (video_style_transfer) removed 2026-05-31.
+type TaskType = 'image_to_video' | 'text_to_video'
 
 interface ModelOpt {
   id: string
@@ -75,23 +75,14 @@ const T2V_MODELS: ModelOpt[] = [
   { id: 'flagship',   nameZh: 'Kling 2.1-master (旗艦)',   nameEn: 'Kling 2.1-master (flagship)', badge: 'premium' },
   { id: 'omni',       nameZh: 'Kling 3.0 / Omni (含音訊)',  nameEn: 'Kling 3.0 / Omni (with audio)', badge: 'premium' },
 ]
-const V2V_MODELS: ModelOpt[] = [
-  // V2V runs Seedance first-frame I2V server-side (Wan 2.1 VACE was pulled
-  // from PiAPI's catalog). Label it for what actually runs so the dropdown
-  // isn't promising a model we no longer call.
-  { id: 'seedance',   nameZh: 'Seedance 2.0 Fast（首幀風格轉換）', nameEn: 'Seedance 2.0 Fast (first-frame style)' },
-]
 function modelOptionsFor(tt: TaskType): ModelOpt[] {
-  return tt === 'image_to_video' ? I2V_MODELS
-       : tt === 'text_to_video'  ? T2V_MODELS
-       : V2V_MODELS
+  return tt === 'image_to_video' ? I2V_MODELS : T2V_MODELS
 }
 
 // Default model per task type — chosen as the cheapest/most-reliable
 const DEFAULT_MODEL: Record<TaskType, string> = {
   image_to_video: 'seedance',
   text_to_video:  'default',
-  video_style_transfer: 'seedance',
 }
 
 // ─── State ───────────────────────────────────────────────────────────
@@ -105,8 +96,6 @@ const aspectRatio = ref<'16:9' | '9:16' | '1:1'>('16:9')
 const duration = ref<5 | 8 | 10>(5)
 
 const imageInput = ref<string | undefined>(undefined)   // data URI from ImageUploader (for I2V)
-const videoFile = ref<File | null>(null)                // raw File (for V2V)
-const videoPreviewUrl = ref<string | null>(null)
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
@@ -131,13 +120,24 @@ watch(locale, () => {
   if (selectedPresetId.value) prompt.value = presetPromptFor(selectedPresetId.value)
 })
 
-// Default task type from route
+// Editing the prompt away from the chosen preset clears the preset id, so the
+// backend sees a CUSTOM prompt (subscription + bound card required) rather
+// than a free example.
+watch(prompt, (val) => {
+  if (selectedPresetId.value && val.trim() !== presetPromptFor(selectedPresetId.value).trim()) {
+    selectedPresetId.value = ''
+  }
+})
+const usingPreset = computed(() =>
+  !!selectedPresetId.value && prompt.value.trim() === presetPromptFor(selectedPresetId.value).trim()
+)
+
+// Default task type from route. /tools/video-transform was removed
+// 2026-05-31 (V2V dropped); the route is gone, so we only branch I2V vs T2V.
 function applyRouteToTaskType() {
   const name = String(route.name || '')
   const path = String(route.path || '')
-  if (name === 'video-transform' || path.endsWith('/video-transform')) {
-    taskType.value = 'video_style_transfer'
-  } else if (name === 'text-to-video' || path.endsWith('/text-to-video')) {
+  if (name === 'text-to-video' || path.endsWith('/text-to-video')) {
     taskType.value = 'text_to_video'
   } else {
     taskType.value = 'image_to_video'
@@ -157,13 +157,11 @@ onMounted(() => applyRouteToTaskType())
 // ─── Validation + cost ───────────────────────────────────────────────
 const disabled = computed(() => {
   if (taskType.value === 'image_to_video') return !imageInput.value
-  if (taskType.value === 'text_to_video')  return !prompt.value.trim()
-  return !videoFile.value || !prompt.value.trim()  // V2V
+  return !prompt.value.trim()  // text_to_video
 })
 const isRunning = computed(() => status.value === 'running')
 
 const creditCost = computed(() => {
-  if (taskType.value === 'video_style_transfer') return 35
   if (taskType.value === 'text_to_video') {
     if (modelId.value === 'omni') return 750
     if (modelId.value === 'flagship') return 500
@@ -192,25 +190,14 @@ async function ensureImageUrl(): Promise<string | null> {
   return up.url
 }
 
-function handleVideoChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  const f = input.files?.[0]
-  if (!f) return
-  if (f.size > 100 * 1024 * 1024) {
-    uiStore.showError(L('檔案超過 100 MB 上限', 'File exceeds the 100 MB limit', '100MB上限', '100MB 한도', 'Excede 100 MB'))
-    return
-  }
-  videoFile.value = f
-  videoPreviewUrl.value = URL.createObjectURL(f)
-}
+// handleVideoChange removed 2026-05-31 — V2V dropped.
 
 // ─── Generate ────────────────────────────────────────────────────────
 async function generate() {
   if (disabled.value || isRunning.value) return
-  if (isDemoUser.value) {
-    uiStore.showInfo(L('請訂閱以使用此工具', 'Please subscribe to use this tool', 'サブスク登録してください', '구독해 주세요', 'Suscríbete'))
-    return
-  }
+  // No client-side subscription block: the backend decides. A free account
+  // using an unmodified preset gets the cached example; a custom/edited prompt
+  // returns error_code 'subscription_card_required', handled below.
   status.value = 'running'
   statusText.value = isZh.value ? '生成中… 通常需要 1-3 分鐘' : 'Generating… typically 1-3 min'
   resultUrl.value = null
@@ -224,18 +211,12 @@ async function generate() {
         motionStrength: motionStrength.value,
         modelId: modelId.value,
         prompt: prompt.value.trim() || undefined,
+        promptId: usingPreset.value ? selectedPresetId.value : undefined,
         negativePrompt: negativePrompt.value.trim() || undefined,
         locale: String(locale.value || ''),
       })
-    } else if (taskType.value === 'text_to_video') {
-      // /api/v1/tools/kling-video accepts T2V when image_url is omitted.
-      // tier maps directly from modelId for T2V (default/flagship/omni).
-      // 2026-05-26: was raw fetch('/api/v1/tools/kling-video') — relative URL
-      // hit the wrong origin in prod and `credentials: 'include'` ignored the
-      // Bearer token the app actually uses for auth, so the text-to-video
-      // task silently failed for every logged-in user. Routed through
-      // toolsApi.klingVideo so it uses the configured apiClient base URL +
-      // Authorization header like every other tool call.
+    } else {
+      // text_to_video — /api/v1/tools/kling-video. tier maps from modelId.
       const tier = (modelId.value === 'flagship' || modelId.value === 'omni')
         ? modelId.value
         : 'default'
@@ -246,12 +227,11 @@ async function generate() {
         duration: duration.value as 5 | 10,
         negativePrompt: negativePrompt.value.trim() || undefined,
       })
-    } else {
-      // V2V
-      statusText.value = isZh.value ? '上傳影片中…' : 'Uploading video…'
-      const normalized = await uploadsApi.normalizeVideo(videoFile.value!)
-      statusText.value = isZh.value ? '套用風格中…' : 'Applying style…'
-      result = await toolsApi.videoTransform(normalized.video_url, prompt.value.trim())
+    }
+
+    if (handleCardRequired(result, uiStore, router, isZh.value)) {
+      status.value = 'idle'
+      return
     }
 
     if (result?.success && (result.video_url || result.result_url)) {
@@ -274,18 +254,12 @@ async function generate() {
 
 // ─── UI label helpers ────────────────────────────────────────────────
 const pageTitle = computed(() => {
-  switch (taskType.value) {
-    case 'text_to_video':       return isZh.value ? 'AI 影片生成（文字）' : 'AI Video Generation (Text)'
-    case 'video_style_transfer': return isZh.value ? '影片風格轉換' : 'Video Style Transfer'
-    default:                    return isZh.value ? 'AI 影片生成（圖片）' : 'AI Video Generation (Image)'
-  }
+  if (taskType.value === 'text_to_video') return isZh.value ? 'AI 影片生成（文字）' : 'AI Video Generation (Text)'
+  return isZh.value ? 'AI 影片生成（圖片）' : 'AI Video Generation (Image)'
 })
 const pageSubtitle = computed(() => {
-  switch (taskType.value) {
-    case 'text_to_video':       return isZh.value ? '輸入文字描述，AI 生成 5-10 秒影片。' : 'Describe a scene; AI generates a 5-10s video.'
-    case 'video_style_transfer': return isZh.value ? '上傳影片，AI 套用新風格（如水彩、像素、賽博龐克）。' : 'Upload a video; AI applies a new style (watercolor, pixel, cyberpunk…).'
-    default:                    return isZh.value ? '上傳圖片，AI 加入鏡頭與動作生成影片。' : 'Upload a still; AI adds camera + motion to create video.'
-  }
+  if (taskType.value === 'text_to_video') return isZh.value ? '輸入文字描述，AI 生成 5-10 秒影片。' : 'Describe a scene; AI generates a 5-10s video.'
+  return isZh.value ? '上傳圖片，AI 加入鏡頭與動作生成影片。' : 'Upload a still; AI adds camera + motion to create video.'
 })
 
 function gotoPricing() { router.push('/pricing') }
@@ -301,7 +275,7 @@ function gotoPricing() { router.push('/pricing') }
     :credit-cost="creditCost"
     :generate-label="isZh ? '開始生成' : 'Generate'"
     :generate-label-running="isZh ? '生成中…' : 'Generating…'"
-    :disabled="disabled || isDemoUser"
+    :disabled="disabled"
     @generate="generate"
   >
     <template #inputs>
@@ -311,7 +285,6 @@ function gotoPricing() { router.push('/pricing') }
         <select v-model="taskType" class="pp-select">
           <option value="image_to_video">{{ isZh ? '圖片轉影片 (I2V)' : 'Image to Video' }}</option>
           <option value="text_to_video">{{ isZh ? '文字生影片 (T2V)' : 'Text to Video' }}</option>
-          <option value="video_style_transfer">{{ isZh ? '影片風格轉換 (V2V)' : 'Video Style Transfer' }}</option>
         </select>
       </div>
 
@@ -335,13 +308,7 @@ function gotoPricing() { router.push('/pricing') }
         />
       </div>
 
-      <!-- Video upload (V2V only) -->
-      <div v-if="taskType === 'video_style_transfer'">
-        <label class="pp-field-label">{{ isZh ? '來源影片 *' : 'Source Video *' }}</label>
-        <input type="file" accept="video/mp4" class="pp-input" @change="handleVideoChange" />
-        <p class="pp-field-help">{{ L('MP4 · 最大 100 MB · 系統會先正規化再轉換', 'MP4 · max 100 MB · normalized server-side first', 'MP4 · 最大100MB · サーバー側で正規化', 'MP4 · 최대 100MB · 서버에서 정규화', 'MP4 · máx 100 MB · normalizado en servidor') }}</p>
-        <video v-if="videoPreviewUrl" :src="videoPreviewUrl" class="w-full mt-2 rounded-lg" controls />
-      </div>
+      <!-- V2V video upload removed 2026-05-31 -->
 
       <!-- Prompt -->
       <div>
@@ -372,8 +339,8 @@ function gotoPricing() { router.push('/pricing') }
         <p class="pp-field-help">{{ isZh ? '提示會原封不動傳給模型；越具體越好。' : 'Your prompt reaches the model verbatim. The more specific, the better.' }}</p>
       </div>
 
-      <!-- Negative prompt (I2V + T2V) -->
-      <div v-if="taskType !== 'video_style_transfer'">
+      <!-- Negative prompt (both I2V and T2V) -->
+      <div>
         <label class="pp-field-label">{{ isZh ? '負面提示（選填）' : 'Negative Prompt (optional)' }}</label>
         <input v-model="negativePrompt" type="text" maxlength="500" class="pp-input"
                :placeholder="isZh ? '例：模糊、變形、低品質' : 'e.g. blurry, distorted, low quality'" />
@@ -412,7 +379,9 @@ function gotoPricing() { router.push('/pricing') }
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
-        {{ isZh ? '訂閱後即可使用此工具。' : 'Subscribe to generate your own videos.' }}
+        {{ isZh
+          ? '免費帳號可用範例下拉選單一鍵生成；自訂提示詞需訂閱並綁定信用卡。'
+          : 'Free accounts can generate from the example presets; custom prompts require a subscription with a bound card.' }}
         <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
       </p>
     </template>

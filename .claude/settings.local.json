@@ -438,7 +438,9 @@
       "Bash(docker version *)",
       "Bash(node -e 'JSON.parse\\(require\\('\\\\''fs'\\\\''\\).readFileSync\\('\\\\''__TRACKED_VAR__.json'\\\\'','\\\\''utf8'\\\\''\\)\\); console.log\\('\\\\''OK __TRACKED_VAR__'\\\\''\\)')",
       "Bash(echo \"exit $?\")",
-      "Bash(bash *)"
+      "Bash(bash *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(echo \"exit=$?\")"
     ],
     "additionalDirectories": [
       "/private/tmp"

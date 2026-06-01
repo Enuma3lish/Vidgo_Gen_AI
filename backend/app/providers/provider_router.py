@@ -43,7 +43,7 @@ class TaskType(str, Enum):
     T2I = "text_to_image"
     I2V = "image_to_video"
     T2V = "text_to_video"
-    V2V = "video_style_transfer"
+    # V2V (video_style_transfer) removed 2026-05-31 — see commit history.
     INTERIOR = "interior_design"
     AVATAR = "avatar"
     UPSCALE = "upscale"
@@ -115,11 +115,10 @@ class ProviderRouter:
         # un-listed model_id is used, if PiAPI + Vertex both fail we still
         # take one last shot at Pollo (it will soft-fail fast for unknown
         # models, costing only ~200 ms; for known Kling models it actually
-        # serves a video). T2V/V2V chain stays Pollo-free because Pollo REST
-        # has no T2V endpoint at all ("not implemented" 404 every call).
+        # serves a video). T2V chain stays Pollo-free because Pollo REST has
+        # no T2V endpoint at all ("not implemented" 404 every call).
         TaskType.I2V: {"primary": "piapi", "backup": "vertex_ai", "tertiary": "pollo", "fallback": None},
         TaskType.T2V: {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
-        TaskType.V2V: {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
 
         # Image tasks — PiAPI REST → Vertex AI fallback. Pollo image
         # generation overlapped with PiAPI's catalog and added no value.
@@ -389,11 +388,8 @@ class ProviderRouter:
         if task_type == TaskType.INTERIOR_3D:
             return ["piapi"]
 
-        if task_type == TaskType.V2V:
-            return self._provider_order_from_config(config)
-
         if has_explicit_model:
-            if task_type in {TaskType.I2V, TaskType.T2V, TaskType.V2V} and model_id in self.POLLO_VIDEO_MODEL_IDS:
+            if task_type in {TaskType.I2V, TaskType.T2V} and model_id in self.POLLO_VIDEO_MODEL_IDS:
                 # Pollo's REST coverage is patchy (HTTP 404 for `seedance`,
                 # "not implemented" for T2V). When a model_id IS one Pollo
                 # genuinely supports (kling_v1.5 / kling_v2 I2V, pixverse,
@@ -409,7 +405,6 @@ class ProviderRouter:
                 TaskType.I2I,
                 TaskType.I2V,
                 TaskType.T2V,
-                TaskType.V2V,
                 TaskType.INTERIOR,
                 TaskType.AVATAR,
                 TaskType.UPSCALE,
@@ -519,7 +514,7 @@ class ProviderRouter:
         return result
 
     def _task_to_media_type(self, task_type: TaskType) -> str:
-        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.V2V, TaskType.AVATAR}
+        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.AVATAR}
         if task_type in video_tasks:
             return "video"
         if task_type == TaskType.INTERIOR_3D:
@@ -545,7 +540,6 @@ class ProviderRouter:
             TaskType.T2I: "t2i",
             TaskType.I2V: "i2v",
             TaskType.T2V: "t2v",
-            TaskType.V2V: "t2v",
             TaskType.INTERIOR: "interior",
             TaskType.INTERIOR_3D: "interior_3d",
             TaskType.AVATAR: "avatar",
@@ -631,8 +625,6 @@ class ProviderRouter:
             return await self.vertex_ai.image_to_video(params)
         elif task_type == TaskType.T2V:
             return await self.vertex_ai.text_to_video(params)
-        elif task_type == TaskType.V2V:
-            return await self.vertex_ai.video_style_transfer(params)
         elif task_type == TaskType.AVATAR:
             return await self.vertex_ai.generate_avatar(params)
         else:
@@ -650,8 +642,6 @@ class ProviderRouter:
             return await self.piapi.image_to_video(params)
         elif task_type == TaskType.T2V:
             return await self.piapi.text_to_video(params)
-        elif task_type == TaskType.V2V:
-            return await self.piapi.video_style_transfer(params)
         elif task_type == TaskType.INTERIOR:
             return await self.piapi.doodle_interior(params)
         elif task_type == TaskType.UPSCALE:
@@ -683,10 +673,6 @@ class ProviderRouter:
             return await self.pollo.image_to_video(params)
         elif task_type == TaskType.T2V:
             return await self.pollo.text_to_video(params)
-        elif task_type == TaskType.V2V:
-            # Pollo has no native V2V endpoint; route through video_style_transfer,
-            # which feeds the first frame (image_url) into per-model I2V.
-            return await self.pollo.video_style_transfer(params)
         elif task_type == TaskType.KLING_VIDEO:
             # Pollo as a backup when PiAPI Kling is out of credit or rate-limited.
             # Pollo only exposes Kling via its I2V endpoint, so a true T2V Kling
@@ -894,7 +880,7 @@ class ProviderRouter:
             return "Service credits are currently depleted. Please try again later."
         if "timeout" in error.lower():
             return "The request timed out. Please try again with a simpler prompt."
-        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.V2V, TaskType.KLING_VIDEO}
+        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.KLING_VIDEO}
         if task_type in video_tasks:
             return "Video generation services are experiencing issues on all providers. Please try again in a few minutes."
         if task_type == TaskType.AVATAR:

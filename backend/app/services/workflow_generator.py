@@ -390,34 +390,14 @@ class WorkflowGenerator:
         result.metadata["base_video_url"] = base_video_url
         logger.info(f"Step 3 complete: Base video generated")
 
-        # Step 4: Apply style with ProviderRouter V2V
-        style_id = topic.style_id or "anime"  # Default to anime style
-        logger.info(f"Step 4: Applying style {style_id}...")
-
-        from app.services.effects_service import get_style_prompt
-        style_prompt = get_style_prompt(style_id) or effect_prompt
-
-        style_result = await self.provider_router.route(
-            TaskType.V2V,
-            {
-                "video_url": base_video_url,
-                "prompt": style_prompt
-            }
-        )
-
-        output_url = style_result.get("video_url") or style_result.get("output_url")
-        if not output_url:
-            # Use base video if style transfer fails
-            result.video_url = base_video_url
-            result.metadata["style_transfer_failed"] = True
-            logger.warning(f"Style transfer failed, using base video")
-        else:
-            result.video_url = output_url
-            result.steps_completed.append("style_applied")
-            logger.info(f"Step 4 complete: Style applied")
-
+        # Step 4 (V2V style transfer) removed 2026-05-31 — the base I2V video
+        # is used directly as the result.
+        style_id = topic.style_id or "anime"
+        result.video_url = base_video_url
+        result.steps_completed.append("base_video_used_as_final")
         result.success = True
         result.metadata["style_id"] = style_id
+        result.metadata["v2v_disabled"] = True
 
         return result
 

@@ -55,6 +55,11 @@ from app.services.demo_cache_service import DemoCacheService
 from app.services.gcs_storage_service import get_gcs_storage
 from app.services.email_service import send_admin_tool_failure_email
 from app.services.prompt_library import lookup_prompt as _lookup_curated_prompt
+from app.services.access_gate import (
+    has_bound_card as _has_bound_card,
+    is_test_account as _is_test_account,
+    custom_prompt_gate as _custom_prompt_gate,
+)
 import logging
 import os
 import hashlib
@@ -249,6 +254,25 @@ async def _refine_generation_prompt(
     for backward-compat and discarded.
     """
     return (prompt or "").strip(), {"changed": False, "skipped": True, "reason": "refinement_disabled"}
+
+
+# Custom-prompt access gate — the core logic lives in app/services/access_gate
+# (imported above as _has_bound_card / _is_test_account / _custom_prompt_gate)
+# so the tools router and the generation router share one source of truth.
+# The block RESPONSE is router-specific (ToolResponse here), so it stays local.
+def _subscribe_card_required_response() -> "ToolResponse":
+    """Soft failure shown when a free account tries a custom/edited prompt.
+    error_code lets the frontend pop a subscribe + add-payment CTA."""
+    return ToolResponse(
+        success=False,
+        error_code="subscription_card_required",
+        message=(
+            "自訂提示詞需要有效訂閱並綁定信用卡。免費帳號可直接使用範例下拉選單一鍵生成。"
+            " / Custom prompts require an active subscription with a bound credit card. "
+            "Free accounts can generate instantly using the example presets in the dropdown."
+        ),
+    )
+
 
 PRODUCT_SCENE_MAX_DIMENSION = 1536
 PRODUCT_SCENE_CUSTOM_PROMPT_MAX_CHARS = 300
@@ -1310,6 +1334,9 @@ class ToolResponse(BaseModel):
     results: Optional[List[Dict]] = None
     credits_used: int = 0
     message: Optional[str] = None
+    # Machine-readable failure reason so the frontend can react specifically —
+    # e.g. "subscription_card_required" pops a subscribe + add-payment CTA.
+    error_code: Optional[str] = None
     cached: bool = False
     # Demo before/after pair — set when returning a pre-generated example
     is_demo: bool = False
@@ -2044,13 +2071,9 @@ async def generate_product_scene(
                 )
             scene_prompt = scene["prompt"]
 
-    if not is_subscribed_user(current_user) and (
-        request.scene_type == PRODUCT_SCENE_CUSTOM_SCENE_TYPE or request.custom_prompt or request.template_id
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="A subscription is required to use custom Product Scene prompts or templates.",
-        )
+    # Custom-prompt access gating now happens via _custom_prompt_gate below
+    # (preset → cached demo, custom/template → subscribe + bound card), so the
+    # old non-subscriber 403 here is removed in favour of the unified gate.
 
     if request.scene_type == PRODUCT_SCENE_CUSTOM_SCENE_TYPE and not scene_prompt:
         raise HTTPException(
@@ -2064,8 +2087,16 @@ async def generate_product_scene(
             detail="Custom scene requires custom_prompt or template_id.",
         )
 
-    # ========== DEMO USER: Return cached demo example ==========
-    if not is_subscribed_user(current_user):
+    # ========== ACCESS GATE: catalog scene → cached demo, custom prompt/template → subscribe + card ==========
+    _is_custom = (
+        request.scene_type == PRODUCT_SCENE_CUSTOM_SCENE_TYPE
+        or bool((request.custom_prompt or "").strip())
+        or bool(request.template_id)
+    )
+    _gate = await _custom_prompt_gate(db, current_user, _is_custom)
+    if _gate == "blocked":
+        return _subscribe_card_required_response()
+    if _gate == "demo":
         user_product_url = None
         try:
             user_product_url = str(request.get_product_url())
@@ -2767,8 +2798,14 @@ async def room_redesign(
     else:
         _catalog = INTERIOR_STYLES
 
-    # ========== DEMO USER: Return cached demo example ==========
-    if not is_subscribed_user(current_user):
+    # ========== ACCESS GATE: style preset → cached demo, custom prompt / magic → subscribe + card ==========
+    # Picking a preset style (no free-text, no magic mode) is the free path;
+    # a typed custom_prompt or Magic mode requires subscription + bound card.
+    _is_custom = (request.mode == "magic") or (bool((request.custom_prompt or "").strip()) and not bool(curated))
+    _gate = await _custom_prompt_gate(db, current_user, _is_custom)
+    if _gate == "blocked":
+        return _subscribe_card_required_response()
+    if _gate == "demo":
         try:
             user_room = str(request.get_room_url())
         except ValueError:
@@ -3154,8 +3191,14 @@ async def _generate_short_video_inner(
     if curated_motion:
         request.style = curated_motion
 
-    # ========== DEMO USER: Return cached demo example ==========
-    if not is_subscribed_user(current_user):
+    # ========== ACCESS GATE: preset → cached demo, custom prompt → subscribe + card ==========
+    # Free accounts may run an unmodified preset (returns the cached example);
+    # a typed/edited motion prompt requires subscription + bound card.
+    _is_custom = bool((request.prompt or "").strip()) and not bool(curated_motion)
+    _gate = await _custom_prompt_gate(db, current_user, _is_custom)
+    if _gate == "blocked":
+        return _subscribe_card_required_response()
+    if _gate == "demo":
         user_frame_url = _resolve_public_url(str(request.image_url)) if request.image_url else None
         # Motion prompt — prefer an explicit style hint from the client; otherwise
         # derive a terse motion description from motion_strength so the cache key
@@ -3363,54 +3406,10 @@ async def _generate_short_video_inner(
         # Persist PiAPI/Pollo CDN video to GCS so it survives 14-day expiry.
         video_url = await _persist_provider_url(video_url, "video", current_user)
 
-        # Optional: Apply style transformation (Video-to-Video)
-        # Requires can_use_effects plan feature
-        apply_style = False
+        # V2V style transfer removed 2026-05-31 — these two placeholders keep
+        # the downstream input_params / response shape unchanged.
         style_prompt_refinement = None
         style_transfer_error = None
-        if request.style and video_url:
-            effects_ok, _, _ = await _check_plan_feature(
-                db, current_user, "can_use_effects", "video style effects"
-            )
-            apply_style = effects_ok
-
-        if apply_style and request.style and video_url:
-            style_prompt = get_style_prompt(request.style)
-            if style_prompt:
-                style_prompt, style_prompt_refinement = await _refine_generation_prompt(
-                    style_prompt,
-                    "video_transform",
-                    "short video style transfer prompt",
-                    user_prompt=True,
-                    context={"style": request.style, "source_tool": "short_video"},
-                )
-                try:
-                    source_frame_url = _resolve_public_url(str(request.image_url))
-                    style_result = await provider_router.route(
-                        TaskType.V2V,
-                        {
-                            "video_url": video_url,
-                            "image_url": source_frame_url,
-                            "first_frame_url": source_frame_url,
-                            "prompt": style_prompt,
-                            "model": request.model_id,
-                            "duration": 5,
-                        }
-                    )
-                    output_url = style_result.get("video_url") or style_result.get("output_url") or style_result.get("output", {}).get("video_url")
-                    if output_url:
-                        video_url = output_url
-                        # Deduct extra 5 credits for style transfer
-                        extra_ok, _ = await _check_and_deduct_credits(db, current_user, 5, "short_video_style")
-                        if extra_ok:
-                            credits_used += 5
-                except Exception as exc:
-                    style_transfer_error = str(exc)
-                    logger.warning(
-                        "Short video style transfer failed; returning base I2V result: %s",
-                        exc,
-                        exc_info=True,
-                    )
 
         if video_url:
             # Save to UserGeneration
@@ -3474,141 +3473,13 @@ async def _generate_short_video_inner(
 ## E-commerce users need their real products animated (I2V), not AI-generated videos from text.
 
 
-# ============================================================================
-# Video Style Transfer — PiAPI Wan VACE V2V
-# ============================================================================
-
-class VideoTransformRequest(BaseModel):
-    """Transform video with style"""
-    video_url: str
-    prompt: str  # style description
-    style: Optional[str] = None
-
-
-@router.post("/video-transform")
-async def video_transform(
-    request: VideoTransformRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user_optional)
-):
-    """
-    Apply style transfer to a video — chunked streaming with 25 s keep-alive
-    so edge proxies don't drop the connection during long V2V runs.
-    """
-    async def _do_video_transform() -> Dict[str, Any]:
-        result = await _video_transform_inner(request, db, current_user)
-        return result.model_dump() if hasattr(result, "model_dump") else result
-
-    return _stream_with_heartbeat(_do_video_transform)
-
-
-async def _video_transform_inner(
-    request: "VideoTransformRequest",
-    db: AsyncSession,
-    current_user,
-) -> ToolResponse:
-    """
-    Apply style transfer to a video.
-
-    Uses PiAPI Wan VACE video-to-video.
-    Credits: 35 per generation
-    """
-    validate_media_url_or_raise(str(request.video_url), "video", "Video transform input")
-
-    if not is_subscribed_user(current_user):
-        return await _demo_response(
-            db,
-            ToolType.SHORT_VIDEO,
-            cta="Subscribe for video style transfer.",
-            input_video_url=request.video_url,
-            effect_prompt=request.prompt,
-        )
-
-    CREDIT_COST = 35
-    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "video_transform")
-    if not ok:
-        return ToolResponse(success=False, message=err)
-
-    try:
-        router_instance = get_provider_router()
-        refined_prompt, prompt_refinement = await _refine_generation_prompt(
-            request.prompt,
-            "video_transform",
-            "video-to-video style prompt",
-            user_prompt=True,
-            context={"style": request.style},
-        )
-
-        # All V2V providers in the chain (piapi_mcp's Wan referenceImage, Pollo,
-        # Vertex AI) reject MP4 URLs — they need a still image. Extract the
-        # first frame and pass it as image_url / first_frame_url so each
-        # provider gets the format it actually expects.
-        try:
-            first_frame_url = await _extract_first_frame_to_gcs(
-                str(request.video_url),
-                str(current_user.id) if current_user is not None and getattr(current_user, "id", None) else None,
-            )
-        except Exception as ff_exc:
-            logger.error("video_transform first-frame extraction failed: %s", ff_exc, exc_info=True)
-            await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
-            return ToolResponse(
-                success=False,
-                message="Could not read the input video. Please upload a standard MP4 (H.264) under 200 MB.",
-            )
-
-        result = await router_instance.route(
-            TaskType.V2V,
-            {
-                "video_url": request.video_url,
-                "image_url": first_frame_url,
-                "first_frame_url": first_frame_url,
-                "prompt": refined_prompt,
-                "style": request.style,
-            }
-        )
-
-        if result.get("success"):
-            output = result.get("output", {})
-            video_url = output.get("video_url")
-            # Persist PiAPI/Pollo CDN video to GCS so it survives 14-day expiry.
-            video_url = await _persist_provider_url(video_url, "video", current_user)
-
-            generation = UserGeneration(
-                user_id=current_user.id,
-                tool_type=ToolType.SHORT_VIDEO,
-                input_video_url=request.video_url,
-                input_text=refined_prompt,
-                input_params={
-                    "prompt": request.prompt,
-                    "refined_prompt": refined_prompt,
-                    "style": request.style,
-                    "prompt_refinement": prompt_refinement,
-                },
-                result_video_url=video_url,
-                credits_used=CREDIT_COST,
-            )
-            generation.set_expiry()
-            db.add(generation)
-            await db.commit()
-
-            return ToolResponse(
-                success=True,
-                result_url=video_url,
-                credits_used=CREDIT_COST,
-                message="Video transformed successfully"
-            )
-        else:
-            await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
-            return _provider_failure_response("video_transform", result, current_user)
-    except Exception as e:
-        logger.error(f"Video transform error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "video_transform")
-        _notify_admin_of_tool_failure("video_transform", e, current_user)
-        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+# Video Style Transfer (V2V) endpoint removed 2026-05-31 — the entire V2V
+# surface (provider methods, TaskType.V2V, request model, /video-transform
+# endpoint, and the frontend tab) was dropped per owner directive.
 
 
 # ============================================================================
-# Claymation AI Generator — multi-mode (T2I / I2I / T2V / V2V) NEW 2026-05-24
+# Claymation AI Generator — multi-mode (T2I / I2I / T2V) NEW 2026-05-24
 # ============================================================================
 # Mirrors piapi.ai/zh-TW/claymation-ai-generator. Routes mode to the right
 # underlying model:
@@ -3628,12 +3499,12 @@ class ClaymationRequest(BaseModel):
     """Multi-mode claymation generator."""
     mode: str = Field(
         "text_to_image",
-        pattern="^(text_to_image|image_to_image|text_to_video|video_to_video)$",
-        description="text_to_image | image_to_image | text_to_video | video_to_video",
+        pattern="^(text_to_image|image_to_image|text_to_video)$",
+        description="text_to_image | image_to_image | text_to_video",
     )
     prompt: str = Field(..., min_length=1, max_length=2000, description="What to clay-ify; appended to the baseline 'claymation style' instruction.")
-    image_url: Optional[str] = Field(None, description="Required for image_to_image and video_to_video (first-frame). MP4 / JPEG / PNG public URL.")
-    video_url: Optional[str] = Field(None, description="Required for video_to_video. Public MP4 URL.")
+    image_url: Optional[str] = Field(None, description="Required for image_to_image. JPEG / PNG public URL.")
+    video_url: Optional[str] = Field(None, description="(Unused — video_to_video mode removed 2026-05-31.)")
     aspect_ratio: Optional[str] = Field("1:1", description="Aspect ratio for image modes (1:1, 16:9, 9:16, 4:3, 3:4).")
 
 
@@ -3657,22 +3528,20 @@ async def claymation_generate(
     Pricing (per call): image modes 8 cr, video modes 50 cr (matches
     upstream cost ratio).
     """
-    is_video = request.mode in ("text_to_video", "video_to_video")
-    needs_image = request.mode in ("image_to_image", "video_to_video")
+    is_video = request.mode == "text_to_video"
+    needs_image = request.mode == "image_to_image"
 
-    if needs_image and not (request.image_url or request.video_url):
+    if needs_image and not request.image_url:
         return ToolResponse(
             success=False,
-            message=f"mode={request.mode} requires image_url (or video_url for video_to_video).",
+            message=f"mode={request.mode} requires image_url.",
         )
 
-    if not is_subscribed_user(current_user):
-        return await _demo_response(
-            db,
-            ToolType.SHORT_VIDEO if is_video else ToolType.EFFECT,
-            cta="Subscribe to use the claymation generator.",
-            effect_prompt=request.prompt[:200],
-        )
+    # Claymation is a pure custom-prompt generator (no server-side preset
+    # catalog), so any non-eligible use is "custom" → subscription + bound
+    # card required. Admins / test accounts bypass.
+    if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
+        return _subscribe_card_required_response()
 
     CREDIT_COST = 50 if is_video else 8
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "claymation")
@@ -3736,22 +3605,13 @@ async def claymation_generate(
             )
             output_key, output_kind = "video_url", "video"
 
-        else:  # video_to_video
-            # Seedance 2.0 Fast — image_to_video with the V2V variant takes
-            # the first frame + prompt; full V2V isn't on the catalog yet.
-            # Fall back to first-frame I2V which is the closest available
-            # primitive for "transform this video into claymation."
-            src = str(request.video_url or request.image_url)
-            result = await provider_router.route(
-                TaskType.I2V,
-                {
-                    "image_url": src,
-                    "prompt": final_prompt,
-                    "model": "seedance",
-                    "duration": 5,
-                },
+        else:
+            # video_to_video mode removed 2026-05-31 (V2V dropped repo-wide).
+            await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+            return ToolResponse(
+                success=False,
+                message="Video-to-video mode has been removed. Use text-to-video for new clips.",
             )
-            output_key, output_kind = "video_url", "video"
 
         if not result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "claymation")
@@ -4152,8 +4012,13 @@ async def _generate_avatar_inner(
                 ),
             )
 
-    # ========== DEMO USER: Return cached demo example ==========
-    if not is_subscribed_user(current_user):
+    # ========== ACCESS GATE: preset script → cached demo, custom script → subscribe + card ==========
+    # Avatar always needs speech text; a preset (prompt_id) script is the free
+    # path, a custom script requires subscription + bound card.
+    _gate = await _custom_prompt_gate(db, current_user, is_custom=not bool(curated_script))
+    if _gate == "blocked":
+        return _subscribe_card_required_response()
+    if _gate == "demo":
         user_headshot = _resolve_public_url(str(request.image_url)) if request.image_url else None
         return await _demo_response(
             db,
@@ -4852,13 +4717,10 @@ async def midjourney_imagine(
 
     UI still calls this path; clients don't need any change.
     """
-    if not is_subscribed_user(current_user):
-        return await _demo_response(
-            db,
-            "image_generation_premium",
-            cta="Subscribe to generate premium AI images.",
-            effect_prompt=request.prompt[:200],
-        )
+    # Premium image generation is a custom-prompt tool → subscription + bound
+    # card required (admins / test accounts bypass).
+    if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
+        return _subscribe_card_required_response()
 
     # Plan-tier gate for the optional T2I model dropdown — Qwen is pro+,
     # Flux/Z-Image are basic. Skipped when no model is sent (Flux default).
@@ -4995,14 +4857,10 @@ async def _kling_video_inner(
         credit_cost_fallback = 60
         demo_cta = "Subscribe to generate Kling videos."
 
-    if not is_subscribed_user(current_user):
-        return await _demo_response(
-            db,
-            service_type,
-            cta=demo_cta,
-            input_image_url=request.image_url,
-            effect_prompt=request.prompt[:200],
-        )
+    # Kling video is a custom-prompt generator → subscription + bound card
+    # required (admins / test accounts bypass).
+    if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
+        return _subscribe_card_required_response()
 
     # Plan-tier gate: flagship (Kling 2.5) and omni (Kling 3.0) require the
     # premium plan. A basic-plan subscriber could otherwise hit this endpoint

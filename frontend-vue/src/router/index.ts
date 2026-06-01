@@ -108,13 +108,7 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
-  // Video Style Transfer — PiAPI Wan VACE V2V
-  {
-    path: '/tools/video-transform',
-    name: 'video-transform',
-    component: () => import('@/views/tools/ShortVideo.vue'),
-    meta: { requiresAuth: false }
-  },
+  // /tools/video-transform route removed 2026-05-31 — V2V dropped repo-wide.
 
   // Text-to-Video removed — redirect to Image-to-Video
   { path: '/tools/text-to-video', redirect: '/tools/short-video' },

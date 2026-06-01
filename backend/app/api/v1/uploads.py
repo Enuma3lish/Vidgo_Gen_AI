@@ -67,7 +67,6 @@ TOOL_BASE_CREDITS = {
     "try_on": 10,
     "room_redesign": 1,
     "short_video": 10,
-    "video_transform": 15,
     "ai_avatar": 30,
     "pattern_generate": 1,
     "effect": 1,
@@ -100,9 +99,6 @@ TOOL_MODELS = {
         {"id": "hunyuan",    "name": "Hunyuan (Chinese-strong)",     "name_zh": "Hunyuan (中文強)",            "credit_multiplier": 1.5},
         {"id": "wan",        "name": "Wan 2.6 (specialty)",          "name_zh": "Wan 2.6 (利基)",              "credit_multiplier": 2},
     ],
-    "video_transform": [
-        {"id": "default", "name": "Standard (Wan VACE)", "name_zh": "標準 (Wan VACE)", "credit_multiplier": 1},
-    ],
     "ai_avatar": [
         {"id": "default", "name": "Standard", "name_zh": "標準", "credit_multiplier": 1},
     ],
@@ -129,7 +125,10 @@ IMAGE_UPLOAD_TOOLS = {
     "pattern_generate",
     "effect",
 }
-VIDEO_UPLOAD_TOOLS = {"video_transform"}
+# VIDEO_UPLOAD_TOOLS — empty after V2V removal 2026-05-31. Kept as an empty
+# set so downstream membership checks (`tool_type in VIDEO_UPLOAD_TOOLS`) stay
+# valid and just always return False.
+VIDEO_UPLOAD_TOOLS: set = set()
 
 UPLOAD_DIR = "/app/static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -666,68 +665,8 @@ async def normalize_video(
         )
 
 
-async def _run_ffmpeg_video_transform(source_url: str, upload: UserUpload) -> str:
-    """Apply a lightweight local video transform when external V2V providers are unavailable."""
-    with tempfile.TemporaryDirectory(prefix="vidgo-video-transform-") as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        input_path = tmp_path / "input.mp4"
-        output_path = tmp_path / "output.mp4"
-
-        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
-            response = await client.get(source_url)
-            response.raise_for_status()
-            input_path.write_bytes(response.content)
-
-        process = await asyncio.create_subprocess_exec(
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(input_path),
-            "-map",
-            "0:v:0",
-            "-map",
-            "0:a?",
-            "-vf",
-            "eq=contrast=1.08:saturation=1.18:brightness=0.02,unsharp=5:5:0.6:3:3:0.3",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
-            "-movflags",
-            "+faststart",
-            str(output_path),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
-        if process.returncode != 0 or not output_path.exists():
-            detail = (stderr or stdout).decode("utf-8", errors="replace")[-1000:]
-            raise RuntimeError(f"ffmpeg video transform failed: {detail}")
-
-        output_bytes = output_path.read_bytes()
-        gcs = get_gcs_storage()
-        if gcs.enabled:
-            return gcs.upload_public(
-                data=output_bytes,
-                blob_name=f"generated/video/uploads/{upload.user_id}/{upload.id}.mp4",
-                content_type="video/mp4",
-            )
-
-        output_dir = Path(UPLOAD_DIR).parent / "generated"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"video_transform_{upload.id}.mp4"
-        local_output = output_dir / filename
-        local_output.write_bytes(output_bytes)
-        public_base = settings.BACKEND_URL.rstrip("/") if settings.BACKEND_URL else ""
-        return f"{public_base}/static/generated/{filename}" if public_base else f"/static/generated/{filename}"
+# _run_ffmpeg_video_transform helper removed 2026-05-31 — only the V2V upload
+# branch (also removed) ever called it.
 
 
 # ─────────────────────────────────────────
@@ -929,36 +868,7 @@ async def _trigger_generation(
             output = result.get("output", {})
             upload.result_video_url = output.get("video_url") or output.get("url")
 
-    elif tool_type == "video_transform":
-        provider_error = None
-        try:
-            result = await provider_router.route(
-                TaskType.V2V,
-                {
-                    "video_url": abs_file_url,
-                    "prompt": prompt,
-                    "effect": "style_transfer",
-                    "intensity": 0.5,
-                }
-            )
-        except Exception as exc:
-            provider_error = str(exc)
-            logger.warning("Provider V2V failed for upload %s; trying local transform: %s", upload.id, exc)
-
-        if not result or not result.get("success"):
-            provider_error = provider_error or result.get("error", "Provider returned no result") if result else provider_error
-            try:
-                local_video_url = await _run_ffmpeg_video_transform(abs_file_url, upload)
-                result = {"success": True, "output": {"video_url": local_video_url}}
-            except Exception as exc:
-                result = {
-                    "success": False,
-                    "error": f"Provider V2V failed ({provider_error or 'unknown'}); local transform failed ({exc})",
-                }
-
-        if result.get("success"):
-            output = result.get("output", {})
-            upload.result_video_url = output.get("video_url") or output.get("url")
+    # tool_type == "video_transform" branch removed 2026-05-31 (V2V dropped).
 
     elif tool_type == "ai_avatar":
         script = prompt or "Hello, I am your AI assistant."

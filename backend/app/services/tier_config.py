@@ -98,7 +98,7 @@ CREDIT_COSTS = {
     "image_to_video":       {"default": 10, "wan_pro": 30},
     "text_to_video":        {"default": 10, "wan_pro": 30},
     "short_video":          {"default": 10, "wan_pro": 30},
-    "video_style_transfer": {"default": 10, "wan_pro": 30},
+    # video_style_transfer removed 2026-05-31 — V2V dropped repo-wide.
     "ai_try_on":            {"default": 10, "wan_pro": 30, "gemini_pro": 30},
     "try_on":               {"default": 10, "wan_pro": 30, "gemini_pro": 30},
     "interior_design":      {"default": 1,  "wan_pro": 3},

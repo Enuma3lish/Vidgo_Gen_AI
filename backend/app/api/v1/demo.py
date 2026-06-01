@@ -306,8 +306,8 @@ class RealtimeDemoRequest(BaseModel):
     """Request for real-time demo generation (See It In Action)"""
     prompt: str = Field(..., min_length=2, max_length=500, description="User prompt for demo")
     image_url: Optional[str] = Field(None, description="Pre-generated image URL to use for video")
-    style: Optional[str] = Field(None, description="Style slug for V2V enhancement")
-    skip_v2v: bool = Field(True, description="Skip V2V enhancement step (default True for current version)")
+    style: Optional[str] = Field(None, description="Style slug (no longer applied — V2V removed 2026-05-31).")
+    # skip_v2v field removed 2026-05-31 — V2V is gone repo-wide; we always skip.
 
 
 class PipelineStep(BaseModel):

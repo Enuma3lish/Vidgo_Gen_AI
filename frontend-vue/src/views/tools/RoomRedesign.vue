@@ -107,7 +107,7 @@ async function generate() {
   // 'subscription_card_required', handled below.
 
   status.value = 'running'
-  statusText.value = isZh.value ? '生成中… 通常需要 30 秒至 2 分鐘' : 'Generating… typically 30s to 2 minutes'
+  statusText.value = L('生成中… 通常需要 30 秒至 2 分鐘', 'Generating… typically 30s to 2 minutes', '生成中… 通常30秒〜2分かかります', '생성 중… 보통 30초~2분 소요', 'Generando… normalmente de 30 s a 2 min')
   resultImage.value = null
 
   try {
@@ -145,18 +145,18 @@ async function generate() {
       const u = result.image_url || result.result_url || ''
       resultImage.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
       status.value = 'done'
-      statusText.value = isZh.value ? '完成' : 'Done'
+      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
       if (result.credits_used) creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success') || 'Success')
     } else {
       status.value = 'error'
-      statusText.value = isZh.value ? '生成失敗' : 'Failed'
+      statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Generación fallida')
       uiStore.showError((result as any).message || (result as any).error || 'Generation failed.')
     }
   } catch (e: any) {
     status.value = 'error'
-    statusText.value = isZh.value ? '錯誤' : 'Error'
-    uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Generation failed'))
+    statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
+    uiStore.showError(extractApiError(e, L('生成失敗', 'Generation failed', '生成失敗', '생성 실패', 'Generación fallida')))
   }
 }
 
@@ -394,6 +394,7 @@ onMounted(async () => {
             >
               <option value="">{{ L('— 請選擇 —', '— Select —', '— 選択 —', '— 선택 —', '— Seleccionar —') }}</option>
               <option v-for="s in styles[spaceKind]" :key="s.id" :value="s.id">
+                <!-- Backend StyleCard only ships name + name_zh; ja/ko/es fall through to English (BUG-017, backend out of scope). -->
                 {{ isZh ? s.name_zh : s.name }}
               </option>
             </select>
@@ -491,7 +492,7 @@ onMounted(async () => {
                 : status === 'error' ? 'background: rgba(239,68,68,0.15); color: #fca5a5; border-color: rgba(239,68,68,0.3);'
                 : 'background: rgba(255,255,255,0.06); color: #94949f; border-color: rgba(255,255,255,0.08);'"
             >
-              {{ statusText || (status === 'idle' ? (isZh ? '待機中' : 'Idle') : status) }}
+              {{ statusText || (status === 'idle' ? L('待機中', 'Idle', '待機中', '대기 중', 'Inactivo') : status) }}
             </span>
           </div>
 
@@ -550,6 +551,7 @@ onMounted(async () => {
           </div>
           <div class="p-3">
             <p class="text-xs font-semibold" style="color: #f5f5fa;">
+              <!-- Backend StyleCard only ships name + name_zh; ja/ko/es fall through to English (BUG-017, backend out of scope). -->
               {{ isZh ? card.name_zh : card.name }}
             </p>
           </div>
@@ -565,10 +567,10 @@ onMounted(async () => {
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div
           v-for="(step, i) in [
-            { en: 'Upload a room photo or sketch', zh: '上傳房間照片或草圖' },
-            { en: 'Pick a mode + style (or describe in text)', zh: '選擇模式與風格（或用文字描述）' },
-            { en: 'Adjust strength, lighting, material', zh: '微調強度、燈光、材質' },
-            { en: 'Generate & download proposal-grade renders', zh: '生成並下載提案級渲染' },
+            L('上傳房間照片或草圖', 'Upload a room photo or sketch', '部屋の写真かスケッチをアップロード', '방 사진이나 스케치 업로드', 'Sube una foto o boceto'),
+            L('選擇模式與風格（或用文字描述）', 'Pick a mode + style (or describe in text)', 'モードとスタイルを選択（テキストで記述も可）', '모드와 스타일 선택 (또는 텍스트로 설명)', 'Elige un modo y estilo (o descríbelo)'),
+            L('微調強度、燈光、材質', 'Adjust strength, lighting, material', '強度、照明、素材を調整', '강도, 조명, 재질 조정', 'Ajusta fuerza, iluminación y material'),
+            L('生成並下載提案級渲染', 'Generate & download proposal-grade renders', '生成して提案レベルの画像をダウンロード', '생성 후 제안용 렌더링 다운로드', 'Genera y descarga renders profesionales'),
           ]"
           :key="i"
           class="rounded-xl p-4"
@@ -576,7 +578,7 @@ onMounted(async () => {
         >
           <p class="text-xs font-mono mb-1" style="color: #a78bfa;">0{{ i + 1 }}</p>
           <p class="text-sm" style="color: #f5f5fa;">
-            {{ isZh ? step.zh : step.en }}
+            {{ step }}
           </p>
         </div>
       </div>

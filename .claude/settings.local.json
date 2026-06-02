@@ -444,7 +444,11 @@
       "Bash(awk 'NR>=435 && /^\\\\]/{print NR\": \"$0; exit} NR>=435 && /service_type/{print NR\": \"$0}' scripts/seed_new_pricing_tiers.py)",
       "Bash(echo \"=== exit status: $? ===\")",
       "Bash(~/google-cloud-sdk/bin/gcloud --version)",
-      "Bash(~/google-cloud-sdk/bin/gcloud auth *)"
+      "Bash(~/google-cloud-sdk/bin/gcloud auth *)",
+      "Bash(awk '/PIAPI_KLING_VERSIONS *= *{/,/}/' app/providers/piapi_provider.py)",
+      "Bash(awk '/def _stream_with_heartbeat/,/^[^ ]/' app/api/v1/tools.py)",
+      "Bash(sed -n '1,40p' backend/Dockerfile)",
+      "Bash(sed -n '1,40p' Dockerfile)"
     ],
     "additionalDirectories": [
       "/private/tmp"

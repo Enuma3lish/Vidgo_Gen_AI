@@ -4,21 +4,29 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
 import { useBrandingStore } from '@/stores/branding'
+import { useLocalized } from '@/composables'
 import { TOOL_EXAMPLES, LANDING_HIGHLIGHTS } from '@/data/toolExamples'
 
 const { t, tm, locale } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const brandingStore = useBrandingStore()
+// 5-language picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 // Admin-editable hero tagline (added 2026-05-23). When the admin types
 // brand_tagline_zh / brand_tagline_en in /admin/branding, that string
 // replaces the hardcoded `t('lp.sub1')` headline subtitle. Empty/null
 // falls back to the i18n default so unconfigured installs render fine.
+//
+// Locale handling (2026-06-02): admin only stores _zh/_en. For ja/ko/es
+// visitors, respect i18n fallback rather than leaking English admin copy.
 const brandTagline = computed(() => {
   const s = brandingStore.settings
-  const isZh = String(locale.value || '').startsWith('zh')
-  return (isZh ? s.brand_tagline_zh : s.brand_tagline_en) || ''
+  const l = String(locale.value || '')
+  if (l.startsWith('zh')) return s.brand_tagline_zh || ''
+  if (l.startsWith('en')) return s.brand_tagline_en || ''
+  return ''
 })
 
 // ── Real demo data from API ──
@@ -254,19 +262,23 @@ const _toolRouteMap: Record<string, string> = {
   'background-removal':     '/tools/background-removal',
 }
 
-const _toolDisplayName: Record<string, { zh: string; en: string }> = {
-  'midjourney-imagine':    { zh: 'AI 圖片生成',      en: 'AI Image Generation' },
-  'kling-video':           { zh: 'Kling 影片',       en: 'Kling Video' },
-  'try-on':                { zh: '虛擬試穿',         en: 'Virtual Try-On' },
-  'room-redesign':         { zh: '室內設計',         en: 'Room Redesign' },
-  'pattern-generate':      { zh: '花紋設計',         en: 'Pattern Design' },
-  'product-scene-classic': { zh: '商品場景',         en: 'Product Scene' },
-  'short-video':           { zh: '短影音',           en: 'Short Video' },
-  'claymation':            { zh: '黏土風',           en: 'Claymation' },
-  'ai-avatar':             { zh: 'AI 數位人',        en: 'AI Avatar' },
-  'image-translator':      { zh: '圖片翻譯',         en: 'Image Translator' },
-  'image-upscale':         { zh: '高清放大',         en: 'Image Upscale' },
-  'background-removal':    { zh: '去背',             en: 'Background Removal' },
+// 5-language tool display labels. Indexed by tool key; values supply
+// translations for all supported locales so ja/ko/es viewers never fall
+// through to the English label (BUG-017).
+interface ToolDisplayName { zh: string; en: string; ja: string; ko: string; es: string }
+const _toolDisplayName: Record<string, ToolDisplayName> = {
+  'midjourney-imagine':    { zh: 'AI 圖片生成',  en: 'AI Image Generation', ja: 'AI画像生成',         ko: 'AI 이미지 생성',  es: 'Generación de imágenes IA' },
+  'kling-video':           { zh: 'Kling 影片',   en: 'Kling Video',         ja: 'Kling 動画',          ko: 'Kling 비디오',    es: 'Video Kling' },
+  'try-on':                { zh: '虛擬試穿',     en: 'Virtual Try-On',      ja: 'バーチャル試着',       ko: '가상 피팅',       es: 'Probador virtual' },
+  'room-redesign':         { zh: '室內設計',     en: 'Room Redesign',       ja: 'インテリアリデザイン', ko: '룸 리디자인',     es: 'Rediseño de habitaciones' },
+  'pattern-generate':      { zh: '花紋設計',     en: 'Pattern Design',      ja: 'パターンデザイン',     ko: '패턴 디자인',     es: 'Diseño de patrones' },
+  'product-scene-classic': { zh: '商品場景',     en: 'Product Scene',       ja: '商品シーン',           ko: '제품 장면',       es: 'Escena de producto' },
+  'short-video':           { zh: '短影音',       en: 'Short Video',         ja: 'ショート動画',         ko: '쇼트 비디오',     es: 'Video corto' },
+  'claymation':            { zh: '黏土風',       en: 'Claymation',          ja: 'クレイメーション',     ko: '클레이메이션',    es: 'Estilo plastilina' },
+  'ai-avatar':             { zh: 'AI 數位人',    en: 'AI Avatar',           ja: 'AIアバター',           ko: 'AI 아바타',       es: 'Avatar IA' },
+  'image-translator':      { zh: '圖片翻譯',     en: 'Image Translator',    ja: '画像翻訳',             ko: '이미지 번역',     es: 'Traductor de imágenes' },
+  'image-upscale':         { zh: '高清放大',     en: 'Image Upscale',       ja: '高解像度化',           ko: '이미지 업스케일', es: 'Ampliación HD' },
+  'background-removal':    { zh: '去背',         en: 'Background Removal',  ja: '背景除去',             ko: '배경 제거',       es: 'Quitar fondo' },
 }
 
 interface HighlightCard {
@@ -282,10 +294,13 @@ const landingHighlightCards = computed<HighlightCard[]>(() => {
     const list = TOOL_EXAMPLES[h.tool] || []
     const ex = list.find(e => e.id === h.example_id) || list[0]
     if (!ex) return null
-    const tn = _toolDisplayName[h.tool] || { zh: h.tool, en: h.tool }
+    const fallback: ToolDisplayName = { zh: h.tool, en: h.tool, ja: h.tool, ko: h.tool, es: h.tool }
+    const tn = _toolDisplayName[h.tool] || fallback
+    // TOOL_EXAMPLES has only _zh / _en columns; ja/ko/es fall back to the
+    // English copy (legible) rather than mixing with Chinese (BUG-017).
     return {
       toolKey: h.tool,
-      toolName: isZhLocale.value ? tn.zh : tn.en,
+      toolName: L(tn.zh, tn.en, tn.ja, tn.ko, tn.es),
       route: _toolRouteMap[h.tool] || '/dashboard',
       category: isZhLocale.value ? ex.category_zh : ex.category_en,
       promptText: isZhLocale.value ? ex.prompt_zh : ex.prompt_en,
@@ -345,9 +360,15 @@ function localizedProductName(rawName: string | undefined | null): string {
 function seasonLabel(preset: any, seasonId?: string): string {
   const params = preset.input_params || {}
   const isZh = locale.value.startsWith('zh')
+  // Resolution order: zh-locale uses _zh; everyone else picks the raw
+  // product_name (English) and we then route it through
+  // localizedProductName() which keys into the i18n catalogue
+  // (lp.productNames.*) — so ja/ko/es get their localized label when one
+  // exists, instead of always reading the English DB field (BUG-017).
   const rawName =
-    (isZh ? params.product_name_zh : params.product_name_en) ||
+    (isZh ? params.product_name_zh : null) ||
     params.product_name ||
+    params.product_name_en ||
     ''
   const productName = localizedProductName(rawName) || (isZh
     ? preset.title_zh || preset.title_en
@@ -1049,12 +1070,22 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-10">
           <h2 class="text-3xl md:text-4xl font-black mb-3" style="color: #f5f5fa;">
-            {{ isZhLocale ? '靈感範例 · 12 種一鍵試做' : 'Prompt Highlights · 12 Ideas to Try' }}
+            {{ L(
+              '靈感範例 · 12 種一鍵試做',
+              'Prompt Highlights · 12 Ideas to Try',
+              'プロンプト集 · 12 アイデア',
+              '프롬프트 모음 · 12가지 아이디어',
+              'Destacados de prompts · 12 ideas',
+            ) }}
           </h2>
           <p class="text-base max-w-2xl mx-auto" style="color: #9494b0;">
-            {{ isZhLocale
-              ? '從每個工具精選一組提示詞，點擊卡片直接前往對應工具開始創作。'
-              : 'One cherry-picked prompt per tool — click any card to jump to that tool and start creating.' }}
+            {{ L(
+              '從每個工具精選一組提示詞，點擊卡片直接前往對應工具開始創作。',
+              'One cherry-picked prompt per tool — click any card to jump to that tool and start creating.',
+              'ツールごとに厳選したプロンプト。カードをクリックして、そのツールで作成を始められます。',
+              '도구별로 엄선된 프롬프트 한 가지. 카드를 클릭해 해당 도구로 바로 시작하세요.',
+              'Una prompt destacada por herramienta: haz clic en cualquier tarjeta para abrirla.',
+            ) }}
           </p>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -1074,7 +1105,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             </div>
             <p class="text-sm leading-snug flex-1" style="color: #e8e8f0;">{{ h.promptText }}</p>
             <span class="text-xs font-medium mt-1" style="color: #a78bfa;">
-              {{ isZhLocale ? '前往工具' : 'Open tool' }} →
+              {{ L('前往工具', 'Open tool', 'ツールを開く', '도구 열기', 'Abrir herramienta') }} →
             </span>
           </RouterLink>
         </div>

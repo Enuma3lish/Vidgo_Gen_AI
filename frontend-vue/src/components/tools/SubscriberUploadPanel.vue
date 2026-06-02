@@ -261,8 +261,11 @@ const pendingDuration = computed(() => isVideoTool.value
   ? L('需要 1 至 5 分鐘', 'Usually takes 1 to 5 minutes', '通常1〜5分かかります', '보통 1-5분 소요', 'Suele tardar 1-5 minutos')
   : L('需要 1 至 2 分鐘', 'Usually takes 1 to 2 minutes', '通常1〜2分かかります', '보통 1-2분 소요', 'Suele tardar 1-2 minutos'))
 
-function localized(zh: string, en: string): string {
-  return isZh.value ? zh : en
+// Delegates to the 5-language L() helper so ja/ko/es viewers don't see
+// English (BUG-017). Localized variants are passed where they exist;
+// English is the safe fallback when a translation hasn't been written yet.
+function localized(zh: string, en: string, ja?: string, ko?: string, es?: string): string {
+  return L(zh, en, ja, ko, es)
 }
 
 // ─── Watchers ────────────────────────────────────────────────────────────────
@@ -376,7 +379,7 @@ async function downloadResult() {
     link.remove()
     URL.revokeObjectURL(objectUrl)
   } catch (err: any) {
-    const msg = err?.response?.data?.detail ?? localized('下載失敗，請再試一次。', 'Download failed. Please try again.')
+    const msg = err?.response?.data?.detail ?? localized('下載失敗，請再試一次。', 'Download failed. Please try again.', 'ダウンロードに失敗しました。もう一度お試しください。', '다운로드에 실패했습니다. 다시 시도해 주세요.', 'Error de descarga. Inténtalo de nuevo.')
     setStatus('error', msg)
   } finally {
     isDownloading.value = false
@@ -398,11 +401,11 @@ async function generate() {
       (pct) => { uploadProgress.value = pct },
     )
     currentUploadId.value = resp.upload_id
-    setStatus('info', localized('生成已開始...', 'Generation started...'))
+    setStatus('info', localized('生成已開始...', 'Generation started...', '生成を開始しました...', '생성을 시작했습니다...', 'Generación iniciada...'))
     startPolling(resp.upload_id)
   } catch (err: any) {
     isLoading.value = false
-    const msg = err?.response?.data?.detail ?? localized('上傳失敗，請再試一次。', 'Upload failed. Please try again.')
+    const msg = err?.response?.data?.detail ?? localized('上傳失敗，請再試一次。', 'Upload failed. Please try again.', 'アップロードに失敗しました。もう一度お試しください。', '업로드에 실패했습니다. 다시 시도해 주세요.', 'Error de carga. Inténtalo de nuevo.')
     setStatus('error', msg)
   }
 }
@@ -417,7 +420,7 @@ function startPolling(uploadId: string) {
         isLoading.value = false
         resultUrl.value = status.result_url
         resultVideoUrl.value = status.result_video_url
-        setStatus('success', localized('生成完成！', 'Generation complete!'))
+        setStatus('success', localized('生成完成！', 'Generation complete!', '生成が完了しました！', '생성이 완료되었습니다!', '¡Generación completa!'))
         emit('result', {
           result_url: status.result_url,
           result_video_url: status.result_video_url,
@@ -426,9 +429,9 @@ function startPolling(uploadId: string) {
       } else if (status.status === 'failed') {
         stopPolling()
         isLoading.value = false
-        setStatus('error', status.error_message ?? localized('生成失敗。', 'Generation failed.'))
+        setStatus('error', status.error_message ?? localized('生成失敗。', 'Generation failed.', '生成に失敗しました。', '생성에 실패했습니다.', 'Error en la generación.'))
       } else {
-        setStatus('info', localized(`處理中...（${status.status}）`, `Processing... (${status.status})`))
+        setStatus('info', localized(`處理中...（${status.status}）`, `Processing... (${status.status})`, `処理中...（${status.status}）`, `처리 중...(${status.status})`, `Procesando... (${status.status})`))
       }
     } catch {
       // keep polling

@@ -48,20 +48,37 @@ const { isDemoUser, loadInputLibrary, inputLibrary } = useDemoMode()
 
 // ─── Models (the "model" picker in piapi.ai style) ────────────────────
 type TryOnModelId = 'kling_try_on' | 'flux_kontext'
-const modelOptions: Array<{ id: TryOnModelId; nameEn: string; nameZh: string; desc_en: string; desc_zh: string }> = [
+interface TryOnModelOption {
+  id: TryOnModelId
+  nameZh: string; nameEn: string; nameJa: string; nameKo: string; nameEs: string
+  descZh: string; descEn: string; descJa: string; descKo: string; descEs: string
+}
+const modelOptions: TryOnModelOption[] = [
   {
     id: 'kling_try_on',
-    nameEn: 'Kling AI Try-On',
     nameZh: 'Kling AI 試穿',
-    desc_en: 'Image-to-image: drop a garment photo onto a model photo.',
-    desc_zh: '圖對圖：把服裝照片穿到模特照片上。',
+    nameEn: 'Kling AI Try-On',
+    nameJa: 'Kling AI 試着',
+    nameKo: 'Kling AI 피팅',
+    nameEs: 'Probador Kling AI',
+    descZh: '圖對圖：把服裝照片穿到模特照片上。',
+    descEn: 'Image-to-image: drop a garment photo onto a model photo.',
+    descJa: '画像→画像：服の写真をモデル写真に合成します。',
+    descKo: '이미지→이미지: 의상 사진을 모델 사진에 합성합니다.',
+    descEs: 'Imagen→imagen: aplica la prenda a la foto de la modelo.',
   },
   {
     id: 'flux_kontext',
-    nameEn: 'Flux Kontext (prompt mode)',
     nameZh: 'Flux Kontext（文字描述）',
-    desc_en: 'Image-to-image edit: keep the person, describe the outfit in text.',
-    desc_zh: '圖像編輯：保留人物，用文字描述新服裝。',
+    nameEn: 'Flux Kontext (prompt mode)',
+    nameJa: 'Flux Kontext（テキスト指示）',
+    nameKo: 'Flux Kontext (텍스트 모드)',
+    nameEs: 'Flux Kontext (modo prompt)',
+    descZh: '圖像編輯：保留人物，用文字描述新服裝。',
+    descEn: 'Image-to-image edit: keep the person, describe the outfit in text.',
+    descJa: '画像編集：人物はそのままに、新しい服装をテキストで指定します。',
+    descKo: '이미지 편집: 인물은 유지하고 텍스트로 새 의상을 설명합니다.',
+    descEs: 'Edita la imagen: conserva a la persona y describe el atuendo con texto.',
   },
 ]
 const selectedModel = ref<TryOnModelId>('kling_try_on')
@@ -114,7 +131,7 @@ const creditCost = computed(() => 15)
 async function generate() {
   if (disabled.value || status.value === 'running') return
   status.value = 'running'
-  statusText.value = isZh.value ? '生成中…通常需要 30-60 秒' : 'Generating… typically 30-60s'
+  statusText.value = L('生成中…通常需要 30-60 秒', 'Generating… typically 30-60s', '生成中…通常 30〜60 秒かかります', '생성 중… 보통 30-60초 소요', 'Generando… normalmente 30-60 s')
   resultUrl.value = null
   try {
     // Promote any local data: URIs to public URLs (Kontext / Kling cannot
@@ -125,12 +142,12 @@ async function generate() {
     ])
     if (!personUrl) {
       status.value = 'error'
-      uiStore.showError(isZh.value ? '人物照片上傳失敗' : 'Person photo upload failed')
+      uiStore.showError(L('人物照片上傳失敗', 'Person photo upload failed', '人物写真のアップロードに失敗しました', '인물 사진 업로드 실패', 'Error al subir la foto de la persona'))
       return
     }
     if (selectedModel.value === 'kling_try_on' && !garmentUrl) {
       status.value = 'error'
-      uiStore.showError(isZh.value ? '服裝照片上傳失敗' : 'Garment photo upload failed')
+      uiStore.showError(L('服裝照片上傳失敗', 'Garment photo upload failed', '衣服の写真のアップロードに失敗しました', '의상 사진 업로드 실패', 'Error al subir la foto de la prenda'))
       return
     }
 
@@ -150,18 +167,18 @@ async function generate() {
     if (result.success && (result.image_url || result.result_url)) {
       resultUrl.value = result.image_url || result.result_url || null
       status.value = 'done'
-      statusText.value = isZh.value ? '完成' : 'Done'
+      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
       if (result.credits_used) creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success'))
     } else {
       status.value = 'error'
-      statusText.value = isZh.value ? '生成失敗' : 'Failed'
-      uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '生成失敗，請稍後再試' : 'Generation failed, please retry.'))
+      statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Falló')
+      uiStore.showError((result as any).message || (result as any).error || L('生成失敗，請稍後再試', 'Generation failed, please retry.', '生成に失敗しました。再試行してください。', '생성에 실패했습니다. 다시 시도해 주세요.', 'Falló la generación. Inténtalo de nuevo.'))
     }
   } catch (e: any) {
     status.value = 'error'
-    statusText.value = isZh.value ? '錯誤' : 'Error'
-    uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Generation failed'))
+    statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
+    uiStore.showError(extractApiError(e, L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'Falló la generación')))
   }
 }
 
@@ -203,8 +220,8 @@ function gotoPricing() { router.push('/pricing') }
     :status="status"
     :status-text="statusText"
     :credit-cost="creditCost"
-    :generate-label="isZh ? '生成' : 'Generate'"
-    :generate-label-running="isZh ? '生成中…' : 'Generating…'"
+    :generate-label="L('生成', 'Generate', '生成', '생성', 'Generar')"
+    :generate-label-running="L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…')"
     :disabled="disabled || isDemoUser"
     @generate="generate"
   >
@@ -212,17 +229,17 @@ function gotoPricing() { router.push('/pricing') }
     <template #inputs>
       <!-- Model dropdown (piapi-style 'Model *') -->
       <div>
-        <label class="pp-field-label">{{ isZh ? '模型 *' : 'Model *' }}</label>
+        <label class="pp-field-label">{{ L('模型 *', 'Model *', 'モデル *', '모델 *', 'Modelo *') }}</label>
         <select class="pp-select" :value="selectedModel" @change="(e) => pickModel(((e.target as HTMLSelectElement).value as TryOnModelId))">
           <option v-for="m in modelOptions" :key="m.id" :value="m.id">
-            {{ (isZh ? m.nameZh : m.nameEn) }} — {{ (isZh ? m.desc_zh : m.desc_en) }}
+            {{ L(m.nameZh, m.nameEn, m.nameJa, m.nameKo, m.nameEs) }} — {{ L(m.descZh, m.descEn, m.descJa, m.descKo, m.descEs) }}
           </option>
         </select>
       </div>
 
       <!-- Task Type dropdown -->
       <div>
-        <label class="pp-field-label">{{ isZh ? '任務類型 *' : 'Task Type *' }}</label>
+        <label class="pp-field-label">{{ L('任務類型 *', 'Task Type *', 'タスクタイプ *', '작업 유형 *', 'Tipo de tarea *') }}</label>
         <select class="pp-select" :value="selectedTaskType" disabled>
           <option v-for="opt in taskTypeOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
         </select>
@@ -230,36 +247,40 @@ function gotoPricing() { router.push('/pricing') }
 
       <!-- Model image upload -->
       <div>
-        <label class="pp-field-label">{{ isZh ? '人物照片 *' : 'Person Photo *' }}</label>
+        <label class="pp-field-label">{{ L('人物照片 *', 'Person Photo *', '人物写真 *', '인물 사진 *', 'Foto de la persona *') }}</label>
         <ImageUploader
           tool-type="try_on_model"
           v-model="modelImageUrl"
-          :label="isZh ? '點擊或拖放人物照片' : 'Click or drag a person photo'"
+          :label="L('點擊或拖放人物照片', 'Click or drag a person photo', '人物写真をクリックまたはドラッグ', '인물 사진을 클릭하거나 끌어다 놓기', 'Haz clic o arrastra una foto de la persona')"
         />
         <p class="pp-field-help mt-1.5">
-          {{ isZh
-            ? '建議全身直立照，比例約 2:3 或 3:4（手機直拍）。正方形或橫拍會被拒絕。'
-            : 'Use a full-body portrait, roughly 2:3 or 3:4 (phone-portrait). Square or landscape photos will be rejected.' }}
+          {{ L(
+            '建議全身直立照，比例約 2:3 或 3:4（手機直拍）。正方形或橫拍會被拒絕。',
+            'Use a full-body portrait, roughly 2:3 or 3:4 (phone-portrait). Square or landscape photos will be rejected.',
+            '全身の縦長ポートレートを推奨（おおむね 2:3 または 3:4 / スマホ縦撮り）。正方形や横向きは弾かれます。',
+            '전신 세로 사진을 권장합니다(약 2:3 또는 3:4, 휴대폰 세로 촬영). 정사각형이나 가로 사진은 거부됩니다.',
+            'Usa un retrato de cuerpo entero, aprox. 2:3 o 3:4 (vertical). Las fotos cuadradas u horizontales serán rechazadas.',
+          ) }}
         </p>
       </div>
 
       <!-- Garment image (only for Kling mode) -->
       <div v-if="selectedModel === 'kling_try_on'">
-        <label class="pp-field-label">{{ isZh ? '服裝照片 *' : 'Garment Photo *' }}</label>
+        <label class="pp-field-label">{{ L('服裝照片 *', 'Garment Photo *', '衣服の写真 *', '의상 사진 *', 'Foto de la prenda *') }}</label>
         <ImageUploader
           tool-type="try_on"
           v-model="garmentImageUrl"
-          :label="isZh ? '點擊或拖放服裝照片' : 'Click or drag a garment photo'"
+          :label="L('點擊或拖放服裝照片', 'Click or drag a garment photo', '衣服の写真をクリックまたはドラッグ', '의상 사진을 클릭하거나 끌어다 놓기', 'Haz clic o arrastra una foto de la prenda')"
         />
         <div class="mt-2">
-          <p class="pp-field-help">{{ isZh ? '服裝類型（決定 Kling 的輸入欄位）' : 'Garment category (drives Kling input slot)' }}</p>
+          <p class="pp-field-help">{{ L('服裝類型（決定 Kling 的輸入欄位）', 'Garment category (drives Kling input slot)', '衣服のカテゴリ（Kling の入力スロットを決定）', '의상 카테고리 (Kling 입력 슬롯 결정)', 'Categoría de prenda (define la entrada de Kling)') }}</p>
           <div class="grid grid-cols-2 gap-2 mt-1">
             <button
               v-for="opt in [
-                { id: 'dress' as const,       label: isZh ? '連身/洋裝' : 'Dress' },
-                { id: 'upper_body' as const,  label: isZh ? '上身' : 'Upper' },
-                { id: 'lower_body' as const,  label: isZh ? '下身' : 'Lower' },
-                { id: 'full_body' as const,   label: isZh ? '整套' : 'Full Body' },
+                { id: 'dress' as const,       label: L('連身/洋裝', 'Dress', 'ワンピース', '드레스', 'Vestido') },
+                { id: 'upper_body' as const,  label: L('上身', 'Upper', '上半身', '상의', 'Parte superior') },
+                { id: 'lower_body' as const,  label: L('下身', 'Lower', '下半身', '하의', 'Parte inferior') },
+                { id: 'full_body' as const,   label: L('整套', 'Full Body', '全身', '풀바디', 'Cuerpo entero') },
               ]"
               :key="opt.id"
               type="button"
@@ -275,22 +296,30 @@ function gotoPricing() { router.push('/pricing') }
 
       <!-- Prompt + presets (only for Kontext mode) -->
       <div v-if="selectedModel === 'flux_kontext'">
-        <label class="pp-field-label">{{ isZh ? '服裝描述 *' : 'Outfit Prompt *' }}</label>
+        <label class="pp-field-label">{{ L('服裝描述 *', 'Outfit Prompt *', '服装の説明 *', '의상 설명 *', 'Prompt del atuendo *') }}</label>
         <textarea
           v-model="promptText"
           class="pp-textarea"
           rows="4"
           maxlength="2000"
-          :placeholder="isZh
-            ? '例：保留人物與姿勢，把服裝換成深藍色羊毛西裝，自然布料質感'
-            : 'e.g. Keep the person and pose, change the outfit to a tailored navy wool suit, realistic fabric texture'"
+          :placeholder="L(
+            '例：保留人物與姿勢，把服裝換成深藍色羊毛西裝，自然布料質感',
+            'e.g. Keep the person and pose, change the outfit to a tailored navy wool suit, realistic fabric texture',
+            '例：人物とポーズは保ち、服装を仕立てたネイビーのウールスーツに変更（自然な質感）',
+            '예: 인물과 자세는 그대로 두고, 의상을 맞춤 네이비 울 슈트로 변경(자연스러운 질감)',
+            'p. ej. Mantén la persona y la pose, cambia el atuendo por un traje de lana azul marino, textura realista',
+          )"
         ></textarea>
-        <p class="pp-field-help">{{ isZh
-          ? '提示：以「保留人物、把服裝換成…」開頭效果最佳。'
-          : 'Tip: prompts starting with "Keep the person, change the outfit to…" work best.' }}</p>
+        <p class="pp-field-help">{{ L(
+          '提示：以「保留人物、把服裝換成…」開頭效果最佳。',
+          'Tip: prompts starting with "Keep the person, change the outfit to…" work best.',
+          'ヒント：「人物はそのままに、服装を…に変更」で始めると効果的です。',
+          '팁: "인물은 유지하고, 의상을 …로 변경"으로 시작하면 가장 효과적입니다.',
+          'Consejo: empieza con "Conserva a la persona, cambia el atuendo a…"',
+        ) }}</p>
 
         <div class="mt-3">
-          <p class="pp-field-label">{{ isZh ? '快速套用' : 'Quick Presets' }}</p>
+          <p class="pp-field-label">{{ L('快速套用', 'Quick Presets', 'クイックプリセット', '빠른 프리셋', 'Preajustes rápidos') }}</p>
           <div class="flex flex-wrap gap-1.5">
             <button
               v-for="p in outfitPresets"
@@ -305,8 +334,8 @@ function gotoPricing() { router.push('/pricing') }
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
-        {{ isZh ? '訂閱後即可使用此工具生成你的圖片。' : 'Subscribe to generate your own results.' }}
-        <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
+        {{ L('訂閱後即可使用此工具生成你的圖片。', 'Subscribe to generate your own results.', '購読すると、このツールで自分の画像を生成できます。', '구독하면 이 도구로 직접 결과물을 생성할 수 있습니다.', 'Suscríbete para generar tus propios resultados.') }}
+        <button @click="gotoPricing" class="underline ml-1">{{ L('查看方案', 'View Plans', 'プランを見る', '플랜 보기', 'Ver planes') }} →</button>
       </p>
     </template>
 
@@ -320,17 +349,17 @@ function gotoPricing() { router.push('/pricing') }
         @click="downloadAsset(resultUrl!, `vidgo_tryon_${Date.now()}.png`)"
         class="px-3 py-1.5 rounded text-xs font-medium"
         style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
-      >📥 {{ isZh ? '下載' : 'Download' }}</button>
+      >📥 {{ L('下載', 'Download', 'ダウンロード', '다운로드', 'Descargar') }}</button>
       <button
         @click="generate"
         class="px-3 py-1.5 rounded text-xs font-medium ml-2"
         style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
-      >🔄 {{ isZh ? '重新生成' : 'Regenerate' }}</button>
+      >🔄 {{ L('重新生成', 'Regenerate', '再生成', '재생성', 'Regenerar') }}</button>
     </template>
 
     <!-- ─── EXAMPLES ─── -->
     <template v-if="examples.length > 0" #examples-title>
-      {{ isZh ? '範例靈感' : 'Example Inspirations' }}
+      {{ L('範例靈感', 'Example Inspirations', '例とインスピレーション', '예시 영감', 'Ejemplos e inspiración') }}
     </template>
     <template v-if="examples.length > 0" #examples>
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">

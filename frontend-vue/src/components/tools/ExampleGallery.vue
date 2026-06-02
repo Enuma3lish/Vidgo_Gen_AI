@@ -7,7 +7,7 @@
  * tools. Cards are non-interactive; users can copy the prompt text manually.
  */
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useLocalized } from '@/composables'
 import { TOOL_EXAMPLES, type ToolExample } from '@/data/toolExamples'
 
 interface Props {
@@ -18,20 +18,33 @@ interface Props {
 }
 const props = defineProps<Props>()
 
-const { locale } = useI18n()
-const isZh = computed(() => String(locale.value || '').startsWith('zh'))
+// 5-language picker — fixes ja/ko/es fall-through (BUG-017).
+// TOOL_EXAMPLES only stores _zh/_en today; ja/ko/es viewers see the English
+// prompt (still readable; mixed zh+en strings would not be).
+const { L, isChinese } = useLocalized()
+const isZh = isChinese
 
 const examples = computed<ToolExample[]>(() => TOOL_EXAMPLES[props.toolKey] || [])
 
 const titleText = computed(() => {
   if (props.title) return props.title
-  return isZh.value ? '提示詞範例 · 10 種靈感' : 'Prompt Examples · 10 Ideas'
+  return L(
+    '提示詞範例 · 10 種靈感',
+    'Prompt Examples · 10 Ideas',
+    'プロンプト例 · 10 アイデア',
+    '프롬프트 예시 · 10가지 아이디어',
+    'Ejemplos de prompts · 10 ideas',
+  )
 })
 
 const subtitleText = computed(() =>
-  isZh.value
-    ? '從以下範例獲得靈感，複製文字到上方提示詞欄位即可開始。'
-    : 'Get inspired — copy any prompt above into the generator to try it.'
+  L(
+    '從以下範例獲得靈感，複製文字到上方提示詞欄位即可開始。',
+    'Get inspired — copy any prompt above into the generator to try it.',
+    '以下の例からヒントを得て、プロンプト欄にコピーして使ってみてください。',
+    '아래 예시에서 영감을 얻어 위 프롬프트 입력란에 복사해 사용해 보세요.',
+    'Inspírate con los ejemplos: copia cualquiera al campo de prompt para probarlo.',
+  )
 )
 
 async function copyPrompt(text: string) {
@@ -76,7 +89,7 @@ async function copyPrompt(text: string) {
             class="self-start mt-auto text-[11px] font-medium"
             style="color: #a78bfa;"
           >
-            {{ isZh ? '複製提示詞' : 'Copy prompt' }} →
+            {{ L('複製提示詞', 'Copy prompt', 'プロンプトをコピー', '프롬프트 복사', 'Copiar prompt') }} →
           </button>
         </div>
       </div>

@@ -36,15 +36,14 @@
  * Props: title, subtitle, status ('idle' | 'running' | 'done' | 'error'),
  * statusText, creditCost, onGenerate (callback), disabled
  */
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useLocalized } from '@/composables'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
-const { locale } = useI18n()
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
 // Used to localize the "Cost per run / 單次消耗" label on the credit-cost
 // badge. The rest of the playground copy comes from each tool view's
 // own translations passed via props/slots.
-const isZh = computed(() => String(locale.value || '').startsWith('zh'))
+const { L } = useLocalized()
 
 interface Props {
   title: string
@@ -133,11 +132,11 @@ function onGenerateClick() {
             style="background: rgba(124,58,237,0.10); border: 1px solid rgba(124,58,237,0.25);"
           >
             <span class="text-xs font-medium" style="color: #c4b5fd;">
-              {{ isZh ? '單次消耗' : 'Cost per run' }}
+              {{ L('單次消耗', 'Cost per run', '1回あたり', '1회 비용', 'Coste por ejecución') }}
             </span>
             <span class="text-sm font-bold tabular-nums" style="color: #fff;">
               {{ creditCost }}
-              <span class="text-xs opacity-70 font-normal ml-0.5">{{ isZh ? '點' : 'credits' }}</span>
+              <span class="text-xs opacity-70 font-normal ml-0.5">{{ L('點', 'credits', 'クレジット', '크레딧', 'créditos') }}</span>
             </span>
           </div>
 

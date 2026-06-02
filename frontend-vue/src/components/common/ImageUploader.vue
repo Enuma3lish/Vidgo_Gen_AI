@@ -70,9 +70,14 @@ async function processFile(file: File): Promise<boolean> {
   uploadError.value = ''
 
   if (!isAllowedImageFile(file)) {
-    uploadError.value = isZh
-      ? `不支援的圖片格式（${file.type || '未知'}），請改用 ${ALLOWED_IMAGE_EXT_LABEL} 格式重新上傳。`
-      : `Unsupported image format (${file.type || 'unknown'}). Please re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`
+    const unknown = L('未知', 'unknown', '不明', '알 수 없음', 'desconocido')
+    uploadError.value = L(
+      `不支援的圖片格式（${file.type || unknown}），請改用 ${ALLOWED_IMAGE_EXT_LABEL} 格式重新上傳。`,
+      `Unsupported image format (${file.type || unknown}). Please re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`,
+      `対応していない画像形式（${file.type || unknown}）です。${ALLOWED_IMAGE_EXT_LABEL} 形式で再アップロードしてください。`,
+      `지원하지 않는 이미지 형식(${file.type || unknown})입니다. ${ALLOWED_IMAGE_EXT_LABEL} 형식으로 다시 업로드해 주세요.`,
+      `Formato de imagen no compatible (${file.type || unknown}). Vuelve a subirla como ${ALLOWED_IMAGE_EXT_LABEL}.`,
+    )
     return false
   }
 
@@ -80,16 +85,24 @@ async function processFile(file: File): Promise<boolean> {
   try {
     uploadFile = await normalizeImageFileForUpload(file, rule.value, { maxSizeMb: MAX_IMAGE_SIZE_MB })
   } catch (error: any) {
-    uploadError.value = isZh
-      ? '無法處理圖片尺寸或壓縮，請改用 JPG / PNG / WebP 重新上傳。'
-      : (error?.message || 'Image could not be resized or compressed. Please re-upload as JPG, PNG, or WebP.')
+    uploadError.value = L(
+      '無法處理圖片尺寸或壓縮，請改用 JPG / PNG / WebP 重新上傳。',
+      error?.message || 'Image could not be resized or compressed. Please re-upload as JPG, PNG, or WebP.',
+      '画像のサイズ変更または圧縮に失敗しました。JPG / PNG / WebP で再アップロードしてください。',
+      '이미지 크기 조정 또는 압축에 실패했습니다. JPG / PNG / WebP 형식으로 다시 업로드해 주세요.',
+      'No se pudo redimensionar o comprimir la imagen. Vuelve a subirla como JPG, PNG o WebP.',
+    )
     return false
   }
 
   if (uploadFile.size > MAX_SIZE_BYTES) {
-    uploadError.value = isZh
-      ? `圖片壓縮後仍超過 ${MAX_IMAGE_SIZE_MB}MB，請改用 ${ALLOWED_IMAGE_EXT_LABEL} 格式重新上傳。`
-      : `Image is still over ${MAX_IMAGE_SIZE_MB}MB after compression. Please re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`
+    uploadError.value = L(
+      `圖片壓縮後仍超過 ${MAX_IMAGE_SIZE_MB}MB，請改用 ${ALLOWED_IMAGE_EXT_LABEL} 格式重新上傳。`,
+      `Image is still over ${MAX_IMAGE_SIZE_MB}MB after compression. Please re-upload as ${ALLOWED_IMAGE_EXT_LABEL}.`,
+      `圧縮後も ${MAX_IMAGE_SIZE_MB}MB を超えています。${ALLOWED_IMAGE_EXT_LABEL} 形式で再アップロードしてください。`,
+      `압축 후에도 ${MAX_IMAGE_SIZE_MB}MB를 초과합니다. ${ALLOWED_IMAGE_EXT_LABEL} 형식으로 다시 업로드해 주세요.`,
+      `La imagen sigue superando ${MAX_IMAGE_SIZE_MB}MB tras la compresión. Vuelve a subirla como ${ALLOWED_IMAGE_EXT_LABEL}.`,
+    )
     return false
   }
 

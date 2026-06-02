@@ -2,34 +2,40 @@
 import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAdminStore } from '@/stores/admin'
+import { useLocalized } from '@/composables'
 
 const adminStore = useAdminStore()
 const { locale } = useI18n()
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 const selectedToolType = ref('')
 const selectedStatus = ref('')
+// Retained for backend-data ternaries below (material.title_zh / title_en).
 const isZh = computed(() => locale.value === 'zh-TW')
 
-function localized(zh: string, en: string): string {
-  return isZh.value ? zh : en
+// Delegates to the 5-language L() helper so ja/ko/es viewers don't see
+// English (BUG-017). Optional ja/ko/es default to English when omitted.
+function localized(zh: string, en: string, ja?: string, ko?: string, es?: string): string {
+  return L(zh, en, ja, ko, es)
 }
 
 const toolTypes = computed(() => [
-  { value: 'background_removal', label: localized('智能去背', 'Background Removal') },
-  { value: 'product_scene', label: localized('商品情境', 'Product Scene') },
-  { value: 'try_on', label: localized('模特換裝', 'Try-On') },
-  { value: 'room_redesign', label: localized('空間改造', 'Room Redesign') },
-  { value: 'short_video', label: localized('短影音', 'Short Video') },
-  { value: 'ai_avatar', label: localized('數位人', 'AI Avatar') },
-  { value: 'pattern_generate', label: localized('圖案生成', 'Pattern Generator') },
-  { value: 'effect', label: localized('圖片特效', 'Image Effect') }
+  { value: 'background_removal', label: localized('智能去背', 'Background Removal', '背景除去', '배경 제거', 'Quitar fondo') },
+  { value: 'product_scene', label: localized('商品情境', 'Product Scene', '商品シーン', '제품 장면', 'Escena de producto') },
+  { value: 'try_on', label: localized('模特換裝', 'Try-On', '試着', '가상 피팅', 'Probador virtual') },
+  { value: 'room_redesign', label: localized('空間改造', 'Room Redesign', '空間リデザイン', '공간 리디자인', 'Rediseño de espacio') },
+  { value: 'short_video', label: localized('短影音', 'Short Video', 'ショート動画', '쇼트 비디오', 'Video corto') },
+  { value: 'ai_avatar', label: localized('數位人', 'AI Avatar', 'AIアバター', 'AI 아바타', 'Avatar IA') },
+  { value: 'pattern_generate', label: localized('圖案生成', 'Pattern Generator', 'パターン生成', '패턴 생성', 'Generador de patrones') },
+  { value: 'effect', label: localized('圖片特效', 'Image Effect', '画像エフェクト', '이미지 이펙트', 'Efecto de imagen') }
 ])
 
 const statuses = computed(() => [
-  { value: 'pending', label: localized('待審核', 'Pending') },
-  { value: 'approved', label: localized('已通過', 'Approved') },
-  { value: 'rejected', label: localized('已拒絕', 'Rejected') },
-  { value: 'featured', label: localized('精選', 'Featured') }
+  { value: 'pending', label: localized('待審核', 'Pending', '審査待ち', '검수 대기', 'Pendiente') },
+  { value: 'approved', label: localized('已通過', 'Approved', '承認済み', '승인됨', 'Aprobado') },
+  { value: 'rejected', label: localized('已拒絕', 'Rejected', '却下', '거부됨', 'Rechazado') },
+  { value: 'featured', label: localized('精選', 'Featured', 'おすすめ', '추천', 'Destacado') }
 ])
 
 onMounted(() => {
@@ -52,7 +58,7 @@ async function loadMaterials(page = 1) {
 async function reviewMaterial(materialId: string, action: 'approve' | 'reject' | 'feature') {
   let reason: string | undefined
   if (action === 'reject') {
-    reason = prompt(localized('請輸入拒絕原因：', 'Please enter a rejection reason:')) || undefined
+    reason = prompt(localized('請輸入拒絕原因：', 'Please enter a rejection reason:', '却下理由を入力してください：', '거부 사유를 입력해 주세요:', 'Introduce el motivo del rechazo:')) || undefined
     if (!reason) return
   }
 
@@ -81,6 +87,7 @@ function getStatusLabel(status: string | null): string {
 }
 
 function getMaterialTitle(material: { title_zh?: string | null; title_en?: string | null; topic?: string | null }): string {
+  // Backend stores only title_zh / title_en — ja/ko/es fall through to English (BUG-017, backend out of scope).
   return isZh.value
     ? material.title_zh || material.title_en || material.topic || '-'
     : material.title_en || material.title_zh || material.topic || '-'
@@ -90,20 +97,20 @@ function getMaterialTitle(material: { title_zh?: string | null; title_en?: strin
 <template>
   <div class="admin-materials">
     <header class="page-header">
-      <h1>{{ localized('素材管理', 'Material Management') }}</h1>
-      <p class="subtitle">{{ localized('管理預生成範例、展示素材與審核狀態', 'Manage pregenerated examples, showcase materials, and review status') }}</p>
+      <h1>{{ localized('素材管理', 'Material Management', '素材管理', '소재 관리', 'Gestión de materiales') }}</h1>
+      <p class="subtitle">{{ localized('管理預生成範例、展示素材與審核狀態', 'Manage pregenerated examples, showcase materials, and review status', '事前生成のサンプル、紹介素材、審査ステータスを管理します', '미리 생성된 예시, 쇼케이스 소재, 검수 상태를 관리합니다', 'Gestiona ejemplos pregenerados, materiales de muestra y el estado de revisión') }}</p>
     </header>
 
     <!-- Filters -->
     <div class="filters">
       <select v-model="selectedToolType" class="filter-select">
-        <option value="">{{ localized('全部工具', 'All Tools') }}</option>
+        <option value="">{{ localized('全部工具', 'All Tools', 'すべてのツール', '모든 도구', 'Todas las herramientas') }}</option>
         <option v-for="tool in toolTypes" :key="tool.value" :value="tool.value">
           {{ tool.label }}
         </option>
       </select>
       <select v-model="selectedStatus" class="filter-select">
-        <option value="">{{ localized('全部狀態', 'All Statuses') }}</option>
+        <option value="">{{ localized('全部狀態', 'All Statuses', 'すべてのステータス', '모든 상태', 'Todos los estados') }}</option>
         <option v-for="status in statuses" :key="status.value" :value="status.value">
           {{ status.label }}
         </option>
@@ -121,7 +128,7 @@ function getMaterialTitle(material: { title_zh?: string | null; title_en?: strin
           <img
             v-if="material.result_image_url"
             :src="material.result_image_url"
-            :alt="getMaterialTitle(material) || localized('素材', 'Material')"
+            :alt="getMaterialTitle(material) || localized('素材', 'Material', '素材', '소재', 'Material')"
           />
           <video
             v-else-if="material.result_video_url"
@@ -131,7 +138,7 @@ function getMaterialTitle(material: { title_zh?: string | null; title_en?: strin
             @mouseenter="($event.target as HTMLVideoElement).play()"
             @mouseleave="($event.target as HTMLVideoElement).pause()"
           />
-          <div v-else class="no-preview">{{ localized('無預覽', 'No Preview') }}</div>
+          <div v-else class="no-preview">{{ localized('無預覽', 'No Preview', 'プレビューなし', '미리보기 없음', 'Sin vista previa') }}</div>
         </div>
 
         <div class="material-info">
@@ -145,24 +152,24 @@ function getMaterialTitle(material: { title_zh?: string | null; title_en?: strin
           <h3 class="material-title">{{ getMaterialTitle(material) }}</h3>
 
           <div class="material-meta">
-            <span>{{ localized(`${material.view_count} 次瀏覽`, `${material.view_count} views`) }}</span>
+            <span>{{ localized(`${material.view_count} 次瀏覽`, `${material.view_count} views`, `${material.view_count} 回視聴`, `조회 ${material.view_count}회`, `${material.view_count} vistas`) }}</span>
             <span>{{ formatDate(material.created_at) }}</span>
           </div>
 
           <div class="material-actions" v-if="material.status === 'pending'">
             <button @click="reviewMaterial(material.id, 'approve')" class="btn approve">
-              {{ localized('通過', 'Approve') }}
+              {{ localized('通過', 'Approve', '承認', '승인', 'Aprobar') }}
             </button>
             <button @click="reviewMaterial(material.id, 'feature')" class="btn feature">
-              {{ localized('設為精選', 'Feature') }}
+              {{ localized('設為精選', 'Feature', 'おすすめに設定', '추천 설정', 'Destacar') }}
             </button>
             <button @click="reviewMaterial(material.id, 'reject')" class="btn reject">
-              {{ localized('拒絕', 'Reject') }}
+              {{ localized('拒絕', 'Reject', '却下', '거부', 'Rechazar') }}
             </button>
           </div>
           <div class="material-actions" v-else-if="material.status !== 'featured'">
             <button @click="reviewMaterial(material.id, 'feature')" class="btn feature">
-              {{ localized('設為精選', 'Feature') }}
+              {{ localized('設為精選', 'Feature', 'おすすめに設定', '추천 설정', 'Destacar') }}
             </button>
           </div>
         </div>
@@ -171,7 +178,7 @@ function getMaterialTitle(material: { title_zh?: string | null; title_en?: strin
 
     <!-- Empty State -->
     <div v-if="adminStore.materials.length === 0 && !adminStore.isLoading" class="empty-state">
-      <p>{{ localized('找不到素材', 'No materials found') }}</p>
+      <p>{{ localized('找不到素材', 'No materials found', '素材が見つかりません', '소재를 찾을 수 없습니다', 'No se encontraron materiales') }}</p>
     </div>
 
     <!-- Pagination -->
@@ -181,17 +188,17 @@ function getMaterialTitle(material: { title_zh?: string | null; title_en?: strin
         :disabled="adminStore.materialsPage <= 1"
         class="page-btn"
       >
-        {{ localized('上一頁', 'Previous') }}
+        {{ localized('上一頁', 'Previous', '前へ', '이전', 'Anterior') }}
       </button>
       <span class="page-info">
-        {{ localized(`第 ${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)} 頁`, `Page ${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)}`) }}
+        {{ localized(`第 ${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)} 頁`, `Page ${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)}`, `${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)} ページ`, `${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)} 페이지`, `Página ${adminStore.materialsPage} / ${Math.ceil(adminStore.materialsTotal / 20)}`) }}
       </span>
       <button
         @click="loadMaterials(adminStore.materialsPage + 1)"
         :disabled="adminStore.materialsPage >= Math.ceil(adminStore.materialsTotal / 20)"
         class="page-btn"
       >
-        {{ localized('下一頁', 'Next') }}
+        {{ localized('下一頁', 'Next', '次へ', '다음', 'Siguiente') }}
       </button>
     </div>
 

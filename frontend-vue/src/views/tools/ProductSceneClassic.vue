@@ -74,7 +74,7 @@ async function generate() {
   // catalog scene (preset); a custom prompt returns
   // 'subscription_card_required', handled below.
   status.value = 'running'
-  statusText.value = isZh.value ? '生成中…' : 'Generating…'
+  statusText.value = L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…')
   resultUrl.value = null
   try {
     const url = await ensureImageUrl()
@@ -95,16 +95,16 @@ async function generate() {
     if (result.success && (result.image_url || result.result_url)) {
       resultUrl.value = result.image_url || result.result_url || null
       status.value = 'done'
-      statusText.value = isZh.value ? '完成' : 'Done'
+      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
       if (result.credits_used) creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success') || 'Success')
     } else {
       status.value = 'error'
-      uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '生成失敗' : 'Failed'))
+      uiStore.showError((result as any).message || (result as any).error || L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Generación fallida'))
     }
   } catch (e: any) {
     status.value = 'error'
-    uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Failed'))
+    uiStore.showError(extractApiError(e, L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Generación fallida')))
   }
 }
 
@@ -114,60 +114,65 @@ function gotoPricing() { router.push('/pricing') }
 <template>
   <PiapiPlayground
     :eta-seconds="40"
-    :title="isZh ? '商品場景圖' : 'Product Scene'"
-    :subtitle="isZh
-      ? '上傳商品照片，AI 把產品放進新場景（攝影棚、自然、優雅、極簡、生活風或自訂）。保留產品標籤與顏色不變形。'
-      : 'Upload a product photo; AI places the product into a new scene (studio / nature / elegant / minimal / lifestyle / custom). Label and color preserved.'"
+    :title="L('商品場景圖', 'Product Scene', '商品シーン', '제품 장면', 'Escena de producto')"
+    :subtitle="L(
+      '上傳商品照片，AI 把產品放進新場景（攝影棚、自然、優雅、極簡、生活風或自訂）。保留產品標籤與顏色不變形。',
+      'Upload a product photo; AI places the product into a new scene (studio / nature / elegant / minimal / lifestyle / custom). Label and color preserved.',
+      '商品写真をアップロードすると、AI が新しいシーン（スタジオ／自然／エレガント／ミニマル／ライフスタイル／カスタム）に配置します。ラベルと色はそのまま保持されます。',
+      '제품 사진을 업로드하면 AI가 새로운 장면(스튜디오·자연·우아·미니멀·라이프스타일·커스텀)에 배치합니다. 라벨과 색상은 그대로 유지됩니다.',
+      'Sube una foto del producto y la IA lo coloca en una nueva escena (estudio, naturaleza, elegante, minimalista, lifestyle o personalizada). Conserva etiqueta y color.'
+    )"
     :status="status"
     :status-text="statusText"
     :credit-cost="creditCost"
-    :generate-label="isZh ? '生成場景' : 'Generate'"
-    :generate-label-running="isZh ? '生成中…' : 'Generating…'"
+    :generate-label="L('生成場景', 'Generate', '生成', '생성', 'Generar')"
+    :generate-label-running="L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…')"
     :disabled="disabled"
     @generate="generate"
   >
     <template #inputs>
       <div>
-        <label class="pp-field-label">{{ isZh ? '模型 *' : 'Model *' }}</label>
+        <label class="pp-field-label">{{ L('模型 *', 'Model *', 'モデル *', '모델 *', 'Modelo *') }}</label>
         <select class="pp-select" disabled>
           <option>Flux Kontext I2I (product-preserving)</option>
         </select>
       </div>
 
       <div>
-        <label class="pp-field-label">{{ isZh ? '任務類型 *' : 'Task Type *' }}</label>
+        <label class="pp-field-label">{{ L('任務類型 *', 'Task Type *', 'タスクタイプ *', '작업 유형 *', 'Tipo de tarea *') }}</label>
         <select class="pp-select" disabled>
           <option>img2img · kontext</option>
         </select>
       </div>
 
       <div>
-        <label class="pp-field-label">{{ isZh ? '商品照片 *' : 'Product Photo *' }}</label>
+        <label class="pp-field-label">{{ L('商品照片 *', 'Product Photo *', '商品写真 *', '제품 사진 *', 'Foto del producto *') }}</label>
         <ImageUploader
           tool-type="product_scene"
           v-model="productImage"
-          :label="isZh ? '點擊或拖放商品照片' : 'Click or drag a product photo'"
+          :label="L('點擊或拖放商品照片', 'Click or drag a product photo', '商品写真をクリックまたはドラッグ', '제품 사진을 클릭하거나 끌어다 놓기', 'Haz clic o arrastra una foto del producto')"
         />
       </div>
 
       <div>
-        <label class="pp-field-label">{{ isZh ? '場景方式 *' : 'Scene Source *' }}</label>
+        <label class="pp-field-label">{{ L('場景方式 *', 'Scene Source *', 'シーンの指定方法 *', '장면 소스 *', 'Origen de la escena *') }}</label>
         <div class="grid grid-cols-2 gap-1.5">
           <button v-for="opt in [
-            { id: 'preset' as const, labelZh: '預設場景', labelEn: 'Preset' },
-            { id: 'custom' as const, labelZh: '自訂提示詞', labelEn: 'Custom Prompt' },
+            { id: 'preset' as const, label: L('預設場景', 'Preset', 'プリセット', '프리셋', 'Preestablecido') },
+            { id: 'custom' as const, label: L('自訂提示詞', 'Custom Prompt', 'カスタムプロンプト', '커스텀 프롬프트', 'Prompt personalizado') },
           ]" :key="opt.id" type="button" @click="mode = opt.id"
             class="py-2 rounded text-xs font-medium"
             :style="mode === opt.id
               ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff;'
               : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
-          >{{ isZh ? opt.labelZh : opt.labelEn }}</button>
+          >{{ opt.label }}</button>
         </div>
       </div>
 
       <div v-if="mode === 'preset'">
-        <label class="pp-field-label">{{ isZh ? '預設場景' : 'Preset Scene' }}</label>
+        <label class="pp-field-label">{{ L('預設場景', 'Preset Scene', 'プリセットシーン', '프리셋 장면', 'Escena preestablecida') }}</label>
         <select v-model="sceneType" class="pp-select">
+          <!-- Backend scene templates only ship name / name_zh; ja/ko/es fall through to English. BUG-017 (backend out of scope). -->
           <option v-for="s in sceneTemplates" :key="s.id" :value="s.id">
             {{ isZh ? s.name_zh : s.name }}
           </option>
@@ -175,17 +180,21 @@ function gotoPricing() { router.push('/pricing') }
       </div>
 
       <div v-if="mode === 'custom'">
-        <label class="pp-field-label">{{ isZh ? '自訂場景描述 *' : 'Custom Scene Prompt *' }}</label>
+        <label class="pp-field-label">{{ L('自訂場景描述 *', 'Custom Scene Prompt *', 'カスタムシーンの説明 *', '커스텀 장면 설명 *', 'Prompt de escena personalizada *') }}</label>
         <textarea v-model="customPrompt" rows="4" maxlength="300" class="pp-textarea"
-          :placeholder="isZh ? '例：木質吧檯、暖色 Edison 燈、背景輕微散景' : 'e.g. wooden bar counter, warm Edison-bulb lighting, subtle background bokeh'"></textarea>
-        <p class="pp-field-help">{{ isZh ? '提示會原封不動傳給 Kontext I2I。' : 'Your prompt reaches Kontext I2I verbatim.' }}</p>
+          :placeholder="L('例：木質吧檯、暖色 Edison 燈、背景輕微散景', 'e.g. wooden bar counter, warm Edison-bulb lighting, subtle background bokeh', '例：木製カウンター、暖色のエジソン電球、背景にやわらかなボケ', '예: 원목 바 카운터, 따뜻한 에디슨 전구, 은은한 배경 보케', 'p. ej., barra de madera, luz cálida tipo Edison, fondo con bokeh sutil')"></textarea>
+        <p class="pp-field-help">{{ L('提示會原封不動傳給 Kontext I2I。', 'Your prompt reaches Kontext I2I verbatim.', 'プロンプトはそのまま Kontext I2I に渡されます。', '입력한 프롬프트는 Kontext I2I에 그대로 전달됩니다.', 'Tu prompt llega a Kontext I2I tal cual.') }}</p>
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
-        {{ isZh
-          ? '免費帳號可用內建場景生成範例；自訂提示詞需訂閱並綁定信用卡。'
-          : 'Free accounts can render the built-in scenes as examples; custom prompts require a subscription with a bound card.' }}
-        <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
+        {{ L(
+          '免費帳號可用內建場景生成範例；自訂提示詞需訂閱並綁定信用卡。',
+          'Free accounts can render the built-in scenes as examples; custom prompts require a subscription with a bound card.',
+          '無料アカウントは組み込みシーンをサンプルとして生成できます。カスタムプロンプトにはサブスクとカード登録が必要です。',
+          '무료 계정은 내장 장면을 예시로 생성할 수 있으며, 커스텀 프롬프트는 카드가 등록된 구독이 필요합니다.',
+          'Las cuentas gratuitas pueden generar las escenas integradas como ejemplo; los prompts personalizados requieren suscripción con tarjeta vinculada.'
+        ) }}
+        <button @click="gotoPricing" class="underline ml-1">{{ L('查看方案', 'View Plans', 'プランを見る', '요금제 보기', 'Ver planes') }} →</button>
       </p>
     </template>
 
@@ -197,7 +206,7 @@ function gotoPricing() { router.push('/pricing') }
       <button @click="downloadAsset(resultUrl!, `vidgo_scene_${Date.now()}.png`)"
         class="px-3 py-1.5 rounded text-xs font-medium"
         style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
-      >📥 {{ isZh ? '下載' : 'Download' }}</button>
+      >📥 {{ L('下載', 'Download', 'ダウンロード', '다운로드', 'Descargar') }}</button>
     </template>
 
     <template #examples>

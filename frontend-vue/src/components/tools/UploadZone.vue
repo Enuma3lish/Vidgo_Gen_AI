@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useLocalized } from '@/composables'
 import { commonImageDimensionRule, isAllowedImageFile, normalizeImageFileForUpload } from '@/utils/mediaValidation'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 // 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
 const { L } = useLocalized()
 
@@ -63,7 +63,7 @@ function allowedTypes() {
 async function processFiles(files: File[]): Promise<boolean> {
   const maxSize = props.maxSize || 20 * 1024 * 1024
   const allowed = allowedTypes()
-  const isZh = locale.value.startsWith('zh')
+  const mb = maxSize / 1024 / 1024
   const validFiles: File[] = []
 
   for (const file of files) {
@@ -71,29 +71,41 @@ async function processFiles(files: File[]): Promise<boolean> {
       const label = allowed === AI_VIDEO_TYPES
         ? L('MP4、WebM 或 MOV 影片', 'MP4, WebM, or MOV video', 'MP4、WebMまたはMOV動画', 'MP4, WebM 또는 MOV 동영상', 'Video MP4, WebM o MOV')
         : L('JPG、PNG 或 WebP 圖片', 'JPG, PNG, or WebP image', 'JPG、PNGまたはWebP画像', 'JPG, PNG 또는 WebP 이미지', 'Imagen JPG, PNG o WebP')
-      emit('error', isZh
-        ? `檔案 ${file.name} 不支援，請選擇 ${label}。`
-        : `File ${file.name} is not supported. Please choose a ${label}.`)
+      emit('error', L(
+        `檔案 ${file.name} 不支援，請選擇 ${label}。`,
+        `File ${file.name} is not supported. Please choose a ${label}.`,
+        `ファイル ${file.name} はサポートされていません。${label} を選択してください。`,
+        `${file.name} 파일은 지원되지 않습니다. ${label}을(를) 선택해 주세요.`,
+        `El archivo ${file.name} no es compatible. Elige ${label}.`,
+      ))
       continue
     }
     if (allowed === AI_VIDEO_TYPES && file.size > maxSize) {
-      emit('error', isZh
-        ? `檔案 ${file.name} 超過 ${maxSize / 1024 / 1024}MB，請選擇較小的檔案。`
-        : `File ${file.name} exceeds maximum size of ${maxSize / 1024 / 1024}MB. Please choose a smaller file.`)
+      emit('error', L(
+        `檔案 ${file.name} 超過 ${mb}MB，請選擇較小的檔案。`,
+        `File ${file.name} exceeds maximum size of ${mb}MB. Please choose a smaller file.`,
+        `ファイル ${file.name} は ${mb}MB を超えています。より小さいファイルを選択してください。`,
+        `${file.name} 파일이 ${mb}MB를 초과합니다. 더 작은 파일을 선택해 주세요.`,
+        `El archivo ${file.name} supera ${mb}MB. Elige uno más pequeño.`,
+      ))
       continue
     }
     let uploadFile = file
     if (allowed === AI_IMAGE_TYPES) {
       try {
-        uploadFile = await normalizeImageFileForUpload(file, commonImageDimensionRule, { maxSizeMb: maxSize / 1024 / 1024 })
+        uploadFile = await normalizeImageFileForUpload(file, commonImageDimensionRule, { maxSizeMb: mb })
       } catch {
         emit('error', L('無法處理圖片尺寸或壓縮，請重新選擇圖片。', 'Image could not be resized or compressed. Please choose a different image.', '画像のリサイズまたは圧縮ができません。別の画像を選んでください。', '이미지 리사이즈 또는 압축에 실패했습니다. 다른 이미지를 선택해 주세요.', 'No se pudo redimensionar o comprimir. Elige otra imagen.'))
         continue
       }
       if (uploadFile.size > maxSize) {
-        emit('error', isZh
-          ? `圖片 ${file.name} 壓縮後仍超過 ${maxSize / 1024 / 1024}MB，請選擇其他圖片。`
-          : `Image ${file.name} is still over ${maxSize / 1024 / 1024}MB after compression. Please choose a different image.`)
+        emit('error', L(
+          `圖片 ${file.name} 壓縮後仍超過 ${mb}MB，請選擇其他圖片。`,
+          `Image ${file.name} is still over ${mb}MB after compression. Please choose a different image.`,
+          `画像 ${file.name} は圧縮後も ${mb}MB を超えています。別の画像を選択してください。`,
+          `이미지 ${file.name}이(가) 압축 후에도 ${mb}MB를 초과합니다. 다른 이미지를 선택해 주세요.`,
+          `La imagen ${file.name} sigue superando ${mb}MB tras la compresión. Elige otra.`,
+        ))
         continue
       }
     }

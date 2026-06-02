@@ -34,11 +34,21 @@ interface StyleCard {
 }
 
 const activeTab = ref<SpaceKind>('interior')
-const tabOptions: Array<{ id: SpaceKind; label_en: string; label_zh: string; emoji: string }> = [
-  { id: 'interior',   label_en: 'Interior',   label_zh: '室內',     emoji: '🛋️' },
-  { id: 'commercial', label_en: 'Commercial', label_zh: '商業空間', emoji: '🏪' },
-  { id: 'exterior',   label_en: 'Exterior',   label_zh: '建築外觀', emoji: '🏛️' },
+// Static 3-tab enum — label resolved per-render via L() in template for full i18n
+// (zh / en / ja / ko / es). See template line ~119.
+const tabOptions: Array<{ id: SpaceKind; emoji: string }> = [
+  { id: 'interior',   emoji: '🛋️' },
+  { id: 'commercial', emoji: '🏪' },
+  { id: 'exterior',   emoji: '🏛️' },
 ]
+
+function tabLabel(kind: SpaceKind): string {
+  switch (kind) {
+    case 'interior':   return L('室內',     'Interior',   'インテリア', '인테리어',   'Interior')
+    case 'commercial': return L('商業空間', 'Commercial', '商業空間',   '상업 공간',  'Comercial')
+    case 'exterior':   return L('建築外觀', 'Exterior',   '建築外観',   '건축 외관',  'Exterior')
+  }
+}
 
 const styles = ref<Record<SpaceKind, StyleCard[]>>({
   interior: [],
@@ -116,7 +126,7 @@ onMounted(() => loadStyles('interior'))
             : 'background: #141420; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
         >
           <span>{{ tab.emoji }}</span>
-          {{ isZh ? tab.label_zh : tab.label_en }}
+          {{ tabLabel(tab.id) }}
         </button>
       </div>
     </section>
@@ -141,6 +151,7 @@ onMounted(() => loadStyles('interior'))
         >
           <!-- Preview tile -->
           <div class="aspect-[4/5] relative overflow-hidden" style="background: linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(244,114,182,0.1) 100%);">
+            <!-- BUG-017: backend catalog only ships zh/en; ja/ko/es fall through to English for card.name / card.name_zh. -->
             <img
               v-if="previewUrl(card)"
               :src="previewUrl(card)!"
@@ -168,6 +179,7 @@ onMounted(() => loadStyles('interior'))
           </div>
           <!-- Card body -->
           <div class="p-4">
+            <!-- BUG-017: backend catalog only ships zh/en; ja/ko/es fall through to English. -->
             <p class="font-semibold text-sm" style="color: #f5f5fa;">
               {{ isZh ? card.name_zh : card.name }}
             </p>

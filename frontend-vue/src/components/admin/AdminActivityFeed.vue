@@ -11,13 +11,13 @@
  * doubles as a fast nav surface ("oh that one customer signed up,
  * let me check them").
  */
-import { computed, onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useLocalized } from '@/composables'
 import apiClient from '@/api/client'
 
-const { locale } = useI18n()
-const isZh = computed(() => locale.value.startsWith('zh'))
+// 5-language picker — fixes ja/ko/es fall-through (BUG-017).
+const { L } = useLocalized()
 
 interface FeedEvent {
   type: 'user_signup' | 'order' | 'material_review' | 'payment_settings' | 'model_registry'
@@ -60,13 +60,13 @@ function relTime(iso: string): string {
   const then = new Date(iso).getTime()
   const now = Date.now()
   const sec = Math.max(0, Math.floor((now - then) / 1000))
-  if (sec < 60) return isZh.value ? `${sec} 秒前` : `${sec}s ago`
+  if (sec < 60) return L(`${sec} 秒前`, `${sec}s ago`, `${sec}秒前`, `${sec}초 전`, `hace ${sec} s`)
   const min = Math.floor(sec / 60)
-  if (min < 60) return isZh.value ? `${min} 分鐘前` : `${min}m ago`
+  if (min < 60) return L(`${min} 分鐘前`, `${min}m ago`, `${min}分前`, `${min}분 전`, `hace ${min} min`)
   const hr = Math.floor(min / 60)
-  if (hr < 24) return isZh.value ? `${hr} 小時前` : `${hr}h ago`
+  if (hr < 24) return L(`${hr} 小時前`, `${hr}h ago`, `${hr}時間前`, `${hr}시간 전`, `hace ${hr} h`)
   const day = Math.floor(hr / 24)
-  if (day < 30) return isZh.value ? `${day} 天前` : `${day}d ago`
+  if (day < 30) return L(`${day} 天前`, `${day}d ago`, `${day}日前`, `${day}일 전`, `hace ${day} d`)
   return new Date(iso).toLocaleDateString()
 }
 
@@ -76,12 +76,12 @@ onMounted(load)
 <template>
   <div class="activity-feed">
     <div class="activity-feed-head">
-      <h3 class="activity-feed-title">{{ isZh ? '最近活動' : 'Recent Activity' }}</h3>
+      <h3 class="activity-feed-title">{{ L('最近活動', 'Recent Activity', '最近のアクティビティ', '최근 활동', 'Actividad reciente') }}</h3>
       <button
         @click="load"
         :disabled="loading"
         class="activity-feed-refresh"
-        :title="isZh ? '重新整理' : 'Refresh'"
+        :title="L('重新整理', 'Refresh', '更新', '새로고침', 'Actualizar')"
       >
         {{ loading ? '⟳' : '↻' }}
       </button>
@@ -92,11 +92,11 @@ onMounted(load)
     </div>
 
     <div v-else-if="loading && events.length === 0" class="activity-feed-empty">
-      {{ isZh ? '載入中…' : 'Loading…' }}
+      {{ L('載入中…', 'Loading…', '読み込み中…', '불러오는 중…', 'Cargando…') }}
     </div>
 
     <div v-else-if="events.length === 0" class="activity-feed-empty">
-      {{ isZh ? '尚無事件' : 'No recent events' }}
+      {{ L('尚無事件', 'No recent events', '最近のイベントはありません', '최근 이벤트가 없습니다', 'Sin eventos recientes') }}
     </div>
 
     <div v-else class="activity-feed-list">

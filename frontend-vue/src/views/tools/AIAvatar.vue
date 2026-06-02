@@ -31,6 +31,8 @@ const { isDemoUser } = useDemoMode()
 const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
 type Language = 'en' | 'zh-TW'
+// Backend voice-language enum is locked to en / zh-TW (see file header + server validator).
+// ja/ko/es UI users default to 'en' voices — extending requires backend changes (out of scope).
 const language = ref<Language>(isZh.value ? 'zh-TW' : 'en')
 const script = ref('')
 const voiceId = ref('')
@@ -114,7 +116,7 @@ async function generate() {
   // gets the cached example; a custom script returns
   // 'subscription_card_required', handled below.
   status.value = 'running'
-  statusText.value = isZh.value ? '生成中…通常 2-5 分鐘' : 'Generating… typically 2-5 min'
+  statusText.value = L('生成中…通常 2-5 分鐘', 'Generating… typically 2-5 min', '生成中…通常2〜5分', '생성 중… 보통 2-5분', 'Generando… normalmente 2-5 min')
   resultUrl.value = null
   try {
     const url = await ensureImageUrl()
@@ -134,16 +136,16 @@ async function generate() {
     if (result.success && (result.video_url || result.result_url)) {
       resultUrl.value = result.video_url || result.result_url || null
       status.value = 'done'
-      statusText.value = isZh.value ? '完成' : 'Done'
+      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
       if (result.credits_used) creditsStore.deductCredits(result.credits_used)
       uiStore.showSuccess(t('common.success') || 'Success')
     } else {
       status.value = 'error'
-      uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '生成失敗' : 'Failed'))
+      uiStore.showError((result as any).message || (result as any).error || L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Error al generar'))
     }
   } catch (e: any) {
     status.value = 'error'
-    uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Failed'))
+    uiStore.showError(extractApiError(e, L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Error al generar')))
   }
 }
 
@@ -159,35 +161,39 @@ function gotoPricing() { router.push('/pricing') }
 <template>
   <PiapiPlayground
     :eta-seconds="300"
-    :title="isZh ? 'AI 數位人 / 代言人' : 'AI Avatar / Spokesperson'"
-    :subtitle="isZh
-      ? '上傳清晰正面照 + 撰寫腳本，AI 生成口型同步的講話影片（PiAPI Kling Avatar）。'
-      : 'Upload a clear frontal headshot + write a script; AI generates a lip-synced talking video (PiAPI Kling Avatar).'"
+    :title="L('AI 數位人 / 代言人', 'AI Avatar / Spokesperson', 'AIアバター / スポークスパーソン', 'AI 아바타 / 대변인', 'Avatar IA / Portavoz')"
+    :subtitle="L(
+      '上傳清晰正面照 + 撰寫腳本，AI 生成口型同步的講話影片（PiAPI Kling Avatar）。',
+      'Upload a clear frontal headshot + write a script; AI generates a lip-synced talking video (PiAPI Kling Avatar).',
+      '正面の顔写真と台本をアップロード、AIがリップシンク動画を生成（PiAPI Kling Avatar）。',
+      '정면 사진과 스크립트를 업로드하면 AI가 립싱크 영상을 생성합니다 (PiAPI Kling Avatar).',
+      'Sube una foto frontal y un guion; la IA genera un vídeo con labios sincronizados (PiAPI Kling Avatar).'
+    )"
     :status="status"
     :status-text="statusText"
     :credit-cost="creditCost"
-    :generate-label="isZh ? '生成影片' : 'Generate'"
-    :generate-label-running="isZh ? '生成中…' : 'Generating…'"
+    :generate-label="L('生成影片', 'Generate', '動画を生成', '영상 생성', 'Generar vídeo')"
+    :generate-label-running="L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…')"
     :disabled="disabled"
     @generate="generate"
   >
     <template #inputs>
       <div>
-        <label class="pp-field-label">{{ isZh ? '模型 *' : 'Model *' }}</label>
+        <label class="pp-field-label">{{ L('模型 *', 'Model *', 'モデル *', '모델 *', 'Modelo *') }}</label>
         <select class="pp-select" disabled>
           <option>PiAPI Kling Avatar (lip-sync + F5-TTS)</option>
         </select>
       </div>
 
       <div>
-        <label class="pp-field-label">{{ isZh ? '任務類型 *' : 'Task Type *' }}</label>
+        <label class="pp-field-label">{{ L('任務類型 *', 'Task Type *', 'タスクタイプ *', '작업 유형 *', 'Tipo de tarea *') }}</label>
         <select class="pp-select" disabled>
           <option>avatar · talking head</option>
         </select>
       </div>
 
       <div>
-        <label class="pp-field-label">{{ isZh ? '正面照 *' : 'Frontal Headshot *' }}</label>
+        <label class="pp-field-label">{{ L('正面照 *', 'Frontal Headshot *', '正面写真 *', '정면 사진 *', 'Foto frontal *') }}</label>
 
         <!-- Sample headshot grid — added 2026-05-25. Visitors without a
              portrait can click one to instantly populate the input.
@@ -205,22 +211,23 @@ function gotoPricing() { router.push('/pricing') }
             :class="{ 'is-active': headshot === s.url }"
             :title="isZh ? s.label.zh : s.label.en"
           >
+            <!-- SAMPLE_HEADSHOTS labels only have .zh / .en — ja/ko/es fall through to English (data shape, out of scope). -->
             <img :src="s.url" :alt="isZh ? s.label.zh : s.label.en" />
           </button>
         </div>
         <p class="pp-field-help" style="margin-bottom: 6px;">
-          {{ isZh ? '點選範例頭像或上傳你自己的照片。' : 'Click a sample headshot or upload your own.' }}
+          {{ L('點選範例頭像或上傳你自己的照片。', 'Click a sample headshot or upload your own.', 'サンプル画像を選ぶか、ご自身の写真をアップロードしてください。', '샘플 사진을 선택하거나 직접 업로드하세요.', 'Elige una foto de muestra o sube la tuya.') }}
         </p>
 
         <ImageUploader
           tool-type="ai_avatar"
           v-model="headshot"
-          :label="isZh ? '清晰正面照（避免側臉、戴墨鏡）' : 'Clear frontal photo (avoid profile / sunglasses)'"
+          :label="L('清晰正面照（避免側臉、戴墨鏡）', 'Clear frontal photo (avoid profile / sunglasses)', '正面写真（横顔・サングラスは避ける）', '정면 사진 (측면 / 선글라스 피하기)', 'Foto frontal nítida (sin perfil ni gafas)')"
         />
       </div>
 
       <div>
-        <label class="pp-field-label">{{ isZh ? '語言 *' : 'Language *' }}</label>
+        <label class="pp-field-label">{{ L('語言 *', 'Language *', '言語 *', '언어 *', 'Idioma *') }}</label>
         <div class="grid grid-cols-2 gap-1.5">
           <button v-for="opt in [
             { id: 'zh-TW' as const, label: '繁體中文' },
@@ -235,14 +242,14 @@ function gotoPricing() { router.push('/pricing') }
       </div>
 
       <div v-if="voices.length > 0">
-        <label class="pp-field-label">{{ isZh ? '聲音' : 'Voice' }}</label>
+        <label class="pp-field-label">{{ L('聲音', 'Voice', '声', '음성', 'Voz') }}</label>
         <select v-model="voiceId" class="pp-select">
           <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option>
         </select>
       </div>
 
       <div>
-        <label class="pp-field-label">{{ isZh ? '腳本 *' : 'Script *' }}</label>
+        <label class="pp-field-label">{{ L('腳本 *', 'Script *', '台本 *', '스크립트 *', 'Guion *') }}</label>
 
         <!-- Script preset picker — sources from prompt_library.json's
              `ai_avatar` topic (spokesperson / product intro / customer
@@ -250,21 +257,25 @@ function gotoPricing() { router.push('/pricing') }
              pattern KlingVideo / ProductSceneClassic adopted. -->
         <div v-if="scriptPresetOptions.length > 0" class="mb-2">
           <select v-model="selectedScriptPresetId" @change="applyScriptPreset" class="pp-select">
-            <option value="">{{ isZh ? '— 選擇腳本範例（一鍵填入）—' : '— Pick a script preset (one-click fill) —' }}</option>
+            <option value="">{{ L('— 選擇腳本範例（一鍵填入）—', '— Pick a script preset (one-click fill) —', '— 台本プリセットを選択（ワンクリック入力）—', '— 스크립트 프리셋 선택 (원클릭 입력) —', '— Elige un guion predefinido (un clic) —') }}</option>
             <option v-for="opt in scriptPresetOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
           </select>
         </div>
 
         <textarea v-model="script" rows="6" maxlength="2000" class="pp-textarea"
-          :placeholder="isZh ? '例：嗨大家好！今天要為你介紹我們剛上架的新品…' : 'e.g. Hi everyone! Today I want to introduce our brand-new product…'"></textarea>
-        <p class="pp-field-help">{{ isZh ? '最少 5 個字，最多 2000 個字。zh-TW 語言下需含中文字。' : 'Min 5 chars, max 2000. When zh-TW is picked, script must contain Chinese characters.' }}</p>
+          :placeholder="L('例：嗨大家好！今天要為你介紹我們剛上架的新品…', 'e.g. Hi everyone! Today I want to introduce our brand-new product…', '例：こんにちは！今日は新発売の商品をご紹介します…', '예: 안녕하세요! 오늘은 새로 출시된 제품을 소개합니다…', 'Ej: ¡Hola a todos! Hoy presento nuestro nuevo producto…')"></textarea>
+        <p class="pp-field-help">{{ L('最少 5 個字，最多 2000 個字。zh-TW 語言下需含中文字。', 'Min 5 chars, max 2000. When zh-TW is picked, script must contain Chinese characters.', '最少5文字、最大2000文字。zh-TW選択時は中国語の文字が必要です。', '최소 5자, 최대 2000자. zh-TW 선택 시 중국어 문자가 필요합니다.', 'Mín. 5 caracteres, máx. 2000. Con zh-TW, el guion debe incluir caracteres chinos.') }}</p>
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
-        {{ isZh
-          ? '免費帳號可用範例腳本下拉選單一鍵生成；自訂腳本需訂閱並綁定信用卡。'
-          : 'Free accounts can generate from the example scripts; custom scripts require a subscription with a bound card.' }}
-        <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
+        {{ L(
+          '免費帳號可用範例腳本下拉選單一鍵生成；自訂腳本需訂閱並綁定信用卡。',
+          'Free accounts can generate from the example scripts; custom scripts require a subscription with a bound card.',
+          '無料アカウントはサンプル台本から生成可能。カスタム台本はカード登録の有料プランが必要です。',
+          '무료 계정은 샘플 스크립트로 생성 가능. 커스텀 스크립트는 카드 등록 구독이 필요합니다.',
+          'Las cuentas gratuitas pueden generar con guiones de ejemplo; los guiones personalizados requieren suscripción con tarjeta.'
+        ) }}
+        <button @click="gotoPricing" class="underline ml-1">{{ L('查看方案', 'View Plans', 'プランを見る', '요금제 보기', 'Ver planes') }} →</button>
       </p>
     </template>
 
@@ -276,7 +287,7 @@ function gotoPricing() { router.push('/pricing') }
       <button @click="downloadAsset(resultUrl!, `vidgo_avatar_${Date.now()}.mp4`)"
         class="px-3 py-1.5 rounded text-xs font-medium"
         style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
-      >📥 {{ isZh ? '下載' : 'Download' }}</button>
+      >📥 {{ L('下載', 'Download', 'ダウンロード', '다운로드', 'Descargar') }}</button>
     </template>
 
     <template #examples>

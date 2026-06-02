@@ -112,6 +112,7 @@ const demoImages = computed(() => {
     .filter(t => t.input_image_url && (t.result_video_url || t.result_watermarked_url))
     .map(t => ({
       id: t.id,
+      // Backend only has prompt_zh / prompt — ja/ko/es fall through to English (BUG-017, backend out of scope).
       name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
       preview: t.input_image_url,
       watermarked_result: t.result_watermarked_url || t.result_video_url
@@ -381,6 +382,7 @@ onMounted(() => {
                 class="w-full h-full object-cover"
               />
             </div>
+            <!-- Backend only has name_zh / name — ja/ko/es fall through to English (BUG-017, backend out of scope). -->
             <span class="text-white font-medium text-sm block text-center">{{ isZh ? (style.name_zh || style.name) : style.name }}</span>
           </div>
         </div>

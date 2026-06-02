@@ -18,17 +18,30 @@ const brandingStore = useBrandingStore()
 // title/body/footnote in /admin/branding, these computed props render it on
 // the public Pricing page so the edits actually appear. Empty/null falls
 // back to the built-in i18n strings so unconfigured installs still look OK.
+//
+// Locale handling (revised 2026-06-02): admin only stores _zh and _en, so
+// for ja/ko/es visitors the _en string is NOT a translation in their
+// language — showing it would replace the localized i18n default with
+// English text. We therefore only honor the admin override on zh-* and
+// en-* locales; ja/ko/es fall straight through to t('pricing.title') etc.
+const isEn = computed(() => locale.value.startsWith('en'))
 const pricingIntroTitle = computed(() => {
   const s = brandingStore.settings
-  return (isZh.value ? s.pricing_intro_title_zh : s.pricing_intro_title_en) || ''
+  if (isZh.value) return s.pricing_intro_title_zh || ''
+  if (isEn.value) return s.pricing_intro_title_en || ''
+  return ''
 })
 const pricingIntroBody = computed(() => {
   const s = brandingStore.settings
-  return (isZh.value ? s.pricing_intro_body_zh : s.pricing_intro_body_en) || ''
+  if (isZh.value) return s.pricing_intro_body_zh || ''
+  if (isEn.value) return s.pricing_intro_body_en || ''
+  return ''
 })
 const pricingFootnote = computed(() => {
   const s = brandingStore.settings
-  return (isZh.value ? s.pricing_footnote_zh : s.pricing_footnote_en) || ''
+  if (isZh.value) return s.pricing_footnote_zh || ''
+  if (isEn.value) return s.pricing_footnote_en || ''
+  return ''
 })
 
 interface CreditTopUpPackage {
@@ -163,9 +176,18 @@ function normalizeCreditPackage(raw: any): CreditTopUpPackage {
   return {
     id: String(raw.id ?? raw.name),
     name: String(raw.name),
-    displayName: isZh.value
-      ? (raw.name_zh ?? fallback?.displayName ?? raw.display_name ?? raw.name)
-      : (raw.name_en ?? fallback?.displayName ?? raw.display_name ?? raw.name),
+    // 2026-06-02 — DB only stores name_zh / name_en. For ja/ko/es prefer the
+    // i18n fallbackNames (already localized) over name_en, otherwise the
+    // English string would leak into the Japanese / Korean / Spanish UI.
+    displayName: (() => {
+      if (isZh.value) {
+        return raw.name_zh ?? fallback?.displayName ?? raw.display_name ?? raw.name
+      }
+      if (isEn.value) {
+        return raw.name_en ?? fallback?.displayName ?? raw.display_name ?? raw.name
+      }
+      return fallback?.displayName ?? raw.name_en ?? raw.display_name ?? raw.name
+    })(),
     credits,
     price,
     currency: 'TWD',
@@ -457,46 +479,55 @@ function getPlanDisplayKey(name: string): string {
 }
 
 function getLocalizedPlanName(name?: string | null, fallback?: string | null): string {
-  // Priority (revised 2026-05-23): admin-edited DB value > i18n translation > raw slug.
+  // Priority (revised 2026-06-02): per-locale admin field (handled upstream
+  // in getPlanDisplayName via display_name_zh/_en) > i18n translation for a
+  // known plan slug > single-column display_name > raw slug.
   //
-  // Before this change, i18n won over the admin's edit because the lookup
-  // `pricing.<slug>` exists for every plan, so editing `plans.display_name`
-  // in /admin/plans had no visible effect on the EN locale (which kept the
-  // hardcoded i18n string) while ZH/etc. fell back to the DB value — that's
-  // the "EN changes but ZH stays" behaviour the operator saw 2026-05-23.
+  // The 2026-05-23 rule put the single `display_name` column above i18n so
+  // admin edits in /admin/plans took effect. But the v2.1 seed writes the
+  // bilingual string "標準版 Standard" into that column, which then leaks
+  // onto the ja/ko/es pricing pages because they fall through here. Result:
+  // Japanese visitors saw "標準版 Standard" instead of "スタンダード".
   //
-  // New rule: if the admin has set a non-empty display_name, respect it
-  // everywhere. i18n is now only the fallback for plans whose display_name
-  // is empty (legacy rows before the v2.1 seed).
-  const trimmed = (fallback || '').trim()
-  if (trimmed) return trimmed
-
+  // New rule: for plans the i18n catalogue knows about (basic/pro/premium/
+  // enterprise/etc.) prefer the locale translation; the bilingual seed only
+  // shows on locales that genuinely contain it (and that's still wrong for
+  // most). Admin edits should go through display_name_zh / display_name_en
+  // — those still win because they're checked before this function runs.
   const displayKey = getPlanDisplayKey(name || fallback || '')
   const translationKey = `pricing.${displayKey}`
   if (te(translationKey)) {
     return t(translationKey)
   }
-  return fallback || name || ''
+  const trimmed = (fallback || '').trim()
+  if (trimmed) return trimmed
+  return name || ''
+}
+
+function getLocaleSpecificBilingual(plan: any): string {
+  // 2026-06-02 — the bilingual admin fields are only display_name_zh and
+  // display_name_en. For ja/ko/es we must NOT fall back to the EN field
+  // (it would replace localized i18n with English text). Return '' so the
+  // caller drops through to the i18n lookup.
+  if (isZh.value) return String(plan?.display_name_zh || '').trim()
+  if (isEn.value) return String(plan?.display_name_en || '').trim()
+  return ''
 }
 
 function getPlanDisplayName(plan: PlanInfo): string {
   // 2026-05-24 — prefer locale-matched bilingual admin edit, then fall back
   // to the single-locale `display_name`, then i18n. Mirrors the same split
   // already used for plan features_text_zh/en.
-  const bilingual = isZh.value ? (plan as any).display_name_zh : (plan as any).display_name_en
-  if (bilingual && String(bilingual).trim()) {
-    return String(bilingual).trim()
-  }
+  const bilingual = getLocaleSpecificBilingual(plan)
+  if (bilingual) return bilingual
   return getLocalizedPlanName(plan.name, plan.display_name)
 }
 
 function getCurrentPlanDisplayName(): string {
   const plan = subscriptionStatus.value?.plan
   if (!plan) return ''
-  const bilingual = isZh.value ? (plan as any).display_name_zh : (plan as any).display_name_en
-  if (bilingual && String(bilingual).trim()) {
-    return String(bilingual).trim()
-  }
+  const bilingual = getLocaleSpecificBilingual(plan)
+  if (bilingual) return bilingual
   return getLocalizedPlanName(plan.name, plan.display_name || plan.name)
 }
 

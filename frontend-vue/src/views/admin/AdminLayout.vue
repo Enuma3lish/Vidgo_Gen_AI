@@ -20,63 +20,66 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
+import { useLocalized } from '@/composables'
 import apiClient from '@/api/client'
 
 useI18n() // ensure locale provider boots — actual labels rendered via L() below
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+// 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
+const { L: L5 } = useLocalized()
 
+interface NavLabel {
+  zh: string
+  en: string
+  ja: string
+  ko: string
+  es: string
+}
 interface NavItem {
-  label_en: string
-  label_zh: string
+  label: NavLabel
   to: string
 }
 interface NavGroup {
-  title_en: string
-  title_zh: string
+  title: NavLabel
   items: NavItem[]
 }
 
 const navGroups: NavGroup[] = [
   {
-    title_en: 'Overview',
-    title_zh: '總覽',
+    title: { zh: '總覽', en: 'Overview', ja: '概要', ko: '개요', es: 'Resumen' },
     items: [
-      { label_en: 'Dashboard',  label_zh: '儀表板', to: '/admin/dashboard' },
+      { label: { zh: '儀表板', en: 'Dashboard', ja: 'ダッシュボード', ko: '대시보드', es: 'Panel' }, to: '/admin/dashboard' },
     ],
   },
   {
-    title_en: 'Operations',
-    title_zh: '營運',
+    title: { zh: '營運', en: 'Operations', ja: '運営', ko: '운영', es: 'Operaciones' },
     items: [
-      { label_en: 'Moderation',     label_zh: '審核佇列', to: '/admin/moderation' },
-      { label_en: 'Materials',      label_zh: '素材庫',   to: '/admin/materials' },
-      { label_en: 'Users',          label_zh: '使用者',   to: '/admin/users' },
+      { label: { zh: '審核佇列', en: 'Moderation', ja: 'モデレーション', ko: '검수 대기열', es: 'Moderación' }, to: '/admin/moderation' },
+      { label: { zh: '素材庫',   en: 'Materials',  ja: '素材',           ko: '소재',         es: 'Materiales' }, to: '/admin/materials' },
+      { label: { zh: '使用者',   en: 'Users',      ja: 'ユーザー',       ko: '사용자',       es: 'Usuarios' },  to: '/admin/users' },
     ],
   },
   {
-    title_en: 'Revenue & Cost',
-    title_zh: '收入與成本',
+    title: { zh: '收入與成本', en: 'Revenue & Cost', ja: '収益とコスト', ko: '매출 및 비용', es: 'Ingresos y costos' },
     items: [
-      { label_en: 'Revenue',  label_zh: '收入',       to: '/admin/revenue' },
-      { label_en: 'Costs',    label_zh: '成本',       to: '/admin/costs' },
-      { label_en: 'Plans',    label_zh: '訂閱方案',   to: '/admin/plans' },
+      { label: { zh: '收入',     en: 'Revenue', ja: '収益',     ko: '매출',         es: 'Ingresos' },  to: '/admin/revenue' },
+      { label: { zh: '成本',     en: 'Costs',   ja: 'コスト',   ko: '비용',         es: 'Costos' },    to: '/admin/costs' },
+      { label: { zh: '訂閱方案', en: 'Plans',   ja: 'プラン',   ko: '요금제',       es: 'Planes' },    to: '/admin/plans' },
     ],
   },
   {
-    title_en: 'Configuration',
-    title_zh: '設定',
+    title: { zh: '設定', en: 'Configuration', ja: '設定', ko: '설정', es: 'Configuración' },
     items: [
-      { label_en: 'Branding',          label_zh: '品牌與文字', to: '/admin/branding' },
-      { label_en: 'AI Models',         label_zh: 'AI 模型',    to: '/admin/models' },
-      { label_en: 'Payment (PayPal)',  label_zh: '金流（PayPal）', to: '/admin/settings/payment' },
-      { label_en: 'System',            label_zh: '系統',       to: '/admin/system' },
+      { label: { zh: '品牌與文字',       en: 'Branding',         ja: 'ブランディング',    ko: '브랜딩',          es: 'Marca' },               to: '/admin/branding' },
+      { label: { zh: 'AI 模型',          en: 'AI Models',        ja: 'AIモデル',          ko: 'AI 모델',         es: 'Modelos de IA' },       to: '/admin/models' },
+      { label: { zh: '金流（PayPal）',   en: 'Payment (PayPal)', ja: '決済（PayPal）',   ko: '결제 (PayPal)',   es: 'Pagos (PayPal)' },      to: '/admin/settings/payment' },
+      { label: { zh: '系統',             en: 'System',           ja: 'システム',          ko: '시스템',          es: 'Sistema' },             to: '/admin/system' },
     ],
   },
 ]
 
-const isZh = computed(() => useI18n().locale.value.startsWith('zh'))
 const currentPath = computed(() => route.path)
 
 // PayPal env badge — read from /payments/methods so it reflects the
@@ -157,8 +160,10 @@ watch(() => route.path, () => {
   loadPaymentEnv()
 })
 
-function L(zh: string, en: string): string {
-  return isZh.value ? zh : en
+// Delegates to the 5-language L() helper so ja/ko/es viewers don't see
+// English (BUG-017). Optional ja/ko/es default to English when omitted.
+function L(zh: string, en: string, ja?: string, ko?: string, es?: string): string {
+  return L5(zh, en, ja, ko, es)
 }
 
 const currentAdminEmail = computed(() => authStore.user?.email || '')
@@ -171,13 +176,13 @@ const currentAdminEmail = computed(() => authStore.user?.email || '')
       <div class="admin-sidebar-brand">
         <RouterLink to="/admin/dashboard" class="admin-brand-link">
           <span class="admin-brand-mark">▣</span>
-          <span class="admin-brand-text">{{ L('VidGo 後台', 'VidGo Admin') }}</span>
+          <span class="admin-brand-text">{{ L('VidGo 後台', 'VidGo Admin', 'VidGo 管理', 'VidGo 관리자', 'VidGo Admin') }}</span>
         </RouterLink>
       </div>
 
       <nav class="admin-nav">
-        <div v-for="group in navGroups" :key="group.title_en" class="admin-nav-group">
-          <div class="admin-nav-title">{{ isZh ? group.title_zh : group.title_en }}</div>
+        <div v-for="group in navGroups" :key="group.title.en" class="admin-nav-group">
+          <div class="admin-nav-title">{{ L(group.title.zh, group.title.en, group.title.ja, group.title.ko, group.title.es) }}</div>
           <RouterLink
             v-for="item in group.items"
             :key="item.to"
@@ -185,14 +190,14 @@ const currentAdminEmail = computed(() => authStore.user?.email || '')
             class="admin-nav-item"
             :class="{ 'admin-nav-item-active': currentPath === item.to || currentPath.startsWith(item.to + '/') }"
           >
-            {{ isZh ? item.label_zh : item.label_en }}
+            {{ L(item.label.zh, item.label.en, item.label.ja, item.label.ko, item.label.es) }}
           </RouterLink>
         </div>
       </nav>
 
       <div class="admin-sidebar-footer">
         <RouterLink to="/" class="admin-exit-link">
-          ← {{ L('返回網站', 'Back to site') }}
+          ← {{ L('返回網站', 'Back to site', 'サイトに戻る', '사이트로 돌아가기', 'Volver al sitio') }}
         </RouterLink>
       </div>
     </aside>
@@ -204,7 +209,7 @@ const currentAdminEmail = computed(() => authStore.user?.email || '')
         <span
           class="admin-env-badge"
           :data-env="paypalEnv"
-          :title="L('PayPal 目前環境', 'Current PayPal environment')"
+          :title="L('PayPal 目前環境', 'Current PayPal environment', '現在のPayPal環境', '현재 PayPal 환경', 'Entorno actual de PayPal')"
         >
           {{ paypalEnv === 'production' ? 'LIVE'
              : paypalEnv === 'sandbox' ? 'SANDBOX'
@@ -220,11 +225,11 @@ const currentAdminEmail = computed(() => authStore.user?.email || '')
             @input="onSearchInput"
             @focus="searchOpen = !!searchQ"
             type="text"
-            :placeholder="L('搜尋使用者、訂單、素材、方案…', 'Search users, orders, materials, plans…')"
+            :placeholder="L('搜尋使用者、訂單、素材、方案…', 'Search users, orders, materials, plans…', 'ユーザー、注文、素材、プランを検索…', '사용자, 주문, 소재, 요금제 검색…', 'Buscar usuarios, pedidos, materiales, planes…')"
             class="admin-search-input"
           />
           <div v-if="searchOpen" class="admin-search-pop">
-            <div v-if="searchLoading" class="admin-search-status">{{ L('搜尋中…', 'Searching…') }}</div>
+            <div v-if="searchLoading" class="admin-search-status">{{ L('搜尋中…', 'Searching…', '検索中…', '검색 중…', 'Buscando…') }}</div>
             <template v-else>
               <div v-for="(hits, cat) in searchResults" :key="cat" v-show="hits.length > 0" class="admin-search-group">
                 <div class="admin-search-cat">{{ cat }}</div>
@@ -241,7 +246,7 @@ const currentAdminEmail = computed(() => authStore.user?.email || '')
                 v-if="!searchResults.users.length && !searchResults.orders.length && !searchResults.materials.length && !searchResults.plans.length"
                 class="admin-search-status"
               >
-                {{ L('沒有結果', 'No matches') }}
+                {{ L('沒有結果', 'No matches', '該当なし', '결과 없음', 'Sin resultados') }}
               </div>
             </template>
           </div>

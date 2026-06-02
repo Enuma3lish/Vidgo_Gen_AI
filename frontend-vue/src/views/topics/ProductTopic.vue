@@ -51,16 +51,33 @@ const tools = [
   }
 ]
 
-// Scene types - descriptions use i18n keys from tools.scenes
+// Scene types - studio/nature/elegant/minimal/lifestyle use i18n keys from tools.scenes;
+// urban/seasonal/holiday have no locale-JSON keys, so they expose a localized()
+// helper that resolves to the active locale via L() (fixes ja/ko/es fall-through, BUG-017).
 const sceneTypes = [
   { key: 'studio', icon: '📷' },
   { key: 'nature', icon: '🌿' },
   { key: 'elegant', icon: '✨' },
   { key: 'minimal', icon: '⬜' },
   { key: 'lifestyle', icon: '🏠' },
-  { key: 'urban', icon: '🏙️', nameZh: '都市', nameEn: 'Urban', descZh: '現代都市背景', descEn: 'Modern city backdrop' },
-  { key: 'seasonal', icon: '🍂', nameZh: '季節', nameEn: 'Seasonal', descZh: '季節性背景', descEn: 'Seasonal backgrounds' },
-  { key: 'holiday', icon: '🎄', nameZh: '節日', nameEn: 'Holiday', descZh: '節日慶典氛圍', descEn: 'Festive celebration' }
+  {
+    key: 'urban',
+    icon: '🏙️',
+    localizedName: () => L('都市', 'Urban', '都市', '도시', 'Urbano'),
+    localizedDesc: () => L('現代都市背景', 'Modern city backdrop', 'モダンな都市背景', '현대 도시 배경', 'Fondo urbano moderno')
+  },
+  {
+    key: 'seasonal',
+    icon: '🍂',
+    localizedName: () => L('季節', 'Seasonal', '季節', '계절', 'Estacional'),
+    localizedDesc: () => L('季節性背景', 'Seasonal backgrounds', '季節の背景', '계절 배경', 'Fondos de temporada')
+  },
+  {
+    key: 'holiday',
+    icon: '🎄',
+    localizedName: () => L('節日', 'Holiday', 'ホリデー', '연휴', 'Festividad'),
+    localizedDesc: () => L('節日慶典氛圍', 'Festive celebration', '祝祭の雰囲気', '축제 분위기', 'Ambiente festivo')
+  }
 ]
 
 const selectedScene = ref('studio')
@@ -94,6 +111,7 @@ const demoImages = computed(() => {
     if (!productMap.has(productId)) {
       productMap.set(productId, {
         id: t.id,
+        // Backend only has prompt_zh / prompt — ja/ko/es fall through to English (BUG-017, backend out of scope).
         name: isZh.value ? (t.prompt_zh || t.prompt) : t.prompt,
         preview: t.input_image_url,
         input_params: params,
@@ -421,8 +439,8 @@ onMounted(async () => {
                   : 'bg-dark-700 border-2 border-transparent hover:border-dark-600'"
               >
                 <span class="text-2xl block mb-2">{{ scene.icon }}</span>
-                <span class="text-white font-medium">{{ (scene as any).nameZh && isZh ? (scene as any).nameZh : (scene as any).nameEn || t(`tools.scenes.${scene.key}.name`) }}</span>
-                <span class="text-gray-500 text-sm block">{{ (scene as any).descZh && isZh ? (scene as any).descZh : (scene as any).descEn || t(`tools.scenes.${scene.key}.desc`) }}</span>
+                <span class="text-white font-medium">{{ (scene as any).localizedName ? (scene as any).localizedName() : t(`tools.scenes.${scene.key}.name`) }}</span>
+                <span class="text-gray-500 text-sm block">{{ (scene as any).localizedDesc ? (scene as any).localizedDesc() : t(`tools.scenes.${scene.key}.desc`) }}</span>
               </button>
             </div>
 

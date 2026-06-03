@@ -120,7 +120,7 @@ FRONTEND_CPU=1
 #      autoscaling on backlog.
 WORKER_MIN_INSTANCES=1
 WORKER_MAX_INSTANCES=2
-WORKER_MEMORY="256Mi"
+WORKER_MEMORY="512Mi"
 WORKER_CPU=1
 
 # 預算告警 (USD)
@@ -811,6 +811,7 @@ if should_run 10 "deploy"; then
     --memory="${FRONTEND_MEMORY}" \
     --cpu="${FRONTEND_CPU}" \
     --port=80 \
+    --timeout=3600 \
     --service-account="${FRONTEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --set-env-vars="BACKEND_URL=${BACKEND_URL}" \
     --allow-unauthenticated

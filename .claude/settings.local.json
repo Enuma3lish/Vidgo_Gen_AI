@@ -448,7 +448,14 @@
       "Bash(awk '/PIAPI_KLING_VERSIONS *= *{/,/}/' app/providers/piapi_provider.py)",
       "Bash(awk '/def _stream_with_heartbeat/,/^[^ ]/' app/api/v1/tools.py)",
       "Bash(sed -n '1,40p' backend/Dockerfile)",
-      "Bash(sed -n '1,40p' Dockerfile)"
+      "Bash(sed -n '1,40p' Dockerfile)",
+      "WebFetch(domain:mnml.ai)",
+      "Bash(node *)",
+      "Bash(sed -n '40,48p;76,82p' src/components/tools/PiapiPlayground.vue)",
+      "Bash(sed -n '34,44p' src/components/common/ImageUploader.vue)",
+      "Bash(sed -n '240,248p' src/components/tools/SubscriberUploadPanel.vue)",
+      "Bash(docker rmi *)",
+      "Bash(awk '/PIAPI_MODELS *=|PIAPI_MODELS: /{f=1} f{print NR\": \"$0} /\\\\}/{if\\(f\\)c++; if\\(c>=1 && f\\){exit}}' app/providers/piapi_provider.py)"
     ],
     "additionalDirectories": [
       "/private/tmp"

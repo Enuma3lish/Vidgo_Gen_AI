@@ -2751,12 +2751,37 @@ async def ai_try_on(
 # Tool 4: Room Redesign
 # ============================================================================
 
-@router.post("/room-redesign", response_model=ToolResponse)
+@router.post("/room-redesign")
 async def room_redesign(
     request: RoomRedesignRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
+    """Transform room interior style — chunked streaming with a 25 s keep-alive
+    heartbeat so Cloudflare / GCLB / Cloud Run idle timeouts don't close the
+    connection during long Kontext / Gemini I2I runs.
+
+    2026-06-03: both the Magic path (Kontext I2I) and the redesign/stage path
+    can sit at the upper end of the image poll window on a cold provider queue.
+    Without a heartbeat that idle connection was being closed by an upstream
+    proxy, which surfaced to the user as "times out / no result appears" with
+    NOTHING in our logs (the app never errored — the proxy killed the socket).
+    Mirrors /short-video, /avatar, /kling-video. The final JSON body matches the
+    previous ToolResponse shape (leading heartbeat whitespace is ignored by
+    JSON.parse / httpx .json()).
+    """
+    async def _do_room_redesign() -> Dict[str, Any]:
+        result = await _room_redesign_inner(request, db, current_user)
+        return result.model_dump() if hasattr(result, "model_dump") else result
+
+    return _stream_with_heartbeat(_do_room_redesign)
+
+
+async def _room_redesign_inner(
+    request: RoomRedesignRequest,
+    db: AsyncSession,
+    current_user,
+) -> ToolResponse:
     """
     Transform room interior style.
 
@@ -2843,7 +2868,19 @@ async def room_redesign(
         try:
             room_url = _resolve_public_url(str(request.get_room_url()))
             provider_router = get_provider_router()
-            magic_prompt = request.custom_prompt.strip()
+            # 2026-06-03 — anti-hallucination preservation envelope. The user's
+            # text stays VERBATIM and is the operative instruction; we only wrap
+            # it so Flux Kontext edits the photo instead of reinventing it
+            # (Kontext is an instruction-edit model — "change X, keep the rest
+            # identical" is exactly how you stop it hallucinating geometry).
+            # This is the user-prompt path the owner asked to de-hallucinate.
+            user_change = request.custom_prompt.strip()
+            magic_prompt = (
+                "Edit the provided photo. Preserve its existing architecture, perspective, "
+                "proportions, camera angle, and overall layout. Apply ONLY this change: "
+                f"{user_change}. Do not add, remove, duplicate, or distort structural elements "
+                "such as walls, windows, doors, or rooflines; keep everything not mentioned identical."
+            )
 
             def _extract_image_url(res: Dict[str, Any]) -> Optional[str]:
                 out = res.get("output") or {}
@@ -2855,7 +2892,9 @@ async def room_redesign(
                         url = first if isinstance(first, str) else (first.get("url") or first.get("image_url"))
                 return url
 
-            # Primary: Flux Kontext I2I — sends the user's prompt verbatim.
+            # Primary: Flux Kontext I2I — user's words verbatim inside the
+            # preservation envelope above (Kontext has no negative_prompt, so
+            # the anti-drift guidance is all positive; steps default to 28).
             result = await provider_router.route(TaskType.I2I, {
                 "image_url": room_url,
                 "prompt": magic_prompt,
@@ -2880,6 +2919,7 @@ async def room_redesign(
                     "image_url": room_url,
                     "prompt": magic_prompt,
                     "style": request.style or "modern",
+                    "space_kind": request.space_kind,
                 })
                 if fb.get("success"):
                     result_url = _extract_image_url(fb)
@@ -3006,7 +3046,28 @@ async def room_redesign(
         "as a clean unpopulated architectural proposal."
     )
 
-    style_prompt = f"{style_prompt} {intensity_clause}{stage_clause}{lighting_clause}{material_clause}{no_people_clause}".strip()
+    # 2026-06-03 — additive structure-extraction pass (owner-approved). One
+    # Gemini Vision call reads the photo and lists the PERMANENT architectural
+    # shell (room/building geometry, windows, doors, massing) so Kontext
+    # preserves the real space instead of hallucinating it. STRICTLY ADDITIVE —
+    # it never drops or rewrites the user's prompt (unlike the retired
+    # describe_and_fuse); magic mode is excluded entirely (verbatim contract,
+    # handled above). Fail-open: any error/timeout yields "" and the render
+    # proceeds unchanged. The 12 s ceiling lives in describe_structure; the
+    # endpoint's keep-alive heartbeat absorbs the extra latency.
+    structure_clause = ""
+    try:
+        from app.services.image_understanding_service import (
+            get_image_understanding_service,
+        )
+        structure_clause = await get_image_understanding_service().extract_structure_constraints(
+            image_url=str(request.get_room_url()),
+            space_kind=request.space_kind,
+        )
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("room_redesign structure extraction failed: %s", _exc)
+
+    style_prompt = f"{style_prompt} {intensity_clause}{stage_clause}{lighting_clause}{material_clause}{structure_clause}{no_people_clause}".strip()
     style_prompt, prompt_refinement = await _refine_generation_prompt(
         style_prompt,
         "room_redesign",
@@ -3054,6 +3115,11 @@ async def room_redesign(
                     "image_url": str(request.get_room_url()),
                     "prompt": prompt,
                     "style": request.style,
+                    # space_kind lets the provider frame the render correctly
+                    # (exterior facade vs interior vs commercial) and pick the
+                    # matching structure-preservation constraints — without it
+                    # exterior renders were mis-framed as "interior design".
+                    "space_kind": request.space_kind,
                     "preserve_structure": request.preserve_structure,
                     "strength": request.style_strength,
                     "denoising_strength": denoising_strength,

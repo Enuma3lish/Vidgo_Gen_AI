@@ -730,6 +730,13 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("kontext_image", params)
 
+        # IMPORTANT: the Qubico flux1-dev-advanced "kontext" task has a CLOSED
+        # input schema (verified against piapi.ai/docs/flux-api/kontext,
+        # 2026-06-03): prompt, image, width, height, seed, steps (default 28,
+        # max 40) ONLY. It does NOT accept negative_prompt or guidance_scale —
+        # sending them risks a 400, so we never add them here. Anti-hallucination
+        # for Kontext must be expressed in the POSITIVE prompt (which is also
+        # how instruction-edit models like Kontext are meant to be steered).
         payload = {
             "model": PIAPI_MODELS["flux_kontext"],
             "task_type": "kontext",
@@ -738,7 +745,9 @@ class PiAPIProvider(BaseProvider):
                 "prompt": params["prompt"],
                 "width": params.get("width", 1024),
                 "height": params.get("height", 768),
-                "steps": params.get("steps", 10),
+                # Vendor default is 28; callers (interior/magic) pass 28 for
+                # fidelity. Clamp to the documented 1..40 range.
+                "steps": max(1, min(40, int(params.get("steps", 28)))),
                 "seed": -1
             }
         }
@@ -1423,29 +1432,59 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("doodle_interior", params)
 
-        style = params.get("style", "modern")
-        room_type = params.get("room_type", "living room")
+        style = str(params.get("style", "modern")).replace("_", " ")
         prompt = params.get("prompt", "")
+        # 2026-06-03 — space_kind-aware framing. Previously EVERY call (incl.
+        # exterior building renders) was framed as "interior design … room
+        # footprint … staged with furniture", which actively induced the model
+        # to hallucinate interior cues onto a facade. Now exterior/commercial
+        # get the correct framing + preservation constraints.
+        space_kind = (params.get("space_kind") or "interior").lower()
 
-        INTERIOR_CONSTRAINTS = (
-            "no people, no humans, no faces, no hands, no pets, "
-            "preserve original walls windows doors ceiling and room footprint, "
-            "empty interior staged only with furniture and decor, "
-            "photorealistic real-estate interior photography"
+        # Kontext has NO negative_prompt (closed schema) — so the anti-drift
+        # guidance lives entirely in this POSITIVE constraint text.
+        anti_drift = (
+            "Do not distort, warp, bend, or duplicate the geometry, perspective, "
+            "windows, or doors; do not invent extra openings or structures."
         )
-        full_prompt = (
-            f"{style} {room_type} interior design, professional architectural rendering, "
-            f"{prompt}. {INTERIOR_CONSTRAINTS}"
-        )
+        if space_kind == "exterior":
+            framing = "professional architectural exterior visualization"
+            constraints = (
+                "Preserve the existing building massing, number of storeys, rooflines, "
+                "and the position and count of windows and doors and the footprint. "
+                f"Do NOT add interior elements or furniture. {anti_drift} "
+                "Photorealistic architectural exterior photography, sharp focus, "
+                "no people, no pets, no text, no watermark."
+            )
+        elif space_kind == "commercial":
+            framing = "professional commercial-space visualization"
+            constraints = (
+                "Preserve the original walls, windows, doors, columns, ceiling structure, "
+                f"and the overall floor plan. {anti_drift} "
+                "Photorealistic commercial interior photography, sharp focus, "
+                "no people, no pets, no text, no watermark."
+            )
+        else:
+            room_type = params.get("room_type", "living room")
+            framing = f"{room_type} interior design, professional architectural rendering"
+            constraints = (
+                "Preserve the original walls, windows, doors, ceiling, and room footprint. "
+                f"Restyle with furniture, decor, and lighting only. {anti_drift} "
+                "Photorealistic real-estate interior photography, sharp focus, "
+                "no people, no humans, no faces, no hands, no pets."
+            )
 
-        # Try kontext first (more likely to be available)
+        full_prompt = f"{style} {framing}. {prompt}. {constraints}"
+
+        # Try kontext first (more likely to be available). steps=28 (vendor
+        # default; the old 10 under-sampled and cost fidelity). negative_prompt
+        # is intentionally NOT passed — the kontext task rejects it.
         return await self.kontext_image({
             "image_url": params["image_url"],
             "prompt": full_prompt,
-            "negative_prompt": "people, humans, persons, faces, hands, pets, animals, text, watermark, signature",
             "width": 1024,
             "height": 768,
-            "steps": 10
+            "steps": params.get("steps", 28),
         })
 
     # ─────────────────────────────────────────────────────────────────────────

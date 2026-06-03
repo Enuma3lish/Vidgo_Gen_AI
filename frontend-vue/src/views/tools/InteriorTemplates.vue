@@ -75,11 +75,16 @@ function selectTab(kind: SpaceKind) {
   void loadStyles(kind)
 }
 
+// Each space-kind now has its own dedicated tool page (2026-06-03 split), so
+// route the click to the matching page with the style pre-filled instead of
+// the old all-in-one RoomRedesign + space_kind query.
+const PAGE_BY_KIND: Record<SpaceKind, string> = {
+  interior: '/tools/room-redesign',
+  exterior: '/tools/exterior-ai',
+  commercial: '/tools/commercial-space',
+}
 function openStyle(card: StyleCard) {
-  router.push({
-    path: '/tools/room-redesign',
-    query: { style: card.id, space_kind: activeTab.value },
-  })
+  router.push({ path: PAGE_BY_KIND[activeTab.value], query: { style: card.id } })
 }
 
 // Fallback preview when the catalog entry has no preview_url (lots of the

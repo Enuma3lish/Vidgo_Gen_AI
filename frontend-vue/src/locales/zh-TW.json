@@ -71,7 +71,7 @@
       "categories": {
         "all": "全部",
         "advertising": "廣告宣傳",
-        "interior": "室內設計",
+        "interior": "室內室外設計",
         "branding": "品牌設計",
         "other": "其他酷炫 AI 功能"
       },
@@ -96,6 +96,10 @@
         "roomRedesign": "室內設計改造",
         "interiorTemplates": "室內設計範本",
         "floorplanVideo": "平面圖長出 3D 房間",
+        "exteriorAi": "建築外觀 AI 設計",
+        "commercialSpace": "商業空間設計",
+        "sketchToRender": "草圖轉渲染",
+        "renderEnhancer": "渲染圖優化放大",
         "videoBgRemove": "影片去背",
         "claymation": "黏土風生成",
         "aiAvatar": "AI 數位人 / 代言人",

@@ -241,6 +241,11 @@
         "createAnyImage": "Imagen hero de marketing",
         "roomRedesign": "Rediseño de Interiores",
         "interiorTemplates": "Plantillas de Interiores",
+        "floorplanVideo": "Plano → Video 3D",
+        "exteriorAi": "Diseño de exteriores IA",
+        "commercialSpace": "Espacio comercial",
+        "sketchToRender": "Boceto a render",
+        "renderEnhancer": "Mejora de renders",
         "videoBgRemove": "Quitar fondo video",
         "claymation": "Claymation IA",
         "aiAvatar": "Avatar IA / Portavoz",
@@ -249,7 +254,7 @@
       "categories": {
         "all": "Todos",
         "advertising": "Publicidad",
-        "interior": "Diseño de interiores",
+        "interior": "Diseño de interiores y exteriores",
         "branding": "Marca",
         "other": "Más herramientas IA"
       },

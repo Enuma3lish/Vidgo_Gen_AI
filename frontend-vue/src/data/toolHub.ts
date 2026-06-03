@@ -63,6 +63,14 @@ export const toolHubTiles: ToolHubTile[] = [
   { id: 'interior-templates',  labelKey: 'tools.hub.tiles.interiorTemplates',  to: '/tools/interior-templates',     thumb: `${T}/product-photography.png`, category: 'interior'    },
   // Floor-plan → 3D growth video (Gemini → render → Kling 3.0 → opt. Trellis).
   { id: 'floorplan-video',     labelKey: 'tools.hub.tiles.floorplanVideo',     to: '/tools/floorplan-to-video',     thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
+  // 2026-06-03 — exterior/render-enhancer/sketch tools added after the owner
+  // asked to mirror mnml.ai's exterior-ai / render-enhancer / sketch2img and
+  // broaden the group to cover indoor + outdoor (室內室外設計). Each is its own
+  // dedicated page; all reuse existing endpoints (room-redesign / upscale).
+  { id: 'exterior-ai',         labelKey: 'tools.hub.tiles.exteriorAi',         to: '/tools/exterior-ai',            thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
+  { id: 'commercial-space',    labelKey: 'tools.hub.tiles.commercialSpace',    to: '/tools/commercial-space',       thumb: `${T}/product-photography.png`, category: 'interior'    },
+  { id: 'sketch-to-render',    labelKey: 'tools.hub.tiles.sketchToRender',     to: '/tools/sketch-to-render',       thumb: `${T}/edit-with-ai.png`,        category: 'interior'    },
+  { id: 'render-enhancer',     labelKey: 'tools.hub.tiles.renderEnhancer',     to: '/tools/render-enhancer',        thumb: `${T}/product-beautifier.png`,  category: 'interior'    },
   // Row 7 — NEW Qubico-backed tools added 2026-05-24 after the stability
   // probe. Only video-background-remove was healthy; sibling video tools
   // upscale + watermark-remove dropped because they timed out or 404'd.

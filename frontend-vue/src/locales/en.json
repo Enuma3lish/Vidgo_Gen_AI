@@ -71,7 +71,7 @@
       "categories": {
         "all": "All",
         "advertising": "Advertising",
-        "interior": "Interior Design",
+        "interior": "Interior & Exterior Design",
         "branding": "Branding",
         "other": "More AI Tools"
       },
@@ -96,6 +96,10 @@
         "roomRedesign": "Interior Redesign",
         "interiorTemplates": "Interior Templates",
         "floorplanVideo": "Floor Plan → 3D Video",
+        "exteriorAi": "Exterior AI",
+        "commercialSpace": "Commercial Space",
+        "sketchToRender": "Sketch to Render",
+        "renderEnhancer": "Render Enhancer",
         "videoBgRemove": "Video BG Remove",
         "claymation": "Claymation AI",
         "aiAvatar": "AI Avatar / Spokesperson",

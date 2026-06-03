@@ -241,6 +241,11 @@
         "createAnyImage": "마케팅 메인 비주얼",
         "roomRedesign": "인테리어 리디자인",
         "interiorTemplates": "인테리어 템플릿",
+        "floorplanVideo": "평면도 → 3D 방",
+        "exteriorAi": "외관 AI 디자인",
+        "commercialSpace": "상업 공간 디자인",
+        "sketchToRender": "스케치 → 렌더",
+        "renderEnhancer": "렌더 향상·확대",
         "videoBgRemove": "동영상 배경 제거",
         "claymation": "클레이메이션 생성",
         "aiAvatar": "AI 아바타 / 대변인",
@@ -249,7 +254,7 @@
       "categories": {
         "all": "전체",
         "advertising": "광고/홍보",
-        "interior": "인테리어 디자인",
+        "interior": "실내·실외 디자인",
         "branding": "브랜딩",
         "other": "기타 AI 기능"
       },

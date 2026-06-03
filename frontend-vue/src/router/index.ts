@@ -74,6 +74,42 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
+  // Exterior AI — building-facade render. Reuses /tools/room-redesign with
+  // space_kind='exterior' (mnml.ai/app/exterior-ai parity).
+  {
+    path: '/tools/exterior-ai',
+    name: 'exterior-ai',
+    component: () => import('@/views/tools/ExteriorAI.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // Commercial Space Design — split out of RoomRedesign (2026-06-03). Reuses
+  // /tools/room-redesign with space_kind='commercial'.
+  {
+    path: '/tools/commercial-space',
+    name: 'commercial-space',
+    component: () => import('@/views/tools/CommercialSpace.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // Sketch → photorealistic render. Reuses /tools/room-redesign image-to-image
+  // (mnml.ai/app/sketch2img parity).
+  {
+    path: '/tools/sketch-to-render',
+    name: 'sketch-to-render',
+    component: () => import('@/views/tools/SketchToRender.vue'),
+    meta: { requiresAuth: false }
+  },
+
+  // Render Enhancer — AI detail enhance (room-redesign magic) + upscale
+  // (mnml.ai/app/render-enhancer parity).
+  {
+    path: '/tools/render-enhancer',
+    name: 'render-enhancer',
+    component: () => import('@/views/tools/RenderEnhancer.vue'),
+    meta: { requiresAuth: false }
+  },
+
   // Interior Templates Gallery — Pippit-style browsable style cards
   // (added 2026-05-24). Clicking a card deeplinks to /tools/room-redesign
   // with style + space_kind preselected via query params.

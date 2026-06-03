@@ -241,6 +241,11 @@
         "createAnyImage": "マーケティングメインビジュアル",
         "roomRedesign": "インテリアリデザイン",
         "interiorTemplates": "インテリアテンプレート",
+        "floorplanVideo": "間取り図から3D部屋",
+        "exteriorAi": "外観AIデザイン",
+        "commercialSpace": "商業空間デザイン",
+        "sketchToRender": "スケッチからレンダー",
+        "renderEnhancer": "レンダー高画質化",
         "videoBgRemove": "動画背景削除",
         "claymation": "クレイメーション生成",
         "aiAvatar": "AIアバター／スポークスパーソン",
@@ -249,7 +254,7 @@
       "categories": {
         "all": "全て",
         "advertising": "広告宣伝",
-        "interior": "インテリアデザイン",
+        "interior": "室内・室外デザイン",
         "branding": "ブランディング",
         "other": "その他のAI機能"
       },

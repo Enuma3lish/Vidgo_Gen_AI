@@ -35,7 +35,7 @@
  * #7c3aed→#a78bfa violet accents, #f5f5fa/#94949f text. Only the SHAPE
  * changes — palette stays.
  */
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
@@ -164,48 +164,38 @@ function handleRoomFileSelected(file: File | null) {
   uploadedFile.value = file
 }
 
-// Pre-fill from query params (Templates Gallery deeplink).
+// Pre-fill from query params (Templates Gallery deeplink). This page is now
+// interior-only — exterior and commercial each have their own dedicated page
+// (/tools/exterior-ai, /tools/commercial-space), so forward any old deeplink
+// or bookmark that still carries space_kind=exterior|commercial to the right
+// tool instead of silently ignoring it.
 async function applyDeeplink() {
   const qStyle = String(route.query.style || '').trim()
   const qSpaceKind = String(route.query.space_kind || '').trim()
-  if (qSpaceKind === 'exterior' || qSpaceKind === 'commercial') {
-    spaceKind.value = qSpaceKind
+  if (qSpaceKind === 'exterior') {
+    router.replace({ path: '/tools/exterior-ai', query: qStyle ? { style: qStyle } : {} })
+    return
   }
-  await loadStyles(spaceKind.value)
+  if (qSpaceKind === 'commercial') {
+    router.replace({ path: '/tools/commercial-space', query: qStyle ? { style: qStyle } : {} })
+    return
+  }
   if (qStyle) selectedStyle.value = qStyle
 }
 
-// Portfolio grid — flatten the loaded styles into a uniform card list.
-const portfolioGrid = computed<StyleCard[]>(() => {
-  const arr: StyleCard[] = []
-  arr.push(...styles.value.interior)
-  arr.push(...styles.value.commercial)
-  arr.push(...styles.value.exterior)
-  return arr
-})
+// Portfolio grid — interior styles only (exterior/commercial moved to their
+// own pages).
+const portfolioGrid = computed<StyleCard[]>(() => styles.value.interior)
 
 function pickFromPortfolio(card: StyleCard) {
-  // Find which catalog the card came from
-  for (const k of ['interior', 'commercial', 'exterior'] as const) {
-    if (styles.value[k].some(s => s.id === card.id)) {
-      spaceKind.value = k
-      break
-    }
-  }
   selectedStyle.value = card.id
   mode.value = 'redesign'
   // scroll to upload form
   window.scrollTo({ top: 600, behavior: 'smooth' })
 }
 
-watch(spaceKind, (k) => {
-  loadStyles(k)
-})
-
 onMounted(async () => {
   await loadStyles('interior')
-  loadStyles('commercial')
-  loadStyles('exterior')
   await applyDeeplink()
 })
 
@@ -313,29 +303,18 @@ onMounted(async () => {
       <div class="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
         <!-- Left: Inputs -->
         <aside class="rounded-2xl p-5 space-y-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <!-- Space kind tabs -->
-          <div>
-            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
-              {{ L('空間類型', 'Space Type', '空間タイプ', '공간 유형', 'Tipo de espacio') }}
-            </p>
-            <div class="grid grid-cols-3 gap-1.5">
-              <button
-                v-for="opt in [
-                  { id: 'interior' as const,   icon: '🛋️', label: L('室內', 'Interior', '室内', '실내', 'Interior') },
-                  { id: 'commercial' as const, icon: '🏪', label: L('商業', 'Commercial', '商業', '상업', 'Comercial') },
-                  { id: 'exterior' as const,   icon: '🏛️', label: L('外觀', 'Exterior', '外観', '외관', 'Exterior') },
-                ]"
-                :key="opt.id"
-                type="button"
-                @click="spaceKind = opt.id"
-                class="py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
-                :style="spaceKind === opt.id
-                  ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff;'
-                  : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
-              >
-                <span>{{ opt.icon }}</span> {{ opt.label }}
-              </button>
-            </div>
+          <!-- Cross-link to the sibling interior/exterior tools so users can
+               jump to the right dedicated page (this page is interior-only). -->
+          <div class="flex flex-wrap gap-1.5">
+            <RouterLink to="/tools/exterior-ai" class="text-[11px] px-2.5 py-1 rounded-full" style="background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);">
+              🏛️ {{ L('建築外觀', 'Exterior', '外観', '외관', 'Exterior') }}
+            </RouterLink>
+            <RouterLink to="/tools/commercial-space" class="text-[11px] px-2.5 py-1 rounded-full" style="background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);">
+              🏪 {{ L('商業空間', 'Commercial', '商業空間', '상업 공간', 'Comercial') }}
+            </RouterLink>
+            <RouterLink to="/tools/sketch-to-render" class="text-[11px] px-2.5 py-1 rounded-full" style="background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);">
+              ✏️ {{ L('草圖轉渲染', 'Sketch', 'スケッチ', '스케치', 'Boceto') }}
+            </RouterLink>
           </div>
 
           <!-- Mode tabs -->

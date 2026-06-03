@@ -36,6 +36,7 @@
  * Props: title, subtitle, status ('idle' | 'running' | 'done' | 'error'),
  * statusText, creditCost, onGenerate (callback), disabled
  */
+import { computed } from 'vue'
 import { useLocalized } from '@/composables'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 
@@ -64,6 +65,17 @@ interface Props {
    * passes a realistic estimate (image ~30s, video ~150s, avatar ~300s).
    */
   etaSeconds?: number
+  /**
+   * UX-friendliness extras (all optional, additive — tools that don't pass
+   * them render exactly as before):
+   *  - etaLabel:       small "~30–60s" estimate shown under the cost row.
+   *  - disabledReason: amber hint shown under a disabled Generate button so
+   *                    the user knows WHAT is missing (mistake prevention).
+   *  - emptyHint:      localized placeholder text for the empty result pane.
+   */
+  etaLabel?: string
+  disabledReason?: string
+  emptyHint?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -140,6 +152,11 @@ function onGenerateClick() {
             </span>
           </div>
 
+          <!-- Optional time estimate (matches the reference "Estimated 45 Sec"). -->
+          <p v-if="etaLabel" class="text-[11px] text-center" style="color: #6b6b7a; margin-top: -0.25rem;">
+            {{ etaLabel }}
+          </p>
+
           <!-- Generate Button -->
           <button
             @click="onGenerateClick"
@@ -158,6 +175,16 @@ function onGenerateClick() {
             </span>
             <span v-else>{{ generateLabel }}</span>
           </button>
+
+          <!-- Mistake-prevention: explain WHY Generate is disabled so the user
+               isn't left guessing (reference shows required fields up front). -->
+          <p
+            v-if="disabled && disabledReason && !isRunning"
+            class="text-[11px] rounded-lg px-3 py-2 flex items-start gap-1.5"
+            style="background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.22); color: #fbbf24;"
+          >
+            <span aria-hidden="true">ⓘ</span><span>{{ disabledReason }}</span>
+          </p>
         </aside>
 
         <!-- RIGHT: Result + status -->
@@ -179,7 +206,7 @@ function onGenerateClick() {
               <div class="text-center px-6 py-10">
                 <p class="text-5xl mb-3 opacity-40">🎨</p>
                 <p class="text-sm" style="color: #94949f;">
-                  Generate to see the result here.
+                  {{ emptyHint || 'Generate to see the result here.' }}
                 </p>
               </div>
             </slot>

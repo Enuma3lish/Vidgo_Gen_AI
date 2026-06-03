@@ -767,25 +767,41 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         """Generate interior design from image using Gemini on Vertex AI."""
         self._log_request("doodle_interior", params)
 
-        style = params.get("style", "modern")
-        room_type = params.get("room_type", "living room")
+        style = str(params.get("style", "modern")).replace("_", " ")
         prompt = params.get("prompt", "")
         # Hard constraint suffix: users were reporting people, pets, and
-        # invented furniture in kitchen / living-room outputs. The frontend
+        # invented furniture / distorted geometry in outputs. The frontend
         # also adds these instructions but we duplicate at the provider
         # level so direct API consumers and prompt-refinement rewrites
-        # cannot strip them.
-        INTERIOR_CONSTRAINTS = (
-            "No people, no humans, no faces, no hands, no pets. "
-            "Preserve the original walls, windows, doors, ceiling height, "
-            "and overall room footprint. Empty interior staged only with "
-            "furniture, decor, and lighting. Photorealistic real-estate "
-            "interior photography, sharp focus, balanced exposure."
-        )
-        full_prompt = (
-            f"Transform this room into a {style} {room_type} interior design. "
-            f"{prompt} {INTERIOR_CONSTRAINTS}"
-        )
+        # cannot strip them. 2026-06-03 — space_kind-aware so exterior /
+        # commercial renders are no longer mis-framed as "interior".
+        space_kind = (params.get("space_kind") or "interior").lower()
+        if space_kind == "exterior":
+            full_prompt = (
+                f"Restyle this building exterior in a {style} style. {prompt} "
+                "Keep the existing building massing, number of storeys, rooflines, and the "
+                "position and count of windows and doors and the footprint unchanged. "
+                "Do not add interior elements or furniture, do not distort the perspective or "
+                "geometry. Photorealistic architectural exterior photography, sharp focus, "
+                "no people, no pets, no text, no watermark."
+            )
+        elif space_kind == "commercial":
+            full_prompt = (
+                f"Transform this commercial space into a {style} design. {prompt} "
+                "Preserve the original walls, windows, doors, columns, ceiling structure, and the "
+                "overall floor plan; do not distort the perspective or geometry. "
+                "Photorealistic commercial interior photography, sharp focus, "
+                "no people, no pets, no text, no watermark."
+            )
+        else:
+            room_type = params.get("room_type", "living room")
+            full_prompt = (
+                f"Transform this room into a {style} {room_type} interior design. {prompt} "
+                "Preserve the original walls, windows, doors, ceiling height, and overall room "
+                "footprint; do not distort the perspective or geometry. Restyle only with "
+                "furniture, decor, and lighting. Photorealistic real-estate interior photography, "
+                "sharp focus, balanced exposure, no people, no humans, no faces, no hands, no pets."
+            )
 
         try:
             result = await self.edit_image({
@@ -833,6 +849,75 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
                 ),
             )
             return response.text
+        except Exception:
+            return None
+
+    async def describe_structure(self, params: Dict[str, Any]) -> Optional[str]:
+        """Extract ONLY the permanent architectural shell of a room/building so
+        a redesign can preserve it (2026-06-03, owner-approved additive pass).
+
+        Returns a short comma-separated phrase of features to keep (windows,
+        doors, massing, roofline, room geometry) — deliberately NOT materials,
+        colors, furniture, or style, which the redesign is free to change.
+        Returns None on any error/timeout so the caller can fail open.
+
+        ``space_kind``: 'interior' | 'commercial' | 'exterior' tunes the prompt.
+        """
+        try:
+            client = self._get_gemini_text_client()
+            from google.genai import types
+
+            space_kind = (params.get("space_kind") or "interior").lower()
+            if space_kind == "exterior":
+                ask = (
+                    "Look at this building exterior. List ONLY the permanent architectural "
+                    "features that must be preserved in a restyle: number of storeys, "
+                    "roofline/roof type, window grid and positions, entry/door position, and "
+                    "overall massing/footprint. Do NOT mention materials, colors, landscaping, "
+                    "or style. Reply as one concise comma-separated phrase, under 35 words."
+                )
+            elif space_kind == "commercial":
+                ask = (
+                    "Look at this commercial space. List ONLY the permanent architectural shell "
+                    "that must be preserved in a restyle: space type, window/storefront positions, "
+                    "columns, wall layout, and ceiling structure/height. Do NOT mention furniture, "
+                    "fixtures, materials, colors, or style. Reply as one concise comma-separated "
+                    "phrase, under 35 words."
+                )
+            else:
+                ask = (
+                    "Look at this interior. List ONLY the permanent architectural features that "
+                    "must be preserved in a redesign: room type, window positions and shapes, door "
+                    "positions, wall layout, and ceiling height/shape. Do NOT mention furniture, "
+                    "decor, materials, colors, or style. Reply as one concise comma-separated "
+                    "phrase, under 35 words."
+                )
+
+            parts: list = []
+            if params.get("image_url"):
+                http = self._get_http_client()
+                img_resp = await http.get(params["image_url"])
+                parts.append(types.Part.from_bytes(data=img_resp.content, mime_type="image/jpeg"))
+            elif params.get("image_bytes"):
+                parts.append(types.Part.from_bytes(data=params["image_bytes"], mime_type="image/jpeg"))
+            else:
+                return None
+            parts.append(ask)
+
+            # Bound the extra latency — this runs BEFORE the render, so a slow
+            # Gemini call must not stall the whole pipeline. ~12 s ceiling;
+            # on timeout we fail open (None → no constraint clause appended).
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.models.generate_content,
+                    model=self.gemini_model,
+                    contents=parts,
+                    config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=120),
+                ),
+                timeout=12.0,
+            )
+            text = (response.text or "").strip()
+            return text or None
         except Exception:
             return None
 

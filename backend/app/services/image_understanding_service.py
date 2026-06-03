@@ -152,6 +152,45 @@ class ImageUnderstandingService:
         """
         return self._fail_open(user_prompt)
 
+    async def extract_structure_constraints(
+        self,
+        *,
+        image_url: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        space_kind: str = "interior",
+    ) -> str:
+        """Additive structure-preservation pass (2026-06-03, owner-approved).
+
+        Unlike the retired ``describe_and_fuse`` — which could DROP or REWRITE
+        the user's prompt — this only READS the photo and returns an extra
+        clause describing the permanent architectural shell to preserve, ready
+        to be APPENDED to the prompt. The user's wording is never touched.
+
+        Returns "" (empty, no clause) on any error/timeout so callers fail
+        open and the render proceeds exactly as before.
+        """
+        try:
+            notes = await self._provider.describe_structure(
+                {"image_url": image_url, "image_bytes": image_bytes, "space_kind": space_kind}
+            )
+        except Exception:
+            notes = None
+        if not notes:
+            return ""
+
+        notes = notes.strip().rstrip(".")
+        if (space_kind or "").lower() == "exterior":
+            return (
+                f" Preserve the building's existing architecture exactly as in the source photo "
+                f"— {notes}. Restyle only cladding, surfaces, materials, finishes, landscaping and "
+                f"lighting; do NOT change the massing, rooflines, window positions, or footprint."
+            )
+        return (
+            f" Preserve the space's existing architecture exactly as in the source photo "
+            f"— {notes}. Restyle only finishes, materials, lighting, furniture and decor; do NOT "
+            f"move or alter walls, windows, doors, or the room geometry."
+        )
+
     @staticmethod
     def _fail_open(user_prompt: str) -> ImageFusionResult:
         """When the vision call errors, fall back to the user's prompt

@@ -90,6 +90,25 @@ def _video_poll_timeout(params: Dict[str, Any], floor: int = VIDEO_GEN_TIMEOUT_S
     return max(requested, floor)
 
 
+def _make_on_submit_wrapper(raw_on_submit, provider_name: str):
+    """Adapt a caller's ``on_submit(task_id, provider_name)`` callback into
+    the single-arg form ``_submit_and_poll`` expects. Returns None if the
+    caller didn't pass one — _submit_and_poll then skips the durable record
+    callback entirely (the 99% of internal callers that don't need reclaim).
+
+    Used by image_to_video / text_to_video / kling_video_generation /
+    generate_avatar so a Cloud-Run-killed foreground request can be reclaimed
+    by the worker via app/models/pending_provider_task.py.
+    """
+    if raw_on_submit is None:
+        return None
+
+    async def _wrapped(task_id: str):
+        await raw_on_submit(task_id, provider_name)
+
+    return _wrapped
+
+
 class PiAPIProvider(BaseProvider):
     """
     PiAPI Provider - Primary provider for VidGo.
@@ -1069,6 +1088,7 @@ class PiAPIProvider(BaseProvider):
         # sites (demo, material, rescue, uploads) previously fell through to the
         # 600 s image default and aborted long Wan/Veo renders mid-flight.
         max_wait = _video_poll_timeout(params)
+        _on_submit_i2v = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
         # Retry transient PiAPI stalls (queue stall, rate limit, upload timeout)
         # on the SAME model before the provider_router falls back to Vertex/Veo
         # or Pollo. Without this, a one-off Seedance/Wan hiccup silently served
@@ -1077,7 +1097,9 @@ class PiAPIProvider(BaseProvider):
         # the worst case to a single retry (a full-timeout retry is expensive).
         result = await self._retry_transient(
             "image_to_video",
-            lambda: self._submit_and_poll(payload, max_wait_seconds=max_wait),
+            lambda: self._submit_and_poll(
+                payload, max_wait_seconds=max_wait, on_submit=_on_submit_i2v,
+            ),
             attempts=2,
         )
 
@@ -1215,7 +1237,10 @@ class PiAPIProvider(BaseProvider):
 
         payload = {"model": model_id, "task_type": task_type, "input": input_payload}
         max_wait = _video_poll_timeout(params)
-        result = await self._submit_and_poll(payload, max_wait_seconds=max_wait)
+        _on_submit_t2v = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
+        result = await self._submit_and_poll(
+            payload, max_wait_seconds=max_wait, on_submit=_on_submit_t2v,
+        )
 
         # Normalise output (same logic as image_to_video).
         if result.get("success"):
@@ -1338,9 +1363,12 @@ class PiAPIProvider(BaseProvider):
             else VIDEO_GEN_TIMEOUT_SEC
         )
         max_wait = _video_poll_timeout(params, _kling_floor)
+        _on_submit_kling = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
         result = await self._retry_transient(
             "kling_video_generation",
-            lambda: self._submit_and_poll(payload, max_wait_seconds=max_wait),
+            lambda: self._submit_and_poll(
+                payload, max_wait_seconds=max_wait, on_submit=_on_submit_kling,
+            ),
         )
         output = result.get("output") or {}
         if isinstance(output, dict):
@@ -1559,7 +1587,14 @@ class PiAPIProvider(BaseProvider):
                 "invert_output": bool(params.get("invert_output", False)),
             },
         }
-        return await self._submit_and_poll(payload)
+        # 2026-06 reclaim hook — same contract as image_to_video et al.
+        # Long inputs (up to 2000 frames) can poll for 5-10 min; a killed
+        # foreground request would otherwise orphan the upstream task.
+        _on_submit_bg = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
+        max_wait = _video_poll_timeout(params)
+        return await self._submit_and_poll(
+            payload, max_wait_seconds=max_wait, on_submit=_on_submit_bg,
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # VIDEO STYLE TRANSFER (Wan VACE via PiAPI)
@@ -1603,7 +1638,12 @@ class PiAPIProvider(BaseProvider):
             }
         }
 
-        return await self._submit_and_poll(payload)
+        # 2026-06 reclaim hook — image-toolkit upscale can stall to 5 min on
+        # bad PiAPI days. Most calls finish in seconds, but the foreground
+        # request is on the hook for whatever the upstream returns; the hook
+        # lets the worker recover those rare long jobs.
+        _on_submit_up = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
+        return await self._submit_and_poll(payload, on_submit=_on_submit_up)
 
     # ─────────────────────────────────────────────────────────────────────────
     # TEXT TO SPEECH (F5-TTS via PiAPI)
@@ -1866,10 +1906,17 @@ class PiAPIProvider(BaseProvider):
         # portrait+audio MP4 instead of a real lip-synced avatar — the main
         # cause of "avatar is sometimes just a still image". attempts=2 keeps
         # the extra wait bounded to one retry.
+        # Forward the durable-record callback (used by long-poll endpoints
+        # to persist the upstream task_id so a killed request can be reclaimed).
+        # See module-level _make_on_submit_wrapper docstring for the contract.
+        _on_submit_wrapped = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
+
         try:
             result = await self._retry_transient(
                 "generate_avatar",
-                lambda: self._submit_and_poll(payload, max_wait_seconds=max_wait),
+                lambda: self._submit_and_poll(
+                    payload, max_wait_seconds=max_wait, on_submit=_on_submit_wrapped,
+                ),
                 attempts=2,
             )
         except Exception as e:
@@ -1910,6 +1957,7 @@ class PiAPIProvider(BaseProvider):
         self,
         payload: Dict[str, Any],
         max_wait_seconds: int = IMAGE_GEN_TIMEOUT_SEC,
+        on_submit=None,
     ) -> Dict[str, Any]:
         """Submit task and poll for result.
 
@@ -1918,6 +1966,14 @@ class PiAPIProvider(BaseProvider):
         kling_video_generation) resolve their own higher floor via
         ``_video_poll_timeout`` — 1200 s generic, 1800 s for Kling 3.0/Omni —
         so long Kling Omni / Veo / Wan jobs aren't aborted mid-render.
+
+        ``on_submit`` is an optional async callback ``f(task_id: str)``
+        fired the moment we capture the upstream task id, BEFORE polling
+        starts. Used by long-poll endpoints (avatar / Veo / Kling Omni)
+        to durably record the task id in `pending_provider_tasks` so a
+        request-killed / Cloud-Run-evicted poll can be reclaimed later by
+        the worker (see app/models/pending_provider_task.py and
+        app/worker.py reclaim_pending_provider_tasks_task).
         """
         # Submit task
         try:
@@ -1950,6 +2006,18 @@ class PiAPIProvider(BaseProvider):
                     "output": output
                 }
             raise Exception(f"Invalid PiAPI response: {data}")
+
+        # Fire the durable-record callback NOW, before polling. If the
+        # callback itself errors we still poll — losing the reclaim record
+        # is preferable to dropping a live upstream job.
+        if on_submit is not None and task_id:
+            try:
+                await on_submit(task_id)
+            except Exception as cb_exc:
+                logger.warning(
+                    "[PiAPI] on_submit callback for task %s raised: %s",
+                    task_id, cb_exc,
+                )
 
         # Poll for result. 5-second cadence, so attempts ≈ seconds / 5.
         max_attempts = max(1, max_wait_seconds // 5)

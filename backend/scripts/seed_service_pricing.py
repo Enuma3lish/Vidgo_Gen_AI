@@ -261,13 +261,142 @@ SERVICE_PRICING_DATA = [
     {
         "service_type": "style_transfer",
         "display_name": "Style Transfer",
-        "credit_cost": 1,
-        "api_cost_usd": Decimal("0.05"),
+        "credit_cost": 2,  # v2.2 — Flux Kontext $0.04
+        "api_cost_usd": Decimal("0.04"),
         "resolution": "1024x1024",
         "max_duration": None,
         "subscribers_only": False,
         "min_plan": "starter",
         "description": "Apply artistic styles to images"
+    },
+
+    # ─── v2.2 (2026-06) — new PiAPI / vendor catalog rows ─────────────
+    # All values match the h2b3c4d5e6f7 alembic migration + tier_config.py.
+    # api_cost_usd is the 2026-Q2 vendor list price; reconcile against the
+    # monthly PiAPI / A2E / Vertex invoice and update when vendors shift.
+    {
+        "service_type": "nano_banana_pro_t2i",
+        "display_name": "Nano Banana Pro (T2I)",
+        "credit_cost": 5,
+        "api_cost_usd": Decimal("0.10"),
+        "resolution": "1024x1024",
+        "max_duration": None,
+        "subscribers_only": True,
+        "min_plan": "pro",
+        "description": "Google Gemini Nano Banana Pro 高品質 T2I"
+    },
+    {
+        "service_type": "seedream_5_lite_t2i",
+        "display_name": "Seedream 5 Lite (T2I)",
+        "credit_cost": 1,
+        "api_cost_usd": Decimal("0.025"),
+        "resolution": "1024x1024",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "description": "ByteDance Seedream 5 Lite — 中低價位 T2I"
+    },
+    {
+        "service_type": "hailuo_fast_video",
+        "display_name": "Hailuo Fast 影片",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.10"),
+        "resolution": "720p",
+        "max_duration": 5,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "description": "Hailuo Fast — 平價影片預設"
+    },
+    {
+        "service_type": "seedance_fast_video",
+        "display_name": "Seedance Fast 影片",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.10"),
+        "resolution": "720p",
+        "max_duration": 5,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "description": "Seedance 2 Fast — 性價比影片預設"
+    },
+    {
+        "service_type": "kling_omni_video",
+        "display_name": "Kling 3.0 Omni 影片",
+        "credit_cost": 60,
+        "api_cost_usd": Decimal("0.50"),
+        "resolution": "1080p",
+        "max_duration": 10,
+        "subscribers_only": True,
+        "min_plan": "pro",
+        "description": "Kling 3.0 Omni — 旗艦影片"
+    },
+    {
+        "service_type": "hunyuan_video",
+        "display_name": "Hunyuan 中文影片",
+        "credit_cost": 25,
+        "api_cost_usd": Decimal("0.30"),
+        "resolution": "720p",
+        "max_duration": 5,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "description": "Hunyuan — 中文 prompts 影片"
+    },
+    {
+        "service_type": "veo_31_fast",
+        "display_name": "Veo 3.1 Fast 影片",
+        "credit_cost": 200,
+        "api_cost_usd": Decimal("0.50"),
+        "resolution": "1080p",
+        "max_duration": 5,
+        "subscribers_only": True,
+        "min_plan": "premium",
+        "description": "Google Veo 3.1 Fast — 旗艦短影片"
+    },
+
+    # Avatar / lip-sync — v2.2 fallback rows so the DB-driven path
+    # works for ai_avatar / lip_sync / video_dubbing endpoints.
+    {
+        "service_type": "ai_avatar",
+        "display_name": "AI Avatar",
+        "credit_cost": 80,
+        "api_cost_usd": Decimal("2.00"),
+        "resolution": "1080p",
+        "max_duration": 30,
+        "subscribers_only": True,
+        "min_plan": "pro",
+        "description": "AI 數位人 (A2E / Kling Avatar)"
+    },
+    {
+        "service_type": "lip_sync",
+        "display_name": "Lip Sync",
+        "credit_cost": 50,
+        "api_cost_usd": Decimal("1.00"),
+        "resolution": "1080p",
+        "max_duration": 30,
+        "subscribers_only": True,
+        "min_plan": "pro",
+        "description": "AI 對嘴 (Kling Lip Sync)"
+    },
+    {
+        "service_type": "video_dubbing",
+        "display_name": "Video Dubbing",
+        "credit_cost": 60,
+        "api_cost_usd": Decimal("1.50"),
+        "resolution": "1080p",
+        "max_duration": 30,
+        "subscribers_only": True,
+        "min_plan": "pro",
+        "description": "AI 配音 (A2E 多語配音)"
+    },
+    {
+        "service_type": "virtual_try_on",
+        "display_name": "Virtual Try-On",
+        "credit_cost": 30,
+        "api_cost_usd": Decimal("0.70"),
+        "resolution": "1080p",
+        "max_duration": None,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "description": "Kling Try-On — 虛擬試穿"
     },
 ]
 

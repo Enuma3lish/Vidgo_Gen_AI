@@ -573,7 +573,7 @@ class DemoCacheService:
 
         # Step 1: Remove background from the frozen product image
         logger.info(f"[DemoCache] Product scene: removing background from {resolved_pid}...")
-        rembg = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": product_url})
+        rembg = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": product_url}, user_tier="pro")
         if not rembg.get("success"):
             logger.warning(f"[DemoCache] rembg failed: {rembg}")
             return {"success": False}
@@ -724,7 +724,7 @@ class DemoCacheService:
         else:
             prompt = effect_prompt or content_prompts.get(topic, random.choice(list(content_prompts.values())))
             logger.info(f"[DemoCache] Short video: generating source image...")
-            t2i = await provider.route(TaskType.T2I, {"prompt": prompt, "width": 1024, "height": 1024})
+            t2i = await provider.route(TaskType.T2I, {"prompt": prompt, "width": 1024, "height": 1024}, user_tier="pro")
             if not t2i.get("success"):
                 return {"success": False}
             source_url = t2i.get("output", {}).get("image_url")
@@ -734,7 +734,7 @@ class DemoCacheService:
 
         # Step 2: I2V — animate the chosen frame with the chosen motion prompt.
         logger.info(f"[DemoCache] Short video: I2V on {'user frame' if input_image_url else 'T2I frame'}...")
-        i2v = await provider.route(TaskType.I2V, {"image_url": source_url, "prompt": i2v_prompt})
+        i2v = await provider.route(TaskType.I2V, {"image_url": source_url, "prompt": i2v_prompt}, user_tier="pro")
         if not i2v.get("success"):
             return {"success": False}
 
@@ -770,7 +770,7 @@ class DemoCacheService:
         full_prompt = f"Seamless pattern design, {prompt}, tileable, high quality, 8K"
 
         logger.info(f"[DemoCache] Pattern: generating...")
-        t2i = await provider.route(TaskType.T2I, {"prompt": full_prompt, "width": 1024, "height": 1024})
+        t2i = await provider.route(TaskType.T2I, {"prompt": full_prompt, "width": 1024, "height": 1024}, user_tier="pro")
         if not t2i.get("success"):
             return {"success": False}
 

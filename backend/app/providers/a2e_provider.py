@@ -93,6 +93,16 @@ class A2EProvider(BaseProvider):
         if not text:
             return {"success": False, "error": "text or script is required for A2E avatar generation"}
 
+        # Forward the durable-record callback (same role as in piapi_provider).
+        # Wrap so the model gets ("a2e", task_id) regardless of which
+        # provider succeeded.
+        _on_submit_raw = params.get("on_submit")
+        _on_submit_wrapped = None
+        if _on_submit_raw is not None:
+            async def _wrap_submit(tid: str):
+                await _on_submit_raw(tid, "a2e")
+            _on_submit_wrapped = _wrap_submit
+
         result = await self.service.generate_and_wait(
             image_url=image_url,
             script=text,
@@ -101,6 +111,7 @@ class A2EProvider(BaseProvider):
             duration=int(params.get("duration", 30)),
             timeout=int(params.get("timeout", 1200)),
             save_locally=False,
+            on_submit=_on_submit_wrapped,
         )
         if not result.get("success"):
             return {"success": False, "error": result.get("error", "A2E avatar generation failed")}

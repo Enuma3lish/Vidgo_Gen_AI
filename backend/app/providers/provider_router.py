@@ -240,6 +240,9 @@ class ProviderRouter:
         self._provider_circuit_breaker_cooldown = timedelta(
             seconds=max(30, settings.PROVIDER_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
         )
+        # Tracks which TaskTypes we have already warned about for missing
+        # user_tier — keeps the migration log from spamming once-per-call.
+        self._tier_warn_seen: set = set()
 
     # ─────────────────────────────────────────────────────────────────────────
     # MAIN ROUTING METHOD
@@ -249,7 +252,7 @@ class ProviderRouter:
         self,
         task_type: TaskType,
         params: Dict[str, Any],
-        user_tier: str = "starter",
+        user_tier: Optional[str] = None,
         persist_to_gcs: bool = True,
     ) -> Dict[str, Any]:
         """
@@ -260,6 +263,34 @@ class ProviderRouter:
         config = self.ROUTING_CONFIG.get(task_type)
         if not config:
             raise ValueError(f"Unknown task type: {task_type}")
+
+        # Normalize the user_tier string so the gate works regardless of
+        # which casing/legacy alias callers send ("starter" ≡ "basic" in
+        # tier_config; some callers still send legacy "pro_plus").
+        # If the caller didn't pass a tier we default to "pro" (permissive)
+        # — the gate was dead code until now, so silently downgrading
+        # everyone to "basic" would be a regression. The warning fires at
+        # most once per process per task_type so unmigrated service-layer
+        # paths don't spam logs.
+        if user_tier is None:
+            if task_type not in self._tier_warn_seen:
+                logger.warning(
+                    "provider_router.route called without user_tier for task=%s — "
+                    "defaulting to 'pro' (permissive). Pass user_tier so the "
+                    "margin gate can enforce premium-model gating.",
+                    task_type.value if hasattr(task_type, "value") else task_type,
+                )
+                self._tier_warn_seen.add(task_type)
+            user_tier = "pro"
+        user_tier = user_tier.lower()
+        if user_tier in ("starter",):
+            user_tier = "basic"
+        if user_tier in ("pro_plus", "premium", "enterprise", "paid"):
+            user_tier = "pro"
+
+        # Apply tier overrides BEFORE provider selection so a downgraded
+        # model_type / dropped concrete slug routes to the correct vendor.
+        params = self._apply_tier_overrides(task_type, params, user_tier)
 
         providers_to_try = self._get_providers_for_task(task_type, params)
         candidate_providers, skipped_providers = self._route_candidates(providers_to_try)
@@ -535,10 +566,25 @@ class ProviderRouter:
         params: Dict[str, Any],
         user_tier: str,
     ) -> Dict[str, Any]:
-        """Apply tier-based parameter overrides."""
-        from app.services.tier_config import FREE_TIER, PAID_TIER
+        """Apply tier-based parameter overrides.
 
-        tier_cfg = FREE_TIER if user_tier == "free" else PAID_TIER
+        2026-06 margin pass: this used to be dead code (never invoked from
+        route()). Now it runs on every route() call and additionally enforces
+        TIER_ALLOWED_MODELS — a free/basic user requesting a premium model
+        (Kling 2.1-master, Veo, Nano Banana Pro, …) is silently downgraded to
+        the tier's default model rather than triggering a $0.50+ upstream
+        call we can't charge for.
+        """
+        from app.services.tier_config import (
+            FREE_TIER, BASIC_TIER, PAID_TIER, TIER_ALLOWED_MODELS,
+        )
+
+        if user_tier == "free":
+            tier_cfg = FREE_TIER
+        elif user_tier == "basic":
+            tier_cfg = BASIC_TIER
+        else:
+            tier_cfg = PAID_TIER
 
         type_key_map = {
             TaskType.T2I: "t2i",
@@ -575,6 +621,50 @@ class ProviderRouter:
 
         if task_type == TaskType.AVATAR:
             params["audio_enabled"] = tier_cfg["audio_enabled"]
+
+        # ── Model whitelist enforcement ──────────────────────────────────
+        # `model_type` is the abstract tier we expose in tier_config
+        # ("default" / "wan_pro" / "gemini_pro" / "veo" / "midjourney").
+        # `model` is the concrete upstream slug ("kling", "veo3.1",
+        # "Qubico/flux1-dev-advanced", …). We gate on model_type first; if
+        # only a concrete `model` slug is set we map it back to its tier
+        # via PREMIUM_MODEL_SLUGS below.
+        allowed = set(TIER_ALLOWED_MODELS.get(user_tier, ["default"]))
+
+        requested_tier = params.get("model_type")
+        concrete_model = (params.get("model") or "").lower()
+
+        # Concrete-slug → abstract-tier mapping. Anything matching a
+        # substring here is a premium upstream that costs ≥$0.40/call.
+        PREMIUM_MODEL_SLUGS = {
+            "veo": "veo",
+            "veo3": "veo",
+            "kling-3": "wan_pro",
+            "kling_v3": "wan_pro",
+            "kling-omni": "wan_pro",
+            "2.1-master": "wan_pro",
+            "nano-banana-pro": "gemini_pro",
+            "midjourney": "midjourney",
+            "flux1-dev-advanced": "wan_pro",
+        }
+
+        inferred_tier = None
+        for slug, tier in PREMIUM_MODEL_SLUGS.items():
+            if slug in concrete_model:
+                inferred_tier = tier
+                break
+
+        effective_tier = requested_tier or inferred_tier
+        if effective_tier and effective_tier not in allowed:
+            logger.warning(
+                "tier_gate: user_tier=%s requested model_type=%s (concrete=%s) "
+                "not allowed — downgrading to default",
+                user_tier, effective_tier, concrete_model or "<none>",
+            )
+            params["model_type"] = "default"
+            # Drop the concrete model so the provider picks its default upstream
+            # (Hailuo/Seedance fast for video, Flux schnell for image).
+            params.pop("model", None)
 
         params["_user_tier"] = user_tier
         return params

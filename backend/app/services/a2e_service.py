@@ -424,7 +424,8 @@ class A2EAvatarService:
         voice_id: Optional[str] = None,
         duration: int = 30,
         timeout: int = 1200,
-        save_locally: bool = True
+        save_locally: bool = True,
+        on_submit=None,
     ) -> Dict[str, Any]:
         """
         Generate avatar video and wait for completion.
@@ -437,6 +438,10 @@ class A2EAvatarService:
             duration: Ignored (determined by script length)
             timeout: Max wait time in seconds
             save_locally: Save video to local storage
+            on_submit: Optional async callback ``f(task_id)`` fired the
+                moment we have a task_id, BEFORE polling. Used by
+                long-poll endpoints to durably record the task_id so a
+                killed request can be reclaimed later by the worker.
 
         Returns:
             Dict with video_url on success
@@ -454,6 +459,18 @@ class A2EAvatarService:
 
         if not success:
             return {"success": False, "error": task_id}
+
+        # Durable-record callback fires as soon as we have a task_id.
+        # Wrapped in try/except so a callback error never drops a live
+        # upstream job — we'd rather lose the reclaim record than the work.
+        if on_submit is not None and task_id:
+            try:
+                await on_submit(task_id)
+            except Exception as cb_exc:
+                logger.warning(
+                    "A2E on_submit callback for task %s raised: %s",
+                    task_id, cb_exc,
+                )
 
         # If immediate URL returned, use it
         if immediate_url:

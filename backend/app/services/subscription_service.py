@@ -381,8 +381,17 @@ class SubscriptionService:
         user.subscription_cancelled_at = None
         user.work_retention_until = None
 
-        # Allocate subscription credits
-        credits_to_add = plan.monthly_credits or plan.weekly_credits or plan.credits_per_month or 0
+        # Allocate subscription credits. Yearly subscribers get 11/12 of the
+        # monthly allowance (2026-06 margin pass) — combined with the 11
+        # subsequent monthly top-ups also at 11/12, this delivers exactly
+        # 11 months of credits across the year. price_yearly is 10 × monthly
+        # (2 free months); credits at 11/12 keeps the per-credit cost above
+        # heavy_pack so yearly stops undercutting every other SKU.
+        full_credits = plan.monthly_credits or plan.weekly_credits or plan.credits_per_month or 0
+        if billing_cycle == "yearly":
+            credits_to_add = int(round(full_credits * 11 / 12))
+        else:
+            credits_to_add = full_credits
         old_sub_credits = user.subscription_credits or 0
 
         if credits_to_add > 0:
@@ -1507,10 +1516,15 @@ class SubscriptionService:
                     user.plan_started_at = subscription.start_date
                     user.plan_expires_at = subscription.end_date
 
-                    # Allocate credits
+                    # Allocate credits. Yearly subscribers get the 11/12
+                    # prorated grant (see 2026-06 margin pass).
                     plan = await db.get(Plan, subscription.plan_id)
                     if plan:
-                        credits = plan.monthly_credits or plan.weekly_credits or 0
+                        full_credits = plan.monthly_credits or plan.weekly_credits or 0
+                        if (subscription.billing_cycle or "monthly") == "yearly":
+                            credits = int(round(full_credits * 11 / 12))
+                        else:
+                            credits = full_credits
                         if credits > 0:
                             user.subscription_credits = credits
                             user.credits_reset_at = utc_now()

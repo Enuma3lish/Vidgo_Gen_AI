@@ -455,7 +455,9 @@
       "Bash(sed -n '34,44p' src/components/common/ImageUploader.vue)",
       "Bash(sed -n '240,248p' src/components/tools/SubscriberUploadPanel.vue)",
       "Bash(docker rmi *)",
-      "Bash(awk '/PIAPI_MODELS *=|PIAPI_MODELS: /{f=1} f{print NR\": \"$0} /\\\\}/{if\\(f\\)c++; if\\(c>=1 && f\\){exit}}' app/providers/piapi_provider.py)"
+      "Bash(awk '/PIAPI_MODELS *=|PIAPI_MODELS: /{f=1} f{print NR\": \"$0} /\\\\}/{if\\(f\\)c++; if\\(c>=1 && f\\){exit}}' app/providers/piapi_provider.py)",
+      "Bash(/usr/bin/python3 -c ' *)",
+      "Bash(/usr/bin/python3 *)"
     ],
     "additionalDirectories": [
       "/private/tmp"

@@ -637,7 +637,19 @@ class CreditService:
         """
         Reset monthly credits for all users with active subscriptions.
         This should be called on the 1st of each month.
+
+        2026-06 margin pass:
+        - Yearly subscribers get a prorated monthly grant (11/12 of full)
+          because price_yearly is 10 × price_monthly (2 free months). Without
+          this proration a yearly subscriber paying $322 receives 14,400
+          credits (12 × 1,200) → $0.0224/credit, undercutting heavy_pack
+          ($0.033/credit) and every subscription tier.
+        - For yearly subscribers do NOT overwrite plan_expires_at — the
+          old logic clamped it to next_month, silently truncating yearly
+          plans into monthly rentals.
         """
+        from app.models.billing import Subscription
+
         # Get all users with active subscriptions
         result = await self.db.execute(
             select(User).where(
@@ -662,6 +674,20 @@ class CreditService:
                 )
                 plan = plan_result.scalar_one_or_none()
 
+                # Determine billing cycle from the most recent active subscription.
+                sub_res = await self.db.execute(
+                    select(Subscription)
+                    .where(
+                        Subscription.user_id == user.id,
+                        Subscription.status == "active",
+                    )
+                    .order_by(desc(Subscription.start_date))
+                    .limit(1)
+                )
+                sub = sub_res.scalar_one_or_none()
+                billing_cycle = (sub.billing_cycle if sub else "monthly") or "monthly"
+                is_yearly = billing_cycle == "yearly"
+
                 if plan:
                     # First, expire old credits
                     old_credits = user.subscription_credits or 0
@@ -679,8 +705,15 @@ class CreditService:
                         )
                         self.db.add(transaction)
 
-                    # Add new monthly credits
-                    new_credits = plan.monthly_credits or 0
+                    # Add new monthly credits. Yearly subscribers get 11/12 of
+                    # the full allowance so total annual credits stay at
+                    # (11 × monthly_credits), aligned with the 10×-monthly
+                    # price_yearly (≈ 2 free months and ~10% credit discount).
+                    full_credits = plan.monthly_credits or 0
+                    if is_yearly:
+                        new_credits = int(round(full_credits * 11 / 12))
+                    else:
+                        new_credits = full_credits
                     if new_credits > 0:
                         user.subscription_credits = new_credits
                         stats["credits_added"] += new_credits
@@ -691,17 +724,25 @@ class CreditService:
                             amount=new_credits,
                             balance_after=(user.purchased_credits or 0) + (user.bonus_credits or 0) + new_credits,
                             transaction_type="subscription",
-                            description="Monthly subscription credits added"
+                            description=(
+                                "Yearly subscription monthly top-up (11/12 prorated)"
+                                if is_yearly
+                                else "Monthly subscription credits added"
+                            )
                         )
                         self.db.add(transaction)
 
-                    # Update plan expiration date (next month)
-                    now = datetime.now(timezone.utc)
-                    if now.month == 12:
-                        next_month = now.replace(year=now.year + 1, month=1, day=1)
-                    else:
-                        next_month = now.replace(month=now.month + 1, day=1)
-                    user.plan_expires_at = next_month
+                    # Only roll plan_expires_at forward for monthly subs.
+                    # Yearly subs already have a year-out expiry from
+                    # subscription activation; clamping to next_month here
+                    # turned annual contracts into rolling monthly ones.
+                    if not is_yearly:
+                        now = datetime.now(timezone.utc)
+                        if now.month == 12:
+                            next_month = now.replace(year=now.year + 1, month=1, day=1)
+                        else:
+                            next_month = now.replace(month=now.month + 1, day=1)
+                        user.plan_expires_at = next_month
 
             except Exception as e:
                 stats["errors"].append(f"User {user.id}: {str(e)}")

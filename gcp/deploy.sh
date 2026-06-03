@@ -5,11 +5,13 @@
 ###############################################################################
 #
 #  Usage:
-#    bash gcp/deploy.sh                       # 執行全部步驟
-#    bash gcp/deploy.sh --step 3              # 只執行第 3 步
-#    bash gcp/deploy.sh --from 5              # 從第 5 步開始
-#    bash gcp/deploy.sh --step secrets        # 只執行 secrets 步驟
-#    bash gcp/deploy.sh --step fixmedia        # 只修復 GCS 影片 Content-Type
+#    bash gcp/deploy.sh                                 # 執行全部步驟
+#    bash gcp/deploy.sh --step 3                        # 只執行第 3 步
+#    bash gcp/deploy.sh --from 5                        # 從第 5 步開始
+#    bash gcp/deploy.sh --step secrets                  # 只執行 secrets 步驟
+#    bash gcp/deploy.sh --step fixmedia                  # 只修復 GCS 影片 Content-Type
+#    bash gcp/deploy.sh --step secret_cleanup           # 清理舊版 Secret (省成本)
+#    SECRET_VERSIONS_TO_KEEP=1 bash gcp/deploy.sh --step secret_cleanup
 #
 #  修改指南:
 #    1. 修改下方 ══ CONFIG ══ 區塊的變數
@@ -59,6 +61,21 @@ DB_TIER="db-g1-small"                         # Phase 1; Phase 2 改 db-n1-stand
 DB_STORAGE="10GB"
 
 # Redis 設定
+# 2026-06 cost audit: Memorystore vidgo-redis ran ~1,501 TWD/mo (BASIC tier,
+# 1GB). This is the GCP floor — BASIC tier minimum is 1GB and pricing is
+# largely fixed per GB-hour regardless of actual key count / RSS.
+# Levers to cut this line item:
+#   1. **Move to Memorystore for Redis Cluster shared-core SKU** (was Preview
+#      in 2024; check current pricing) — substantially cheaper for <1GB working set.
+#   2. **Self-host Redis on the existing worker / a tiny e2-micro VM** —
+#      ~$5/mo for the VM, but you take on backup + uptime responsibility.
+#   3. **Drop Redis entirely** — the only producers are: (a) arq queue,
+#      (b) abuse_prevention rate limiter, (c) credit-deduct distributed lock.
+#      arq supports a Postgres backend; rate limiting can move to Postgres
+#      counters or in-memory (sticky-session caveat); deduct lock already
+#      falls back to PG row-lock when Redis is absent (credit_service.py).
+# All three options are non-trivial; the BASIC-1GB tier is the floor for
+# the managed path.
 REDIS_TIER="basic"                            # Phase 1; Phase 2 改 standard
 REDIS_SIZE_GB=1                               # Phase 1; Phase 2 改 5
 
@@ -73,9 +90,37 @@ FRONTEND_MAX_INSTANCES=4
 FRONTEND_MEMORY="256Mi"
 FRONTEND_CPU=1
 
+# Worker (arq queue consumer).
+# 2026-06 cost audit (Gemini billing report): previous defaults
+# (cpu=1, memory=512Mi, max=3) combined with --no-cpu-throttling produced
+# ~1,590 TWD/month at 0.4% avg CPU utilization. Breakdown:
+#   - 1,507 TWD "Instance-based billing"  (always-allocated CPU)
+#   - 609 TWD   "Min Instance"            (the always-on instance)
+#
+# The instance MUST stay always-on (min=1) because --no-cpu-throttling is
+# what lets the asyncio event loop keep polling Redis between HTTP requests
+# — on throttled Cloud Run the loop would freeze and queued jobs would
+# pile up. So min=1 + --no-cpu-throttling stays.
+#
+# Constraint: Cloud Run requires --cpu >= 1 when --no-cpu-throttling is set,
+# so we cannot fractional-CPU the worker. Levers we CAN pull here:
+#   1. Memory 512Mi → 256Mi   — halves the memory portion
+#   2. Max 3 → 2              — caps burst spend during a queue backlog
+#
+# Bigger savings require a refactor (NOT in this edit, but documented):
+#   A. Switch worker to **Cloud Run Jobs** (pay per arq invocation, not per
+#      always-on instance). Estimated ~80% cost reduction at current load.
+#      Refactor: drop the `python -m http.server 8000 & exec arq …` shim,
+#      schedule arq via Cloud Scheduler + Pub/Sub trigger.
+#   B. Drop --no-cpu-throttling AND add a Cloud Scheduler ping every 60s
+#      to keep the worker warm during job-poll cycles. ~50% saving.
+#      Trade-off: queued jobs wait up to the ping interval before pickup.
+#   C. Run the worker on a small Compute Engine VM (e2-small ≈ $13/mo) —
+#      cheaper than Cloud Run min=1 + no-throttling, but loses Cloud Run's
+#      autoscaling on backlog.
 WORKER_MIN_INSTANCES=1
-WORKER_MAX_INSTANCES=3
-WORKER_MEMORY="512Mi"
+WORKER_MAX_INSTANCES=2
+WORKER_MEMORY="256Mi"
 WORKER_CPU=1
 
 # 預算告警 (USD)
@@ -250,6 +295,19 @@ if should_run 2 "vpc"; then
     2>/dev/null && log "VPC peering created" || warn "VPC peering already exists"
 
   # VPC Connector (Cloud Run → VPC)
+  # 2026-06 cost audit: this Serverless VPC Access connector ran ~455 TWD/mo
+  # at 2.3% CPU. Connectors charge per-instance-hour regardless of traffic.
+  # min=2 is the GCP-enforced floor for Serverless VPC Access — cannot go lower.
+  #
+  # CHEAPER ALTERNATIVE (deferred): migrate Cloud Run to **Direct VPC egress**
+  # (GA 2024). Direct VPC removes the connector entirely; Cloud Run attaches
+  # to a VPC subnet directly. Trade-offs:
+  #   + ~$10-15/mo saved (the connector instance fees vanish).
+  #   + No more "connector at capacity" throttling during traffic spikes.
+  #   - Recent feature — test against PiAPI / Vertex AI / Cloud SQL first.
+  # Migration: drop this connector block; replace `--vpc-connector=…` in the
+  # Cloud Run deploy lines with `--network=${VPC_NAME} --subnet=${SUBNET_NAME}
+  # --vpc-egress=all-traffic`.
   gcloud compute networks vpc-access connectors create "${CONNECTOR_NAME}" \
     --project="${PROJECT_ID}" \
     --region="${REGION}" \
@@ -469,6 +527,13 @@ if should_run 8 "secrets"; then
   DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${SQL_IP}:5432/${DB_NAME}"
   REDIS_URL="redis://${REDIS_IP}:6379/0"
 
+  # Number of historical secret versions to keep per secret. Older versions
+  # are destroyed by put_secret + the explicit secret_cleanup step. Each
+  # stored version incurs ongoing "Secret version replica storage" billing
+  # ($0.06/version/month per replica × 2 replicas/region by default), so
+  # keeping unbounded history was costing ~605 TWD/month at 2026-05.
+  : "${SECRET_VERSIONS_TO_KEEP:=2}"
+
   # Helper function: create or update secret
   put_secret() {
     local name=$1
@@ -484,6 +549,25 @@ if should_run 8 "secrets"; then
       echo -n "$value" | gcloud secrets create "$name" --data-file=- --project="${PROJECT_ID}" \
         --replication-policy="user-managed" --locations="${REGION}" &>/dev/null
       log "Created secret: $name"
+    fi
+    # Destroy all versions older than the most recent SECRET_VERSIONS_TO_KEEP.
+    # `gcloud secrets versions destroy` is irreversible — only enabled or
+    # disabled versions are listed; already-destroyed versions are skipped
+    # by gcloud automatically.
+    local stale_versions
+    stale_versions=$(gcloud secrets versions list "$name" \
+      --project="${PROJECT_ID}" \
+      --filter="state=ENABLED OR state=DISABLED" \
+      --sort-by=~createTime \
+      --format='value(name)' 2>/dev/null \
+      | tail -n +"$((SECRET_VERSIONS_TO_KEEP + 1))" || true)
+    if [ -n "$stale_versions" ]; then
+      while IFS= read -r v; do
+        [ -z "$v" ] && continue
+        gcloud secrets versions destroy "$v" \
+          --secret="$name" --project="${PROJECT_ID}" --quiet &>/dev/null || true
+      done <<< "$stale_versions"
+      log "Pruned old versions of secret: $name (kept latest ${SECRET_VERSIONS_TO_KEEP})"
     fi
   }
 
@@ -521,6 +605,54 @@ if should_run 8 "secrets"; then
   log "All secrets stored."
   warn "DATABASE_URL = ${DATABASE_URL}"
   warn "REDIS_URL    = ${REDIS_URL}"
+fi
+
+###############################################################################
+# STEP 8b: Secret Manager — prune stale versions (cost optimization)
+###############################################################################
+# This step destroys all but the latest N versions of every secret in the
+# project. Run it on its own when you want to clean up historical bloat:
+#
+#   bash gcp/deploy.sh --step secret_cleanup
+#   SECRET_VERSIONS_TO_KEEP=1 bash gcp/deploy.sh --step secret_cleanup
+#
+# Safe to run anytime — Cloud Run loads `<NAME>:latest` so prior versions
+# are never referenced unless you've explicitly pinned (we don't anywhere
+# in this repo). Destruction is irreversible; recover by re-running `put_secret`
+# with the fresh value if needed.
+if should_run 85 "secret_cleanup"; then
+  step 85 "Prune stale Secret Manager versions (keep latest ${SECRET_VERSIONS_TO_KEEP:-2})"
+
+  : "${SECRET_VERSIONS_TO_KEEP:=2}"
+  pruned_total=0
+
+  # List all secrets in the project. Limit to ones managed by this app to
+  # avoid touching anything created out-of-band.
+  while IFS= read -r secret_name; do
+    [ -z "$secret_name" ] && continue
+    stale=$(gcloud secrets versions list "$secret_name" \
+      --project="${PROJECT_ID}" \
+      --filter="state=ENABLED OR state=DISABLED" \
+      --sort-by=~createTime \
+      --format='value(name)' 2>/dev/null \
+      | tail -n +"$((SECRET_VERSIONS_TO_KEEP + 1))" || true)
+    if [ -z "$stale" ]; then
+      continue
+    fi
+    count=0
+    while IFS= read -r v; do
+      [ -z "$v" ] && continue
+      gcloud secrets versions destroy "$v" \
+        --secret="$secret_name" --project="${PROJECT_ID}" --quiet &>/dev/null \
+        && count=$((count + 1)) || true
+    done <<< "$stale"
+    if [ "$count" -gt 0 ]; then
+      log "Pruned ${count} stale version(s) of ${secret_name}"
+      pruned_total=$((pruned_total + count))
+    fi
+  done < <(gcloud secrets list --project="${PROJECT_ID}" --format='value(name)' 2>/dev/null)
+
+  log "Secret cleanup complete: ${pruned_total} versions destroyed."
 fi
 
 ###############################################################################
@@ -623,7 +755,13 @@ if should_run 10 "deploy"; then
     --memory="${BACKEND_MEMORY}" \
     --cpu="${BACKEND_CPU}" \
     --port=8000 \
-    --timeout=900 \
+    --timeout=3600 \
+    `# 2026-06: raised from 900s to Cloud Run's 3600s ceiling. The avatar` \
+    `# / Kling Omni / Veo 3.1 endpoints poll the upstream provider for up` \
+    `# to ~50 min on long scripts (see tools.py AVATAR_MAX_TIMEOUT_SEC). The` \
+    `# old 900s killed those requests mid-poll and orphaned the upstream` \
+    `# task — credits charged, no result returned. Keep this strictly` \
+    `# greater than every per-request poll ceiling.` \
     --vpc-connector="${CONNECTOR_PATH}" \
     --vpc-egress=all-traffic \
     --add-cloudsql-instances="${SQL_CONNECTION}" \

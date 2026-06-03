@@ -830,11 +830,19 @@ async def _trigger_generation(
     # Build absolute URL for the uploaded file (for external API)
     abs_file_url = file_url  # provider handles /static/ → base64 conversion
 
+    # Resolve user tier so the provider_router margin gate can enforce the
+    # premium-model whitelist (2026-06 margin pass).
+    from app.services.tier_config import get_user_tier
+    upload_owner_res = await db.execute(select(User).where(User.id == upload.user_id))
+    upload_owner = upload_owner_res.scalar_one_or_none()
+    user_tier = get_user_tier(upload_owner) if upload_owner else "free"
+
     result = None
     if tool_type == "background_removal":
         result = await provider_router.route(
             TaskType.BACKGROUND_REMOVAL,
-            {"image_url": abs_file_url}
+            {"image_url": abs_file_url},
+            user_tier=user_tier,
         )
         if result.get("success"):
             output = result.get("output", {})
@@ -849,7 +857,8 @@ async def _trigger_generation(
                 "prompt": prompt,
                 "strength": 0.65,
                 "model": model_id if model_id != "default" else None,
-            }
+            },
+            user_tier=user_tier,
         )
         if result.get("success"):
             output = result.get("output", {})
@@ -862,7 +871,8 @@ async def _trigger_generation(
         i2v_model = model_id if model_id != "default" else _POLLO_REG["pixverse_default"]
         result = await provider_router.route(
             TaskType.I2V,
-            {"image_url": abs_file_url, "prompt": prompt, "model": i2v_model, "duration": 5}
+            {"image_url": abs_file_url, "prompt": prompt, "model": i2v_model, "duration": 5},
+            user_tier=user_tier,
         )
         if result.get("success"):
             output = result.get("output", {})
@@ -872,6 +882,15 @@ async def _trigger_generation(
 
     elif tool_type == "ai_avatar":
         script = prompt or "Hello, I am your AI assistant."
+        # Dynamic timeout (see tools.py:/ai_avatar/ for the formula and rationale).
+        # Long scripts otherwise get aborted at the generic 1200s ceiling.
+        _word_count = len((script or "").strip().split())
+        _avatar_base = int(os.getenv("AVATAR_TIMEOUT_BASE_SEC", "600"))
+        _avatar_max = int(os.getenv("AVATAR_MAX_TIMEOUT_SEC", "3000"))
+        _avatar_timeout = max(1200, min(
+            _avatar_base + 10 * 30 + int(1.5 * _word_count),
+            _avatar_max,
+        ))
         result = await provider_router.route(
             TaskType.AVATAR,
             {
@@ -881,7 +900,9 @@ async def _trigger_generation(
                 "language": "en",
                 "duration": 30,
                 "user_id": str(upload.user_id),
-            }
+                "timeout": _avatar_timeout,
+            },
+            user_tier=user_tier,
         )
         if result.get("success"):
             output = result.get("output", {})

@@ -445,7 +445,8 @@ class WorkflowGenerator:
                 "image_url": avatar_url,
                 "script": script,
                 "language": language,
-            }
+            },
+            user_tier="pro",  # admin workflow pipeline — full access
         )
 
         if not avatar_result.get("success"):

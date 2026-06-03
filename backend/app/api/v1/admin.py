@@ -1539,13 +1539,13 @@ async def generate_demo_example(
             input_url = None  # no separate input for pattern
 
         elif tool == "background_removal":
-            r = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": input_url})
+            r = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": input_url}, user_tier="pro")
             if r.get("success"):
                 result_url = _extract_url(r)
 
         elif tool == "product_scene":
             # Remove bg → generate scene → composite (simplified: just remove bg for now)
-            r = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": input_url})
+            r = await provider.route(TaskType.BACKGROUND_REMOVAL, {"image_url": input_url}, user_tier="pro")
             if r.get("success"):
                 result_url = _extract_url(r)
 
@@ -1555,7 +1555,7 @@ async def generate_demo_example(
                 "image_url": input_url,
                 "prompt": style_prompt,
                 "style": request.style_id or "modern_minimalist",
-            })
+            }, user_tier="pro")
             if r.get("success"):
                 result_url = _extract_url(r)
 
@@ -1564,7 +1564,7 @@ async def generate_demo_example(
                 "image_url": input_url,
                 "prompt": effect_prompt,
                 "strength": 0.75,
-            })
+            }, user_tier="pro")
             if r.get("success"):
                 result_url = _extract_url(r)
 
@@ -1573,7 +1573,7 @@ async def generate_demo_example(
                 "image_url": input_url,
                 "prompt": effect_prompt or "smooth natural camera motion",
                 "duration": 5,
-            })
+            }, user_tier="pro")
             if r.get("success"):
                 output = r.get("output", {})
                 video_url = output.get("video_url")
@@ -1584,7 +1584,7 @@ async def generate_demo_example(
                 "image_url": input_url,
                 "prompt": effect_prompt or "virtual try-on, garment on model",
                 "strength": 0.8,
-            })
+            }, user_tier="pro")
             if r.get("success"):
                 result_url = _extract_url(r)
 
@@ -1592,7 +1592,7 @@ async def generate_demo_example(
             r = await provider.route(TaskType.AVATAR, {
                 "image_url": input_url,
                 "prompt": effect_prompt or request.prompt,
-            })
+            }, user_tier="pro")
             if r.get("success"):
                 output = r.get("output", {})
                 video_url = output.get("video_url")

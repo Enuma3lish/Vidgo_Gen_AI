@@ -2,16 +2,42 @@
 Tier Configuration - Defines plan-based limits and credit costs.
 
 This module provides:
-1. FREE_TIER / PAID_TIER configs for provider_router parameter overrides
+1. FREE_TIER / BASIC_TIER / PAID_TIER configs for provider_router overrides
 2. get_credit_cost() - Dynamic credit cost lookup by tool + user plan
 3. get_user_tier() - Determine user's tier string from their plan
 
-Pricing Reference (VidGo 2.0 Credit Spec — 2026-05):
-- 標準圖片 (SD/SDXL/Flux):              1  credit  (~$0.5  cost)
-- 高畫質圖片 (MJ/DALL-E/Midjourney):    3  credits (~$1.5  cost, range 3-5)
-- 標準影片 (5-10s, 5s/720p):            10 credits (~$5    cost)
-- 專業影片 (Luma/Kling, 10s/4K):        30 credits (~$15   cost, range 30-50)
-- 影片擴展/修補 (Extend):               15 credits (~$7.5  cost)
+Pricing Reference (VidGo 2.2 Credit Spec — 2026-06 margin pass).
+At the cheapest pack rate (heavy_pack: 850 cr / NT$999 ≈ $0.0388/credit)
+the floor revenue per credit is $0.039. The values below were chosen so
+each tool's "default" credit_cost covers its CHEAPEST viable upstream at
+that floor revenue, and "premium" (wan_pro / gemini_pro / veo) covers
+the flagship upstream + ≥30% margin.
+
+Real upstream costs that drive the table (PiAPI / A2E / Vertex 2026-Q2):
+  Standard image (Flux schnell, Z-Image, Seedream-Lite):  $0.003-0.025
+  Premium image (Nano Banana Pro, MJ, Flux Kontext):      $0.04-0.10
+  Standard 5s video (Hailuo Fast, Seedance Fast):         $0.10-0.15
+  Mid 5s video (Hunyuan, Wan 2.6, Kling 2.6):             $0.20-0.30
+  Premium 5s video (Kling 2.1-master, Kling 3 Omni):      $0.50-0.70
+  Veo 3.1 Fast 5s:                                        $0.50
+  Try-on (Kling Try-On):                                  $0.50-1.00
+  Avatar (A2E full pipeline, Kling Avatar):               $1.00-3.00
+  Lip-sync / dubbing:                                     $0.50-2.00
+  Background removal / image upscale:                     $0.02-0.20
+  Video upscale / video bg-remove:                        $0.10-0.50
+
+Spec lifecycle:
+  v2.0 (2026-05-12): undercharged ~10x — every paid call lost margin.
+  v2.1 (2026-05-22): repriced DB rows for image / video / pro-video /
+                     upscale; missed tools.py service_type mismatches.
+  v2.2 (2026-06-03): closed mismatches, raised avatar/try-on/lip-sync
+                     fallbacks, rerated heavy_pack to stop arbitrage.
+                     See docs/service-cost.md for the full audit.
+
+When PiAPI / vendor costs shift, update this file AND seed an alembic
+migration that mirrors the change into service_pricing. Keep the two
+sources of truth aligned — the deduction firewall prefers DB values, but
+the code fallback is the floor when a DB row is missing.
 """
 from typing import Optional
 
@@ -82,37 +108,49 @@ PAID_TIER = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 CREDIT_COSTS = {
-    # Standard image (SD/SDXL/Flux) = 1, High-quality (MJ/DALL-E) = 3
-    "text_to_image":        {"default": 1,  "midjourney": 3, "wan_pro": 3},
-    "background_removal":   {"default": 1},
-    "product_scene":        {"default": 1,  "wan_pro": 3},
-    "pattern_gen":          {"default": 1,  "wan_pro": 3},
-    "pattern_generate":     {"default": 1,  "wan_pro": 3},
-    "room_redesign":        {"default": 1,  "wan_pro": 3},
-    "i2i":                  {"default": 1,  "wan_pro": 3},
-    "style_transfer":       {"default": 1,  "wan_pro": 3},
-    "upscale":              {"default": 1},
-    "image_translator":     {"default": 1,  "wan_pro": 3},
+    # 2026-06 margin pass: every tool's "default" must cover the cheapest
+    # viable upstream at the cheapest-pack rate ($0.033/credit). "premium"
+    # (wan_pro / gemini_pro / veo) covers the flagship upstream + margin.
+    # See docs/service-cost.md for the spreadsheet that drives these values.
+    "text_to_image":        {"default": 1,  "midjourney": 5, "wan_pro": 5,  "gemini_pro": 5},
+    "background_removal":   {"default": 3},
+    "bg_removal":           {"default": 3},
+    "product_scene":        {"default": 10, "wan_pro": 15},
+    "product_scene_gen":    {"default": 10, "wan_pro": 15},
+    "pattern_gen":          {"default": 2,  "wan_pro": 5},
+    "pattern_generate":     {"default": 2,  "wan_pro": 5},
+    "room_redesign":        {"default": 5,  "wan_pro": 10},
+    "i2i":                  {"default": 2,  "wan_pro": 5,  "gemini_pro": 5},
+    "image_transform":      {"default": 2,  "wan_pro": 5,  "gemini_pro": 5},
+    "style_transfer":       {"default": 2,  "wan_pro": 5},
+    "upscale":              {"default": 15},
+    "image_upscale":        {"default": 15},
+    "video_upscale":        {"default": 50},
+    "image_translator":     {"default": 2,  "wan_pro": 5,  "gemini_pro": 5},
+    "image_translation":    {"default": 2,  "wan_pro": 5,  "gemini_pro": 5},
 
-    # Standard video (5-10s) = 10, Pro video (Luma/Kling 10s/4K) = 30
-    "image_to_video":       {"default": 10, "wan_pro": 30},
-    "text_to_video":        {"default": 10, "wan_pro": 30},
-    "short_video":          {"default": 10, "wan_pro": 30},
-    # video_style_transfer removed 2026-05-31 — V2V dropped repo-wide.
-    "ai_try_on":            {"default": 10, "wan_pro": 30, "gemini_pro": 30},
-    "try_on":               {"default": 10, "wan_pro": 30, "gemini_pro": 30},
-    "interior_design":      {"default": 1,  "wan_pro": 3},
-    "effect":               {"default": 1,  "wan_pro": 3},
+    # Video: cheap-upstream default (Hailuo/Seedance fast ~$0.10),
+    # premium covers Kling 2.1-master / Veo 3.1 (~$0.50-0.70).
+    "image_to_video":       {"default": 20, "wan_pro": 60, "veo": 200},
+    "text_to_video":        {"default": 20, "wan_pro": 60, "veo": 200},
+    "short_video":          {"default": 20, "wan_pro": 60, "veo": 200},
+    "ai_try_on":            {"default": 30, "wan_pro": 60, "gemini_pro": 60},
+    "try_on":               {"default": 30, "wan_pro": 60, "gemini_pro": 60},
+    "virtual_try_on":       {"default": 30, "wan_pro": 60, "gemini_pro": 60},
+    "interior_design":      {"default": 2,  "wan_pro": 5},
+    "effect":               {"default": 1,  "wan_pro": 5},
+    "claymation":           {"default": 10, "wan_pro": 50},  # 8→10 image, 50 video
 
-    # Avatar / lip-sync — pro video tier
-    "ai_avatar":            {"default": 30, "gemini_pro": 30},
-    "avatar":               {"default": 30, "gemini_pro": 30},
-    "lip_sync":             {"default": 30, "gemini_pro": 30},
-    "video_dubbing":        {"default": 30, "gemini_pro": 30},
+    # Avatar / lip-sync upstream is $1-3 per call — must charge accordingly.
+    "ai_avatar":            {"default": 80, "gemini_pro": 80},
+    "avatar":               {"default": 80, "gemini_pro": 80},
+    "lip_sync":             {"default": 50, "gemini_pro": 50},
+    "video_dubbing":        {"default": 60, "gemini_pro": 60},
 
-    # Video extend / repair = 15
-    "video_extend":         {"default": 15},
-    "video_transform":      {"default": 15},
+    # Video extend / repair: ~$0.30-1.00 upstream.
+    "video_extend":         {"default": 30},
+    "video_transform":      {"default": 30},
+    "video_background_remove": {"default": 50},
 
     # Premium — future expansion (e.g. Veo 3.1 / Kling Omni-tier upgrades).
 }
@@ -129,11 +167,14 @@ PLAN_TIER_MAP = {
     "enterprise": "pro",
 }
 
-# Allowed model types per plan tier
+# Allowed model types per plan tier.
+# free/basic CANNOT select flagship variants (wan_pro / gemini_pro / veo)
+# because those upstreams cost $0.40-$1.40 per call and the cheapest pack
+# only yields $0.033/credit. Pro and above unlock the premium tiers.
 TIER_ALLOWED_MODELS = {
     "free":  ["default"],
     "basic": ["default"],
-    "pro":   ["default", "wan_pro", "gemini_pro", "veo"],
+    "pro":   ["default", "wan_pro", "gemini_pro", "midjourney", "veo"],
 }
 
 

@@ -63,6 +63,7 @@ from app.services.access_gate import (
 import logging
 import os
 import hashlib
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -1721,7 +1722,7 @@ async def remove_background(
 
     # ========== SUBSCRIBER: Real-time Generation ==========
     CREDIT_COST = 3
-    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "background_removal")
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "bg_removal")
     if not ok:
         return ToolResponse(success=False, message=err)
 
@@ -1737,6 +1738,21 @@ async def remove_background(
             result_url = output.get("image_url")
             # Persist PiAPI CDN result to GCS so it survives 14-day expiry.
             result_url = await _persist_provider_url(result_url, "image", current_user)
+
+            # 2026-06: provider success but no URL → refund + fail. Without
+            # this the user pays for an empty gallery row.
+            if not result_url:
+                await _refund_credits(db, current_user, CREDIT_COST, "bg_removal")
+                logger.warning(
+                    "bg_removal provider success=true but no image_url — "
+                    "result keys=%s output keys=%s",
+                    list(result.keys()),
+                    list(output.keys()) if isinstance(output, dict) else type(output).__name__,
+                )
+                return ToolResponse(
+                    success=False,
+                    message="Background removal returned no result. Please try again.",
+                )
 
             # Replacement background: priority is ai_prompt > image > color >
             # output_format. Each path falls back to the transparent PNG on
@@ -1847,12 +1863,12 @@ async def remove_background(
                 message="Background removed successfully"
             )
         else:
-            await _refund_credits(db, current_user, CREDIT_COST, "background_removal")
-            return _provider_failure_response("background_removal", result, current_user)
+            await _refund_credits(db, current_user, CREDIT_COST, "bg_removal")
+            return _provider_failure_response("bg_removal", result, current_user)
     except Exception as e:
         logger.error(f"Background removal error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "background_removal")
-        _notify_admin_of_tool_failure("background_removal", e, current_user)
+        await _refund_credits(db, current_user, CREDIT_COST, "bg_removal")
+        _notify_admin_of_tool_failure("bg_removal", e, current_user)
         return ToolResponse(
             success=False,
             message=GENERIC_TOOL_FAILURE_MESSAGE,
@@ -2114,7 +2130,7 @@ async def generate_product_scene(
 
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
     CREDIT_COST = 10
-    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "product_scene")
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "product_scene_gen")
     if not ok:
         return ToolResponse(success=False, message=err)
 
@@ -2303,8 +2319,8 @@ async def generate_product_scene(
 
     except Exception as e:
         logger.error(f"Product scene error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "product_scene")
-        _notify_admin_of_tool_failure("product_scene", e, current_user)
+        await _refund_credits(db, current_user, CREDIT_COST, "product_scene_gen")
+        _notify_admin_of_tool_failure("product_scene_gen", e, current_user)
         return ToolResponse(
             success=False,
             message=GENERIC_TOOL_FAILURE_MESSAGE,
@@ -2480,7 +2496,9 @@ async def ai_try_on(
         )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
-    CREDIT_COST = 15
+    # Try-on upstream (Kling) is $0.50-$1.00 — must charge at the cheap-pack
+    # rate to cover cost.
+    CREDIT_COST = 30
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "virtual_try_on")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -3332,6 +3350,46 @@ async def _generate_short_video_inner(
     if not ok:
         return ToolResponse(success=False, message=err)
 
+    # 2026-06: insert a pending_provider_tasks row BEFORE polling so that
+    # if Cloud Run kills this request mid-poll (long Kling/Veo renders
+    # > 15 min are the main risk), the worker reclaim job can recover
+    # the upstream result. See ai_avatar handler for the same pattern.
+    from app.models.pending_provider_task import PendingProviderTask
+    pending_task = PendingProviderTask(
+        user_id=current_user.id,
+        tool_type="short_video",
+        service_type=service_type,
+        credits_charged=CREDIT_COST,
+        input_params={
+            "image_url": _resolve_public_url(str(request.image_url)),
+            "prompt": (request.prompt or "").strip(),
+            "style": request.style,
+            "model_id": request.model_id,
+            "motion_strength": request.motion_strength,
+        },
+        status="submitting",
+    )
+    db.add(pending_task)
+    await db.commit()
+    await db.refresh(pending_task)
+
+    async def _on_short_video_submit(task_id: str, provider_name: str):
+        try:
+            pending_task.provider_task_id = task_id
+            pending_task.provider_name = provider_name
+            pending_task.status = "polling"
+            pending_task.submitted_at = datetime.now(timezone.utc)
+            await db.commit()
+            logger.info(
+                "short_video: pending_task=%s recorded provider=%s task_id=%s",
+                pending_task.id, provider_name, task_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "short_video: failed to record pending_task task_id=%s: %s",
+                task_id, exc,
+            )
+
     try:
         credits_used = CREDIT_COST
 
@@ -3451,21 +3509,30 @@ async def _generate_short_video_inner(
                 kling_tier = "flagship"
             else:
                 kling_tier = "default"
+            from app.services.tier_config import get_user_tier
             result = await provider_router.route(
                 TaskType.KLING_VIDEO,
                 {
                     **task_params,
                     "tier": kling_tier,
+                    "on_submit": _on_short_video_submit,
                 },
+                user_tier=get_user_tier(current_user),
             )
         else:
+            from app.services.tier_config import get_user_tier
             result = await provider_router.route(
                 TaskType.I2V,
-                task_params
+                {**task_params, "on_submit": _on_short_video_submit},
+                user_tier=get_user_tier(current_user),
             )
 
         if not result.get("success"):
-            await _refund_credits(db, current_user, CREDIT_COST, "short_video")
+            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            pending_task.status = "failed"
+            pending_task.error_message = str(result.get("error") or "")[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
             return _provider_failure_response("short_video", result, current_user)
 
         video_url = result.get("video_url") or result.get("output", {}).get("video_url") or result.get("output_url")
@@ -3498,6 +3565,11 @@ async def _generate_short_video_inner(
             user_gen.set_expiry()
             db.add(user_gen)
 
+            # Mark the pending row terminal so the reclaim job ignores it.
+            pending_task.status = "completed"
+            pending_task.result_url = video_url
+            pending_task.completed_at = datetime.now(timezone.utc)
+
             # Recycle for demo gallery
             await _maybe_recycle_for_demo(
                 db, user_gen, ToolType.SHORT_VIDEO,
@@ -3519,7 +3591,11 @@ async def _generate_short_video_inner(
                 )
             )
         else:
-            await _refund_credits(db, current_user, CREDIT_COST, "short_video")
+            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            pending_task.status = "failed"
+            pending_task.error_message = "provider success=true but no video_url"
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
             return ToolResponse(
                 success=False,
                 message="Video generation returned no URL"
@@ -3527,7 +3603,16 @@ async def _generate_short_video_inner(
 
     except Exception as e:
         logger.error(f"Short video error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "short_video")
+        await _refund_credits(db, current_user, CREDIT_COST, service_type)
+        # Best-effort mark of the pending row — the reclaim worker will
+        # eventually abandon+refund it if this commit also dies.
+        try:
+            pending_task.status = "failed"
+            pending_task.error_message = str(e)[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception:
+            pass
         _notify_admin_of_tool_failure("short_video", e, current_user)
         return ToolResponse(
             success=False,
@@ -3609,7 +3694,7 @@ async def claymation_generate(
     if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
         return _subscribe_card_required_response()
 
-    CREDIT_COST = 50 if is_video else 8
+    CREDIT_COST = 50 if is_video else 10
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "claymation")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -3617,6 +3702,48 @@ async def claymation_generate(
     # User prompt reaches the model verbatim (just prefixed with the
     # claymation styling). No Gemini rewrite, no fusion.
     final_prompt = _CLAYMATION_PREFIX + request.prompt.strip()
+
+    # 2026-06: only the T2V branch is reclaim-vulnerable (Kling Omni 5-15
+    # min upstream poll). T2I / I2I finish in seconds, well inside any
+    # Cloud Run timeout — they don't need durable task_id tracking.
+    pending_task = None
+    _on_claymation_submit = None
+    if is_video:
+        from app.models.pending_provider_task import PendingProviderTask
+        pending_task = PendingProviderTask(
+            user_id=current_user.id,
+            tool_type="claymation",
+            service_type="claymation",
+            credits_charged=CREDIT_COST,
+            input_params={
+                "mode": request.mode,
+                "prompt": request.prompt,
+                "final_prompt": final_prompt,
+                "aspect_ratio": request.aspect_ratio,
+            },
+            status="submitting",
+        )
+        db.add(pending_task)
+        await db.commit()
+        await db.refresh(pending_task)
+
+        async def _on_claymation_submit_impl(task_id: str, provider_name: str):
+            try:
+                pending_task.provider_task_id = task_id
+                pending_task.provider_name = provider_name
+                pending_task.status = "polling"
+                pending_task.submitted_at = datetime.now(timezone.utc)
+                await db.commit()
+                logger.info(
+                    "claymation: pending_task=%s recorded provider=%s task_id=%s",
+                    pending_task.id, provider_name, task_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "claymation: failed to record pending_task task_id=%s: %s",
+                    task_id, exc,
+                )
+        _on_claymation_submit = _on_claymation_submit_impl
 
     try:
         provider_router = get_provider_router()
@@ -3667,6 +3794,8 @@ async def claymation_generate(
                     "tier":   "omni",   # → mode="omni" with enable_audio=true
                     "duration": 5,
                     "aspect_ratio": request.aspect_ratio or "16:9",
+                    # Reclaim hook — see pending_task block above.
+                    "on_submit": _on_claymation_submit,
                 },
             )
             output_key, output_kind = "video_url", "video"
@@ -3681,6 +3810,11 @@ async def claymation_generate(
 
         if not result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+            if pending_task is not None:
+                pending_task.status = "failed"
+                pending_task.error_message = str(result.get("error") or "")[:1000]
+                pending_task.completed_at = datetime.now(timezone.utc)
+                await db.commit()
             return ToolResponse(
                 success=False,
                 message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE,
@@ -3745,6 +3879,11 @@ async def claymation_generate(
         url = await _persist_provider_url(url, output_kind, current_user)
         if not url:
             await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+            if pending_task is not None:
+                pending_task.status = "failed"
+                pending_task.error_message = "provider success but no URL"
+                pending_task.completed_at = datetime.now(timezone.utc)
+                await db.commit()
             logger.warning(
                 "claymation %s succeeded at provider but yielded no URL — "
                 "result keys=%s output keys=%s",
@@ -3774,6 +3913,10 @@ async def claymation_generate(
         )
         user_gen.set_expiry()
         db.add(user_gen)
+        if pending_task is not None:
+            pending_task.status = "completed"
+            pending_task.result_url = url
+            pending_task.completed_at = datetime.now(timezone.utc)
         await db.commit()
 
         return ToolResponse(
@@ -3787,6 +3930,14 @@ async def claymation_generate(
     except Exception as exc:
         logger.error("claymation error: %s", exc, exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+        if pending_task is not None:
+            try:
+                pending_task.status = "failed"
+                pending_task.error_message = str(exc)[:1000]
+                pending_task.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                pass
         _notify_admin_of_tool_failure("claymation", exc, current_user)
         return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 
@@ -3839,6 +3990,42 @@ async def video_background_remove(
     if not ok:
         return ToolResponse(success=False, message=err)
 
+    # 2026-06: insert a pending_provider_tasks row BEFORE polling. Long
+    # videos (up to 2000 frames) can take 5-10 min upstream; a Cloud Run
+    # request kill would orphan that work without this hook.
+    from app.models.pending_provider_task import PendingProviderTask
+    pending_task = PendingProviderTask(
+        user_id=current_user.id,
+        tool_type="video_background_remove",
+        service_type="video_background_remove",
+        credits_charged=CREDIT_COST,
+        input_params={
+            "video_url": str(request.video_url),
+            "invert_output": bool(request.invert_output),
+        },
+        status="submitting",
+    )
+    db.add(pending_task)
+    await db.commit()
+    await db.refresh(pending_task)
+
+    async def _on_vbg_submit(task_id: str, provider_name: str):
+        try:
+            pending_task.provider_task_id = task_id
+            pending_task.provider_name = provider_name
+            pending_task.status = "polling"
+            pending_task.submitted_at = datetime.now(timezone.utc)
+            await db.commit()
+            logger.info(
+                "video_background_remove: pending_task=%s provider=%s task_id=%s",
+                pending_task.id, provider_name, task_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "video_background_remove: failed to record pending_task %s: %s",
+                task_id, exc,
+            )
+
     try:
         # Route directly through PiAPIProvider — no fallback chain because
         # no other vendor in our routing graph offers this primitive yet.
@@ -3847,10 +4034,15 @@ async def video_background_remove(
         result = await provider.video_background_remove({
             "video_url": str(request.video_url),
             "invert_output": bool(request.invert_output),
+            "on_submit": _on_vbg_submit,
         })
 
         if not result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+            pending_task.status = "failed"
+            pending_task.error_message = str(result.get("error") or "")[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
             return ToolResponse(
                 success=False,
                 message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE,
@@ -3861,6 +4053,10 @@ async def video_background_remove(
         video_url = await _persist_provider_url(video_url, "video", current_user)
         if not video_url:
             await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+            pending_task.status = "failed"
+            pending_task.error_message = "provider success but no URL"
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
             return ToolResponse(
                 success=False,
                 message="Video background remove returned no result. Please try again.",
@@ -3876,6 +4072,9 @@ async def video_background_remove(
         )
         user_gen.set_expiry()
         db.add(user_gen)
+        pending_task.status = "completed"
+        pending_task.result_url = video_url
+        pending_task.completed_at = datetime.now(timezone.utc)
         await db.commit()
 
         return ToolResponse(
@@ -3888,6 +4087,13 @@ async def video_background_remove(
     except Exception as exc:
         logger.error("video_background_remove error: %s", exc, exc_info=True)
         await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+        try:
+            pending_task.status = "failed"
+            pending_task.error_message = str(exc)[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception:
+            pass
         _notify_admin_of_tool_failure("video_background_remove", exc, current_user)
         return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 
@@ -3940,10 +4146,52 @@ async def upscale_image(
     if not res_ok:
         return ToolResponse(success=False, message=res_err)
 
-    CREDIT_COST = 10
-    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "upscale")
+    # v2.2 spec: 15 credits to cover PiAPI image upscaler $0.05-$0.20 plus
+    # margin at the cheap-pack rate. ServicePricing overrides if seeded.
+    CREDIT_COST = 15
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "image_upscale")
     if not ok:
         return ToolResponse(success=False, message=err)
+
+    # 2026-06: insert a pending_provider_tasks row BEFORE polling. PiAPI
+    # image-toolkit usually finishes in seconds, but has been observed to
+    # stall to 5 min on bad days; the hook recovers those rare jobs if
+    # Cloud Run kills the foreground request. If the Vertex AI backup
+    # path serves the result (synchronous, no task_id), on_submit never
+    # fires — the foreground terminal branch still flips the row to
+    # completed/failed regardless of which provider answered.
+    from app.models.pending_provider_task import PendingProviderTask
+    pending_task = PendingProviderTask(
+        user_id=current_user.id,
+        tool_type="image_upscale",
+        service_type="image_upscale",
+        credits_charged=CREDIT_COST,
+        input_params={
+            "image_url": _resolve_public_url(request.image_url),
+            "scale": request.scale,
+        },
+        status="submitting",
+    )
+    db.add(pending_task)
+    await db.commit()
+    await db.refresh(pending_task)
+
+    async def _on_upscale_submit(task_id: str, provider_name: str):
+        try:
+            pending_task.provider_task_id = task_id
+            pending_task.provider_name = provider_name
+            pending_task.status = "polling"
+            pending_task.submitted_at = datetime.now(timezone.utc)
+            await db.commit()
+            logger.info(
+                "image_upscale: pending_task=%s provider=%s task_id=%s",
+                pending_task.id, provider_name, task_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "image_upscale: failed to record pending_task %s: %s",
+                task_id, exc,
+            )
 
     try:
         router_instance = get_provider_router()
@@ -3952,6 +4200,7 @@ async def upscale_image(
             {
                 "image_url": _resolve_public_url(request.image_url),
                 "scale": request.scale,
+                "on_submit": _on_upscale_submit,
             }
         )
 
@@ -3960,6 +4209,24 @@ async def upscale_image(
             image_url = output.get("image_url")
             # Persist PiAPI CDN result to GCS so it survives 14-day expiry.
             image_url = await _persist_provider_url(image_url, "image", current_user)
+
+            # 2026-06: provider success but no URL → refund + fail.
+            if not image_url:
+                await _refund_credits(db, current_user, CREDIT_COST, "image_upscale")
+                pending_task.status = "failed"
+                pending_task.error_message = "provider success but no image_url"
+                pending_task.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+                logger.warning(
+                    "image_upscale provider success=true but no image_url — "
+                    "result keys=%s output keys=%s",
+                    list(result.keys()),
+                    list(output.keys()) if isinstance(output, dict) else type(output).__name__,
+                )
+                return ToolResponse(
+                    success=False,
+                    message="Upscale returned no result. Please try again.",
+                )
 
             generation = UserGeneration(
                 user_id=current_user.id,
@@ -3971,6 +4238,9 @@ async def upscale_image(
             )
             generation.set_expiry()
             db.add(generation)
+            pending_task.status = "completed"
+            pending_task.result_url = image_url
+            pending_task.completed_at = datetime.now(timezone.utc)
             await db.commit()
 
             return ToolResponse(
@@ -3980,11 +4250,22 @@ async def upscale_image(
                 message=f"Image upscaled {request.scale}x successfully"
             )
         else:
-            await _refund_credits(db, current_user, CREDIT_COST, "upscale")
-            return _provider_failure_response("upscale", result, current_user)
+            await _refund_credits(db, current_user, CREDIT_COST, "image_upscale")
+            pending_task.status = "failed"
+            pending_task.error_message = str(result.get("error") or "")[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+            return _provider_failure_response("image_upscale", result, current_user)
     except Exception as e:
         logger.error(f"Upscale error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "upscale")
+        await _refund_credits(db, current_user, CREDIT_COST, "image_upscale")
+        try:
+            pending_task.status = "failed"
+            pending_task.error_message = str(e)[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception:
+            pass
         _notify_admin_of_tool_failure("image_upscale", e, current_user)
         return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
 
@@ -4131,7 +4412,73 @@ async def _generate_avatar_inner(
 
         provider_router = get_provider_router()
 
+        # 2026-06: dynamically size the upstream poll timeout to the script
+        # length. Kling Avatar / A2E render time correlates with the audio
+        # duration (≈ script_words / 150 wpm × 60 s) and the requested
+        # output duration. Previously a 5-second "Hello" clip and a
+        # 120-second 500-word monologue both got the same 1200 s ceiling —
+        # short clips wasted polling cycles, long clips were aborted mid-
+        # render. Formula:
+        #   base 600 s (Kling pipeline warm-up + lip-sync seed)
+        # + 10 s per second of output duration (covers slow seeds)
+        # + 1.5 s per word of script (TTS + extra lip-sync passes)
+        # capped at AVATAR_MAX_TIMEOUT_SEC (default 3000 ≈ 50 min — under
+        # the Cloud Run 3600 ceiling so the OUTER request timeout never
+        # arrives first, see gcp/deploy.sh --timeout=3600).
+        _script = (request.script or "").strip()
+        _word_count = len(_script.split()) if _script else 0
+        _avatar_base = int(os.getenv("AVATAR_TIMEOUT_BASE_SEC", "600"))
+        _avatar_max = int(os.getenv("AVATAR_MAX_TIMEOUT_SEC", "3000"))
+        _avatar_timeout = _avatar_base + 10 * int(request.duration or 30) + int(1.5 * _word_count)
+        _avatar_timeout = max(1200, min(_avatar_timeout, _avatar_max))
+        logger.info(
+            "ai_avatar: dynamic timeout=%ds (duration=%ds, script_words=%d)",
+            _avatar_timeout, request.duration, _word_count,
+        )
+
         logger.info(f"Calling Gemini Avatar API for subscriber: {request.script[:50]}...")
+
+        # 2026-06: insert a `pending_provider_tasks` row BEFORE polling so
+        # that if Cloud Run kills this request mid-poll (cold migration,
+        # SIGTERM, OOM, network blip → 504), the worker reclaim job can
+        # still recover the upstream result. The provider invokes the
+        # `on_submit` callback the moment a task_id is captured.
+        from app.models.pending_provider_task import PendingProviderTask
+        pending_task = PendingProviderTask(
+            user_id=current_user.id,
+            tool_type="ai_avatar",
+            service_type="ai_avatar",
+            credits_charged=CREDIT_COST,
+            input_params={
+                "image_url": _resolve_public_url(str(request.image_url)),
+                "script": request.script,
+                "language": request.language,
+                "voice_id": request.voice_id,
+                "duration": request.duration,
+            },
+            status="submitting",
+        )
+        db.add(pending_task)
+        await db.commit()
+        await db.refresh(pending_task)
+
+        async def _on_avatar_submit(task_id: str, provider_name: str):
+            """Provider invokes this once it has the upstream task_id."""
+            try:
+                pending_task.provider_task_id = task_id
+                pending_task.provider_name = provider_name
+                pending_task.status = "polling"
+                pending_task.submitted_at = datetime.now(timezone.utc)
+                await db.commit()
+                logger.info(
+                    "ai_avatar: pending_task=%s recorded provider=%s task_id=%s",
+                    pending_task.id, provider_name, task_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "ai_avatar: failed to record pending_task task_id=%s: %s",
+                    task_id, exc,
+                )
 
         result = await provider_router.route(
             TaskType.AVATAR,
@@ -4142,10 +4489,13 @@ async def _generate_avatar_inner(
                 "voice_id": request.voice_id,
                 "duration": request.duration,
                 "user_id": str(current_user.id),
-                # 20-minute provider wait. Kling Avatar lip-sync polling can
-                # idle 8-15 min on long scripts; default 10 min was tripping
-                # on healthy jobs that just needed a few more poll cycles.
-                "timeout": 1200,
+                # Dynamically computed above so long scripts don't get
+                # aborted at the generic 20-min cap. See AVATAR_*_SEC env
+                # vars above for ops-side tuning. The outer Cloud Run
+                # request timeout (gcp/deploy.sh --timeout=3600) is the
+                # hard ceiling — keep AVATAR_MAX_TIMEOUT_SEC strictly below.
+                "timeout": _avatar_timeout,
+                "on_submit": _on_avatar_submit,
             }
         )
 
@@ -4155,7 +4505,30 @@ async def _generate_avatar_inner(
             # Persist provider CDN video to GCS so it survives 14-day expiry.
             video_url = await _persist_provider_url(video_url, "video", current_user)
 
-            # Save to UserGeneration (for subscriber's personal gallery)
+            # 2026-06: provider said success but yielded no playable URL —
+            # treat as failure and refund. Previously we silently logged a
+            # gallery row with video_url=None and kept the 300 credits.
+            if not video_url:
+                await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
+                pending_task.status = "failed"
+                pending_task.error_message = "no video_url in provider response"
+                pending_task.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+                logger.warning(
+                    "ai_avatar provider success=true but no video_url — "
+                    "result keys=%s output keys=%s",
+                    list(result.keys()),
+                    list(output.keys()) if isinstance(output, dict) else type(output).__name__,
+                )
+                return ToolResponse(
+                    success=False,
+                    message="Avatar generation returned no result. Please try again.",
+                )
+
+            # Save to UserGeneration (for subscriber's personal gallery).
+            # credits_used must reflect the actual deduction (CREDIT_COST = 300
+            # per the v2.1 ServicePricing alignment); the prior hardcoded 30
+            # surfaced a 10x mismatch in the user's gallery / billing email.
             user_gen = UserGeneration(
                 user_id=current_user.id,
                 tool_type=ToolType.AI_AVATAR,
@@ -4172,10 +4545,15 @@ async def _generate_avatar_inner(
                     "action": "photo_to_avatar",
                     "language": request.language
                 },
-                credits_used=30,
+                credits_used=CREDIT_COST,
             )
             user_gen.set_expiry()
             db.add(user_gen)
+
+            # Mark the pending row terminal so the reclaim job ignores it.
+            pending_task.status = "completed"
+            pending_task.result_url = video_url
+            pending_task.completed_at = datetime.now(timezone.utc)
 
             # Recycle for demo gallery
             await _maybe_recycle_for_demo(
@@ -4191,11 +4569,15 @@ async def _generate_avatar_inner(
             return ToolResponse(
                 success=True,
                 result_url=video_url,
-                credits_used=30,
+                credits_used=CREDIT_COST,
                 message=f"Avatar video generated successfully in {request.language}"
             )
         else:
             await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
+            pending_task.status = "failed"
+            pending_task.error_message = str(result.get("error") or "")[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
             return ToolResponse(
                 success=False,
                 message=result.get("error", "Avatar generation failed")
@@ -4568,9 +4950,9 @@ async def video_dubbing(
     if not allowed:
         return ToolResponse(success=False, message=err)
 
-    # 30 credits per tier_config.py video_dubbing default; UI hard-codes the
-    # same value on CreditCost so the displayed cost matches what we deduct.
-    CREDIT_COST = 30
+    # 2026-06 margin pass: dubbing upstream (A2E / lip-sync) is $0.50-$2.00.
+    # Aligned with tier_config.video_dubbing default (60).
+    CREDIT_COST = 60
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "video_dubbing")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -4824,7 +5206,10 @@ async def midjourney_imagine(
             # falls back to Flux. No whitelist needed; the provider's else-branch
             # is the safe default.
             route_params["model"] = request.model
-        result = await provider_router.route(TaskType.T2I, route_params)
+        from app.services.tier_config import get_user_tier
+        result = await provider_router.route(
+            TaskType.T2I, route_params, user_tier=get_user_tier(current_user),
+        )
         if not result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
             return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)

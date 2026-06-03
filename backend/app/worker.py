@@ -153,9 +153,12 @@ async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                     if not user or not plan:
                         continue
 
-                    # Extend subscription by 1 month
+                    # Extend subscription. Yearly auto-renew adds 365 days
+                    # and grants the 11/12 prorated full-year allowance;
+                    # monthly auto-renew adds 30 days and grants one month.
+                    is_yearly = (sub.billing_cycle or "monthly") == "yearly"
                     old_end = sub.end_date
-                    new_end = old_end + timedelta(days=30)
+                    new_end = old_end + timedelta(days=365 if is_yearly else 30)
                     sub.start_date = old_end
                     sub.end_date = new_end
 
@@ -163,8 +166,14 @@ async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                     user.plan_started_at = old_end
                     user.plan_expires_at = new_end
 
-                    # Allocate new monthly credits (old ones expired)
-                    credits = plan.monthly_credits or 0
+                    # Allocate new monthly credits (old ones expired).
+                    # Yearly: 11/12 of monthly_credits (the per-month
+                    # top-up reset will keep adding 11/12 each month).
+                    full_credits = plan.monthly_credits or 0
+                    if is_yearly:
+                        credits = int(round(full_credits * 11 / 12))
+                    else:
+                        credits = full_credits
                     if credits > 0:
                         # Expire remaining old subscription credits
                         old_credits = user.subscription_credits or 0
@@ -229,9 +238,9 @@ async def monthly_credit_reset_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """
     logger.info("Starting monthly credit reset task")
 
-    from sqlalchemy import select, and_
+    from sqlalchemy import select, and_, desc
     from app.models.user import User
-    from app.models.billing import Plan, CreditTransaction
+    from app.models.billing import Plan, CreditTransaction, Subscription
 
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -263,8 +272,27 @@ async def monthly_credit_reset_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                     if not plan or not plan.monthly_credits:
                         continue
 
+                    # 2026-06 margin pass: yearly subscribers get a 11/12
+                    # prorated monthly grant. Without this, the worker reset
+                    # path silently undoes the credit_service.py fix.
+                    sub_res = await db.execute(
+                        select(Subscription)
+                        .where(
+                            Subscription.user_id == user.id,
+                            Subscription.status == "active",
+                        )
+                        .order_by(desc(Subscription.start_date))
+                        .limit(1)
+                    )
+                    sub = sub_res.scalar_one_or_none()
+                    is_yearly = bool(sub and (sub.billing_cycle or "monthly") == "yearly")
+
                     old_credits = user.subscription_credits or 0
-                    new_credits = plan.monthly_credits
+                    full_credits = plan.monthly_credits
+                    if is_yearly:
+                        new_credits = int(round(full_credits * 11 / 12))
+                    else:
+                        new_credits = full_credits
 
                     # Reset subscription credits to plan amount
                     user.subscription_credits = new_credits
@@ -410,6 +438,431 @@ async def generate_single_demo_task(
 
 
 # =============================================================================
+# RECLAIM ORPHANED PROVIDER TASKS (2026-06)
+# =============================================================================
+# Long-poll endpoints (avatar, Veo, Kling Omni) can have their foreground
+# request killed by Cloud Run (cold migration, SIGTERM at the request
+# timeout, worker OOM). The upstream provider task keeps running — we lost
+# the in-process poll loop, not the work. Each such endpoint writes a row
+# to `pending_provider_tasks` BEFORE polling, capturing user_id, payload,
+# and (as soon as the provider returns it) the upstream task_id. This task
+# re-polls those rows and either:
+#   - materialises a UserGeneration on success, OR
+#   - refunds the credits on permanent failure, OR
+#   - abandons + refunds after RECLAIM_MAX_AGE_HOURS.
+# Cadence: every 2 minutes. Tasks polled by the foreground request have
+# their status flipped to "completed"/"failed" inside that request — this
+# worker only touches rows still in "submitting"/"polling" past the grace.
+
+RECLAIM_FOREGROUND_GRACE_SEC = 60      # don't touch rows the foreground is still actively polling
+RECLAIM_MAX_AGE_HOURS = 6              # after this, abandon + refund
+
+
+# tool_type → media kind. Drives which output key the worker looks for
+# in the upstream response AND which UserGeneration column receives the
+# reclaimed URL. Default for unknown tools is "video".
+TOOL_TYPE_KIND = {
+    "ai_avatar":               "video",
+    "short_video":             "video",
+    "claymation":              "video",  # only T2V mode reaches reclaim
+    "video_background_remove": "video",
+    "image_upscale":           "image",
+}
+
+
+# tool_type → ToolType enum so the reclaim worker can materialise the
+# UserGeneration row with the same tool_type the foreground handler used.
+# NOT in this map (intentional, ordered by reason):
+#   - video_dubbing      → not long-poll vulnerable (TTS ~30 s + local
+#                          ffmpeg ~few s, well inside Cloud Run 3600 s).
+#   - image_translation  → Vertex Gemini synchronous; no task_id exists
+#                          to poll, so reclaim cannot help even in theory.
+#   - bg_removal         → fast image op (<5 s), no reclaim need.
+def _build_tool_enum_map():
+    """Built lazily inside the reclaim task — importing material at
+    module scope would create a circular import with app.models."""
+    from app.models.material import ToolType as _ToolType
+    return {
+        "ai_avatar":               _ToolType.AI_AVATAR,
+        "short_video":             _ToolType.SHORT_VIDEO,
+        "claymation":              _ToolType.SHORT_VIDEO,
+        "video_background_remove": _ToolType.SHORT_VIDEO,
+        "image_upscale":           _ToolType.EFFECT,  # matches foreground choice
+    }
+
+
+def _extract_piapi_media_url(out, kind: str = "video") -> str | None:
+    """Pull a usable media URL out of PiAPI's many output shapes.
+
+    Mirrors the unpacking the foreground handler in tools.py already does
+    (claymation/short_video for video, upscale for image). We go straight
+    from the raw PiAPI response (no piapi_provider normalisation pass), so
+    we have to cover all the per-model shapes ourselves.
+
+    Shapes seen in prod (2026-05 audit):
+      Video — Seedance / Hailuo / Wan / Hunyuan / Veo (generic I2V/T2V):
+        output.video_url = "https://…"
+      Video — Kling 1.6 / 2.6 / 2.1-master (older versions):
+        output.works[].video.url
+      Video — Kling 3.0 / Omni (newest, multimodal):
+        output.video = "https://…"                          OR
+        output.video = {"url": "…"}                          OR
+        output.video = {"resource": "…"}                     OR
+        output.video = {"resource_without_watermark": "…"}
+      Image — Qubico/image-toolkit upscale, T2I models:
+        output.image_url = "https://…"                       OR
+        output.images = [{"url": "…"} | "https://…", …]
+      Defensive fallbacks (older PiAPI normalised key):
+        top-level output_url
+    """
+    if not isinstance(out, dict):
+        return None
+    primary_key = "image_url" if kind == "image" else "video_url"
+    # 1) Direct primary key + the universal fallbacks
+    for k in (primary_key, "url", "output_url"):
+        v = out.get(k)
+        if isinstance(v, str) and v:
+            return v
+    if kind == "video":
+        # 2) Kling 3.0/Omni — "video" key, string or dict
+        video = out.get("video")
+        if isinstance(video, str) and video:
+            return video
+        if isinstance(video, dict):
+            for k in ("url", "video_url", "resource", "resource_without_watermark"):
+                v = video.get(k)
+                if isinstance(v, str) and v:
+                    return v
+        # 3) Kling older — works[].video.url
+        works = out.get("works") or out.get("video_urls")
+        if isinstance(works, list):
+            for w in works:
+                if isinstance(w, str) and w:
+                    return w
+                if isinstance(w, dict):
+                    wv = w.get("video") or w
+                    if isinstance(wv, dict):
+                        for k in ("url", "video_url", "resource", "resource_without_watermark"):
+                            v = wv.get(k)
+                            if isinstance(v, str) and v:
+                                return v
+                    elif isinstance(wv, str) and wv:
+                        return wv
+    # 4) Array shapes — images[] / image_urls[]
+    arr = out.get("images") or out.get("image_urls")
+    if isinstance(arr, list) and arr:
+        first = arr[0]
+        if isinstance(first, dict):
+            for k in ("url", "image_url"):
+                v = first.get(k)
+                if isinstance(v, str) and v:
+                    return v
+        if isinstance(first, str) and first:
+            return first
+    return None
+
+
+# Back-compat alias — internal callers used the old name before 2026-06.
+_extract_piapi_video_url = _extract_piapi_media_url
+
+
+async def _reclaim_check_piapi(provider_task_id: str, kind: str = "video") -> Dict[str, Any]:
+    """One-shot PiAPI poll. Returns {status, media_url?, error?}.
+
+    status ∈ {"completed", "failed", "running"}.
+    kind ∈ {"video", "image"} — determines which output key to prefer.
+    """
+    import os
+    import httpx
+    base_url = "https://api.piapi.ai/api/v1"
+    api_key = os.getenv("PIAPI_KEY", "")
+    if not api_key:
+        return {"status": "running", "error": "PIAPI_KEY missing in worker env"}
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                f"{base_url}/task/{provider_task_id}",
+                headers={"X-API-Key": api_key},
+            )
+            if resp.status_code >= 500:
+                return {"status": "running", "error": f"upstream {resp.status_code}"}
+            data = resp.json()
+    except Exception as exc:
+        return {"status": "running", "error": str(exc)[:160]}
+
+    task_data = data.get("data", data)
+    upstream = (task_data.get("status") or "").lower()
+    if upstream in ("completed", "success", "done"):
+        out = task_data.get("output") or task_data.get("result") or {}
+        media_url = _extract_piapi_media_url(out, kind=kind)
+        if media_url:
+            return {"status": "completed", "media_url": media_url}
+        # success without URL — treat as permanent failure (matches the
+        # foreground handler in tools.py).
+        return {"status": "failed", "error": f"no {kind}_url in completed task"}
+    if upstream in ("failed", "error"):
+        return {"status": "failed", "error": (task_data.get("error") or "upstream failure")[:200]}
+    return {"status": "running"}
+
+
+async def _reclaim_check_a2e(provider_task_id: str, kind: str = "video") -> Dict[str, Any]:
+    """One-shot A2E poll. Same return shape as _reclaim_check_piapi.
+
+    A2E only emits avatar/lip-sync videos today, but `kind` is accepted so
+    callers don't have to special-case providers — uniform call signature
+    across all reclaim adapters.
+    """
+    try:
+        from app.providers.a2e_provider import A2EProvider
+        a2e = A2EProvider()
+        status = await a2e.service.get_task_status(provider_task_id)
+    except Exception as exc:
+        return {"status": "running", "error": str(exc)[:160]}
+    upstream = (status.get("status") or "").lower()
+    if upstream == "succeed":
+        media_url = status.get("video_url") or status.get("remote_url")
+        if media_url:
+            return {"status": "completed", "media_url": media_url}
+        return {"status": "failed", "error": "no video_url in completed task"}
+    if upstream == "failed":
+        return {"status": "failed", "error": (status.get("error") or "upstream failure")[:200]}
+    return {"status": "running"}
+
+
+async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """Re-poll orphaned upstream tasks, materialise results or refund."""
+    from sqlalchemy import select, and_, or_
+    from app.models.user import User
+    from app.models.pending_provider_task import PendingProviderTask
+    from app.models.user_generation import UserGeneration
+    from app.services.gcs_storage_service import get_gcs_storage
+
+    TOOL_TYPE_TO_ENUM = _build_tool_enum_map()
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    now = datetime.utcnow()
+    grace = now - timedelta(seconds=RECLAIM_FOREGROUND_GRACE_SEC)
+    abandon_cutoff = now - timedelta(hours=RECLAIM_MAX_AGE_HOURS)
+
+    stats = {"checked": 0, "completed": 0, "failed": 0, "abandoned": 0, "still_running": 0, "errors": 0}
+
+    try:
+        async with async_session() as db:
+            res = await db.execute(
+                select(PendingProviderTask).where(
+                    and_(
+                        PendingProviderTask.status.in_(["submitting", "polling"]),
+                        PendingProviderTask.created_at <= grace,
+                    )
+                )
+            )
+            pendings = res.scalars().all()
+            stats["checked"] = len(pendings)
+
+            for p in pendings:
+                # Abandon rows that exceeded the max retention window —
+                # refund the user; assume the upstream is permanently lost.
+                if p.created_at and p.created_at.replace(tzinfo=None) < abandon_cutoff:
+                    try:
+                        credit_svc = CreditService(db)
+                        if p.credits_charged > 0:
+                            await credit_svc.add_credits(
+                                user_id=str(p.user_id),
+                                amount=p.credits_charged,
+                                credit_type="subscription",
+                                transaction_type="refund",
+                                description=f"Refund: abandoned {p.service_type} (reclaim age > {RECLAIM_MAX_AGE_HOURS}h)",
+                                metadata={"pending_task_id": str(p.id)},
+                            )
+                        p.status = "abandoned"
+                        p.error_message = f"reclaim age exceeded {RECLAIM_MAX_AGE_HOURS}h"
+                        p.completed_at = now
+                        await db.commit()
+                        stats["abandoned"] += 1
+                    except Exception as exc:
+                        logger.warning("reclaim: abandon refund failed for %s: %s", p.id, exc)
+                        stats["errors"] += 1
+                    continue
+
+                # Rows still in "submitting" never captured a task_id — the
+                # original request died before the upstream API responded.
+                # Nothing we can poll. Abandon + refund.
+                if p.status == "submitting" or not p.provider_task_id:
+                    try:
+                        credit_svc = CreditService(db)
+                        if p.credits_charged > 0:
+                            await credit_svc.add_credits(
+                                user_id=str(p.user_id),
+                                amount=p.credits_charged,
+                                credit_type="subscription",
+                                transaction_type="refund",
+                                description=f"Refund: {p.service_type} never received provider task_id",
+                                metadata={"pending_task_id": str(p.id)},
+                            )
+                        p.status = "abandoned"
+                        p.error_message = "provider submit died before task_id was captured"
+                        p.completed_at = now
+                        await db.commit()
+                        stats["abandoned"] += 1
+                    except Exception as exc:
+                        logger.warning("reclaim: orphan-submit refund failed for %s: %s", p.id, exc)
+                        stats["errors"] += 1
+                    continue
+
+                # Per-tool media kind. Determines which upstream output key
+                # to look for AND which UserGeneration column to populate.
+                kind = TOOL_TYPE_KIND.get(p.tool_type, "video")
+
+                # Re-poll the upstream provider.
+                try:
+                    if p.provider_name == "piapi":
+                        check = await _reclaim_check_piapi(p.provider_task_id, kind=kind)
+                    elif p.provider_name == "a2e":
+                        check = await _reclaim_check_a2e(p.provider_task_id, kind=kind)
+                    else:
+                        logger.warning("reclaim: unknown provider %r on task %s", p.provider_name, p.id)
+                        stats["errors"] += 1
+                        continue
+                except Exception as exc:
+                    logger.warning("reclaim: poll exception for %s: %s", p.id, exc)
+                    stats["errors"] += 1
+                    continue
+
+                p.last_polled_at = now
+
+                if check["status"] == "running":
+                    stats["still_running"] += 1
+                    await db.commit()
+                    continue
+
+                if check["status"] == "completed":
+                    # Persist provider CDN URL into GCS so it survives 14-day expiry.
+                    media_url = check.get("media_url")
+                    try:
+                        media_url = await get_gcs_storage().safe_persist_url(
+                            media_url, kind, str(p.user_id),
+                        )
+                    except Exception:
+                        pass  # fall back to provider CDN (safe_persist_url already guards)
+
+                    if not media_url:
+                        # completed but somehow no URL → treat as failure + refund
+                        try:
+                            credit_svc = CreditService(db)
+                            if p.credits_charged > 0:
+                                await credit_svc.add_credits(
+                                    user_id=str(p.user_id),
+                                    amount=p.credits_charged,
+                                    credit_type="subscription",
+                                    transaction_type="refund",
+                                    description=f"Refund: {p.service_type} completed without URL",
+                                    metadata={"pending_task_id": str(p.id)},
+                                )
+                        except Exception as exc:
+                            logger.warning("reclaim: refund-on-empty failed for %s: %s", p.id, exc)
+                        p.status = "failed"
+                        p.error_message = "completed without video_url"
+                        p.completed_at = now
+                        await db.commit()
+                        stats["failed"] += 1
+                        continue
+
+                    try:
+                        input_p = p.input_params or {}
+                        tool_enum = TOOL_TYPE_TO_ENUM.get(p.tool_type)
+                        if tool_enum is not None:
+                            # Pull the input_text the foreground would have set —
+                            # avatar uses `script`, short-video / claymation
+                            # use `prompt` / `final_prompt`.
+                            input_text = (
+                                input_p.get("script")
+                                or input_p.get("prompt")
+                                or input_p.get("final_prompt")
+                            )
+                            user_gen = UserGeneration(
+                                user_id=p.user_id,
+                                tool_type=tool_enum,
+                                input_image_url=input_p.get("image_url"),
+                                input_video_url=input_p.get("video_url"),
+                                input_text=input_text,
+                                input_params={
+                                    **{k: v for k, v in input_p.items()
+                                       if k not in ("image_url", "video_url",
+                                                    "script", "prompt", "final_prompt")},
+                                    "reclaimed": True,
+                                },
+                                # Write the result into the correct column.
+                                # kind=="image" → result_image_url (upscale);
+                                # kind=="video" → result_video_url (avatar,
+                                # short-video, claymation T2V, vbg-remove).
+                                result_image_url=media_url if kind == "image" else None,
+                                result_video_url=media_url if kind == "video" else None,
+                                result_metadata={
+                                    "api": p.provider_name,
+                                    "reclaimed_at": now.isoformat(),
+                                    "pending_task_id": str(p.id),
+                                },
+                                credits_used=p.credits_charged,
+                            )
+                            user_gen.set_expiry()
+                            db.add(user_gen)
+                        else:
+                            logger.warning(
+                                "reclaim: no UserGeneration mapping for tool_type=%r "
+                                "(pending_task=%s) — marking completed but no gallery row",
+                                p.tool_type, p.id,
+                            )
+
+                        p.status = "completed"
+                        p.result_url = media_url
+                        p.completed_at = now
+                        await db.commit()
+                        stats["completed"] += 1
+                        logger.info(
+                            "reclaim: recovered %s task %s for user %s",
+                            p.tool_type, p.id, p.user_id,
+                        )
+                    except Exception as exc:
+                        logger.error("reclaim: materialise failed for %s: %s", p.id, exc, exc_info=True)
+                        stats["errors"] += 1
+                    continue
+
+                # status == "failed" — refund and mark failed.
+                if check["status"] == "failed":
+                    try:
+                        credit_svc = CreditService(db)
+                        if p.credits_charged > 0:
+                            await credit_svc.add_credits(
+                                user_id=str(p.user_id),
+                                amount=p.credits_charged,
+                                credit_type="subscription",
+                                transaction_type="refund",
+                                description=f"Refund: {p.service_type} upstream failed (reclaim)",
+                                metadata={"pending_task_id": str(p.id)},
+                            )
+                        p.status = "failed"
+                        p.error_message = check.get("error") or "upstream failure"
+                        p.completed_at = now
+                        await db.commit()
+                        stats["failed"] += 1
+                    except Exception as exc:
+                        logger.warning("reclaim: refund-on-fail failed for %s: %s", p.id, exc)
+                        stats["errors"] += 1
+                    continue
+
+        return {"status": "completed", "timestamp": now.isoformat(), **stats}
+
+    except Exception as exc:
+        logger.error("reclaim_pending_provider_tasks_task failed: %s", exc, exc_info=True)
+        return {"status": "failed", "error": str(exc), **stats}
+
+    finally:
+        await engine.dispose()
+
+
+# =============================================================================
 # WORKER SETTINGS
 # =============================================================================
 
@@ -428,6 +881,7 @@ class WorkerSettings:
         monthly_credit_reset_task,
         cleanup_expired_bonus_credits_task,
         auto_renew_subscriptions_task,
+        reclaim_pending_provider_tasks_task,
     ]
 
     # Cron jobs (scheduled tasks)
@@ -476,6 +930,17 @@ class WorkerSettings:
             auto_renew_subscriptions_task,
             hour=1,
             minute=0,
+            run_at_startup=False
+        ),
+        # Reclaim orphaned upstream provider tasks every 2 minutes.
+        # Foreground requests that get killed by Cloud Run mid-poll leave
+        # a `pending_provider_tasks` row behind; this re-polls the upstream
+        # provider, materialises the result, or refunds. See the function
+        # docstring + app/models/pending_provider_task.py for the lifecycle.
+        cron(
+            reclaim_pending_provider_tasks_task,
+            minute={0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28,
+                    30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58},
             run_at_startup=False
         ),
     ]

@@ -816,7 +816,8 @@ class MaterialGenerator:
                             "image_url": image_url,
                             "prompt": prompt_zh,
                             "duration": SHORT_VIDEO_LENGTH
-                        }
+                        },
+                        user_tier="pro",  # admin pre-render
                     )
 
                     video_url = None
@@ -882,7 +883,8 @@ class MaterialGenerator:
                                     "image_url": avatar_image,
                                     "script": avatar_script,
                                     "language": lang,
-                                }
+                                },
+                                user_tier="pro",  # admin pre-render
                             )
                             avatar_elapsed = time.monotonic() - avatar_start
                             logger.info(f"Landing {topic_key} #{idx+1} avatar {lang}: {avatar_elapsed:.1f}s")
@@ -1016,7 +1018,8 @@ class MaterialGenerator:
                     # Use ProviderRouter for background removal
                     effect_result = await self.provider_router.route(
                         TaskType.BACKGROUND_REMOVAL,
-                        {"image_url": source_url}
+                        {"image_url": source_url},
+                        user_tier="pro",  # admin pre-render
                     )
                     output = effect_result.get('output', {})
                     if effect_result.get('success'):
@@ -1100,7 +1103,8 @@ class MaterialGenerator:
                         "image_url": image_url,
                         "prompt": example['source_prompt'],
                         "duration": SHORT_VIDEO_LENGTH
-                    }
+                    },
+                    user_tier="pro",  # admin pre-render
                 )
 
                 if not video_router_result.get('success'):
@@ -1160,7 +1164,8 @@ class MaterialGenerator:
                         "image_url": example['avatar_url'],
                         "script": example['script'],
                         "language": example['language'],
-                    }
+                    },
+                    user_tier="pro",  # admin pre-render
                 )
 
                 if result.get('success'):

@@ -18,4 +18,5 @@ from app.models.site_settings import SiteSettings
 from app.models.payment_settings import PaymentSettings
 from app.models.hero_demo_pair import HeroDemoPair
 from app.models.model_registry import ModelRegistryOverride, ModelRegistryAudit, GenerationMetric
+from app.models.pending_provider_task import PendingProviderTask, PENDING_TASK_STATUS_CHOICES
 from app.core.database import Base

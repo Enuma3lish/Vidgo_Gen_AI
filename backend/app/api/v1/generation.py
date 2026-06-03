@@ -455,7 +455,10 @@ async def generate_pattern(
             # qwen → Qubico/qwen-image, z-image → Qubico/z-image. Anything
             # unrecognized falls back to Flux there (safe default).
             route_params["model"] = request.model
-        result = await provider_router.route(TaskType.T2I, route_params)
+        from app.services.tier_config import get_user_tier
+        result = await provider_router.route(
+            TaskType.T2I, route_params, user_tier=get_user_tier(current_user),
+        )
 
         if result.get("success"):
             output = result.get("output", {})
@@ -993,7 +996,7 @@ AVAILABLE_MODELS = [
         "name": "Pixverse v4.5",
         "description": "Fast, affordable video generation",
         "type": "video",
-        "credit_cost": 10,
+        "credit_cost": 20,
         "min_plan": "starter",
         "max_length": 8,
         "resolution": "720p",
@@ -1061,7 +1064,7 @@ AVAILABLE_MODELS = [
         "name": "Wan I2V (Default)",
         "description": "Standard image-to-video generation",
         "type": "video",
-        "credit_cost": 10,
+        "credit_cost": 20,
         "min_plan": "starter",
         "max_length": 5,
         "resolution": "720p",
@@ -1156,16 +1159,18 @@ async def upload_and_generate(
     b64 = base64.b64encode(contents).decode("utf-8")
     data_url = f"data:{mime};base64,{b64}"
 
-    # Determine credit cost based on model
+    # Determine credit cost based on model. 2026-06 margin pass — values
+    # match tier_config.CREDIT_COSTS so this code path can't undercut the
+    # main tools.py deduction path.
     model_costs = {m["id"]: m["credit_cost"] for m in AVAILABLE_MODELS}
-    credit_cost = model_costs.get(model, 5)  # default 5
+    credit_cost = model_costs.get(model, 5)
 
     tool_cost_defaults = {
         "background_removal": 3,
-        "product_scene": 5,
+        "product_scene": 10,
         "effect": 5,
-        "short_video": 10,
-        "try_on": 8,
+        "short_video": 20,   # was 10 — Kling/Hailuo upstream $0.10-$0.70
+        "try_on": 30,        # was 8 — Kling try-on upstream $0.50-$1.00
         "pattern_generate": 5,
     }
     if not model:
@@ -1181,6 +1186,11 @@ async def upload_and_generate(
             detail=f"Insufficient credits. This operation requires {credit_cost} credits.",
         )
 
+    # 2026-06: pass the real user tier so provider_router's margin gate
+    # (downgrade premium models for free/basic) can actually enforce.
+    from app.services.tier_config import get_user_tier
+    user_tier = get_user_tier(current_user)
+
     try:
         result = None
         tool_type_enum = None
@@ -1190,6 +1200,7 @@ async def upload_and_generate(
             result = await provider_router.route(
                 TaskType.BACKGROUND_REMOVAL,
                 {"image_url": data_url},
+                user_tier=user_tier,
             )
         elif tool_type == "product_scene":
             tool_type_enum = ToolType.PRODUCT_SCENE
@@ -1197,6 +1208,7 @@ async def upload_and_generate(
             result = await provider_router.route(
                 TaskType.T2I,
                 {"prompt": f"Product photography, {scene_prompt}, professional quality", "size": "1024*1024"},
+                user_tier=user_tier,
             )
         elif tool_type == "effect":
             tool_type_enum = ToolType.EFFECT
@@ -1204,6 +1216,7 @@ async def upload_and_generate(
             result = await provider_router.route(
                 TaskType.T2I,
                 {"prompt": style_prompt, "image_url": data_url, "size": "1024*1024"},
+                user_tier=user_tier,
             )
         elif tool_type == "short_video":
             tool_type_enum = ToolType.SHORT_VIDEO
@@ -1215,12 +1228,13 @@ async def upload_and_generate(
             }
             if model:
                 params["model"] = model
-            result = await provider_router.route(TaskType.I2V, params)
+            result = await provider_router.route(TaskType.I2V, params, user_tier=user_tier)
         elif tool_type == "pattern_generate":
             tool_type_enum = ToolType.PATTERN_GENERATE
             result = await provider_router.route(
                 TaskType.T2I,
                 {"prompt": f"{prompt}, seamless tileable repeating pattern, high quality", "size": "1024*1024"},
+                user_tier=user_tier,
             )
         else:
             raise HTTPException(

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { useLocalized } from '@/composables'
 import {
   imageDimensionRuleForTool,
@@ -34,8 +33,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'file-selected'])
-const { locale } = useI18n()
-const isZh = locale.value.startsWith('zh')
 // 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
 const { L } = useLocalized()
 const isDragging = ref(false)

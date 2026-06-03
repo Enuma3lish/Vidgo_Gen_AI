@@ -242,7 +242,6 @@ const currentCreditCost = computed(() => {
   const m = models.value.find(m => m.id === selectedModel.value)
   return m?.credit_cost ?? 0
 })
-const isZh = computed(() => locale.value.startsWith('zh'))
 // 5-language inline picker — fixes ja/ko/es fall-through (BUG-017).
 const { L } = useLocalized()
 const isVideoTool = computed(() => props.toolType.includes('video') || props.toolType.includes('avatar'))

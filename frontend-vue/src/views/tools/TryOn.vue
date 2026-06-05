@@ -18,7 +18,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
 import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -204,6 +204,24 @@ function applyExample(ex: ExampleCard) {
   if (ex.promptHint) promptText.value = ex.promptHint
   uiStore.showInfo(isZh.value ? '已套用範例設定' : 'Example applied — adjust inputs and click Generate.')
 }
+
+// Gallery "Try this example" deeplink — prefill outfit prompt + person image.
+// A prompt-only example switches to Flux Kontext prompt mode (which takes a
+// person photo + text outfit) so the carried prompt is actually consumed.
+useExamplePrefill({
+  onPrompt: (p) => {
+    promptText.value = p
+    selectedModel.value = 'flux_kontext'
+  },
+  onImage: (url) => { modelImageUrl.value = url },
+  onError: () => uiStore.showError(L(
+    '範例素材已過期,請改用其他範例或上傳自有圖片。',
+    'This example is no longer available. Pick another or upload your own image.',
+    'この例は利用できなくなりました。別の例を選ぶか、画像をアップロードしてください。',
+    '이 예제는 더 이상 사용할 수 없습니다. 다른 예제를 선택하거나 이미지를 업로드하세요.',
+    'Este ejemplo ya no está disponible. Elige otro o sube tu propia imagen.',
+  )),
+})
 
 const subtitle = computed(() => isZh.value
   ? '上傳一張人物照，再選一張服裝或用文字描述新服裝。模型保留人物與姿勢，只改變身上穿的。'

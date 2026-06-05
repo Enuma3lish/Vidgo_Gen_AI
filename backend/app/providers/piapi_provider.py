@@ -1932,18 +1932,33 @@ class PiAPIProvider(BaseProvider):
             output = result.get("output", {})
             video_url = output.get("video_url") or output.get("url") or ""
             if not video_url:
-                # Try to find video in nested output structure
+                # Find the video in Kling's nested works[] structure. Per the
+                # official Get-Task schema (https://piapi.ai/docs/kling-api/get-task)
+                # a completed work's video lives at works[].video.resource /
+                # .resource_without_watermark — there is NO works[].video.url
+                # field. The old code only checked .url, so a successfully
+                # rendered Kling Avatar returned no URL and the caller wrongly
+                # degraded to the presenter / static-portrait fallback. Prefer
+                # the watermark-free resource (we apply our own watermark later).
                 works = output.get("works", [])
                 if works and isinstance(works, list):
                     for w in works:
-                        if isinstance(w, dict):
-                            v = w.get("video", {})
-                            if isinstance(v, dict) and v.get("url"):
-                                video_url = v["url"]
+                        if not isinstance(w, dict):
+                            continue
+                        v = w.get("video")
+                        if isinstance(v, dict):
+                            cand = (
+                                v.get("resource_without_watermark")
+                                or v.get("resource")
+                                or v.get("url")
+                                or v.get("video_url")
+                            )
+                            if cand:
+                                video_url = cand
                                 break
-                            elif isinstance(v, str):
-                                video_url = v
-                                break
+                        elif isinstance(v, str) and v:
+                            video_url = v
+                            break
             if video_url:
                 result["output"]["video_url"] = video_url
 
@@ -1952,6 +1967,42 @@ class PiAPIProvider(BaseProvider):
     # ─────────────────────────────────────────────────────────────────────────
     # INTERNAL METHODS
     # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_task_error(task_data: Dict[str, Any]) -> str:
+        """Pull a human-readable failure reason out of a PiAPI Get-Task body.
+
+        Per the official response schema
+        (https://piapi.ai/docs/kling-api/get-task) ``data.error`` is an OBJECT
+        ``{code, raw_message, message, detail}`` \u2014 NOT a string \u2014 and the
+        worker-level reason for some failures (e.g. the F5-TTS "internal server
+        error 500") only surfaces in ``data.logs``. The old code did
+        ``task_data.get("error", "Unknown error")`` and raised the raw dict, so
+        logs/users saw ``{'code': ..., 'message': ...}`` and the clean message
+        was buried (and ``_is_transient_piapi_error`` had to match against the
+        stringified dict). Extract the best available string instead.
+        """
+        err = task_data.get("error")
+        if isinstance(err, dict):
+            msg = err.get("message") or err.get("raw_message")
+            if msg:
+                return str(msg)
+        elif isinstance(err, str) and err:
+            return err
+        # Fall back to the logs array (worker-level failure detail).
+        logs = task_data.get("logs")
+        if isinstance(logs, list) and logs:
+            parts = []
+            for item in logs:
+                if isinstance(item, str) and item:
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    m = item.get("message") or item.get("msg")
+                    if m:
+                        parts.append(str(m))
+            if parts:
+                return "; ".join(parts)
+        return "Unknown error"
 
     async def _submit_and_poll(
         self,
@@ -2045,7 +2096,7 @@ class PiAPIProvider(BaseProvider):
                         "output": output
                     }
                 elif status in ["failed", "error"]:
-                    error_msg = task_data.get("error", "Unknown error")
+                    error_msg = self._extract_task_error(task_data)
                     self._log_response(payload.get("task_type", "unknown"), False, error_msg)
                     raise Exception(error_msg)
 

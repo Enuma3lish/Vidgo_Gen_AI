@@ -11,7 +11,21 @@ export interface ReferralStatsResponse {
   referral_count: number
   credits_earned: number
   referred_by: string | null
+  // Credit rules pulled from backend config so localized copy can interpolate
+  // them instead of hardcoding numbers (must mirror backend settings:
+  // REFERRAL_WELCOME_CREDITS / REFERRAL_BONUS_CREDITS / REGISTRATION_BONUS_CREDITS).
+  welcome_credits?: number
+  referrer_bonus?: number
+  registration_bonus?: number
 }
+
+// Display defaults if the API hasn't returned yet. Keep in lock-step with
+// backend/app/core/config.py.
+export const DEFAULT_CREDIT_RULES = {
+  welcome_credits: 40,
+  referrer_bonus: 50,
+  registration_bonus: 40,
+} as const
 
 export interface ApplyReferralResponse {
   success: boolean

@@ -582,7 +582,13 @@
     "registerBtn": "免費開始 — 獲得 40 點",
     "termsAgree": "點擊「免費開始」即表示您同意我們的服務條款與隱私政策",
     "fillAllFields": "請填寫所有欄位",
-    "login": "登入"
+    "login": "登入",
+    "errors": {
+      "emailRequired": "請輸入電子郵件。",
+      "emailInvalid": "請輸入有效的電子郵件地址。",
+      "passwordRequired": "請輸入密碼。",
+      "passwordTooShort": "密碼長度至少需 {min} 個字元。"
+    }
   },
   "dashboard": {
     "welcome": "歡迎回來",
@@ -1193,22 +1199,22 @@
       "none": "—"
     },
     "yourLink": "您的推薦連結",
-    "linkDescription": "分享此連結邀請好友，每邀請一人成功註冊即可獲得 50 點數。",
+    "linkDescription": "分享此連結邀請好友，每邀請一人成功註冊即可獲得 {referrerBonus} 點數。",
     "copy": "複製",
     "copied": "已複製！",
-    "shareText": "加入 VidGo AI，透過推薦連結註冊即可獲得 20 點免費點數！",
+    "shareText": "加入 VidGo AI,透過推薦連結註冊即可獲得 {welcomeCredits} 點免費點數!",
     "share": {
       "copyLink": "複製連結"
     },
     "howItWorks": {
       "title": "如何運作",
-      "step1": "複製您的專屬推薦連結，分享給朋友或發布在社群媒體上。",
+      "step1": "複製您的專屬推薦連結,分享給朋友或發布在社群媒體上。",
       "step2": "好友使用您的連結完成註冊並驗證電子郵件。",
-      "step3": "您立即獲得 50 點數，好友也能獲得 20 點歡迎點數！"
+      "step3": "您立即獲得 {referrerBonus} 點數,好友也能獲得 {welcomeCredits} 點歡迎點數!"
     },
     "applyCode": {
-      "title": "有推薦碼嗎？",
-      "description": "輸入推薦碼即可獲得 20 點額外點數。",
+      "title": "有推薦碼嗎?",
+      "description": "輸入推薦碼即可獲得 {welcomeCredits} 點額外點數。",
       "placeholder": "輸入推薦碼（例如 ABC12345）",
       "submit": "套用",
       "error": "套用失敗，請再試一次。"

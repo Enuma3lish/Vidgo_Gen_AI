@@ -37,6 +37,11 @@ class ReferralStatsResponse(BaseModel):
     referral_count: int
     credits_earned: int
     referred_by: Optional[str] = None    # email of who referred this user (masked)
+    # Credit rules surfaced so the frontend can interpolate localized copy
+    # against the canonical config rather than hardcoding stale numbers.
+    welcome_credits: int = 0      # credits the invitee receives
+    referrer_bonus: int = 0       # credits the referrer receives per signup
+    registration_bonus: int = 0   # credits granted at any signup (no referral)
 
 
 class ApplyReferralRequest(BaseModel):
@@ -162,6 +167,9 @@ async def get_referral_stats(
         referral_count=referral_count,
         credits_earned=credits_earned,
         referred_by=referred_by_email,
+        welcome_credits=settings.REFERRAL_WELCOME_CREDITS,
+        referrer_bonus=settings.REFERRAL_BONUS_CREDITS,
+        registration_bonus=settings.REGISTRATION_BONUS_CREDITS,
     )
 
 

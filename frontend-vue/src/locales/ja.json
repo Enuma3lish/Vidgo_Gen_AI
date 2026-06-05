@@ -582,7 +582,13 @@
     "signingIn": "ログイン中…",
     "signingUp": "登録中…",
     "termsAgree": "「無料で始める」をクリックすると、利用規約とプライバシーポリシーに同意したものとみなされます",
-    "login": "ログイン"
+    "login": "ログイン",
+    "errors": {
+      "emailRequired": "メールアドレスを入力してください。",
+      "emailInvalid": "有効なメールアドレスを入力してください。",
+      "passwordRequired": "パスワードを入力してください。",
+      "passwordTooShort": "パスワードは {min} 文字以上で入力してください。"
+    }
   },
   "dashboard": {
     "welcome": "おかえりなさい",
@@ -1560,7 +1566,7 @@
   },
   "referrals": {
     "applyCode": {
-      "description": "コードを入力すると、20 ボーナスクレジットがアカウントに追加されます。",
+      "description": "コードを入力すると、{welcomeCredits} ボーナスクレジットがアカウントに追加されます。",
       "error": "コードを適用できませんでした。再度お試しください。",
       "placeholder": "紹介コードを入力（例: ABC12345）",
       "submit": "適用",
@@ -1571,7 +1577,7 @@
     "howItWorks": {
       "step1": "ユニークな紹介リンクを友達や SNS でシェアしましょう。",
       "step2": "友達があなたのリンクから登録し、メール認証を完了します。",
-      "step3": "あなたは 50 ボーナスクレジット、友達は 20 ウェルカムクレジットを獲得！",
+      "step3": "あなたは {referrerBonus} ボーナスクレジット、友達は {welcomeCredits} ウェルカムクレジットを獲得！",
       "title": "仕組み"
     },
     "leaderboard": {
@@ -1579,11 +1585,11 @@
       "referrals": "紹介数",
       "title": "紹介ランキング"
     },
-    "linkDescription": "このリンクで友達を招待しましょう。登録ごとに 50 クレジット獲得できます。",
+    "linkDescription": "このリンクで友達を招待しましょう。登録ごとに {referrerBonus} クレジット獲得できます。",
     "share": {
       "copyLink": "リンクをコピー"
     },
-    "shareText": "VidGo AI に登録すると 20 クレジットが無料！",
+    "shareText": "VidGo AI に登録すると {welcomeCredits} クレジットが無料！",
     "stats": {
       "creditsEarned": "獲得クレジット",
       "invited": "招待人数",

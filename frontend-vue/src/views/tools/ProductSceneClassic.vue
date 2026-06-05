@@ -11,7 +11,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
 import { toolsApi } from '@/api'
 import apiClient from '@/api/client'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
@@ -58,6 +58,24 @@ async function loadScenes() {
   }
 }
 onMounted(loadScenes)
+
+// "Try this example" deeplink — Inspiration Gallery pushes ?prompt= and
+// ?image= into the route. Wire them into the existing form state so the
+// user lands with the example pre-loaded instead of an empty playground.
+useExamplePrefill({
+  onPrompt: (p) => {
+    customPrompt.value = p
+    mode.value = 'custom'
+  },
+  onImage: (url) => { productImage.value = url },
+  onError: () => uiStore.showError(L(
+    '範例素材已過期,請改用其他範例或上傳自有圖片。',
+    'This example is no longer available. Pick another or upload your own image.',
+    'この例は利用できなくなりました。別の例を選ぶか、画像をアップロードしてください。',
+    '이 예제는 더 이상 사용할 수 없습니다. 다른 예제를 선택하거나 이미지를 업로드하세요.',
+    'Este ejemplo ya no está disponible. Elige otro o sube tu propia imagen.',
+  )),
+})
 
 async function ensureImageUrl(): Promise<string | null> {
   if (!productImage.value) return null

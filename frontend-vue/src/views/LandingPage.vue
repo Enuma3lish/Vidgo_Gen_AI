@@ -33,6 +33,11 @@ const brandTagline = computed(() => {
 const demoImages = ref<Record<string, { before: string; after: string }[]>>({})
 const demoLoading = ref(true)
 
+// Interior before/after hero image fallback — if the GCS asset 404s we hide
+// the broken <img> and surface a styled gradient placeholder instead.
+const interiorBeforeFailed = ref(false)
+const interiorAfterFailed = ref(false)
+
 // Fallback images — shown only as a last resort while real AI results load.
 // Each tool MUST use a logically-PAIRED before/after (same subject, real
 // transformation) so visitors never see two unrelated images. The previous
@@ -633,18 +638,26 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <div class="interior-preview">
             <div class="interior-preview-pane interior-preview-before">
               <img
+                v-if="!interiorBeforeFailed"
                 src="https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/room-before.jpg"
                 :alt="t('lp.interior.beforeAlt')"
-                @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+                @error="interiorBeforeFailed = true"
               />
+              <div v-else class="interior-preview-placeholder interior-preview-placeholder-before">
+                <span aria-hidden="true">🛋️</span>
+              </div>
               <span class="interior-preview-label">{{ t('lp.interior.beforeLabel') }}</span>
             </div>
             <div class="interior-preview-pane interior-preview-after">
               <img
+                v-if="!interiorAfterFailed"
                 src="https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/room-after.jpg"
                 :alt="t('lp.interior.afterAlt')"
-                @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+                @error="interiorAfterFailed = true"
               />
+              <div v-else class="interior-preview-placeholder interior-preview-placeholder-after">
+                <span aria-hidden="true">✨</span>
+              </div>
               <span class="interior-preview-label interior-preview-label-after">{{ t('lp.interior.afterLabel') }}</span>
             </div>
           </div>
@@ -1785,6 +1798,22 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
 
 .interior-preview-label-after {
   background: linear-gradient(135deg, #1677ff 0%, #7c3aed 100%);
+}
+
+.interior-preview-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+  color: rgba(245, 245, 250, 0.85);
+}
+.interior-preview-placeholder-before {
+  background: linear-gradient(145deg, #1a1a28 0%, #232336 100%);
+}
+.interior-preview-placeholder-after {
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.35) 0%, rgba(124, 58, 237, 0.35) 100%), #1a1a28;
 }
 
 @media (max-width: 900px) {

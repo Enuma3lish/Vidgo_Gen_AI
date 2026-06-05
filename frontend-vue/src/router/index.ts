@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { applySeo } from '@/composables/useSeo'
 
 // 2026-05-18 — subscription result pages are eagerly imported. They
 // are the landing target when PayPal redirects back to vidgo.co after
@@ -414,6 +415,101 @@ const router = createRouter({
       return { top: 0 }
     }
   }
+})
+
+// ── SEO metadata per route ──
+// Keyed by route.name so the catalogue is decoupled from path edits. Pages
+// without an entry fall back to the site-wide default in applySeo().
+type RouteSeo = { title: string; description: string }
+const ROUTE_SEO: Record<string, RouteSeo> = {
+  home: {
+    title: 'VidGo AI｜AI 商品攝影、去背、短影音與室內設計工具',
+    description:
+      'VidGo AI 集合商品攝影、智能去背、AI 試穿、室內設計渲染、短影音與數位人，一站完成電商與品牌內容製作。',
+  },
+  pricing: {
+    title: 'VidGo 定價方案｜AI 商品圖、影片與室內設計點數方案',
+    description:
+      '比較 VidGo AI 訂閱方案與點數包：4K 影音、無浮水印、優先佇列、API 存取，依用量選擇最適方案。',
+  },
+  gallery: {
+    title: 'AI 創作靈感庫｜VidGo 商品圖、室內設計與影音範本',
+    description:
+      '瀏覽 VidGo AI 的 AI 創作範本：商品場景、模特試穿、室內提案、短影音與數位人，一鍵套用素材。',
+  },
+  'background-removal': {
+    title: 'AI 智能去背工具｜商品圖透明 PNG 與換景 - VidGo',
+    description:
+      '上傳商品圖即可一鍵 AI 去背，輸出透明 PNG 或自動換景；保留邊緣細節，適合電商商品圖與目錄。',
+  },
+  'room-redesign': {
+    title: 'AI 室內設計渲染｜房間照片、草圖與平面圖轉提案圖 - VidGo',
+    description:
+      '上傳房間照片或草圖，挑選風格範本，AI 立即生成室內設計提案圖，支援 4K 高解析輸出。',
+  },
+  'interior-templates': {
+    title: 'AI 室內設計範本庫｜風格範本一鍵套用 - VidGo',
+    description:
+      '瀏覽北歐、極簡、日式侘寂、工業風等室內設計範本，挑選後上傳房間照片，AI 立即生成提案圖。',
+  },
+  'exterior-ai': {
+    title: 'AI 建築外觀渲染｜立面風格範本 - VidGo',
+    description:
+      '上傳建築外觀照片或草圖，挑選材質與風格，AI 生成多版本建築立面提案圖。',
+  },
+  'commercial-space': {
+    title: 'AI 商業空間設計渲染｜店面、辦公室與餐廳提案 - VidGo',
+    description:
+      '上傳商業空間照片，AI 依照產業與品牌氣質生成店面、辦公室、咖啡廳的設計提案。',
+  },
+  'try-on': {
+    title: 'AI 模特試穿｜服飾自動套用到模特身上 - VidGo',
+    description:
+      '上傳平拍服飾與模特圖片，AI 自動完成試穿合成，保留布料質感與品牌一致性。',
+  },
+  'short-video': {
+    title: 'AI 短影音生成｜圖片轉影片、社群廣告影片 - VidGo',
+    description:
+      '單張商品圖即可生成 8 秒短影音，適合社群廣告、商品介紹與品牌主視覺。',
+  },
+  avatar: {
+    title: 'AI 數位人生成｜口播導購與品牌代言影片 - VidGo',
+    description:
+      'AI 數位人代言：自動生成口播影片，支援多語言、語速調整，適合電商導購與品牌行銷。',
+  },
+  upscale: {
+    title: 'AI 圖片高畫質放大｜4K 高解析輸出 - VidGo',
+    description:
+      '上傳低解析圖片，AI 自動補細節並放大至 4K，適合商品圖、藝術作品與印刷素材。',
+  },
+  login: { title: '登入 VidGo AI', description: '登入 VidGo AI 帳號，繼續使用 AI 商品攝影、影音與室內設計工具。' },
+  register: {
+    title: '註冊 VidGo AI｜40 點免費點數',
+    description: '免費註冊 VidGo AI，立即獲得 40 點免費點數，使用商品攝影、影音與室內設計工具。',
+  },
+}
+
+router.afterEach((to) => {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const path = to.path || '/'
+  const canonical = origin ? origin + path : undefined
+  const name = (to.name as string) || ''
+  const seo = ROUTE_SEO[name]
+  const lang = typeof document !== 'undefined' ? document.documentElement.getAttribute('lang') || 'en' : 'en'
+  const alternateLocales = origin
+    ? ['en', 'zh-TW', 'ja', 'ko', 'es'].map((code) => ({ hreflang: code, href: origin + path }))
+    : []
+  applySeo({
+    title: seo?.title,
+    description: seo?.description,
+    canonical,
+    locale: lang,
+    alternateLocales,
+    // Guest-only pages (login/register/etc.) shouldn't be indexed once logged in,
+    // but as guest-discoverable pages they're fine to leave open. /admin etc. is
+    // explicitly noindex.
+    noindex: path.startsWith('/admin') || path.startsWith('/dashboard') || path.startsWith('/subscription'),
+  })
 })
 
 // Navigation guards

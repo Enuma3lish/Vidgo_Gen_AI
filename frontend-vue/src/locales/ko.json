@@ -582,7 +582,13 @@
     "signingIn": "로그인 중...",
     "signingUp": "가입 중...",
     "termsAgree": "‘무료로 시작’ 클릭 시 이용약관과 개인정보처리방침에 동의하는 것으로 간주됩니다",
-    "login": "로그인"
+    "login": "로그인",
+    "errors": {
+      "emailRequired": "이메일을 입력해 주세요.",
+      "emailInvalid": "유효한 이메일 주소를 입력해 주세요.",
+      "passwordRequired": "비밀번호를 입력해 주세요.",
+      "passwordTooShort": "비밀번호는 최소 {min}자 이상이어야 합니다."
+    }
   },
   "dashboard": {
     "welcome": "다시 오신 것을 환영합니다",
@@ -1560,7 +1566,7 @@
   },
   "referrals": {
     "applyCode": {
-      "description": "코드를 입력하면 20 보너스 크레딧이 계정에 추가됩니다.",
+      "description": "코드를 입력하면 {welcomeCredits} 보너스 크레딧이 계정에 추가됩니다.",
       "error": "코드 적용에 실패했습니다. 다시 시도해 주세요.",
       "placeholder": "추천 코드 입력 (예: ABC12345)",
       "submit": "적용",
@@ -1571,7 +1577,7 @@
     "howItWorks": {
       "step1": "고유한 추천 링크를 친구나 SNS에 공유하세요.",
       "step2": "친구가 링크로 가입하고 이메일을 인증합니다.",
-      "step3": "당신은 50 보너스 크레딧, 친구는 20 웰컴 크레딧을 받습니다!",
+      "step3": "당신은 {referrerBonus} 보너스 크레딧, 친구는 {welcomeCredits} 웰컴 크레딧을 받습니다!",
       "title": "이용 방법"
     },
     "leaderboard": {
@@ -1579,11 +1585,11 @@
       "referrals": "추천 수",
       "title": "추천 랭킹"
     },
-    "linkDescription": "이 링크로 친구를 초대하세요. 가입할 때마다 50 크레딧을 받습니다.",
+    "linkDescription": "이 링크로 친구를 초대하세요. 가입할 때마다 {referrerBonus} 크레딧을 받습니다.",
     "share": {
       "copyLink": "링크 복사"
     },
-    "shareText": "VidGo AI에 가입하면 20 크레딧을 무료로 받으세요!",
+    "shareText": "VidGo AI에 가입하면 {welcomeCredits} 크레딧을 무료로 받으세요!",
     "stats": {
       "creditsEarned": "획득 크레딧",
       "invited": "초대한 사람 수",

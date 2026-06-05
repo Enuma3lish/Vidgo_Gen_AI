@@ -544,8 +544,15 @@ function tryExample(item: any) {
     pattern_generate: '/tools/pattern-generate',
     inspiration: '/tools/product-scene'
   }
-  const route = routeMap[item.tool_type] || '/tools/product-scene'
-  router.push(route)
+  const path = routeMap[item.tool_type] || '/tools/product-scene'
+  // Carry the example into the tool page so it lands with the prompt and
+  // source image pre-filled (the tool page reads ?example/?prompt/?image
+  // via useExamplePrefill() in onMounted).
+  const query: Record<string, string> = { example: String(item.id ?? '') }
+  if (item.prompt) query.prompt = item.prompt
+  const image = item.image_url || item.thumbnail_url
+  if (image) query.image = image
+  router.push({ path, query })
 }
 
 onMounted(() => {

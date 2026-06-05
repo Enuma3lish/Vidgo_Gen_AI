@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useBrandingStore } from '@/stores/branding'
@@ -11,6 +11,7 @@ import type { PlanInfo, SubscriptionStatus } from '@/api'
 
 const { t, te, locale } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const brandingStore = useBrandingStore()
 
@@ -331,7 +332,11 @@ async function handleCreditPurchase(
   paymentMethod: 'ecpay' | 'paypal' = 'ecpay',
 ) {
   if (!isLoggedIn.value) {
-    router.push('/auth/login')
+    // Carry the chosen pack through login so the user lands back on
+    // /pricing#credit-packs with autoBuy enabled instead of having to
+    // hunt for the same card again.
+    const redirect = `/pricing?pack=${encodeURIComponent(pkg.name)}&payment=${paymentMethod}#credit-packs`
+    router.push({ path: '/auth/login', query: { redirect } })
     return
   }
 
@@ -377,7 +382,9 @@ async function handleCreditPurchase(
 // Subscribe to a plan
 async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paypal' | 'ecpay' = 'ecpay') {
   if (!isLoggedIn.value) {
-    router.push('/auth/login')
+    const billing = isTestPlan(plan) ? 'monthly' : billingPeriod.value
+    const redirect = `/pricing?plan=${encodeURIComponent(plan.name)}&billing=${billing}&payment=${paymentMethod}`
+    router.push({ path: '/auth/login', query: { redirect } })
     return
   }
 
@@ -697,6 +704,43 @@ async function fetchPaymentMethods() {
   }
 }
 
+// After login, /auth/login bounces back to /pricing?plan=...&billing=...&payment=...
+// or /pricing?pack=...&payment=... — replay the originally-chosen checkout so
+// the user doesn't have to find and click the same card a second time.
+const autoCheckoutTried = ref(false)
+async function maybeResumeCheckout() {
+  if (autoCheckoutTried.value) return
+  if (!isLoggedIn.value) return
+  if (!plans.value.length || !creditPackages.value.length) return
+  const planName = typeof route.query.plan === 'string' ? route.query.plan : ''
+  const packName = typeof route.query.pack === 'string' ? route.query.pack : ''
+  const payment = (route.query.payment === 'paypal' ? 'paypal' : 'ecpay') as 'paypal' | 'ecpay'
+  const billing = route.query.billing === 'yearly' ? 'yearly' : 'monthly'
+  if (planName) {
+    const plan = plans.value.find(p => p.name === planName || p.id === planName)
+    if (plan) {
+      autoCheckoutTried.value = true
+      billingPeriod.value = billing
+      router.replace({ path: route.path, query: {} })
+      handleSubscribe(plan, payment)
+      return
+    }
+  }
+  if (packName) {
+    const pkg = creditPackages.value.find(p => p.name === packName || p.id === packName)
+    if (pkg) {
+      autoCheckoutTried.value = true
+      router.replace({ path: route.path, query: {} })
+      handleCreditPurchase(pkg, payment)
+    }
+  }
+}
+
+watch(
+  () => [isLoggedIn.value, plans.value.length, creditPackages.value.length],
+  () => maybeResumeCheckout(),
+)
+
 onMounted(async () => {
   await Promise.all([
     fetchPlans(),
@@ -704,6 +748,7 @@ onMounted(async () => {
     fetchCreditPackages(),
     fetchPaymentMethods()
   ])
+  maybeResumeCheckout()
 })
 </script>
 

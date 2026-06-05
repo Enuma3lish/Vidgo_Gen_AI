@@ -582,7 +582,13 @@
     "signingIn": "Iniciando sesión...",
     "signingUp": "Registrando...",
     "termsAgree": "Al hacer clic en \"Empieza gratis\" aceptas nuestros Términos y Política de Privacidad",
-    "login": "Iniciar sesión"
+    "login": "Iniciar sesión",
+    "errors": {
+      "emailRequired": "Por favor, introduce tu correo electrónico.",
+      "emailInvalid": "Por favor, introduce un correo electrónico válido.",
+      "passwordRequired": "Por favor, introduce tu contraseña.",
+      "passwordTooShort": "La contraseña debe tener al menos {min} caracteres."
+    }
   },
   "dashboard": {
     "welcome": "Bienvenido de vuelta",
@@ -1560,7 +1566,7 @@
   },
   "referrals": {
     "applyCode": {
-      "description": "Introduce un código para añadir 20 créditos extra a tu cuenta.",
+      "description": "Introduce un código para añadir {welcomeCredits} créditos extra a tu cuenta.",
       "error": "No se pudo aplicar el código. Inténtalo de nuevo.",
       "placeholder": "Introduce el código de referido (ej. ABC12345)",
       "submit": "Aplicar",
@@ -1571,7 +1577,7 @@
     "howItWorks": {
       "step1": "Comparte tu enlace de referido único con amigos o en redes sociales.",
       "step2": "Tu amigo se registra usando tu enlace y verifica su correo.",
-      "step3": "¡Tú recibes 50 créditos extra y tu amigo recibe 20 créditos de bienvenida!",
+      "step3": "¡Tú recibes {referrerBonus} créditos extra y tu amigo recibe {welcomeCredits} créditos de bienvenida!",
       "title": "Cómo Funciona"
     },
     "leaderboard": {
@@ -1579,11 +1585,11 @@
       "referrals": "referidos",
       "title": "Mejores Recomendadores"
     },
-    "linkDescription": "Comparte este enlace para invitar amigos. Ganas 50 créditos por cada persona que se registre.",
+    "linkDescription": "Comparte este enlace para invitar amigos. Ganas {referrerBonus} créditos por cada persona que se registre.",
     "share": {
       "copyLink": "Copiar Enlace"
     },
-    "shareText": "¡Únete a VidGo AI y obtén 20 créditos gratis al registrarte!",
+    "shareText": "¡Únete a VidGo AI y obtén {welcomeCredits} créditos gratis al registrarte!",
     "stats": {
       "creditsEarned": "Créditos Ganados",
       "invited": "Personas Invitadas",

@@ -1,20 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
-import { useUIStore } from '@/stores'
 import { useRecaptcha } from '@/composables/useRecaptcha'
 
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
-const uiStore = useUIStore()
 const { execute: executeRecaptcha } = useRecaptcha()
 
 const email = ref('')
 const password = ref('')
+const emailError = ref('')
+const passwordError = ref('')
+const emailInput = ref<HTMLInputElement | null>(null)
+const passwordInput = ref<HTMLInputElement | null>(null)
 const isLoading = ref(false)
 const showPassword = ref(false)
 // Caps Lock warning — a wrong-case password is the #1 silent login failure.
@@ -26,9 +28,30 @@ function detectCapsLock(e: KeyboardEvent) {
   }
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+function validate(): boolean {
+  emailError.value = ''
+  passwordError.value = ''
+  if (!email.value.trim()) {
+    emailError.value = t('auth.errors.emailRequired')
+  } else if (!EMAIL_RE.test(email.value.trim())) {
+    emailError.value = t('auth.errors.emailInvalid')
+  }
+  if (!password.value) {
+    passwordError.value = t('auth.errors.passwordRequired')
+  }
+  return !emailError.value && !passwordError.value
+}
+
+async function focusFirstError() {
+  await nextTick()
+  if (emailError.value) emailInput.value?.focus()
+  else if (passwordError.value) passwordInput.value?.focus()
+}
+
 async function handleSubmit() {
-  if (!email.value || !password.value) {
-    uiStore.showError(t('auth.fillAllFields'))
+  if (!validate()) {
+    await focusFirstError()
     return
   }
   isLoading.value = true
@@ -133,27 +156,37 @@ async function handleSubmit() {
           </div>
 
           <!-- Form -->
-          <form @submit.prevent="handleSubmit" class="space-y-4">
+          <form @submit.prevent="handleSubmit" class="space-y-4" novalidate>
             <div>
-              <label class="block text-sm font-medium mb-1.5" style="color: #f5f5fa;">{{ t('auth.email') }}</label>
-              <input v-model="email" type="email"
+              <label for="email" class="block text-sm font-medium mb-1.5" style="color: #f5f5fa;">{{ t('auth.email') }}</label>
+              <input id="email" name="email" v-model="email" type="email" ref="emailInput"
+                required autocomplete="email"
+                :aria-invalid="!!emailError"
+                aria-describedby="email-error"
                 class="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all"
                 style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
-                placeholder="you@example.com" autocomplete="email"
+                placeholder="you@example.com"
                 onfocus="this.style.borderColor='#1677ff';this.style.boxShadow='0 0 0 3px rgba(22,119,255,0.1)'"
                 onblur="this.style.borderColor='rgba(255,255,255,0.08)';this.style.boxShadow=''"/>
+              <p v-if="emailError" id="email-error" role="alert" class="mt-1.5 text-xs" style="color: #ff4d4f;">
+                {{ emailError }}
+              </p>
             </div>
             <div>
               <div class="flex items-center justify-between mb-1.5">
-                <label class="block text-sm font-medium" style="color: #f5f5fa;">{{ t('auth.password') }}</label>
+                <label for="password" class="block text-sm font-medium" style="color: #f5f5fa;">{{ t('auth.password') }}</label>
                 <RouterLink to="/auth/forgot-password" class="text-xs transition-colors" style="color: #1677ff;">{{ t('auth.forgotPassword') }}</RouterLink>
               </div>
               <div class="relative">
-                <input v-model="password" :type="showPassword ? 'text' : 'password'"
+                <input id="password" name="password" v-model="password" ref="passwordInput"
+                  :type="showPassword ? 'text' : 'password'"
+                  required autocomplete="current-password"
+                  :aria-invalid="!!passwordError"
+                  aria-describedby="password-error caps-lock-hint"
                   @keyup="detectCapsLock" @keydown="detectCapsLock"
                   class="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all pr-10"
                   style="background: #141420; border: 1px solid rgba(255,255,255,0.08); color: #f5f5fa;"
-                  placeholder="••••••••" autocomplete="current-password"
+                  placeholder="••••••••"
                   onfocus="this.style.borderColor='#1677ff';this.style.boxShadow='0 0 0 3px rgba(22,119,255,0.1)'"
                   onblur="this.style.borderColor='rgba(255,255,255,0.08)';this.style.boxShadow=''"/>
                 <button type="button" @click="showPassword = !showPassword"
@@ -164,7 +197,10 @@ async function handleSubmit() {
                   <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
                 </button>
               </div>
-              <p v-if="capsLockOn" class="mt-1.5 text-xs flex items-center gap-1" style="color: #faad14;">
+              <p v-if="passwordError" id="password-error" role="alert" class="mt-1.5 text-xs" style="color: #ff4d4f;">
+                {{ passwordError }}
+              </p>
+              <p v-if="capsLockOn" id="caps-lock-hint" class="mt-1.5 text-xs flex items-center gap-1" style="color: #faad14;">
                 <span aria-hidden="true">⚠</span> {{ t('auth.capsLockOn') }}
               </p>
             </div>

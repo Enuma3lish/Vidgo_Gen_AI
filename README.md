@@ -535,8 +535,9 @@ Provider checks are cached briefly. After repeated provider failures, the router
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `REGISTRATION_BONUS_CREDITS` | `40` | Credits granted on any new account signup |
 | `REFERRAL_BONUS_CREDITS` | `50` | Credits for referrer per successful signup |
-| `REFERRAL_WELCOME_CREDITS` | `20` | Welcome credits for new user via referral |
+| `REFERRAL_WELCOME_CREDITS` | `40` | Welcome credits for new user via referral |
 | `MAX_UPLOAD_SIZE_MB` | `20` | Max subscriber upload size in MB |
 | `UPLOAD_ALLOWED_TYPES` | `image/jpeg,...` | Allowed upload MIME types |
 

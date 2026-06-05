@@ -10,7 +10,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, usePromptLibrary } from '@/composables'
+import { useDemoMode, usePromptLibrary, useExamplePrefill } from '@/composables'
 import { generationApi } from '@/api/generation'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
@@ -67,6 +67,12 @@ watch(prompt, (val) => {
   if (selectedPromptId.value && val.trim() !== patternPromptTextFor(selectedPromptId.value).trim()) {
     selectedPromptId.value = ''
   }
+})
+
+// Gallery deeplink → fill the prompt textarea. Pattern generate is T2I so
+// no image is consumed; example image is ignored.
+useExamplePrefill({
+  onPrompt: (p) => { prompt.value = p },
 })
 
 function sizeForRatio(ratio: string): { width: number; height: number } {

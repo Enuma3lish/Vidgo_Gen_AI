@@ -57,6 +57,13 @@ const styles = ref<Record<SpaceKind, StyleCard[]>>({
 })
 const isLoading = ref<Record<SpaceKind, boolean>>({ interior: false, commercial: false, exterior: false })
 
+// Track preview URLs that 404'd at runtime so we can fall back to the
+// branded gradient placeholder instead of leaving a broken-image icon.
+const failedPreviews = ref<Set<string>>(new Set())
+function markPreviewFailed(card: StyleCard) {
+  failedPreviews.value = new Set(failedPreviews.value).add(card.id)
+}
+
 async function loadStyles(kind: SpaceKind) {
   if (styles.value[kind].length > 0 || isLoading.value[kind]) return
   isLoading.value[kind] = true
@@ -87,13 +94,12 @@ function openStyle(card: StyleCard) {
   router.push({ path: PAGE_BY_KIND[activeTab.value], query: { style: card.id } })
 }
 
-// Fallback preview when the catalog entry has no preview_url (lots of the
-// new 2026-05-24 entries don't yet — we fall back to a neutral gradient with
-// the style name so the grid still looks intentional).
+// Fallback preview when the catalog entry has no preview_url, or when the
+// referenced asset 404'd at runtime. Returning null swaps the <img> for the
+// neutral gradient placeholder so the grid never shows a broken-image icon.
 function previewUrl(card: StyleCard): string | null {
   if (!card.preview_url) return null
-  // preview_url in the catalog is typically /static/interior/<id>.jpg —
-  // route it through the API host if it's a relative path.
+  if (failedPreviews.value.has(card.id)) return null
   if (card.preview_url.startsWith('http')) return card.preview_url
   return card.preview_url
 }
@@ -163,7 +169,7 @@ onMounted(() => loadStyles('interior'))
               :alt="isZh ? card.name_zh : card.name"
               class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
               loading="lazy"
-              @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }"
+              @error="markPreviewFailed(card)"
             />
             <div
               v-else

@@ -29,7 +29,7 @@
       <!-- Referral link card -->
       <div class="bg-gradient-to-br from-indigo-900/60 to-purple-900/60 rounded-2xl p-6 border border-indigo-700/40">
         <h2 class="text-xl font-semibold text-dark-900 mb-1">{{ $t('referrals.yourLink') }}</h2>
-        <p class="text-slate-400 text-sm mb-4">{{ $t('referrals.linkDescription') }}</p>
+        <p class="text-slate-400 text-sm mb-4">{{ $t('referrals.linkDescription', creditRules) }}</p>
 
         <!-- Referral URL display -->
         <div class="flex gap-2">
@@ -77,7 +77,7 @@
       <!-- Apply referral code (only if user hasn't been referred yet) -->
       <div v-if="!stats?.referred_by" class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
         <h2 class="text-xl font-semibold text-dark-900 mb-1">{{ $t('referrals.applyCode.title') }}</h2>
-        <p class="text-slate-400 text-sm mb-4">{{ $t('referrals.applyCode.description') }}</p>
+        <p class="text-slate-400 text-sm mb-4">{{ $t('referrals.applyCode.description', creditRules) }}</p>
         <div class="flex gap-2">
           <input
             v-model="applyCodeInput"
@@ -128,7 +128,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { referralsApi } from '@/api/referrals'
+import { referralsApi, DEFAULT_CREDIT_RULES } from '@/api/referrals'
 import type { ReferralStatsResponse, LeaderboardEntry } from '@/api/referrals'
 
 const { t } = useI18n()
@@ -141,15 +141,23 @@ const applyLoading = ref(false)
 const applyMessage = ref('')
 const applySuccess = ref(false)
 
+// Credit-rule interpolation values for i18n strings. Backend stats override the
+// hard-coded defaults so a config change ripples through the UI on next load.
+const creditRules = computed(() => ({
+  welcomeCredits: stats.value?.welcome_credits ?? DEFAULT_CREDIT_RULES.welcome_credits,
+  referrerBonus: stats.value?.referrer_bonus ?? DEFAULT_CREDIT_RULES.referrer_bonus,
+  registrationBonus: stats.value?.registration_bonus ?? DEFAULT_CREDIT_RULES.registration_bonus,
+}))
+
 const howItWorksSteps = computed(() => [
   t('referrals.howItWorks.step1'),
   t('referrals.howItWorks.step2'),
-  t('referrals.howItWorks.step3'),
+  t('referrals.howItWorks.step3', creditRules.value),
 ])
 
 const shareChannels = computed(() => {
   const url = stats.value?.referral_url ?? ''
-  const text = t('referrals.shareText')
+  const text = t('referrals.shareText', creditRules.value)
   return [
     {
       id: 'copy',

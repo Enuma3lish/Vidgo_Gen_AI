@@ -39,7 +39,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
 import { demoApi, toolsApi } from '@/api'
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -197,6 +197,24 @@ function pickFromPortfolio(card: StyleCard) {
 onMounted(async () => {
   await loadStyles('interior')
   await applyDeeplink()
+})
+
+// Gallery "Try this example" deeplink — prefill prompt + source image.
+// Switches to Magic mode when only a prompt is provided so the prompt is
+// actually consumed by the generate path.
+useExamplePrefill({
+  onPrompt: (p) => {
+    customPrompt.value = p
+    if (!selectedStyle.value) mode.value = 'magic'
+  },
+  onImage: (url) => { uploadedImage.value = url },
+  onError: () => uiStore.showError(L(
+    '範例素材已過期,請改用其他範例或上傳自有圖片。',
+    'This example is no longer available. Pick another or upload your own image.',
+    'この例は利用できなくなりました。別の例を選ぶか、画像をアップロードしてください。',
+    '이 예제는 더 이상 사용할 수 없습니다. 다른 예제를 선택하거나 이미지를 업로드하세요.',
+    'Este ejemplo ya no está disponible. Elige otro o sube tu propia imagen.',
+  )),
 })
 
 function gotoPricing() { router.push('/pricing') }

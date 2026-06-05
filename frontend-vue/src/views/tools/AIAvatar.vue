@@ -10,7 +10,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
 import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import apiClient from '@/api/client'
@@ -61,6 +61,20 @@ const SAMPLE_HEADSHOTS = [
   { id: 'male-3',   url: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/avatars/male-3.png',   label: { zh: '男性 C', en: 'Male C' } },
 ]
 function pickSampleHeadshot(url: string) { headshot.value = url }
+
+// Gallery deeplink — the avatar tool consumes a headshot image and a script,
+// so map ?image → headshot and ?prompt → script when present.
+useExamplePrefill({
+  onImage: (url) => { headshot.value = url },
+  onPrompt: (p) => { script.value = p },
+  onError: () => uiStore.showError(L(
+    '範例素材已過期,請改用其他範例或上傳自有圖片。',
+    'This example is no longer available. Pick another or upload your own image.',
+    'この例は利用できなくなりました。別の例を選ぶか、画像をアップロードしてください。',
+    '이 예제는 더 이상 사용할 수 없습니다. 다른 예제를 선택하거나 이미지를 업로드하세요.',
+    'Este ejemplo ya no está disponible. Elige otro o sube tu propia imagen.',
+  )),
+})
 
 // Curated script library (`ai_avatar` topic in prompt_library.json).
 // Same flagship-tool pattern KlingVideo / ProductSceneClassic use.

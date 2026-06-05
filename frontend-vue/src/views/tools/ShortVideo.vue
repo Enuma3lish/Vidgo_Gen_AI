@@ -27,7 +27,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
 import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
@@ -153,6 +153,25 @@ watch(taskType, (next, prev) => {
 })
 
 onMounted(() => applyRouteToTaskType())
+
+// Gallery "Try this example" deeplink — prefill prompt + source image. A
+// carried image forces image_to_video so the picture is actually used; the
+// prompt fills the textarea (marked custom, which is correct for an edited run).
+useExamplePrefill({
+  onPrompt: (p) => { prompt.value = p },
+  onImage: (url) => {
+    imageInput.value = url
+    taskType.value = 'image_to_video'
+    modelId.value = DEFAULT_MODEL.image_to_video
+  },
+  onError: () => uiStore.showError(L(
+    '範例素材已過期,請改用其他範例或上傳自有圖片。',
+    'This example is no longer available. Pick another or upload your own image.',
+    'この例は利用できなくなりました。別の例を選ぶか、画像をアップロードしてください。',
+    '이 예제는 더 이상 사용할 수 없습니다. 다른 예제를 선택하거나 이미지를 업로드하세요.',
+    'Este ejemplo ya no está disponible. Elige otro o sube tu propia imagen.',
+  )),
+})
 
 // ─── Validation + cost ───────────────────────────────────────────────
 const disabled = computed(() => {

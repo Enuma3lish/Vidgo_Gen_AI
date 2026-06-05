@@ -922,10 +922,25 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             return None
 
     async def _interior_text_only(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Fallback: text-only interior design description."""
+        """Fallback when image generation is unavailable.
+
+        IMPORTANT: this returns ``success: False``. Every consumer of
+        TaskType.INTERIOR (room_redesign tool, interior.py, generation.py,
+        rescue/example/admin paths) wants a REDESIGNED IMAGE — none of them
+        render the text description. Previously this returned
+        ``success: True`` with only a ``description`` and no ``image_url``,
+        which masked a failed render as a success: the provider_router (which
+        only treats ``success is False`` as a soft-failure) recorded a false
+        success, skipped any remaining fallback, and the API returned
+        ``success=True`` with a BLANK image — and in the credited room_redesign
+        path the user was charged for nothing. Returning ``success: False``
+        lets the router register the real failure and the callers refund /
+        surface an error. The description is kept as supplementary context.
+        """
         desc = await self._interior_text_description(params)
         return {
-            "success": True,
+            "success": False,
+            "error": "Interior image generation failed (text-only fallback).",
             "output": {
                 "description": desc or "Interior design description unavailable.",
                 "suggestions": [],

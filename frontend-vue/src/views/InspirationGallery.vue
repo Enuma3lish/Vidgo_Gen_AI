@@ -533,8 +533,12 @@ function resetCardHoverStyle(event: MouseEvent) {
 }
 
 function tryExample(item: any) {
+  // NOTE: product_scene must land on /tools/product-scene-classic (the actual
+  // generator that wires useExamplePrefill), NOT /tools/product-scene which is
+  // the tool-hub launcher and silently drops ?example/?prompt/?image. Same for
+  // the generic `inspiration` bucket which is product-scene-shaped.
   const routeMap: Record<string, string> = {
-    product_scene: '/tools/product-scene',
+    product_scene: '/tools/product-scene-classic',
     background_removal: '/tools/background-removal',
     try_on: '/tools/try-on',
     room_redesign: '/tools/room-redesign',
@@ -542,9 +546,9 @@ function tryExample(item: any) {
     ai_avatar: '/tools/avatar',
     effect: '/tools/effects',
     pattern_generate: '/tools/pattern-generate',
-    inspiration: '/tools/product-scene'
+    inspiration: '/tools/product-scene-classic'
   }
-  const path = routeMap[item.tool_type] || '/tools/product-scene'
+  const path = routeMap[item.tool_type] || '/tools/product-scene-classic'
   // Carry the example into the tool page so it lands with the prompt and
   // source image pre-filled (the tool page reads ?example/?prompt/?image
   // via useExamplePrefill() in onMounted).

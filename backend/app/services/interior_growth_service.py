@@ -185,22 +185,63 @@ class InteriorGrowthService:
         }
 
         # ── Step 2: render the photorealistic 3D interior (END frame) ───────
+        # Primary path: interior_design_service calls Gemini 2.5 Flash Image
+        # directly (it has a tuned isometric floor-plan-aware prompt that
+        # Kontext I2I doesn't replicate well). Fallback path (added 2026-06-06):
+        # when the Gemini-direct call fails, route through provider_router
+        # TaskType.INTERIOR so the user still gets a render via PiAPI Kontext
+        # (primary) → Vertex Gemini fallback. Without this fallback a transient
+        # Gemini outage or quota miss dead-ended the entire floor-plan growth
+        # pipeline at stage 2 (refund + "Floor-plan render failed").
         render = await interior.render_from_floorplan(
             floorplan_image_url=public_floorplan,
             style_id=style_id,
             room_type=room_type,
             extra_prompt=render_prompt,
         )
-        if not render.get("success") or not render.get("image_url"):
+        render_image_url = render.get("image_url") if render.get("success") else None
+
+        if not render_image_url:
+            logger.warning(
+                "[InteriorGrowth] Gemini render_from_floorplan failed (%s); "
+                "falling back to provider_router INTERIOR chain",
+                render.get("error") if isinstance(render, dict) else "no result",
+            )
+            try:
+                fb = await router.route(
+                    TaskType.INTERIOR,
+                    {
+                        "image_url": public_floorplan,
+                        "prompt": render_prompt,
+                        "style": style_id or "modern_minimalist",
+                        "room_type": room_type or "living_room",
+                        # space_kind defaults to interior — floor-plan growth
+                        # is always an interior render.
+                        "preserve_structure": True,
+                    },
+                )
+                fb_out = fb.get("output") or {}
+                render_image_url = (
+                    fb_out.get("image_url")
+                    or fb.get("image_url")
+                    or fb.get("output_url")
+                )
+                if render_image_url:
+                    steps["render"] = "fallback:provider_router"
+            except Exception as fb_exc:  # noqa: BLE001
+                logger.error("[InteriorGrowth] router INTERIOR fallback raised: %s", fb_exc)
+
+        if not render_image_url:
             return {
                 "success": False,
                 "stage": "render",
-                "error": render.get("error", "Floor-plan render failed"),
+                "error": (render.get("error") if isinstance(render, dict) else None)
+                         or "Floor-plan render failed",
                 "prompts": prompts,
                 "steps": steps,
             }
-        render_public = await self._ensure_public_image(render["image_url"])
-        steps["render"] = "ok"
+        render_public = await self._ensure_public_image(render_image_url)
+        steps.setdefault("render", "ok")
 
         # ── Step 3: Kling 3.0/Omni first→last frame growth video ────────────
         # router.route() RAISES (it doesn't return success=False) when every

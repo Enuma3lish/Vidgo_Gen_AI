@@ -305,6 +305,11 @@ async def redesign_room(
                 "prompt": routed_prompt,
                 "style": request.style_id or "modern",
                 "room_type": request.room_type or "living_room",
+                # space_kind drives provider-side framing (exterior facades
+                # need different anti-drift constraints than interiors).
+                # Forgotten here pre-2026-06-06 — exterior requests silently
+                # rendered with interior framing.
+                "space_kind": request.space_kind,
             },
             user_tier=user_tier,
         )

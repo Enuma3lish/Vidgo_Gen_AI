@@ -2679,42 +2679,94 @@ async def ai_try_on(
                 await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
                 return ToolResponse(success=False, message=f"Unknown model_id: {request.model_id}")
 
-        # Route via PIAPI Client directly for specialized Try-On
-        from scripts.services.piapi_client import PiAPIClient
-        piapi = PiAPIClient(api_key=os.getenv("PIAPI_KEY", ""))
+        # 2026-06-06 — Route through the singleton PiAPIProvider (was
+        # scripts.services.piapi_client.PiAPIClient, a fresh httpx client per
+        # request). The provider version wraps the same Kling Try-On call in
+        # _retry_transient + metrics + circuit-breaker + email alerting that
+        # every other tool gets via provider_router, so a one-off PiAPI queue
+        # stall no longer surfaces as a hard user error.
+        provider_router = get_provider_router()
+        piapi = provider_router.piapi
 
-        # Map category → which Kling input slot to use.
-        # PiAPIClient.virtual_try_on() accepts dress_input (full body) or
-        # upper_input / lower_input. The category field on the request lets
-        # the caller pick the slot; "dress"/"full_body" send a single garment
-        # via dress_input, while "upper_body"/"lower_body" send via the
-        # corresponding split slot.
-        tryon_kwargs: Dict[str, Any] = {"model_image_url": model_url}
-        if request.category == "upper_body":
-            tryon_kwargs["garment_image_url"] = ""
-            tryon_kwargs["upper_garment_url"] = garment_url
-        elif request.category == "lower_body":
-            tryon_kwargs["garment_image_url"] = ""
-            tryon_kwargs["lower_garment_url"] = garment_url
-        else:
-            tryon_kwargs["garment_image_url"] = garment_url
+        # provider.virtual_try_on takes `category` directly and maps to the
+        # right Kling input slot internally (dress_input / upper_input /
+        # lower_input), so we no longer build kwargs slot-by-slot here.
+        try:
+            result = await piapi.virtual_try_on(
+                model_image_url=model_url,
+                garment_image_url=garment_url,
+                category=request.category or "dress",
+            )
+        except Exception as primary_exc:
+            logger.warning(
+                "Try-On PiAPI Kling raised; attempting Kontext I2I fallback: %s",
+                primary_exc,
+            )
+            result = {"success": False, "error": str(primary_exc)}
 
-        result = await piapi.virtual_try_on(**tryon_kwargs)
+        # ── Fallback: Kontext I2I outfit edit ────────────────────────────────
+        # Pollo has no virtual try-on endpoint, so the chain is piapi → Kontext
+        # (PiAPI Flux Kontext with vertex fallback). We caption the garment via
+        # Gemini Vision and instruct Kontext to repaint just the outfit on the
+        # model photo. Quality is below dedicated Kling Try-On (no exact pattern
+        # match), but the user still gets a usable result instead of an error.
+        # Same pattern the prompt-mode branch above uses.
+        result_url = None
+        used_fallback = False
+        if result.get("success"):
+            result_url = (
+                result.get("image_url")
+                or result.get("output", {}).get("image_url")
+            )
+            if not result_url:
+                images = result.get("output", {}).get("images", [])
+                if images:
+                    result_url = images[0].get("url") if isinstance(images[0], dict) else images[0]
 
-        if not result.get("success"):
-             # Fallback to T2I? No, Try-On is specific.
-             raise Exception(result.get("error", "Try-on failed"))
-
-        # Extract result URL
-        result_url = result.get("image_url") or result.get("output", {}).get("image_url")
         if not result_url:
-             # Check list output
-              images = result.get("output", {}).get("images", [])
-              if images:
-                   result_url = images[0].get("url") if isinstance(images[0], dict) else images[0]
+            try:
+                from app.services.gemini_service import get_gemini_service
+                caption_resp = await get_gemini_service().describe_image(
+                    image_url=garment_url, language="en"
+                )
+                garment_desc = (caption_resp or {}).get("description") or ""
+                garment_desc = garment_desc.strip()
+                if not garment_desc:
+                    garment_desc = "the garment shown in the reference photo"
+
+                fallback_prompt = (
+                    "Edit this image: keep the person's face, body, pose, and "
+                    "background exactly the same. Change the outfit to: "
+                    f"{garment_desc}. Realistic fabric texture, natural fit, "
+                    "consistent studio lighting."
+                )
+                fb = await provider_router.route(TaskType.I2I, {
+                    "image_url": model_url,
+                    "prompt": fallback_prompt,
+                    "model": "flux_kontext",
+                    "width": 1024,
+                    "height": 1024,
+                })
+                if fb.get("success"):
+                    fb_out = fb.get("output") or {}
+                    result_url = fb_out.get("image_url")
+                    if not result_url:
+                        imgs = fb_out.get("image_urls") or fb_out.get("images") or []
+                        if isinstance(imgs, list) and imgs:
+                            first = imgs[0]
+                            result_url = first if isinstance(first, str) else (
+                                first.get("url") or first.get("image_url")
+                            )
+                    if result_url:
+                        used_fallback = True
+                        logger.info("Try-On served via Kontext I2I fallback")
+            except Exception as fb_exc:
+                logger.warning("Try-On Kontext fallback also failed: %s", fb_exc)
 
         if not result_url:
-             raise Exception("No result URL returned from Try-On service")
+            raise Exception(
+                result.get("error") or "No result URL returned from Try-On service"
+            )
 
         # Persist PiAPI CDN result to GCS so it survives 14-day expiry.
         result_url = await _persist_provider_url(result_url, "image", current_user)
@@ -2729,9 +2781,10 @@ async def ai_try_on(
                 "model_image_url": str(request.model_image_url) if request.model_image_url else None,
                 "angle": request.angle,
                 "category": request.category,
+                "used_kontext_fallback": used_fallback,
             },
             result_image_url=result_url,
-            credits_used=15,
+            credits_used=CREDIT_COST,
         )
         user_gen.set_expiry()
         db.add(user_gen)
@@ -2750,8 +2803,12 @@ async def ai_try_on(
         return ToolResponse(
             success=True,
             result_url=result_url,
-            credits_used=15,
-            message="Virtual try-on successful"
+            credits_used=CREDIT_COST,
+            message=(
+                "Virtual try-on served via Kontext fallback (Kling Try-On was unavailable)."
+                if used_fallback
+                else "Virtual try-on successful"
+            ),
         )
 
     except Exception as e:

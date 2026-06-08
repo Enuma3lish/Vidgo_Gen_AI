@@ -130,6 +130,7 @@ class PlanInfo(BaseModel):
     currency: str = "TWD"
     is_test_only: bool = False
     monthly_credits: int
+    monthly_credits_twd: Optional[int] = None
     features: dict
 
 
@@ -142,9 +143,9 @@ class PlanInfo(BaseModel):
 # MUST stay in lockstep with scripts.seed_new_pricing_tiers.NEW_PLAN_DATA —
 # otherwise the live API silently reverts the migration's UPDATE values.
 DEFAULT_VIDGO_PLANS = [
-    {"name": "basic", "display_name": "標準版 Standard", "slug": "basic", "plan_type": "basic", "price_monthly": 399.0, "price_yearly": 3990.0, "price_twd": 399, "price_usd": 19.99, "monthly_credits": 450, "weekly_credits": 0, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False, "social_media_batch_posting": False, "enterprise_features": False, "max_concurrent_generations": 1, "allowed_models": ["flux", "seedance", "z-image"], "pollo_limit": 0, "goenhance_limit": 0, "description": "標準入門方案 — 1080p HD、無浮水印、450 點/月"},
-    {"name": "pro", "display_name": "專業版 Pro", "slug": "pro", "plan_type": "pro", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "price_usd": 49.99, "monthly_credits": 1200, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 3, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan"], "pollo_limit": 50, "goenhance_limit": None, "description": "主力方案 — 4K、無浮水印、進階模型、1,200 點/月"},
-    {"name": "premium", "display_name": "進階版 Advanced", "slug": "premium", "plan_type": "premium", "price_monthly": 1699.0, "price_yearly": 16990.0, "price_twd": 1699, "price_usd": 89.99, "monthly_credits": 2200, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 5, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo"], "pollo_limit": 100, "goenhance_limit": None, "description": "重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1、2,200 點/月"},
+    {"name": "basic", "display_name": "標準版 Standard", "slug": "basic", "plan_type": "basic", "price_monthly": 399.0, "price_yearly": 3990.0, "price_twd": 399, "price_usd": 19.99, "monthly_credits": 400, "monthly_credits_twd": 350, "weekly_credits": 0, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False, "social_media_batch_posting": False, "enterprise_features": False, "max_concurrent_generations": 1, "allowed_models": ["flux", "seedance", "z-image"], "pollo_limit": 0, "goenhance_limit": 0, "description": "標準入門方案 — 1080p HD、無浮水印、400 點/月（NT$ 方案 350 點）"},
+    {"name": "pro", "display_name": "專業版 Pro", "slug": "pro", "plan_type": "pro", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "price_usd": 49.99, "monthly_credits": 1000, "monthly_credits_twd": 900, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 3, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan"], "pollo_limit": 50, "goenhance_limit": None, "description": "主力方案 — 4K、無浮水印、進階模型、1,000 點/月（NT$ 方案 900 點）"},
+    {"name": "premium", "display_name": "進階版 Advanced", "slug": "premium", "plan_type": "premium", "price_monthly": 1799.0, "price_yearly": 17990.0, "price_twd": 1799, "price_usd": 89.99, "monthly_credits": 1800, "monthly_credits_twd": 1600, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 5, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo"], "pollo_limit": 100, "goenhance_limit": None, "description": "重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1、1,800 點/月（NT$ 方案 1,600 點）"},
     # Enterprise: Contact-Us tier. price_monthly=0 makes the frontend render
     # the contact CTA instead of a buy button (isContactUsPlan helper in
     # Pricing.vue). monthly_credits=0 — provisioned per contract.
@@ -284,6 +285,7 @@ async def list_available_plans(
             currency=plan.currency or "TWD",
             is_test_only=is_test_pro_plan(plan),
             monthly_credits=plan.monthly_credits or plan.weekly_credits or 0,
+            monthly_credits_twd=getattr(plan, "monthly_credits_twd", None),
             features={
                 "max_video_length": plan.max_video_length,
                 "max_resolution": plan.max_resolution,
@@ -705,6 +707,7 @@ async def get_plan_features(
                 "api_access": plan.api_access or False,
             },
             "monthly_credits": plan.monthly_credits or 0,
+            "monthly_credits_twd": getattr(plan, "monthly_credits_twd", None),
             "weekly_credits": plan.weekly_credits or 0,
             "price_monthly": float(plan.price_monthly) if plan.price_monthly else 0,
             "price_yearly": float(plan.price_yearly) if plan.price_yearly else 0,

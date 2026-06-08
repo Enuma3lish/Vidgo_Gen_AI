@@ -9,6 +9,8 @@
  * navigation time — there is no DOM-effect we need beyond setAttribute().
  */
 
+import { SUPPORTED_LOCALES } from '@/utils/locales'
+
 export interface SeoInput {
   title?: string
   description?: string
@@ -105,4 +107,31 @@ export function applySeo(input: SeoInput) {
   if (input.locale) {
     document.documentElement.setAttribute('lang', input.locale)
   }
+}
+
+/**
+ * Build the hreflang alternates for a given path.
+ *
+ * Each supported locale MUST resolve to its own distinct URL (via a `?lang=`
+ * query). Emitting the same href for every hreflang — the previous behaviour —
+ * is invalid per Google's spec and is silently ignored, so the five language
+ * variants were invisible to search engines (T-04). An `x-default` entry points
+ * at the canonical, param-less URL for unmatched locales.
+ *
+ * The matching `?lang=` is honoured at app boot by getInitialLocale(), so these
+ * URLs serve genuinely different content rather than being SEO-only decoration.
+ */
+export function buildAlternateLocales(
+  origin: string,
+  path: string,
+): Array<{ hreflang: string; href: string }> {
+  if (!origin) return []
+  const base = origin + (path || '/')
+  const sep = base.includes('?') ? '&' : '?'
+  const alternates: Array<{ hreflang: string; href: string }> = SUPPORTED_LOCALES.map((code) => ({
+    hreflang: code,
+    href: `${base}${sep}lang=${code}`,
+  }))
+  alternates.push({ hreflang: 'x-default', href: base })
+  return alternates
 }

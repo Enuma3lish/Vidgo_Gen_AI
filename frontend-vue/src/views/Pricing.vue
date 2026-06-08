@@ -8,6 +8,7 @@ import { subscriptionApi } from '@/api'
 import apiClient from '@/api/client'
 import ConfirmModal from '@/components/molecules/ConfirmModal.vue'
 import type { PlanInfo, SubscriptionStatus } from '@/api'
+import { subscribeRedirect, creditPackRedirect, loginWithRedirect } from '@/utils/checkout'
 
 const { t, te, locale } = useI18n()
 const router = useRouter()
@@ -246,7 +247,8 @@ async function fetchPlans() {
         description: '入門首選 — 1080p HD、無浮水印',
         price_monthly: 399,
         price_yearly: 3990,
-        monthly_credits: 450,
+        monthly_credits: 400,
+        monthly_credits_twd: 350,
         features: { max_video_length: 60, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: false, custom_styles: false }
       },
       {
@@ -256,7 +258,8 @@ async function fetchPlans() {
         description: '主力銷售方案 — 4K、進階模型',
         price_monthly: 999,
         price_yearly: 9990,
-        monthly_credits: 1200,
+        monthly_credits: 1000,
+        monthly_credits_twd: 900,
         features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: false, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
       },
       {
@@ -264,9 +267,10 @@ async function fetchPlans() {
         name: 'premium',
         display_name: '進階版 Advanced',
         description: '重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1',
-        price_monthly: 1699,
-        price_yearly: 16990,
-        monthly_credits: 2200,
+        price_monthly: 1799,
+        price_yearly: 17990,
+        monthly_credits: 1800,
+        monthly_credits_twd: 1600,
         features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
       },
       {
@@ -335,8 +339,7 @@ async function handleCreditPurchase(
     // Carry the chosen pack through login so the user lands back on
     // /pricing#credit-packs with autoBuy enabled instead of having to
     // hunt for the same card again.
-    const redirect = `/pricing?pack=${encodeURIComponent(pkg.name)}&payment=${paymentMethod}#credit-packs`
-    router.push({ path: '/auth/login', query: { redirect } })
+    router.push(loginWithRedirect(creditPackRedirect(pkg.name, paymentMethod)))
     return
   }
 
@@ -383,8 +386,7 @@ async function handleCreditPurchase(
 async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paypal' | 'ecpay' = 'ecpay') {
   if (!isLoggedIn.value) {
     const billing = isTestPlan(plan) ? 'monthly' : billingPeriod.value
-    const redirect = `/pricing?plan=${encodeURIComponent(plan.name)}&billing=${billing}&payment=${paymentMethod}`
-    router.push({ path: '/auth/login', query: { redirect } })
+    router.push(loginWithRedirect(subscribeRedirect(plan.name, billing, paymentMethod)))
     return
   }
 
@@ -547,9 +549,11 @@ function getCreditsPerMonthLabel(plan: PlanInfo): string {
   // Enterprise (Contact Us tier) → "客製化點數". -1 still maps to unlimited
   // for any internal/test plans that use that sentinel.
   if (isContactUsPlan(plan)) return t('pricing.customCredits', '客製化點數')
-  return plan.monthly_credits === -1
-    ? t('pricing.unlimitedCredits')
-    : t('pricing.creditsPerMonth', { credits: plan.monthly_credits })
+  if (plan.monthly_credits === -1) return t('pricing.unlimitedCredits')
+  // zh visitors see the NT$ price (ECPay) → show the matching, smaller TWD
+  // allowance; USD/PayPal visitors see the full monthly_credits.
+  const credits = (isZh.value && plan.monthly_credits_twd) ? plan.monthly_credits_twd : plan.monthly_credits
+  return t('pricing.creditsPerMonth', { credits })
 }
 
 // Check if plan is popular

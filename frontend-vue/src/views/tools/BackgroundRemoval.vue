@@ -63,11 +63,9 @@ const disabled = computed(() => {
   if (bgMode.value === 'ai' && !aiBackgroundPrompt.value.trim()) return true
   return false
 })
-// Backend tools.py remove-bg handler is flat 3 credits regardless of
-// background mode (line ~1696 CREDIT_COST=3, no per-mode variation, no
-// service_pricing row to override). Frontend used to advertise 8 for AI
-// mode — incorrect. Showing the true 3 to match what's actually deducted.
-const creditCost = computed(() => 3)
+// VidGo 3.0 扣點表 — background removal = 2 credits (~$0.001 upstream),
+// flat regardless of mode. Matches tools.py remove-bg handler.
+const creditCost = computed(() => 2)
 
 async function ensureImageUrl(): Promise<string | null> {
   if (!imageInput.value) return null

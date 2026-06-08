@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
-import { applySeo } from '@/composables/useSeo'
+import { applySeo, buildAlternateLocales } from '@/composables/useSeo'
 
 // 2026-05-18 — subscription result pages are eagerly imported. They
 // are the landing target when PayPal redirects back to vidgo.co after
@@ -496,9 +496,9 @@ router.afterEach((to) => {
   const name = (to.name as string) || ''
   const seo = ROUTE_SEO[name]
   const lang = typeof document !== 'undefined' ? document.documentElement.getAttribute('lang') || 'en' : 'en'
-  const alternateLocales = origin
-    ? ['en', 'zh-TW', 'ja', 'ko', 'es'].map((code) => ({ hreflang: code, href: origin + path }))
-    : []
+  // Each locale gets its own ?lang= URL — pointing every hreflang at the same
+  // href (the old behaviour) is invalid and ignored by search engines (T-04).
+  const alternateLocales = buildAlternateLocales(origin, path)
   applySeo({
     title: seo?.title,
     description: seo?.description,

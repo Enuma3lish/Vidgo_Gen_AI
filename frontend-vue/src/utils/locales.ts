@@ -28,6 +28,24 @@ export function getStoredLocale(): SupportedLocale {
   return normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY))
 }
 
+/**
+ * Locale to boot the app with. A `?lang=` query param wins (and is persisted)
+ * so the hreflang alternates emitted for SEO — `…?lang=ja`, `…?lang=ko`, etc. —
+ * resolve to genuinely different content for crawlers and shared links. Falls
+ * back to the user's stored choice, then DEFAULT_LOCALE. Unknown `lang` values
+ * are ignored rather than forced to the default, so a stray param can't wipe a
+ * returning user's saved language.
+ */
+export function getInitialLocale(): SupportedLocale {
+  if (typeof window !== 'undefined') {
+    const param = (new URLSearchParams(window.location.search).get('lang') || '').trim().toLowerCase()
+    if (param && SUPPORTED_LOCALES.some((code) => param.startsWith(code.split('-')[0]))) {
+      return persistLocale(param)
+    }
+  }
+  return getStoredLocale()
+}
+
 export function persistLocale(locale: string): SupportedLocale {
   const normalizedLocale = normalizeLocale(locale)
   if (typeof localStorage !== 'undefined') {

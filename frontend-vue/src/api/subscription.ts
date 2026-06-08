@@ -21,6 +21,10 @@ export interface PlanInfo {
   currency?: string
   is_test_only?: boolean
   monthly_credits: number
+  // TWD/ECPay subscribers receive a smaller monthly allowance than USD payers
+  // for the same tier (the NT$ price is cheaper — anti-arbitrage). NULL → use
+  // monthly_credits. The Pricing page shows this to zh-locale (NT$) visitors.
+  monthly_credits_twd?: number | null
   features: {
     max_video_length: number | null
     max_resolution: string | null

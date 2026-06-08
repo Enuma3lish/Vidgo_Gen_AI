@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import router from './router'
 import App from './App.vue'
 import './assets/styles/main.css'
-import { getStoredLocale } from './utils/locales'
+import { getInitialLocale, localeToHtmlLang } from './utils/locales'
 
 // Import locale messages
 import en from './locales/en.json'
@@ -13,10 +13,12 @@ import ja from './locales/ja.json'
 import ko from './locales/ko.json'
 import es from './locales/es.json'
 
-// Create i18n instance
+// Create i18n instance. getInitialLocale() honours a ?lang= query param so the
+// hreflang alternates we emit for SEO resolve to genuinely different content.
+const initialLocale = getInitialLocale()
 const i18n = createI18n({
   legacy: false,
-  locale: getStoredLocale(),
+  locale: initialLocale,
   fallbackLocale: 'en',
   messages: {
     en,
@@ -26,6 +28,11 @@ const i18n = createI18n({
     es
   }
 })
+
+// Reflect the active locale on <html lang> immediately so the first served
+// markup matches the chosen language for crawlers; router.afterEach keeps it in
+// sync on subsequent navigations.
+document.documentElement.setAttribute('lang', localeToHtmlLang(initialLocale))
 
 // Create app
 const app = createApp(App)

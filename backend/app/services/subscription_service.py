@@ -34,6 +34,31 @@ from app.core.test_plans import can_access_test_pro_plan, is_test_pro_plan
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+
+def subscription_period_credits(
+    plan,
+    payment_method: Optional[str] = None,
+    billing_cycle: str = "monthly",
+) -> int:
+    """Credits to grant for one subscription period (currency-aware, prorated).
+
+    TWD payers (ECPay) get the smaller ``monthly_credits_twd`` allowance so the
+    cheaper NT$ price (NT$399 ≈ US$12 vs the $19.99 USD plan) can't be
+    arbitraged against the USD plan; USD / PayPal / direct payers get
+    ``monthly_credits``. Yearly billing grants 11/12 of the monthly allowance
+    (2026-06 margin pass — combined with 11 monthly top-ups also at 11/12 this
+    delivers exactly 11 months of credits across the year).
+    """
+    base = plan.monthly_credits or plan.weekly_credits or getattr(plan, "credits_per_month", 0) or 0
+    if (payment_method or "").lower() == "ecpay":
+        twd = getattr(plan, "monthly_credits_twd", None)
+        if twd:
+            base = int(twd)
+    base = int(base)
+    if (billing_cycle or "monthly") == "yearly":
+        return int(round(base * 11 / 12))
+    return base
+
 # Refund eligibility period (7 days)
 REFUND_ELIGIBILITY_DAYS = 7
 
@@ -175,7 +200,8 @@ class SubscriptionService:
             # Direct activation without payment — safe to cancel previous sub
             # immediately because there's no "back from payment" scenario.
             return await self._activate_subscription_directly(
-                db, user, plan, billing_cycle, is_upgrade=(change_type == "upgrade")
+                db, user, plan, billing_cycle, is_upgrade=(change_type == "upgrade"),
+                payment_method=payment_method,
             )
         elif payment_method == 'ecpay':
             # Create ECPay checkout (Taiwan credit card). Existing subscription
@@ -313,7 +339,8 @@ class SubscriptionService:
         user: User,
         plan: Plan,
         billing_cycle: str,
-        is_upgrade: bool = False
+        is_upgrade: bool = False,
+        payment_method: str = "direct",
     ) -> Dict[str, Any]:
         """
         Activate subscription without payment (mock/dev mode).
@@ -387,11 +414,7 @@ class SubscriptionService:
         # 11 months of credits across the year. price_yearly is 10 × monthly
         # (2 free months); credits at 11/12 keeps the per-credit cost above
         # heavy_pack so yearly stops undercutting every other SKU.
-        full_credits = plan.monthly_credits or plan.weekly_credits or plan.credits_per_month or 0
-        if billing_cycle == "yearly":
-            credits_to_add = int(round(full_credits * 11 / 12))
-        else:
-            credits_to_add = full_credits
+        credits_to_add = subscription_period_credits(plan, payment_method, billing_cycle)
         old_sub_credits = user.subscription_credits or 0
 
         if credits_to_add > 0:
@@ -1520,11 +1543,9 @@ class SubscriptionService:
                     # prorated grant (see 2026-06 margin pass).
                     plan = await db.get(Plan, subscription.plan_id)
                     if plan:
-                        full_credits = plan.monthly_credits or plan.weekly_credits or 0
-                        if (subscription.billing_cycle or "monthly") == "yearly":
-                            credits = int(round(full_credits * 11 / 12))
-                        else:
-                            credits = full_credits
+                        credits = subscription_period_credits(
+                            plan, order.payment_method, subscription.billing_cycle or "monthly"
+                        )
                         if credits > 0:
                             user.subscription_credits = credits
                             user.credits_reset_at = utc_now()

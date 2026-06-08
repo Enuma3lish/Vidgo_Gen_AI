@@ -32,7 +32,8 @@ NEW_PLAN_DATA = [
         "price_usd": Decimal("19.99"),     # hardcoded — must NOT be FX-converted
         "price_monthly": 399.0,
         "price_yearly": 3990.0,
-        "monthly_credits": 450,
+        "monthly_credits": 400,
+        "monthly_credits_twd": 350,
         "weekly_credits": 0,
         "topup_discount_rate": Decimal("0"),
         "max_resolution": "1080p",
@@ -47,7 +48,7 @@ NEW_PLAN_DATA = [
         "allowed_models": ["flux", "seedance", "z-image"],
         "pollo_limit": 0,
         "goenhance_limit": 0,
-        "description": "標準入門方案 — 1080p HD、無浮水印、450 點/月"
+        "description": "標準入門方案 — 1080p HD、無浮水印、400 點/月（NT$ 方案 350 點）"
     },
     {
         "name": "pro",
@@ -58,7 +59,8 @@ NEW_PLAN_DATA = [
         "price_usd": Decimal("49.99"),
         "price_monthly": 999.0,
         "price_yearly": 9990.0,
-        "monthly_credits": 1200,
+        "monthly_credits": 1000,
+        "monthly_credits_twd": 900,
         "weekly_credits": 0,
         "topup_discount_rate": Decimal("0.10"),
         "max_resolution": "4k",
@@ -71,18 +73,19 @@ NEW_PLAN_DATA = [
         "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan"],
         "pollo_limit": 50,
         "goenhance_limit": None,
-        "description": "主力方案 — 4K、無浮水印、進階模型、1,200 點/月"
+        "description": "主力方案 — 4K、無浮水印、進階模型、1,000 點/月（NT$ 方案 900 點）"
     },
     {
         "name": "premium",
         "display_name": "進階版 Advanced",
         "slug": "premium",
         "plan_type": "premium",
-        "price_twd": Decimal("1699"),
+        "price_twd": Decimal("1799"),
         "price_usd": Decimal("89.99"),
-        "price_monthly": 1699.0,
-        "price_yearly": 16990.0,
-        "monthly_credits": 2200,
+        "price_monthly": 1799.0,
+        "price_yearly": 17990.0,
+        "monthly_credits": 1800,
+        "monthly_credits_twd": 1600,
         "weekly_credits": 0,
         "topup_discount_rate": Decimal("0.15"),
         "max_resolution": "4k",
@@ -95,7 +98,7 @@ NEW_PLAN_DATA = [
         "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo"],
         "pollo_limit": 100,
         "goenhance_limit": None,
-        "description": "重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1、2,200 點/月"
+        "description": "重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1、1,800 點/月（NT$ 方案 1,600 點）"
     },
     {
         "name": "enterprise",

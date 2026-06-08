@@ -55,15 +55,13 @@ watch(locale, () => {
 // Backend hardcoded fallback per tier (matches seeded ServicePricing).
 // Admin overrides via /admin/models still affect the actual deduction
 // regardless of what's displayed here.
-// Mirror of backend KlingVideo handler's credit_cost_fallback ladder
-// (tools.py line ~4905). Default tier = video_generation_professional
-// service_pricing row = 60 credits; flagship = 500; omni = 750. Frontend
-// previously showed 100 for the default tier, which was a pre-2026-05-20
-// pricing draft — backend never deducted more than 60. Aligning now.
+// VidGo 3.0 扣點表 — mirror resolve_video_credits(tier=...) in backend tools.py:
+// default → Kling V2.5 STD (28), flagship → Kling V3.0 STD (65),
+// omni → Kling V3.0 PRO 含音 (130).
 const displayCost = computed(() => {
-  if (tier.value === 'omni') return 750
-  if (tier.value === 'flagship') return 500
-  return 60
+  if (tier.value === 'omni') return 130
+  if (tier.value === 'flagship') return 65
+  return 28
 })
 
 async function handleGenerate() {

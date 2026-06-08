@@ -166,14 +166,20 @@ async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                     user.plan_started_at = old_end
                     user.plan_expires_at = new_end
 
-                    # Allocate new monthly credits (old ones expired).
-                    # Yearly: 11/12 of monthly_credits (the per-month
-                    # top-up reset will keep adding 11/12 each month).
-                    full_credits = plan.monthly_credits or 0
-                    if is_yearly:
-                        credits = int(round(full_credits * 11 / 12))
-                    else:
-                        credits = full_credits
+                    # Allocate new credits (old ones expired). Currency-aware:
+                    # ECPay (TWD) renewals grant the smaller TWD allowance, and
+                    # yearly stays 11/12-prorated — see subscription_period_credits.
+                    from app.models.billing import Order as _Order
+                    from app.services.subscription_service import (
+                        subscription_period_credits as _period_credits,
+                    )
+                    _last_order = (await db.execute(
+                        select(_Order)
+                        .where(_Order.subscription_id == sub.id)
+                        .order_by(_Order.created_at.desc())
+                    )).scalars().first()
+                    _pay_method = _last_order.payment_method if _last_order else None
+                    credits = _period_credits(plan, _pay_method, sub.billing_cycle or "monthly")
                     if credits > 0:
                         # Expire remaining old subscription credits
                         old_credits = user.subscription_credits or 0

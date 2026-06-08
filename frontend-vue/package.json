@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "vue": "^3.4.21",
@@ -31,6 +33,9 @@
     "postcss": "^8.4.35",
     "autoprefixer": "^10.4.18",
     "@types/three": "^0.165.0",
-    "@types/node": "^20.11.28"
+    "@types/node": "^20.11.28",
+    "@vue/test-utils": "^2.4.6",
+    "vitest": "^1.6.1",
+    "jsdom": "^24.1.3"
   }
 }

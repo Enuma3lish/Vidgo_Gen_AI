@@ -774,46 +774,46 @@
       },
       "rows": {
         "standardImage": {
-          "feature": "標準 AI 圖片",
-          "cost": "1 點",
-          "output": "100 張",
+          "feature": "標準 AI 圖片 (Z-Image / Qwen)",
+          "cost": "2 點",
+          "output": "50 張",
           "useCase": "電商商品圖、社群封面、配圖"
         },
         "premiumImage": {
-          "feature": "高品質 AI 圖片 (Flux / Qwen)",
-          "cost": "5 點",
-          "output": "20 張",
-          "useCase": "品牌主視覺、廣告主圖、印刷品"
+          "feature": "高品質圖片 / Gemini · nano-banana",
+          "cost": "3–12 點",
+          "output": "8–33 張",
+          "useCase": "品牌主視覺、nano-banana 1K/4K、印刷品"
         },
         "standardVideo": {
-          "feature": "標準 AI 影片 (5-10s)",
-          "cost": "20 點",
-          "output": "5 支",
-          "useCase": "Hailuo / Hunyuan / Kling 1.6 短影片"
+          "feature": "標準 AI 影片 (Hailuo / Wan / Kling V2.5)",
+          "cost": "18–28 點",
+          "output": "3–5 支",
+          "useCase": "Hailuo Fast / Wan 480p / Kling V2.5 短影片"
         },
         "proLong": {
-          "feature": "專業長影片 (Kling 10s)",
-          "cost": "60 點",
+          "feature": "專業影片 (Kling V3.0 / Seedance)",
+          "cost": "65–160 點",
           "output": "約 1 支",
-          "useCase": "Kling 高品質 10 秒影片"
+          "useCase": "Kling V3.0 標準/PRO、Seedance 720p / 1080p"
         },
         "restore": {
           "feature": "畫質修復 / 增強",
-          "cost": "15 點",
-          "output": "約 6 次",
+          "cost": "3 點",
+          "output": "約 33 次",
           "useCase": "舊片翻新、低解析度轉 1080p / 4K"
         },
         "veo3": {
           "feature": "Veo 3.1 影片 (5s) 🆕",
-          "cost": "200 點",
+          "cost": "80 點",
           "output": "—",
           "useCase": "進階版專屬旗艦影片"
         },
         "seedanceWan": {
-          "feature": "Seedance / Wan 影片 🆕",
-          "cost": "40 點",
-          "output": "約 2 支",
-          "useCase": "中價位動態影片、抖音直式內容"
+          "feature": "Seedance 720p / 1080p 🆕",
+          "cost": "65 / 160 點",
+          "output": "1–1.5 支",
+          "useCase": "電影級動態影片、抖音直式內容"
         }
       },
       "scenarios": {

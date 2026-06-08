@@ -739,46 +739,46 @@
       },
       "rows": {
         "standardImage": {
-          "feature": "標準AI画像",
-          "cost": "1クレジット",
-          "output": "100枚",
+          "feature": "標準AI画像 (Z-Image / Qwen)",
+          "cost": "2クレジット",
+          "output": "50枚",
           "useCase": "ECサイト商品画像、SNSカバー、配置画像"
         },
         "premiumImage": {
-          "feature": "高品質AI画像 (Flux / Qwen)",
-          "cost": "5クレジット",
-          "output": "20枚",
-          "useCase": "ブランドメイン画像、広告主画像、印刷物"
+          "feature": "高品質画像 / Gemini・nano-banana",
+          "cost": "3–12クレジット",
+          "output": "8–33枚",
+          "useCase": "ブランドメイン画像、nano-banana 1K/4K、印刷物"
         },
         "standardVideo": {
-          "feature": "標準AI動画 (5-10秒)",
-          "cost": "20クレジット",
-          "output": "5本",
-          "useCase": "Hailuo / Hunyuan / Kling 1.6 短尺動画"
+          "feature": "標準AI動画 (Hailuo / Wan / Kling V2.5)",
+          "cost": "18–28クレジット",
+          "output": "3–5本",
+          "useCase": "Hailuo Fast / Wan 480p / Kling V2.5 短尺動画"
         },
         "proLong": {
-          "feature": "プロ長尺動画 (Kling 10秒)",
-          "cost": "60クレジット",
+          "feature": "プロ動画 (Kling V3.0 / Seedance)",
+          "cost": "65–160クレジット",
           "output": "約1本",
-          "useCase": "Kling 高品質10秒動画"
+          "useCase": "Kling V3.0 標準/PRO、Seedance 720p / 1080p"
         },
         "restore": {
           "feature": "画質修復 / アップスケール",
-          "cost": "15クレジット",
-          "output": "約6回",
+          "cost": "3クレジット",
+          "output": "約33回",
           "useCase": "古い映像の再生、低解像度を1080p/4K化"
         },
         "veo3": {
           "feature": "Veo 3.1 動画 (5秒) 🆕",
-          "cost": "200クレジット",
+          "cost": "80クレジット",
           "output": "—",
           "useCase": "Advancedプラン限定の旗艦動画"
         },
         "seedanceWan": {
-          "feature": "Seedance / Wan 動画 🆕",
-          "cost": "40クレジット",
-          "output": "約2本",
-          "useCase": "中価格帯の動的動画、縦型TikTok"
+          "feature": "Seedance 720p / 1080p 🆕",
+          "cost": "65 / 160クレジット",
+          "output": "1–1.5本",
+          "useCase": "シネマティックな動き、縦型TikTok"
         }
       },
       "scenarios": {

@@ -38,7 +38,12 @@ class Plan(Base):
     billing_cycle = Column(String, default="monthly")
 
     # Credit Allocation (Monthly)
-    monthly_credits = Column(Integer, default=0)  # Credits per month
+    monthly_credits = Column(Integer, default=0)  # Credits per month (USD/PayPal payers)
+    # TWD/ECPay payers get a SMALLER monthly grant than USD payers for the same
+    # tier — the NT$ price (NT$399 ≈ US$12) is cheaper than the USD price
+    # ($19.99), so equal credits would let everyone arbitrage via the TWD plan.
+    # NULL → fall back to monthly_credits. See subscription_period_credits().
+    monthly_credits_twd = Column(Integer, nullable=True)  # Credits per month (TWD/ECPay payers)
     weekly_credits = Column(Integer, default=0)  # Credits per week (legacy)
     credits_per_month = Column(Integer, default=10)  # Legacy field
 

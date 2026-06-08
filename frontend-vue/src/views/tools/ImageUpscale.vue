@@ -33,11 +33,9 @@ const resultUrl = ref<string | null>(null)
 
 const disabled = computed(() => !imageInput.value)
 // Backend tools.py upscale handler is flat 10 credits regardless of scale
-// (line ~3963 CREDIT_COST=10, no scale-based variation, no per-scale
-// service_pricing row). Frontend previously advertised 20/30 for 4x/8x —
-// pre-pricing-v2.1 draft that never landed in the backend. Showing the
-// true 10 to match what's actually deducted.
-const creditCost = computed(() => 10)
+// VidGo 3.0 扣點表 — upscale = 3 credits (~$0.005 upstream), flat regardless
+// of scale. Matches tools.py image-upscale handler (image_upscale).
+const creditCost = computed(() => 3)
 
 async function ensureImageUrl(): Promise<string | null> {
   if (!imageInput.value) return null

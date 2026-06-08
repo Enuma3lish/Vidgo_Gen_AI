@@ -57,23 +57,24 @@ interface ModelOpt {
   nameEn: string
   badge?: string
 }
+// VidGo 3.0 扣點表 — each model id maps to a fixed credit cost in tools.py
+// (resolve_video_credits). Labels, ids, and the creditCost computed below all
+// agree with the backend so the user never gets a sticker-shock deduction.
 const I2V_MODELS: ModelOpt[] = [
-  { id: 'seedance',   nameZh: 'Seedance 2.0 Fast',         nameEn: 'Seedance 2.0 Fast',         badge: 'default' },
-  { id: 'kling_omni', nameZh: 'Kling 3.0 / Omni（含音訊）', nameEn: 'Kling 3.0 / Omni (with audio)', badge: 'premium' },
-  // id MUST stay 'kling_v2' (not 'kling_v3'): the backend cost/tier resolver
-  // routes any id containing "_v3"/"omni" to Kling 3.0/Omni at 750 credits.
-  // 'kling_v2' lands on the standard 2.6 tier (60 credits) so the label,
-  // the routed model, and the charged cost all agree.
-  { id: 'kling_v2',   nameZh: 'Kling 2.6（標準）',           nameEn: 'Kling 2.6 (standard)' },
-  { id: 'veo',        nameZh: 'Veo 3.1 Fast（Google 旗艦）', nameEn: 'Veo 3.1 Fast (Google flagship)', badge: 'premium' },
-  { id: 'hailuo',     nameZh: 'Hailuo（最便宜）',           nameEn: 'Hailuo (cheapest)' },
-  { id: 'hunyuan',    nameZh: 'Hunyuan（中文擅長）',         nameEn: 'Hunyuan (Chinese-friendly)' },
-  { id: 'wan',        nameZh: 'Wan 2.6',                   nameEn: 'Wan 2.6' },
+  { id: 'hailuo',         nameZh: 'Hailuo Fast（最便宜）',      nameEn: 'Hailuo Fast (cheapest)' },
+  { id: 'wan',            nameZh: 'Wan 480p',                  nameEn: 'Wan 480p' },
+  { id: 'hunyuan',        nameZh: 'Hunyuan（中文擅長）',        nameEn: 'Hunyuan (Chinese-friendly)' },
+  { id: 'kling_v2',       nameZh: 'Kling V2.5（標準）',          nameEn: 'Kling V2.5 (standard)' },
+  { id: 'seedance',       nameZh: 'Seedance 720p',             nameEn: 'Seedance 720p', badge: 'premium' },
+  { id: 'seedance_1080p', nameZh: 'Seedance 1080p',            nameEn: 'Seedance 1080p', badge: 'premium' },
+  { id: 'kling_v3_std',   nameZh: 'Kling V3.0（標準）',          nameEn: 'Kling V3.0 (standard)', badge: 'premium' },
+  { id: 'kling_omni',     nameZh: 'Kling V3.0 PRO（含音訊）',    nameEn: 'Kling V3.0 PRO (with audio)', badge: 'premium' },
+  { id: 'veo',            nameZh: 'Veo 3.1（含音訊）',           nameEn: 'Veo 3.1 (with audio)', badge: 'premium' },
 ]
 const T2V_MODELS: ModelOpt[] = [
-  { id: 'default',    nameZh: 'Kling 2.6 (預設)',          nameEn: 'Kling 2.6 (default)' },
-  { id: 'flagship',   nameZh: 'Kling 2.1-master (旗艦)',   nameEn: 'Kling 2.1-master (flagship)', badge: 'premium' },
-  { id: 'omni',       nameZh: 'Kling 3.0 / Omni (含音訊)',  nameEn: 'Kling 3.0 / Omni (with audio)', badge: 'premium' },
+  { id: 'default',    nameZh: 'Kling V2.5（標準）',         nameEn: 'Kling V2.5 (standard)' },
+  { id: 'flagship',   nameZh: 'Kling V3.0（標準）',         nameEn: 'Kling V3.0 (standard)', badge: 'premium' },
+  { id: 'omni',       nameZh: 'Kling V3.0 PRO（含音訊）',    nameEn: 'Kling V3.0 PRO (with audio)', badge: 'premium' },
 ]
 function modelOptionsFor(tt: TaskType): ModelOpt[] {
   return tt === 'image_to_video' ? I2V_MODELS : T2V_MODELS
@@ -181,22 +182,21 @@ const disabled = computed(() => {
 const isRunning = computed(() => status.value === 'running')
 
 const creditCost = computed(() => {
+  // VidGo 3.0 扣點表 — mirror resolve_video_credits() in backend tools.py.
   if (taskType.value === 'text_to_video') {
-    if (modelId.value === 'omni') return 750
-    if (modelId.value === 'flagship') return 500
-    return 60
+    if (modelId.value === 'omni') return 130      // Kling V3.0 PRO (audio)
+    if (modelId.value === 'flagship') return 65   // Kling V3.0 STD
+    return 28                                     // Kling V2.5 STD
   }
-  // I2V — must mirror the backend cost-resolution chain in tools.py
-  // (2026-05-26 sync). The previous mapping under-displayed Kling tiers,
-  // causing the UI to show 200 credits while the backend deducted 750 for
-  // kling_omni — a sticker-shock surprise on the user's balance.
   const m = modelId.value || ''
-  if (m === 'veo') return 200
-  if (m === 'kling_omni' || m.includes('_v3') || m.includes('kling-3') || m.includes('kling3')) return 750
-  if (m.includes('kling') && (m.includes('flagship') || m.includes('master') || m.includes('2.1'))) return 500
-  if (m.includes('kling')) return 60                                 // generic Kling 2.6
-  if (m === 'seedance' || m === 'wan' || m === 'hunyuan') return 40
-  return 20  // hailuo / default fallback
+  if (m === 'veo') return 80
+  if (m === 'seedance_1080p') return 160
+  if (m === 'seedance') return 65                 // Seedance 720p
+  if (m === 'kling_omni') return 130              // Kling V3.0 PRO (audio)
+  if (m === 'kling_v3_std') return 65             // Kling V3.0 STD
+  if (m.includes('kling')) return 28              // Kling V2.5 standard
+  if (m === 'wan' || m === 'hunyuan') return 20
+  return 18                                       // hailuo / default
 })
 
 // ─── Helpers ─────────────────────────────────────────────────────────

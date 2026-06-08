@@ -1721,7 +1721,8 @@ async def remove_background(
         )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
-    CREDIT_COST = 3
+    # VidGo 3.0 扣點表: background removal = 2 credits (~$0.001 upstream).
+    CREDIT_COST = 2
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "bg_removal")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -3371,37 +3372,14 @@ async def _generate_short_video_inner(
     # ServicePricing rows override these via service_type lookup so ops can
     # fine-tune without a redeploy. The fallback constants here are the
     # safety net when a service_pricing row is missing or out of date.
-    mid_lower = (request.model_id or "").lower()
-    # 2026-05-26 — added Kling tiers + hunyuan to the cost-resolution chain.
-    # Previously a user could pick "kling_omni" from the ShortVideo I2V
-    # dropdown, the UI would show 200 credits, and the backend would
-    # silently deduct 20 because Kling wasn't matched — a hard money-loss
-    # bug (Kling Omni costs PiAPI ~$0.30/render but we charged for cheap
-    # Hailuo). The handler still routes Kling models to TaskType.KLING_VIDEO
-    # downstream (line ~3280), so the cost calc just needed to learn the
-    # same tiers KlingVideo itself uses.
-    if "veo" in mid_lower:
-        CREDIT_COST  = 200
-        service_type = "veo3_video"
-    elif "kling" in mid_lower and ("omni" in mid_lower or "_v3" in mid_lower or "kling3" in mid_lower or "kling-3" in mid_lower):
-        CREDIT_COST  = 750
-        service_type = "video_kling_omni"
-    elif "kling" in mid_lower and ("flagship" in mid_lower or "master" in mid_lower or "2.1" in mid_lower):
-        CREDIT_COST  = 500
-        service_type = "video_flagship"
-    elif "kling" in mid_lower:
-        # Standard Kling (2.6 / 1.6) — pro tier
-        CREDIT_COST  = 60
-        service_type = "video_generation_professional"
-    elif "seedance" in mid_lower or "doubao" in mid_lower or "wan" in mid_lower or "hunyuan" in mid_lower or "tencent" in mid_lower:
-        # Mid-tier I2V — Seedance / Wan / Hunyuan all priced together
-        # (hunyuan was missing before 2026-05-26, leaking ~20 credits/call).
-        CREDIT_COST  = 40
-        service_type = "seedance_wan_video"
-    else:
-        # Hailuo / minimax / unknown fallback — cheapest tier
-        CREDIT_COST  = 20
-        service_type = "short_video"
+    # VidGo 3.0 扣點表 (2026-06) — credits resolved per model (+ resolution) via
+    # the central table, never a single fixed value: Hailuo 18, Wan 20, Kling
+    # V2.5 STD 28, Seedance 720p 65 / 1080p 160, Kling V3.0 STD 65 / PRO 130,
+    # Veo 80. See tier_config.VIDEO_CREDIT_COSTS / resolve_video_credits.
+    from app.services.tier_config import resolve_video_credits
+    _vrow = resolve_video_credits(request.model_id, getattr(request, "resolution", None))
+    CREDIT_COST  = _vrow["credits"]
+    service_type = _vrow["service_type"]
 
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, service_type)
     if not ok:
@@ -4203,9 +4181,9 @@ async def upscale_image(
     if not res_ok:
         return ToolResponse(success=False, message=res_err)
 
-    # v2.2 spec: 15 credits to cover PiAPI image upscaler $0.05-$0.20 plus
-    # margin at the cheap-pack rate. ServicePricing overrides if seeded.
-    CREDIT_COST = 15
+    # VidGo 3.0 扣點表: upscale = 3 credits (~$0.005 upstream).
+    # ServicePricing overrides if seeded.
+    CREDIT_COST = 3
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "image_upscale")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -5231,10 +5209,14 @@ async def midjourney_imagine(
     # Flux/Z-Image are basic. Skipped when no model is sent (Flux default).
     await require_model_access(db, current_user, request.model)
 
-    # v2.1 spec: 高品質 AI 圖片 = 5pt. ServicePricing overrides if seeded.
-    CREDIT_COST = 5
+    # VidGo 3.0 扣點表 — price per chosen model: standard (Flux/Z-Image/Qwen/
+    # Seedream) = 2, premium edit (Flux dev / Qwen edit) = 3, Gemini/nano-banana
+    # 1K = 8, nano-banana 4K = 12. ServicePricing overrides if seeded.
+    from app.services.tier_config import resolve_image_credits
+    _irow = resolve_image_credits(request.model, getattr(request, "resolution", None))
+    CREDIT_COST = _irow["credits"]
     ok, err = await _check_and_deduct_credits(
-        db, current_user, CREDIT_COST, "image_generation_premium"
+        db, current_user, CREDIT_COST, _irow["service_type"]
     )
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -5347,23 +5329,16 @@ async def _kling_video_inner(
     if tier not in {"default", "flagship", "omni"}:
         return ToolResponse(success=False, message="tier must be 'default', 'flagship', or 'omni'")
 
-    if tier == "omni":
-        # Kling 3.0 / Omni — 2026-05-19 owner-approved premium tier
-        # (頂級品質 + audio). Priced above flagship because the multimodal
-        # output is the most expensive Kling task per PiAPI's price sheet.
-        service_type = "video_kling_omni"
-        credit_cost_fallback = 750
-        demo_cta = "Subscribe to unlock Kling 3.0 / Omni multimodal videos."
-    elif tier == "flagship":
-        service_type = "video_flagship"
-        credit_cost_fallback = 500
-        demo_cta = "Subscribe to unlock Kling 2.1-master flagship videos."
-    else:
-        # v2.1 spec: 專業長影片 (Kling 10s) = 60 pt. Omni/Flagship are
-        # premium tiers and keep their higher costs above.
-        service_type = "video_generation_professional"
-        credit_cost_fallback = 60
-        demo_cta = "Subscribe to generate Kling videos."
+    # VidGo 3.0 扣點表 — the three Kling tiers map to the doc's three Kling rows:
+    # default → V2.5 STD (28), flagship → V3.0 STD (65), omni → V3.0 PRO 含音 (130).
+    from app.services.tier_config import resolve_video_credits
+    _vrow = resolve_video_credits(None, getattr(request, "resolution", None), tier=tier)
+    service_type = _vrow["service_type"]
+    credit_cost_fallback = _vrow["credits"]
+    demo_cta = {
+        "omni": "Subscribe to unlock Kling 3.0 / Omni multimodal videos.",
+        "flagship": "Subscribe to unlock Kling V3.0 standard videos.",
+    }.get(tier, "Subscribe to generate Kling videos.")
 
     # Kling video is a custom-prompt generator → subscription + bound card
     # required (admins / test accounts bypass).
@@ -5447,6 +5422,26 @@ async def get_scene_templates():
     return SCENE_TEMPLATES
 
 
+# Per-style preview thumbnails live in the public GCS bucket under a stable,
+# id-derived path (static/interior-styles/<id>.jpg) — the same bucket/convention
+# the rest of the app uses for tryon models, hero demos, etc. We derive the URL
+# rather than hardcoding one per entry so a newly-uploaded thumbnail appears
+# automatically with no code change. Emitting the URL before the asset exists is
+# safe: the InteriorTemplates gallery probes each preview and swaps a missing one
+# for a styled placeholder (markPreviewFailed), so there is never a broken image.
+# Uploading the 63 thumbnails is the remaining ops step — see
+# docs/T-01-gcs-assets-checklist.md.
+_STYLE_PREVIEW_BASE = "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/interior-styles"
+
+
+def _with_preview_urls(styles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Fill in a convention-based preview_url for any style that lacks one."""
+    return [
+        {**style, "preview_url": style.get("preview_url") or f"{_STYLE_PREVIEW_BASE}/{style['id']}.jpg"}
+        for style in styles
+    ]
+
+
 @router.get("/templates/interior-styles")
 async def get_interior_styles(space_kind: str = "interior"):
     """Get available styles for Room Redesign.
@@ -5455,27 +5450,28 @@ async def get_interior_styles(space_kind: str = "interior"):
     `"exterior"` returns EXTERIOR_STYLES (building facades, gardens,
     storefronts); `"commercial"` returns COMMERCIAL_STYLES (restaurant,
     retail, hotel lobby, modern office, café, gym). Frontend tab
-    switches drive this via query param.
+    switches drive this via query param. Each style carries a derived
+    preview_url so the gallery can render a thumbnail.
     """
     if space_kind == "exterior":
-        return EXTERIOR_STYLES
+        return _with_preview_urls(EXTERIOR_STYLES)
     if space_kind == "commercial":
-        return COMMERCIAL_STYLES
-    return INTERIOR_STYLES
+        return _with_preview_urls(COMMERCIAL_STYLES)
+    return _with_preview_urls(INTERIOR_STYLES)
 
 
 @router.get("/templates/exterior-styles")
 async def get_exterior_styles():
     """Convenience alias — returns EXTERIOR_STYLES directly so older clients
     can hit a dedicated route without needing the `space_kind` query param."""
-    return EXTERIOR_STYLES
+    return _with_preview_urls(EXTERIOR_STYLES)
 
 
 @router.get("/templates/commercial-styles")
 async def get_commercial_styles():
     """Convenience alias — returns COMMERCIAL_STYLES directly. Added
     2026-05-18 alongside the ReRoom-inspired commercial space tab."""
-    return COMMERCIAL_STYLES
+    return _with_preview_urls(COMMERCIAL_STYLES)
 
 
 @router.get("/templates/style-templates")

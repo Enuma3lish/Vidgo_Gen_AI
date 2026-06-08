@@ -41,12 +41,14 @@ type ModelId = 'flux' | 'qwen' | 'z-image' | 'nano-banana' | 'nano-banana-pro' |
 // TODO: if/when ops adds per-model service_pricing rows, restore the cost
 // field here and dispatch by model_id in the backend cost-resolution chain.
 const modelOptions: Array<{ id: ModelId; nameZh: string; nameEn: string; tag?: string; cost: number }> = [
-  { id: 'flux',             nameZh: 'Flux Schnell（預設）',        nameEn: 'Flux Schnell (default)', cost: 5 },
-  { id: 'z-image',          nameZh: 'Z-Image Turbo（最便宜）',     nameEn: 'Z-Image Turbo (cheapest)', cost: 5 },
-  { id: 'qwen',             nameZh: 'Qwen Image（中文擅長）',       nameEn: 'Qwen Image (Chinese-friendly)', tag: 'pro', cost: 5 },
-  { id: 'nano-banana',      nameZh: 'Nano Banana 2',               nameEn: 'Nano Banana 2', tag: 'pro', cost: 5 },
-  { id: 'seedream',         nameZh: 'Seedream 5 Lite',             nameEn: 'Seedream 5 Lite', tag: 'pro', cost: 5 },
-  { id: 'nano-banana-pro',  nameZh: 'Nano Banana Pro（最高品質）', nameEn: 'Nano Banana Pro (highest quality)', tag: 'premium', cost: 5 },
+  // VidGo 3.0 扣點表 — standard models (Flux/Z-Image/Qwen/Seedream) = 2,
+  // Gemini / nano-banana 1K = 8. Mirrors resolve_image_credits() in tools.py.
+  { id: 'flux',             nameZh: 'Flux Schnell（預設）',        nameEn: 'Flux Schnell (default)', cost: 2 },
+  { id: 'z-image',          nameZh: 'Z-Image Turbo（最便宜）',     nameEn: 'Z-Image Turbo (cheapest)', cost: 2 },
+  { id: 'qwen',             nameZh: 'Qwen Image（中文擅長）',       nameEn: 'Qwen Image (Chinese-friendly)', tag: 'pro', cost: 2 },
+  { id: 'nano-banana',      nameZh: 'Nano Banana 2（Gemini 1K）',  nameEn: 'Nano Banana 2 (Gemini 1K)', tag: 'pro', cost: 8 },
+  { id: 'seedream',         nameZh: 'Seedream 5 Lite',             nameEn: 'Seedream 5 Lite', tag: 'pro', cost: 2 },
+  { id: 'nano-banana-pro',  nameZh: 'Nano Banana Pro（最高品質）', nameEn: 'Nano Banana Pro (highest quality)', tag: 'premium', cost: 8 },
 ]
 
 const modelId = ref<ModelId>('flux')

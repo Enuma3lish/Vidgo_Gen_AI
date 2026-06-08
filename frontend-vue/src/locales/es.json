@@ -739,46 +739,46 @@
       },
       "rows": {
         "standardImage": {
-          "feature": "Imagen AI estándar",
-          "cost": "1 crédito",
-          "output": "100 imágenes",
+          "feature": "Imagen AI estándar (Z-Image / Qwen)",
+          "cost": "2 créditos",
+          "output": "50 imágenes",
           "useCase": "Imágenes de producto, portadas sociales, rellenos"
         },
         "premiumImage": {
-          "feature": "Imagen AI premium (Flux / Qwen)",
-          "cost": "5 créditos",
-          "output": "20 imágenes",
-          "useCase": "Visual principal de marca, hero de anuncios, impresión"
+          "feature": "Imagen premium / Gemini · nano-banana",
+          "cost": "3–12 créditos",
+          "output": "8–33 imágenes",
+          "useCase": "Visual principal de marca, nano-banana 1K/4K, impresión"
         },
         "standardVideo": {
-          "feature": "Video AI estándar (5-10s)",
-          "cost": "20 créditos",
-          "output": "5 videos",
-          "useCase": "Hailuo / Hunyuan / Kling 1.6 clips cortos"
+          "feature": "Video AI estándar (Hailuo / Wan / Kling V2.5)",
+          "cost": "18–28 créditos",
+          "output": "3–5 videos",
+          "useCase": "Hailuo Fast / Wan 480p / Kling V2.5 clips cortos"
         },
         "proLong": {
-          "feature": "Video largo pro (Kling 10s)",
-          "cost": "60 créditos",
+          "feature": "Video pro (Kling V3.0 / Seedance)",
+          "cost": "65–160 créditos",
           "output": "aprox. 1 video",
-          "useCase": "Clips Kling de 10 segundos de alta calidad"
+          "useCase": "Kling V3.0 STD/PRO, Seedance 720p / 1080p"
         },
         "restore": {
           "feature": "Restauración / escalado",
-          "cost": "15 créditos",
-          "output": "aprox. 6 ejecuciones",
+          "cost": "3 créditos",
+          "output": "aprox. 33 ejecuciones",
           "useCase": "Renovar material antiguo, baja resolución a 1080p / 4K"
         },
         "veo3": {
           "feature": "Video Veo 3.1 (5s) 🆕",
-          "cost": "200 créditos",
+          "cost": "80 créditos",
           "output": "—",
           "useCase": "Clip insignia exclusivo del plan Advanced"
         },
         "seedanceWan": {
-          "feature": "Video Seedance / Wan 🆕",
-          "cost": "40 créditos",
-          "output": "aprox. 2 videos",
-          "useCase": "Video dinámico de gama media, vertical TikTok"
+          "feature": "Video Seedance 720p / 1080p 🆕",
+          "cost": "65 / 160 créditos",
+          "output": "1–1.5 videos",
+          "useCase": "Movimiento cinematográfico, TikTok vertical"
         }
       },
       "scenarios": {

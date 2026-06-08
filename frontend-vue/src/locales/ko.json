@@ -739,46 +739,46 @@
       },
       "rows": {
         "standardImage": {
-          "feature": "표준 AI 이미지",
-          "cost": "1크레딧",
-          "output": "100장",
+          "feature": "표준 AI 이미지 (Z-Image / Qwen)",
+          "cost": "2크레딧",
+          "output": "50장",
           "useCase": "이커머스 상품 이미지, 소셜 커버, 배치 이미지"
         },
         "premiumImage": {
-          "feature": "고품질 AI 이미지 (Flux / Qwen)",
-          "cost": "5크레딧",
-          "output": "20장",
-          "useCase": "브랜드 메인 비주얼, 광고 메인 이미지, 인쇄물"
+          "feature": "고품질 이미지 / Gemini · nano-banana",
+          "cost": "3–12크레딧",
+          "output": "8–33장",
+          "useCase": "브랜드 메인 비주얼, nano-banana 1K/4K, 인쇄물"
         },
         "standardVideo": {
-          "feature": "표준 AI 영상 (5-10초)",
-          "cost": "20크레딧",
-          "output": "5개",
-          "useCase": "Hailuo / Hunyuan / Kling 1.6 숏폼"
+          "feature": "표준 AI 영상 (Hailuo / Wan / Kling V2.5)",
+          "cost": "18–28크레딧",
+          "output": "3–5개",
+          "useCase": "Hailuo Fast / Wan 480p / Kling V2.5 숏폼"
         },
         "proLong": {
-          "feature": "전문 장편 영상 (Kling 10초)",
-          "cost": "60크레딧",
+          "feature": "전문 영상 (Kling V3.0 / Seedance)",
+          "cost": "65–160크레딧",
           "output": "약 1개",
-          "useCase": "Kling 고품질 10초 영상"
+          "useCase": "Kling V3.0 표준/PRO, Seedance 720p / 1080p"
         },
         "restore": {
           "feature": "화질 복원 / 업스케일",
-          "cost": "15크레딧",
-          "output": "약 6회",
+          "cost": "3크레딧",
+          "output": "약 33회",
           "useCase": "구영상 리마스터, 저해상도 1080p / 4K 변환"
         },
         "veo3": {
           "feature": "Veo 3.1 영상 (5초) 🆕",
-          "cost": "200크레딧",
+          "cost": "80크레딧",
           "output": "—",
           "useCase": "Advanced 플랜 전용 플래그십 영상"
         },
         "seedanceWan": {
-          "feature": "Seedance / Wan 영상 🆕",
-          "cost": "40크레딧",
-          "output": "약 2개",
-          "useCase": "중간 가격대 동적 영상, 세로형 틱톡"
+          "feature": "Seedance 720p / 1080p 🆕",
+          "cost": "65 / 160크레딧",
+          "output": "1–1.5개",
+          "useCase": "시네마틱 모션, 세로형 틱톡"
         }
       },
       "scenarios": {

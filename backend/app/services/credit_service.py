@@ -705,15 +705,23 @@ class CreditService:
                         )
                         self.db.add(transaction)
 
-                    # Add new monthly credits. Yearly subscribers get 11/12 of
-                    # the full allowance so total annual credits stay at
-                    # (11 × monthly_credits), aligned with the 10×-monthly
-                    # price_yearly (≈ 2 free months and ~10% credit discount).
-                    full_credits = plan.monthly_credits or 0
-                    if is_yearly:
-                        new_credits = int(round(full_credits * 11 / 12))
-                    else:
-                        new_credits = full_credits
+                    # Add new credits. Currency-aware: ECPay (TWD) subscribers
+                    # get the smaller TWD allowance (anti-arbitrage); yearly
+                    # stays 11/12-prorated. See subscription_period_credits.
+                    from app.models.billing import Order as _Order
+                    from app.services.subscription_service import (
+                        subscription_period_credits as _period_credits,
+                    )
+                    _ord = None
+                    if sub is not None:
+                        _ord = (await self.db.execute(
+                            select(_Order)
+                            .where(_Order.subscription_id == sub.id)
+                            .order_by(_Order.created_at.desc())
+                        )).scalars().first()
+                    new_credits = _period_credits(
+                        plan, _ord.payment_method if _ord else None, billing_cycle
+                    )
                     if new_credits > 0:
                         user.subscription_credits = new_credits
                         stats["credits_added"] += new_credits

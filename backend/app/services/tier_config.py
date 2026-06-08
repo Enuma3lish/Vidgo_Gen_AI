@@ -39,6 +39,7 @@ migration that mirrors the change into service_pricing. Keep the two
 sources of truth aligned — the deduction firewall prefers DB values, but
 the code fallback is the floor when a DB row is missing.
 """
+import math
 from typing import Optional
 
 
@@ -112,9 +113,9 @@ CREDIT_COSTS = {
     # viable upstream at the cheapest-pack rate ($0.033/credit). "premium"
     # (wan_pro / gemini_pro / veo) covers the flagship upstream + margin.
     # See docs/service-cost.md for the spreadsheet that drives these values.
-    "text_to_image":        {"default": 1,  "midjourney": 5, "wan_pro": 5,  "gemini_pro": 5},
-    "background_removal":   {"default": 3},
-    "bg_removal":           {"default": 3},
+    "text_to_image":        {"default": 2,  "premium": 3, "nano_banana": 8, "nano_banana_4k": 12},
+    "background_removal":   {"default": 2},
+    "bg_removal":           {"default": 2},
     "product_scene":        {"default": 10, "wan_pro": 15},
     "product_scene_gen":    {"default": 10, "wan_pro": 15},
     "pattern_gen":          {"default": 2,  "wan_pro": 5},
@@ -123,17 +124,19 @@ CREDIT_COSTS = {
     "i2i":                  {"default": 2,  "wan_pro": 5,  "gemini_pro": 5},
     "image_transform":      {"default": 2,  "wan_pro": 5,  "gemini_pro": 5},
     "style_transfer":       {"default": 2,  "wan_pro": 5},
-    "upscale":              {"default": 15},
-    "image_upscale":        {"default": 15},
+    "upscale":              {"default": 3},
+    "image_upscale":        {"default": 3},
     "video_upscale":        {"default": 50},
     "image_translator":     {"default": 2,  "wan_pro": 5,  "gemini_pro": 5},
     "image_translation":    {"default": 2,  "wan_pro": 5,  "gemini_pro": 5},
 
     # Video: cheap-upstream default (Hailuo/Seedance fast ~$0.10),
     # premium covers Kling 2.1-master / Veo 3.1 (~$0.50-0.70).
-    "image_to_video":       {"default": 20, "wan_pro": 60, "veo": 200},
-    "text_to_video":        {"default": 20, "wan_pro": 60, "veo": 200},
-    "short_video":          {"default": 20, "wan_pro": 60, "veo": 200},
+    # Video defaults are the legacy fallback only — the live charge comes from
+    # VIDEO_CREDIT_COSTS via resolve_video_credits() (per model + resolution).
+    "image_to_video":       {"default": 18, "wan_pro": 65, "veo": 80},
+    "text_to_video":        {"default": 18, "wan_pro": 65, "veo": 80},
+    "short_video":          {"default": 18, "wan_pro": 65, "veo": 80},
     "ai_try_on":            {"default": 30, "wan_pro": 60, "gemini_pro": 60},
     "try_on":               {"default": 30, "wan_pro": 60, "gemini_pro": 60},
     "virtual_try_on":       {"default": 30, "wan_pro": 60, "gemini_pro": 60},
@@ -252,3 +255,127 @@ def get_credit_cost(tool_type: str, user=None, model_type: Optional[str] = None)
 
     # No user context → return default cost
     return costs.get("default", list(costs.values())[0])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VidGo 3.0 PER-MODEL CREDIT TABLE — "扣點表 + 方案金額" spec (2026-06)
+#
+# Iron rule: credits = ceil( PiAPI_cost_USD / 0.04 * 2.5 ). Every task sells for
+# ≥2.5× upstream cost at 1 credit = US$0.04. Video MUST charge per
+# model + resolution + duration — never a single fixed value — so the deduction
+# path resolves (model_id, resolution, tier) → (service_type, credits) via the
+# tables below before charging. When upstream PiAPI costs move, update ONLY
+# these tables AND the mirroring alembic migration (keep service_pricing aligned).
+# ─────────────────────────────────────────────────────────────────────────────
+
+CREDIT_USD_PRICE = 0.04   # 1 credit = US$0.04 (point-pack unit price; do NOT change)
+MARGIN_MULTIPLIER = 2.5   # gross-margin multiple over upstream cost
+
+
+def credits_for_cost(api_cost_usd: float) -> int:
+    """Iron-rule price for an arbitrary upstream cost: ceil(usd / 0.04 * 2.5)."""
+    return max(1, math.ceil(api_cost_usd / CREDIT_USD_PRICE * MARGIN_MULTIPLIER))
+
+
+# Normalized model key → its billing row. `credits` are the doc-fixed values
+# (rounded up from the formula). `usd` is the 2026-Q2 PiAPI upstream estimate.
+VIDEO_CREDIT_COSTS = {
+    "hailuo":          {"service_type": "video_hailuo",         "credits": 18,  "usd": 0.26, "label": "Hailuo Fast 10s 768p"},
+    "wan":             {"service_type": "video_wan",            "credits": 20,  "usd": 0.28, "label": "Wan 480p"},
+    "hunyuan":         {"service_type": "video_hunyuan",        "credits": 20,  "usd": 0.28, "label": "Hunyuan"},
+    "kling_std":       {"service_type": "video_kling_std",      "credits": 28,  "usd": 0.40, "label": "Kling V2.5 STD 10s"},
+    "seedance_720p":   {"service_type": "video_seedance_720p",  "credits": 65,  "usd": 1.00, "label": "Seedance 720p 5s"},
+    "seedance_1080p":  {"service_type": "video_seedance_1080p", "credits": 160, "usd": 2.50, "label": "Seedance 1080p 5s"},
+    "kling_v3_std":    {"service_type": "video_kling_v3_std",   "credits": 65,  "usd": 1.00, "label": "Kling V3.0 STD 10s"},
+    "kling_v3_pro":    {"service_type": "video_kling_v3_pro",   "credits": 130, "usd": 2.00, "label": "Kling V3.0 PRO 10s 含音"},
+    "veo":             {"service_type": "video_veo",            "credits": 80,  "usd": 1.20, "label": "Veo 3.1 5s 含音"},
+    "sora2":           {"service_type": "video_sora2",          "credits": 80,  "usd": 1.20, "label": "Sora2 Pro 5s"},
+}
+
+IMAGE_CREDIT_COSTS = {
+    "standard":        {"service_type": "text_to_image",            "credits": 2,  "usd": 0.015, "label": "Standard AI image (Z-Image/Qwen)"},
+    "premium":         {"service_type": "image_generation_premium", "credits": 3,  "usd": 0.025, "label": "Premium image (Flux dev / Qwen edit)"},
+    "nano_banana":     {"service_type": "nano_banana_t2i",          "credits": 8,  "usd": 0.105, "label": "Gemini / nano-banana 1K"},
+    "nano_banana_4k":  {"service_type": "nano_banana_4k_t2i",       "credits": 12, "usd": 0.18,  "label": "nano-banana 4K"},
+    "upscale":         {"service_type": "image_upscale",            "credits": 3,  "usd": 0.005, "label": "Upscale"},
+    "bg_removal":      {"service_type": "bg_removal",               "credits": 2,  "usd": 0.001, "label": "Background Removal"},
+}
+
+
+def _norm(value: Optional[str]) -> str:
+    return (value or "").strip().lower()
+
+
+def resolve_video_credits(
+    model_id: Optional[str],
+    resolution: Optional[str] = None,
+    tier: Optional[str] = None,
+) -> dict:
+    """Map an incoming video (model_id, resolution, tier) to its billing row.
+
+    Resolution disambiguates Seedance 720p vs 1080p; model/tier disambiguates
+    Kling V2.5 STD vs V3.0 STD vs V3.0 PRO. Unknown models fall back to the
+    Hailuo (cheapest) row so we never charge zero.
+    """
+    m, r, t = _norm(model_id), _norm(resolution), _norm(tier)
+
+    # Exact canonical key (the frontend may send e.g. "seedance_1080p" directly).
+    if m in VIDEO_CREDIT_COSTS:
+        return VIDEO_CREDIT_COSTS[m]
+
+    # The Kling-video endpoint sends a bare tier (default/flagship/omni) with no
+    # model_id. Map those three onto the doc's three Kling tiers (28/65/130).
+    if not m and t in ("default", "flagship", "omni"):
+        return VIDEO_CREDIT_COSTS[
+            {"default": "kling_std", "flagship": "kling_v3_std", "omni": "kling_v3_pro"}[t]
+        ]
+
+    if "veo" in m:
+        return VIDEO_CREDIT_COSTS["veo"]
+    if "sora" in m:
+        return VIDEO_CREDIT_COSTS["sora2"]
+    if "seedance" in m or "doubao" in m:
+        if "1080" in m or "1080" in r:
+            return VIDEO_CREDIT_COSTS["seedance_1080p"]
+        return VIDEO_CREDIT_COSTS["seedance_720p"]
+    if "kling" in m or "kling" in t:
+        is_v3 = any(k in m for k in ("omni", "_v3", "v3", "kling3", "kling-3")) or t == "omni"
+        if is_v3:
+            # omni / audio / pro → the audio-enabled PRO tier; else V3.0 STD.
+            if "pro" in m or "pro" in t or "audio" in m or "omni" in m:
+                return VIDEO_CREDIT_COSTS["kling_v3_pro"]
+            return VIDEO_CREDIT_COSTS["kling_v3_std"]
+        if "flagship" in m or "master" in m or "2.1" in m or t == "flagship":
+            return VIDEO_CREDIT_COSTS["kling_v3_std"]  # legacy 2.1-master → V3.0 STD tier
+        return VIDEO_CREDIT_COSTS["kling_std"]  # Kling 2.5 / 2.6 standard
+    if "hunyuan" in m or "tencent" in m:
+        return VIDEO_CREDIT_COSTS["hunyuan"]
+    if "wan" in m:
+        return VIDEO_CREDIT_COSTS["wan"]
+    return VIDEO_CREDIT_COSTS["hailuo"]
+
+
+def resolve_image_credits(model_id: Optional[str], resolution: Optional[str] = None) -> dict:
+    """Map an incoming image (model_id, resolution) to its billing row."""
+    m, r = _norm(model_id), _norm(resolution)
+    if "nano-banana" in m or "nano_banana" in m:
+        if "4k" in m or "4k" in r or "2048" in r or "4096" in r:
+            return IMAGE_CREDIT_COSTS["nano_banana_4k"]
+        return IMAGE_CREDIT_COSTS["nano_banana"]
+    if "gemini" in m:
+        return IMAGE_CREDIT_COSTS["nano_banana"]
+    if any(k in m for k in ("flux-dev", "flux_dev", "qwen-edit", "qwen_edit", "kontext", "edit")):
+        return IMAGE_CREDIT_COSTS["premium"]
+    return IMAGE_CREDIT_COSTS["standard"]  # flux schnell / z-image / qwen / seedream / sdxl
+
+
+# Flat catalog used by seeds + the alembic migration to upsert service_pricing
+# rows for every per-model entry above (keeps DB ⇄ code in lockstep).
+def all_model_pricing_rows() -> list:
+    """Return [(service_type, credits, usd, label, kind), ...] for every row."""
+    rows = []
+    for entry in IMAGE_CREDIT_COSTS.values():
+        rows.append((entry["service_type"], entry["credits"], entry["usd"], entry["label"], "image"))
+    for entry in VIDEO_CREDIT_COSTS.values():
+        rows.append((entry["service_type"], entry["credits"], entry["usd"], entry["label"], "video"))
+    return rows

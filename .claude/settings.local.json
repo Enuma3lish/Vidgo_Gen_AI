@@ -499,7 +499,10 @@
       "Bash(textutil -convert txt -stdout \"🚀 VidGo_Gen_AI 立即改善工單（工程師執行版）.docx\")",
       "Bash(textutil -convert txt -stdout \"「扣點表 + 方案金額」.docx\")",
       "Bash(xargs -n1 basename)",
-      "Bash(echo \"  old same-URL map gone: $\\(grep -c \"map\\(\\(code\\) => \\({ hreflang: code, href: origin + path }\\)\\)\" frontend-vue/src/router/index.ts\\) \\(expect 0\\)\")"
+      "Bash(echo \"  old same-URL map gone: $\\(grep -c \"map\\(\\(code\\) => \\({ hreflang: code, href: origin + path }\\)\\)\" frontend-vue/src/router/index.ts\\) \\(expect 0\\)\")",
+      "Bash(awk '/^<template>/,0' /Users/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/src/views/Pricing.vue)",
+      "Bash(awk 'NR>=1789 && NR<=1900 {print NR\": \"$0}' /Users/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/src/locales/zh-TW.json)",
+      "Bash(awk NR>=1830 && NR<=1882 {print NR\": \"$0} *)"
     ],
     "additionalDirectories": [
       "/private/tmp"

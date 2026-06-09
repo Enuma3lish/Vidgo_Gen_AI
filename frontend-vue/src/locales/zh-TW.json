@@ -103,7 +103,8 @@
         "videoBgRemove": "影片去背",
         "claymation": "黏土風生成",
         "aiAvatar": "AI 數位人 / 代言人",
-        "videoDubbing": "影片配音翻譯"
+        "videoDubbing": "影片配音翻譯",
+        "sora2Pro": "Sora 2 Pro 旗艦影片"
       }
     },
     "tryOnLayout": {
@@ -762,7 +763,7 @@
     "ecpayPaymentLabel": "信用卡付款 (ECPay)",
     "testPaymentLabel": "測試付款 (US$1 / 約 NT$32)",
     "paypalPaymentLabel": "國際付款 (PayPal)",
-    "paypalPricingStrategy": "國外定價建議 (PayPal/USD)：建議分別定價為 US$19.99 / US$49.99 / US$99.99，分別對應 Basic / Pro / Premium，以抵銷 PayPal 手續費與匯差。",
+    "paypalPricingStrategy": "國外定價建議 (PayPal/USD)：建議分別定價為 US$19.99 / US$49.99 / US$89.99，分別對應 Basic / Pro / Premium，以抵銷 PayPal 手續費與匯差。",
     "overseasUsdLabel": "海外收美金費用",
     "creditReference": {
       "title": "點數換算參考（100 點）",
@@ -784,6 +785,12 @@
           "cost": "3–12 點",
           "output": "8–33 張",
           "useCase": "品牌主視覺、nano-banana 1K/4K、印刷品"
+        },
+        "backgroundRemoval": {
+          "feature": "去背 Background Removal",
+          "cost": "2 點",
+          "output": "50 張",
+          "useCase": "電商去背、透明 PNG、商品批量處理"
         },
         "standardVideo": {
           "feature": "標準 AI 影片 (Hailuo / Wan / Kling V2.5)",
@@ -808,6 +815,12 @@
           "cost": "80 點",
           "output": "—",
           "useCase": "進階版專屬旗艦影片"
+        },
+        "sora2Pro": {
+          "feature": "Sora2 Pro (5s) 🆕",
+          "cost": "80 點",
+          "output": "—",
+          "useCase": "旗艦電影級短片、真實感動態"
         },
         "seedanceWan": {
           "feature": "Seedance 720p / 1080p 🆕",
@@ -1861,6 +1874,43 @@
     "errors": {
       "loadFailed": "讀取模型登錄表失敗。",
       "saveFailed": "儲存覆寫失敗。"
+    }
+  },
+  "sora2Pro": {
+    "title": "Sora 2 Pro 旗艦影片",
+    "subtitle": "OpenAI Sora 2 Pro — 真實感動態 + 同步音訊（5–10 秒 1080p）。",
+    "demoCta": "訂閱後即可生成 Sora 2 Pro 旗艦影片。",
+    "presetLabel": "範例提示詞（T2V 或 I2V）",
+    "promptLabel": "提示詞",
+    "promptPlaceholder": "描述場景、動作、光線，以及你想要的聲音…",
+    "startImage": "起始畫面（選填）",
+    "startImageHint": "上傳後切換為圖生影片，畫面比例會跟隨來源。",
+    "duration": "影片長度",
+    "aspectRatio": "畫面比例",
+    "resolutionLabel": "解析度",
+    "resolution": {
+      "hd": "720p HD",
+      "fullHd": "1080p Full HD",
+      "hdHint": "出圖較快，扣點相同。",
+      "fullHdHint": "旗艦畫質，完整音訊。"
+    },
+    "audioLabel": "同步音訊",
+    "audioHint": "Sora 2 Pro 的招牌功能：人聲、音效、環境音都會與畫面同步。",
+    "action": "使用 Sora 2 Pro 生成",
+    "processing": "生成中...",
+    "loading": "Sora 2 Pro 生成中（約 5–12 分鐘）…",
+    "placeholder": "生成完成的影片會顯示在這裡。",
+    "resultLabel": "生成結果",
+    "download": "下載",
+    "warnings": {
+      "emptyPrompt": "請輸入提示詞。"
+    },
+    "toasts": {
+      "success": "Sora 2 Pro 影片生成完成。",
+      "demoReady": "範例影片已準備好。"
+    },
+    "errors": {
+      "generic": "生成失敗，請再試一次。"
     }
   },
   "lumaVideo": {

@@ -103,7 +103,8 @@
         "videoBgRemove": "Video BG Remove",
         "claymation": "Claymation AI",
         "aiAvatar": "AI Avatar / Spokesperson",
-        "videoDubbing": "Video Dubbing"
+        "videoDubbing": "Video Dubbing",
+        "sora2Pro": "Sora 2 Pro Flagship Video"
       }
     },
     "tryOnLayout": {
@@ -762,7 +763,7 @@
     "ecpayPaymentLabel": "Credit card payment (ECPay)",
     "testPaymentLabel": "Test payment (US$1 / approx. NT$32)",
     "paypalPaymentLabel": "International payment (PayPal)",
-    "paypalPricingStrategy": "International USD pricing (PayPal): Basic US$19.99, Pro US$49.99, Premium US$99.99 — to offset PayPal fees and FX losses.",
+    "paypalPricingStrategy": "International USD pricing (PayPal): Basic US$19.99, Pro US$49.99, Premium US$89.99 — to offset PayPal fees and FX losses.",
     "overseasUsdLabel": "Overseas USD",
     "creditReference": {
       "title": "Credit Conversion Reference (100 credits)",
@@ -784,6 +785,12 @@
           "cost": "3–12 credits",
           "output": "8–33 images",
           "useCase": "Brand key visuals, nano-banana 1K/4K, print"
+        },
+        "backgroundRemoval": {
+          "feature": "Background Removal",
+          "cost": "2 credits",
+          "output": "50 images",
+          "useCase": "E-commerce cut-outs, transparent PNG, batch product prep"
         },
         "standardVideo": {
           "feature": "Standard AI video (Hailuo / Wan / Kling V2.5)",
@@ -808,6 +815,12 @@
           "cost": "80 credits",
           "output": "—",
           "useCase": "Advanced-plan exclusive flagship clip"
+        },
+        "sora2Pro": {
+          "feature": "Sora2 Pro (5s) 🆕",
+          "cost": "80 credits",
+          "output": "—",
+          "useCase": "Flagship cinematic clip, photorealistic motion"
         },
         "seedanceWan": {
           "feature": "Seedance 720p / 1080p 🆕",
@@ -1818,6 +1831,43 @@
     },
     "toasts": {
       "success": "{tier} video generated.",
+      "demoReady": "Demo video ready."
+    },
+    "errors": {
+      "generic": "Generation failed. Please try again."
+    }
+  },
+  "sora2Pro": {
+    "title": "Sora 2 Pro Flagship Video",
+    "subtitle": "OpenAI Sora 2 Pro — photorealistic motion with synchronized audio (5–10 s @ 1080p).",
+    "demoCta": "Subscribe to unlock Sora 2 Pro flagship videos.",
+    "presetLabel": "Prompt template (T2V or I2V)",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe the scene, motion, lighting, and any sound you want...",
+    "startImage": "Source Frame (optional)",
+    "startImageHint": "Upload to switch to image-to-video. Framing follows the source.",
+    "duration": "Duration",
+    "aspectRatio": "Aspect Ratio",
+    "resolutionLabel": "Resolution",
+    "resolution": {
+      "hd": "720p HD",
+      "fullHd": "1080p Full HD",
+      "hdHint": "Faster turnaround, same price.",
+      "fullHdHint": "Flagship quality, full audio bandwidth."
+    },
+    "audioLabel": "Synchronized audio",
+    "audioHint": "Sora 2 Pro’s headline feature — voices, FX, and ambience matched to the action.",
+    "action": "Generate with Sora 2 Pro",
+    "processing": "Generating...",
+    "loading": "Generating with Sora 2 Pro (5–12 min)...",
+    "placeholder": "Your generated video will appear here.",
+    "resultLabel": "Result",
+    "download": "Download",
+    "warnings": {
+      "emptyPrompt": "Please enter a prompt."
+    },
+    "toasts": {
+      "success": "Sora 2 Pro video generated.",
       "demoReady": "Demo video ready."
     },
     "errors": {

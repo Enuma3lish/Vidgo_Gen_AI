@@ -73,6 +73,16 @@ POLLO_MODELS = {
         "description": "Premium tier — top quality + audio",
         "lengths": [5, 10]
     },
+    # OpenAI Sora 2 via Pollo's unified platform (2026-06-09). Used as the
+    # backup when the PiAPI Sora 2 lane errors / rate-limits. Pollo accepts
+    # the same input.image + input.prompt shape as the rest of the table, so
+    # the existing generate_video() flow handles it without a code branch.
+    "sora-2": {
+        "endpoint": "/generation/sora/sora-2",
+        "name": "OpenAI Sora 2",
+        "description": "Photorealistic motion, synchronized audio (flagship)",
+        "lengths": [5, 8, 10]
+    },
 }
 
 

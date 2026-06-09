@@ -87,6 +87,11 @@ export const toolHubTiles: ToolHubTile[] = [
   // concept; text.png evokes dubbing's voice/script swap.
   { id: 'ai-avatar',           labelKey: 'tools.hub.tiles.aiAvatar',           to: '/tools/avatar',                 thumb: `${T}/virtual-model.png`,       category: 'advertising' },
   { id: 'video-dubbing',       labelKey: 'tools.hub.tiles.videoDubbing',       to: '/tools/video-dubbing',          thumb: `${T}/text.png`,                category: 'advertising' },
+  // 2026-06-09 — Sora 2 Pro flagship video (PiAPI primary, Pollo backup).
+  // Reuses video-generator thumb until a dedicated Sora 2 hero shot is shot;
+  // swap `thumb` when art lands. Category=advertising because the flagship
+  // 5-10s clips slot into the same promo workflow as Kling Omni / Veo.
+  { id: 'sora2-pro',           labelKey: 'tools.hub.tiles.sora2Pro',           to: '/tools/sora2-pro',              thumb: `${T}/video-generator.png`,     category: 'advertising' },
 ]
 
 // Stable order of categories shown in the hub-view filter bar / header

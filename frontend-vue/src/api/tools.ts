@@ -364,6 +364,31 @@ export const toolsApi = {
 
   // lumaVideo() removed 2026-05-19 — use shortVideo() with model_id picks.
 
+  async sora2Pro(params: {
+    prompt: string
+    aspectRatio?: '16:9' | '9:16' | '1:1'
+    duration?: number       // 4–12 (server clamps)
+    resolution?: '720p' | '1080p'
+    imageUrl?: string
+    negativePrompt?: string
+    enableAudio?: boolean
+  }): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/sora2-pro',
+      {
+        prompt: params.prompt,
+        aspect_ratio: params.aspectRatio ?? '16:9',
+        duration: params.duration ?? 5,
+        resolution: params.resolution ?? '1080p',
+        image_url: params.imageUrl,
+        negative_prompt: params.negativePrompt,
+        enable_audio: params.enableAudio,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
   async uploadImage(file: File): Promise<{ url: string }> {
     const formData = new FormData()
     formData.append('file', file)

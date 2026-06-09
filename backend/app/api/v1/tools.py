@@ -5412,6 +5412,127 @@ async def _kling_video_inner(
 # /tools/kling-video with tier="omni" for Kling 3.0 premium output.
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# SORA 2 PRO (added 2026-06-09)
+# ─────────────────────────────────────────────────────────────────────────
+# Mirrors /kling-video: streaming wrapper + inner async function. Billing
+# row video_sora2 = 80 credits / 5s @ 1080p, premium-tier model_id (see
+# app/services/plan_gates.py). PiAPI primary, Pollo backup (I2V only) via
+# the new TaskType.SORA2_VIDEO routing.
+
+class Sora2ProRequest(BaseModel):
+    """Generate flagship video via OpenAI Sora 2 Pro (PiAPI primary, Pollo backup).
+
+    T2V if no ``image_url`` is provided; I2V otherwise. ``duration`` is clamped
+    to Sora 2's 4-12 s envelope inside the provider; the default 5 s matches
+    the billing row (video_sora2 = 80 credits / 5 s @ 1080p).
+    """
+    prompt: str = Field(..., min_length=1, max_length=2500)
+    aspect_ratio: str = Field(default="16:9", description="T2V only: 16:9 / 9:16 / 1:1")
+    duration: int = Field(default=5, ge=4, le=12, description="4–12 s")
+    resolution: str = Field(default="1080p", description="720p or 1080p (pro)")
+    image_url: Optional[str] = Field(default=None, description="If set, switches to image-to-video")
+    negative_prompt: Optional[str] = Field(default=None, max_length=2500)
+    enable_audio: Optional[bool] = Field(
+        default=None,
+        description="Sora 2 Pro emits synchronized audio by default; pass false for a silent render.",
+    )
+
+
+@router.post("/sora2-pro")
+async def sora2_pro(
+    request: Sora2ProRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """Streaming wrapper around the real Sora 2 Pro work. Sora 2 Pro jobs run
+    in the same 5-15 minute envelope as Kling Omni / Veo 3.1, so we reuse the
+    25 s heartbeat pattern to keep intermediate proxies from cutting the
+    connection (same fix that landed for /kling-video on 2026-05-26)."""
+    async def _do_sora2_pro() -> Dict[str, Any]:
+        result = await _sora2_pro_inner(request, db, current_user)
+        return result.model_dump() if hasattr(result, "model_dump") else result
+
+    return _stream_with_heartbeat(_do_sora2_pro)
+
+
+async def _sora2_pro_inner(
+    request: Sora2ProRequest,
+    db: AsyncSession,
+    current_user,
+) -> ToolResponse:
+    """OpenAI Sora 2 Pro — flagship 5 s 1080p video with synchronized audio.
+
+    Billing: video_sora2 row, 80 credits (same tier as Veo 3.1). Premium plan
+    or higher is required (enforced via require_model_access on the
+    ``sora2_pro`` model_id; see plan_gates._PLAN_FLOOR_FOR_MODEL).
+    """
+    # Resolve the billing row from the central tier table so the credit
+    # cost can't drift from the migration / pricing-page reference.
+    from app.services.tier_config import VIDEO_CREDIT_COSTS
+    _vrow = VIDEO_CREDIT_COSTS["sora2"]
+    service_type = _vrow["service_type"]
+    credit_cost_fallback = _vrow["credits"]
+
+    # Custom-prompt generator → subscription + bound card required (admins
+    # / test accounts bypass via _custom_prompt_gate).
+    if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
+        return _subscribe_card_required_response()
+
+    # Plan-tier floor: Sora 2 Pro is premium. A basic / pro user could
+    # otherwise hit this endpoint and burn 80 premium credits.
+    await require_model_access(db, current_user, "sora2_pro")
+
+    if request.image_url:
+        request.image_url = await _ensure_public_image_url(
+            request.image_url, user_id=str(current_user.id) if current_user else None
+        )
+
+    ok, err = await _check_and_deduct_credits(
+        db, current_user, credit_cost_fallback, service_type
+    )
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    try:
+        provider_router = get_provider_router()
+        result = await provider_router.route(
+            TaskType.SORA2_VIDEO,
+            {
+                "prompt": request.prompt,
+                "aspect_ratio": request.aspect_ratio,
+                "duration": request.duration,
+                "resolution": request.resolution,
+                "image_url": request.image_url,
+                "negative_prompt": request.negative_prompt,
+                "enable_audio": request.enable_audio,
+            },
+        )
+        if not result.get("success"):
+            await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+            return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
+
+        output = result.get("output") or {}
+        video_url = output.get("video_url")
+        video_url = await _persist_provider_url(video_url, "video", current_user)
+        if not video_url:
+            await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+            return ToolResponse(success=False, message="Sora 2 Pro returned no video URL. Please try again.")
+
+        return ToolResponse(
+            success=True,
+            result_url=video_url,
+            video_url=video_url,
+            credits_used=credit_cost_fallback,
+            message="Video generated via Sora 2 Pro.",
+        )
+    except Exception as exc:
+        logger.error("sora2_pro error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+        _notify_admin_of_tool_failure("sora2_pro", exc, current_user)
+        return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
+
+
 # ============================================================================
 # Template & Resource Endpoints
 # ============================================================================

@@ -249,7 +249,8 @@
         "videoBgRemove": "동영상 배경 제거",
         "claymation": "클레이메이션 생성",
         "aiAvatar": "AI 아바타 / 대변인",
-        "videoDubbing": "비디오 더빙"
+        "videoDubbing": "비디오 더빙",
+        "sora2Pro": "Sora 2 Pro 플래그십 영상"
       },
       "categories": {
         "all": "전체",
@@ -727,7 +728,7 @@
     "ecpayPaymentLabel": "신용카드 결제 (ECPay)",
     "testPaymentLabel": "테스트 결제 (US$1 / 약 NT$32)",
     "paypalPaymentLabel": "국제 결제 (PayPal)",
-    "paypalPricingStrategy": "해외 PayPal 권장 가격 (USD): Basic US$19.99, Pro US$49.99, Premium US$99.99. PayPal 수수료와 환율 손실을 상쇄합니다.",
+    "paypalPricingStrategy": "해외 PayPal 권장 가격 (USD): Basic US$19.99, Pro US$49.99, Premium US$89.99. PayPal 수수료와 환율 손실을 상쇄합니다.",
     "overseasUsdLabel": "해외 USD",
     "creditReference": {
       "title": "크레딧 환산 참고 (100크레딧)",
@@ -749,6 +750,12 @@
           "cost": "3–12크레딧",
           "output": "8–33장",
           "useCase": "브랜드 메인 비주얼, nano-banana 1K/4K, 인쇄물"
+        },
+        "backgroundRemoval": {
+          "feature": "배경 제거 Background Removal",
+          "cost": "2크레딧",
+          "output": "50장",
+          "useCase": "이커머스 누끼컷, 투명 PNG, 상품 일괄 처리"
         },
         "standardVideo": {
           "feature": "표준 AI 영상 (Hailuo / Wan / Kling V2.5)",
@@ -773,6 +780,12 @@
           "cost": "80크레딧",
           "output": "—",
           "useCase": "Advanced 플랜 전용 플래그십 영상"
+        },
+        "sora2Pro": {
+          "feature": "Sora2 Pro (5초) 🆕",
+          "cost": "80크레딧",
+          "output": "—",
+          "useCase": "플래그십 시네마틱 영상, 포토리얼 모션"
         },
         "seedanceWan": {
           "feature": "Seedance 720p / 1080p 🆕",
@@ -1861,6 +1874,43 @@
     "errors": {
       "loadFailed": "모델 레지스트리 로드 실패.",
       "saveFailed": "오버라이드 저장 실패."
+    }
+  },
+  "sora2Pro": {
+    "title": "Sora 2 Pro 플래그십 영상",
+    "subtitle": "OpenAI Sora 2 Pro — 포토리얼 모션과 동기화된 오디오 (5–10초 1080p).",
+    "demoCta": "구독하고 Sora 2 Pro 플래그십 영상을 잠금 해제하세요.",
+    "presetLabel": "프롬프트 템플릿 (T2V 또는 I2V)",
+    "promptLabel": "프롬프트",
+    "promptPlaceholder": "장면, 모션, 조명, 원하는 사운드를 설명하세요…",
+    "startImage": "시작 프레임 (선택)",
+    "startImageHint": "업로드하면 이미지-투-비디오로 전환되며 비율은 원본을 따릅니다.",
+    "duration": "길이",
+    "aspectRatio": "화면비",
+    "resolutionLabel": "해상도",
+    "resolution": {
+      "hd": "720p HD",
+      "fullHd": "1080p Full HD",
+      "hdHint": "출력 속도가 빠르고 요금은 동일합니다.",
+      "fullHdHint": "플래그십 화질, 풀 오디오."
+    },
+    "audioLabel": "동기화된 오디오",
+    "audioHint": "Sora 2 Pro의 시그니처 기능 — 보이스·효과음·앰비언스가 영상과 동기화됩니다.",
+    "action": "Sora 2 Pro로 생성",
+    "processing": "생성 중...",
+    "loading": "Sora 2 Pro 생성 중 (5–12분)…",
+    "placeholder": "생성된 영상이 여기에 표시됩니다.",
+    "resultLabel": "결과",
+    "download": "다운로드",
+    "warnings": {
+      "emptyPrompt": "프롬프트를 입력하세요."
+    },
+    "toasts": {
+      "success": "Sora 2 Pro 영상을 생성했습니다.",
+      "demoReady": "데모 영상이 준비되었습니다."
+    },
+    "errors": {
+      "generic": "생성에 실패했습니다. 다시 시도해 주세요."
     }
   },
   "lumaVideo": {

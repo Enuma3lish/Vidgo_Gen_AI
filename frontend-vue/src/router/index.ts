@@ -203,6 +203,16 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
+  // Sora 2 Pro — flagship 5s 1080p with audio (80 credits / premium tier).
+  // Added 2026-06-09; PiAPI primary, Pollo backup. Mirrors KlingVideo UX
+  // (preset dropdown + free-form prompt + optional source frame).
+  {
+    path: '/tools/sora2-pro',
+    name: 'sora2-pro',
+    component: () => import('@/views/tools/Sora2Pro.vue'),
+    meta: { requiresAuth: false }
+  },
+
   // ===== Redirects for removed/aliased routes =====
   // 2026-05-19: Luma removed in favor of the new tier (Seedance Fast default,
   // Kling Omni premium, Hailuo Fast cheap, Hunyuan 中文, Wan specialty).

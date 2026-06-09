@@ -173,6 +173,15 @@ class PolloProvider(BaseProvider):
             "kling_omni":    _POLLO_REG["kling_omni"],
             "kling-3":       _POLLO_REG["kling_omni"],
             "kling_v3":      _POLLO_REG["kling_omni"],
+            # Sora 2 Pro (2026-06-09). Frontend / router may pass any of these
+            # marketing aliases; normalize them all onto Pollo's "sora-2" slug.
+            "sora":          _POLLO_REG["sora2"],
+            "sora2":         _POLLO_REG["sora2"],
+            "sora_2":        _POLLO_REG["sora2"],
+            "sora-2":        _POLLO_REG["sora2"],
+            "sora2_pro":     _POLLO_REG["sora2"],
+            "sora2-pro":     _POLLO_REG["sora2"],
+            "sora-2-pro":    _POLLO_REG["sora2"],
         }
         m = aliases.get(m, m)
         if m in POLLO_MODELS:

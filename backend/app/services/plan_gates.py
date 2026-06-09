@@ -98,6 +98,21 @@ _PLAN_FLOOR_FOR_MODEL: dict[str, str] = {
     "z_image":        "basic",
     "zimage":         "basic",
 
+    # ── Sora 2 Pro (premium tier as of 2026-06-09) ──
+    # Sora 2 Pro is now exposed via PiAPI (primary) and Pollo (backup) at the
+    # same billing row as Veo 3.1 (80 credits / $1.20 / 5s 1080p). It belongs
+    # in the premium plan, not enterprise — keep these BEFORE the generic
+    # "sora" entry so the longest-match scan wins. The bare "sora" key below
+    # stays at enterprise as a safety net for the legacy OpenAI-direct alias
+    # that was removed 2026-05-20.
+    "sora2_pro":      "premium",
+    "sora-2-pro":     "premium",
+    "sora2-pro":      "premium",
+    "sora_2_pro":     "premium",
+    "sora2":          "premium",
+    "sora-2":         "premium",
+    "sora_2":         "premium",
+
     # ── Enterprise-only ──
     "sora":           "enterprise",
 }

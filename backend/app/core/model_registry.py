@@ -106,6 +106,16 @@ PIAPI_MODELS: Dict[str, str] = {
     "veo_31_fast_model":       os.environ.get("PIAPI_VEO_31_FAST_MODEL",       "veo3.1"),
     "veo_31_fast_task":        os.environ.get("PIAPI_VEO_31_FAST_TASK",        "veo3.1-video-fast"),
 
+    # Sora 2 Pro (2026-06-09 addition). PiAPI exposes OpenAI's Sora 2 / Sora 2
+    # Pro through their proxy at piapi.ai/sora-2. Pro mode supports 720p/1080p
+    # with variable 4-12s duration; we price the 5s 1080p output at 80 credits
+    # (mirrors Veo 3.1) via the existing video_sora2 ServicePricing row.
+    # When PiAPI renames the alias, override PIAPI_SORA2_MODEL / *_TASK without
+    # rebuilding. If OpenAI shuts the underlying model down (announced EOL
+    # 2026-09-24), flip the env override to point at a fallback alias.
+    "sora2_model":             os.environ.get("PIAPI_SORA2_MODEL",             "sora"),
+    "sora2_task":              os.environ.get("PIAPI_SORA2_TASK",              "sora-2-pro-video"),
+
     # Wan video (model="Wan"; version encoded in task_type)
     "wan_video":           os.environ.get("PIAPI_WAN_VIDEO_MODEL",     "Wan"),
     "wan_i2v_task":        os.environ.get("PIAPI_WAN_I2V_TASK",        "wan26-img2video"),
@@ -206,6 +216,11 @@ POLLO_MODELS: Dict[str, str] = {
     "hailuo_default":    os.environ.get("POLLO_HAILUO_MODEL",           "hailuo_fast"),
     "hunyuan_default":   os.environ.get("POLLO_HUNYUAN_MODEL",          "hunyuan_v1"),
     "kling_omni":        os.environ.get("POLLO_KLING_OMNI_MODEL",       "kling_v3"),
+    # Sora 2 (2026-06-09). Pollo's unified platform exposes OpenAI's Sora 2
+    # at /generation/sora/sora-2 — our backup when PiAPI is rate-limited or
+    # the upstream task fails. Slug is bare "sora-2" (Pollo doesn't expose a
+    # separate "pro" SKU; quality is selected via request params).
+    "sora2":             os.environ.get("POLLO_SORA2_MODEL",            "sora-2"),
 }
 
 

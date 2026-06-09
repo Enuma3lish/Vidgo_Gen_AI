@@ -249,7 +249,8 @@
         "videoBgRemove": "Quitar fondo video",
         "claymation": "Claymation IA",
         "aiAvatar": "Avatar IA / Portavoz",
-        "videoDubbing": "Doblaje de Vídeo"
+        "videoDubbing": "Doblaje de Vídeo",
+        "sora2Pro": "Sora 2 Pro Video Insignia"
       },
       "categories": {
         "all": "Todos",
@@ -727,7 +728,7 @@
     "ecpayPaymentLabel": "Pago con tarjeta (ECPay)",
     "testPaymentLabel": "Pago de prueba (US$1 / aprox. NT$32)",
     "paypalPaymentLabel": "Pago internacional (PayPal)",
-    "paypalPricingStrategy": "Precio recomendado en USD (PayPal): Basic US$19.99, Pro US$49.99, Premium US$99.99. Compensa las comisiones de PayPal y la diferencia cambiaria.",
+    "paypalPricingStrategy": "Precio recomendado en USD (PayPal): Basic US$19.99, Pro US$49.99, Premium US$89.99. Compensa las comisiones de PayPal y la diferencia cambiaria.",
     "overseasUsdLabel": "USD internacional",
     "creditReference": {
       "title": "Referencia de conversión (100 créditos)",
@@ -749,6 +750,12 @@
           "cost": "3–12 créditos",
           "output": "8–33 imágenes",
           "useCase": "Visual principal de marca, nano-banana 1K/4K, impresión"
+        },
+        "backgroundRemoval": {
+          "feature": "Eliminación de fondo Background Removal",
+          "cost": "2 créditos",
+          "output": "50 imágenes",
+          "useCase": "Recortes para e-commerce, PNG transparente, lotes de productos"
         },
         "standardVideo": {
           "feature": "Video AI estándar (Hailuo / Wan / Kling V2.5)",
@@ -773,6 +780,12 @@
           "cost": "80 créditos",
           "output": "—",
           "useCase": "Clip insignia exclusivo del plan Advanced"
+        },
+        "sora2Pro": {
+          "feature": "Sora2 Pro (5s) 🆕",
+          "cost": "80 créditos",
+          "output": "—",
+          "useCase": "Clip cinematográfico insignia, movimiento fotorrealista"
         },
         "seedanceWan": {
           "feature": "Video Seedance 720p / 1080p 🆕",
@@ -1861,6 +1874,43 @@
     "errors": {
       "loadFailed": "Error al cargar el registro de modelos.",
       "saveFailed": "Error al guardar el override."
+    }
+  },
+  "sora2Pro": {
+    "title": "Sora 2 Pro Video Insignia",
+    "subtitle": "OpenAI Sora 2 Pro — movimiento fotorrealista con audio sincronizado (5–10 s a 1080p).",
+    "demoCta": "Suscríbete para desbloquear los videos insignia de Sora 2 Pro.",
+    "presetLabel": "Plantilla de prompt (T2V o I2V)",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "Describe la escena, el movimiento, la iluminación y el sonido que quieres...",
+    "startImage": "Cuadro inicial (opcional)",
+    "startImageHint": "Súbelo para cambiar a imagen-a-video; el encuadre sigue la fuente.",
+    "duration": "Duración",
+    "aspectRatio": "Relación de aspecto",
+    "resolutionLabel": "Resolución",
+    "resolution": {
+      "hd": "720p HD",
+      "fullHd": "1080p Full HD",
+      "hdHint": "Más rápido, mismo costo.",
+      "fullHdHint": "Calidad insignia, audio completo."
+    },
+    "audioLabel": "Audio sincronizado",
+    "audioHint": "La función estrella de Sora 2 Pro: voces, efectos y ambiente sincronizados con la acción.",
+    "action": "Generar con Sora 2 Pro",
+    "processing": "Generando...",
+    "loading": "Generando con Sora 2 Pro (5–12 min)…",
+    "placeholder": "Aquí aparecerá tu video generado.",
+    "resultLabel": "Resultado",
+    "download": "Descargar",
+    "warnings": {
+      "emptyPrompt": "Por favor escribe un prompt."
+    },
+    "toasts": {
+      "success": "Video Sora 2 Pro generado.",
+      "demoReady": "Video de demostración listo."
+    },
+    "errors": {
+      "generic": "La generación falló. Inténtalo de nuevo."
     }
   },
   "lumaVideo": {

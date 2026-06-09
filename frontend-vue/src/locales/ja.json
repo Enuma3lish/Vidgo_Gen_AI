@@ -249,7 +249,8 @@
         "videoBgRemove": "動画背景削除",
         "claymation": "クレイメーション生成",
         "aiAvatar": "AIアバター／スポークスパーソン",
-        "videoDubbing": "動画吹き替え"
+        "videoDubbing": "動画吹き替え",
+        "sora2Pro": "Sora 2 Pro 旗艦動画"
       },
       "categories": {
         "all": "全て",
@@ -727,7 +728,7 @@
     "ecpayPaymentLabel": "クレジットカード決済 (ECPay)",
     "testPaymentLabel": "テスト決済 (US$1 / 約NT$32)",
     "paypalPaymentLabel": "国際決済 (PayPal)",
-    "paypalPricingStrategy": "海外PayPal推奨価格 (USD)：Basic US$19.99、Pro US$49.99、Premium US$99.99。PayPal手数料と為替損失をカバーします。",
+    "paypalPricingStrategy": "海外PayPal推奨価格 (USD)：Basic US$19.99、Pro US$49.99、Premium US$89.99。PayPal手数料と為替損失をカバーします。",
     "overseasUsdLabel": "海外USD",
     "creditReference": {
       "title": "クレジット換算の目安（100クレジット）",
@@ -749,6 +750,12 @@
           "cost": "3–12クレジット",
           "output": "8–33枚",
           "useCase": "ブランドメイン画像、nano-banana 1K/4K、印刷物"
+        },
+        "backgroundRemoval": {
+          "feature": "背景除去 Background Removal",
+          "cost": "2クレジット",
+          "output": "50枚",
+          "useCase": "ECサイトの切り抜き、透明PNG、商品一括処理"
         },
         "standardVideo": {
           "feature": "標準AI動画 (Hailuo / Wan / Kling V2.5)",
@@ -773,6 +780,12 @@
           "cost": "80クレジット",
           "output": "—",
           "useCase": "Advancedプラン限定の旗艦動画"
+        },
+        "sora2Pro": {
+          "feature": "Sora2 Pro (5秒) 🆕",
+          "cost": "80クレジット",
+          "output": "—",
+          "useCase": "旗艦シネマティック動画、フォトリアルな動き"
         },
         "seedanceWan": {
           "feature": "Seedance 720p / 1080p 🆕",
@@ -1861,6 +1874,43 @@
     "errors": {
       "loadFailed": "モデルレジストリの取得に失敗。",
       "saveFailed": "上書きの保存に失敗。"
+    }
+  },
+  "sora2Pro": {
+    "title": "Sora 2 Pro 旗艦動画",
+    "subtitle": "OpenAI Sora 2 Pro — フォトリアルな動きと同期音声（5〜10秒 / 1080p）。",
+    "demoCta": "サブスクライブして Sora 2 Pro 旗艦動画を解放しよう。",
+    "presetLabel": "プロンプトテンプレート（T2V または I2V）",
+    "promptLabel": "プロンプト",
+    "promptPlaceholder": "シーン、動き、ライティング、入れたい音などを記述…",
+    "startImage": "開始フレーム（任意）",
+    "startImageHint": "アップロードすると画像から動画モードに切り替わります。",
+    "duration": "長さ",
+    "aspectRatio": "アスペクト比",
+    "resolutionLabel": "解像度",
+    "resolution": {
+      "hd": "720p HD",
+      "fullHd": "1080p Full HD",
+      "hdHint": "出力が速く、料金は同じ。",
+      "fullHdHint": "旗艦画質、フル音声帯域。"
+    },
+    "audioLabel": "同期音声",
+    "audioHint": "Sora 2 Pro の目玉機能 — 声・効果音・環境音が映像と同期します。",
+    "action": "Sora 2 Pro で生成",
+    "processing": "生成中...",
+    "loading": "Sora 2 Pro で生成中（5〜12分）…",
+    "placeholder": "生成された動画はここに表示されます。",
+    "resultLabel": "結果",
+    "download": "ダウンロード",
+    "warnings": {
+      "emptyPrompt": "プロンプトを入力してください。"
+    },
+    "toasts": {
+      "success": "Sora 2 Pro 動画を生成しました。",
+      "demoReady": "デモ動画の準備ができました。"
+    },
+    "errors": {
+      "generic": "生成に失敗しました。もう一度お試しください。"
     }
   },
   "lumaVideo": {

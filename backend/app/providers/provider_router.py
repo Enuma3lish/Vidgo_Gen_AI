@@ -60,6 +60,10 @@ class TaskType(str, Enum):
     # task type itself.
     MIDJOURNEY_T2I = "midjourney_imagine"
     KLING_VIDEO    = "kling_video_generation"
+    # Sora 2 Pro added 2026-06-09. PiAPI is primary (proxies OpenAI Sora 2 /
+    # Sora 2 Pro), Pollo is the I2V backup. Billed at 80 credits via the
+    # existing video_sora2 ServicePricing row — mirrors Veo 3.1 in price tier.
+    SORA2_VIDEO    = "sora2_video_generation"
     # NOTE: LUMA_VIDEO was removed 2026-05-19. The /tools/luma-video endpoint
     # and its tier-table slot are gone; short-video / kling-video / the new
     # Seedance / Hailuo / Hunyuan / Wan tiers cover every prior use case.
@@ -149,6 +153,11 @@ class ProviderRouter:
         # an image_url so the Pollo branch soft-fails and the router surfaces
         # the PiAPI error — same UX as before for that path.
         TaskType.KLING_VIDEO:    {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
+        # Sora 2 Pro: PiAPI primary (sora-2-pro-video task), Pollo backup via
+        # /generation/sora/sora-2. Pollo only ingests the I2V path; T2V soft-
+        # fails through to the PiAPI error in _execute_pollo, identical to
+        # how KLING_VIDEO degrades.
+        TaskType.SORA2_VIDEO:    {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
     }
 
     # Models Pollo's REST endpoint actually covers. Trimmed 2026-05-25 to
@@ -172,6 +181,12 @@ class ProviderRouter:
         "wan2.6",
         "wan",
         "pollo-v1-6",
+        # 2026-06-09 — Sora 2 lives at Pollo's /generation/sora/sora-2; an
+        # explicit model_id="sora-2" promotes Pollo to PRIMARY when the
+        # caller is bypassing the dedicated SORA2_VIDEO task type (e.g. a
+        # generic I2V call with model_id chosen on the frontend).
+        "sora-2",
+        "sora2",
     }
 
     SYSTEM_FAILURE_HINTS = (
@@ -754,6 +769,8 @@ class ProviderRouter:
             return await self.piapi.midjourney_imagine(params)
         elif task_type == TaskType.KLING_VIDEO:
             return await self.piapi.kling_video_generation(params)
+        elif task_type == TaskType.SORA2_VIDEO:
+            return await self.piapi.sora2_video_generation(params)
         else:
             raise ValueError(f"PiAPI doesn't support: {task_type}")
 
@@ -782,6 +799,19 @@ class ProviderRouter:
             tier = (params.get("tier") or "default").lower()
             pollo_model = "kling_v2" if tier == "flagship" else "kling_v1.5"
             pollo_params = {**params, "model": pollo_model}
+            return await self.pollo.image_to_video(pollo_params)
+        elif task_type == TaskType.SORA2_VIDEO:
+            # Pollo backup for Sora 2 — only the I2V path is wired (Pollo's
+            # /generation/sora/sora-2 endpoint takes input.image + prompt).
+            # T2V Sora 2 requests have no image_url and soft-fail through,
+            # which surfaces the original PiAPI error to the caller. Same
+            # degradation pattern as KLING_VIDEO above.
+            if not (params.get("image_url") or params.get("image")):
+                return {
+                    "success": False,
+                    "error": "Pollo Sora 2 backup requires image_url (T2V Sora 2 not supported by Pollo REST).",
+                }
+            pollo_params = {**params, "model": "sora-2"}
             return await self.pollo.image_to_video(pollo_params)
         else:
             raise ValueError(f"Pollo doesn't support: {task_type}")

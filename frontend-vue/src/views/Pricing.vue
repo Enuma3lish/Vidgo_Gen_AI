@@ -610,6 +610,14 @@ function isHiddenDisplayPlan(plan: PlanInfo): boolean {
   // / NT$299 starter promo). The price_monthly<=0 rule used to hide
   // enterprise too — fixed 2026-05-22.
   if (name === 'enterprise') return false
+  // Internal "Pro Test $1 / 10000-credit" SKU must NEVER appear on the public
+  // grid, even when the backend whitelist (TEST_PRO_PLAN_ALLOWED_EMAILS) lets
+  // it through for a logged-in admin. Without this guard the test card lands
+  // above Basic on every page the admin visits — and any visitor who shares a
+  // session, screenshot, or referral link sees an arbitrage hole (US$1 → 10k
+  // credits). Reported 2026-06-09; fix is purely frontend so we don't strand
+  // existing internal subscriptions in the backend whitelist.
+  if (isTestPlan(plan)) return true
   return name === 'demo' || name === 'free' || name === 'starter' || plan.price_monthly <= 0 || plan.price_monthly === 299
 }
 
@@ -1017,7 +1025,7 @@ onMounted(async () => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="key in ['standardImage','premiumImage','standardVideo','proLong','restore','veo3','seedanceWan']" :key="key">
+                  <tr v-for="key in ['standardImage','premiumImage','backgroundRemoval','standardVideo','proLong','restore','veo3','sora2Pro','seedanceWan']" :key="key">
                     <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t(`pricing.creditReference.rows.${key}.feature`) }}</td>
                     <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t(`pricing.creditReference.rows.${key}.cost`) }}</td>
                     <td class="px-3 py-2 align-top" style="border: 1px solid rgba(255,255,255,0.35);">{{ t(`pricing.creditReference.rows.${key}.output`) }}</td>

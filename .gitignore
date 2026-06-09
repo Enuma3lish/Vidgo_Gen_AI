@@ -223,11 +223,11 @@ marimo/_lsp/
 __marimo__/
 
 # ── IDE ──
-.idea/
 .vscode/
 
 # ── Claude Code ──
-.claude/settings.local.json
+.claude/
+
 
 # ── Static / generated media (persisted in Docker volumes, not git) ──
 **/static/generated/

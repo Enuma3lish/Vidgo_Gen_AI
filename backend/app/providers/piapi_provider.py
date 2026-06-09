@@ -1438,6 +1438,121 @@ class PiAPIProvider(BaseProvider):
     # Wan via text_to_video()/image_to_video(), or Kling Omni via
     # kling_video_generation(params={"tier": "omni"}).
 
+    async def sora2_video_generation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate video via OpenAI Sora 2 / Sora 2 Pro through PiAPI's proxy.
+        Reference: piapi.ai/sora-2 (text-to-video and image-to-video both
+        supported; pro mode reaches 1080p with synchronized audio).
+
+        Mode is auto-selected by presence of ``image_url``:
+          - no image_url → text-to-video (uses ``aspect_ratio``)
+          - image_url    → image-to-video
+
+        Args:
+            params: {
+                "prompt": str (required, ≤2500 chars),
+                "negative_prompt": str (optional),
+                "duration": int (optional, 4-12, default 5),
+                "aspect_ratio": str (optional, T2V only, "16:9"|"9:16"|"1:1"),
+                "image_url": str (optional, switches to I2V),
+                "resolution": str (optional, "720p"|"1080p"; default 1080p
+                                   to match the 80-credit billing row),
+                "enable_audio": bool (optional, default True),
+            }
+
+        Returns:
+            {"success": True, "task_id": str, "output": {"video_url": str}}
+        """
+        self._log_request("sora2_video_generation", params)
+
+        # Hard-cap to the 4-12s range Sora 2 accepts. Frontend sends 5s by
+        # default to keep the billing row honest (video_sora2 = 5s @ 80 credits).
+        try:
+            duration = max(4, min(12, int(params.get("duration", 5))))
+        except (TypeError, ValueError):
+            duration = 5
+
+        input_data: Dict[str, Any] = {
+            "prompt": params["prompt"],
+            "duration": duration,
+            "resolution": str(params.get("resolution") or "1080p"),
+        }
+        # Audio is Sora 2 Pro's headline feature; default on but let callers
+        # opt out for silent renders.
+        if params.get("enable_audio") is None:
+            input_data["enable_audio"] = True
+        else:
+            input_data["enable_audio"] = bool(params["enable_audio"])
+        if params.get("negative_prompt"):
+            input_data["negative_prompt"] = params["negative_prompt"]
+
+        if params.get("image_url"):
+            input_data["image_url"] = self._resolve_image_url(params["image_url"])
+        else:
+            # aspect_ratio is T2V-only; Sora 2 derives I2V framing from the input.
+            input_data["aspect_ratio"] = params.get("aspect_ratio", "16:9")
+
+        payload = {
+            "model": PIAPI_MODELS["sora2_model"],
+            "task_type": PIAPI_MODELS["sora2_task"],
+            "input": input_data,
+            "config": {"service_mode": "public"},
+        }
+
+        # Sora 2 Pro is in the same latency class as Veo / Kling Omni — give
+        # it the Omni-length floor so a forgotten timeout never aborts a healthy
+        # 10+ minute render. Caller-supplied larger timeouts still win.
+        max_wait = _video_poll_timeout(params, KLING_OMNI_TIMEOUT_SEC)
+        _on_submit_sora = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
+        result = await self._retry_transient(
+            "sora2_video_generation",
+            lambda: self._submit_and_poll(
+                payload, max_wait_seconds=max_wait, on_submit=_on_submit_sora,
+            ),
+        )
+        output = result.get("output") or {}
+        if isinstance(output, dict):
+            # Sora 2's output shape mirrors Kling 3.0 — the video URL may live at
+            # any of `video_url` / `url` / `video.resource` / `videos[0].url`.
+            # Mirror kling_video_generation's normalizer so the router gets the
+            # standard `output.video_url` regardless of PiAPI's nesting.
+            video_url = output.get("video_url") or output.get("url") or ""
+            if not video_url:
+                v = output.get("video")
+                if isinstance(v, dict):
+                    video_url = (
+                        v.get("resource_without_watermark")
+                        or v.get("resource")
+                        or v.get("url")
+                        or v.get("video_url")
+                        or ""
+                    )
+                elif isinstance(v, str):
+                    video_url = v
+            if not video_url:
+                arrs = output.get("videos") or output.get("video_urls") or []
+                if isinstance(arrs, list) and arrs:
+                    first = arrs[0]
+                    if isinstance(first, str):
+                        video_url = first
+                    elif isinstance(first, dict):
+                        video_url = (
+                            first.get("url")
+                            or first.get("video_url")
+                            or first.get("resource_without_watermark")
+                            or first.get("resource")
+                            or ""
+                        )
+            if video_url:
+                output["video_url"] = video_url
+            else:
+                logger.warning(
+                    "[PiAPI] sora2_video_generation: success but no video URL — output keys=%s",
+                    list(output.keys()),
+                )
+            result["output"] = output
+        return result
+
     # ─────────────────────────────────────────────────────────────────────────
     # INTERIOR DESIGN (using Flux img2img as fallback)
     # ─────────────────────────────────────────────────────────────────────────

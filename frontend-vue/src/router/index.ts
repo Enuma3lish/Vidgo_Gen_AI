@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { applySeo, buildAlternateLocales } from '@/composables/useSeo'
+import { safeLocalStorage } from '@/utils/safeStorage'
 
 // 2026-05-18 — subscription result pages are eagerly imported. They
 // are the landing target when PayPal redirects back to vidgo.co after
@@ -524,7 +525,7 @@ router.afterEach((to) => {
 
 // Navigation guards
 router.beforeEach(async (to, _from, next) => {
-  const token = localStorage.getItem('access_token')
+  const token = safeLocalStorage.getItem('access_token')
   const isAuthenticated = !!token
 
   if (to.meta.requiresAuth && !isAuthenticated) {

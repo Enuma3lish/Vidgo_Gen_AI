@@ -3,6 +3,8 @@
 // were patched via /tmp/patch_locales.py. If a future en-only key is added
 // without a matching ja/ko/es value, vue-i18n's missingHandler will fall
 // back to en — but that should be the exception, not the steady state.
+import { safeLocalStorage } from '@/utils/safeStorage'
+
 export const SUPPORTED_LOCALES = ['en', 'zh-TW', 'ja', 'ko', 'es'] as const
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
@@ -24,8 +26,7 @@ export function normalizeLocale(value?: string | null): SupportedLocale {
 }
 
 export function getStoredLocale(): SupportedLocale {
-  if (typeof localStorage === 'undefined') return DEFAULT_LOCALE
-  return normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY))
+  return normalizeLocale(safeLocalStorage.getItem(LOCALE_STORAGE_KEY))
 }
 
 /**
@@ -48,9 +49,7 @@ export function getInitialLocale(): SupportedLocale {
 
 export function persistLocale(locale: string): SupportedLocale {
   const normalizedLocale = normalizeLocale(locale)
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(LOCALE_STORAGE_KEY, normalizedLocale)
-  }
+  safeLocalStorage.setItem(LOCALE_STORAGE_KEY, normalizedLocale)
   return normalizedLocale
 }
 

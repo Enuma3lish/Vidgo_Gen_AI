@@ -15,6 +15,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import apiClient from '@/api/client'
 import { LOCALE_STORAGE_KEY, SUPPORTED_LOCALES, normalizeLocale, persistLocale } from '@/utils/locales'
+import { safeLocalStorage } from '@/utils/safeStorage'
 
 const GEO_DETECTED_KEY = 'vidgo_geo_language_detected'
 // Must match the key used by main.ts + stores/ui.ts (LanguageSelector).
@@ -33,14 +34,14 @@ export function useGeoLanguage() {
    * Check if we've already detected language before
    */
   function hasDetected(): boolean {
-    return localStorage.getItem(GEO_DETECTED_KEY) === 'true'
+    return safeLocalStorage.getItem(GEO_DETECTED_KEY) === 'true'
   }
 
   /**
    * Mark as detected (so we don't call API again)
    */
   function markDetected(): void {
-    localStorage.setItem(GEO_DETECTED_KEY, 'true')
+    safeLocalStorage.setItem(GEO_DETECTED_KEY, 'true')
   }
 
   /**
@@ -50,7 +51,7 @@ export function useGeoLanguage() {
   async function detectLanguage(): Promise<string> {
     // Skip if already detected
     if (hasDetected()) {
-      const savedLocale = localStorage.getItem(LOCALE_KEY)
+      const savedLocale = safeLocalStorage.getItem(LOCALE_KEY)
       if (savedLocale) {
         return normalizeLocale(savedLocale)
       }
@@ -87,7 +88,7 @@ export function useGeoLanguage() {
    */
   async function initLanguage(): Promise<void> {
     // Check if user has manually set a locale preference
-    const userSetLocale = localStorage.getItem(LOCALE_KEY)
+    const userSetLocale = safeLocalStorage.getItem(LOCALE_KEY)
     if (userSetLocale) {
       locale.value = persistLocale(userSetLocale)
       return
@@ -106,8 +107,8 @@ export function useGeoLanguage() {
    * Reset detection (for testing or user preference change)
    */
   function resetDetection(): void {
-    localStorage.removeItem(GEO_DETECTED_KEY)
-    localStorage.removeItem(LOCALE_KEY)
+    safeLocalStorage.removeItem(GEO_DETECTED_KEY)
+    safeLocalStorage.removeItem(LOCALE_KEY)
   }
 
   return {

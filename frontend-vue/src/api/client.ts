@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import { safeLocalStorage } from '@/utils/safeStorage'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -23,11 +24,11 @@ const apiClient: AxiosInstance = axios.create({
 // Request interceptor - add auth token
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('access_token')
+    const token = safeLocalStorage.getItem('access_token')
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    const locale = localStorage.getItem('locale') || localStorage.getItem('vidgo-locale') || navigator.language || 'en'
+    const locale = safeLocalStorage.getItem('locale') || safeLocalStorage.getItem('vidgo-locale') || navigator.language || 'en'
     if (config.headers) {
       config.headers['Accept-Language'] = locale
     }
@@ -81,7 +82,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
 
-      const refreshToken = localStorage.getItem('refresh_token')
+      const refreshToken = safeLocalStorage.getItem('refresh_token')
       if (refreshToken) {
         try {
           // Single in-flight refresh: when many requests fire in parallel and
@@ -98,8 +99,8 @@ apiClient.interceptors.response.use(
           return apiClient(originalRequest)
         } catch (refreshError) {
           // Refresh failed - logout user
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
+          safeLocalStorage.removeItem('access_token')
+          safeLocalStorage.removeItem('refresh_token')
           window.location.href = '/auth/login'
           return Promise.reject(refreshError)
         }
@@ -121,9 +122,9 @@ async function getOrStartTokenRefresh(refreshToken: string): Promise<string> {
         refresh: refreshToken,
       })
       const { access, refresh: newRefreshToken } = response.data
-      localStorage.setItem('access_token', access)
+      safeLocalStorage.setItem('access_token', access)
       if (newRefreshToken) {
-        localStorage.setItem('refresh_token', newRefreshToken)
+        safeLocalStorage.setItem('refresh_token', newRefreshToken)
       }
       try {
         const { useAuthStore } = await import('@/stores/auth')

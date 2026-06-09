@@ -252,7 +252,13 @@ class CreditService:
             from app.services.subscription_service import REFUND_HQ_EXPORT_THRESHOLD
             if amount >= REFUND_HQ_EXPORT_THRESHOLD:
                 from app.models.billing import Subscription
-                from datetime import datetime, timezone
+                # NOTE: do NOT re-import datetime/timezone here. They are already
+                # imported at module level (line 16). A local `from datetime
+                # import datetime` rebinds `datetime` as a function-local for the
+                # WHOLE of _do_deduct, so the earlier `datetime.now(...)` bonus-
+                # expiry check raised UnboundLocalError ("cannot access local
+                # variable 'datetime'...") and crashed every credit-deducting
+                # render for users holding bonus credits.
                 await self.db.execute(
                     update(Subscription)
                     .where(

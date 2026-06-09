@@ -290,8 +290,13 @@ async def check_concurrent_limit(
     else:
         max_concurrent = 1
 
-    # Count currently processing generations
-    from sqlalchemy import func, select
+    # Count currently processing generations.
+    # NOTE: import only `func` here, NOT `select`. `select` is already imported
+    # at module level (line 24) and is used earlier in this function (the plan
+    # lookup above). A local `import select` rebinds it as a function-local for
+    # the WHOLE function, making that earlier use raise UnboundLocalError
+    # ("cannot access local variable 'select'") for any user who has a plan.
+    from sqlalchemy import func
     from app.models.billing import Generation
     count_result = await db.execute(
         select(func.count()).select_from(Generation).where(

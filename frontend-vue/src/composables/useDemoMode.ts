@@ -19,6 +19,7 @@ import { computed, ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { subscriptionApi } from '@/api/subscription'
 import apiClient from '@/api/client'
+import { safeLocalStorage } from '@/utils/safeStorage'
 
 export interface DemoTemplate {
   id: string
@@ -374,7 +375,7 @@ export function useDemoMode() {
   }
 
   function resolveSelectedLanguage(locale?: string): 'zh-TW' | 'en' {
-    const storedLocale = typeof localStorage !== 'undefined' ? localStorage.getItem('locale') : null
+    const storedLocale = safeLocalStorage.getItem('locale')
     const browserLocale = typeof navigator !== 'undefined' ? navigator.language : 'en'
     const lang = locale || storedLocale || browserLocale || 'en'
     return lang.startsWith('zh') ? 'zh-TW' : 'en'
@@ -384,10 +385,10 @@ export function useDemoMode() {
    * Get or create session ID for demo users
    */
   function getSessionId(): string {
-    let sessionId = localStorage.getItem('demo_session_id')
+    let sessionId = safeLocalStorage.getItem('demo_session_id')
     if (!sessionId) {
       sessionId = 'demo_' + Math.random().toString(36).substring(2, 15)
-      localStorage.setItem('demo_session_id', sessionId)
+      safeLocalStorage.setItem('demo_session_id', sessionId)
     }
     return sessionId
   }

@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useUIStore } from '@/stores'
+import { safeSessionStorage } from '@/utils/safeStorage'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -22,7 +23,7 @@ const emailForVerify = computed(() => {
   const q = route.query.email
   if (typeof q === 'string' && q) return q
   if (authStore.pendingEmail) return authStore.pendingEmail
-  return sessionStorage.getItem('pendingVerifyEmail') || ''
+  return safeSessionStorage.getItem('pendingVerifyEmail') || ''
 })
 
 function handleInput(index: number, event: Event) {
@@ -82,7 +83,7 @@ async function handleSubmit() {
       code: fullCode
     })
 
-    sessionStorage.removeItem('pendingVerifyEmail')
+    safeSessionStorage.removeItem('pendingVerifyEmail')
     uiStore.showSuccess('Email verified successfully!')
     router.push('/dashboard/my-works')
   } catch (error) {

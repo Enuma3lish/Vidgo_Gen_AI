@@ -2,12 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api'
 import type { User, LoginRequest, RegisterRequest, VerifyCodeRequest } from '@/api'
+import { safeLocalStorage, safeSessionStorage } from '@/utils/safeStorage'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
   const user = ref<User | null>(null)
-  const accessToken = ref<string | null>(localStorage.getItem('access_token'))
-  const refreshToken = ref<string | null>(localStorage.getItem('refresh_token'))
+  const accessToken = ref<string | null>(safeLocalStorage.getItem('access_token'))
+  const refreshToken = ref<string | null>(safeLocalStorage.getItem('refresh_token'))
   const loading = ref(false)
   const error = ref<string | null>(null)
   const pendingEmail = ref<string | null>(null)
@@ -56,7 +57,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authApi.register(data)
       pendingEmail.value = data.email
-      sessionStorage.setItem('pendingVerifyEmail', data.email)
+      safeSessionStorage.setItem('pendingVerifyEmail', data.email)
       return response
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } }
@@ -131,16 +132,16 @@ export const useAuthStore = defineStore('auth', () => {
   function setTokens(access: string, refresh: string) {
     accessToken.value = access
     refreshToken.value = refresh
-    localStorage.setItem('access_token', access)
-    localStorage.setItem('refresh_token', refresh)
+    safeLocalStorage.setItem('access_token', access)
+    safeLocalStorage.setItem('refresh_token', refresh)
   }
 
   function logout() {
     user.value = null
     accessToken.value = null
     refreshToken.value = null
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+    safeLocalStorage.removeItem('access_token')
+    safeLocalStorage.removeItem('refresh_token')
   }
 
   function clearError() {

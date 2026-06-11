@@ -538,6 +538,67 @@ class InteriorDesignService:
         }
         return await self._generate_image(request_body, "floorplan_render")
 
+    async def render_realistic_preserve(
+        self,
+        image_url: Optional[str] = None,
+        image_base64: Optional[str] = None,
+        extra_prompt: str = "",
+    ) -> Dict[str, Any]:
+        """Faithful "auto" render — photorealize an existing design WITHOUT
+        redesigning it.
+
+        For 3D 效果圖's "auto" effect: the input is already a design (a 3D-model
+        screenshot, SketchUp/clay/white-model render, draft, or photo). Convert it
+        into a real-world photograph while preserving the EXACT design — the same
+        layout, structure, geometry, furniture, materials, colors and textures.
+        Only the rendering realism is upgraded; nothing about the design changes.
+        """
+        if image_url and not image_base64:
+            try:
+                image_base64, _ = await self._fetch_image_as_base64(image_url)
+            except Exception as exc:
+                return {"success": False, "error": f"Failed to fetch image: {exc}"}
+
+        if not image_base64:
+            return {"success": False, "error": "No image provided"}
+
+        mime_type = "image/png" if image_base64.startswith("iVBOR") else "image/jpeg"
+
+        primary_prompt = (
+            "The attached image is an existing interior/architectural design — it may "
+            "be a 3D-model screenshot, a SketchUp/clay/white-model render, a draft, or "
+            "a photo. Convert it into a photorealistic real-world photograph. "
+            "CRITICAL — preserve the EXACT design: keep the same camera angle and "
+            "composition, the same room layout and structure, the same geometry and "
+            "proportions, the same furniture and object placement, and the same "
+            "materials, colors, patterns and textures shown in the image. Do NOT "
+            "redesign, do NOT change the style, do NOT move/add/remove any objects, do "
+            "NOT alter the architecture. Only upgrade the rendering to look like a real "
+            "photograph: physically accurate lighting, soft realistic shadows, correct "
+            "reflections and global illumination, fine material/texture detail, and "
+            "natural depth of field. Empty space: no people, no text, no labels, no "
+            "watermark. "
+            f"{extra_prompt}"
+        ).strip()
+
+        request_body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {"mime_type": mime_type, "data": image_base64}},
+                        {"text": primary_prompt},
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                # Low temperature → stay faithful to the input, minimal invention.
+                "temperature": 0.4,
+            },
+        }
+        return await self._generate_image(request_body, "realistic_preserve")
+
     async def generate_floorplan(
         self,
         requirements: str = "",

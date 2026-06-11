@@ -140,6 +140,9 @@ export interface FloorplanToVideoRequest {
   duration?: 5 | 10
   model_version?: 'v1' | 'v2'
   language?: 'en' | 'zh'
+  // 3D 效果圖 "auto" effect: faithfully photorealize the uploaded design,
+  // preserving its style/materials/structure instead of restyling it.
+  preserve_original?: boolean
 }
 
 export interface FloorplanToVideoResponse {

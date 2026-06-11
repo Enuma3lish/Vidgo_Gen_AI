@@ -188,6 +188,13 @@ class FloorplanToVideoRequest(BaseModel):
     duration: int = Field(5, ge=5, le=10, description="Growth-video length in seconds (5 or 10).")
     model_version: str = Field("v2", description="Trellis version for the 3D model when result_tier='video_3d'.")
     language: Optional[str] = Field("en", description="Language for the Gemini analysis ('en' | 'zh').")
+    preserve_original: bool = Field(
+        False,
+        description="3D 效果圖 'auto' effect: faithfully photorealize the uploaded "
+                    "design (keep its style, materials, textures and structure; "
+                    "simulate a real-world photo) instead of rendering a new design "
+                    "from a floor plan.",
+    )
 
 
 class FloorplanToVideoResponse(BaseModel):
@@ -1019,12 +1026,20 @@ async def _floorplan_to_video_inner(
         if not ok:
             return FloorplanToVideoResponse(success=False, result_tier="render", error=err)
         try:
-            result = await get_interior_design_service().render_from_floorplan(
-                floorplan_image_url=request.image_url,
-                style_id=request.style_id,
-                room_type=request.room_type,
-                extra_prompt=request.prompt or "",
-            )
+            if request.preserve_original:
+                # "Auto" effect: faithfully photorealize the uploaded design,
+                # preserving its style/materials/structure (no redesign).
+                result = await get_interior_design_service().render_realistic_preserve(
+                    image_url=request.image_url,
+                    extra_prompt=request.prompt or "",
+                )
+            else:
+                result = await get_interior_design_service().render_from_floorplan(
+                    floorplan_image_url=request.image_url,
+                    style_id=request.style_id,
+                    room_type=request.room_type,
+                    extra_prompt=request.prompt or "",
+                )
         except Exception as exc:  # noqa: BLE001
             await _refund_credits(db, current_user, RENDER_CREDITS, "interior_render")
             logger.error("3D render (render tier) raised: %s", exc, exc_info=True)
@@ -1054,12 +1069,23 @@ async def _floorplan_to_video_inner(
     if not ok:
         return FloorplanToVideoResponse(success=False, result_tier=request.result_tier, error=err)
 
+    # "Auto" effect on the video tiers: bias the render stage toward faithfully
+    # preserving the uploaded design rather than restyling it.
+    growth_extra_prompt = request.prompt or ""
+    if request.preserve_original:
+        growth_extra_prompt = (
+            "Preserve the original design exactly — keep the same layout, structure, "
+            "geometry, furniture placement, materials, colors and textures from the "
+            "input; only make it photorealistic. Do not redesign or change the style. "
+            + growth_extra_prompt
+        ).strip()
+
     try:
         result = await get_interior_growth_service().run(
             floorplan_url=request.image_url,
             style_id=request.style_id,
             room_type=request.room_type,
-            extra_prompt=request.prompt or "",
+            extra_prompt=growth_extra_prompt,
             include_3d=include_3d,
             duration=request.duration,
             model_version=request.model_version,

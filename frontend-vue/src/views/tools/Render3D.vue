@@ -35,6 +35,7 @@ const imageInput = ref<string | undefined>(undefined)   // floor plan or room ph
 const styleId = ref<string>('modern_minimalist')
 const roomType = ref<string>('living_room')
 const resultTier = ref<GrowthTier>('render')
+const preserveOriginal = ref(false)
 const prompt = ref('')
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
@@ -111,6 +112,7 @@ async function generate() {
       room_type: roomType.value,
       prompt: prompt.value.trim() || undefined,
       result_tier: resultTier.value,
+      preserve_original: preserveOriginal.value,
       language: isZh.value ? 'zh' : 'en',
     })
 
@@ -196,7 +198,26 @@ const hasResult = computed(() => (isVideoTier.value ? !!videoUrl.value : !!rende
         </p>
       </div>
 
+      <!-- Auto effect: faithfully photorealize the uploaded design -->
       <div>
+        <label class="pp-field-label">{{ L('渲染模式', 'Render Mode', 'レンダリングモード', '렌더 모드', 'Modo de render') }}</label>
+        <button type="button" @click="preserveOriginal = !preserveOriginal"
+          class="w-full py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
+          :style="preserveOriginal
+            ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
+            : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
+        >
+          <span>{{ preserveOriginal ? '✓' : '' }}</span>
+          {{ L('自動：保留原始設計、模擬真實場景', 'Auto: keep original design → real world', '自動：元のデザインを保持して実写化', '자동: 원본 디자인 유지 → 실사화', 'Auto: conservar diseño → mundo real') }}
+        </button>
+        <p class="pp-field-help">
+          {{ preserveOriginal
+            ? L('忠實保留上傳設計的格局、材質、紋理與結構,只把畫面渲染成真實照片(不重新設計,風格選項此時略過)。', 'Faithfully keeps your uploaded design\'s layout, materials, textures and structure — only photorealizes it (no redesign; the style option is skipped).', 'アップロードしたデザインの間取り・素材・質感・構造を忠実に保ち、実写化のみ行います(再設計なし、スタイル指定は無視)。', '업로드한 디자인의 레이아웃·재질·질감·구조를 그대로 유지하고 실사화만 합니다(재설계 없음, 스타일 옵션 무시).', 'Mantiene fielmente el diseño subido (distribución, materiales, texturas y estructura) y solo lo vuelve fotorrealista (sin rediseño; se omite el estilo).')
+            : L('依下方風格從平面圖/草圖渲染新的設計。', 'Renders a new design from your floor plan/sketch using the style below.', '下のスタイルで間取り図/スケッチから新しいデザインをレンダリングします。', '아래 스타일로 평면도/스케치에서 새 디자인을 렌더링합니다.', 'Renderiza un diseño nuevo desde tu plano/boceto con el estilo de abajo.') }}
+        </p>
+      </div>
+
+      <div v-show="!preserveOriginal">
         <label class="pp-field-label">{{ L('設計風格', 'Design Style', 'デザインスタイル', '디자인 스타일', 'Estilo de diseño') }}</label>
         <select v-model="styleId" class="pp-select">
           <option v-for="s in styles" :key="s.id" :value="s.id">{{ styleLabel(s) }}</option>

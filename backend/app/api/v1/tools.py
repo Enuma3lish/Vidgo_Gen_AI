@@ -4323,8 +4323,17 @@ async def _generate_avatar_inner(
 
     # Resolve curated avatar script. The avatar `language` field decides which
     # canonical variant to use: zh-TW → ZH script; otherwise → EN script.
+    #
+    # 2026-06-11: only adopt the preset when the user has NOT typed their own
+    # words. Previously a resolving `prompt_id` UNCONDITIONALLY overwrote
+    # `request.script`, so if the client sent a stale/preset prompt_id alongside
+    # an edited script the avatar spoke the preset sentence instead of what the
+    # user typed ("the avatar doesn't speak the sentence I typed"). Honor the
+    # typed script and let the access gate treat a differing script as custom.
     curated_script = _resolve_curated_prompt("ai_avatar", request.prompt_id, request.locale or request.language)
-    if curated_script:
+    user_script = (request.script or "").strip()
+    used_preset = bool(curated_script) and (not user_script or user_script == curated_script.strip())
+    if used_preset:
         request.script = curated_script
     if not request.script or not request.script.strip():
         raise HTTPException(
@@ -4362,7 +4371,7 @@ async def _generate_avatar_inner(
     # ========== ACCESS GATE: preset script → cached demo, custom script → subscribe + card ==========
     # Avatar always needs speech text; a preset (prompt_id) script is the free
     # path, a custom script requires subscription + bound card.
-    _gate = await _custom_prompt_gate(db, current_user, is_custom=not bool(curated_script))
+    _gate = await _custom_prompt_gate(db, current_user, is_custom=not used_preset)
     if _gate == "blocked":
         return _subscribe_card_required_response()
     if _gate == "demo":

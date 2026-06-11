@@ -397,11 +397,13 @@ class PiAPIProvider(BaseProvider):
         # of the visual prompt so the image-to-video model doesn't render any
         # of the script as on-screen text. The lip-sync step still uses the
         # full audio so the message itself is preserved.
+        # 2026-06-11: clean positive prompt — do NOT name "text/captions/etc."
+        # here either (naming them can make the model render them). The I2V
+        # path has no negative_prompt knob, so a text-free brief is the safest.
         presenter_prompt = (
             "natural presenter talking to camera, subtle head movement, "
             "friendly expression, professional studio lighting, stable face, "
-            "no text, no captions, no subtitles, no watermark, no logos, "
-            "no on-screen graphics"
+            "clean cinematic talking-head portrait, plain neutral background"
         )
 
         logger.warning("[PiAPI] Avatar: trying presenter image-to-video fallback")
@@ -1974,22 +1976,27 @@ class PiAPIProvider(BaseProvider):
 
         # Step 2: Build Kling Avatar request (requires local_dubbing_url).
         # NOTE: Kling's `prompt` field controls the *visual scene*, not the
-        # spoken content. Passing the user's script in `prompt` made Kling
-        # render parts of it as on-screen captions/text overlays (BUG-005).
-        # The script reaches Kling via `local_dubbing_url` (the TTS audio);
-        # the prompt should be a clean visual brief that explicitly tells
-        # the model "no text, no captions, no watermark" so the output is a
-        # plain talking-head video.
+        # spoken content. The script reaches Kling via `local_dubbing_url`
+        # (the TTS audio) and must NEVER appear in `prompt` (BUG-005: it got
+        # rendered as on-screen captions).
+        #
+        # 2026-06-11: the POSITIVE prompt must also not enumerate "no text /
+        # no captions / no subtitles". Naming those tokens in a generative
+        # prompt frequently backfires and makes the model render that very
+        # text on screen (the "don't think of an elephant" failure) — the
+        # likely cause of stray on-screen words reported on subscriber
+        # avatars. Keep the positive prompt a clean visual brief that never
+        # mentions text, and put the exclusions ONLY in negative_prompt.
         input_data: Dict[str, Any] = {
             "image_url": image_url,
             "local_dubbing_url": audio_url,
             "mode": mode,
             "batch_size": params.get("batch_size", 1),
             "prompt": (
-                "Natural talking-head presenter video, subtle lip-sync and "
-                "head movement, neutral background, professional studio "
-                "lighting, no text, no captions, no subtitles, no watermark, "
-                "no logos, no on-screen graphics"
+                "A person speaking naturally and directly to the camera, "
+                "subtle lip-sync and gentle head movement, friendly "
+                "professional expression, soft studio lighting, plain "
+                "neutral background, clean cinematic talking-head portrait"
             ),
             "negative_prompt": (
                 "text, captions, subtitles, watermark, logo, on-screen "

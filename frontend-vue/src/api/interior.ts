@@ -21,6 +21,10 @@ export interface DesignResponse {
   conversation_id?: string
   turn_count?: number
   error?: string
+  // Access-gate signal — utils/toolGate.ts handleCardRequired reads this.
+  error_code?: string
+  message?: string
+  credits_used?: number
   space_kind?: 'interior' | 'exterior' | 'commercial'
   // When variation_count > 1, the backend returns all variant URLs here.
   // results[0] always matches image_url (the primary).
@@ -102,8 +106,30 @@ export interface Generate3DResponse {
   error?: string
 }
 
-// ── Floor-plan → 3D-growth-video pipeline ──────────────────────────────────
-export type GrowthTier = 'video' | 'video_3d'
+// ── Floor plan (平面配置圖) ─────────────────────────────────────────────────
+export interface FloorPlanRequest {
+  room_type?: string
+  dimensions?: string
+  requirements?: string
+  sketch_image_url?: string
+  sketch_image_base64?: string
+  language?: string
+}
+
+// ── Isometric 3D view (立體圖) ──────────────────────────────────────────────
+export interface IsometricRequest {
+  image_url?: string
+  image_base64?: string
+  style_id?: string
+  room_type?: string
+  prompt?: string
+  language?: string
+}
+
+// ── 3D 效果圖 / Floor-plan → 3D-growth-video pipeline ───────────────────────
+// 'render' = photorealistic 3D 效果圖 only; 'video'/'video_3d' add the growth
+// animation (and optional GLB). All three are output options of the 3D 效果圖 page.
+export type GrowthTier = 'render' | 'video' | 'video_3d'
 
 export interface FloorplanToVideoRequest {
   image_url: string
@@ -173,6 +199,26 @@ export const interiorApi = {
    */
   async redesign(request: RedesignRequest): Promise<DesignResponse> {
     const response = await apiClient.post('/api/v1/interior/redesign', request)
+    return response.data
+  },
+
+  /**
+   * 平面配置圖 — generate a clean 2D floor plan from typed requirements OR a sketch.
+   */
+  async floorplan(request: FloorPlanRequest): Promise<DesignResponse> {
+    const response = await apiClient.post('/api/v1/interior/floorplan', request, {
+      timeout: 120000,
+    })
+    return response.data
+  },
+
+  /**
+   * 立體圖 — isometric 3D "dollhouse" view from an uploaded image.
+   */
+  async isometric(request: IsometricRequest): Promise<DesignResponse> {
+    const response = await apiClient.post('/api/v1/interior/isometric', request, {
+      timeout: 120000,
+    })
     return response.data
   },
 

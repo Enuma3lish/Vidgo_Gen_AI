@@ -60,8 +60,12 @@ export const toolHubTiles: ToolHubTile[] = [
   // entirely). Thumbnails reuse hub assets that visually match.
   { id: 'room-redesign',       labelKey: 'tools.hub.tiles.roomRedesign',       to: '/tools/room-redesign',          thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
   { id: 'interior-templates',  labelKey: 'tools.hub.tiles.interiorTemplates',  to: '/tools/interior-templates',     thumb: `${T}/product-photography.png`, category: 'interior'    },
-  // Floor-plan → 3D growth video (Gemini → render → Kling 3.0 → opt. Trellis).
-  { id: 'floorplan-video',     labelKey: 'tools.hub.tiles.floorplanVideo',     to: '/tools/floorplan-to-video',     thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
+  // 2026-06-11 — interior design workflow: 平面配置圖 / 立體圖 / 3D 效果圖.
+  // The standalone floorplan-to-video tile was removed; its growth video is now
+  // an output option inside 3D 效果圖 (/tools/render-3d).
+  { id: 'floor-plan',          labelKey: 'tools.hub.tiles.floorPlan',          to: '/tools/floor-plan',             thumb: `${T}/edit-with-ai.png`,        category: 'interior'    },
+  { id: 'isometric',           labelKey: 'tools.hub.tiles.isometric',          to: '/tools/isometric',              thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
+  { id: 'render-3d',           labelKey: 'tools.hub.tiles.render3d',           to: '/tools/render-3d',              thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
   // 2026-06-03 — exterior/render-enhancer/sketch tools added after the owner
   // asked to mirror mnml.ai's exterior-ai / render-enhancer / sketch2img and
   // broaden the group to cover indoor + outdoor (室內室外設計). Each is its own

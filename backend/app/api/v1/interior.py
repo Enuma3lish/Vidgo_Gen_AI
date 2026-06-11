@@ -34,14 +34,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/interior", tags=["interior"])
 
-# ── Floor-plan → 3D-growth-video pipeline pricing ──────────────────────────
-# Fallback credit costs; a ServicePricing row keyed by the same service_type
-# overrides these per the deduction-firewall pattern in
-# tools._check_and_deduct_credits, so ops can retune without a redeploy.
-#   Tier "video"     = Gemini analysis + 3D render + Kling 3.0/Omni growth video
-#   Tier "video_3d"  = + Trellis2 interactive GLB model
-GROWTH_VIDEO_CREDITS = 800
-GROWTH_VIDEO_3D_CREDITS = 950
+# ── Interior tool pricing (fallbacks) ──────────────────────────────────────
+# A ServicePricing row keyed by the same service_type overrides these per the
+# deduction-firewall pattern in tools._check_and_deduct_credits, so ops can
+# retune without a redeploy. These constants must stay correct, since they are
+# the live charge until the ServicePricing seed runs.
+#   interior_floorplan = 2D floor-plan blueprint (平面配置圖)
+#   interior_isometric = 3D isometric "dollhouse" view (立體圖)
+#   interior_render    = photorealistic render only, 3D 效果圖 "render" tier
+#   "video"    tier    = render + Kling 3.0/Omni growth video
+#   "video_3d" tier    = + Trellis2 interactive GLB model
+FLOORPLAN_CREDITS = 15
+ISOMETRIC_CREDITS = 25
+RENDER_CREDITS = 40
+GROWTH_VIDEO_CREDITS = 600
+GROWTH_VIDEO_3D_CREDITS = 750
 GROWTH_3D_DELTA = GROWTH_VIDEO_3D_CREDITS - GROWTH_VIDEO_CREDITS  # refunded if 3D add-on yields no model
 
 
@@ -100,6 +107,26 @@ class StyleTransferRequest(BaseModel):
     style_id: str = Field(..., description="Design style ID to apply")
 
 
+class FloorPlanRequest(BaseModel):
+    """平面配置圖 — generate a clean 2D floor plan from requirements OR a sketch."""
+    room_type: Optional[str] = Field(None, description="Primary room/space type hint.")
+    dimensions: Optional[str] = Field(None, max_length=200, description="Free-text overall dimensions, e.g. '4m x 5m, 2 bedrooms'.")
+    requirements: Optional[str] = Field(None, max_length=1000, description="Free-text needs (rooms, adjacencies, must-haves).")
+    sketch_image_url: Optional[str] = Field(None, description="URL of an uploaded hand sketch / rough plan to clean up.")
+    sketch_image_base64: Optional[str] = Field(None, description="Base64 of an uploaded sketch (alternative to URL).")
+    language: Optional[str] = Field("en", description="UI locale hint.")
+
+
+class IsometricRequest(BaseModel):
+    """立體圖 — isometric 3D 'dollhouse' view from an uploaded image (e.g. a floor plan)."""
+    image_url: Optional[str] = Field(None, description="URL of the source image (floor plan or layout).")
+    image_base64: Optional[str] = Field(None, description="Base64 of the source image (alternative to URL).")
+    style_id: Optional[str] = Field(None, description="Optional interior design style.")
+    room_type: Optional[str] = Field(None, description="Optional room type hint.")
+    prompt: Optional[str] = Field(None, max_length=1000, description="Optional extra request (materials, mood).")
+    language: Optional[str] = Field("en", description="UI locale hint.")
+
+
 class DesignResponse(BaseModel):
     success: bool
     image_url: Optional[str] = None
@@ -107,6 +134,11 @@ class DesignResponse(BaseModel):
     conversation_id: Optional[str] = None
     turn_count: Optional[int] = None
     error: Optional[str] = None
+    # Access-gate signal: when set to 'subscription_card_required' the frontend
+    # (utils/toolGate.ts isCardRequired) pops the subscribe + add-card CTA.
+    error_code: Optional[str] = None
+    message: Optional[str] = None
+    credits_used: int = 0
     space_kind: Optional[str] = None  # 'interior' | 'exterior', echoed back
     # 2026-05-18 — image-understanding fusion result. Lets the frontend
     # show "we see: ..." alongside the result and warn the user when
@@ -147,9 +179,10 @@ class FloorplanToVideoRequest(BaseModel):
     room_type: Optional[str] = Field("living_room", description="Primary room type hint (see GET /interior/room-types).")
     prompt: Optional[str] = Field(None, description="Optional extra request (materials, mood, dimensions).")
     result_tier: str = Field(
-        "video",
-        pattern="^(video|video_3d)$",
-        description="What the user wants: 'video' = render + Kling 3.0 growth animation; "
+        "render",
+        pattern="^(render|video|video_3d)$",
+        description="What the user wants: 'render' = photorealistic 3D 效果圖 only; "
+                    "'video' = render + Kling 3.0 growth animation; "
                     "'video_3d' = also reconstruct an interactive 3D model (.glb).",
     )
     duration: int = Field(5, ge=5, le=10, description="Growth-video length in seconds (5 or 10).")
@@ -728,6 +761,152 @@ async def generate_3d_from_floorplan(
     )
 
 
+async def _record_interior_generation(
+    db: AsyncSession,
+    user: User,
+    service_type: str,
+    input_image_url: Optional[str],
+    result_image_url: Optional[str],
+    credits_used: int,
+    input_text: Optional[str] = None,
+) -> None:
+    """Best-effort UserGeneration history row — never break the response on it."""
+    try:
+        user_gen = UserGeneration(
+            user_id=user.id,
+            tool_type=ToolType.ROOM_REDESIGN,
+            input_image_url=input_image_url,
+            input_params={"pipeline": service_type},
+            input_text=input_text,
+            result_image_url=result_image_url,
+            credits_used=credits_used,
+        )
+        if hasattr(user_gen, "set_expiry"):
+            user_gen.set_expiry()
+        db.add(user_gen)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("%s: generation record skipped: %s", service_type, exc)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@router.post("/floorplan", response_model=DesignResponse)
+async def generate_floorplan_layout(
+    request: FloorPlanRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """平面配置圖 — generate a clean 2D floor-plan layout from typed requirements
+    OR an uploaded hand sketch (Gemini 2.5 Flash Image)."""
+    has_text = bool((request.requirements or "").strip() or (request.dimensions or "").strip())
+    has_sketch = bool(request.sketch_image_url or request.sketch_image_base64)
+    if not has_text and not has_sketch:
+        raise HTTPException(status_code=400, detail="Provide requirements/dimensions or upload a sketch.")
+
+    # Floor-plan input is always custom → active subscription + bound card
+    # required (admins / internal test accounts bypass via the gate).
+    from app.services.access_gate import custom_prompt_gate
+    if await custom_prompt_gate(db, current_user, is_custom=True) != "allow":
+        return DesignResponse(
+            success=False,
+            error_code="subscription_card_required",
+            message="平面配置圖需要有效訂閱並綁定信用卡。 / Floor-plan generation requires an active subscription with a bound card.",
+        )
+
+    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits
+    ok, err = await _check_and_deduct_credits(db, current_user, FLOORPLAN_CREDITS, "interior_floorplan")
+    if not ok:
+        return DesignResponse(success=False, error=err)
+
+    try:
+        result = await get_interior_design_service().generate_floorplan(
+            requirements=request.requirements or "",
+            dimensions=request.dimensions,
+            room_type=request.room_type,
+            sketch_image_url=request.sketch_image_url,
+            sketch_image_base64=request.sketch_image_base64,
+        )
+    except Exception as exc:  # noqa: BLE001
+        await _refund_credits(db, current_user, FLOORPLAN_CREDITS, "interior_floorplan")
+        logger.error("floorplan layout generation raised: %s", exc, exc_info=True)
+        return DesignResponse(success=False, error="Floor-plan generation failed. Please try again.")
+
+    if not result.get("success") or not result.get("image_url"):
+        await _refund_credits(db, current_user, FLOORPLAN_CREDITS, "interior_floorplan")
+        return DesignResponse(success=False, error=result.get("error") or "Floor-plan generation failed.")
+
+    credits_used = 0 if getattr(current_user, "is_superuser", False) else FLOORPLAN_CREDITS
+    await _record_interior_generation(
+        db, current_user, "interior_floorplan",
+        request.sketch_image_url, result.get("image_url"), credits_used,
+        input_text=request.requirements,
+    )
+    return DesignResponse(
+        success=True,
+        image_url=result.get("image_url"),
+        description="Floor plan generated",
+        credits_used=credits_used,
+    )
+
+
+@router.post("/isometric", response_model=DesignResponse)
+async def generate_isometric_view(
+    request: IsometricRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """立體圖 — isometric 3D 'dollhouse' view from an uploaded image. Reuses
+    interior_design_service.render_from_floorplan (its prompt yields a 45°
+    isometric interior visualization)."""
+    if not request.image_url and not request.image_base64:
+        raise HTTPException(status_code=400, detail="An image (URL or base64) is required.")
+
+    from app.services.access_gate import custom_prompt_gate
+    if await custom_prompt_gate(db, current_user, is_custom=True) != "allow":
+        return DesignResponse(
+            success=False,
+            error_code="subscription_card_required",
+            message="立體圖需要有效訂閱並綁定信用卡。 / Isometric view requires an active subscription with a bound card.",
+        )
+
+    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits
+    ok, err = await _check_and_deduct_credits(db, current_user, ISOMETRIC_CREDITS, "interior_isometric")
+    if not ok:
+        return DesignResponse(success=False, error=err)
+
+    try:
+        result = await get_interior_design_service().render_from_floorplan(
+            floorplan_image_url=request.image_url,
+            floorplan_image_base64=request.image_base64,
+            style_id=request.style_id,
+            room_type=request.room_type,
+            extra_prompt=request.prompt or "",
+        )
+    except Exception as exc:  # noqa: BLE001
+        await _refund_credits(db, current_user, ISOMETRIC_CREDITS, "interior_isometric")
+        logger.error("isometric view generation raised: %s", exc, exc_info=True)
+        return DesignResponse(success=False, error="Isometric view generation failed. Please try again.")
+
+    if not result.get("success") or not result.get("image_url"):
+        await _refund_credits(db, current_user, ISOMETRIC_CREDITS, "interior_isometric")
+        return DesignResponse(success=False, error=result.get("error") or "Isometric view generation failed.")
+
+    credits_used = 0 if getattr(current_user, "is_superuser", False) else ISOMETRIC_CREDITS
+    await _record_interior_generation(
+        db, current_user, "interior_isometric",
+        request.image_url, result.get("image_url"), credits_used,
+    )
+    return DesignResponse(
+        success=True,
+        image_url=result.get("image_url"),
+        description="Isometric view generated",
+        credits_used=credits_used,
+    )
+
+
 @router.get("/floorplan-options")
 async def floorplan_to_video_options():
     """Result tiers + credit costs + styles for the floor-plan growth pipeline.
@@ -738,6 +917,15 @@ async def floorplan_to_video_options():
     """
     return {
         "tiers": [
+            {
+                "id": "render",
+                "name": "3D Render",
+                "name_zh": "3D 效果圖",
+                "description": "Gemini renders a photorealistic 3D interior from your floor plan or room image (image only, no video).",
+                "service_type": "interior_render",
+                "credits": RENDER_CREDITS,
+                "outputs": ["render_image"],
+            },
             {
                 "id": "video",
                 "name": "Growth Video",
@@ -816,15 +1004,51 @@ async def _floorplan_to_video_inner(
     """Run the floor-plan growth pipeline (credits + orchestration + record).
     Returns a FloorplanToVideoResponse; the caller streams it with heartbeats.
     """
-    include_3d = request.result_tier == "video_3d"
-    service_type = "interior_growth_video_3d" if include_3d else "interior_growth_video"
-    cost = GROWTH_VIDEO_3D_CREDITS if include_3d else GROWTH_VIDEO_CREDITS
     is_admin = bool(getattr(current_user, "is_superuser", False))
 
     # Credit deduction reuses the platform's deduction firewall (admins bypass,
     # ServicePricing overrides the fallback `cost`). Imported lazily to avoid a
     # tools.py ↔ interior.py circular import at module load.
     from app.api.v1.tools import _check_and_deduct_credits, _refund_credits
+
+    # ── "render" tier: photorealistic 3D 效果圖 only (no Kling/Trellis) ──
+    # Reuses the same Gemini render the growth pipeline uses for its end frame,
+    # so output is visually consistent with the video tiers.
+    if request.result_tier == "render":
+        ok, err = await _check_and_deduct_credits(db, current_user, RENDER_CREDITS, "interior_render")
+        if not ok:
+            return FloorplanToVideoResponse(success=False, result_tier="render", error=err)
+        try:
+            result = await get_interior_design_service().render_from_floorplan(
+                floorplan_image_url=request.image_url,
+                style_id=request.style_id,
+                room_type=request.room_type,
+                extra_prompt=request.prompt or "",
+            )
+        except Exception as exc:  # noqa: BLE001
+            await _refund_credits(db, current_user, RENDER_CREDITS, "interior_render")
+            logger.error("3D render (render tier) raised: %s", exc, exc_info=True)
+            raise HTTPException(status_code=500, detail=str(exc) or "3D render failed") from exc
+        if not result.get("success") or not result.get("image_url"):
+            await _refund_credits(db, current_user, RENDER_CREDITS, "interior_render")
+            return FloorplanToVideoResponse(
+                success=False, result_tier="render", error=result.get("error") or "3D render failed",
+            )
+        credits_used = 0 if is_admin else RENDER_CREDITS
+        await _record_interior_generation(
+            db, current_user, "interior_render",
+            request.image_url, result.get("image_url"), credits_used,
+        )
+        return FloorplanToVideoResponse(
+            success=True,
+            result_tier="render",
+            render_image_url=result.get("image_url"),
+            credits_used=credits_used,
+        )
+
+    include_3d = request.result_tier == "video_3d"
+    service_type = "interior_growth_video_3d" if include_3d else "interior_growth_video"
+    cost = GROWTH_VIDEO_3D_CREDITS if include_3d else GROWTH_VIDEO_CREDITS
 
     ok, err = await _check_and_deduct_credits(db, current_user, cost, service_type)
     if not ok:

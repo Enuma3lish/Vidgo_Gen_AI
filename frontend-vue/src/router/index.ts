@@ -220,18 +220,10 @@ const routes: RouteRecordRaw[] = [
   // Redirect to /tools/short-video so old bookmarks land on the closest tool.
   { path: '/tools/luma-video', redirect: '/tools/short-video' },
   { path: '/tools/remove-watermark', redirect: '/tools/effects' },
-  {
-    path: '/tools/image-translator',
-    name: 'image-translator',
-    component: () => import('@/views/tools/ImageTranslator.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/tools/video-dubbing',
-    name: 'video-dubbing',
-    component: () => import('@/views/tools/VideoDubbing.vue'),
-    meta: { requiresAuth: false }
-  },
+  // 2026-06-11: Image Translator and Video Dubbing retired. Redirect old
+  // bookmarks/links to the tool hub instead of 404-ing.
+  { path: '/tools/image-translator', redirect: '/tools/product-scene' },
+  { path: '/tools/video-dubbing', redirect: '/tools/product-scene' },
   { path: '/tools/ai-model-swap', redirect: '/tools/try-on' },
   { path: '/tools/try-on-accessories', redirect: '/tools/try-on' },
   { path: '/tools/ai-templates', redirect: '/tools/product-scene' },

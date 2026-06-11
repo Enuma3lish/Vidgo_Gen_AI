@@ -32,23 +32,6 @@ export interface ToolResponse {
   prompt_gap_reason?: string | null
 }
 
-export interface ImageTranslateParams {
-  imageUrl: string
-  targetLanguage: string
-  sourceLanguage?: string
-  instructions?: string
-}
-
-export interface VideoDubbingParams {
-  videoUrl: string
-  targetLanguage: string
-  sourceLanguage?: string
-  sourceScript?: string
-  translatedScript?: string
-  voiceReferenceUrl?: string
-  voiceReferenceText?: string
-}
-
 export const toolsApi = {
   async removeBackground(
     imageUrl: string,
@@ -259,37 +242,6 @@ export const toolsApi = {
       {
         video_url: videoUrl,
         invert_output: opts?.invertOutput ?? false,
-      },
-      { timeout: GENERATION_TIMEOUT_MS }
-    )
-    return response.data
-  },
-
-  async imageTranslate(params: ImageTranslateParams): Promise<ToolResponse> {
-    const response = await apiClient.post(
-      '/api/v1/tools/image-translate',
-      {
-        image_url: params.imageUrl,
-        target_language: params.targetLanguage,
-        source_language: params.sourceLanguage,
-        instructions: params.instructions,
-      },
-      { timeout: GENERATION_TIMEOUT_MS }
-    )
-    return response.data
-  },
-
-  async videoDubbing(params: VideoDubbingParams): Promise<ToolResponse> {
-    const response = await apiClient.post(
-      '/api/v1/tools/video-dubbing',
-      {
-        video_url: params.videoUrl,
-        target_language: params.targetLanguage,
-        source_language: params.sourceLanguage,
-        source_script: params.sourceScript,
-        translated_script: params.translatedScript,
-        voice_reference_url: params.voiceReferenceUrl,
-        voice_reference_text: params.voiceReferenceText,
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )

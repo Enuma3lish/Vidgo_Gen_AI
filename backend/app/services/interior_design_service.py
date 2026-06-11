@@ -538,6 +538,72 @@ class InteriorDesignService:
         }
         return await self._generate_image(request_body, "floorplan_render")
 
+    async def generate_floorplan(
+        self,
+        requirements: str = "",
+        dimensions: Optional[str] = None,
+        room_type: Optional[str] = None,
+        sketch_image_url: Optional[str] = None,
+        sketch_image_base64: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Generate a clean 2D architectural floor-plan drawing (平面配置圖).
+
+        Two input modes (either or both):
+          - Typed requirements / dimensions / room_type → draw a plan from scratch.
+          - A hand sketch / rough plan image → redraw it as a clean scaled plan,
+            preserving room positions and adjacencies.
+
+        Unlike render_from_floorplan() (which produces a 3D render FROM a plan),
+        this produces a flat top-down blueprint as the OUTPUT — so the prompt
+        explicitly forbids perspective / photorealism.
+        """
+        if sketch_image_url and not sketch_image_base64:
+            try:
+                sketch_image_base64, _ = await self._fetch_image_as_base64(sketch_image_url)
+            except Exception as exc:
+                return {"success": False, "error": f"Failed to fetch sketch image: {exc}"}
+
+        room_hint = ""
+        if room_type and room_type in ROOM_TYPES:
+            room_hint = f"The primary space is a {ROOM_TYPES[room_type]['context']}. "
+        dim_hint = f"Overall dimensions: {dimensions}. " if dimensions else ""
+
+        base_prompt = (
+            "Generate a clean, professional 2D architectural floor-plan drawing — a "
+            "top-down orthographic blueprint view. Draw walls as solid black double "
+            "lines, doors as quarter-circle door swings, and windows as gaps with sill "
+            "lines. Label each room with its name. Include furniture footprints (bed, "
+            "sofa, dining table, kitchen counters, fixtures) drawn as simple top-down "
+            "icons. Use a white background, crisp black linework, light room fills, and "
+            "thin dimension lines. This must be a flat scaled floor plan — NOT a 3D "
+            "render, NOT a perspective view, NOT photorealistic. "
+            f"{room_hint}{dim_hint}{requirements}"
+        ).strip()
+
+        if sketch_image_base64:
+            mime_type = "image/png" if sketch_image_base64.startswith("iVBOR") else "image/jpeg"
+            full_prompt = (
+                "The attached image is a rough hand sketch / draft floor plan. Redraw it "
+                "as a clean, scaled 2D architectural floor plan, preserving the room "
+                "positions, proportions, and adjacencies shown in the sketch. " + base_prompt
+            )
+            parts = [
+                {"inline_data": {"mime_type": mime_type, "data": sketch_image_base64}},
+                {"text": full_prompt},
+            ]
+        else:
+            parts = [{"text": base_prompt}]
+
+        request_body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "temperature": 0.6,
+            },
+        }
+        return await self._generate_image(request_body, "floorplan")
+
     async def generate_design(
         self,
         prompt: str,

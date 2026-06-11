@@ -66,15 +66,27 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
-  // Floor plan → 3D growth video (Gemini → render → Kling 3.0 → opt. Trellis).
-  // Subscriber/superuser gated server-side; the page itself loads for all so
-  // visitors can see the tool before the auth wall on Generate.
+  // 2026-06-11 — interior design workflow tools. The growth video folded into
+  // 3D 效果圖 (/tools/render-3d), so the old floorplan-to-video route now redirects.
   {
-    path: '/tools/floorplan-to-video',
-    name: 'floorplan-to-video',
-    component: () => import('@/views/tools/FloorplanToVideo.vue'),
+    path: '/tools/floor-plan',
+    name: 'floor-plan',
+    component: () => import('@/views/tools/FloorPlan.vue'),
     meta: { requiresAuth: false }
   },
+  {
+    path: '/tools/isometric',
+    name: 'isometric',
+    component: () => import('@/views/tools/Isometric.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/tools/render-3d',
+    name: 'render-3d',
+    component: () => import('@/views/tools/Render3D.vue'),
+    meta: { requiresAuth: false }
+  },
+  { path: '/tools/floorplan-to-video', redirect: '/tools/render-3d' },
 
   // Exterior AI — building-facade render. Reuses /tools/room-redesign with
   // space_kind='exterior' (mnml.ai/app/exterior-ai parity).
@@ -454,6 +466,21 @@ const ROUTE_SEO: Record<string, RouteSeo> = {
     title: 'AI 室內設計範本庫｜風格範本一鍵套用 - VidGo',
     description:
       '瀏覽北歐、極簡、日式侘寂、工業風等室內設計範本，挑選後上傳房間照片，AI 立即生成提案圖。',
+  },
+  'floor-plan': {
+    title: 'AI 平面配置圖｜輸入需求或草圖生成 2D 平面圖 - VidGo',
+    description:
+      '輸入空間需求與尺寸，或上傳手繪草圖，AI 立即產生乾淨的 2D 平面配置圖。',
+  },
+  'isometric': {
+    title: 'AI 立體圖｜平面圖轉 45° 等角透視 - VidGo',
+    description:
+      '上傳平面圖或空間照片，AI 生成 45° 等角立體圖（dollhouse 視角），快速呈現格局。',
+  },
+  'render-3d': {
+    title: 'AI 3D 效果圖｜平面圖轉寫實渲染與成長影片 - VidGo',
+    description:
+      '上傳平面圖或房間照片，AI 渲染寫實 3D 效果圖，並可加購「拔地而起」成長影片與可旋轉 3D 模型。',
   },
   'exterior-ai': {
     title: 'AI 建築外觀渲染｜立面風格範本 - VidGo',

@@ -451,7 +451,9 @@ NEW_SERVICE_PRICING_DATA = [
     {
         "service_type": "interior_growth_video",
         "display_name": "平面圖長出房間影片 (Kling 3.0)",
-        "credit_cost": 800,
+        # 2026-06-11: repriced 800→600 (accessible-funnel pass) — growth video is
+        # now an output option inside the 3D 效果圖 page, not a standalone tool.
+        "credit_cost": 600,
         "api_cost_usd": Decimal("0.350"),
         "model_type": "kling_omni",
         "tool_category": "premium",
@@ -466,7 +468,8 @@ NEW_SERVICE_PRICING_DATA = [
     {
         "service_type": "interior_growth_video_3d",
         "display_name": "平面圖長出房間影片 + 3D 模型",
-        "credit_cost": 950,
+        # 2026-06-11: repriced 950→750 (keeps the +150 3D add-on delta).
+        "credit_cost": 750,
         "api_cost_usd": Decimal("0.450"),
         "model_type": "kling_omni",
         "tool_category": "premium",
@@ -477,6 +480,55 @@ NEW_SERVICE_PRICING_DATA = [
         "min_plan": "pro",
         "allowed_models": ["kling_omni", "trellis"],
         "description": "室內設計管線 - 成長影片 + Trellis2 可旋轉 3D 模型 (.glb)"
+    },
+
+    # ── Interior workflow tools (2026-06-11): 平面配置圖 / 立體圖 / 3D 效果圖 ──
+    # Single Gemini 2.5 Flash Image generations (~$0.01-0.04 upstream); priced
+    # as an accessible funnel so users iterate cheaply before the premium video.
+    {
+        "service_type": "interior_floorplan",
+        "display_name": "平面配置圖 (2D Floor Plan)",
+        "credit_cost": 15,
+        "api_cost_usd": Decimal("0.010"),
+        "model_type": "gemini_flash_image",
+        "tool_category": "standard",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image"],
+        "description": "室內設計 - 2D 平面配置圖生成 (文字需求或草圖輸入)"
+    },
+    {
+        "service_type": "interior_isometric",
+        "display_name": "立體圖 (Isometric 3D)",
+        "credit_cost": 25,
+        "api_cost_usd": Decimal("0.020"),
+        "model_type": "gemini_flash_image",
+        "tool_category": "standard",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image"],
+        "description": "室內設計 - 平面圖轉 45° 等角立體圖 (dollhouse view)"
+    },
+    {
+        "service_type": "interior_render",
+        "display_name": "3D 效果圖 (Photorealistic Render)",
+        "credit_cost": 40,
+        "api_cost_usd": Decimal("0.040"),
+        "model_type": "gemini_flash_image",
+        "tool_category": "standard",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image"],
+        "description": "室內設計 - 平面圖/房間照轉寫實 3D 效果圖 (render only)"
     },
 ]
 

@@ -542,16 +542,22 @@ class InteriorDesignService:
         self,
         image_url: Optional[str] = None,
         image_base64: Optional[str] = None,
+        style_id: Optional[str] = None,
+        structural_fidelity: int = 70,
+        style_strength: int = 60,
         extra_prompt: str = "",
     ) -> Dict[str, Any]:
-        """Faithful "auto" render — photorealize an existing design WITHOUT
-        redesigning it.
+        """"保留結構" render — photorealize an existing design while respecting
+        its structure, graded by two sliders (UI spec v1.0, 2026-06-09):
 
-        For 3D 效果圖's "auto" effect: the input is already a design (a 3D-model
-        screenshot, SketchUp/clay/white-model render, draft, or photo). Convert it
-        into a real-world photograph while preserving the EXACT design — the same
-        layout, structure, geometry, furniture, materials, colors and textures.
-        Only the rendering realism is upgraded; nothing about the design changes.
+          - structural_fidelity (0-100): how strictly the AI must keep the
+            original walls / layout / furniture positions. Higher = stricter.
+          - style_strength (0-100): how strongly the chosen style is applied to
+            materials / colors / lighting. 0 = keep original materials.
+
+        The input is already a design (3D-model screenshot, SketchUp/clay/white
+        model, draft, sketch, or photo); the output is a real-world photograph.
+        Structure is never invented — only realism and (optionally) surface style.
         """
         if image_url and not image_base64:
             try:
@@ -564,22 +570,60 @@ class InteriorDesignService:
 
         mime_type = "image/png" if image_base64.startswith("iVBOR") else "image/jpeg"
 
+        fidelity = max(0, min(100, int(structural_fidelity)))
+        strength = max(0, min(100, int(style_strength)))
+
+        if fidelity >= 80:
+            structure_clause = (
+                "Lock the architecture EXACTLY: keep every wall, window, door, "
+                "structural element AND all furniture positions precisely as in the "
+                "input. Do not move, add, or remove anything."
+            )
+        elif fidelity >= 50:
+            structure_clause = (
+                "Preserve the main structure — walls, windows, doors and the overall "
+                "layout must match the input, and keep furniture placement. You may "
+                "only subtly refine furniture styling, never its position."
+            )
+        else:
+            structure_clause = (
+                "Keep the general layout and structure recognizable from the input, "
+                "but light adjustments to furniture styling and arrangement are allowed."
+            )
+
+        style_name = ""
+        if style_id and style_id in DESIGN_STYLES:
+            style_name = DESIGN_STYLES[style_id].get("prompt_suffix") or DESIGN_STYLES[style_id].get("name", "")
+        if strength <= 20 or not style_name:
+            style_clause = (
+                "Keep the original materials, colors and textures from the input; "
+                "only improve rendering realism."
+            )
+        elif strength <= 70:
+            style_clause = (
+                f"Moderately apply {style_name} to the materials, colors and lighting "
+                "while keeping the original materials recognizable."
+            )
+        else:
+            style_clause = (
+                f"Fully apply {style_name} to the materials, finishes, colors and "
+                "lighting — but never change the structure or furniture placement."
+            )
+
         primary_prompt = (
-            "The attached image is an existing interior/architectural design — it may "
-            "be a 3D-model screenshot, a SketchUp/clay/white-model render, a draft, or "
-            "a photo. Convert it into a photorealistic real-world photograph. "
-            "CRITICAL — preserve the EXACT design: keep the same camera angle and "
-            "composition, the same room layout and structure, the same geometry and "
-            "proportions, the same furniture and object placement, and the same "
-            "materials, colors, patterns and textures shown in the image. Do NOT "
-            "redesign, do NOT change the style, do NOT move/add/remove any objects, do "
-            "NOT alter the architecture. Only upgrade the rendering to look like a real "
-            "photograph: physically accurate lighting, soft realistic shadows, correct "
+            "The attached image is an existing interior/architectural design. Convert "
+            "it into a photorealistic real-world photograph, keeping the same camera "
+            "angle and composition. "
+            f"{structure_clause} {style_clause} "
+            "Render with physically accurate lighting, soft realistic shadows, correct "
             "reflections and global illumination, fine material/texture detail, and "
             "natural depth of field. Empty space: no people, no text, no labels, no "
             "watermark. "
             f"{extra_prompt}"
         ).strip()
+
+        # Higher fidelity → lower temperature → less invention.
+        temperature = round(0.3 + (100 - fidelity) / 100 * 0.4, 2)
 
         request_body = {
             "contents": [
@@ -593,8 +637,7 @@ class InteriorDesignService:
             ],
             "generationConfig": {
                 "responseModalities": ["TEXT", "IMAGE"],
-                # Low temperature → stay faithful to the input, minimal invention.
-                "temperature": 0.4,
+                "temperature": temperature,
             },
         }
         return await self._generate_image(request_body, "realistic_preserve")

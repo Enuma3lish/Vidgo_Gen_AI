@@ -20,6 +20,7 @@ import { interiorApi, type FloorplanTier, type GrowthTier } from '@/api/interior
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import ThreeViewer from '@/components/tools/ThreeViewer.vue'
+import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
 import { extractApiError } from '@/utils/apiError'
 import { dataURItoBlob } from '@/utils/dataUri'
 import { downloadAsset } from '@/utils/downloadAsset'
@@ -35,7 +36,12 @@ const imageInput = ref<string | undefined>(undefined)   // floor plan or room ph
 const styleId = ref<string>('modern_minimalist')
 const roomType = ref<string>('living_room')
 const resultTier = ref<GrowthTier>('render')
-const preserveOriginal = ref(false)
+// Render mode (UI spec): 'preserve' = 保留結構, 'free' = 自由改造. Default 保留結構.
+const renderMode = ref<'preserve' | 'free'>('preserve')
+const preserveOriginal = computed(() => renderMode.value === 'preserve')
+// 結構控制 sliders (only used in 保留結構 mode).
+const structuralFidelity = ref(70)
+const styleStrength = ref(60)
 const prompt = ref('')
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
@@ -113,6 +119,8 @@ async function generate() {
       prompt: prompt.value.trim() || undefined,
       result_tier: resultTier.value,
       preserve_original: preserveOriginal.value,
+      structural_fidelity: structuralFidelity.value,
+      style_strength: styleStrength.value,
       language: isZh.value ? 'zh' : 'en',
     })
 
@@ -198,26 +206,52 @@ const hasResult = computed(() => (isVideoTier.value ? !!videoUrl.value : !!rende
         </p>
       </div>
 
-      <!-- Auto effect: faithfully photorealize the uploaded design -->
+      <!-- Render Mode (UI spec §2.2): 保留結構 vs 自由改造 -->
       <div>
         <label class="pp-field-label">{{ L('渲染模式', 'Render Mode', 'レンダリングモード', '렌더 모드', 'Modo de render') }}</label>
-        <button type="button" @click="preserveOriginal = !preserveOriginal"
-          class="w-full py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
-          :style="preserveOriginal
-            ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
-            : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
-        >
-          <span>{{ preserveOriginal ? '✓' : '' }}</span>
-          {{ L('自動：保留原始設計、模擬真實場景', 'Auto: keep original design → real world', '自動：元のデザインを保持して実写化', '자동: 원본 디자인 유지 → 실사화', 'Auto: conservar diseño → mundo real') }}
-        </button>
-        <p class="pp-field-help">
-          {{ preserveOriginal
-            ? L('忠實保留上傳設計的格局、材質、紋理與結構,只把畫面渲染成真實照片(不重新設計,風格選項此時略過)。', 'Faithfully keeps your uploaded design\'s layout, materials, textures and structure — only photorealizes it (no redesign; the style option is skipped).', 'アップロードしたデザインの間取り・素材・質感・構造を忠実に保ち、実写化のみ行います(再設計なし、スタイル指定は無視)。', '업로드한 디자인의 레이아웃·재질·질감·구조를 그대로 유지하고 실사화만 합니다(재설계 없음, 스타일 옵션 무시).', 'Mantiene fielmente el diseño subido (distribución, materiales, texturas y estructura) y solo lo vuelve fotorrealista (sin rediseño; se omite el estilo).')
-            : L('依下方風格從平面圖/草圖渲染新的設計。', 'Renders a new design from your floor plan/sketch using the style below.', '下のスタイルで間取り図/スケッチから新しいデザインをレンダリングします。', '아래 스타일로 평면도/스케치에서 새 디자인을 렌더링합니다.', 'Renderiza un diseño nuevo desde tu plano/boceto con el estilo de abajo.') }}
-        </p>
+        <div class="grid grid-cols-2 gap-2">
+          <button v-for="opt in [
+              { id: 'preserve' as const, t: L('保留結構', 'Preserve Structure', '構造を保持', '구조 유지', 'Conservar estructura'), d: L('保留原始空間結構與牆體位置,只調整風格與材質', 'Keep the original structure & walls; adjust only style & materials', '元の構造と壁を保持し、スタイルと素材のみ調整', '원래 구조와 벽을 유지하고 스타일·재질만 조정', 'Mantiene estructura y muros; ajusta estilo y materiales') },
+              { id: 'free' as const, t: L('自由改造', 'Free Redesign', '自由にリデザイン', '자유 리디자인', 'Rediseño libre'), d: L('自由重新設計空間配置與設計', 'Freely redesign the space layout & design', '空間レイアウトを自由に再設計', '공간 배치를 자유롭게 재설계', 'Rediseña libremente la distribución') },
+            ]" :key="opt.id" type="button" @click="renderMode = opt.id"
+            class="p-3 rounded-lg text-left transition-colors"
+            :style="renderMode === opt.id
+              ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
+              : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
+          >
+            <div class="text-[13px] font-semibold mb-1">{{ renderMode === opt.id ? '✓ ' : '' }}{{ opt.t }}</div>
+            <div class="text-[11px] leading-snug opacity-80">{{ opt.d }}</div>
+          </button>
+        </div>
       </div>
 
-      <div v-show="!preserveOriginal">
+      <!-- Structure Control (UI spec §2.3) — only in 保留結構 mode -->
+      <template v-if="renderMode === 'preserve'">
+        <div>
+          <label class="pp-field-label">
+            {{ L('結構精確度', 'Structural Fidelity', '構造精度', '구조 정확도', 'Fidelidad estructural') }}
+            <span class="ml-2" style="color:#a78bfa">{{ structuralFidelity }}</span>
+          </label>
+          <input type="range" min="0" max="100" step="5" v-model.number="structuralFidelity" class="w-full" style="accent-color:#a78bfa" />
+          <div class="flex justify-between pp-field-help" style="margin-top:2px;">
+            <span>{{ L('允許 AI 發揮', 'Allow AI freedom', 'AIに委ねる', 'AI 자유', 'Libertad de IA') }}</span>
+            <span>{{ L('嚴格遵守線條', 'Strictly follow lines', '線を厳守', '선을 엄수', 'Seguir líneas') }}</span>
+          </div>
+        </div>
+        <div>
+          <label class="pp-field-label">
+            {{ L('風格強度', 'Style Strength', 'スタイル強度', '스타일 강도', 'Fuerza del estilo') }}
+            <span class="ml-2" style="color:#a78bfa">{{ styleStrength }}</span>
+          </label>
+          <input type="range" min="0" max="100" step="5" v-model.number="styleStrength" class="w-full" style="accent-color:#a78bfa" />
+          <div class="flex justify-between pp-field-help" style="margin-top:2px;">
+            <span>{{ L('輕微調整', 'Subtle', '軽微', '약하게', 'Sutil') }}</span>
+            <span>{{ L('完全應用風格', 'Full style', '完全適用', '완전 적용', 'Estilo completo') }}</span>
+          </div>
+        </div>
+      </template>
+
+      <div>
         <label class="pp-field-label">{{ L('設計風格', 'Design Style', 'デザインスタイル', '디자인 스타일', 'Estilo de diseño') }}</label>
         <select v-model="styleId" class="pp-select">
           <option v-for="s in styles" :key="s.id" :value="s.id">{{ styleLabel(s) }}</option>
@@ -239,9 +273,18 @@ const hasResult = computed(() => (isVideoTier.value ? !!videoUrl.value : !!rende
     </template>
 
     <template v-if="hasResult" #result>
-      <!-- Render-only tier: just the image -->
-      <img v-if="!isVideoTier && renderImageUrl" :src="renderImageUrl" alt="3D render"
-        class="max-w-full max-h-[520px] object-contain rounded-lg" />
+      <!-- Render-only tier: before/after comparison (or plain image) -->
+      <template v-if="!isVideoTier && renderImageUrl">
+        <BeforeAfterSlider
+          v-if="imageInput"
+          :before-image="imageInput"
+          :after-image="renderImageUrl"
+          :before-label="L('原始圖片', 'Before', '元画像', '원본', 'Antes')"
+          :after-label="L('渲染結果', 'After', 'レンダー', '렌더', 'Después')"
+        />
+        <img v-else :src="renderImageUrl" alt="3D render"
+          class="max-w-full max-h-[520px] object-contain rounded-lg" />
+      </template>
       <!-- Video tiers: video + render + optional 3D model -->
       <div v-else class="flex flex-col gap-3 w-full items-center">
         <video v-if="videoUrl" :src="videoUrl" class="max-w-full max-h-[420px] rounded-lg" controls autoplay loop muted />

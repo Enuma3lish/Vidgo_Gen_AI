@@ -190,10 +190,19 @@ class FloorplanToVideoRequest(BaseModel):
     language: Optional[str] = Field("en", description="Language for the Gemini analysis ('en' | 'zh').")
     preserve_original: bool = Field(
         False,
-        description="3D 效果圖 'auto' effect: faithfully photorealize the uploaded "
-                    "design (keep its style, materials, textures and structure; "
-                    "simulate a real-world photo) instead of rendering a new design "
-                    "from a floor plan.",
+        description="3D 效果圖 render mode. True = '保留結構' (preserve the uploaded "
+                    "design's structure/layout and photorealize it); "
+                    "False = '自由改造' (render a new design from the floor plan).",
+    )
+    structural_fidelity: int = Field(
+        70, ge=0, le=100,
+        description="保留結構 mode: how strictly to keep the original walls/layout/"
+                    "furniture (higher = stricter). Ignored in 自由改造 mode.",
+    )
+    style_strength: int = Field(
+        60, ge=0, le=100,
+        description="保留結構 mode: how strongly the chosen style applies to "
+                    "materials/colors/lighting (0 = keep original materials).",
     )
 
 
@@ -1027,10 +1036,13 @@ async def _floorplan_to_video_inner(
             return FloorplanToVideoResponse(success=False, result_tier="render", error=err)
         try:
             if request.preserve_original:
-                # "Auto" effect: faithfully photorealize the uploaded design,
-                # preserving its style/materials/structure (no redesign).
+                # 保留結構: photorealize the uploaded design, respecting its
+                # structure/layout, graded by the fidelity + style-strength sliders.
                 result = await get_interior_design_service().render_realistic_preserve(
                     image_url=request.image_url,
+                    style_id=request.style_id,
+                    structural_fidelity=request.structural_fidelity,
+                    style_strength=request.style_strength,
                     extra_prompt=request.prompt or "",
                 )
             else:

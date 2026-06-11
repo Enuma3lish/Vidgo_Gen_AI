@@ -43,7 +43,6 @@ export const toolHubTiles: ToolHubTile[] = [
   { id: 'flat-lay',            labelKey: 'tools.hub.tiles.flatLay',            to: '/tools/product-scene-classic',  thumb: `${T}/flat-lay.png`,            category: 'advertising' },
   // Row 3
   { id: 'logo',                labelKey: 'tools.hub.tiles.logo',               to: '/tools/midjourney-imagine',     thumb: `${T}/logo.png`,                category: 'branding'    },
-  { id: 'text',                labelKey: 'tools.hub.tiles.text',               to: '/tools/image-translator',       thumb: `${T}/text.png`,                category: 'branding'    },
   { id: 'create-any-image',    labelKey: 'tools.hub.tiles.createAnyImage',     to: '/tools/midjourney-imagine',     thumb: `${T}/create-any-image.png`,    category: 'branding'    },
   { id: 'instagram-story',     labelKey: 'tools.hub.tiles.instagramStory',     to: '/tools/short-video',            thumb: `${T}/instagram-story.png`,     category: 'advertising' },
   // Row 4
@@ -80,13 +79,11 @@ export const toolHubTiles: ToolHubTile[] = [
   { id: 'claymation',          labelKey: 'tools.hub.tiles.claymation',         to: '/tools/claymation',             thumb: `${T}/edit-with-ai.png`,        category: 'other'       },
   // Row 9 — flagship video/voice tools that existed in the router but
   // were missing from the hub catalog (added 2026-05-26 after the
-  // dead-routes audit). Without these, users had no path to /tools/avatar
-  // or /tools/video-dubbing from the hub page.
-  // TODO: replace thumbs with dedicated assets when art is ready —
-  // virtual-model.png matches AI Avatar's "talking spokesperson"
-  // concept; text.png evokes dubbing's voice/script swap.
+  // dead-routes audit). Without this, users had no path to /tools/avatar
+  // from the hub page.
+  // TODO: replace thumb with dedicated asset when art is ready —
+  // virtual-model.png matches AI Avatar's "talking spokesperson" concept.
   { id: 'ai-avatar',           labelKey: 'tools.hub.tiles.aiAvatar',           to: '/tools/avatar',                 thumb: `${T}/virtual-model.png`,       category: 'advertising' },
-  { id: 'video-dubbing',       labelKey: 'tools.hub.tiles.videoDubbing',       to: '/tools/video-dubbing',          thumb: `${T}/text.png`,                category: 'advertising' },
   // 2026-06-09 — Sora 2 Pro flagship video (PiAPI primary, Pollo backup).
   // Reuses video-generator thumb until a dedicated Sora 2 hero shot is shot;
   // swap `thumb` when art lands. Category=advertising because the flagship

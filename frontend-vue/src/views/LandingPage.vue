@@ -234,16 +234,6 @@ const allTools: LandingTool[] = [
   { id: 'roomRedesign',    route: '/tools/room-redesign',      emoji: '🏠', color: '#52c41a', tag: '' },
   { id: 'hdUpscale',       route: '/tools/upscale',            emoji: '🔍', color: '#13c2c2', tag: 'New' },
   { id: 'patternGenerate', route: '/tools/pattern-generate',   emoji: '▦', color: '#f759ab', tag: '' },
-  { id: 'imageTranslator', route: '/tools/image-translator',   emoji: '文', color: '#faad14', tag: 'New' },
-  {
-    id: 'videoDubbing',
-    route: '/tools/video-dubbing',
-    emoji: '🎙️',
-    color: '#13c2c2',
-    tag: 'Pro',
-    nameKey: 'lp.videoDubbing.title',
-    descKey: 'lp.videoDubbing.desc',
-  },
 ]
 
 function toolName(tool: LandingTool): string {
@@ -262,7 +252,6 @@ const _toolRouteMap: Record<string, string> = {
   'short-video':            '/tools/short-video',
   'claymation':             '/tools/claymation',
   'ai-avatar':              '/tools/avatar',
-  'image-translator':       '/tools/image-translator',
   'image-upscale':          '/tools/upscale',
   'background-removal':     '/tools/background-removal',
 }
@@ -281,7 +270,6 @@ const _toolDisplayName: Record<string, ToolDisplayName> = {
   'short-video':           { zh: '短影音',       en: 'Short Video',         ja: 'ショート動画',         ko: '쇼트 비디오',     es: 'Video corto' },
   'claymation':            { zh: '黏土風',       en: 'Claymation',          ja: 'クレイメーション',     ko: '클레이메이션',    es: 'Estilo plastilina' },
   'ai-avatar':             { zh: 'AI 數位人',    en: 'AI Avatar',           ja: 'AIアバター',           ko: 'AI 아바타',       es: 'Avatar IA' },
-  'image-translator':      { zh: '圖片翻譯',     en: 'Image Translator',    ja: '画像翻訳',             ko: '이미지 번역',     es: 'Traductor de imágenes' },
   'image-upscale':         { zh: '高清放大',     en: 'Image Upscale',       ja: '高解像度化',           ko: '이미지 업스케일', es: 'Ampliación HD' },
   'background-removal':    { zh: '去背',         en: 'Background Removal',  ja: '背景除去',             ko: '배경 제거',       es: 'Quitar fondo' },
 }

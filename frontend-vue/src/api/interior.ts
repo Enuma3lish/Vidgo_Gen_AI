@@ -140,9 +140,13 @@ export interface FloorplanToVideoRequest {
   duration?: 5 | 10
   model_version?: 'v1' | 'v2'
   language?: 'en' | 'zh'
-  // 3D 效果圖 "auto" effect: faithfully photorealize the uploaded design,
-  // preserving its style/materials/structure instead of restyling it.
+  // 3D 效果圖 render mode: true = 保留結構 (preserve structure & photorealize),
+  // false = 自由改造 (free redesign from floor plan).
   preserve_original?: boolean
+  // 保留結構 mode sliders (0-100). structural_fidelity = how strictly to keep
+  // the original structure; style_strength = how strongly to apply the style.
+  structural_fidelity?: number
+  style_strength?: number
 }
 
 export interface FloorplanToVideoResponse {

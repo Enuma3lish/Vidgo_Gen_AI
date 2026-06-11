@@ -1012,6 +1012,70 @@ async def floorplan_to_video(
     return _stream_with_heartbeat(_work)
 
 
+async def _preserve_render(request: "FloorplanToVideoRequest", current_user: User) -> Dict[str, Any]:
+    """保留結構 render. Primary: Flux ControlNet (depth) — hard-locks the output
+    geometry to the uploaded design so structure/layout cannot drift or be
+    invented (strongest anti-hallucination lever). Fallback: the Gemini
+    structure-preserve render. Returns {success, image_url, error, engine}.
+
+    structural_fidelity → ControlNet control_strength (higher = stricter lock);
+    style_strength drives how much the chosen style restyles materials/lighting.
+    """
+    fidelity = max(0, min(100, request.structural_fidelity))
+    strength = max(0, min(100, request.style_strength))
+
+    style_name = ""
+    if request.style_id and request.style_id in DESIGN_STYLES:
+        style_name = DESIGN_STYLES[request.style_id].get("prompt_suffix") or DESIGN_STYLES[request.style_id].get("name", "")
+    if strength <= 20 or not style_name:
+        style_clause = "keeping the original materials, colors and textures"
+    elif strength <= 70:
+        style_clause = f"moderately styled toward {style_name}"
+    else:
+        style_clause = f"styled as {style_name}"
+    cn_prompt = (
+        "photorealistic real-world interior photograph, "
+        f"{style_clause}, professional architectural visualization, natural lighting, "
+        "soft realistic shadows, sharp focus, high detail, no people, no text, no watermark. "
+        + (request.prompt or "")
+    ).strip()
+    # fidelity 0..100 → control_strength 0.4..0.85 (higher = stricter geometry lock).
+    control_strength = round(0.4 + (fidelity / 100) * 0.45, 2)
+
+    try:
+        piapi = get_provider_router().piapi
+        cn = await piapi.controlnet_render({
+            "image_url": request.image_url,
+            "prompt": cn_prompt,
+            "control_type": "depth",
+            "control_strength": control_strength,
+            "timeout": 300,
+        })
+        img = (cn.get("output") or {}).get("image_url") if cn and cn.get("success") else None
+        if img:
+            # ControlNet returns a temporary PiAPI URL — persist to GCS so it survives.
+            from app.api.v1.tools import _persist_provider_url
+            persisted = await _persist_provider_url(img, "image", current_user)
+            return {"success": True, "image_url": persisted or img, "engine": "controlnet_depth"}
+        logger.warning("[preserve-render] ControlNet returned no image; falling back to Gemini")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[preserve-render] ControlNet failed (%s); falling back to Gemini", exc)
+
+    g = await get_interior_design_service().render_realistic_preserve(
+        image_url=request.image_url,
+        style_id=request.style_id,
+        structural_fidelity=fidelity,
+        style_strength=strength,
+        extra_prompt=request.prompt or "",
+    )
+    return {
+        "success": bool(g.get("success") and g.get("image_url")),
+        "image_url": g.get("image_url"),
+        "error": g.get("error"),
+        "engine": "gemini_preserve",
+    }
+
+
 async def _floorplan_to_video_inner(
     request: "FloorplanToVideoRequest",
     current_user: User,
@@ -1036,15 +1100,13 @@ async def _floorplan_to_video_inner(
             return FloorplanToVideoResponse(success=False, result_tier="render", error=err)
         try:
             if request.preserve_original:
-                # 保留結構: photorealize the uploaded design, respecting its
-                # structure/layout, graded by the fidelity + style-strength sliders.
-                result = await get_interior_design_service().render_realistic_preserve(
-                    image_url=request.image_url,
-                    style_id=request.style_id,
-                    structural_fidelity=request.structural_fidelity,
-                    style_strength=request.style_strength,
-                    extra_prompt=request.prompt or "",
-                )
+                # 保留結構: ControlNet (depth) hard structure lock → Gemini fallback.
+                rendered = await _preserve_render(request, current_user)
+                result = {
+                    "success": rendered["success"],
+                    "image_url": rendered.get("image_url"),
+                    "error": rendered.get("error"),
+                }
             else:
                 result = await get_interior_design_service().render_from_floorplan(
                     floorplan_image_url=request.image_url,

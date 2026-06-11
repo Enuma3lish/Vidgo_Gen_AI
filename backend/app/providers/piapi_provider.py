@@ -1634,6 +1634,55 @@ class PiAPIProvider(BaseProvider):
             "steps": params.get("steps", 28),
         })
 
+    async def controlnet_render(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Flux ControlNet render — hard-locks the output geometry to a control
+        image so the model cannot drift or invent structure. The strongest
+        anti-hallucination lever for interior renders (validated live against
+        api.piapi.ai on 2026-06-11; controlnet-lora is supported only on
+        Qubico/flux1-dev-advanced).
+
+        params: {
+          image_url: str,            # control image (floor plan / room / sketch / 3D model)
+          prompt: str,
+          control_type: str,         # 'depth' (default) | 'canny' | 'soft_edge' | 'openpose'
+          control_strength: float,   # 0-1, higher = stricter geometry lock (default 0.6)
+          negative_prompt, steps, guidance_scale, timeout
+        }
+        Returns {success, task_id, output: {image_url}} (temp PiAPI URL — caller
+        must persist to GCS).
+        """
+        image_url = self._resolve_image_url(params["image_url"])
+        payload = {
+            "model": "Qubico/flux1-dev-advanced",
+            "task_type": "controlnet-lora",
+            "input": {
+                "prompt": params.get("prompt", ""),
+                "negative_prompt": params.get(
+                    "negative_prompt",
+                    "low quality, distorted, warped geometry, deformed, extra rooms, "
+                    "extra windows, duplicated walls, people, text, watermark",
+                ),
+                "steps": int(params.get("steps", 28)),
+                "guidance_scale": float(params.get("guidance_scale", 3.5)),
+                "control_net_settings": [{
+                    "control_type": params.get("control_type", "depth"),
+                    "control_image": image_url,
+                    "control_strength": float(params.get("control_strength", 0.6)),
+                    "return_preprocessed_image": False,
+                }],
+            },
+        }
+        result = await self._submit_and_poll(
+            payload, max_wait_seconds=int(params.get("timeout", IMAGE_GEN_TIMEOUT_SEC)),
+        )
+        if result.get("success"):
+            out = result.get("output") or {}
+            img = out.get("image_url") or (out.get("image_urls") or [None])[0] or out.get("url")
+            if img:
+                out["image_url"] = img
+            result["output"] = out
+        return result
+
     # ─────────────────────────────────────────────────────────────────────────
     # BACKGROUND REMOVAL (using local rembg library)
     # ─────────────────────────────────────────────────────────────────────────

@@ -1589,8 +1589,10 @@ class PiAPIProvider(BaseProvider):
         # Kontext has NO negative_prompt (closed schema) — so the anti-drift
         # guidance lives entirely in this POSITIVE constraint text.
         anti_drift = (
-            "Do not distort, warp, bend, or duplicate the geometry, perspective, "
-            "windows, or doors; do not invent extra openings or structures."
+            "Do not distort, warp, bend, move, add, remove, or duplicate any walls, "
+            "windows, doors, columns, beams or the camera perspective; keep their "
+            "exact count, position and proportions; do not invent extra openings, "
+            "rooms, levels, or architectural structures that are not in the input."
         )
         if space_kind == "exterior":
             framing = "professional architectural exterior visualization"

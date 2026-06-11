@@ -512,6 +512,10 @@ class InteriorDesignService:
             "Your task: generate a single photorealistic isometric (45-degree bird's-eye) "
             "interior visualization that faithfully reflects the room shapes, wall positions, "
             "doorways, and window openings shown in the floor plan. "
+            "STRICT: match the EXACT room count, wall layout, and the number and placement "
+            "of doors and windows shown in the plan. Do NOT add or remove rooms, walls, "
+            "doors or windows, and do NOT invent extra openings, spaces or levels that are "
+            "not drawn in the plan. "
             "Rules: walls should be approximately 2.8 m tall; use realistic materials "
             "(hardwood or tile flooring, painted plaster walls); soft natural daylight "
             "through the windows; no people, no dimension text, no measurement labels, "
@@ -533,7 +537,8 @@ class InteriorDesignService:
             ],
             "generationConfig": {
                 "responseModalities": ["TEXT", "IMAGE"],
-                "temperature": 0.7,
+                # Lowered 0.7→0.5: less invention, closer adherence to the plan.
+                "temperature": 0.5,
             },
         }
         return await self._generate_image(request_body, "floorplan_render")
@@ -610,11 +615,22 @@ class InteriorDesignService:
                 "lighting — but never change the structure or furniture placement."
             )
 
+        # Hard anti-hallucination invariant. Gemini image-edit has no
+        # negative_prompt, so the "do NOT invent" rules must live in the
+        # positive prompt. This is the strongest lever short of ControlNet.
+        invariant = (
+            "STRICT: reproduce ONLY what is in the input. Do NOT add, remove, move, "
+            "duplicate, resize or reshape any wall, window, door, column, beam, "
+            "staircase, room or furniture piece — keep their exact count, position and "
+            "proportions and the room footprint. Do NOT invent extra rooms, openings, "
+            "levels, windows, or decorative features that are not visible in the input. "
+            "Do NOT change the camera viewpoint, framing or the number of objects."
+        )
         primary_prompt = (
             "The attached image is an existing interior/architectural design. Convert "
             "it into a photorealistic real-world photograph, keeping the same camera "
             "angle and composition. "
-            f"{structure_clause} {style_clause} "
+            f"{structure_clause} {style_clause} {invariant} "
             "Render with physically accurate lighting, soft realistic shadows, correct "
             "reflections and global illumination, fine material/texture detail, and "
             "natural depth of field. Empty space: no people, no text, no labels, no "
@@ -622,8 +638,9 @@ class InteriorDesignService:
             f"{extra_prompt}"
         ).strip()
 
-        # Higher fidelity → lower temperature → less invention.
-        temperature = round(0.3 + (100 - fidelity) / 100 * 0.4, 2)
+        # Higher fidelity → lower temperature → less invention. Floor lowered to
+        # 0.15 (was 0.3) so max-fidelity renders stay tightly faithful to the input.
+        temperature = round(0.15 + (100 - fidelity) / 100 * 0.45, 2)
 
         request_body = {
             "contents": [
@@ -682,6 +699,8 @@ class InteriorDesignService:
             "icons. Use a white background, crisp black linework, light room fills, and "
             "thin dimension lines. This must be a flat scaled floor plan — NOT a 3D "
             "render, NOT a perspective view, NOT photorealistic. "
+            "Include only the rooms and spaces described; do not invent extra rooms, "
+            "floors, or spaces beyond what is requested. "
             f"{room_hint}{dim_hint}{requirements}"
         ).strip()
 

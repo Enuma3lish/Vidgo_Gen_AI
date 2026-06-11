@@ -1004,7 +1004,7 @@ class ProviderRouter:
             return "Service credits are currently depleted. Please try again later."
         if "timeout" in error.lower():
             return "The request timed out. Please try again with a simpler prompt."
-        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.KLING_VIDEO}
+        video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.KLING_VIDEO, TaskType.SORA2_VIDEO}
         if task_type in video_tasks:
             return "Video generation services are experiencing issues on all providers. Please try again in a few minutes."
         if task_type == TaskType.AVATAR:

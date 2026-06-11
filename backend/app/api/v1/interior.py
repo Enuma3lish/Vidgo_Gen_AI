@@ -1117,7 +1117,13 @@ async def _floorplan_to_video_inner(
         except Exception as exc:  # noqa: BLE001
             await _refund_credits(db, current_user, RENDER_CREDITS, "interior_render")
             logger.error("3D render (render tier) raised: %s", exc, exc_info=True)
-            raise HTTPException(status_code=500, detail=str(exc) or "3D render failed") from exc
+            # Return a graceful response (NOT raise): this runs inside the
+            # heartbeat-streamed worker, where a raised HTTPException can't set a
+            # real status and yields a body the frontend can't read as an error.
+            return FloorplanToVideoResponse(
+                success=False, result_tier="render",
+                error="3D render failed. Please try again.",
+            )
         if not result.get("success") or not result.get("image_url"):
             await _refund_credits(db, current_user, RENDER_CREDITS, "interior_render")
             return FloorplanToVideoResponse(
@@ -1168,10 +1174,12 @@ async def _floorplan_to_video_inner(
     except Exception as exc:
         await _refund_credits(db, current_user, cost, service_type)
         logger.error("floorplan-to-video pipeline raised: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc) or "Floor-plan growth pipeline failed",
-        ) from exc
+        # Graceful return (NOT raise) — see render-tier note above; this runs
+        # inside the heartbeat-streamed worker.
+        return FloorplanToVideoResponse(
+            success=False, result_tier=request.result_tier,
+            error="Floor-plan growth pipeline failed. Please try again.",
+        )
 
     if not result.get("success"):
         await _refund_credits(db, current_user, cost, service_type)

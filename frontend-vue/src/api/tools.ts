@@ -336,7 +336,10 @@ export const toolsApi = {
         negative_prompt: params.negativePrompt,
         enable_audio: params.enableAudio,
       },
-      { timeout: GENERATION_TIMEOUT_MS }
+      // Sora 2 Pro polls up to 1800s (KLING_OMNI_TIMEOUT_SEC) server-side; the
+      // 15-min shared GENERATION_TIMEOUT_MS aborted healthy renders client-side
+      // while credits were already charged. Give it a 35-min ceiling (> server).
+      { timeout: 35 * 60 * 1000 }
     )
     return response.data
   },

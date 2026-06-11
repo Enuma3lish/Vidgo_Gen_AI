@@ -813,19 +813,35 @@ async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str
         credit_svc = CreditService(db)
         deduction = deduction_snapshot or {"subscription": amount}
 
+        # Refund AT MOST `amount`. Partial refunds (e.g. the 3D add-on delta on
+        # the growth-video tier) pass less than the full deduction; previously
+        # this loop ignored `amount` and restored the ENTIRE deducted snapshot,
+        # so a partial refund handed back the whole charge (user kept the
+        # delivered video for free). Draw the deducted buckets down in order,
+        # capped at `amount`. A full refund (amount == total deducted) still
+        # restores every bucket exactly as before.
+        remaining = int(amount) if (amount and amount > 0) else sum(
+            int(deduction.get(k) or 0) for k in ("bonus", "subscription", "purchased")
+        )
+        refunded_total = 0
         for credit_type in ("bonus", "subscription", "purchased"):
+            if remaining <= 0:
+                break
             bucket_amount = int(deduction.get(credit_type) or 0)
             if bucket_amount <= 0:
                 continue
+            refund_this = min(bucket_amount, remaining)
             await credit_svc.add_credits(
                 user_id=user_id_str,
-                amount=bucket_amount,
+                amount=refund_this,
                 credit_type=credit_type,
                 transaction_type="refund",
                 description=f"Refund: {service_type} failed",
                 metadata={"refund_source": credit_type},
             )
-        logger.info(f"Refunded {amount} credits to user {user_id_str} for failed {service_type}")
+            remaining -= refund_this
+            refunded_total += refund_this
+        logger.info(f"Refunded {refunded_total} credits to user {user_id_str} for failed {service_type}")
     except Exception as e:
         logger.error(f"Failed to refund {amount} credits to user {user_id_str}: {e}")
 

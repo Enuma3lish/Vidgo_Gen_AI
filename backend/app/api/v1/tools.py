@@ -939,6 +939,7 @@ async def _check_and_deduct_credits(
     """
     # Admins bypass credit checks entirely
     if getattr(user, "is_superuser", False):
+        setattr(user, "_last_effective_credit_cost", 0)
         return True, None
 
     # Check concurrent generation limit first
@@ -986,7 +987,19 @@ async def _check_and_deduct_credits(
     if not success:
         return False, result.get("error", "Credit deduction failed")
     setattr(user, "_last_credit_deduction", result.get("deducted", {}))
+    # Stash the amount actually charged (honors the ServicePricing override) so
+    # callers can report an accurate `credits_used` to the UI / history instead
+    # of re-deriving it from their hardcoded constant.
+    setattr(user, "_last_effective_credit_cost", effective_amount)
     return True, None
+
+
+def _credits_charged(user, fallback: int) -> int:
+    """Credits actually deducted by the most recent _check_and_deduct_credits for
+    this user (ServicePricing override aware; 0 for admins). Falls back to the
+    caller's hardcoded amount if no deduction was recorded on this user object."""
+    val = getattr(user, "_last_effective_credit_cost", None)
+    return int(val) if val is not None else int(fallback)
 
 
 # ============================================================================
@@ -5163,7 +5176,7 @@ async def _sora2_pro_inner(
             success=True,
             result_url=video_url,
             video_url=video_url,
-            credits_used=credit_cost_fallback,
+            credits_used=_credits_charged(current_user, credit_cost_fallback),
             message="Video generated via Sora 2 Pro.",
         )
     except Exception as exc:

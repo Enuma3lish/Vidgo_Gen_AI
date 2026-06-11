@@ -832,7 +832,7 @@ async def generate_floorplan_layout(
             message="平面配置圖需要有效訂閱並綁定信用卡。 / Floor-plan generation requires an active subscription with a bound card.",
         )
 
-    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits
+    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits, _credits_charged
     ok, err = await _check_and_deduct_credits(db, current_user, FLOORPLAN_CREDITS, "interior_floorplan")
     if not ok:
         return DesignResponse(success=False, error=err)
@@ -854,7 +854,7 @@ async def generate_floorplan_layout(
         await _refund_credits(db, current_user, FLOORPLAN_CREDITS, "interior_floorplan")
         return DesignResponse(success=False, error=result.get("error") or "Floor-plan generation failed.")
 
-    credits_used = 0 if getattr(current_user, "is_superuser", False) else FLOORPLAN_CREDITS
+    credits_used = _credits_charged(current_user, FLOORPLAN_CREDITS)
     await _record_interior_generation(
         db, current_user, "interior_floorplan",
         request.sketch_image_url, result.get("image_url"), credits_used,
@@ -888,7 +888,7 @@ async def generate_isometric_view(
             message="立體圖需要有效訂閱並綁定信用卡。 / Isometric view requires an active subscription with a bound card.",
         )
 
-    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits
+    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits, _credits_charged
     ok, err = await _check_and_deduct_credits(db, current_user, ISOMETRIC_CREDITS, "interior_isometric")
     if not ok:
         return DesignResponse(success=False, error=err)
@@ -910,7 +910,7 @@ async def generate_isometric_view(
         await _refund_credits(db, current_user, ISOMETRIC_CREDITS, "interior_isometric")
         return DesignResponse(success=False, error=result.get("error") or "Isometric view generation failed.")
 
-    credits_used = 0 if getattr(current_user, "is_superuser", False) else ISOMETRIC_CREDITS
+    credits_used = _credits_charged(current_user, ISOMETRIC_CREDITS)
     await _record_interior_generation(
         db, current_user, "interior_isometric",
         request.image_url, result.get("image_url"), credits_used,
@@ -1089,7 +1089,7 @@ async def _floorplan_to_video_inner(
     # Credit deduction reuses the platform's deduction firewall (admins bypass,
     # ServicePricing overrides the fallback `cost`). Imported lazily to avoid a
     # tools.py ↔ interior.py circular import at module load.
-    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits
+    from app.api.v1.tools import _check_and_deduct_credits, _refund_credits, _credits_charged
 
     # ── "render" tier: photorealistic 3D 效果圖 only (no Kling/Trellis) ──
     # Reuses the same Gemini render the growth pipeline uses for its end frame,
@@ -1129,7 +1129,7 @@ async def _floorplan_to_video_inner(
             return FloorplanToVideoResponse(
                 success=False, result_tier="render", error=result.get("error") or "3D render failed",
             )
-        credits_used = 0 if is_admin else RENDER_CREDITS
+        credits_used = _credits_charged(current_user, RENDER_CREDITS)
         await _record_interior_generation(
             db, current_user, "interior_render",
             request.image_url, result.get("image_url"), credits_used,
@@ -1192,11 +1192,12 @@ async def _floorplan_to_video_inner(
             error=result.get("error"),
         )
 
-    credits_used = 0 if is_admin else cost
+    # Report the amount actually charged (ServicePricing-override aware; 0 for admins).
+    credits_used = _credits_charged(current_user, cost)
     # Partial refund: the user paid for a 3D model that couldn't be produced.
     if include_3d and not result.get("model_url") and not is_admin:
         await _refund_credits(db, current_user, GROWTH_3D_DELTA, service_type)
-        credits_used = cost - GROWTH_3D_DELTA
+        credits_used = max(0, credits_used - GROWTH_3D_DELTA)
 
     prompts = result.get("prompts") or {}
 

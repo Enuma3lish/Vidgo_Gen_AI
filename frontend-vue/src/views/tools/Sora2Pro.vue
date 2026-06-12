@@ -23,9 +23,11 @@ const { isDemoUser } = useDemoMode()
 const { L } = useLocalized()
 
 const prompt = ref('')
-const duration = ref<5 | 8 | 10>(5)
+// Sora 2's duration enum is 4 / 8 / 12 s and T2V aspect is 16:9 or 9:16
+// (2026-06-12 fix — the previous 5/8/10 + 1:1 options were rejected upstream).
+const duration = ref<4 | 8 | 12>(4)
 const resolution = ref<'720p' | '1080p'>('1080p')
-const aspectRatio = ref<'16:9' | '9:16' | '1:1'>('16:9')
+const aspectRatio = ref<'16:9' | '9:16'>('16:9')
 const startImage = ref<string | undefined>(undefined)
 const negativePrompt = ref('')
 const enableAudio = ref(true)
@@ -185,12 +187,12 @@ async function handleGenerate() {
             <ImageUploader tool-type="sora2_pro" v-model="startImage" />
           </div>
 
-          <!-- Duration (Sora 2 envelope is 4-12s; expose the three most useful values) -->
+          <!-- Duration (Sora 2 accepts exactly 4 / 8 / 12 s) -->
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('sora2Pro.duration') }}</label>
             <div class="flex gap-2">
               <button
-                v-for="d in [5, 8, 10] as const"
+                v-for="d in [4, 8, 12] as const"
                 :key="d"
                 @click="duration = d"
                 class="flex-1 py-2 rounded-lg text-sm font-medium transition-all"
@@ -202,9 +204,9 @@ async function handleGenerate() {
           <!-- Aspect ratio (T2V only — Sora 2 derives I2V framing from the source frame) -->
           <div v-if="!startImage" class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('sora2Pro.aspectRatio') }}</label>
-            <div class="grid grid-cols-3 gap-2">
+            <div class="grid grid-cols-2 gap-2">
               <button
-                v-for="ar in ['16:9', '9:16', '1:1'] as const"
+                v-for="ar in ['16:9', '9:16'] as const"
                 :key="ar"
                 @click="aspectRatio = ar"
                 class="py-2 rounded-lg text-xs font-medium transition-all"

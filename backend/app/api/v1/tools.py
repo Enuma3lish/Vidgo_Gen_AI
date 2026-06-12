@@ -1247,6 +1247,46 @@ class RoomRedesignRequest(BaseModel):
         return _resolve_public_url(url)
 
 
+# ── Video faithfulness controls (2026-06-12, owner request) ────────────────
+# The 2026-05-23 owner directive keeps the user's prompt VERBATIM (no AI
+# rewriting), so hallucination is reduced with USER-CHOSEN additive levers
+# instead: a deterministic camera-move catalog (precise, no room for the
+# model to improvise a move), a subject-lock clause appended AFTER the
+# user's own text, a strict-adherence clause for T2V, and a baseline
+# negative prompt shared by every video endpoint.
+VIDEO_CAMERA_MOVES = {
+    "static":    "Locked-off tripod shot: the camera does not move at all; only natural subject and ambient motion.",
+    "dolly_in":  "Slow cinematic dolly-in toward the subject, straight forward, no rotation, constant speed.",
+    "dolly_out": "Slow cinematic pull-out away from the subject, straight backward, no rotation, constant speed.",
+    "orbit":     "Smooth slow orbit around the subject at constant radius and height; the subject stays centered.",
+    "pan":       "Gentle horizontal pan across the scene at constant speed; no zoom, no tilt.",
+    "tilt_up":   "Slow tilt-up reveal from a low angle to eye level, ending centered on the subject.",
+    "crane_up":  "Smooth crane rise from eye level to a high angle, keeping the subject centered.",
+    "handheld":  "Subtle stabilized handheld drift with slight organic sway; no abrupt movement.",
+}
+
+VIDEO_SUBJECT_LOCK_CLAUSE = (
+    " Keep the main subject from the input image EXACTLY the same — identical "
+    "shape, colors, materials, label text, logo and proportions. Do not add "
+    "any new objects, people, hands, animals, on-screen text, or logos that "
+    "are not in the source image, and keep the background consistent with "
+    "the source image."
+)
+
+VIDEO_PROMPT_ADHERENCE_CLAUSE = (
+    " Render ONLY what this prompt describes. Do not add extra objects, "
+    "characters, on-screen text, captions, or logos that are not explicitly "
+    "requested."
+)
+
+VIDEO_BASELINE_NEGATIVE = (
+    "deformed, distorted, warped geometry, morphing, melting, extra limbs, "
+    "extra fingers, duplicated objects, unrequested objects appearing, "
+    "low quality, blurry, flickering, watermark, text overlay, subtitles, "
+    "random logos"
+)
+
+
 class ShortVideoRequest(BaseModel):
     """Short Video - image to video with optional TTS"""
     image_url: str = Field(..., description="Input image URL used as the starting frame for video generation.")
@@ -1284,6 +1324,24 @@ class ShortVideoRequest(BaseModel):
     script: Optional[str] = Field(None, description="Optional narration script for text-to-speech voice-over.")
     voice_id: Optional[str] = Field(None, description="Optional voice identifier for TTS narration.")
     negative_prompt: Optional[str] = Field(None, max_length=500, description="Optional things to avoid (e.g. 'extra arms, distorted face'). A product-safety baseline is always applied.")
+    # 2026-06-12 — user-chosen faithfulness controls (additive; never rewrite
+    # the user's prompt).
+    camera_move: Optional[str] = Field(
+        None,
+        description=(
+            "Deterministic camera move (static | dolly_in | dolly_out | orbit | "
+            "pan | tilt_up | crane_up | handheld). Composed additively with the "
+            "prompt so the model can't improvise a different move."
+        ),
+    )
+    subject_lock: bool = Field(
+        True,
+        description=(
+            "Append the subject-preservation clause so the I2V model keeps the "
+            "uploaded subject identical (anti-hallucination). On by default; "
+            "the user can switch it off for creative transformations."
+        ),
+    )
 
 
 class AvatarRequest(BaseModel):
@@ -3456,8 +3514,22 @@ async def _generate_short_video_inner(
         # the user's exact text. motion_strength still controls fidelity /
         # motion_bucket downstream so the slider isn't useless.
         user_free_prompt = (request.prompt or "").strip()
+        # 2026-06-12 — deterministic camera move chosen by the user. When set
+        # it REPLACES the strength-derived boilerplate (so the two never
+        # describe conflicting moves) and is appended after a user-typed
+        # prompt (the user's own text always stays first and verbatim).
+        camera_clause = VIDEO_CAMERA_MOVES.get((request.camera_move or "").strip().lower())
         if user_free_prompt:
             motion_prompt_base = user_free_prompt
+            if camera_clause:
+                motion_prompt_base += f" Camera: {camera_clause}"
+        elif camera_clause:
+            motion_prompt_base = (
+                f"Camera: {camera_clause} Natural ambient motion only, smooth "
+                "and stabilized, professional commercial quality."
+            )
+            if request.style:
+                motion_prompt_base += f" Visual style guidance: {style_hint or request.style}"
         else:
             motion_prompt_base = (
                 f"{motion_desc}. Visual style guidance: {style_hint or request.style}"
@@ -3492,6 +3564,12 @@ async def _generate_short_video_inner(
                 motion_prompt = fusion.fused_prompt
         except Exception as exc:  # noqa: BLE001
             logger.info("short_video image understanding skipped: %s", exc)
+
+        # 2026-06-12 — subject lock (user-controlled, default on): additive
+        # preservation clause appended AFTER the user's verbatim text. This is
+        # the prompt-side twin of the image_fidelity / negative_prompt levers.
+        if request.subject_lock:
+            motion_prompt = f"{motion_prompt}{VIDEO_SUBJECT_LOCK_CLAUSE}"
 
         task_params = {
             "image_url": public_image_url,
@@ -4947,6 +5025,21 @@ class KlingVideoRequest(BaseModel):
     image_tail_url: Optional[str] = Field(default=None, description="Optional end frame for I2V")
     negative_prompt: Optional[str] = Field(default=None, max_length=2500)
     cfg_scale: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # 2026-06-12 — user-chosen faithfulness controls (additive; the user's
+    # prompt itself stays verbatim). See VIDEO_CAMERA_MOVES /
+    # VIDEO_SUBJECT_LOCK_CLAUSE / VIDEO_PROMPT_ADHERENCE_CLAUSE.
+    camera_move: Optional[str] = Field(
+        default=None,
+        description="Deterministic camera move id (static | dolly_in | dolly_out | orbit | pan | tilt_up | crane_up | handheld).",
+    )
+    subject_lock: bool = Field(
+        default=True,
+        description="I2V only: append the subject-preservation clause so the start frame's subject stays identical.",
+    )
+    strict_prompt: bool = Field(
+        default=True,
+        description="T2V only: append the strict-adherence clause so the model renders only what the prompt describes.",
+    )
 
 
 @router.post("/kling-video")
@@ -5018,18 +5111,35 @@ async def _kling_video_inner(
     if not ok:
         return ToolResponse(success=False, message=err)
 
+    # 2026-06-12 — additive faithfulness controls. The user's prompt stays
+    # first and verbatim; camera move / subject lock / strict adherence are
+    # appended only when the user left them on, and a baseline negative
+    # prompt applies when the user didn't write their own.
+    final_prompt = request.prompt
+    camera_clause = VIDEO_CAMERA_MOVES.get((request.camera_move or "").strip().lower())
+    if camera_clause:
+        final_prompt += f" Camera: {camera_clause}"
+    if request.image_url and request.subject_lock:
+        final_prompt += VIDEO_SUBJECT_LOCK_CLAUSE
+    elif not request.image_url and request.strict_prompt:
+        final_prompt += VIDEO_PROMPT_ADHERENCE_CLAUSE
+    final_negative = (
+        f"{VIDEO_BASELINE_NEGATIVE}. Also avoid: {request.negative_prompt}"
+        if request.negative_prompt else VIDEO_BASELINE_NEGATIVE
+    )
+
     try:
         provider_router = get_provider_router()
         result = await provider_router.route(
             TaskType.KLING_VIDEO,
             {
-                "prompt": request.prompt,
+                "prompt": final_prompt,
                 "tier": tier,
                 "aspect_ratio": request.aspect_ratio,
                 "duration": request.duration,
                 "image_url": request.image_url,
                 "image_tail_url": request.image_tail_url,
-                "negative_prompt": request.negative_prompt,
+                "negative_prompt": final_negative,
                 "cfg_scale": request.cfg_scale,
             },
         )
@@ -5090,6 +5200,20 @@ class Sora2ProRequest(BaseModel):
         default=None,
         description="Sora 2 Pro emits synchronized audio by default; pass false for a silent render.",
     )
+    # 2026-06-12 — user-chosen faithfulness controls, same semantics as
+    # /kling-video: additive clauses only, user prompt stays verbatim.
+    camera_move: Optional[str] = Field(
+        default=None,
+        description="Deterministic camera move id (static | dolly_in | dolly_out | orbit | pan | tilt_up | crane_up | handheld).",
+    )
+    subject_lock: bool = Field(
+        default=True,
+        description="I2V only: append the subject-preservation clause so the start frame's subject stays identical.",
+    )
+    strict_prompt: bool = Field(
+        default=True,
+        description="T2V only: append the strict-adherence clause so the model renders only what the prompt describes.",
+    )
 
 
 @router.post("/sora2-pro")
@@ -5147,17 +5271,31 @@ async def _sora2_pro_inner(
     if not ok:
         return ToolResponse(success=False, message=err)
 
+    # 2026-06-12 — additive faithfulness controls, mirroring /kling-video.
+    final_prompt = request.prompt
+    camera_clause = VIDEO_CAMERA_MOVES.get((request.camera_move or "").strip().lower())
+    if camera_clause:
+        final_prompt += f" Camera: {camera_clause}"
+    if request.image_url and request.subject_lock:
+        final_prompt += VIDEO_SUBJECT_LOCK_CLAUSE
+    elif not request.image_url and request.strict_prompt:
+        final_prompt += VIDEO_PROMPT_ADHERENCE_CLAUSE
+    final_negative = (
+        f"{VIDEO_BASELINE_NEGATIVE}. Also avoid: {request.negative_prompt}"
+        if request.negative_prompt else VIDEO_BASELINE_NEGATIVE
+    )
+
     try:
         provider_router = get_provider_router()
         result = await provider_router.route(
             TaskType.SORA2_VIDEO,
             {
-                "prompt": request.prompt,
+                "prompt": final_prompt,
                 "aspect_ratio": request.aspect_ratio,
                 "duration": request.duration,
                 "resolution": request.resolution,
                 "image_url": request.image_url,
-                "negative_prompt": request.negative_prompt,
+                "negative_prompt": final_negative,
                 "enable_audio": request.enable_audio,
             },
         )

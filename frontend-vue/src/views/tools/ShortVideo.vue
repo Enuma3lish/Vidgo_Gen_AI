@@ -33,6 +33,7 @@ import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
+import VideoFaithfulnessControls from '@/components/tools/VideoFaithfulnessControls.vue'
 import { extractApiError } from '@/utils/apiError'
 import { dataURItoBlob } from '@/utils/dataUri'
 import { downloadAsset } from '@/utils/downloadAsset'
@@ -95,6 +96,11 @@ const negativePrompt = ref('')
 const motionStrength = ref<number>(5)
 const aspectRatio = ref<'16:9' | '9:16' | '1:1'>('16:9')
 const duration = ref<5 | 8 | 10>(5)
+// 2026-06-12 — anti-hallucination controls (additive; the prompt itself
+// stays verbatim). cameraMove pins an exact move; faithLock = subject_lock
+// in I2V mode and strict_prompt in T2V mode. Default on.
+const cameraMove = ref('')
+const faithLock = ref(true)
 
 const imageInput = ref<string | undefined>(undefined)   // data URI from ImageUploader (for I2V)
 
@@ -233,6 +239,8 @@ async function generate() {
         promptId: usingPreset.value ? selectedPresetId.value : undefined,
         negativePrompt: negativePrompt.value.trim() || undefined,
         locale: String(locale.value || ''),
+        cameraMove: cameraMove.value || undefined,
+        subjectLock: faithLock.value,
       })
     } else {
       // text_to_video — /api/v1/tools/kling-video. tier maps from modelId.
@@ -245,6 +253,8 @@ async function generate() {
         aspectRatio: aspectRatio.value,
         duration: duration.value as 5 | 10,
         negativePrompt: negativePrompt.value.trim() || undefined,
+        cameraMove: cameraMove.value || undefined,
+        strictPrompt: faithLock.value,
       })
     }
 
@@ -357,6 +367,14 @@ function gotoPricing() { router.push('/pricing') }
         ></textarea>
         <p class="pp-field-help">{{ isZh ? '提示會原封不動傳給模型；越具體越好。' : 'Your prompt reaches the model verbatim. The more specific, the better.' }}</p>
       </div>
+
+      <!-- Anti-hallucination controls: camera move + faith lock (2026-06-12).
+           faithLock = subject_lock (I2V) / strict_prompt (T2V). -->
+      <VideoFaithfulnessControls
+        :mode="taskType === 'image_to_video' ? 'i2v' : 't2v'"
+        v-model:camera-move="cameraMove"
+        v-model:faith-lock="faithLock"
+      />
 
       <!-- Negative prompt (both I2V and T2V) -->
       <div>

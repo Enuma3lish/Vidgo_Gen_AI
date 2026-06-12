@@ -180,6 +180,10 @@ export const toolsApi = {
       // motion description when present. Reaches the I2V model verbatim.
       prompt?: string
       negativePrompt?: string
+      // 2026-06-12 — user-chosen faithfulness controls (additive clauses;
+      // the prompt itself is never rewritten).
+      cameraMove?: string
+      subjectLock?: boolean
     },
   ): Promise<ToolResponse> {
     const response = await apiClient.post(
@@ -195,6 +199,8 @@ export const toolsApi = {
         locale: opts?.locale,
         prompt: opts?.prompt,
         negative_prompt: opts?.negativePrompt,
+        camera_move: opts?.cameraMove || undefined,
+        subject_lock: opts?.subjectLock ?? true,
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
@@ -296,6 +302,10 @@ export const toolsApi = {
     imageTailUrl?: string
     negativePrompt?: string
     cfgScale?: number
+    // 2026-06-12 — user-chosen faithfulness controls (additive clauses).
+    cameraMove?: string
+    subjectLock?: boolean   // I2V: keep the start frame's subject identical
+    strictPrompt?: boolean  // T2V: render only what the prompt describes
   }): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/kling-video',
@@ -308,6 +318,9 @@ export const toolsApi = {
         image_tail_url: params.imageTailUrl,
         negative_prompt: params.negativePrompt,
         cfg_scale: params.cfgScale,
+        camera_move: params.cameraMove || undefined,
+        subject_lock: params.subjectLock ?? true,
+        strict_prompt: params.strictPrompt ?? true,
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )
@@ -324,6 +337,10 @@ export const toolsApi = {
     imageUrl?: string
     negativePrompt?: string
     enableAudio?: boolean
+    // 2026-06-12 — user-chosen faithfulness controls (additive clauses).
+    cameraMove?: string
+    subjectLock?: boolean   // I2V: keep the start frame's subject identical
+    strictPrompt?: boolean  // T2V: render only what the prompt describes
   }): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/sora2-pro',
@@ -335,6 +352,9 @@ export const toolsApi = {
         image_url: params.imageUrl,
         negative_prompt: params.negativePrompt,
         enable_audio: params.enableAudio,
+        camera_move: params.cameraMove || undefined,
+        subject_lock: params.subjectLock ?? true,
+        strict_prompt: params.strictPrompt ?? true,
       },
       // Sora 2 Pro polls up to 1800s (KLING_OMNI_TIMEOUT_SEC) server-side; the
       // 15-min shared GENERATION_TIMEOUT_MS aborted healthy renders client-side

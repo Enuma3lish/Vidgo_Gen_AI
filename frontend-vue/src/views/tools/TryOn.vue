@@ -1,15 +1,20 @@
 <script setup lang="ts">
 /**
- * TryOn — PiAPI playground refactor (2026-05-24).
+ * TryOn — PiAPI playground refactor (2026-05-24), UX overhaul 2026-06-12.
  *
- * Layout matches piapi.ai/zh-TW/flux-kontext exactly:
- *   Left column  → Model + Task Type + Prompt + Image + params + Generate
- *   Right column → Status + Result preview + Download/Regenerate
- *   Below        → Examples gallery + FAQ
+ * Layout: PiapiPlayground (left config / right result / examples below).
  *
- * Two task types backed by the same /api/v1/tools/try-on endpoint:
- *   - "Garment Try-On"  → mode=garment (image+image via Kling AI Try-On)
- *   - "Prompt Outfit"   → mode=prompt  (image+text via Flux Kontext I2I)
+ * Two modes backed by the same /api/v1/tools/try-on endpoint:
+ *   - "garment" → upload a garment photo (Kling AI Try-On, image+image)
+ *   - "prompt"  → describe the outfit in text (Flux Kontext I2I)
+ * The engine choice is an implementation detail — the UI shows plain-task
+ * buttons instead of model-name dropdowns (2026-06-12 owner request:
+ * make try-on easier to use).
+ *
+ * Person photo comes from either:
+ *   - a built-in AI model picker (backend TRYON_MODELS presets — one click,
+ *     no upload, never rejected by the aspect-ratio validator), or
+ *   - the user's own upload (full-body 2:3 / 3:4 portrait).
  *
  * Owner directive: ui colors stay (#0a0a0f bg, violet gradient buttons),
  * only UX shape changes.
@@ -46,59 +51,48 @@ const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 const { L } = useLocalized()
 const { isDemoUser, loadInputLibrary, inputLibrary } = useDemoMode()
 
-// ─── Models (the "model" picker in piapi.ai style) ────────────────────
-type TryOnModelId = 'kling_try_on' | 'flux_kontext'
-interface TryOnModelOption {
-  id: TryOnModelId
-  nameZh: string; nameEn: string; nameJa: string; nameKo: string; nameEs: string
-  descZh: string; descEn: string; descJa: string; descKo: string; descEs: string
-}
-const modelOptions: TryOnModelOption[] = [
-  {
-    id: 'kling_try_on',
-    nameZh: 'Kling AI 試穿',
-    nameEn: 'Kling AI Try-On',
-    nameJa: 'Kling AI 試着',
-    nameKo: 'Kling AI 피팅',
-    nameEs: 'Probador Kling AI',
-    descZh: '圖對圖：把服裝照片穿到模特照片上。',
-    descEn: 'Image-to-image: drop a garment photo onto a model photo.',
-    descJa: '画像→画像：服の写真をモデル写真に合成します。',
-    descKo: '이미지→이미지: 의상 사진을 모델 사진에 합성합니다.',
-    descEs: 'Imagen→imagen: aplica la prenda a la foto de la modelo.',
-  },
-  {
-    id: 'flux_kontext',
-    nameZh: 'Flux Kontext（文字描述）',
-    nameEn: 'Flux Kontext (prompt mode)',
-    nameJa: 'Flux Kontext（テキスト指示）',
-    nameKo: 'Flux Kontext (텍스트 모드)',
-    nameEs: 'Flux Kontext (modo prompt)',
-    descZh: '圖像編輯：保留人物，用文字描述新服裝。',
-    descEn: 'Image-to-image edit: keep the person, describe the outfit in text.',
-    descJa: '画像編集：人物はそのままに、新しい服装をテキストで指定します。',
-    descKo: '이미지 편집: 인물은 유지하고 텍스트로 새 의상을 설명합니다.',
-    descEs: 'Edita la imagen: conserva a la persona y describe el atuendo con texto.',
-  },
-]
-const selectedModel = ref<TryOnModelId>('kling_try_on')
-function pickModel(id: TryOnModelId) {
-  selectedModel.value = id
+// ─── Mode — plain-task buttons, engine is an implementation detail ────
+// 'garment' → Kling AI Try-On (image+image); 'prompt' → Flux Kontext I2I.
+type TryOnMode = 'garment' | 'prompt'
+const mode = ref<TryOnMode>('garment')
+function pickMode(m: TryOnMode) {
+  mode.value = m
   resultUrl.value = null
 }
 
-// ─── Task type (per-model — locked to one task each for try-on) ───────
-const taskTypeOptions = computed(() => {
-  return selectedModel.value === 'kling_try_on'
-    ? [{ id: 'ai_try_on', label: L('虛擬試衣', 'Virtual Try-On', 'バーチャル試着', '가상 시착', 'Prueba Virtual') }]
-    : [{ id: 'kontext_outfit', label: L('Kontext 改服裝', 'Kontext Change Outfit', 'Kontext 服装変更', 'Kontext 의상 변경', 'Kontext Cambio de Atuendo') }]
-})
-const selectedTaskType = computed(() => taskTypeOptions.value[0]?.id || '')
+// ─── Person source — built-in AI models OR the user's own photo ───────
+// The backend has always accepted model_id → TRYON_MODELS (11 presets with
+// brand-generated photos on GCS), but the UI never exposed them, forcing
+// every user to find a strict 2:3 full-body portrait first. The preset grid
+// makes the tool one-click usable: pick a model, add a garment, generate.
+type PersonSource = 'preset' | 'upload'
+const personSource = ref<PersonSource>('preset')
+const PRESET_MODEL_BASE = 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/tryon/models'
+interface PresetModel { id: string; nameZh: string; nameEn: string }
+// Ids must match backend TRYON_MODELS in app/api/v1/tools.py; display names
+// follow the brand-asset catalog (generate_brand_assets.py model_catalog).
+const presetModels: PresetModel[] = [
+  { id: 'avery',   nameZh: '怡君', nameEn: 'Yi-Jun' },
+  { id: 'kendall', nameZh: '曉雨', nameEn: 'Xiao-Yu' },
+  { id: 'alex',    nameZh: '佳穎', nameEn: 'Jia-Ying' },
+  { id: 'maya',    nameZh: '雅婷', nameEn: 'Ya-Ting' },
+  { id: 'lena',    nameZh: '美玲', nameEn: 'Mei-Ling' },
+  { id: 'julia',   nameZh: '佩珊', nameEn: 'Pei-Shan' },
+  { id: 'sam',     nameZh: '志偉', nameEn: 'Zhi-Wei' },
+  { id: 'taylor',  nameZh: '俊豪', nameEn: 'Jun-Hao' },
+  { id: 'jordan',  nameZh: '冠宇', nameEn: 'Guan-Yu' },
+  { id: 'casey',   nameZh: '宗翰', nameEn: 'Zong-Han' },
+  { id: 'reece',   nameZh: '昊然', nameEn: 'Hao-Ran' },
+]
+// Preselect the first model so the form starts nearly ready — the user only
+// adds a garment (or outfit text) and clicks Generate.
+const selectedPresetModelId = ref<string>('avery')
+const presetThumb = (id: string) => `${PRESET_MODEL_BASE}/${id}.png`
 
 // ─── Inputs ───────────────────────────────────────────────────────────
-const modelImageUrl = ref<string | undefined>(undefined)  // person photo
-const garmentImageUrl = ref<string | undefined>(undefined) // clothing photo (Kling only)
-const promptText = ref('')                                  // outfit description (Kontext only)
+const modelImageUrl = ref<string | undefined>(undefined)  // person photo (upload source)
+const garmentImageUrl = ref<string | undefined>(undefined) // clothing photo (garment mode)
+const promptText = ref('')                                  // outfit description (prompt mode)
 const garmentCategory = ref<'upper_body' | 'lower_body' | 'dress' | 'full_body'>('dress')
 
 // Outfit presets for Kontext mode — Kling 3.0 style instruction prompts.
@@ -118,14 +112,18 @@ const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
 // Disable Generate when required inputs are missing.
+const personReady = computed(() =>
+  personSource.value === 'preset' ? !!selectedPresetModelId.value : !!modelImageUrl.value)
 const disabled = computed(() => {
-  if (selectedModel.value === 'kling_try_on') {
-    return !modelImageUrl.value || !garmentImageUrl.value
-  }
-  return !modelImageUrl.value || !promptText.value.trim()
+  if (!personReady.value) return true
+  if (mode.value === 'garment') return !garmentImageUrl.value
+  return !promptText.value.trim()
 })
 
-const creditCost = computed(() => 15)
+// Must mirror the backend deduction (tools.py ai_try_on CREDIT_COST = 30).
+// Was displayed as 15 while the backend charged 30 — sticker-shock bug
+// fixed 2026-06-12.
+const creditCost = computed(() => 30)
 
 // ─── Generate ─────────────────────────────────────────────────────────
 async function generate() {
@@ -136,26 +134,29 @@ async function generate() {
   try {
     // Promote any local data: URIs to public URLs (Kontext / Kling cannot
     // fetch a data URI). Done concurrently — they're independent uploads.
+    // Preset models skip the person upload entirely: the backend resolves
+    // model_id → TRYON_MODELS URL itself.
+    const usePreset = personSource.value === 'preset'
     const [personUrl, garmentUrl] = await Promise.all([
-      ensurePublicUrl(modelImageUrl.value),
-      selectedModel.value === 'kling_try_on' ? ensurePublicUrl(garmentImageUrl.value) : Promise.resolve(null),
+      usePreset ? Promise.resolve(null) : ensurePublicUrl(modelImageUrl.value),
+      mode.value === 'garment' ? ensurePublicUrl(garmentImageUrl.value) : Promise.resolve(null),
     ])
-    if (!personUrl) {
+    if (!usePreset && !personUrl) {
       status.value = 'error'
       uiStore.showError(L('人物照片上傳失敗', 'Person photo upload failed', '人物写真のアップロードに失敗しました', '인물 사진 업로드 실패', 'Error al subir la foto de la persona'))
       return
     }
-    if (selectedModel.value === 'kling_try_on' && !garmentUrl) {
+    if (mode.value === 'garment' && !garmentUrl) {
       status.value = 'error'
       uiStore.showError(L('服裝照片上傳失敗', 'Garment photo upload failed', '衣服の写真のアップロードに失敗しました', '의상 사진 업로드 실패', 'Error al subir la foto de la prenda'))
       return
     }
 
-    const apiPayload: Parameters<typeof toolsApi.tryOn>[1] = {
-      modelImageUrl: personUrl,
-    }
+    const apiPayload: Parameters<typeof toolsApi.tryOn>[1] = usePreset
+      ? { modelId: selectedPresetModelId.value }
+      : { modelImageUrl: personUrl! }
     let result
-    if (selectedModel.value === 'kling_try_on') {
+    if (mode.value === 'garment') {
       apiPayload.mode = 'garment'
       apiPayload.category = garmentCategory.value
       result = await toolsApi.tryOn(garmentUrl!, apiPayload)
@@ -183,7 +184,7 @@ async function generate() {
 }
 
 // ─── Examples (clickable cards) ──────────────────────────────────────
-interface ExampleCard { id: string; title_zh: string; title_en: string; image: string; modelHint: TryOnModelId; promptHint?: string }
+interface ExampleCard { id: string; title_zh: string; title_en: string; image: string; modeHint: TryOnMode; promptHint?: string }
 const examples = ref<ExampleCard[]>([])
 onMounted(async () => {
   await loadInputLibrary('try_on')
@@ -195,25 +196,28 @@ onMounted(async () => {
       title_zh: it.prompt_zh || it.prompt || '示範',
       title_en: it.prompt || it.topic || 'Example',
       image: it.result_image_url || it.input_image_url,
-      modelHint: 'kling_try_on',
+      modeHint: 'garment',
     }))
 })
 
 function applyExample(ex: ExampleCard) {
-  selectedModel.value = ex.modelHint
+  mode.value = ex.modeHint
   if (ex.promptHint) promptText.value = ex.promptHint
   uiStore.showInfo(isZh.value ? '已套用範例設定' : 'Example applied — adjust inputs and click Generate.')
 }
 
 // Gallery "Try this example" deeplink — prefill outfit prompt + person image.
-// A prompt-only example switches to Flux Kontext prompt mode (which takes a
-// person photo + text outfit) so the carried prompt is actually consumed.
+// A prompt-only example switches to prompt mode (person photo + text outfit)
+// so the carried prompt is actually consumed.
 useExamplePrefill({
   onPrompt: (p) => {
     promptText.value = p
-    selectedModel.value = 'flux_kontext'
+    mode.value = 'prompt'
   },
-  onImage: (url) => { modelImageUrl.value = url },
+  onImage: (url) => {
+    modelImageUrl.value = url
+    personSource.value = 'upload'
+  },
   onError: () => uiStore.showError(L(
     '範例素材已過期,請改用其他範例或上傳自有圖片。',
     'This example is no longer available. Pick another or upload your own image.',
@@ -224,8 +228,8 @@ useExamplePrefill({
 })
 
 const subtitle = computed(() => isZh.value
-  ? '上傳一張人物照，再選一張服裝或用文字描述新服裝。模型保留人物與姿勢，只改變身上穿的。'
-  : 'Upload a person photo, then drop in a garment image OR describe the new outfit in text. The model keeps the person and pose, swapping only the clothing.')
+  ? '選一位 AI 模特（或上傳自己的照片），再上傳服裝照片或用文字描述新服裝。AI 保留人物與姿勢，只改變身上穿的。'
+  : 'Pick a built-in AI model (or upload your own photo), then add a garment photo OR describe the outfit in text. The AI keeps the person and pose, swapping only the clothing.')
 
 function gotoPricing() { router.push('/pricing') }
 </script>
@@ -245,45 +249,85 @@ function gotoPricing() { router.push('/pricing') }
   >
     <!-- ─── INPUT COLUMN ─── -->
     <template #inputs>
-      <!-- Model dropdown (piapi-style 'Model *') -->
+      <!-- Mode — two plain-task buttons (engine is an implementation detail) -->
       <div>
-        <label class="pp-field-label">{{ L('模型 *', 'Model *', 'モデル *', '모델 *', 'Modelo *') }}</label>
-        <select class="pp-select" :value="selectedModel" @change="(e) => pickModel(((e.target as HTMLSelectElement).value as TryOnModelId))">
-          <option v-for="m in modelOptions" :key="m.id" :value="m.id">
-            {{ L(m.nameZh, m.nameEn, m.nameJa, m.nameKo, m.nameEs) }} — {{ L(m.descZh, m.descEn, m.descJa, m.descKo, m.descEs) }}
-          </option>
-        </select>
+        <label class="pp-field-label">{{ L('換裝方式 *', 'How do you want to dress them? *', '着せ替え方法 *', '체인지 방식 *', 'Método *') }}</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button v-for="opt in [
+              { id: 'garment' as const, t: L('上傳服裝照片', 'Garment Photo', '服の写真', '의상 사진', 'Foto de prenda'), d: L('把服裝照片穿到模特身上', 'Put a garment photo onto the model', '服の写真をモデルに着せる', '의상 사진을 모델에게 입히기', 'Pone la prenda en la modelo') },
+              { id: 'prompt' as const,  t: L('文字描述服裝', 'Describe Outfit', 'テキストで指定', '텍스트로 설명', 'Describir atuendo'), d: L('用一句話描述想要的新服裝', 'Describe the new outfit in a sentence', '欲しい服装を一文で説明', '원하는 의상을 한 문장으로', 'Describe el atuendo en una frase') },
+            ]" :key="opt.id" type="button" @click="pickMode(opt.id)"
+            class="p-3 rounded-lg text-left transition-colors"
+            :style="mode === opt.id
+              ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
+              : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
+          >
+            <div class="text-[13px] font-semibold mb-1">{{ mode === opt.id ? '✓ ' : '' }}{{ opt.t }}</div>
+            <div class="text-[11px] leading-snug opacity-80">{{ opt.d }}</div>
+          </button>
+        </div>
       </div>
 
-      <!-- Task Type dropdown -->
+      <!-- Person — built-in AI model picker OR own photo upload -->
       <div>
-        <label class="pp-field-label">{{ L('任務類型 *', 'Task Type *', 'タスクタイプ *', '작업 유형 *', 'Tipo de tarea *') }}</label>
-        <select class="pp-select" :value="selectedTaskType" disabled>
-          <option v-for="opt in taskTypeOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
-        </select>
+        <label class="pp-field-label">{{ L('模特 *', 'Model *', 'モデル *', '모델 *', 'Modelo *') }}</label>
+        <div class="grid grid-cols-2 gap-1.5 mb-2">
+          <button v-for="opt in [
+              { id: 'preset' as const, label: L('選擇 AI 模特', 'Built-in AI models', 'AIモデルを選ぶ', 'AI 모델 선택', 'Modelos integrados') },
+              { id: 'upload' as const, label: L('上傳自己的照片', 'Upload your own', '自分の写真', '직접 업로드', 'Sube la tuya') },
+            ]" :key="opt.id" type="button" @click="personSource = opt.id"
+            class="py-2 rounded-lg text-xs font-medium transition-colors"
+            :style="personSource === opt.id
+              ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
+              : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
+          >{{ opt.label }}</button>
+        </div>
+
+        <!-- Preset model grid: one click, no upload, never rejected -->
+        <template v-if="personSource === 'preset'">
+          <div class="grid grid-cols-4 gap-2">
+            <button
+              v-for="m in presetModels"
+              :key="m.id"
+              type="button"
+              @click="selectedPresetModelId = m.id"
+              class="rounded-lg overflow-hidden text-center transition-all"
+              :style="selectedPresetModelId === m.id
+                ? 'border: 2px solid #a78bfa; box-shadow: 0 0 0 2px rgba(124,58,237,0.35);'
+                : 'border: 1px solid rgba(255,255,255,0.08);'"
+            >
+              <div class="aspect-[2/3] overflow-hidden" style="background:#0a0a0f;">
+                <img :src="presetThumb(m.id)" :alt="isZh ? m.nameZh : m.nameEn" class="w-full h-full object-cover" loading="lazy" />
+              </div>
+              <p class="text-[10px] py-1" :style="selectedPresetModelId === m.id ? 'color:#c4b5fd;' : 'color:#94949f;'">
+                {{ isZh ? m.nameZh : m.nameEn }}
+              </p>
+            </button>
+          </div>
+          <p class="pp-field-help mt-1.5">{{ L('點選一位內建模特即可開始，不需要上傳人物照片。', 'Pick a built-in model and you\'re ready — no person photo needed.', '内蔵モデルを選ぶだけでOK。人物写真は不要です。', '내장 모델을 선택하면 바로 시작 — 인물 사진이 필요 없습니다.', 'Elige un modelo integrado y listo, sin subir fotos.') }}</p>
+        </template>
+
+        <!-- Own photo upload -->
+        <template v-else>
+          <ImageUploader
+            tool-type="try_on_model"
+            v-model="modelImageUrl"
+            :label="L('點擊或拖放人物照片', 'Click or drag a person photo', '人物写真をクリックまたはドラッグ', '인물 사진을 클릭하거나 끌어다 놓기', 'Haz clic o arrastra una foto de la persona')"
+          />
+          <p class="pp-field-help mt-1.5">
+            {{ L(
+              '建議全身直立照，比例約 2:3 或 3:4（手機直拍）。正方形或橫拍會被拒絕。',
+              'Use a full-body portrait, roughly 2:3 or 3:4 (phone-portrait). Square or landscape photos will be rejected.',
+              '全身の縦長ポートレートを推奨（おおむね 2:3 または 3:4 / スマホ縦撮り）。正方形や横向きは弾かれます。',
+              '전신 세로 사진을 권장합니다(약 2:3 또는 3:4, 휴대폰 세로 촬영). 정사각형이나 가로 사진은 거부됩니다.',
+              'Usa un retrato de cuerpo entero, aprox. 2:3 o 3:4 (vertical). Las fotos cuadradas u horizontales serán rechazadas.',
+            ) }}
+          </p>
+        </template>
       </div>
 
-      <!-- Model image upload -->
-      <div>
-        <label class="pp-field-label">{{ L('人物照片 *', 'Person Photo *', '人物写真 *', '인물 사진 *', 'Foto de la persona *') }}</label>
-        <ImageUploader
-          tool-type="try_on_model"
-          v-model="modelImageUrl"
-          :label="L('點擊或拖放人物照片', 'Click or drag a person photo', '人物写真をクリックまたはドラッグ', '인물 사진을 클릭하거나 끌어다 놓기', 'Haz clic o arrastra una foto de la persona')"
-        />
-        <p class="pp-field-help mt-1.5">
-          {{ L(
-            '建議全身直立照，比例約 2:3 或 3:4（手機直拍）。正方形或橫拍會被拒絕。',
-            'Use a full-body portrait, roughly 2:3 or 3:4 (phone-portrait). Square or landscape photos will be rejected.',
-            '全身の縦長ポートレートを推奨（おおむね 2:3 または 3:4 / スマホ縦撮り）。正方形や横向きは弾かれます。',
-            '전신 세로 사진을 권장합니다(약 2:3 또는 3:4, 휴대폰 세로 촬영). 정사각형이나 가로 사진은 거부됩니다.',
-            'Usa un retrato de cuerpo entero, aprox. 2:3 o 3:4 (vertical). Las fotos cuadradas u horizontales serán rechazadas.',
-          ) }}
-        </p>
-      </div>
-
-      <!-- Garment image (only for Kling mode) -->
-      <div v-if="selectedModel === 'kling_try_on'">
+      <!-- Garment image (garment mode) -->
+      <div v-if="mode === 'garment'">
         <label class="pp-field-label">{{ L('服裝照片 *', 'Garment Photo *', '衣服の写真 *', '의상 사진 *', 'Foto de la prenda *') }}</label>
         <ImageUploader
           tool-type="try_on"
@@ -312,8 +356,8 @@ function gotoPricing() { router.push('/pricing') }
         </div>
       </div>
 
-      <!-- Prompt + presets (only for Kontext mode) -->
-      <div v-if="selectedModel === 'flux_kontext'">
+      <!-- Prompt + presets (prompt mode) -->
+      <div v-if="mode === 'prompt'">
         <label class="pp-field-label">{{ L('服裝描述 *', 'Outfit Prompt *', '服装の説明 *', '의상 설명 *', 'Prompt del atuendo *') }}</label>
         <textarea
           v-model="promptText"

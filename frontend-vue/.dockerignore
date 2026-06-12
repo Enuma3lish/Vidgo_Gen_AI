@@ -1,0 +1,9 @@
+# Keep the Docker build context clean — Dockerfile.prod runs `npm ci` itself,
+# so the local node_modules must never ride along (2026-06-12: Finder-duplicated
+# "@types/* 2" dirs in local node_modules were copied into the image and broke
+# `vue-tsc` with TS2688 during `npm run build`).
+node_modules
+dist
+.vite
+*.log
+.DS_Store

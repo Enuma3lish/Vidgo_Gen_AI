@@ -6,11 +6,17 @@ future invoice is issued automatically after payment:
   - default_buyer_tax_id        統一編號 (8 digits, B2B mode)
   - default_buyer_company_name  公司抬頭 (B2B mode)
 
-Statements use IF NOT EXISTS so this can also be applied manually via psql
-on environments where the multi-head alembic history is managed by hand.
+Statements use IF NOT EXISTS so the migration is also safe to pre-apply
+manually (the prod rollout on 2026-06-12 applied the SQL via a one-off
+Cloud Run job before this revision ran at startup).
+
+NOTE: down_revision must be the CURRENT chain head (the production
+entrypoint runs `alembic upgrade head` on boot and refuses to start when
+multiple heads exist). Chaining off a mid-chain revision broke revision
+vidgo-backend-00332 — keep this on the linear chain.
 
 Revision ID: e2f3g4h5i6j7
-Revises: s1t2u3v4w5x6
+Revises: j4d5e6f7g8h9
 Create Date: 2026-06-12 00:00:00.000000
 
 """
@@ -19,7 +25,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'e2f3g4h5i6j7'
-down_revision: Union[str, None] = 's1t2u3v4w5x6'
+down_revision: Union[str, None] = 'j4d5e6f7g8h9'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

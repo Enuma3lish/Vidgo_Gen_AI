@@ -1,227 +1,140 @@
-# VidGo 新定價系統部署指南
+# VidGo Deployment Guide
 
-## 部署步驟
+> Last updated: 2026-06-12. This replaces the earlier one-off "新定價系統部署指南"
+> (the pricing rollout finished; its steps are preserved in git history).
 
-### 1. 資料庫遷移
+VidGo production runs on **GCP project `vidgo-ai`**, region **`asia-east1`**:
+
+| Piece | Resource |
+|---|---|
+| Frontend | Cloud Run `vidgo-frontend` |
+| Backend API | Cloud Run `vidgo-backend` (min 1 / max 10, 2Gi, 3600s timeout) |
+| Background worker | Cloud Run `vidgo-worker` — same backend image, command `arq app.worker.WorkerSettings` |
+| Images | Artifact Registry `asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images` |
+| Database | Cloud SQL `prod-db` (PostgreSQL, **private IP only**) + `vidgo-db`, attached via the Cloud SQL connector |
+| Secrets | Secret Manager (`DATABASE_URL`, `REDIS_URL`, superuser credentials, …) |
+| Networking | VPC connector `vidgo-connector` |
+| Media | GCS bucket `vidgo-media-vidgo-ai` |
+
+There are two supported deploy paths. Both end with new Cloud Run revisions.
+
+---
+
+## Path A — Cloud Build (CI pipeline)
+
+`cloudbuild.yaml` builds both images, pushes them, and deploys
+backend + worker + frontend in one run (E2_HIGHCPU_8, layer caching from
+`:latest`). Trigger it manually with:
+
 ```bash
-cd /Users/mailungwu/Desktop/Vidgo_Gen_AI/backend
-
-# 執行 migration
-alembic upgrade head
-
-# 如果 alembic 不可用，使用以下命令：
-python -m alembic upgrade head
-# 或
-uv run alembic upgrade head
+gcloud builds submit --config cloudbuild.yaml --project vidgo-ai
 ```
 
-### 2. 初始化新定價資料
+Partial pipelines exist for one-sided changes:
+`cloudbuild.backend-only.yaml`, `cloudbuild.frontend-only.yaml`
+(these build + push only; deploy manually per Path B step 4).
+
+---
+
+## Path B — Local build + push + deploy
+
+Works from any **linux/amd64** Docker host (Intel Mac or `--platform linux/amd64`).
+
+### 1. Build
+
 ```bash
-cd /Users/mailungwu/Desktop/Vidgo_Gen_AI/backend
+cd Vidgo_Gen_AI
+TS=$(date +%Y%m%d-%H%M%S)
+REG=asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images
 
-# 執行新的 seed 腳本
-python -m scripts.seed_new_pricing_tiers
+# Backend (context = repo root)
+docker build -f backend/Dockerfile \
+  -t $REG/vidgo-backend:${TS}-be -t $REG/vidgo-backend:latest .
 
-# 或使用 uv
-uv run python -m scripts.seed_new_pricing_tiers
+# Frontend (context = frontend-vue/, uses the production Dockerfile)
+docker build -f frontend-vue/Dockerfile.prod \
+  -t $REG/vidgo-frontend:${TS} -t $REG/vidgo-frontend:latest frontend-vue/
 ```
 
-### 3. 驗證部署
+Tag conventions: backend `YYYYMMDD-HHMMSS-be`, frontend `YYYYMMDD-HHMMSS`.
+Note: local `vue-tsc` may show bogus `TS2688 "@types/* 2"` errors from
+Finder-duplicated dirs in `node_modules` — the Docker build does a clean
+`npm ci` and is the source of truth.
+
+### 2. Push
+
 ```bash
-# 測試 API 端點
-curl -X GET "http://localhost:8000/api/v1/plans/"
-curl -X GET "http://localhost:8000/api/v1/plans/comparison"
-curl -X GET "http://localhost:8000/api/v1/credits/pricing"
+gcloud auth configure-docker asia-east1-docker.pkg.dev   # once per machine
+docker push --all-tags $REG/vidgo-backend
+docker push --all-tags $REG/vidgo-frontend
 ```
 
-## 新功能說明
+### 3. Apply DB migrations (when the release contains one)
 
-### 1. 訂閱方案 (4個層級)
-- **基礎進階版 (Basic)**: $699 TWD/月, 7,000 點, 僅限 default 模型
-- **專業版 (Pro)**: $999 TWD/月, 10,000 點, 開放高級模型
-- **尊榮版 (Premium)**: $1699 TWD/月, 18,000 點, 優先佇列
-- **企業旗艦版 (Enterprise)**: $15,000 TWD/月, 160,000 點, 全功能解鎖
+⚠️ **Do this BEFORE deploying the backend.** SQLAlchemy selects every mapped
+column, so deploying a model change without the columns breaks every query on
+that table.
 
-### 2. 點數包 (3種)
-- **輕量包**: $299 TWD 購買 3,000 點
-- **標準包**: $499 TWD 購買 5,500 點 (多送 10%)
-- **重度包**: $999 TWD 購買 12,000 點 (多送 20%)
+The alembic history has **multiple heads**; schema changes are applied
+manually. Migrations are written with idempotent `ADD COLUMN IF NOT EXISTS`
+SQL so they can be replayed safely. Because `prod-db` is private-IP only,
+run the SQL through a one-off **Cloud Run job** that reuses the backend's
+service account, secrets, Cloud SQL attachment, and VPC connector:
 
-### 3. AI 工具扣點對照表
-- **標準靜態生成**: 20 點/次 (文生圖、去背)
-- **進階動態生成**: 250-300 點/次 (圖生影片、AI試穿、虛擬人物)
-- **頂規耗能任務**: 2,500 點/次 (超高畫質影片)
-
-## API 端點
-
-### Plans API (`/api/v1/plans/`)
-- `GET /` - 取得所有可用方案
-- `GET /comparison` - 取得方案比較表
-- `GET /current` - 取得當前用戶方案詳情
-- `POST /upgrade` - 升級用戶方案
-- `POST /downgrade` - 降級用戶方案
-- `GET /check-permission` - 檢查模型權限
-- `GET /check-concurrent` - 檢查併發限制
-
-### Credits API (`/api/v1/credits/`)
-- `GET /balance` - 取得點數餘額
-- `GET /transactions` - 取得交易記錄
-- `GET /packages` - 取得可用點數包
-- `POST /purchase` - 購買點數包
-- `GET /pricing` - 取得服務定價表
-
-## 防護機制
-
-### 1. 點數過期機制
-- 月訂閱點數不累計至下月
-- 每月1號自動重置所有用戶點數
-- 使用 `reset_monthly_credits_for_all_users()` 方法
-
-### 2. 併發限制
-- 基礎版: 1個同時生成任務
-- 專業版: 3個同時生成任務
-- 尊榮版: 5個同時生成任務
-- 企業版: 10個同時生成任務
-
-### 3. 模型權限控制
-- 基礎版: 僅限 default 模型
-- 專業版以上: 開放 wan_pro, gemini_pro 模型
-- 企業版: 額外開放 sora 模型
-
-## 管理員功能
-
-### 1. 重置月點數 (Cron Job)
 ```bash
-# 每月1號 00:00 執行
-curl -X POST "http://localhost:8000/api/v1/plans/admin/reset-monthly-credits" \
-  -H "Authorization: Bearer <admin_token>"
+gcloud run jobs create vidgo-db-migrate \
+  --project vidgo-ai --region asia-east1 \
+  --image $REG/vidgo-backend:${TS}-be \
+  --service-account vidgo-backend@vidgo-ai.iam.gserviceaccount.com \
+  --set-secrets DATABASE_URL=DATABASE_URL:latest \
+  --set-cloudsql-instances vidgo-ai:asia-east1:prod-db,vidgo-ai:asia-east1:vidgo-db \
+  --vpc-connector vidgo-connector \
+  --command python \
+  --args '-c,<python snippet that runs the ALTER statements via asyncpg>'
+
+gcloud run jobs execute vidgo-db-migrate --project vidgo-ai --region asia-east1 --wait
 ```
 
-### 2. 動態調整定價
-- 透過管理後台調整 `service_pricing` 表
-- 即時生效，不需重啟服務
+(If the job already exists, use `gcloud run jobs update … && gcloud run jobs execute …`.)
 
-### 3. 用戶點數管理
-- 查看用戶點數使用情況
-- 手動調整用戶點數餘額
-- 強制過期用戶點數
+### 4. Deploy new revisions
 
-## 前端整合建議
+`services update --image` keeps all existing env vars / secrets / flags and
+only swaps the image:
 
-### 1. 方案選擇頁面
-- 顯示4個方案的比較表
-- 突出顯示每個方案的特點
-- 提供升級/降級按鈕
-
-### 2. 點數購買頁面
-- 顯示3種點數包
-- 顯示優惠資訊 (多送10%/20%)
-- 整合金流支付
-
-### 3. 使用限制提示
-- 當用戶嘗試使用未授權的模型時顯示錯誤
-- 當達到併發限制時顯示等待訊息
-- 當點數不足時顯示購買提示
-
-## 監控與報表
-
-### 1. API 成本細分報表
-- 追蹤每個服務的 API 成本
-- 計算毛利率
-- 識別高成本服務
-
-### 2. 用戶使用統計
-- 各方案用戶數
-- 點數消耗趨勢
-- 熱門服務排行
-
-### 3. 系統健康檢查
-- 併發使用情況
-- 點數餘額分布
-- 模型使用頻率
-
-## 故障排除
-
-### 1. Migration 失敗
-```sql
--- 手動檢查資料庫欄位
-SELECT column_name, data_type 
-FROM information_schema.columns 
-WHERE table_name = 'plans';
-
--- 手動新增缺少的欄位
-ALTER TABLE plans ADD COLUMN allowed_models JSON DEFAULT '["default"]';
-ALTER TABLE plans ADD COLUMN max_concurrent_generations INTEGER DEFAULT 1;
-```
-
-### 2. Seed 資料錯誤
 ```bash
-# 清除舊的 seed 資料
-DELETE FROM plans WHERE name IN ('basic', 'pro', 'premium', 'enterprise');
-DELETE FROM credit_packages WHERE name IN ('light_pack', 'standard_pack', 'heavy_pack');
-
-# 重新執行 seed
-python -m scripts.seed_new_pricing_tiers
+gcloud run services update vidgo-backend  --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
+gcloud run services update vidgo-worker   --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
+gcloud run services update vidgo-frontend --image $REG/vidgo-frontend:${TS}   --project vidgo-ai --region asia-east1
 ```
 
-### 3. API 端點無法存取
+### 5. Verify
+
 ```bash
-# 檢查 API 路由
-curl -X GET "http://localhost:8000/docs"  # 查看 Swagger UI
-
-# 檢查日誌
-tail -f /var/log/vidgo/backend.log
+curl -s https://vidgo-backend-38714015566.asia-east1.run.app/api/v1/health
+curl -I https://vidgo-frontend-38714015566.asia-east1.run.app
+gcloud run services logs read vidgo-backend --project vidgo-ai --region asia-east1 --limit 50
 ```
 
-## 效能優化建議
+Roll back by pointing the service at the previous tag
+(`gcloud run services update <svc> --image <previous tag>`), or shift traffic
+with `gcloud run services update-traffic <svc> --to-revisions <rev>=100`.
 
-### 1. 快取方案資料
-```python
-# 使用 Redis 快取方案比較表
-redis_key = "plans:comparison"
-cached = await redis.get(redis_key)
-if not cached:
-    comparison = await credit_service.get_plan_comparison()
-    await redis.setex(redis_key, 3600, json.dumps(comparison))
-```
+---
 
-### 2. 批次處理點數過期
-```python
-# 使用批次更新減少資料庫負載
-UPDATE users 
-SET subscription_credits = 0 
-WHERE current_plan_id IS NOT NULL 
-  AND plan_expires_at < NOW();
-```
+## Release checklist
 
-### 3. 監控併發限制
-```python
-# 使用 Redis 計數器實時監控
-redis_key = f"concurrent:{user_id}:count"
-current = await redis.incr(redis_key)
-await redis.expire(redis_key, 300)  # 5分鐘過期
-```
+1. `git push origin main` — the deployed code must be in the repo.
+2. Migration needed? → Path B step 3 first.
+3. Build + push + deploy (Path A or B).
+4. Health-check backend + frontend; tail logs for the first minutes.
+5. If `ServicePricing` / plan rows changed, run the matching seed script
+   (e.g. `backend/scripts/seed_service_pricing.py`) — credit charges fall
+   back to in-code constants until the rows exist.
 
-## 安全注意事項
+## Related docs
 
-### 1. 權限驗證
-- 所有 API 端點都需要身份驗證
-- 管理員功能需要 superuser 權限
-- 模型權限檢查在服務層執行
-
-### 2. 點數扣除原子性
-- 使用 Redis 分散式鎖
-- 確保點數扣除的原子性
-- 防止重複扣除
-
-### 3. 金流整合安全
-- 使用 HTTPS 加密傳輸
-- 驗證支付回調簽名
-- 記錄所有支付交易
-
-## 聯絡支援
-
-如有問題，請聯絡：
-- 技術支援: tech@vidgo.com
-- 系統管理員: admin@vidgo.com
-- 緊急聯絡: +886-2-1234-5678
+- Infra layout: [vidgo-infra-architecture.md](./vidgo-infra-architecture.md)
+- First-time DNS / payment bring-up: [setup_guide.md](./setup_guide.md),
+  [dns-and-ecpay-setup.md](./dns-and-ecpay-setup.md), [PAYPAL_SETUP.md](./PAYPAL_SETUP.md)
+- Costs & margins: [service-cost.md](./service-cost.md)

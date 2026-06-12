@@ -1,9 +1,10 @@
 # VidGo AI Platform - Infrastructure Architecture
 
-**Version:** 3.3
-**Last Updated:** March 18, 2026
-**Cloud Provider:** Google Cloud Platform (GCP)  
-**DNS Provider:** GoDaddy  
+> Last updated: 2026-06-12
+
+**Version:** 4.0
+**Cloud Provider:** Google Cloud Platform (GCP) — project `vidgo-ai`, region `asia-east1`
+**DNS Provider:** GoDaddy (domain `vidgo.co`)
 **Max Concurrent Users:** 1,000
 
 ---
@@ -19,60 +20,83 @@
 │       │                                                                              │
 │       ▼                                                                              │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐  │
-│   │                    GoDaddy DNS                                               │  │
+│   │                    GoDaddy DNS (vidgo.co)                                    │  │
 │   │                                                                              │  │
-│   │   vidgo.ai          → GCP Load Balancer IP                                  │  │
-│   │   api.vidgo.ai      → GCP Load Balancer IP                                  │  │
-│   │   www.vidgo.ai      → CNAME to vidgo.ai                                     │  │
-│   └─────────────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                                 │
-│                                    ▼                                                 │
-│   ┌─────────────────────────────────────────────────────────────────────────────┐  │
-│   │                    GCP Cloud Load Balancer                                   │  │
+│   │   vidgo.co          → Cloud Run domain mapping → vidgo-frontend             │  │
+│   │   api.vidgo.co      → Cloud Run domain mapping → vidgo-backend              │  │
+│   │   app.vidgo.co      → Cloud Run domain mapping → vidgo-frontend (pending)   │  │
 │   │                                                                              │  │
-│   │   • HTTPS termination (Managed SSL)                                         │  │
-│   │   • DDoS protection                                                          │  │
-│   │   • Global routing                                                           │  │
-│   │   • Health checks                                                            │  │
+│   │   No GCP Load Balancer — Cloud Run domain mappings handle TLS directly.     │  │
 │   └─────────────────────────────────────────────────────────────────────────────┘  │
 │                          │                    │                                      │
 │                          ▼                    ▼                                      │
-│   ┌──────────────────────────────┐  ┌──────────────────────────────┐              │
-│   │     Cloud Run (Frontend)     │  │     Cloud Run (API)          │              │
-│   │                              │  │                              │              │
-│   │   • Vue 3 + Vite            │  │   • FastAPI                  │              │
-│   │   • Static hosting          │  │   • Auto-scaling 0-10        │              │
-│   │   • CDN caching             │  │   • 1000 concurrent limit    │              │
-│   │   • Min: 0, Max: 5          │  │   • 2 vCPU, 2GB RAM          │              │
-│   └──────────────────────────────┘  └──────────────────────────────┘              │
+│   ┌──────────────────────────────┐  ┌──────────────────────────────┐               │
+│   │   Cloud Run: vidgo-frontend  │  │   Cloud Run: vidgo-backend   │               │
+│   │                              │  │                              │               │
+│   │   • Vue 3 + Vite → nginx     │  │   • FastAPI (uvicorn)        │               │
+│   │   • /api proxied to backend  │  │   • Min: 1, Max: 10          │               │
+│   │   • Min: 0, Max: 4           │  │   • 1 vCPU, 2Gi RAM          │               │
+│   │   • 1 vCPU, 256Mi RAM        │  │   • concurrency 80           │               │
+│   │   • port 80                  │  │   • timeout 3600s, port 8000 │               │
+│   └──────────────────────────────┘  └──────────────────────────────┘               │
 │                                                │                                     │
-│                                                ▼                                     │
+│   ┌──────────────────────────────┐             │                                     │
+│   │   Cloud Run: vidgo-worker    │◄────────────┤  (same backend image,               │
+│   │                              │             │   custom command:                   │
+│   │   • ARQ background worker    │             │   `python -m http.server 8000 &     │
+│   │   • Min: 1, Max: 2           │             │    exec arq                          │
+│   │   • 1 vCPU, 512Mi RAM        │             │    app.worker.WorkerSettings`)      │
+│   │   • --no-cpu-throttling      │             │                                     │
+│   └──────────────────────────────┘             │                                     │
+│                          │                     │                                     │
+│                          ▼                     ▼                                     │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐  │
-│   │                           VPC Network                                        │  │
+│   │              VPC `vidgo-vpc` (via connector `vidgo-connector`)               │  │
 │   │                                                                              │  │
-│   │   ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐   │  │
-│   │   │   Cloud SQL        │  │   Memorystore      │  │   Cloud Storage    │   │  │
-│   │   │   (PostgreSQL)     │  │   (Redis)          │  │   (Media Files)    │   │  │
-│   │   │                    │  │                    │  │                    │   │  │
-│   │   │   • db-g1-small    │  │   • Basic 1GB      │  │   • Standard       │   │  │
-│   │   │   • 10GB SSD       │  │   • Cache + Queue  │  │   • asia-east1     │   │  │
-│   │   │   • Auto backup    │  │   • Session store  │  │   • CDN enabled    │   │  │
-│   │   └────────────────────┘  └────────────────────┘  └────────────────────┘   │  │
+│   │   ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐    │  │
+│   │   │   Cloud SQL        │  │   Memorystore      │  │   Cloud Storage    │    │  │
+│   │   │   `prod-db`        │  │   `vidgo-redis`    │  │   `vidgo-media-    │    │  │
+│   │   │                    │  │                    │  │    vidgo-ai`       │    │  │
+│   │   │   • PostgreSQL 15  │  │   • Basic 1GB      │  │   • static/ +      │    │  │
+│   │   │   • db-f1-micro    │  │   • 10.24.105.251  │  │     generated/     │    │  │
+│   │   │   • PRIVATE IP only│  │   • Cache + ARQ    │  │   • asia-east1     │    │  │
+│   │   │     10.70.0.3      │  │     queue          │  │   • public media   │    │  │
+│   │   └────────────────────┘  └────────────────────┘  └────────────────────┘    │  │
 │   │                                                                              │  │
+│   │   Cloud NAT static egress IP: 35.201.182.131 (`vidgo-nat-ip`)               │  │
+│   │   — fixed outbound IP for ECPay / Giveme allowlisting                       │  │
 │   └─────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐  │
-│   │                         Monitoring Stack                                     │  │
+│   │                       External AI Providers (REST only)                      │  │
 │   │                                                                              │  │
-│   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │  │
-│   │   │ Cloud        │  │ Cloud        │  │   Sentry     │  │  SendGrid    │   │  │
-│   │   │ Monitoring   │  │ Logging      │  │   (Errors)   │  │  (Alerts)    │   │  │
-│   │   └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘   │  │
-│   │                                                                              │  │
+│   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │  │
+│   │   │   PiAPI      │  │  Vertex AI   │  │   Pollo.ai   │  │   A2E.ai     │    │  │
+│   │   │  (PRIMARY)   │  │ (ADC backup) │  │ (I2V backup) │  │  (avatar)    │    │  │
+│   │   └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘    │  │
 │   └─────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+Key facts (verified against live `gcloud` state on 2026-06-12):
+
+| Resource | Value |
+|----------|-------|
+| GCP project | `vidgo-ai` |
+| Region | `asia-east1` |
+| Cloud Run services | `vidgo-backend`, `vidgo-worker`, `vidgo-frontend` |
+| Artifact Registry | `asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images` |
+| Cloud SQL | `prod-db` (POSTGRES_15, db-f1-micro, **private IP only** `10.70.0.3`) |
+| Memorystore Redis | `vidgo-redis` (Basic 1GB, `10.24.105.251:6379`, network `vidgo-vpc`) |
+| VPC connector | `vidgo-connector` (`vidgo-vpc`, `10.8.0.0/28`, egress `all-traffic`) |
+| Media bucket | `gs://vidgo-media-vidgo-ai` |
+| Service accounts | `vidgo-backend@vidgo-ai.iam.gserviceaccount.com` (backend), `vidgo-worker@vidgo-ai.iam.gserviceaccount.com` (worker) |
+
+Notes:
+- `DATABASE_URL` and `REDIS_URL` come from **Secret Manager** (mounted as env vars); the DB is reached over its private IP through the VPC connector.
+- Both backend and worker carry the `run.googleapis.com/cloudsql-instances` annotation `vidgo-ai:asia-east1:prod-db,vidgo-ai:asia-east1:vidgo-db`. The `vidgo-db` instance **no longer exists** (deleted); the annotation entry is a harmless leftover — the live connection uses `prod-db` private IP, not the SQL Auth Proxy socket.
+- `vidgo-worker` runs the **backend image** with a custom command (`python -m http.server 8000 & exec arq app.worker.WorkerSettings`) — the dummy HTTP server satisfies Cloud Run's port health check while ARQ consumes the Redis queue.
 
 ---
 
@@ -91,42 +115,31 @@
 | **GPU 支援** | ❌ | ✅ | ✅ |
 | **適合場景** | HTTP API, 突發流量 | 複雜微服務 | 完全控制 |
 
-### 2.2 建議選擇
+### 2.2 選擇結果
+
+VidGo 已採用 **Cloud Run (Serverless)** 並在生產環境運行:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       建議: Cloud Run (Serverless)                          │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ✅ 選擇 Cloud Run 的原因:                                                  │
-│                                                                             │
-│  1. 成本效益最佳                                                            │
-│     • Scale to zero = 閒置不收費                                            │
-│     • 1000 並發在 Cloud Run 完全可以處理                                    │
-│     • 預估月成本 $100-200 vs GKE $200+                                     │
-│                                                                             │
-│  2. 管理簡單                                                                │
-│     • 無需管理 Kubernetes 集群                                              │
-│     • 自動擴展、自動修復                                                    │
-│     • 降低 DevOps 負擔                                                      │
-│                                                                             │
-│  3. VidGo 使用場景適合                                                      │
-│     • AI 生成是異步任務 (HTTP request + polling/webhook)                    │
-│     • 不需要 GPU (AI 在外部 API)                                            │
-│     • 不需要長時間 WebSocket (可用 polling)                                 │
-│                                                                             │
-│  4. 未來可擴展                                                              │
-│     • 如果需要可以遷移到 GKE                                                │
-│     • Container 架構相同                                                    │
-│                                                                             │
-│  ❌ 不需要 GKE 的原因:                                                      │
-│                                                                             │
-│  1. 沒有自建 AI 模型需求 (使用外部 API)                                     │
-│  2. 沒有複雜微服務架構                                                      │
-│  3. 1000 用戶不需要 Kubernetes 複雜度                                       │
-│  4. 預算考量 (Cloud Run 便宜 50%+)                                         │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+✅ 選擇 Cloud Run 的原因 (已驗證):
+
+1. 成本效益最佳
+   • backend min=1 保持暖機, frontend scale-to-zero
+   • 1000 並發在 Cloud Run 完全可以處理
+
+2. 管理簡單
+   • 無需管理 Kubernetes 集群
+   • 自動擴展、自動修復、revision-based rollback
+
+3. VidGo 使用場景適合
+   • AI 生成是異步任務 (ARQ worker + polling)
+   • 不需要 GPU (AI 在外部 API: PiAPI / Vertex AI / Pollo / A2E)
+   • 不需要長時間 WebSocket (使用 polling / SSE)
+
+❌ 不需要 GKE 的原因:
+
+1. 沒有自建 AI 模型需求 (使用外部 API)
+2. 沒有複雜微服務架構 (3 個 Cloud Run services)
+3. 1000 用戶不需要 Kubernetes 複雜度
 ```
 
 ### 2.3 何時考慮 GKE
@@ -137,900 +150,409 @@
 • 用戶超過 10,000+ 並發
 • 需要自建 AI 推論 (GPU nodes)
 • 需要複雜的服務網格 (service mesh)
-• 需要 StatefulSet (有狀態服務)
 • WebSocket 成為核心功能
 • DevOps 團隊有 K8s 經驗
 ```
 
 ---
 
-## 3. GCP Resource Setup
+## 3. GCP Resources (As Built)
 
-### 3.1 Prerequisites
+### 3.1 Cloud Run Services
 
-```bash
-# Install gcloud CLI
-curl https://sdk.cloud.google.com | bash
-exec -l $SHELL
-gcloud init
+| Setting | `vidgo-backend` | `vidgo-worker` | `vidgo-frontend` |
+|---------|-----------------|----------------|------------------|
+| Image | `…/vidgo-images/vidgo-backend:<TAG>` | same backend image | `…/vidgo-images/vidgo-frontend:<TAG>` |
+| Command | default (uvicorn via entrypoint) | `/bin/bash -c "python -m http.server 8000 & exec arq app.worker.WorkerSettings"` | nginx |
+| CPU / Memory | 1 vCPU / 2Gi | 1 vCPU / 512Mi (`--no-cpu-throttling`) | 1 vCPU / 256Mi |
+| Scaling | min 1 / max 10 | min 1 / max 2 | min 0 / max 4 |
+| Concurrency | 80 | 80 | default |
+| Timeout | 3600s | 300s | default |
+| Port | 8000 | 8000 (dummy health server) | 80 |
+| Ingress / auth | all, `--allow-unauthenticated` | `--no-allow-unauthenticated` | all, `--allow-unauthenticated` |
+| VPC | `vidgo-connector`, egress all-traffic | `vidgo-connector`, egress all-traffic | none |
+| Service account | `vidgo-backend@vidgo-ai.iam` | `vidgo-worker@vidgo-ai.iam` | default |
 
-# Login and set project
-gcloud auth login
-gcloud config set project vidgo-ai-prod
+Notable env vars on backend/worker (non-secret): `SKIP_PREGENERATION=true`, `SKIP_DEPENDENCY_CHECK=true`, `GCS_BUCKET=vidgo-media-vidgo-ai`, `VERTEX_AI_PROJECT=vidgo-ai`, `VERTEX_AI_LOCATION=asia-east1`, `GEMINI_MODEL=gemini-2.5-flash`, `GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`, `VEO_MODEL=veo-3.0-fast-generate-001`, `FRONTEND_URL=https://vidgo.co`, `BACKEND_URL=https://api.vidgo.co`, `ECPAY_ENV=production`, `PAYPAL_ENV=production`, `GIVEME_ENABLED=true`.
 
-# Enable required APIs
-gcloud services enable \
-    run.googleapis.com \
-    sql-component.googleapis.com \
-    sqladmin.googleapis.com \
-    redis.googleapis.com \
-    storage.googleapis.com \
-    compute.googleapis.com \
-    cloudresourcemanager.googleapis.com \
-    secretmanager.googleapis.com \
-    monitoring.googleapis.com \
-    logging.googleapis.com
-```
+Frontend env: `BACKEND_URL=https://vidgo-backend-r2laip67ma-de.a.run.app` (substituted into the nginx template so `/api/*` is proxied server-side to the backend).
 
-### 3.2 Create Infrastructure
+### 3.2 Networking
 
 ```bash
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. CREATE VPC NETWORK
-# ─────────────────────────────────────────────────────────────────────────────
-gcloud compute networks create vidgo-vpc \
-    --subnet-mode=auto \
-    --bgp-routing-mode=regional
+# VPC + connector (existing — reference only)
+# vidgo-vpc, connector vidgo-connector: 10.8.0.0/28, 2-3 instances, READY
+gcloud compute networks vpc-access connectors describe vidgo-connector \
+    --region=asia-east1 --project=vidgo-ai
 
-# Create VPC connector for Cloud Run
-gcloud compute networks vpc-access connectors create vidgo-connector \
-    --region=asia-east1 \
-    --network=vidgo-vpc \
-    --range=10.8.0.0/28
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. CREATE CLOUD SQL (PostgreSQL)
-# ─────────────────────────────────────────────────────────────────────────────
-gcloud sql instances create vidgo-db \
-    --database-version=POSTGRES_15 \
-    --tier=db-g1-small \
-    --region=asia-east1 \
-    --storage-size=10GB \
-    --storage-type=SSD \
-    --storage-auto-increase \
-    --backup-start-time=03:00 \
-    --availability-type=zonal \
-    --network=vidgo-vpc \
-    --no-assign-ip
-
-# Create database
-gcloud sql databases create vidgo --instance=vidgo-db
-
-# Create user
-gcloud sql users create vidgo_user \
-    --instance=vidgo-db \
-    --password="$(openssl rand -base64 32)"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. CREATE MEMORYSTORE (Redis)
-# ─────────────────────────────────────────────────────────────────────────────
-gcloud redis instances create vidgo-redis \
-    --size=1 \
-    --region=asia-east1 \
-    --redis-version=redis_7_0 \
-    --network=vidgo-vpc \
-    --tier=basic
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 4. CREATE CLOUD STORAGE BUCKET
-# ─────────────────────────────────────────────────────────────────────────────
-gsutil mb -p vidgo-ai-prod -l asia-east1 gs://vidgo-media-prod
-
-# Set CORS
-cat > cors.json << EOF
-[
-  {
-    "origin": ["https://vidgo.ai", "https://api.vidgo.ai"],
-    "method": ["GET", "PUT", "POST", "DELETE"],
-    "responseHeader": ["Content-Type"],
-    "maxAgeSeconds": 3600
-  }
-]
-EOF
-gsutil cors set cors.json gs://vidgo-media-prod
-
-# Enable CDN
-gsutil web set -m index.html -e 404.html gs://vidgo-media-prod
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 5. CREATE SECRETS
-# ─────────────────────────────────────────────────────────────────────────────
-# Store sensitive data in Secret Manager
-echo -n "your-secret-key" | gcloud secrets create SECRET_KEY --data-file=-
-echo -n "your-piapi-key" | gcloud secrets create PIAPI_API_KEY --data-file=-
-echo -n "your-pollo-key" | gcloud secrets create POLLO_API_KEY --data-file=-
-echo -n "your-a2e-key" | gcloud secrets create A2E_API_KEY --data-file=-
-echo -n "your-gemini-key" | gcloud secrets create GEMINI_API_KEY --data-file=-
-echo -n "your-paddle-key" | gcloud secrets create PADDLE_API_KEY --data-file=-
-echo -n "your-paddle-webhook-secret" | gcloud secrets create PADDLE_WEBHOOK_SECRET --data-file=-
-echo -n "your-sendgrid-key" | gcloud secrets create SENDGRID_API_KEY --data-file=-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 6. RESERVE STATIC IP
-# ─────────────────────────────────────────────────────────────────────────────
-gcloud compute addresses create vidgo-ip --global
-
-# Get the IP address
-gcloud compute addresses describe vidgo-ip --global --format="get(address)"
-# Output: 34.xxx.xxx.xxx (use this for GoDaddy DNS)
+# Cloud NAT static egress IP (for ECPay / Giveme IP allowlists)
+# vidgo-nat-ip = 35.201.182.131
+gcloud compute addresses list --project=vidgo-ai
 ```
 
-### 3.3 Deploy Cloud Run Services
+There is **no GCP HTTPS Load Balancer, no serverless NEGs, no reserved global IP** — public traffic terminates directly on Cloud Run via domain mappings (Section 4).
+
+### 3.3 Data Stores
 
 ```bash
-# ─────────────────────────────────────────────────────────────────────────────
-# BUILD AND PUSH DOCKER IMAGES
-# ─────────────────────────────────────────────────────────────────────────────
+# Cloud SQL — PostgreSQL 15, private IP only (10.70.0.3), no public IP
+gcloud sql instances describe prod-db --project=vidgo-ai
 
-# Backend API
-cd vidgo-backend
-docker build -t asia-east1-docker.pkg.dev/vidgo-ai-prod/vidgo/api:latest .
-docker push asia-east1-docker.pkg.dev/vidgo-ai-prod/vidgo/api:latest
+# Memorystore Redis — Basic 1GB on vidgo-vpc (cache + ARQ task queue)
+gcloud redis instances describe vidgo-redis --region=asia-east1 --project=vidgo-ai
 
-# Frontend
-cd vidgo-frontend
-npm run build
-docker build -t asia-east1-docker.pkg.dev/vidgo-ai-prod/vidgo/web:latest .
-docker push asia-east1-docker.pkg.dev/vidgo-ai-prod/vidgo/web:latest
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DEPLOY API SERVICE
-# ─────────────────────────────────────────────────────────────────────────────
-gcloud run deploy vidgo-api \
-    --image=asia-east1-docker.pkg.dev/vidgo-ai-prod/vidgo/api:latest \
-    --region=asia-east1 \
-    --platform=managed \
-    --allow-unauthenticated \
-    --vpc-connector=vidgo-connector \
-    --set-env-vars="ENVIRONMENT=production" \
-    --set-secrets="SECRET_KEY=SECRET_KEY:latest,PIAPI_API_KEY=PIAPI_API_KEY:latest,POLLO_API_KEY=POLLO_API_KEY:latest,A2E_API_KEY=A2E_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,PADDLE_API_KEY=PADDLE_API_KEY:latest,PADDLE_WEBHOOK_SECRET=PADDLE_WEBHOOK_SECRET:latest,SENDGRID_API_KEY=SENDGRID_API_KEY:latest" \
-    --add-cloudsql-instances=vidgo-ai-prod:asia-east1:vidgo-db \
-    --cpu=2 \
-    --memory=2Gi \
-    --min-instances=1 \
-    --max-instances=10 \
-    --concurrency=100 \
-    --timeout=300
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DEPLOY FRONTEND SERVICE
-# ─────────────────────────────────────────────────────────────────────────────
-gcloud run deploy vidgo-web \
-    --image=asia-east1-docker.pkg.dev/vidgo-ai-prod/vidgo/web:latest \
-    --region=asia-east1 \
-    --platform=managed \
-    --allow-unauthenticated \
-    --cpu=1 \
-    --memory=512Mi \
-    --min-instances=0 \
-    --max-instances=5 \
-    --concurrency=200
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SETUP LOAD BALANCER WITH SSL
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Create serverless NEG for API
-gcloud compute network-endpoint-groups create vidgo-api-neg \
-    --region=asia-east1 \
-    --network-endpoint-type=serverless \
-    --cloud-run-service=vidgo-api
-
-# Create serverless NEG for Web
-gcloud compute network-endpoint-groups create vidgo-web-neg \
-    --region=asia-east1 \
-    --network-endpoint-type=serverless \
-    --cloud-run-service=vidgo-web
-
-# Create backend services
-gcloud compute backend-services create vidgo-api-backend \
-    --global \
-    --load-balancing-scheme=EXTERNAL_MANAGED
-
-gcloud compute backend-services add-backend vidgo-api-backend \
-    --global \
-    --network-endpoint-group=vidgo-api-neg \
-    --network-endpoint-group-region=asia-east1
-
-gcloud compute backend-services create vidgo-web-backend \
-    --global \
-    --load-balancing-scheme=EXTERNAL_MANAGED
-
-gcloud compute backend-services add-backend vidgo-web-backend \
-    --global \
-    --network-endpoint-group=vidgo-web-neg \
-    --network-endpoint-group-region=asia-east1
-
-# Create URL map
-gcloud compute url-maps create vidgo-lb \
-    --default-service=vidgo-web-backend
-
-# Add path rules for API
-gcloud compute url-maps add-path-matcher vidgo-lb \
-    --path-matcher-name=api-matcher \
-    --default-service=vidgo-api-backend \
-    --path-rules="/api/*=vidgo-api-backend"
-
-gcloud compute url-maps add-host-rule vidgo-lb \
-    --hosts="api.vidgo.ai" \
-    --path-matcher-name=api-matcher
-
-# Create SSL certificate
-gcloud compute ssl-certificates create vidgo-ssl \
-    --domains="vidgo.ai,www.vidgo.ai,api.vidgo.ai" \
-    --global
-
-# Create HTTPS proxy
-gcloud compute target-https-proxies create vidgo-https-proxy \
-    --url-map=vidgo-lb \
-    --ssl-certificates=vidgo-ssl
-
-# Create forwarding rule
-gcloud compute forwarding-rules create vidgo-https-rule \
-    --global \
-    --target-https-proxy=vidgo-https-proxy \
-    --ports=443 \
-    --address=vidgo-ip
+# Media bucket — public generated/static media
+gsutil ls gs://vidgo-media-vidgo-ai/
+#   static/      → hub thumbnails (static/hub/...), try-on models
+#                  (static/tryon/models/...), demo products (static/products/...)
+#   generated/   → user/demo generation outputs persisted from provider CDNs
 ```
+
+**Provider CDN persistence:** PiAPI and Pollo return temporary CDN URLs that expire after ~14 days. `app/services/gcs_storage_service.py` downloads results and re-uploads them to `gs://vidgo-media-vidgo-ai/generated/...`, persisting the GCS URL instead of the expiring provider URL.
+
+### 3.4 Secret Manager
+
+Secrets mounted on backend + worker (as env vars, `:latest`):
+
+```
+DATABASE_URL  REDIS_URL  SECRET_KEY
+PIAPI_KEY  GEMINI_API_KEY  POLLO_API_KEY
+A2E_API_KEY  A2E_API_ID  A2E_DEFAULT_CREATOR_ID
+SMTP_HOST  SMTP_PORT  SMTP_USER  SMTP_PASSWORD
+ECPAY_MERCHANT_ID  ECPAY_HASH_KEY  ECPAY_HASH_IV
+GIVEME_IDNO  GIVEME_PASSWORD
+```
+
+Additional secrets exist in Secret Manager but are **not mounted** on the services:
+- `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` / `PAYPAL_WEBHOOK_ID` / `PAYPAL_PLAN_IDS` — PayPal credentials are admin-configured in the DB (payment settings page) with env-var fallback (`app/services/payment_settings_service.py`).
+- `PADDLE_*` — **legacy, unused**. Paddle was removed from the platform (payments are PayPal + ECPay, e-invoices via Giveme). Safe to delete.
+- `FACEBOOK_*`, `TIKTOK_*`, `YOUTUBE_*` — social-posting integrations; `ADMIN_*`, `QA_*`, `TEST_ACCOUNTS` — seeding/QA.
+
+> ⚠️ **`GEMINI_API_KEY` is revoked** (the key leaked and was disabled). It is still mounted but non-functional. All Gemini / Imagen / Veo calls go through **Vertex AI with Application Default Credentials (ADC)** using the service account — no API key involved. See Section 7.
 
 ---
 
 ## 4. GoDaddy DNS Configuration
 
-### 4.1 DNS Records Setup
+Domain is **`vidgo.co`** (not vidgo.ai). TLS is provisioned automatically by Cloud Run domain mappings — no load balancer or managed SSL cert resources to maintain.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         GoDaddy DNS Configuration                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Domain: vidgo.ai                                                           │
-│  GCP Static IP: 34.xxx.xxx.xxx (from gcloud compute addresses describe)    │
-│                                                                             │
-│  ┌────────────────────────────────────────────────────────────────────────┐│
-│  │  DNS Records                                                           ││
-│  │  ─────────────────────────────────────────────────────────────────────││
-│  │                                                                        ││
-│  │  Type    Name    Value                        TTL                     ││
-│  │  ────    ────    ─────                        ───                     ││
-│  │  A       @       34.xxx.xxx.xxx               600                     ││
-│  │  A       api     34.xxx.xxx.xxx               600                     ││
-│  │  A       www     34.xxx.xxx.xxx               600                     ││
-│  │  CNAME   www     @                            600 (alternative)       ││
-│  │                                                                        ││
-│  │  Optional: Email records                                              ││
-│  │  TXT     @       v=spf1 include:_spf.google.com ~all                 ││
-│  │  MX      @       10 mx.example.com                                    ││
-│  │                                                                        ││
-│  └────────────────────────────────────────────────────────────────────────┘│
-│                                                                             │
-│  Setup Steps:                                                               │
-│  ─────────────────────────────────────────────────────────────────────────│
-│                                                                             │
-│  1. Login to GoDaddy: https://dcc.godaddy.com/                            │
-│                                                                             │
-│  2. Select domain: vidgo.ai                                                │
-│                                                                             │
-│  3. Go to "DNS Management"                                                 │
-│                                                                             │
-│  4. Edit A Record (Type A):                                               │
-│     • Name: @ (or leave blank for root)                                   │
-│     • Value: 34.xxx.xxx.xxx (GCP static IP)                              │
-│     • TTL: 600 seconds                                                    │
-│                                                                             │
-│  5. Add A Record for API:                                                  │
-│     • Name: api                                                           │
-│     • Value: 34.xxx.xxx.xxx                                              │
-│     • TTL: 600 seconds                                                    │
-│                                                                             │
-│  6. Add A Record for WWW:                                                  │
-│     • Name: www                                                           │
-│     • Value: 34.xxx.xxx.xxx                                              │
-│     • TTL: 600 seconds                                                    │
-│                                                                             │
-│  7. Save changes                                                           │
-│                                                                             │
-│  8. Wait for propagation (5-30 minutes)                                   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 4.2 GoDaddy Configuration Steps (GUI)
-
-```
-Step-by-Step GoDaddy DNS Setup:
-═════════════════════════════════════════════════════════════════════════════
-
-1. Login to GoDaddy
-   └── https://sso.godaddy.com/
-
-2. Navigate to DNS Management
-   └── My Products → Domains → vidgo.ai → DNS
-
-3. Modify A Record (Root Domain)
-   ┌─────────────────────────────────────────────────────────────────────┐
-   │ Type: A                                                              │
-   │ Name: @                                                              │
-   │ Value: 34.xxx.xxx.xxx  ← GCP Load Balancer IP                       │
-   │ TTL: 600 seconds (10 minutes)                                       │
-   └─────────────────────────────────────────────────────────────────────┘
-
-4. Add A Record (API Subdomain)
-   ┌─────────────────────────────────────────────────────────────────────┐
-   │ Type: A                                                              │
-   │ Name: api                                                            │
-   │ Value: 34.xxx.xxx.xxx  ← Same GCP Load Balancer IP                  │
-   │ TTL: 600 seconds                                                     │
-   └─────────────────────────────────────────────────────────────────────┘
-
-5. Add A Record (WWW Subdomain)
-   ┌─────────────────────────────────────────────────────────────────────┐
-   │ Type: A                                                              │
-   │ Name: www                                                            │
-   │ Value: 34.xxx.xxx.xxx                                               │
-   │ TTL: 600 seconds                                                     │
-   └─────────────────────────────────────────────────────────────────────┘
-
-6. Verify Configuration
-   └── Wait 5-30 minutes for DNS propagation
-   └── Test: nslookup vidgo.ai
-   └── Test: curl -I https://vidgo.ai
-   └── Test: curl -I https://api.vidgo.ai/health
-
-7. SSL Certificate Provisioning
-   └── GCP will automatically provision SSL after DNS propagation
-   └── Check status: gcloud compute ssl-certificates describe vidgo-ssl
-   └── Usually takes 15-60 minutes
-```
-
-### 4.3 Verify DNS Configuration
+### 4.1 Domain Mappings (live)
 
 ```bash
-# Check DNS propagation
-nslookup vidgo.ai
-nslookup api.vidgo.ai
-nslookup www.vidgo.ai
+gcloud beta run domain-mappings list --project=vidgo-ai --region=asia-east1
+#  ✔  api.vidgo.co  → vidgo-backend
+#  ✗  app.vidgo.co  → vidgo-frontend   (mapping created, cert not yet provisioned)
+#  ✔  vidgo.co      → vidgo-frontend
+```
 
-# Check from different DNS servers
-nslookup vidgo.ai 8.8.8.8  # Google DNS
-nslookup vidgo.ai 1.1.1.1  # Cloudflare DNS
+### 4.2 GoDaddy DNS Records
 
-# Check SSL certificate status
-gcloud compute ssl-certificates describe vidgo-ssl --global
+```
+Type    Name    Value                                  TTL
+────    ────    ─────                                  ───
+A/AAAA  @       Google-provided IPs (from the          600
+                domain-mapping resource records)
+CNAME   api     ghs.googlehosted.com                   600
+CNAME   app     ghs.googlehosted.com                   600
+```
 
-# Test endpoints
-curl -I https://vidgo.ai
-curl -I https://api.vidgo.ai/health
+Setup: GoDaddy → My Products → Domains → vidgo.co → DNS, enter the resource records shown by:
+
+```bash
+gcloud beta run domain-mappings describe --domain=vidgo.co \
+    --project=vidgo-ai --region=asia-east1
+```
+
+See also `docs/dns-and-ecpay-setup.md` for the ECPay/Giveme callback and NAT egress IP requirements.
+
+### 4.3 Verify
+
+```bash
+nslookup vidgo.co
+nslookup api.vidgo.co
+curl -I https://vidgo.co
+curl -I https://api.vidgo.co/health
 ```
 
 ---
 
 ## 5. Docker Configuration
 
-### 5.1 Backend Dockerfile
+### 5.1 Backend Image (`backend/Dockerfile`)
+
+Built from the **repo root** as build context (requirements and code are copied from `backend/`). Base: `python:3.12-slim`.
+
+Highlights:
+- System deps: `curl postgresql-client redis-tools ffmpeg dos2unix fonts-noto-cjk fonts-noto-cjk-extra` (CJK fonts are required so the image-translator can render Traditional Chinese/Japanese/Korean glyphs instead of tofu).
+- **Node.js + MCP server build removed 2026-05-26** — the Pollo MCP and PiAPI MCP providers were deleted in favor of REST equivalents. This trimmed the image by ~150-200 MB and shaved ~30-60s off every build.
+- Entry: `scripts/docker_entrypoint.sh` (CRLF→LF normalized at build time), default CMD `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+- The same image serves both `vidgo-backend` and `vidgo-worker` (worker overrides the command).
+
+### 5.2 Frontend Image (`frontend-vue/Dockerfile.prod`)
 
 ```dockerfile
-# docker/Dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application
-COPY app/ ./app/
-COPY alembic/ ./alembic/
-COPY alembic.ini .
-
-# Set environment
-ENV PYTHONPATH=/app
-ENV PORT=8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
-
-# Run with Gunicorn
-CMD exec gunicorn --bind :$PORT --workers 2 --threads 4 --timeout 300 \
-    --worker-class uvicorn.workers.UvicornWorker app.main:app
+# Stage 1: node:20-alpine — npm ci && npm run build
+# Stage 2: mirror.gcr.io/library/nginx:alpine
+#   dist/ → /usr/share/nginx/html
+#   nginx.conf.template → /etc/nginx/templates/default.conf.template
+#   NGINX_ENVSUBST_FILTER=BACKEND_URL  (only $BACKEND_URL is substituted;
+#   nginx runtime vars like $host/$uri are left intact)
+#   EXPOSE 80
 ```
 
-### 5.2 Frontend Dockerfile
+The nginx template serves the SPA and reverse-proxies `/api/*` to `$BACKEND_URL`, so the browser only ever talks to the frontend origin.
 
-```dockerfile
-# vidgo-frontend/Dockerfile
-FROM node:20-alpine AS builder
+### 5.3 Local Development (`docker-compose.yml`)
 
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-
-EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
-```
-
-### 5.3 Frontend Nginx Config
-
-```nginx
-# vidgo-frontend/nginx.conf
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    server {
-        listen 8080;
-        server_name _;
-        root /usr/share/nginx/html;
-        index index.html;
-
-        # Gzip compression
-        gzip on;
-        gzip_types text/plain text/css application/json application/javascript;
-
-        # SPA routing
-        location / {
-            try_files $uri $uri/ /index.html;
-        }
-
-        # Cache static assets
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-
-        # Health check
-        location /health {
-            return 200 'OK';
-            add_header Content-Type text/plain;
-        }
-    }
-}
-```
+Services: `postgres` (15-alpine, host port 5433), `redis` (7-alpine, host port 6380), `mailpit` (SMTP testing, UI :8025), `backend` (uvicorn --reload, host port 8001), `worker` (ARQ), `frontend` (Vite dev server, host port 8501), plus profile-gated `init-materials` / `pregenerate` jobs for Material DB seeding. Generated media and materials persist in named Docker volumes (`vidgo_generated`, `vidgo_materials`, `vidgo_tryon_garments`).
 
 ---
 
-## 6. Monitoring Setup
+## 6. CI/CD & Deployment
 
-### 6.1 Cloud Monitoring Dashboard
+### 6.1 Cloud Build Pipelines (repo root)
 
-```bash
-# Create custom dashboard
-gcloud monitoring dashboards create --config-from-file=dashboard.json
-```
+| File | Purpose |
+|------|---------|
+| `cloudbuild.yaml` | Full pipeline: build backend + frontend images in parallel (with `--cache-from :latest`), push to `vidgo-images`, then deploy `vidgo-backend`, `vidgo-worker` (backend image + custom ARQ command), and `vidgo-frontend` with explicit flags (`SKIP_PREGENERATION=true`, `--add-cloudsql-instances`, scaling/memory per service). |
+| `cloudbuild.backend-only.yaml` | Build + push the backend image only (no deploy). |
+| `cloudbuild.frontend-only.yaml` | Build + push the frontend image only (no deploy). |
 
-```json
-// dashboard.json
-{
-  "displayName": "VidGo AI Monitoring",
-  "mosaicLayout": {
-    "columns": 12,
-    "tiles": [
-      {
-        "width": 4,
-        "height": 4,
-        "widget": {
-          "title": "API Request Rate",
-          "xyChart": {
-            "dataSets": [{
-              "timeSeriesQuery": {
-                "timeSeriesFilter": {
-                  "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"run.googleapis.com/request_count\"",
-                  "aggregation": {
-                    "alignmentPeriod": "60s",
-                    "perSeriesAligner": "ALIGN_RATE"
-                  }
-                }
-              }
-            }]
-          }
-        }
-      },
-      {
-        "width": 4,
-        "height": 4,
-        "widget": {
-          "title": "API Latency (p95)",
-          "xyChart": {
-            "dataSets": [{
-              "timeSeriesQuery": {
-                "timeSeriesFilter": {
-                  "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"run.googleapis.com/request_latencies\"",
-                  "aggregation": {
-                    "alignmentPeriod": "60s",
-                    "perSeriesAligner": "ALIGN_PERCENTILE_95"
-                  }
-                }
-              }
-            }]
-          }
-        }
-      },
-      {
-        "width": 4,
-        "height": 4,
-        "widget": {
-          "title": "Error Rate",
-          "xyChart": {
-            "dataSets": [{
-              "timeSeriesQuery": {
-                "timeSeriesFilter": {
-                  "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"run.googleapis.com/request_count\" AND metric.labels.response_code_class!=\"2xx\"",
-                  "aggregation": {
-                    "alignmentPeriod": "60s",
-                    "perSeriesAligner": "ALIGN_RATE"
-                  }
-                }
-              }
-            }]
-          }
-        }
-      }
-    ]
-  }
-}
-```
+### 6.2 Local-Build Deploy Flow (primary day-to-day path)
 
-### 6.2 Alert Policies
+Images are typically built on a **linux/amd64** Docker host (Intel Mac, or `--platform linux/amd64`), pushed directly to Artifact Registry, then rolled out with `gcloud run services update --image` — which **preserves all existing env vars / secrets / flags** on the service:
 
 ```bash
-# Create alert for high error rate
+REG=asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images
+TS=$(date +%Y%m%d-%H%M%S)
+
+# Backend (+ worker shares the image) — tag convention: YYYYMMDD-HHMMSS-be
+docker build --platform linux/amd64 -t $REG/vidgo-backend:${TS}-be -f backend/Dockerfile .
+docker push $REG/vidgo-backend:${TS}-be
+gcloud run services update vidgo-backend  --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
+gcloud run services update vidgo-worker   --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
+
+# Frontend — tag convention: YYYYMMDD-HHMMSS-fe
+docker build --platform linux/amd64 -t $REG/vidgo-frontend:${TS}-fe -f frontend-vue/Dockerfile.prod frontend-vue/
+docker push $REG/vidgo-frontend:${TS}-fe
+gcloud run services update vidgo-frontend --image $REG/vidgo-frontend:${TS}-fe --project vidgo-ai --region asia-east1
+```
+
+Rollback: `gcloud run services update <svc> --image <previous tag>` or `gcloud run services update-traffic <svc> --to-revisions <rev>=100`. See `docs/DEPLOYMENT_GUIDE.md` for the full procedure.
+
+### 6.3 Database Migrations — ⚠️ Manual
+
+The Alembic history has **multiple heads** (currently 2: `e2f3g4h5i6j7` and `j4d5e6f7g8h9`), so `alembic upgrade head` is **not** run automatically. Schema changes are applied **manually via psql**, and migrations are written idempotently (`ADD COLUMN IF NOT EXISTS` / `DROP COLUMN IF EXISTS`) so they can be re-run safely.
+
+Latest migration: **`e2f3g4h5i6j7_add_invoice_mode_prefs.py`** — adds `users.default_invoice_mode`, `users.default_buyer_tax_id`, `users.default_buyer_company_name` (發票設定 auto-issue preferences). **This must be applied to `prod-db` before deploying any backend image that contains it.**
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS default_invoice_mode VARCHAR(10);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS default_buyer_tax_id VARCHAR(8);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS default_buyer_company_name VARCHAR(100);
+```
+
+(Connect via Cloud SQL private IP from a VPC-attached workload, or `cloud-sql-proxy` with the `vidgo-ai:asia-east1:prod-db` connection name.)
+
+---
+
+## 7. AI Provider Architecture (REST only)
+
+**MCP servers were removed on 2026-05-26.** The backend no longer spawns any MCP subprocesses — `app/main.py` lifespan has no MCP startup/shutdown, and the Dockerfile no longer installs Node.js or builds `piapi-mcp-server`. All providers are plain REST/SDK clients in `backend/app/providers/`:
+
+| Provider | Role |
+|----------|------|
+| **PiAPI** (`piapi_provider.py`) | **PRIMARY** for nearly all generation tasks (T2I, I2I, I2V, T2V, effects, upscale, background removal, interior, avatar...). Premium tiers (e.g. Sora 2 Pro) are PiAPI-only. |
+| **Vertex AI** (`vertex_ai_provider.py`) | Backup for image/video tasks and primary for Gemini text workflows. Auth: **ADC** (service-account identity) — **no API key**. `VERTEX_AI_LOCATION=asia-east1` for Gemini text; the image client is pinned to **us-central1** for `gemini-2.5-flash-image` / Imagen, and Veo also runs in us-central1. |
+| **Pollo.ai** (`pollo_provider.py`) | Tertiary backup for I2V; promoted to primary for specific Pollo-exclusive model ids. |
+| **A2E.ai** (`a2e_provider.py`) | Avatar / digital-human fallback after PiAPI. |
+
+Routing/fallback order lives in `app/providers/provider_router.py` (`primary → backup → tertiary → fallback` per `TaskType`). A Redis pub/sub model-registry subscriber (started in the FastAPI lifespan) lets admin model overrides propagate to every Cloud Run instance within seconds, without a redeploy.
+
+### 7.1 Backend Lifespan (startup behavior)
+
+`backend/app/main.py` lifespan is designed to start **fast** so the Cloud Run health check passes:
+- Material validation + startup media cleanup run as a **non-blocking background task** (5s delay, 30s timeout, non-fatal).
+- Hourly media-cleanup loop task.
+- Model-registry Redis pub/sub subscriber (best-effort; falls back to DB-on-write + env-on-restart).
+- `SKIP_PREGENERATION=true` in production — materials are seeded via admin endpoints/scripts, never at boot.
+
+---
+
+## 8. Monitoring Setup
+
+### 8.1 Cloud Monitoring / Logging
+
+```bash
+# View backend logs
+gcloud logging read \
+  'resource.type=cloud_run_revision AND resource.labels.service_name=vidgo-backend' \
+  --project=vidgo-ai --limit=100
+
+# Worker logs (ARQ job failures surface here)
+gcloud logging read \
+  'resource.type=cloud_run_revision AND resource.labels.service_name=vidgo-worker' \
+  --project=vidgo-ai --limit=100
+```
+
+Useful built-in Cloud Run metrics: `run.googleapis.com/request_count` (filter `response_code_class!="2xx"` for error rate), `request_latencies` (p95), instance count, and container memory utilization (backend is 2Gi; watch for OOM on media-heavy endpoints).
+
+### 8.2 Alert Policies
+
+```bash
+# High error rate on the backend
 gcloud alpha monitoring policies create \
     --display-name="VidGo API High Error Rate" \
     --condition-display-name="Error rate > 5%" \
-    --condition-filter='resource.type="cloud_run_revision" AND metric.type="run.googleapis.com/request_count" AND metric.labels.response_code_class!="2xx"' \
+    --condition-filter='resource.type="cloud_run_revision" AND resource.labels.service_name="vidgo-backend" AND metric.type="run.googleapis.com/request_count" AND metric.labels.response_code_class!="2xx"' \
     --condition-threshold-value=0.05 \
     --condition-threshold-comparison=COMPARISON_GT \
-    --notification-channels="projects/vidgo-ai-prod/notificationChannels/xxx"
-
-# Create alert for provider failure
-gcloud alpha monitoring policies create \
-    --display-name="VidGo Provider Down" \
-    --condition-display-name="Provider health check failed" \
-    --condition-filter='resource.type="cloud_run_revision" AND metric.type="custom.googleapis.com/vidgo/provider_status"' \
-    --condition-threshold-value=0 \
-    --condition-threshold-comparison=COMPARISON_EQ \
-    --notification-channels="projects/vidgo-ai-prod/notificationChannels/xxx"
+    --notification-channels="projects/vidgo-ai/notificationChannels/xxx"
 ```
 
 ---
 
-## 7. Complete Cost Analysis
+## 9. Cost Analysis (estimates, 1,000 users)
 
-### 7.1 Infrastructure Costs (Monthly)
+### 9.1 Infrastructure Costs (Monthly)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                    GCP Infrastructure Costs (1,000 Users)                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Service                        Specs                     Monthly Cost      │
+│  Service                        Specs                     Monthly Cost     │
 │  ─────────────────────────────────────────────────────────────────────────│
 │                                                                             │
-│  Cloud Run (API)                                                            │
-│  ├── Min instances: 1          2 vCPU, 2GB RAM           $35-50           │
-│  ├── Max instances: 10         ~10K requests/instance                      │
-│  └── Estimated usage           ~500K requests/month                        │
+│  Cloud Run (vidgo-backend)     1 vCPU, 2Gi, min 1/max 10  $35-55          │
+│  Cloud Run (vidgo-worker)      1 vCPU, 512Mi, min 1/max 2,                 │
+│                                no-cpu-throttling          $20-30          │
+│  Cloud Run (vidgo-frontend)    1 vCPU, 256Mi, min 0/max 4 $2-8            │
 │                                                                             │
-│  Cloud Run (Frontend)                                                       │
-│  ├── Min instances: 0          1 vCPU, 512MB RAM         $5-15            │
-│  └── Max instances: 5          Static hosting                              │
+│  Cloud SQL (prod-db)           db-f1-micro, PG15          $10-15          │
+│  Memorystore Redis             Basic 1GB                  $35             │
+│  VPC connector                 2-3 e2 instances           $15-25          │
+│  Cloud NAT + static IP         egress IP for payments     $5-10           │
 │                                                                             │
-│  Cloud SQL (PostgreSQL)                                                     │
-│  ├── Instance: db-g1-small     1 vCPU, 1.7GB RAM         $25-35           │
-│  ├── Storage: 10GB SSD                                   $2               │
-│  └── Backup: 7 days                                      $1               │
-│                                                                             │
-│  Memorystore (Redis)                                                        │
-│  └── Basic 1GB                 asia-east1                $35              │
-│                                                                             │
-│  Cloud Storage                                                              │
-│  ├── Standard: ~50GB           Media files               $1-2             │
-│  ├── Operations                ~100K/month               $0.50            │
-│  └── Egress                    ~100GB/month              $8-12            │
-│                                                                             │
-│  Load Balancer                                                              │
-│  ├── Forwarding rule           HTTPS                     $18              │
-│  └── Data processing           ~500GB/month              $4               │
-│                                                                             │
-│  Cloud Monitoring & Logging                                                 │
-│  └── Basic usage               Included in free tier     $0-5             │
-│                                                                             │
-│  Static IP                                                                  │
-│  └── Reserved address          1 IP                      $7               │
-│                                                                             │
-│  Secret Manager                                                             │
-│  └── 10 secrets                ~10K accesses/month       $0.50            │
+│  Cloud Storage                 vidgo-media bucket + ops   $5-15           │
+│  Artifact Registry             ~100GB images (prune old   $10             │
+│                                tags to reduce)                             │
+│  Secret Manager                ~38 secrets                $1              │
+│  Monitoring & Logging          basic usage                $0-5            │
 │                                                                             │
 │  ─────────────────────────────────────────────────────────────────────────│
-│  GCP Infrastructure Subtotal                             $142-192         │
+│  GCP Infrastructure Subtotal                              ~$140-210       │
 │                                                                             │
+│  (No Load Balancer / global IP — domain mappings are free.)               │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 AI Service Costs (Monthly)
+### 9.2 AI Service Costs (Monthly)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      AI Service Costs (1,000 Users)                          │
+│                      AI Service Costs (1,000 Users)                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Assumptions:                                                               │
-│  ├── 1,000 active users/month                                              │
-│  ├── Average 10 generations/user/month                                     │
-│  ├── Mix: 40% T2I, 30% I2V, 15% V2V, 10% Interior, 5% Avatar              │
-│  └── Total: 10,000 generations/month                                       │
+│  Assumptions: ~10,000 generations/month                                    │
 │                                                                             │
-│  Service                        Volume          Unit Price    Monthly Cost  │
-│  ─────────────────────────────────────────────────────────────────────────│
+│  PiAPI - Primary (T2I/I2V/effects/interior/...)          ~$130-150        │
+│  Vertex AI (ADC) - Gemini text + image/video backup       ~$10-30         │
+│  Pollo.ai - I2V backup (usage-based)                       ~$0-20          │
+│  A2E.ai - avatar fallback (usage-based)                    ~$0-20          │
 │                                                                             │
-│  PiAPI (Wan API) - Primary                                                  │
-│  ├── Wan T2I                   4,000 images    $0.006       $24           │
-│  ├── Wan I2V (5s)              3,000 videos    $0.014       $42           │
-│  ├── Wan Interior (Doodle)     1,000 images    $0.008       $8            │
-│  └── PiAPI Pro Plan            1 month         $60          $60           │
-│  PiAPI Subtotal                                             $134          │
-│                                                                             │
-│  Gemini API (Backup + Moderation)                                           │
-│  ├── Backup for image tasks    1,000 images    $0.002       $2            │
-│  └── Moderation                10,000 calls    ~$0.001      $10           │
-│  Gemini Subtotal                                            $12           │
-│                                                                             │
-│  ─────────────────────────────────────────────────────────────────────────│
-│  AI Services Subtotal                                       $146          │
-│                                                                             │
+│  AI Services Subtotal                                      ~$140-220       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.3 Third-Party Services Costs
+### 9.3 Payments & Third-Party
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    Third-Party Services (Monthly)                            │
-├─────────────────────────────────────────────────────────────────────────────┤
+│  Payments: PayPal + ECPay (綠界), e-invoices via Giveme (發票好幫手)        │
+│  — transaction fees are revenue share, not fixed cost                      │
+│  (Paddle was removed; its Secret Manager entries are unused legacy.)       │
 │                                                                             │
-│  Service                        Plan              Monthly Cost              │
-│  ─────────────────────────────────────────────────────────────────────────│
-│                                                                             │
-│  Paddle (Payment)               Standard          2.5% + $0.25/tx          │
-│  ├── Estimated revenue          $15,000           ~$400                    │
-│  └── Note: This is revenue share, not cost                                 │
-│                                                                             │
-│  SendGrid (Email)               Free tier         $0                       │
-│  └── 100 emails/day             3,000/month       Free                     │
-│                                                                             │
-│  Sentry (Error Tracking)        Team              $26                      │
-│  └── 50K events/month                                                      │
-│                                                                             │
-│  GoDaddy Domain                 Annual            $20/year ≈ $2/month     │
-│                                                                             │
-│  ─────────────────────────────────────────────────────────────────────────│
-│  Third-Party Subtotal                             $28                      │
-│  (Paddle fees separate)                                                     │
-│                                                                             │
+│  SMTP email                     Free/low tier             ~$0              │
+│  GoDaddy domain (vidgo.co)      Annual                    ~$2/month        │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.4 Total Monthly Cost Summary
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    VidGo Total Cost Summary (1,000 Users)                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Category                                          Monthly Cost             │
-│  ─────────────────────────────────────────────────────────────────────────│
-│                                                                             │
-│  GCP Infrastructure                                $142 - $192             │
-│  ├── Cloud Run (API + Web)                         $40 - $65               │
-│  ├── Cloud SQL                                     $28 - $38               │
-│  ├── Memorystore Redis                             $35                     │
-│  ├── Cloud Storage + CDN                           $10 - $15               │
-│  ├── Load Balancer + SSL                           $22                     │
-│  └── Monitoring + Others                           $7 - $17                │
-│                                                                             │
-│  AI Services                                       $146                    │
-│  ├── PiAPI (Wan) - Primary                         $134                    │
-│  └── Gemini (Backup + Moderation)                  $12                     │
-│                                                                             │
-│  Third-Party Services                              $28                     │
-│  ├── Sentry                                        $26                     │
-│  └── GoDaddy Domain                                $2                      │
-│                                                                             │
-│  ─────────────────────────────────────────────────────────────────────────│
-│                                                                             │
-│  TOTAL MONTHLY COST                                $316 - $366             │
-│                                                                             │
-│  ─────────────────────────────────────────────────────────────────────────│
-│                                                                             │
-│  Revenue Analysis (1,000 Users):                                           │
-│  ├── Starter (40%): 400 × $9.9 =                   $3,960                 │
-│  ├── Pro (40%): 400 × $29 =                        $11,600                │
-│  ├── Pro+ (20%): 200 × $49 =                       $9,800                 │
-│  └── Total Revenue:                                $25,360                │
-│                                                                             │
-│  Paddle Fees (2.5% + $0.25):                                               │
-│  └── ~$650 + ~$250 =                               ~$900                  │
-│                                                                             │
-│  NET REVENUE                                       $25,360 - $900         │
-│                                                     = $24,460              │
-│                                                                             │
-│  GROSS PROFIT                                      $24,460 - $341         │
-│                                                     = $24,119              │
-│                                                                             │
-│  GROSS MARGIN                                      ~94%                   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 7.5 Cost Per User Analysis
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        Cost Per User Analysis                                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Per User Metrics (1,000 Users):                                           │
-│                                                                             │
-│  Average Cost per User:        $341 / 1000 = $0.34/user/month             │
-│  Average Revenue per User:     $25,360 / 1000 = $25.36/user/month         │
-│  Net Profit per User:          $24,119 / 1000 = $24.12/user/month         │
-│                                                                             │
-│  ─────────────────────────────────────────────────────────────────────────│
-│                                                                             │
-│  Per Plan Profitability:                                                   │
-│                                                                             │
-│  Plan       Revenue    Est. Cost    Profit    Margin                       │
-│  ─────────────────────────────────────────────────────────────────────────│
-│  Starter    $9.90      $2.50        $7.40     75%                         │
-│  Pro        $29.00     $8.00        $21.00    72%                         │
-│  Pro+       $49.00     $15.00       $34.00    69%                         │
-│                                                                             │
-│  ─────────────────────────────────────────────────────────────────────────│
-│                                                                             │
-│  Breakeven Analysis:                                                       │
-│                                                                             │
-│  Fixed Costs (Monthly):        ~$200 (min infrastructure)                  │
-│  Variable Cost per Gen:        ~$0.04                                      │
-│  Average Revenue per Gen:      ~$0.25                                      │
-│  Contribution Margin:          ~$0.21/generation                           │
-│                                                                             │
-│  Breakeven Users:              $200 / $23 = ~9 users                       │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+Per-plan pricing/margin modeling lives in `docs/service-cost.md`.
 
 ---
 
-## 8. Deployment Checklist
+## 10. Deployment Checklist
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      VidGo Deployment Checklist                              │
+│                      VidGo Deployment Checklist                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Pre-Deployment:                                                            │
-│  □ GCP project created and billing enabled                                 │
-│  □ All required APIs enabled                                               │
-│  □ GoDaddy domain purchased                                                │
-│  □ Paddle account created and configured                                   │
-│  □ All API keys obtained (PiAPI, Pollo, A2E, Gemini)                      │
-│  □ SendGrid account created                                                │
-│  □ Sentry project created                                                  │
-│                                                                             │
-│  Infrastructure Setup:                                                      │
-│  □ VPC network created                                                     │
-│  □ Cloud SQL instance created                                              │
-│  □ Memorystore Redis created                                               │
-│  □ Cloud Storage bucket created                                            │
-│  □ Static IP reserved                                                      │
-│  □ All secrets stored in Secret Manager                                    │
+│  □ Any new Alembic migration applied MANUALLY to prod-db first             │
+│    (multi-head history — see Section 6.3; latest: e2f3g4h5i6j7)            │
+│  □ New secrets created in Secret Manager AND mounted on the service        │
+│  □ Image built for linux/amd64                                             │
 │                                                                             │
 │  Application Deployment:                                                    │
-│  □ Docker images built and pushed                                          │
-│  □ Cloud Run services deployed                                             │
-│  □ Load balancer configured                                                │
-│  □ SSL certificate provisioned                                             │
+│  □ Backend image built + pushed (tag YYYYMMDD-HHMMSS-be)                   │
+│  □ vidgo-backend updated via `gcloud run services update --image`          │
+│  □ vidgo-worker updated to the SAME backend image tag                      │
+│  □ Frontend image built + pushed, vidgo-frontend updated                   │
 │                                                                             │
-│  DNS Configuration:                                                         │
-│  □ A records added in GoDaddy                                              │
-│  □ DNS propagation verified                                                │
-│  □ SSL certificate active                                                  │
-│  □ HTTPS working for all domains                                           │
-│                                                                             │
-│  Post-Deployment:                                                          │
-│  □ Health checks passing                                                   │
-│  □ API endpoints responding                                                │
-│  □ Database migrations applied                                             │
-│  □ Demo materials pre-generated                                            │
-│  □ Monitoring dashboard configured                                         │
-│  □ Alert policies created                                                  │
-│  □ Paddle webhooks verified                                                │
-│  □ Email sending tested                                                    │
+│  Post-Deployment:                                                           │
+│  □ https://api.vidgo.co/health responding                                  │
+│  □ https://vidgo.co loads, /api proxy works                                │
+│  □ Worker logs show ARQ consuming jobs (no startup crash-loop)             │
+│  □ A test generation completes (PiAPI primary path)                        │
+│  □ Provider fallback intact (Vertex AI ADC — no GEMINI_API_KEY usage)      │
+│  □ PayPal + ECPay webhooks verified; Giveme e-invoice issued on payment    │
+│  □ Email sending tested (SMTP)                                             │
 │                                                                             │
 │  Testing:                                                                   │
-│  □ User registration flow                                                  │
-│  □ Subscription payment flow                                               │
-│  □ Subscription cancellation flow                                          │
-│  □ All generation features                                                 │
-│  □ Provider failover                                                       │
-│  □ Alert notifications                                                     │
-│                                                                             │
+│  □ User registration flow                                                   │
+│  □ Subscription payment flow (PayPal / ECPay)                              │
+│  □ Subscription cancellation flow                                           │
+│  □ All generation features                                                  │
+│  □ Provider failover                                                        │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 9. Quick Reference Commands
+## 11. Quick Reference Commands
 
 ```bash
 # ─────────────────────────────────────────────────────────────────────────────
-# DEPLOYMENT
+# DEPLOYMENT (preserves env vars / secrets / flags)
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Deploy API
-gcloud run deploy vidgo-api --image=asia-east1-docker.pkg.dev/vidgo-ai-prod/vidgo/api:latest --region=asia-east1
-
-# Deploy Frontend
-gcloud run deploy vidgo-web --image=asia-east1-docker.pkg.dev/vidgo-ai-prod/vidgo/web:latest --region=asia-east1
+REG=asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images
+gcloud run services update vidgo-backend  --image $REG/vidgo-backend:<TAG>-be --project vidgo-ai --region asia-east1
+gcloud run services update vidgo-worker   --image $REG/vidgo-backend:<TAG>-be --project vidgo-ai --region asia-east1
+gcloud run services update vidgo-frontend --image $REG/vidgo-frontend:<TAG>   --project vidgo-ai --region asia-east1
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MONITORING
 # ─────────────────────────────────────────────────────────────────────────────
-
-# View logs
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=vidgo-api" --limit=100
-
-# Check service status
-gcloud run services describe vidgo-api --region=asia-east1
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=vidgo-backend" --project=vidgo-ai --limit=100
+gcloud run services describe vidgo-backend --project=vidgo-ai --region=asia-east1
+gcloud run revisions list --service=vidgo-backend --project=vidgo-ai --region=asia-east1
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DATABASE
+# DATABASE (private IP — connect from VPC or via cloud-sql-proxy)
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Connect to database
-gcloud sql connect vidgo-db --user=vidgo_user --database=vidgo
+cloud-sql-proxy vidgo-ai:asia-east1:prod-db --port 5432 &
+psql "host=127.0.0.1 port=5432 dbname=vidgo user=<user>"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TROUBLESHOOTING
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Check SSL certificate status
-gcloud compute ssl-certificates describe vidgo-ssl --global
-
-# Check load balancer
-gcloud compute forwarding-rules describe vidgo-https-rule --global
-
-# Test DNS
-dig vidgo.ai
-dig api.vidgo.ai
+gcloud beta run domain-mappings list --project=vidgo-ai --region=asia-east1
+gcloud redis instances describe vidgo-redis --region=asia-east1 --project=vidgo-ai
+dig vidgo.co
+dig api.vidgo.co
+curl -I https://api.vidgo.co/health
 ```
 
 ---
@@ -1045,13 +567,14 @@ dig api.vidgo.ai
 | `CLEAN_MATERIALS` | `all` | Delete + re-seed ALL tool materials on startup |
 | `CLEAN_MATERIALS` | `ai_avatar` | Delete + re-seed specific tool |
 | `CLEAN_MATERIALS` | `ai_avatar,effect,short_video` | Comma-separated: multiple tools |
-| `SKIP_PREGENERATION` | `true` / `false` | Skip material pre-generation on startup |
+| `SKIP_PREGENERATION` | `true` / `false` | Skip material pre-generation on startup (**`true` in production**) |
 | `PREGENERATION_LIMIT` | `10` (default) | Max materials per tool per startup |
 
 ### 14-Day Media Retention
 - Hourly background task scans `user_generations` table
 - Entries older than 14 days have media URLs (`result_url`, `result_video_url`) cleared
-- Initial cleanup runs on application startup
+- Initial cleanup runs (non-blocking) shortly after application startup
+- Provider CDN URLs themselves expire after ~14 days — durable results are persisted to GCS (Section 3.3)
 
 ## 13. 3-Tier User System Infrastructure
 
@@ -1119,5 +642,5 @@ dig api.vidgo.ai
 
 ---
 
-*Document Version: 3.3*
-*Last Updated: March 18, 2026*
+*Document Version: 4.0*
+*Last Updated: 2026-06-12*

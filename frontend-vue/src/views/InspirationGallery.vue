@@ -714,6 +714,7 @@ watch(locale, () => {
 
               <!-- Image -->
               <img
+                loading="lazy"
                 v-if="item.type === 'image'"
                 :src="item.image_url || item.thumbnail_url"
                 :alt="displayTitle(item)"
@@ -723,6 +724,7 @@ watch(locale, () => {
               <!-- Video poster -->
               <div v-else-if="item.type === 'video'" class="relative w-full h-full">
                 <img
+                loading="lazy"
                   v-if="posterImageUrl(item)"
                   :src="posterImageUrl(item)"
                   :alt="displayTitle(item)"
@@ -737,6 +739,7 @@ watch(locale, () => {
                   class="w-full h-full object-cover"
                 />
                 <img
+                loading="lazy"
                   v-else
                   :src="item.image_url || item.thumbnail_url"
                   :alt="displayTitle(item)"

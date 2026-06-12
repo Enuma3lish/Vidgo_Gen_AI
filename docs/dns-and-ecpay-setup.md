@@ -151,6 +151,12 @@ Save this IP — you will use it in Steps 4 and 5.
 3. Add the NAT static IP from Step 3
 4. Save
 
+> **Note (2026-06-12):** Giveme is the **primary** e-invoice provider when
+> `GIVEME_ENABLED=true` (ECPay e-invoice is the code fallback). Invoices are
+> auto-issued after every payment; buyers pick 載具 / 統一編號 (B2B) / 捐贈
+> once in the dashboard 發票設定 tab (`PUT /api/v1/einvoices/preferences`),
+> and `auto_issue_invoice` follows that choice.
+
 ---
 
 ## 6. Verification Checklist

@@ -1,0 +1,298 @@
+{
+  "name": "VidGo 瞬影科技 - AI 短影音獲客系統",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vidgo-lead-gen",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-01-webhook",
+      "name": "1. 觸發器 Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "📌 步驟1：接收觸發請求\n\n其他工具（Google Sheet按鈕、Notion按鈕、定時器）送 POST 到這裡啟動系統。\n\n測試方法：在 n8n 點擊「Test Webhook」，然後用 Postman 或 curl 送：\ncurl -X POST https://你的n8n網址/webhook/vidgo-lead-gen \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"industry\":\"醫美\",\"line_id\":\"@vidgoai\"}'"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $vars.VIDGO_BASE_URL }}/api/v1/auth/login/form",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "username", "value": "={{ $vars.VIDGO_EMAIL }}" },
+            { "name": "password", "value": "={{ $vars.VIDGO_PASSWORD }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-02-login",
+      "name": "2. 登入 VidGo 取得 Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300],
+      "notes": "📌 步驟2：登入 VidGo 平台取得 JWT Token\n\n需要在 n8n 的 Variables 設定：\n- VIDGO_BASE_URL = https://你的VidGo網址 (本機測試用 http://localhost:8001)\n- VIDGO_EMAIL = 你的VidGo帳號Email\n- VIDGO_PASSWORD = 你的VidGo密碼\n\n回傳：{ access_token: '...', token_type: 'bearer' }"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $vars.VIDGO_BASE_URL }}/api/v1/lead-gen/script",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('2. 登入 VidGo 取得 Token').item.json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "industry", "value": "={{ $('1. 觸發器 Webhook').item.json.body.industry }}" },
+            { "name": "cta_type", "value": "={{ $('1. 觸發器 Webhook').item.json.body.cta_type || 'line' }}" },
+            { "name": "duration_sec", "value": "=60" },
+            { "name": "language", "value": "zh-TW" },
+            { "name": "brand_name", "value": "瞬影科技" },
+            { "name": "line_id", "value": "={{ $('1. 觸發器 Webhook').item.json.body.line_id || '@vidgoai' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-03-script",
+      "name": "3. AI 生成短影音腳本",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "notes": "📌 步驟3：呼叫 VidGo Lead Gen API 生成腳本\n\n送出：{ industry, cta_type, duration_sec, brand_name, line_id }\n\n取得：\n- hook（前3秒吸引力開場）\n- pain（痛點描述）\n- solution（解決方案）\n- cta（行動呼籲）\n- full_script（完整腳本）\n- video_prompt（給影片工具的提示詞）\n- hashtags（5個hashtag）"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $vars.VIDGO_BASE_URL }}/api/v1/uploads/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('2. 登入 VidGo 取得 Token').item.json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "tool_type", "value": "short_video" },
+            { "name": "input_text", "value": "={{ $('3. AI 生成短影音腳本').item.json.video_prompt }}" },
+            { "name": "model", "value": "kling_v1" },
+            { "name": "aspect_ratio", "value": "9:16" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-04-generate-video",
+      "name": "4. 生成短影音（VidGo）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "notes": "📌 步驟4：用 VidGo 生成 9:16 短影音\n\n送出：\n- tool_type: short_video（固定）\n- input_text: 來自步驟3的 video_prompt\n- model: kling_v1（可改 kling_v2 畫質更好，費用較高）\n- aspect_ratio: 9:16（YouTube Shorts / TikTok 標準格式）\n\n回傳：{ generation_id: 'xxx', status: 'processing' }"
+    },
+    {
+      "parameters": {
+        "amount": 90,
+        "unit": "seconds"
+      },
+      "id": "node-05-wait",
+      "name": "5. 等待影片生成（90秒）",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "notes": "📌 步驟5：等待影片生成完成\n\n短影音通常需要 60-120 秒。\n等待 90 秒後繼續。\n\n如果要更精確：可以改用 Loop + HTTP GET 輪詢：\nGET /api/v1/user/works/{generation_id}\n直到 status == 'completed'"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://{{ $vars.VIDGO_BASE_URL }}/api/v1/user/works/{{ $('4. 生成短影音（VidGo）').item.json.generation_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('2. 登入 VidGo 取得 Token').item.json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-06-check-status",
+      "name": "6. 確認影片完成",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300],
+      "notes": "📌 步驟6：確認影片生成狀態\n\n取得影片的 result_video_url。\n如果 status != completed，需要再等待。\n\n回傳：\n{ generation_id, result_video_url, status: 'completed' }"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $vars.VIDGO_BASE_URL }}/api/v1/social/publish/{{ $('4. 生成短影音（VidGo）').item.json.generation_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('2. 登入 VidGo 取得 Token').item.json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "platforms",
+              "value": "=[\"youtube\"]"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('3. AI 生成短影音腳本').item.json.hook }}\\n\\n{{ $('3. AI 生成短影音腳本').item.json.cta }}\\n\\n#{{ $('1. 觸發器 Webhook').item.json.body.industry }} {{ $('3. AI 生成短影音腳本').item.json.hashtags.join(' #') }}"
+            },
+            {
+              "name": "privacy_level",
+              "value": "public"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-07-youtube",
+      "name": "7. 上傳 YouTube Shorts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 300],
+      "notes": "📌 步驟7：自動上傳到 YouTube Shorts\n\n前提：需先在 VidGo 平台連結 YouTube 帳號\n路徑：VidGo → 社群媒體 → 連接 YouTube\n\n上傳後回傳：\n{ post_url: 'https://youtube.com/shorts/xxx', post_id: 'xxx' }"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $vars.NOTION_API_KEY }}"
+            },
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"parent\": { \"database_id\": \"{{ $vars.NOTION_CRM_DATABASE_ID }}\" },\n  \"properties\": {\n    \"客戶名稱\": {\n      \"title\": [{ \"text\": { \"content\": \"{{ $('1. 觸發器 Webhook').item.json.body.industry }} 影片 - {{ $now.format('MM/DD HH:mm') }}\" } }]\n    },\n    \"行業\": {\n      \"select\": { \"name\": \"{{ $('1. 觸發器 Webhook').item.json.body.industry }}\" }\n    },\n    \"狀態\": {\n      \"select\": { \"name\": \"冷客戶\" }\n    },\n    \"來源影片\": {\n      \"url\": \"{{ $('7. 上傳 YouTube Shorts').item.json.post_url || '' }}\"\n    },\n    \"來源平台\": {\n      \"select\": { \"name\": \"YouTube\" }\n    },\n    \"影片觀看數\": {\n      \"number\": 0\n    },\n    \"加入日期\": {\n      \"date\": { \"start\": \"{{ $now.format('YYYY-MM-DD') }}\" }\n    },\n    \"腳本Hook\": {\n      \"rich_text\": [{ \"text\": { \"content\": \"{{ $('3. AI 生成短影音腳本').item.json.hook }}\" } }]\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "node-08-notion",
+      "name": "8. 寫入 Notion CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 300],
+      "notes": "📌 步驟8：自動建立 Notion CRM 記錄\n\n需要在 n8n Variables 設定：\n- NOTION_API_KEY = notion.so/my-integrations 取得\n- NOTION_CRM_DATABASE_ID = Notion 資料庫 URL 中的 ID\n\n初始狀態設為「冷客戶」，後續依影片表現自動升級。"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $('6. 確認影片完成').item.json.result_video_url ? 1 : 0 }}",
+              "operation": "equal",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "id": "node-09-success",
+      "name": "9. 確認成功",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2000, 300],
+      "notes": "📌 步驟9：判斷整個流程是否成功\n\nTrue（成功）→ 送成功通知\nFalse（失敗）→ 送錯誤通知"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"✅ 短影音已生成並上傳！\",\n  \"industry\": \"{{ $('1. 觸發器 Webhook').item.json.body.industry }}\",\n  \"script_hook\": \"{{ $('3. AI 生成短影音腳本').item.json.hook }}\",\n  \"youtube_url\": \"{{ $('7. 上傳 YouTube Shorts').item.json.post_url || '上傳中' }}\",\n  \"notion_created\": true\n}",
+        "options": {}
+      },
+      "id": "node-10-response",
+      "name": "10. 回傳成功結果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 220],
+      "notes": "📌 成功回應\n\n整個流程完成後回傳 JSON 結果。\n可以把這個結果顯示在你的 Notion 或 Google Sheet 上。"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"❌ 影片生成中，請到 VidGo 平台查看狀態\",\n  \"generation_id\": \"{{ $('4. 生成短影音（VidGo）').item.json.generation_id }}\",\n  \"script_ready\": true,\n  \"hook\": \"{{ $('3. AI 生成短影音腳本').item.json.hook }}\"\n}",
+        "options": {}
+      },
+      "id": "node-11-partial",
+      "name": "11. 腳本完成（影片生成中）",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 380],
+      "notes": "📌 部分成功\n\n腳本已生成，但影片還在處理中。\n可到 VidGo 平台查看影片狀態。"
+    }
+  ],
+  "connections": {
+    "1. 觸發器 Webhook": {
+      "main": [[{ "node": "2. 登入 VidGo 取得 Token", "type": "main", "index": 0 }]]
+    },
+    "2. 登入 VidGo 取得 Token": {
+      "main": [[{ "node": "3. AI 生成短影音腳本", "type": "main", "index": 0 }]]
+    },
+    "3. AI 生成短影音腳本": {
+      "main": [[{ "node": "4. 生成短影音（VidGo）", "type": "main", "index": 0 }]]
+    },
+    "4. 生成短影音（VidGo）": {
+      "main": [[{ "node": "5. 等待影片生成（90秒）", "type": "main", "index": 0 }]]
+    },
+    "5. 等待影片生成（90秒）": {
+      "main": [[{ "node": "6. 確認影片完成", "type": "main", "index": 0 }]]
+    },
+    "6. 確認影片完成": {
+      "main": [[{ "node": "7. 上傳 YouTube Shorts", "type": "main", "index": 0 }]]
+    },
+    "7. 上傳 YouTube Shorts": {
+      "main": [[{ "node": "8. 寫入 Notion CRM", "type": "main", "index": 0 }]]
+    },
+    "8. 寫入 Notion CRM": {
+      "main": [[{ "node": "9. 確認成功", "type": "main", "index": 0 }]]
+    },
+    "9. 確認成功": {
+      "main": [
+        [{ "node": "10. 回傳成功結果", "type": "main", "index": 0 }],
+        [{ "node": "11. 腳本完成（影片生成中）", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["瞬影科技", "短影音", "獲客", "CRM"],
+  "pinData": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "instanceId": "vidgo-lead-gen-v1",
+    "templateCredsSetupCompleted": false
+  }
+}

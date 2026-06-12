@@ -254,6 +254,26 @@ export const toolsApi = {
     return response.data
   },
 
+  // 商品換色 — recolor a product photo (Flux Kontext I2I, keep everything
+  // but the color identical). Added 2026-06-12: the hub tile previously
+  // pointed at pattern-generate, which is a different tool entirely.
+  async recolor(
+    imageUrl: string,
+    params: { targetColor: string; targetPart?: string; customPrompt?: string },
+  ): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/recolor',
+      {
+        image_url: imageUrl,
+        target_color: params.targetColor,
+        target_part: params.targetPart || undefined,
+        custom_prompt: params.customPrompt || undefined,
+      },
+      { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
   async upscale(imageUrl: string, scale = 2): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/upscale',

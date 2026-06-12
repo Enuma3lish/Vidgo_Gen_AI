@@ -58,6 +58,16 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
+  // Product Recolor (商品換色) — added 2026-06-12. The hub tile previously
+  // deep-linked to /tools/pattern-generate (wrong tool); this is the real
+  // color-change service (Kontext I2I, color-only edit).
+  {
+    path: '/tools/recolor',
+    name: 'recolor',
+    component: () => import('@/views/tools/Recolor.vue'),
+    meta: { requiresAuth: false }
+  },
+
   // Room Redesign — PiAPI Kontext (Flux advanced)
   {
     path: '/tools/room-redesign',
@@ -485,6 +495,11 @@ const ROUTE_SEO: Record<string, RouteSeo> = {
     title: 'AI 智能去背工具｜商品圖透明 PNG 與換景 - VidGo',
     description:
       '上傳商品圖即可一鍵 AI 去背，輸出透明 PNG 或自動換景；保留邊緣細節，適合電商商品圖與目錄。',
+  },
+  recolor: {
+    title: 'AI 商品換色｜一鍵更換商品顏色，材質與 Logo 不變 - VidGo',
+    description:
+      '上傳商品照片並選擇目標顏色，AI 只更換顏色 — 形狀、材質、Logo、背景與光影完全保留，快速產出多色系商品圖。',
   },
   'room-redesign': {
     title: 'AI 室內設計渲染｜房間照片、草圖與平面圖轉提案圖 - VidGo',

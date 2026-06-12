@@ -4378,6 +4378,179 @@ async def upscale_image(
 
 
 # ============================================================================
+# Product Recolor (商品換色) — added 2026-06-12 (owner request: the hub tile
+# pointed at /tools/pattern-generate, which generates patterns, not recolors).
+# Flux Kontext I2I with a strict change-only-the-color envelope.
+# ============================================================================
+
+class RecolorRequest(BaseModel):
+    """商品換色 — change a product's color while keeping everything else identical."""
+    image_url: str = Field(..., description="Product photo URL (or data: URL — promoted to GCS).")
+    target_color: str = Field(
+        ..., min_length=2, max_length=60,
+        description="Target color: a name ('forest green', '霧霾藍') or hex ('#ff5733').",
+    )
+    target_part: Optional[str] = Field(
+        None, max_length=120,
+        description="Which part to recolor (e.g. 'the hoodie', 'the bottle cap'). Defaults to the main product.",
+    )
+    custom_prompt: Optional[str] = Field(
+        None, max_length=500,
+        description="Optional extra notes, appended verbatim (prompt-fidelity principle).",
+    )
+
+
+@router.post("/recolor", response_model=ToolResponse)
+async def recolor_product(
+    request: RecolorRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional)
+):
+    """商品換色 — recolor a product photo via Flux Kontext I2I (Vertex backup).
+
+    The instruction prompt locks shape, material texture, logo/label text,
+    background, shadows and lighting; ONLY the color changes. Credits: 15.
+    """
+    validate_media_url_or_raise(str(request.image_url), "image", "Recolor input")
+    await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+    request.image_url = await _ensure_public_image_url(
+        str(request.image_url),
+        user_id=str(current_user.id) if current_user else None,
+    )
+
+    if not is_subscribed_user(current_user):
+        return await _demo_response(
+            db,
+            ToolType.EFFECT,
+            cta="Subscribe to recolor your own products.",
+            input_image_url=_resolve_public_url(str(request.image_url)),
+            effect_prompt=f"recolor_{request.target_color}",
+        )
+
+    CREDIT_COST = 15
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "product_recolor")
+    if not ok:
+        return ToolResponse(success=False, message=err)
+
+    target = (request.target_part or "").strip() or "the main product"
+    color = request.target_color.strip()
+    # Instruction-style Kontext prompt; user's note is appended verbatim.
+    recolor_prompt = (
+        f"Change the color of {target} to {color}. Keep the product's shape, "
+        "geometry, material texture, surface finish, logo and label text, "
+        "background, shadows and lighting EXACTLY the same — modify ONLY the "
+        "color. Do not add, remove, move or resize any object."
+    )
+    if request.custom_prompt and request.custom_prompt.strip():
+        recolor_prompt += f" {request.custom_prompt.strip()}"
+
+    from app.models.pending_provider_task import PendingProviderTask
+    pending_task = PendingProviderTask(
+        user_id=current_user.id,
+        tool_type="product_recolor",
+        service_type="product_recolor",
+        credits_charged=CREDIT_COST,
+        input_params={
+            "image_url": _resolve_public_url(request.image_url),
+            "target_color": color,
+            "target_part": request.target_part,
+        },
+        status="submitting",
+    )
+    db.add(pending_task)
+    await db.commit()
+    await db.refresh(pending_task)
+
+    async def _on_recolor_submit(task_id: str, provider_name: str):
+        try:
+            pending_task.provider_task_id = task_id
+            pending_task.provider_name = provider_name
+            pending_task.status = "polling"
+            pending_task.submitted_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception as exc:
+            logger.warning("product_recolor: failed to record pending_task %s: %s", task_id, exc)
+
+    try:
+        router_instance = get_provider_router()
+        result = await router_instance.route(
+            TaskType.I2I,
+            {
+                "image_url": _resolve_public_url(request.image_url),
+                "prompt": recolor_prompt,
+                "model": "flux_kontext",
+                "width": 1024,
+                "height": 1024,
+                "on_submit": _on_recolor_submit,
+            },
+        )
+
+        if result.get("success"):
+            output = result.get("output", {}) or {}
+            image_url = output.get("image_url")
+            if not image_url:
+                imgs = output.get("image_urls") or output.get("images") or []
+                if isinstance(imgs, list) and imgs:
+                    first = imgs[0]
+                    image_url = first if isinstance(first, str) else (first.get("url") or first.get("image_url"))
+            image_url = await _persist_provider_url(image_url, "image", current_user)
+
+            if not image_url:
+                await _refund_credits(db, current_user, CREDIT_COST, "product_recolor")
+                pending_task.status = "failed"
+                pending_task.error_message = "provider success but no image_url"
+                pending_task.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+                return ToolResponse(success=False, message="Recolor returned no result. Please try again.")
+
+            generation = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.EFFECT,
+                input_image_url=request.image_url,
+                input_params={
+                    "action": "recolor",
+                    "target_color": color,
+                    "target_part": request.target_part,
+                    "prompt": recolor_prompt,
+                },
+                result_image_url=image_url,
+                credits_used=CREDIT_COST,
+            )
+            generation.set_expiry()
+            db.add(generation)
+            pending_task.status = "completed"
+            pending_task.result_url = image_url
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+
+            return ToolResponse(
+                success=True,
+                result_url=image_url,
+                credits_used=CREDIT_COST,
+                message=f"Product recolored to {color}.",
+            )
+
+        await _refund_credits(db, current_user, CREDIT_COST, "product_recolor")
+        pending_task.status = "failed"
+        pending_task.error_message = str(result.get("error") or "")[:1000]
+        pending_task.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+        return _provider_failure_response("product_recolor", result, current_user)
+    except Exception as e:
+        logger.error(f"Recolor error: {e}", exc_info=True)
+        await _refund_credits(db, current_user, CREDIT_COST, "product_recolor")
+        try:
+            pending_task.status = "failed"
+            pending_task.error_message = str(e)[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception:
+            pass
+        _notify_admin_of_tool_failure("product_recolor", e, current_user)
+        return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+# ============================================================================
 # Tool 6: AI Avatar
 # ============================================================================
 

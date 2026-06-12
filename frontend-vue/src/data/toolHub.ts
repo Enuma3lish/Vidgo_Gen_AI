@@ -35,7 +35,9 @@ export interface ToolHubTile {
 const T = 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/hub'
 export const toolHubTiles: ToolHubTile[] = [
   // Row 1
-  { id: 'recolor',             labelKey: 'tools.hub.tiles.recolor',            to: '/tools/pattern-generate',       thumb: `${T}/recolor.png`,             category: 'branding'    },
+  // 2026-06-12 — recolor now has its own dedicated tool (was mis-linked to
+  // the pattern generator).
+  { id: 'recolor',             labelKey: 'tools.hub.tiles.recolor',            to: '/tools/recolor',                thumb: `${T}/recolor.png`,             category: 'branding'    },
   { id: 'product-beautifier',  labelKey: 'tools.hub.tiles.productBeautifier',  to: '/tools/upscale',                thumb: `${T}/product-beautifier.png`,  category: 'other'       },
   { id: 'virtual-model',       labelKey: 'tools.hub.tiles.virtualModel',       to: '/tools/try-on',                 thumb: `${T}/virtual-model.png`,       category: 'advertising' },
   { id: 'product-staging',     labelKey: 'tools.hub.tiles.productStaging',     to: '/tools/product-scene-classic',  thumb: `${T}/product-staging.png`,     category: 'advertising' },

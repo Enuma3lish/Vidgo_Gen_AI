@@ -38,10 +38,17 @@ export interface VoidInvoiceRequest {
   reason: string
 }
 
+// 發票設定 — how every future payment auto-issues its invoice:
+// 'carrier' = 個人發票+載具, 'donation' = 捐贈(愛心碼), 'b2b' = 公司發票(統編).
+export type InvoiceMode = 'carrier' | 'donation' | 'b2b'
+
 export interface InvoicePrefs {
+  default_invoice_mode?: InvoiceMode | null
   default_carrier_type?: 'mobile_barcode' | 'citizen_cert' | 'email' | null
   default_carrier_number?: string | null
   default_love_code?: string | null
+  default_buyer_tax_id?: string | null
+  default_buyer_company_name?: string | null
 }
 
 export interface EInvoiceDetail {
@@ -121,7 +128,12 @@ export const einvoiceApi = {
     return data
   },
 
-  async updatePreferences(prefs: InvoicePrefs): Promise<{ success: boolean; message: string }> {
+  async getPreferences(): Promise<{ success: boolean; preferences: InvoicePrefs }> {
+    const { data } = await apiClient.get('/api/v1/einvoices/preferences')
+    return data
+  },
+
+  async updatePreferences(prefs: InvoicePrefs): Promise<{ success: boolean; message: string; preferences?: InvoicePrefs }> {
     const { data } = await apiClient.put('/api/v1/einvoices/preferences', prefs)
     return data
   },

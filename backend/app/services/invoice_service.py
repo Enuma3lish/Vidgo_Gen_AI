@@ -849,8 +849,10 @@ async def auto_issue_invoice(
     order_id: str,
 ) -> Dict[str, Any]:
     """
-    Auto-issue invoice after payment using user's saved carrier/donation preferences.
-    If user has no saved preferences, creates a pending_issue record.
+    Auto-issue invoice after payment using user's saved invoice preferences
+    (發票設定): explicit mode 'b2b' (統編) / 'donation' (愛心碼) / 'carrier'
+    (載具), falling back to legacy field inference, then to an email carrier
+    so the invoice is always issued.
     """
     user = await db.get(User, user_id)
     if not user:
@@ -859,6 +861,28 @@ async def auto_issue_invoice(
     order = await db.get(Order, order_id)
     if not order:
         return {"success": False, "error": "Order not found"}
+
+    # 2026-06-12 — explicit B2B preference (公司發票 + 統一編號). Checked
+    # first because it routes to a different invoice type entirely.
+    mode = (getattr(user, "default_invoice_mode", None) or "").lower()
+    if mode == "b2b" and user.default_buyer_tax_id and user.default_buyer_company_name:
+        items = [{
+            "item_name": f"VidGo Service - Order {order.order_number}",
+            "item_count": 1,
+            "item_unit": "式",
+            "item_price": float(order.amount),
+            "item_amount": float(order.amount),
+        }]
+        return await create_b2b_invoice(
+            db=db,
+            user_id=str(user_id),
+            order_id=str(order_id),
+            buyer_company_name=user.default_buyer_company_name,
+            buyer_tax_id=user.default_buyer_tax_id,
+            buyer_email=user.email,
+            tax_type="taxable",
+            items=items,
+        )
 
     # If user has saved carrier preferences, auto-issue B2C
     if user.default_carrier_type and user.default_carrier_number:

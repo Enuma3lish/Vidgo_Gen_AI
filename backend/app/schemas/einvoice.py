@@ -74,17 +74,40 @@ class InvoiceVoidRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=255)
 
 
+class InvoiceMode(str, Enum):
+    """How future invoices are auto-issued after payment (發票設定)."""
+    carrier = "carrier"    # 個人發票 + 載具
+    donation = "donation"  # 捐贈發票 (愛心碼)
+    b2b = "b2b"            # 公司發票 (統一編號 + 公司抬頭)
+
+
 class InvoicePrefsUpdateRequest(BaseModel):
-    """Update user's default invoice preferences for auto-issue."""
+    """Update user's default invoice preferences for auto-issue.
+
+    2026-06-12 — added an explicit mode plus B2B (統編) fields so the buyer
+    can decide in 發票設定 whether each payment issues with a carrier, as a
+    donation, or as a company invoice. Mode-specific required fields are
+    enforced in the endpoint (which also clears the other modes' fields).
+    """
+    default_invoice_mode: Optional[InvoiceMode] = None
     default_carrier_type: Optional[CarrierType] = None
     default_carrier_number: Optional[str] = None
     default_love_code: Optional[str] = None
+    default_buyer_tax_id: Optional[str] = None
+    default_buyer_company_name: Optional[str] = Field(default=None, max_length=100)
 
     @field_validator("default_love_code")
     @classmethod
     def validate_love_code(cls, v):
         if v and (len(v) < 3 or len(v) > 7 or not v.isdigit()):
             raise ValueError("Love code must be 3-7 digits")
+        return v
+
+    @field_validator("default_buyer_tax_id")
+    @classmethod
+    def validate_tax_id(cls, v):
+        if v and (len(v) != 8 or not v.isdigit()):
+            raise ValueError("Tax ID (統一編號) must be exactly 8 digits")
         return v
 
 

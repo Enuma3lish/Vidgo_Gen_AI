@@ -8,13 +8,15 @@ import { useToast } from '@/composables'
 import { einvoiceApi } from '@/api/einvoice'
 import type { EInvoiceDetail } from '@/api/einvoice'
 import InvoiceCreateForm from '@/components/invoice/InvoiceCreateForm.vue'
+import InvoicePrefsForm from '@/components/invoice/InvoicePrefsForm.vue'
 import InvoiceVoidDialog from '@/components/invoice/InvoiceVoidDialog.vue'
 
 const { t } = useI18n()
 const toast = useToast()
 
-// Tab state
-const activeTab = ref<'list' | 'create'>('list')
+// Tab state — 'settings' (發票設定) added 2026-06-12: choose 載具 / 統編 /
+// 捐贈 once and every future payment auto-issues accordingly.
+const activeTab = ref<'list' | 'create' | 'settings'>('list')
 
 // Legacy invoices (PayPal)
 const invoices = ref<InvoiceItem[]>([])
@@ -167,10 +169,21 @@ function statusBadgeClass(status: string) {
                 class="px-4 py-2 rounded-md text-sm font-medium transition-colors">
           {{ t('einvoice.issueInvoice', 'Issue Invoice') }}
         </button>
+        <button @click="activeTab = 'settings'"
+                :class="activeTab === 'settings' ? 'shadow-sm' : ''"
+                :style="activeTab === 'settings' ? 'background: #141420; color: #f5f5fa;' : 'color: #9494b0;'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">
+          {{ t('einvoice.settings', 'Invoice Settings') }}
+        </button>
+      </div>
+
+      <!-- Tab: Invoice Settings (發票設定 — carrier / tax ID / donation) -->
+      <div v-if="activeTab === 'settings'">
+        <InvoicePrefsForm />
       </div>
 
       <!-- Tab: Create Invoice -->
-      <div v-if="activeTab === 'create'">
+      <div v-else-if="activeTab === 'create'">
         <InvoiceCreateForm
           :order-id="selectedOrderId"
           :order-amount="selectedOrderAmount"

@@ -154,6 +154,26 @@ async def list_invoices(
     )
 
 
+# NOTE: must be declared BEFORE GET /{invoice_id}, otherwise "preferences"
+# would be captured as an invoice_id path param.
+@router.get("/preferences")
+async def get_invoice_preferences(
+    current_user: User = Depends(get_current_user),
+):
+    """Get the user's saved invoice preferences (發票設定) for auto-issue."""
+    return {
+        "success": True,
+        "preferences": {
+            "default_invoice_mode": current_user.default_invoice_mode,
+            "default_carrier_type": current_user.default_carrier_type,
+            "default_carrier_number": current_user.default_carrier_number,
+            "default_love_code": current_user.default_love_code,
+            "default_buyer_tax_id": current_user.default_buyer_tax_id,
+            "default_buyer_company_name": current_user.default_buyer_company_name,
+        },
+    }
+
+
 @router.get("/{invoice_id}", response_model=InvoiceDetailResponse)
 async def get_invoice(
     invoice_id: str,
@@ -179,27 +199,68 @@ async def update_invoice_preferences(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update user's default invoice preferences for auto-issue on payment."""
-    # Validate mutual exclusion: carrier vs love_code
-    if request.default_carrier_type and request.default_love_code:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot set both carrier and love code (載具與捐贈互斥)"
-        )
+    """Update user's default invoice preferences for auto-issue on payment.
 
+    2026-06-12 — mode-aware (發票設定): the buyer picks how every future
+    payment issues its invoice — 個人發票+載具 (carrier), 捐贈 (donation),
+    or 公司發票+統編 (b2b). Each mode requires its own fields and the other
+    modes' fields are cleared so auto_issue_invoice never sees a conflicting
+    combination. Legacy callers that send only carrier/love-code fields
+    (no mode) keep the old behavior.
+    """
+    mode = request.default_invoice_mode.value if request.default_invoice_mode else None
+
+    if mode == "carrier":
+        if not request.default_carrier_type or not (request.default_carrier_number or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Carrier mode requires carrier type and number (載具模式需要載具類別與號碼)",
+            )
+    elif mode == "donation":
+        if not request.default_love_code:
+            raise HTTPException(
+                status_code=400,
+                detail="Donation mode requires a love code (捐贈模式需要愛心碼)",
+            )
+    elif mode == "b2b":
+        if not request.default_buyer_tax_id or not (request.default_buyer_company_name or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail="B2B mode requires tax ID and company name (公司發票需要統一編號與公司抬頭)",
+            )
+    else:
+        # Legacy (no mode): keep the original carrier-vs-donation exclusion.
+        if request.default_carrier_type and request.default_love_code:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot set both carrier and love code (載具與捐贈互斥)"
+            )
+
+    current_user.default_invoice_mode = mode
+    # Persist only the active mode's fields; clear the rest so a later mode
+    # switch can't leave stale combinations behind.
+    use_carrier = mode == "carrier" or (mode is None and request.default_carrier_type)
+    use_donation = mode == "donation" or (mode is None and request.default_love_code)
     current_user.default_carrier_type = (
-        request.default_carrier_type.value if request.default_carrier_type else None
+        request.default_carrier_type.value if (use_carrier and request.default_carrier_type) else None
     )
-    current_user.default_carrier_number = request.default_carrier_number
-    current_user.default_love_code = request.default_love_code
+    current_user.default_carrier_number = request.default_carrier_number if use_carrier else None
+    current_user.default_love_code = request.default_love_code if use_donation else None
+    current_user.default_buyer_tax_id = request.default_buyer_tax_id if mode == "b2b" else None
+    current_user.default_buyer_company_name = (
+        (request.default_buyer_company_name or "").strip() if mode == "b2b" else None
+    )
     await db.commit()
 
     return {
         "success": True,
         "message": "Invoice preferences updated",
         "preferences": {
+            "default_invoice_mode": current_user.default_invoice_mode,
             "default_carrier_type": current_user.default_carrier_type,
             "default_carrier_number": current_user.default_carrier_number,
             "default_love_code": current_user.default_love_code,
+            "default_buyer_tax_id": current_user.default_buyer_tax_id,
+            "default_buyer_company_name": current_user.default_buyer_company_name,
         },
     }

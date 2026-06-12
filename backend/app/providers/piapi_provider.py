@@ -1467,12 +1467,14 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("sora2_video_generation", params)
 
-        # Hard-cap to the 4-12s range Sora 2 accepts. Frontend sends 5s by
-        # default to keep the billing row honest (video_sora2 = 5s @ 80 credits).
+        # PiAPI's sora2 tasks document duration as an enum {4, 8, 12} —
+        # snap to the nearest allowed value (submit-time validation is
+        # lenient, but off-enum values are unreliable at render time).
         try:
-            duration = max(4, min(12, int(params.get("duration", 5))))
+            requested = int(params.get("duration", 4))
         except (TypeError, ValueError):
-            duration = 5
+            requested = 4
+        duration = min((4, 8, 12), key=lambda v: abs(v - requested))
 
         input_data: Dict[str, Any] = {
             "prompt": params["prompt"],
@@ -1491,8 +1493,11 @@ class PiAPIProvider(BaseProvider):
         if params.get("image_url"):
             input_data["image_url"] = self._resolve_image_url(params["image_url"])
         else:
-            # aspect_ratio is T2V-only; Sora 2 derives I2V framing from the input.
-            input_data["aspect_ratio"] = params.get("aspect_ratio", "16:9")
+            # aspect_ratio is T2V-only; Sora 2 derives I2V framing from the
+            # input. PiAPI documents only 16:9 / 9:16 — map anything else
+            # (e.g. the old 1:1 option) to 16:9.
+            ar = str(params.get("aspect_ratio") or "16:9")
+            input_data["aspect_ratio"] = ar if ar in ("16:9", "9:16") else "16:9"
 
         payload = {
             "model": PIAPI_MODELS["sora2_model"],

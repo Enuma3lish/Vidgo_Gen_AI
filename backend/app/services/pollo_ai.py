@@ -81,7 +81,10 @@ POLLO_MODELS = {
         "endpoint": "/generation/sora/sora-2",
         "name": "OpenAI Sora 2",
         "description": "Photorealistic motion, synchronized audio (flagship)",
-        "lengths": [5, 8, 10]
+        # 2026-06-12 fix: Pollo's sora-2 validates length against this enum
+        # (it rejected our 5 with options [4,8,12,16,20]); _normalize_length
+        # snaps requests to the nearest allowed value.
+        "lengths": [4, 8, 12, 16, 20]
     },
 }
 

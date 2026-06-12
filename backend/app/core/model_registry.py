@@ -113,8 +113,12 @@ PIAPI_MODELS: Dict[str, str] = {
     # When PiAPI renames the alias, override PIAPI_SORA2_MODEL / *_TASK without
     # rebuilding. If OpenAI shuts the underlying model down (announced EOL
     # 2026-09-24), flip the env override to point at a fallback alias.
-    "sora2_model":             os.environ.get("PIAPI_SORA2_MODEL",             "sora"),
-    "sora2_task":              os.environ.get("PIAPI_SORA2_TASK",              "sora-2-pro-video"),
+    # 2026-06-12 fix: PiAPI rejected the original guesses ("sora" /
+    # "sora-2-pro-video") with "invalid model" — Sora 2 Pro was broken since
+    # launch. Verified against the live API: model="sora2" with task_type
+    # "sora2-pro-video" (pro) / "sora2-video" (standard) pass validation.
+    "sora2_model":             os.environ.get("PIAPI_SORA2_MODEL",             "sora2"),
+    "sora2_task":              os.environ.get("PIAPI_SORA2_TASK",              "sora2-pro-video"),
 
     # Wan video (model="Wan"; version encoded in task_type)
     "wan_video":           os.environ.get("PIAPI_WAN_VIDEO_MODEL",     "Wan"),

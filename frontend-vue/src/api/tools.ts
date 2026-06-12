@@ -347,7 +347,8 @@ export const toolsApi = {
       {
         prompt: params.prompt,
         aspect_ratio: params.aspectRatio ?? '16:9',
-        duration: params.duration ?? 5,
+        // Sora 2's duration enum is 4/8/12 (server snaps to nearest).
+        duration: params.duration ?? 4,
         resolution: params.resolution ?? '1080p',
         image_url: params.imageUrl,
         negative_prompt: params.negativePrompt,

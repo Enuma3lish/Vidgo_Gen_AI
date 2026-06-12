@@ -1,12 +1,20 @@
 <script setup lang="ts">
 /**
- * Interior Templates Gallery — Pippit-style browsable cards.
+ * Templates Gallery — Pippit-style browsable cards.
  *
  * Added 2026-05-24 (owner directive — match pippit.ai/templates/ai-interior-design
  * presentation while leveraging our existing /api/v1/tools/room-redesign engine).
- * Each card shows a style preview + name. Click deeplinks into RoomRedesign with
- * `?style=<id>&space_kind=<interior|exterior|commercial>` so the picker is
- * pre-filled and the user only needs to upload a photo.
+ * Each card shows a style preview + name; click deeplinks into the matching
+ * dedicated tool page with the style pre-filled.
+ *
+ * 2026-06-12 — interior, exterior, and commercial are now SEPARATE PAGES
+ * (owner directive: never mix interior and exterior on one page; each tool
+ * in the interior group and the exterior group is its own page). The old
+ * in-page 3-tab switcher was removed; this component is rendered by three
+ * routes that pin the `spaceKind` prop:
+ *   /tools/interior-templates   → spaceKind='interior'
+ *   /tools/exterior-templates   → spaceKind='exterior'
+ *   /tools/commercial-templates → spaceKind='commercial'
  *
  * Color palette intentionally matches the rest of the tools UI (#0f0f17 panels,
  * violet→indigo gradient accents, etc.) — owner directive 2026-05-24:
@@ -25,6 +33,11 @@ const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
 type SpaceKind = 'interior' | 'exterior' | 'commercial'
 
+// Pinned per route — see the route entries in router/index.ts.
+const props = withDefaults(defineProps<{ spaceKind?: SpaceKind }>(), { spaceKind: 'interior' })
+const spaceKind = computed<SpaceKind>(() =>
+  props.spaceKind === 'exterior' || props.spaceKind === 'commercial' ? props.spaceKind : 'interior')
+
 interface StyleCard {
   id: string
   name: string
@@ -33,29 +46,8 @@ interface StyleCard {
   preview_url?: string
 }
 
-const activeTab = ref<SpaceKind>('interior')
-// Static 3-tab enum — label resolved per-render via L() in template for full i18n
-// (zh / en / ja / ko / es). See template line ~119.
-const tabOptions: Array<{ id: SpaceKind; emoji: string }> = [
-  { id: 'interior',   emoji: '🛋️' },
-  { id: 'commercial', emoji: '🏪' },
-  { id: 'exterior',   emoji: '🏛️' },
-]
-
-function tabLabel(kind: SpaceKind): string {
-  switch (kind) {
-    case 'interior':   return L('室內',     'Interior',   'インテリア', '인테리어',   'Interior')
-    case 'commercial': return L('商業空間', 'Commercial', '商業空間',   '상업 공간',  'Comercial')
-    case 'exterior':   return L('建築外觀', 'Exterior',   '建築外観',   '건축 외관',  'Exterior')
-  }
-}
-
-const styles = ref<Record<SpaceKind, StyleCard[]>>({
-  interior: [],
-  commercial: [],
-  exterior: [],
-})
-const isLoading = ref<Record<SpaceKind, boolean>>({ interior: false, commercial: false, exterior: false })
+const styles = ref<StyleCard[]>([])
+const isLoading = ref(false)
 
 // Track preview URLs that 404'd at runtime so we can fall back to the
 // branded gradient placeholder instead of leaving a broken-image icon.
@@ -64,35 +56,56 @@ function markPreviewFailed(card: StyleCard) {
   failedPreviews.value = new Set(failedPreviews.value).add(card.id)
 }
 
-async function loadStyles(kind: SpaceKind) {
-  if (styles.value[kind].length > 0 || isLoading.value[kind]) return
-  isLoading.value[kind] = true
+async function loadStyles() {
+  isLoading.value = true
   try {
-    const resp = await apiClient.get(`/api/v1/tools/templates/interior-styles?space_kind=${kind}`)
-    styles.value[kind] = (resp.data || []) as StyleCard[]
+    const resp = await apiClient.get(`/api/v1/tools/templates/interior-styles?space_kind=${spaceKind.value}`)
+    styles.value = (resp.data || []) as StyleCard[]
   } catch (e) {
-    console.warn(`[interior-templates] failed to load ${kind}:`, e)
+    console.warn(`[templates] failed to load ${spaceKind.value}:`, e)
   } finally {
-    isLoading.value[kind] = false
+    isLoading.value = false
   }
 }
 
-function selectTab(kind: SpaceKind) {
-  activeTab.value = kind
-  void loadStyles(kind)
-}
-
-// Each space-kind now has its own dedicated tool page (2026-06-03 split), so
-// route the click to the matching page with the style pre-filled instead of
-// the old all-in-one RoomRedesign + space_kind query.
+// Each space-kind has its own dedicated tool page (2026-06-03 split), so
+// route the click to the matching page with the style pre-filled.
 const PAGE_BY_KIND: Record<SpaceKind, string> = {
   interior: '/tools/room-redesign',
   exterior: '/tools/exterior-ai',
   commercial: '/tools/commercial-space',
 }
 function openStyle(card: StyleCard) {
-  router.push({ path: PAGE_BY_KIND[activeTab.value], query: { style: card.id } })
+  router.push({ path: PAGE_BY_KIND[spaceKind.value], query: { style: card.id } })
 }
+
+// Sibling template galleries — navigation links only; the galleries
+// themselves never share a page.
+const siblingLinks = computed(() => ([
+  { kind: 'interior' as const,   to: '/tools/interior-templates',   label: '🛋️ ' + L('室內範本', 'Interior', 'インテリア', '인테리어', 'Interior') },
+  { kind: 'exterior' as const,   to: '/tools/exterior-templates',   label: '🏛️ ' + L('建築外觀範本', 'Exterior', '建築外観', '건축 외관', 'Exterior') },
+  { kind: 'commercial' as const, to: '/tools/commercial-templates', label: '🏪 ' + L('商業空間範本', 'Commercial', '商業空間', '상업 공간', 'Comercial') },
+].filter((s) => s.kind !== spaceKind.value)))
+
+const pageTitle = computed(() => {
+  if (spaceKind.value === 'exterior') {
+    return L('AI 建築外觀範本', 'AI Exterior Design Templates', 'AI建築外観テンプレート', 'AI 건축 외관 템플릿', 'Plantillas de Diseño Exterior con IA')
+  }
+  if (spaceKind.value === 'commercial') {
+    return L('AI 商業空間範本', 'AI Commercial Space Templates', 'AI商業空間テンプレート', 'AI 상업 공간 템플릿', 'Plantillas de Espacios Comerciales con IA')
+  }
+  return L('AI 室內設計範本', 'AI Interior Design Templates', 'AIインテリアデザインテンプレート', 'AI 인테리어 디자인 템플릿', 'Plantillas de Diseño de Interiores con IA')
+})
+
+const pageSubtitle = computed(() => {
+  if (spaceKind.value === 'exterior') {
+    return L('挑選一個外觀風格範本，上傳你的建築照片，AI 立刻生成外觀提案。', 'Pick an exterior style template, upload your building photo, and let AI generate a facade proposal instantly.', '外観スタイルを選び、建物の写真をアップロードすると、AIが即座に提案を生成します。', '외관 스타일 템플릿을 선택하고 건물 사진을 올리면 AI가 즉시 제안을 생성합니다.', 'Elige una plantilla exterior, sube la foto del edificio y la IA genera una propuesta al instante.')
+  }
+  if (spaceKind.value === 'commercial') {
+    return L('挑選一個商業空間範本，上傳你的空間照片，AI 立刻生成設計提案。', 'Pick a commercial style template, upload your space photo, and let AI generate a design proposal instantly.', '商業空間スタイルを選び、写真をアップロードすると、AIが即座に提案を生成します。', '상업 공간 템플릿을 선택하고 사진을 올리면 AI가 즉시 제안을 생성합니다.', 'Elige una plantilla comercial, sube la foto y la IA genera una propuesta al instante.')
+  }
+  return L('挑選一個風格範本，上傳你的房間照片，AI 立刻幫你生成設計提案。', 'Pick a style template, upload your room photo, and let AI generate a design proposal instantly.', 'スタイルテンプレートを選び、部屋の写真をアップロードすると、AIが即座にデザイン提案を生成します。', '스타일 템플릿을 선택하고 방 사진을 업로드하면 AI가 즉시 디자인 제안을 생성합니다.', 'Elige una plantilla, sube la foto de tu habitación y deja que la IA genere una propuesta de diseño al instante.')
+})
 
 // Fallback preview when the catalog entry has no preview_url, or when the
 // referenced asset 404'd at runtime. Returning null swaps the <img> for the
@@ -104,7 +117,7 @@ function previewUrl(card: StyleCard): string | null {
   return card.preview_url
 }
 
-onMounted(() => loadStyles('interior'))
+onMounted(() => loadStyles())
 </script>
 
 <template>
@@ -116,45 +129,40 @@ onMounted(() => loadStyles('interior'))
           {{ L('範本庫', 'TEMPLATES', 'テンプレート', '템플릿', 'PLANTILLAS') }}
         </p>
         <h1 class="text-4xl sm:text-5xl font-bold" style="color: #f5f5fa;">
-          {{ L('AI 室內設計範本', 'AI Interior Design Templates', 'AIインテリアデザインテンプレート', 'AI 인테리어 디자인 템플릿', 'Plantillas de Diseño de Interiores con IA') }}
+          {{ pageTitle }}
         </h1>
         <p class="text-base max-w-2xl mx-auto" style="color: #94949f;">
-          {{ L('挑選一個風格範本，上傳你的房間照片，AI 立刻幫你生成設計提案。', 'Pick a style template, upload your room photo, and let AI generate a design proposal instantly.', 'スタイルテンプレートを選び、部屋の写真をアップロードすると、AIが即座にデザイン提案を生成します。', '스타일 템플릿을 선택하고 방 사진을 업로드하면 AI가 즉시 디자인 제안을 생성합니다.', 'Elige una plantilla, sube la foto de tu habitación y deja que la IA genere una propuesta de diseño al instante.') }}
+          {{ pageSubtitle }}
         </p>
       </div>
     </section>
 
-    <!-- Tabs -->
+    <!-- Sibling galleries — navigation only; each gallery is its own page -->
     <section class="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
       <div class="flex gap-2 justify-center mb-8 flex-wrap">
-        <button
-          v-for="tab in tabOptions"
-          :key="tab.id"
-          @click="selectTab(tab.id)"
+        <RouterLink
+          v-for="s in siblingLinks"
+          :key="s.kind"
+          :to="s.to"
           class="px-5 py-2.5 rounded-full text-sm font-semibold transition-all flex items-center gap-2"
-          :style="activeTab === tab.id
-            ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff;'
-            : 'background: #141420; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
-        >
-          <span>{{ tab.emoji }}</span>
-          {{ tabLabel(tab.id) }}
-        </button>
+          style="background: #141420; color: #94949f; border: 1px solid rgba(255,255,255,0.08);"
+        >{{ s.label }} →</RouterLink>
       </div>
     </section>
 
     <!-- Grid -->
     <section class="px-4 sm:px-6 lg:px-8 pb-16 max-w-7xl mx-auto">
-      <div v-if="isLoading[activeTab]" class="flex justify-center py-16">
+      <div v-if="isLoading" class="flex justify-center py-16">
         <div class="animate-spin w-10 h-10 border-2 rounded-full" style="border-color: #a78bfa; border-top-color: transparent;"></div>
       </div>
 
-      <div v-else-if="styles[activeTab].length === 0" class="text-center py-16" style="color: #94949f;">
+      <div v-else-if="styles.length === 0" class="text-center py-16" style="color: #94949f;">
         {{ L('暫無範本', 'No templates yet', 'テンプレートがありません', '템플릿이 없습니다', 'Sin plantillas todavía') }}
       </div>
 
       <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
         <button
-          v-for="card in styles[activeTab]"
+          v-for="card in styles"
           :key="card.id"
           @click="openStyle(card)"
           class="group text-left rounded-2xl overflow-hidden transition-all hover:scale-[1.02]"
@@ -202,7 +210,7 @@ onMounted(() => loadStyles('interior'))
       </div>
 
       <p class="text-center text-xs mt-10" style="color: #6b6b7a;">
-        {{ L(`共 ${styles[activeTab].length} 個範本`, `${styles[activeTab].length} templates`, `${styles[activeTab].length}個のテンプレート`, `${styles[activeTab].length}개 템플릿`, `${styles[activeTab].length} plantillas`) }}
+        {{ L(`共 ${styles.length} 個範本`, `${styles.length} templates`, `${styles.length}個のテンプレート`, `${styles.length}개 템플릿`, `${styles.length} plantillas`) }}
       </p>
     </section>
   </div>

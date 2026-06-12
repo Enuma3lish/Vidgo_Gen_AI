@@ -38,6 +38,7 @@ const categoryCounts = computed<Record<CategoryFilter, number>>(() => {
     all: toolHubTiles.length,
     advertising: 0,
     interior: 0,
+    exterior: 0,
     branding: 0,
     other: 0,
   }

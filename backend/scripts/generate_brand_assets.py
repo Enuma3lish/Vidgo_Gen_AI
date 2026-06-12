@@ -179,6 +179,11 @@ HUB_STYLE_OVERRIDES: Dict[str, str] = {
         "interior design moodboard composition, soft natural lighting, "
         "clean grid layout on a cream background, no text, no watermark, 8k"
     ),
+    "exterior-templates": (
+        "architectural exterior moodboard composition, soft natural "
+        "lighting, clean grid layout on a cream background, no text, "
+        "no watermark, 8k"
+    ),
     "floor-plan": (
         "crisp 2D architectural drawing, flat top-down orthographic "
         "blueprint, white paper background, fine black linework, light "
@@ -374,6 +379,11 @@ def hub_catalog() -> List[AssetSpec]:
           "A modern two-storey house exterior with a glass curtain facade "
           "and warm light glowing from inside at dusk, minimalist "
           "landscaped garden and stone walkway"),
+        s("exterior-templates",
+          "Exterior Templates",
+          "A neat grid moodboard of four small building exterior vignettes "
+          "— modern glass facade, Nordic timber house, Mediterranean villa, "
+          "urban townhouse — arranged like style template cards"),
         s("commercial-space",
           "Commercial Space",
           "A warm modern café interior with walnut tables, bentwood "

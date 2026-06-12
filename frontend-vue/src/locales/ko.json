@@ -248,6 +248,7 @@
         "commercialSpace": "상업 공간 디자인",
         "sketchToRender": "스케치 → 렌더",
         "sketchToRenderExterior": "스케치 → 렌더 (외관)",
+        "exteriorTemplates": "건축 외관 템플릿",
         "sketchToRenderInterior": "스케치 → 렌더 (실내)",
         "renderEnhancer": "렌더 향상·확대",
         "videoBgRemove": "동영상 배경 제거",
@@ -259,7 +260,8 @@
       "categories": {
         "all": "전체",
         "advertising": "광고/홍보",
-        "interior": "실내·실외 디자인",
+        "interior": "인테리어 디자인",
+        "exterior": "익스테리어 디자인",
         "branding": "브랜딩",
         "other": "기타 AI 기능"
       },

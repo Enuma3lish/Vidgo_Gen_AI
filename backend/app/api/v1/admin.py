@@ -995,17 +995,40 @@ async def seed_demo_material(
                    f"Allowed: {[t.value for t in ToolType]}",
         )
 
-    # Idempotent: if a row with this lookup_hash already exists, return it.
+    # Idempotent on lookup_hash — but UPSERT, don't discard. 2026-06-12: the
+    # old skip-on-conflict behavior threw away the freshly generated result
+    # URL and left the row in whatever state it was in. After the media audit
+    # deactivated rows whose GCS objects had expired, re-seeding silently
+    # burned provider spend while the row stayed inactive with a dead URL.
+    # Now a conflict refreshes the result URLs and reactivates the row.
     existing = await db.execute(
         select(Material).where(Material.lookup_hash == payload.lookup_hash)
     )
     row = existing.scalar_one_or_none()
     if row:
+        updated = False
+        if payload.result_image_url and payload.result_image_url != row.result_image_url:
+            row.result_image_url = payload.result_image_url
+            row.result_watermarked_url = payload.result_image_url
+            updated = True
+        if payload.result_video_url and payload.result_video_url != row.result_video_url:
+            row.result_video_url = payload.result_video_url
+            updated = True
+        if payload.result_thumbnail_url and payload.result_thumbnail_url != row.result_thumbnail_url:
+            row.result_thumbnail_url = payload.result_thumbnail_url
+            updated = True
+        if not row.is_active and (payload.result_image_url or payload.result_video_url):
+            row.is_active = True
+            updated = True
+        if updated:
+            await db.commit()
         return {
             "success": True,
             "inserted": False,
+            "updated": updated,
             "material_id": str(row.id),
-            "reason": "already exists (lookup_hash match)",
+            "reason": "already exists (lookup_hash match)"
+                      + (" — result URLs refreshed and row reactivated" if updated else ""),
         }
 
     # Use watermarked_url == result_image_url so the ExampleGallery shows it

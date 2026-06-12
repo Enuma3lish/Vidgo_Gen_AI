@@ -237,6 +237,48 @@ class GeminiService:
                 "error": str(e),
             }
 
+    async def translate_text(self, text: str, target_language: str) -> Dict[str, Any]:
+        """Translate spoken-script text into ``target_language`` ('zh-TW' | 'en').
+
+        Added 2026-06-12 for the avatar tool: the script is auto-translated to
+        the selected voice language instead of being rejected (zh-TW mode +
+        English text used to 400) or mispronounced (en mode + Chinese text
+        spoke Chinese). Fail-open: any error returns the original text.
+        """
+        if not text or not text.strip() or (not self.api_key and not self._use_vertex):
+            return {"success": False, "translated": text}
+        lang_name = {
+            "zh-TW": "Traditional Chinese (繁體中文, Taiwan usage)",
+            "en": "natural English",
+        }.get(target_language, target_language)
+        try:
+            client = self._get_genai_client()
+            from google.genai import types
+
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=self.model_name,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=(
+                            f"Translate the following text into {lang_name}. It is a "
+                            "spoken script for a presenter video — keep the meaning, "
+                            "tone, and approximate length, and make it sound natural "
+                            "when read aloud. Output ONLY the translated text, with no "
+                            "preamble, no quotes, no labels.\n\n"
+                            f"{text}"
+                        ))],
+                    ),
+                ],
+                config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=800),
+            )
+            out = (response.text or "").strip().strip('"').strip("'")
+            return {"success": bool(out), "translated": out or text}
+        except Exception as e:
+            logger.warning(f"Gemini translate_text error (fail-open): {e}")
+            return {"success": False, "translated": text}
+
     # =========================================================================
     # Content Moderation
     # =========================================================================

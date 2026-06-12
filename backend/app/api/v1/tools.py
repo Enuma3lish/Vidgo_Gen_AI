@@ -4628,25 +4628,28 @@ async def _generate_avatar_inner(
             status_code=400,
             detail="Avatar script is too short (need at least 5 characters of speech content).",
         )
-    # Soft sanity check: when the picked language is zh-TW but the script
-    # contains zero CJK characters, the TTS will produce romanised gibberish.
-    # Don't hard-reject (users sometimes script in pinyin on purpose), but
-    # surface a clear warning by routing through HTTPException so the UI
-    # toast tells them exactly what to fix instead of waiting 5min for a bad
-    # video. Tunable: comment out if it ever blocks a legitimate use case.
-    if request.language == "zh-TW":
-        cjk_count = sum(
-            1 for ch in request.script if "一" <= ch <= "鿿"
-        )
-        if cjk_count == 0:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Language is zh-TW but the script contains no Chinese "
-                    "characters. Switch language to 'en', or write the script "
-                    "in Traditional Chinese."
-                ),
+    # 2026-06-12 (owner request): auto-translate the script to the selected
+    # voice language instead of rejecting/mispronouncing mismatches.
+    # Previously zh-TW mode + an English script hard-400'd here, and en mode
+    # + a Chinese script just spoke Chinese. Now: zh-TW mode + no CJK →
+    # translate to 繁體中文; en mode + CJK present → translate to English.
+    # Fail-open — if the Gemini translation errors, the original script is
+    # kept (the old 400 is gone; a mismatched voice beats a hard block).
+    def _has_cjk(s: str) -> bool:
+        return any("一" <= ch <= "鿿" for ch in s)
+
+    _needs_zh = request.language == "zh-TW" and not _has_cjk(request.script)
+    _needs_en = request.language == "en" and _has_cjk(request.script)
+    if _needs_zh or _needs_en:
+        from app.services.gemini_service import get_gemini_service
+        _target = "zh-TW" if _needs_zh else "en"
+        _tr = await get_gemini_service().translate_text(request.script, _target)
+        if _tr.get("success") and (_tr.get("translated") or "").strip():
+            logger.warning(
+                "ai_avatar: script auto-translated to %s (%d chars -> %d chars)",
+                _target, len(request.script), len(_tr["translated"].strip()),
             )
+            request.script = _tr["translated"].strip()
 
     # ========== ACCESS GATE: preset script → cached demo, custom script → subscribe + card ==========
     # Avatar always needs speech text; a preset (prompt_id) script is the free

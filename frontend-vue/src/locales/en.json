@@ -71,7 +71,8 @@
       "categories": {
         "all": "All",
         "advertising": "Advertising",
-        "interior": "Interior & Exterior Design",
+        "interior": "Interior Design",
+        "exterior": "Exterior Design",
         "branding": "Branding",
         "other": "More AI Tools"
       },
@@ -102,6 +103,7 @@
         "commercialSpace": "Commercial Space",
         "sketchToRender": "Sketch to Render",
         "sketchToRenderExterior": "Sketch to Render (Exterior)",
+        "exteriorTemplates": "Exterior Templates",
         "sketchToRenderInterior": "Sketch to Render (Interior)",
         "renderEnhancer": "Render Enhancer",
         "videoBgRemove": "Video BG Remove",

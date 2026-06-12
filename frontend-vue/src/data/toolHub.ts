@@ -7,15 +7,18 @@
 // about. Keep the `id` stable so localStorage "Recently Used" entries
 // don't desync after a swap.
 
-// Hub categories — revised 2026-05-29 to the four "big topic" buckets the
-// owner asked for, grouped by the user's GOAL rather than the media type:
+// Hub categories — revised 2026-05-29 to "big topic" buckets the owner
+// asked for, grouped by the user's GOAL rather than the media type.
+// 2026-06-12: the combined 室內室外設計 bucket was split (owner directive:
+// never mix interior and exterior — each group lists its own per-tool pages):
 //   advertising (廣告宣傳) — promo content: video, avatar, product scenes
-//   interior    (室內設計) — room redesign + interior templates
+//   interior    (室內設計) — room redesign / floor plan / isometric / 3D render…
+//   exterior    (室外設計) — building facade / exterior sketch / exterior templates
 //   branding    (品牌設計) — logo / hero image / packaging pattern / text
 //   other       (其他酷炫的AI功能) — utility/effects: cutout, upscale, claymation
 // Keep this list short; the 'all' tab is rendered first by the consumer
 // view, so we don't include it here.
-export type ToolHubCategory = 'advertising' | 'interior' | 'branding' | 'other'
+export type ToolHubCategory = 'advertising' | 'interior' | 'exterior' | 'branding' | 'other'
 
 export interface ToolHubTile {
   id: string
@@ -69,16 +72,19 @@ export const toolHubTiles: ToolHubTile[] = [
   { id: 'isometric',           labelKey: 'tools.hub.tiles.isometric',          to: '/tools/isometric',              thumb: `${T}/isometric.png`,           category: 'interior'    },
   { id: 'render-3d',           labelKey: 'tools.hub.tiles.render3d',           to: '/tools/render-3d',              thumb: `${T}/render-3d.png`,           category: 'interior'    },
   // 2026-06-03 — exterior/render-enhancer/sketch tools added after the owner
-  // asked to mirror mnml.ai's exterior-ai / render-enhancer / sketch2img and
-  // broaden the group to cover indoor + outdoor (室內室外設計). Each is its own
-  // dedicated page; all reuse existing endpoints (room-redesign / upscale).
-  { id: 'exterior-ai',         labelKey: 'tools.hub.tiles.exteriorAi',         to: '/tools/exterior-ai',            thumb: `${T}/exterior-ai.png`,         category: 'interior'    },
+  // asked to mirror mnml.ai's exterior-ai / render-enhancer / sketch2img.
+  // 2026-06-12 — exterior tools moved to their own 室外設計 category (owner
+  // directive: never mix interior and exterior; each group lists its own
+  // per-tool pages). Commercial-space stays in interior (it designs interiors
+  // of commercial venues); render-enhancer stays in interior as the generic
+  // render utility.
   { id: 'commercial-space',    labelKey: 'tools.hub.tiles.commercialSpace',    to: '/tools/commercial-space',       thumb: `${T}/commercial-space.png`,    category: 'interior'    },
-  // 2026-06-12 — sketch-to-render split into dedicated exterior + interior
-  // pages (owner directive: never mix interior and exterior on one page).
-  { id: 'sketch-to-render-exterior', labelKey: 'tools.hub.tiles.sketchToRenderExterior', to: '/tools/sketch-to-render-exterior', thumb: `${T}/sketch-to-render-exterior.png`, category: 'interior' },
   { id: 'sketch-to-render-interior', labelKey: 'tools.hub.tiles.sketchToRenderInterior', to: '/tools/sketch-to-render-interior', thumb: `${T}/sketch-to-render-interior.png`, category: 'interior' },
   { id: 'render-enhancer',     labelKey: 'tools.hub.tiles.renderEnhancer',     to: '/tools/render-enhancer',        thumb: `${T}/render-enhancer.png`,     category: 'interior'    },
+  // ── 室外設計 (exterior) group — each tool is its own dedicated page ──
+  { id: 'exterior-ai',         labelKey: 'tools.hub.tiles.exteriorAi',         to: '/tools/exterior-ai',            thumb: `${T}/exterior-ai.png`,         category: 'exterior'    },
+  { id: 'sketch-to-render-exterior', labelKey: 'tools.hub.tiles.sketchToRenderExterior', to: '/tools/sketch-to-render-exterior', thumb: `${T}/sketch-to-render-exterior.png`, category: 'exterior' },
+  { id: 'exterior-templates',  labelKey: 'tools.hub.tiles.exteriorTemplates',  to: '/tools/exterior-templates',     thumb: `${T}/exterior-templates.png`,  category: 'exterior'    },
   // Row 7 — NEW Qubico-backed tools added 2026-05-24 after the stability
   // probe. Only video-background-remove was healthy; sibling video tools
   // upscale + watermark-remove dropped because they timed out or 404'd.
@@ -99,9 +105,9 @@ export const toolHubTiles: ToolHubTile[] = [
 
 // Stable order of categories shown in the hub-view filter bar / header
 // dropdown. Advertising leads (most tiles + the main conversion path);
-// interior stays visible even with only 2 tiles since it's a flagship use
-// case.
-export const TOOL_HUB_CATEGORIES: ToolHubCategory[] = ['advertising', 'interior', 'branding', 'other']
+// interior and exterior sit side by side as separate flagship groups
+// (2026-06-12 split).
+export const TOOL_HUB_CATEGORIES: ToolHubCategory[] = ['advertising', 'interior', 'exterior', 'branding', 'other']
 
 // localStorage-backed list of recently used tool IDs (max 4). Keep this
 // outside of pinia so the AppHeader dropdown and the hub page can both read

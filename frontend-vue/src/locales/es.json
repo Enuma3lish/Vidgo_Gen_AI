@@ -248,6 +248,7 @@
         "commercialSpace": "Espacio comercial",
         "sketchToRender": "Boceto a render",
         "sketchToRenderExterior": "Boceto a render (exterior)",
+        "exteriorTemplates": "Plantillas exteriores",
         "sketchToRenderInterior": "Boceto a render (interior)",
         "renderEnhancer": "Mejora de renders",
         "videoBgRemove": "Quitar fondo video",
@@ -259,7 +260,8 @@
       "categories": {
         "all": "Todos",
         "advertising": "Publicidad",
-        "interior": "Diseño de interiores y exteriores",
+        "interior": "Diseño interior",
+        "exterior": "Diseño exterior",
         "branding": "Marca",
         "other": "Más herramientas IA"
       },

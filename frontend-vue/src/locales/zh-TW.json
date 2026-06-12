@@ -71,7 +71,8 @@
       "categories": {
         "all": "全部",
         "advertising": "廣告宣傳",
-        "interior": "室內室外設計",
+        "interior": "室內設計",
+        "exterior": "室外設計",
         "branding": "品牌設計",
         "other": "其他酷炫 AI 功能"
       },
@@ -102,6 +103,7 @@
         "commercialSpace": "商業空間設計",
         "sketchToRender": "草圖轉渲染",
         "sketchToRenderExterior": "草圖轉渲染（建築外觀）",
+        "exteriorTemplates": "建築外觀範本",
         "sketchToRenderInterior": "草圖轉渲染（室內）",
         "renderEnhancer": "渲染圖優化放大",
         "videoBgRemove": "影片去背",

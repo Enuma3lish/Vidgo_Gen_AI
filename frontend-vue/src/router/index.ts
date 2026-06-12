@@ -136,13 +136,30 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
-  // Interior Templates Gallery — Pippit-style browsable style cards
-  // (added 2026-05-24). Clicking a card deeplinks to /tools/room-redesign
-  // with style + space_kind preselected via query params.
+  // Templates Galleries — Pippit-style browsable style cards (added
+  // 2026-05-24). 2026-06-12: the in-page interior/exterior/commercial tab
+  // switcher was removed (owner directive: never mix interior and exterior
+  // on one page) — each space kind is its own dedicated page pinned via the
+  // spaceKind prop. Clicking a card deeplinks into the matching tool page.
   {
     path: '/tools/interior-templates',
     name: 'interior-templates',
     component: () => import('@/views/tools/InteriorTemplates.vue'),
+    props: { spaceKind: 'interior' },
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/tools/exterior-templates',
+    name: 'exterior-templates',
+    component: () => import('@/views/tools/InteriorTemplates.vue'),
+    props: { spaceKind: 'exterior' },
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/tools/commercial-templates',
+    name: 'commercial-templates',
+    component: () => import('@/views/tools/InteriorTemplates.vue'),
+    props: { spaceKind: 'commercial' },
     meta: { requiresAuth: false }
   },
 
@@ -478,6 +495,16 @@ const ROUTE_SEO: Record<string, RouteSeo> = {
     title: 'AI 室內設計範本庫｜風格範本一鍵套用 - VidGo',
     description:
       '瀏覽北歐、極簡、日式侘寂、工業風等室內設計範本，挑選後上傳房間照片，AI 立即生成提案圖。',
+  },
+  'exterior-templates': {
+    title: 'AI 建築外觀範本庫｜外觀風格一鍵套用 - VidGo',
+    description:
+      '瀏覽現代玻璃帷幕、北歐木屋、地中海別墅等建築外觀範本，挑選後上傳建築照片，AI 立即生成外觀提案。',
+  },
+  'commercial-templates': {
+    title: 'AI 商業空間範本庫｜店面與餐廳風格一鍵套用 - VidGo',
+    description:
+      '瀏覽餐酒館、精品零售、飯店大廳等商業空間範本，挑選後上傳空間照片，AI 立即生成設計提案。',
   },
   'floor-plan': {
     title: 'AI 平面配置圖｜輸入需求或草圖生成 2D 平面圖 - VidGo',

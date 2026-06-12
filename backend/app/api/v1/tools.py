@@ -2807,11 +2807,20 @@ async def _try_on_inner(
                 if not garment_desc:
                     garment_desc = "the garment shown in the reference photo"
 
+                # 2026-06-12: garment reference photos often show the piece on
+                # a ghost mannequin, so the Gemini caption can include
+                # "mannequin" — and Kontext then repainted the PERSON into a
+                # mannequin. Pin the person hard and scope the caption to the
+                # clothing only.
                 fallback_prompt = (
-                    "Edit this image: keep the person's face, body, pose, and "
-                    "background exactly the same. Change the outfit to: "
-                    f"{garment_desc}. Realistic fabric texture, natural fit, "
-                    "consistent studio lighting."
+                    "Edit this photo of a person: keep the person's face, hair, "
+                    "skin, body, pose, and the background EXACTLY the same — the "
+                    "result must show the SAME PERSON, never a mannequin and "
+                    "never a different model. Change ONLY the clothing they are "
+                    f"wearing to this garment: {garment_desc}. Ignore any "
+                    "mannequin or display stand mentioned in the garment "
+                    "description — only the garment itself matters. Realistic "
+                    "fabric texture, natural fit, consistent studio lighting."
                 )
                 fb = await provider_router.route(TaskType.I2I, {
                     "image_url": model_url,

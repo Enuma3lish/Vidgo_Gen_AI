@@ -165,10 +165,10 @@ async function generate() {
   }
 }
 
-const pageTitle = computed(() => L('3D 效果圖', '3D Render', '3D 効果図', '3D 효과도', 'Render 3D'))
+const pageTitle = computed(() => L('3D 效果圖（細化）', '3D Render (Refine)', '3D 効果図（詳細化）', '3D 효과도 (디테일)', 'Render 3D (refinado)'))
 const pageSubtitle = computed(() => L(
-  '上傳平面圖或房間照片,AI 渲染寫實 3D 效果圖;可選擇加上「拔地而起」成長影片與可旋轉 3D 模型。',
-  'Upload a floor plan or room photo; AI renders a photoreal 3D image. Optionally add a growth video and a rotatable 3D model.',
+  '從平面配置圖、立體圖或房間照片選定空間,細化成寫實 3D 效果圖;可選擇加上「拔地而起」成長影片與可旋轉 3D 模型。',
+  'Pick a space from your floor plan, isometric view, or room photo and refine it into a photoreal 3D render. Optionally add a growth video and a rotatable 3D model.',
   '間取り図や部屋写真をアップロードすると、AIがフォトリアルな3D効果図をレンダリング。成長動画や回転可能な3Dモデルも追加できます。',
   '평면도나 방 사진을 올리면 AI가 사실적인 3D 효과도를 렌더링합니다. 성장 영상과 회전 가능한 3D 모델도 선택할 수 있습니다.',
   'Sube un plano o foto; la IA renderiza una imagen 3D fotorrealista. Opcionalmente añade un vídeo de crecimiento y un modelo 3D giratorio.',

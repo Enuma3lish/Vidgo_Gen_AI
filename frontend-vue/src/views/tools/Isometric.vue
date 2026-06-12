@@ -112,8 +112,8 @@ async function generate() {
     :eta-seconds="60"
     :title="L('立體圖', 'Isometric View', '立体図', '입체도', 'Vista isométrica')"
     :subtitle="L(
-      '上傳平面圖或空間照片,AI 生成 45° 等角立體圖(dollhouse 視角)。',
-      'Upload a floor plan or room image — AI generates a 45° isometric 3D view (dollhouse).',
+      '上傳平面配置圖,AI 生成整個空間的 45° 等角立體圖(dollhouse 視角) — 平面圖中的每個房間都會依用途完整呈現。',
+      'Upload a floor plan — AI generates a 45° isometric dollhouse view of the WHOLE unit, every room furnished per its function.',
       '間取り図や空間写真をアップロードすると、AIが45°アイソメ立体図(ドールハウス)を生成します。',
       '평면도나 공간 사진을 올리면 AI가 45° 아이소메트릭 입체도(돌하우스)를 생성합니다.',
       'Sube un plano o foto del espacio; la IA genera una vista isométrica 3D de 45° (casa de muñecas).')"
@@ -146,11 +146,12 @@ async function generate() {
       </div>
 
       <div>
-        <label class="pp-field-label">{{ L('空間類型（選填）', 'Room type (optional)', '部屋タイプ（任意）', '공간 유형 (선택)', 'Tipo de habitación (opcional)') }}</label>
+        <label class="pp-field-label">{{ L('重點空間（選填）', 'Focus room (optional)', '注目する部屋（任意）', '중점 공간 (선택)', 'Habitación destacada (opcional)') }}</label>
         <select v-model="roomType" class="pp-select">
-          <option value="">{{ L('— 自動 —', '— Auto —', '— 自動 —', '— 자동 —', '— Auto —') }}</option>
+          <option value="">{{ L('— 全室均衡呈現 —', '— Whole unit equally —', '— 全室をバランスよく —', '— 전체 균형 표현 —', '— Toda la unidad —') }}</option>
           <option v-for="r in roomTypes" :key="r.id" :value="r.id">{{ label(r) }}</option>
         </select>
+        <p class="pp-field-help">{{ L('立體圖一律呈現平面圖中的所有房間；選擇重點空間只是加強該區的細節。', 'The isometric always shows every room in the plan; picking a focus room only adds extra detail there.', '立体図は常に全室を表示します。選択した部屋はディテールが強化されるだけです。', '입체도는 항상 모든 방을 표시하며, 중점 공간은 디테일만 강화됩니다.', 'La vista siempre muestra todas las habitaciones; el foco solo añade detalle.') }}</p>
       </div>
 
       <AtmosphereControls

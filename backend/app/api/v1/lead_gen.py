@@ -11,10 +11,18 @@ from pydantic import BaseModel, Field
 from typing import Optional, Literal
 import httpx
 import logging
+import uuid
 
-from app.api.deps import get_current_user
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user, get_db
 from app.core.config import get_settings
 from app.models.user import User
+from app.models.user_upload import UserUpload
+from app.models.social_account import SocialAccount
+from app.services import social_media_service as svc
+from app.services.token_refresh_service import ensure_valid_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -225,6 +233,108 @@ async def generate_script(
         hashtags=result.get("hashtags", []),
         estimated_duration_sec=estimated_sec,
     )
+
+
+@router.post("/publish-video", summary="發布影片到 YouTube Shorts")
+async def publish_video_to_youtube(
+    upload_id: str = Field(...),
+    caption: str = Field(default="AI 短影音 #Shorts #AI行銷"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    拿到 upload_id 後呼叫此 endpoint → 自動發布到 YouTube Shorts。
+
+    **給 Make.com 呼叫：**
+    1. 先呼叫 POST /uploads/generate → 取得 upload_id
+    2. Sleep 120 秒（等影片生成完成）
+    3. 呼叫本 endpoint，帶入 upload_id 和 caption
+    4. 回傳 youtube_url 寫入 Notion CRM
+    """
+    try:
+        upload_uuid = uuid.UUID(upload_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="upload_id 格式錯誤")
+
+    result = await db.execute(
+        select(UserUpload).where(
+            UserUpload.id == upload_uuid,
+            UserUpload.user_id == current_user.id,
+        )
+    )
+    upload = result.scalar_one_or_none()
+    if not upload:
+        raise HTTPException(status_code=404, detail="找不到此影片，請確認 upload_id 正確")
+
+    video_url = upload.result_video_url
+    if not video_url:
+        status_val = upload.status.value if hasattr(upload.status, "value") else str(upload.status)
+        raise HTTPException(
+            status_code=425,
+            detail=f"影片尚未生成完成（目前狀態：{status_val}），請稍後再試",
+        )
+
+    yt_result = await db.execute(
+        select(SocialAccount).where(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.platform == "youtube",
+            SocialAccount.is_active == True,
+        )
+    )
+    yt_account = yt_result.scalar_one_or_none()
+    if not yt_account:
+        raise HTTPException(
+            status_code=400,
+            detail="YouTube 帳號尚未連接，請到 VidGo 後台 → 社群媒體 → 連接 YouTube",
+        )
+
+    access_token = await ensure_valid_token(yt_account, db)
+
+    publish_result = await svc.publish_to_youtube(
+        access_token=access_token,
+        title=caption[:100],
+        description=caption,
+        video_url=video_url,
+        privacy_status="public",
+    )
+
+    return {
+        "success": True,
+        "youtube_url": publish_result.get("url", ""),
+        "video_id": publish_result.get("post_id", ""),
+        "upload_id": upload_id,
+    }
+
+
+@router.get("/upload-status/{upload_id}", summary="查詢影片生成進度")
+async def check_upload_status(
+    upload_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """查詢影片是否生成完成，Make.com 可在 Sleep 後呼叫確認再發布。"""
+    try:
+        upload_uuid = uuid.UUID(upload_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="upload_id 格式錯誤")
+
+    result = await db.execute(
+        select(UserUpload).where(
+            UserUpload.id == upload_uuid,
+            UserUpload.user_id == current_user.id,
+        )
+    )
+    upload = result.scalar_one_or_none()
+    if not upload:
+        raise HTTPException(status_code=404, detail="找不到此影片")
+
+    status_val = upload.status.value if hasattr(upload.status, "value") else str(upload.status)
+    return {
+        "upload_id": upload_id,
+        "status": status_val,
+        "ready": bool(upload.result_video_url),
+        "result_video_url": upload.result_video_url,
+    }
 
 
 @router.get("/health", summary="檢查 Lead Gen 服務狀態")

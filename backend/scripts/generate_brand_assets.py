@@ -167,6 +167,77 @@ HUB_STYLE_OVERRIDES: Dict[str, str] = {
         "vignettes, soft natural lighting, cream background, clean "
         "layout, no extra text or watermark, 8k"
     ),
+    # ── Interior / architecture tiles (added 2026-06-12) ──
+    # The default e-commerce studio suffix fights architectural subjects, so
+    # every interior tile gets the archviz look instead.
+    "room-redesign": (
+        "photorealistic interior architectural visualization, soft natural "
+        "daylight, wide-angle interior photography, clean composition, "
+        "no people, no text, no watermark, 8k"
+    ),
+    "interior-templates": (
+        "interior design moodboard composition, soft natural lighting, "
+        "clean grid layout on a cream background, no text, no watermark, 8k"
+    ),
+    "floor-plan": (
+        "crisp 2D architectural drawing, flat top-down orthographic "
+        "blueprint, white paper background, fine black linework, light "
+        "room fills, no perspective, no watermark"
+    ),
+    "isometric": (
+        "clean 3D isometric architectural render, 45-degree dollhouse "
+        "cutaway, soft studio lighting, pastel background, high detail, "
+        "no people, no text, no watermark, 8k"
+    ),
+    "render-3d": (
+        "photorealistic interior architectural visualization, global "
+        "illumination, fine material detail, no people, no text, "
+        "no watermark, 8k"
+    ),
+    "exterior-ai": (
+        "photorealistic exterior architectural visualization at dusk, "
+        "warm interior glow through windows, landscaped surroundings, "
+        "no people, no text, no watermark, 8k"
+    ),
+    "commercial-space": (
+        "photorealistic commercial interior render, warm inviting "
+        "lighting, professional architectural photography, no people, "
+        "no text, no watermark, 8k"
+    ),
+    "sketch-to-render-exterior": (
+        "half hand-drawn pencil line sketch transitioning into a "
+        "photorealistic architectural render, split-image concept, clean "
+        "composition, no text, no watermark, 8k"
+    ),
+    "sketch-to-render-interior": (
+        "half hand-drawn pencil line sketch transitioning into a "
+        "photorealistic interior render, split-image concept, clean "
+        "composition, no text, no watermark, 8k"
+    ),
+    "render-enhancer": (
+        "ultra-sharp photorealistic interior render close-up, crisp "
+        "material micro-detail, professional archviz quality, no people, "
+        "no text, no watermark, 8k"
+    ),
+    # ── Other previously-duplicated tiles ──
+    "claymation": (
+        "handcrafted claymation stop-motion still, plasticine texture, "
+        "soft toy-set lighting, pastel backdrop, no text, no watermark, 8k"
+    ),
+    "ai-avatar": (
+        "professional studio portrait, soft key lighting, neutral "
+        "gradient backdrop, broadcast quality, no text, no watermark, 8k"
+    ),
+    "sora2-pro": (
+        "cinematic anamorphic film still, dramatic lighting, shallow "
+        "depth of field, premium film-grade color grade, no text, "
+        "no watermark, 8k"
+    ),
+    "video-bg-remove": (
+        "clean cutout subject on a grey-and-white checkerboard "
+        "transparency pattern, sharp edges, studio lighting, no text, "
+        "no watermark, 8k"
+    ),
 }
 
 
@@ -270,6 +341,79 @@ def hub_catalog() -> List[AssetSpec]:
           "A glowing play button overlaid on a mountain landscape photo "
           "with subtle motion-blur snow texture, concept for an AI "
           "video generator"),
+        # ── 2026-06-12 — dedicated thumbnails for tiles that previously
+        # reused another tile's image (owner flagged the duplicates on the
+        # AI 工具 hub page). Filenames = tile ids in toolHub.ts.
+        s("room-redesign",
+          "Room Redesign",
+          "A bright Scandinavian living room interior with pale oak "
+          "herringbone floor, grey linen sofa, brass floor lamp and large "
+          "windows with sheer curtains, freshly redesigned look"),
+        s("interior-templates",
+          "Interior Templates",
+          "A neat grid moodboard of four small interior style vignettes — "
+          "Nordic living room, Japandi bedroom, industrial loft, coastal "
+          "dining room — arranged like style template cards"),
+        s("floor-plan",
+          "Floor Plan",
+          "A clean 2D architectural floor plan of a two-bedroom apartment "
+          "drawn top-down with black double-line walls, door swings, and "
+          "simple furniture icons on white paper"),
+        s("isometric",
+          "Isometric View",
+          "An isometric 45-degree cutaway dollhouse view of a furnished "
+          "modern apartment showing living room, bedroom and kitchen with "
+          "miniature furniture and white walls"),
+        s("render-3d",
+          "3D Render",
+          "A photorealistic 3D interior render of a modern living room "
+          "with floor-to-ceiling windows, warm golden-hour light streaming "
+          "across a designer sofa and marble coffee table"),
+        s("exterior-ai",
+          "Exterior AI",
+          "A modern two-storey house exterior with a glass curtain facade "
+          "and warm light glowing from inside at dusk, minimalist "
+          "landscaped garden and stone walkway"),
+        s("commercial-space",
+          "Commercial Space",
+          "A warm modern café interior with walnut tables, bentwood "
+          "chairs, brass pendant lights and a veined marble bar counter, "
+          "inviting commercial space design"),
+        s("sketch-to-render-exterior",
+          "Sketch to Render (Exterior)",
+          "A modern house split down the middle: the left half is a rough "
+          "hand-drawn pencil architecture sketch, the right half is the "
+          "same house as a finished photorealistic exterior render"),
+        s("sketch-to-render-interior",
+          "Sketch to Render (Interior)",
+          "A living room split down the middle: the left half is a rough "
+          "hand-drawn pencil interior sketch, the right half is the same "
+          "room as a finished photorealistic interior render"),
+        s("render-enhancer",
+          "Render Enhancer",
+          "An ultra-crisp close-up of a luxury living room corner render "
+          "showing razor-sharp fabric weave, wood grain and glass "
+          "reflections, showcasing maximum render detail"),
+        s("claymation",
+          "Claymation",
+          "A cheerful handmade plasticine clay character standing on a "
+          "tiny pastel stop-motion film set with a miniature clay camera "
+          "beside it"),
+        s("ai-avatar",
+          "AI Avatar",
+          "A friendly East Asian woman presenter in a navy blazer "
+          "speaking toward the camera in a softly lit studio, framed like "
+          "a professional spokesperson video still"),
+        s("sora2-pro",
+          "Sora 2 Pro",
+          "A cinematic film still of a futuristic coastal city at dusk "
+          "with sweeping camera perspective, anamorphic lens flare and "
+          "dramatic clouds, flagship AI video concept"),
+        s("video-bg-remove",
+          "Video BG Remove",
+          "A dancer captured mid-leap, cleanly cut out against a grey and "
+          "white checkerboard transparency pattern, video background "
+          "removal concept"),
     ]
 
 

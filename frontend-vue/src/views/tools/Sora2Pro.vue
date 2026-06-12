@@ -8,6 +8,7 @@ import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import CreditCost from '@/components/tools/CreditCost.vue'
+import VideoFaithfulnessControls from '@/components/tools/VideoFaithfulnessControls.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import LoadingOverlay from '@/components/common/LoadingOverlay.vue'
 import { downloadAsset } from '@/utils/downloadAsset'
@@ -30,6 +31,12 @@ const negativePrompt = ref('')
 const enableAudio = ref(true)
 const resultVideo = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
+// 2026-06-12 — anti-hallucination controls (additive; the prompt itself
+// stays verbatim). faithLock = subject_lock with a start frame (I2V) or
+// strict_prompt without one (T2V). Default on.
+const cameraMove = ref('')
+const faithLock = ref(true)
+const faithMode = computed<'i2v' | 't2v'>(() => (startImage.value ? 'i2v' : 't2v'))
 
 // Reuse the kling_video curated 40-prompt library — Sora 2 Pro accepts the
 // same cinematic-motion style prompts and shipping a brand-new prompt set
@@ -71,6 +78,9 @@ async function handleGenerate() {
       imageUrl: startImage.value,
       negativePrompt: negativePrompt.value || undefined,
       enableAudio: enableAudio.value,
+      cameraMove: cameraMove.value || undefined,
+      subjectLock: faithLock.value,
+      strictPrompt: faithLock.value,
     })
     if (handleCardRequired(result, uiStore, router, String(locale.value || '').startsWith('zh'))) {
       return
@@ -155,6 +165,16 @@ async function handleGenerate() {
               style="background: #0d0d15; color: #e8e8f0; border: 1px solid rgba(255,255,255,0.1); resize: vertical;"
               :placeholder="t('sora2Pro.promptPlaceholder')"
             ></textarea>
+          </div>
+
+          <!-- Anti-hallucination controls: camera move + faith lock (2026-06-12).
+               faithLock = subject_lock (start frame set) / strict_prompt (T2V). -->
+          <div class="rounded-xl p-4 space-y-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <VideoFaithfulnessControls
+              :mode="faithMode"
+              v-model:camera-move="cameraMove"
+              v-model:faith-lock="faithLock"
+            />
           </div>
 
           <!-- Optional source frame (I2V). Hidden in demo mode since demo users

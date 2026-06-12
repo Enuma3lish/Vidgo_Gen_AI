@@ -1,5 +1,11 @@
 # VidGo 服務成本與毛利分析
 
+> **2026-06-12 增補**：本文撰寫後，影片計價已改以 `tier_config.py` 的
+> `VIDEO_CREDIT_COSTS` 為唯一對照表（hailuo 18 / wan・hunyuan 20 /
+> kling_std 28 / seedance_720p・kling_v3_std 65 / veo・**sora2 80**（06-09 新增，
+> Sora 2 Pro）/ kling_v3_pro 130 / seedance_1080p 160），且 `ai_try_on`
+> 實際扣點為 **30 點**（前端顯示已同步修正）。其餘分析仍以 2026-06-03 資料為準。
+
 > 產出日期：2026-06-03
 > 範圍：目前線上 v2.1 訂閱方案、Credit Pack、所有經過 `_check_and_deduct_credits` 的工具呼叫
 > 資料來源：

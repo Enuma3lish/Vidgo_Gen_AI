@@ -107,13 +107,25 @@ const routes: RouteRecordRaw[] = [
   },
 
   // Sketch → photorealistic render. Reuses /tools/room-redesign image-to-image
-  // (mnml.ai/app/sketch2img parity).
+  // (mnml.ai/app/sketch2img parity). 2026-06-12 — split into dedicated
+  // interior and exterior pages (owner directive: never mix interior and
+  // exterior on one page); the old combined route redirects to the exterior
+  // page, which was its previous default.
   {
-    path: '/tools/sketch-to-render',
-    name: 'sketch-to-render',
+    path: '/tools/sketch-to-render-exterior',
+    name: 'sketch-to-render-exterior',
     component: () => import('@/views/tools/SketchToRender.vue'),
+    props: { spaceKind: 'exterior' },
     meta: { requiresAuth: false }
   },
+  {
+    path: '/tools/sketch-to-render-interior',
+    name: 'sketch-to-render-interior',
+    component: () => import('@/views/tools/SketchToRender.vue'),
+    props: { spaceKind: 'interior' },
+    meta: { requiresAuth: false }
+  },
+  { path: '/tools/sketch-to-render', redirect: '/tools/sketch-to-render-exterior' },
 
   // Render Enhancer — AI detail enhance (room-redesign magic) + upscale
   // (mnml.ai/app/render-enhancer parity).
@@ -491,6 +503,16 @@ const ROUTE_SEO: Record<string, RouteSeo> = {
     title: 'AI 商業空間設計渲染｜店面、辦公室與餐廳提案 - VidGo',
     description:
       '上傳商業空間照片，AI 依照產業與品牌氣質生成店面、辦公室、咖啡廳的設計提案。',
+  },
+  'sketch-to-render-exterior': {
+    title: 'AI 草圖轉渲染（建築外觀）｜手繪外觀草圖轉寫實渲染 - VidGo',
+    description:
+      '上傳建築外觀手繪草圖或線稿，挑選風格，AI 立即生成寫實建築外觀渲染圖。',
+  },
+  'sketch-to-render-interior': {
+    title: 'AI 草圖轉渲染（室內）｜手繪室內草圖轉寫實渲染 - VidGo',
+    description:
+      '上傳室內空間手繪草圖或線稿，挑選風格，AI 立即生成寫實室內設計渲染圖。',
   },
   'try-on': {
     title: 'AI 模特試穿｜服飾自動套用到模特身上 - VidGo',

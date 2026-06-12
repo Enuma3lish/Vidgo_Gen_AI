@@ -247,6 +247,8 @@
         "exteriorAi": "Diseño de exteriores IA",
         "commercialSpace": "Espacio comercial",
         "sketchToRender": "Boceto a render",
+        "sketchToRenderExterior": "Boceto a render (exterior)",
+        "sketchToRenderInterior": "Boceto a render (interior)",
         "renderEnhancer": "Mejora de renders",
         "videoBgRemove": "Quitar fondo video",
         "claymation": "Claymation IA",

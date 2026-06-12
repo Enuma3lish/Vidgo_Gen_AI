@@ -116,6 +116,13 @@ export interface FloorPlanRequest {
   language?: string
 }
 
+// ── Atmosphere fine-tune knobs (立體圖 + 3D 效果圖, 2026-06-12) ─────────────
+// Additive lighting / color-temperature / material clauses — never structural.
+export type InteriorLightingTone =
+  | 'daylight' | 'warm_evening' | 'golden_hour' | 'overcast_soft' | 'dramatic_spotlight' | 'night'
+export type InteriorMaterialAccent =
+  | 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'
+
 // ── Isometric 3D view (立體圖) ──────────────────────────────────────────────
 export interface IsometricRequest {
   image_url?: string
@@ -124,6 +131,9 @@ export interface IsometricRequest {
   room_type?: string
   prompt?: string
   language?: string
+  lighting_tone?: InteriorLightingTone
+  color_temperature?: number  // Kelvin, 2700-6500 typical
+  material_accent?: InteriorMaterialAccent
 }
 
 // ── 3D 效果圖 / Floor-plan → 3D-growth-video pipeline ───────────────────────
@@ -147,6 +157,10 @@ export interface FloorplanToVideoRequest {
   // the original structure; style_strength = how strongly to apply the style.
   structural_fidelity?: number
   style_strength?: number
+  // Atmosphere fine-tune knobs — applied in every tier/mode.
+  lighting_tone?: InteriorLightingTone
+  color_temperature?: number  // Kelvin
+  material_accent?: InteriorMaterialAccent
 }
 
 export interface FloorplanToVideoResponse {

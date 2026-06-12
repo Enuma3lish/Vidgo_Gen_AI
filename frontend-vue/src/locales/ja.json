@@ -247,6 +247,8 @@
         "exteriorAi": "外観AIデザイン",
         "commercialSpace": "商業空間デザイン",
         "sketchToRender": "スケッチからレンダー",
+        "sketchToRenderExterior": "スケッチからレンダー（外観）",
+        "sketchToRenderInterior": "スケッチからレンダー（室内）",
         "renderEnhancer": "レンダー高画質化",
         "videoBgRemove": "動画背景削除",
         "claymation": "クレイメーション生成",

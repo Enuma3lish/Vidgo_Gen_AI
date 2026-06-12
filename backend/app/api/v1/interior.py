@@ -125,6 +125,11 @@ class IsometricRequest(BaseModel):
     room_type: Optional[str] = Field(None, description="Optional room type hint.")
     prompt: Optional[str] = Field(None, max_length=1000, description="Optional extra request (materials, mood).")
     language: Optional[str] = Field("en", description="UI locale hint.")
+    # 2026-06-12 — fine-tune knobs so the user can adjust the same render
+    # instead of regenerating blind. Additive atmosphere clauses only.
+    lighting_tone: Optional[str] = Field(None, description="daylight | warm_evening | golden_hour | overcast_soft | dramatic_spotlight | night")
+    color_temperature: Optional[int] = Field(None, ge=2000, le=8000, description="Light color temperature in Kelvin (2700-6500 typical).")
+    material_accent: Optional[str] = Field(None, description="wood | marble | concrete | linen | brass | leather | terrazzo")
 
 
 class DesignResponse(BaseModel):
@@ -203,6 +208,20 @@ class FloorplanToVideoRequest(BaseModel):
         60, ge=0, le=100,
         description="保留結構 mode: how strongly the chosen style applies to "
                     "materials/colors/lighting (0 = keep original materials).",
+    )
+    # 2026-06-12 — detailed adjustment knobs (designer request): lighting mood
+    # and color temperature, applied in every tier/mode as additive clauses.
+    lighting_tone: Optional[str] = Field(
+        None,
+        description="daylight | warm_evening | golden_hour | overcast_soft | dramatic_spotlight | night",
+    )
+    color_temperature: Optional[int] = Field(
+        None, ge=2000, le=8000,
+        description="Light color temperature in Kelvin (2700-6500 typical).",
+    )
+    material_accent: Optional[str] = Field(
+        None,
+        description="wood | marble | concrete | linen | brass | leather | terrazzo",
     )
 
 
@@ -900,6 +919,9 @@ async def generate_isometric_view(
             style_id=request.style_id,
             room_type=request.room_type,
             extra_prompt=request.prompt or "",
+            lighting_tone=request.lighting_tone,
+            color_temperature=request.color_temperature,
+            material_accent=request.material_accent,
         )
     except Exception as exc:  # noqa: BLE001
         await _refund_credits(db, current_user, ISOMETRIC_CREDITS, "interior_isometric")
@@ -1033,10 +1055,19 @@ async def _preserve_render(request: "FloorplanToVideoRequest", current_user: Use
         style_clause = f"moderately styled toward {style_name}"
     else:
         style_clause = f"styled as {style_name}"
+    # Atmosphere knobs (lighting / color temperature / material) apply to the
+    # ControlNet path too — depth conditioning locks geometry, so these only
+    # restyle light and surfaces.
+    from app.services.interior_design_service import build_atmosphere_clause
+    atmosphere = build_atmosphere_clause(
+        request.lighting_tone, request.color_temperature, request.material_accent
+    )
+    lighting_default = "" if request.lighting_tone or request.color_temperature else "natural lighting, "
     cn_prompt = (
         "photorealistic real-world interior photograph, "
-        f"{style_clause}, professional architectural visualization, natural lighting, "
-        "soft realistic shadows, sharp focus, high detail, no people, no text, no watermark. "
+        f"{style_clause}, professional architectural visualization, {lighting_default}"
+        "soft realistic shadows, sharp focus, high detail, no people, no text, no watermark."
+        f"{atmosphere} "
         + (request.prompt or "")
     ).strip()
     # fidelity 0..100 → control_strength 0.4..0.85 (higher = stricter geometry lock).
@@ -1067,6 +1098,9 @@ async def _preserve_render(request: "FloorplanToVideoRequest", current_user: Use
         structural_fidelity=fidelity,
         style_strength=strength,
         extra_prompt=request.prompt or "",
+        lighting_tone=request.lighting_tone,
+        color_temperature=request.color_temperature,
+        material_accent=request.material_accent,
     )
     return {
         "success": bool(g.get("success") and g.get("image_url")),
@@ -1113,6 +1147,9 @@ async def _floorplan_to_video_inner(
                     style_id=request.style_id,
                     room_type=request.room_type,
                     extra_prompt=request.prompt or "",
+                    lighting_tone=request.lighting_tone,
+                    color_temperature=request.color_temperature,
+                    material_accent=request.material_accent,
                 )
         except Exception as exc:  # noqa: BLE001
             await _refund_credits(db, current_user, RENDER_CREDITS, "interior_render")
@@ -1151,7 +1188,14 @@ async def _floorplan_to_video_inner(
 
     # "Auto" effect on the video tiers: bias the render stage toward faithfully
     # preserving the uploaded design rather than restyling it.
-    growth_extra_prompt = request.prompt or ""
+    from app.services.interior_design_service import build_atmosphere_clause
+    growth_extra_prompt = (
+        build_atmosphere_clause(
+            request.lighting_tone, request.color_temperature, request.material_accent
+        ).strip()
+        + " "
+        + (request.prompt or "")
+    ).strip()
     if request.preserve_original:
         growth_extra_prompt = (
             "Preserve the original design exactly — keep the same layout, structure, "

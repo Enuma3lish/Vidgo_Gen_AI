@@ -100,6 +100,68 @@ DESIGN_STYLES = {
 }
 
 
+# ── Atmosphere adjustments (lighting / color temperature / material) ───────
+# Shared by 立體圖 (isometric) and 3D 效果圖 (render tiers) so the user can
+# fine-tune the same render instead of regenerating blind. Clauses are
+# additive — they style light and surfaces only and never touch geometry,
+# so they stay compatible with the anti-hallucination invariants below.
+LIGHTING_TONES = {
+    "daylight":           "Lit by soft natural daylight through the windows; balanced exposure, no harsh shadows.",
+    "warm_evening":       "Warm evening interior lighting from layered lamps; cozy atmospheric ambience.",
+    "golden_hour":        "Late-golden-hour sunlight raking across surfaces; warm amber highlights, long soft shadows.",
+    "overcast_soft":      "Soft diffuse overcast daylight; even, shadowless illumination that reads true material colors.",
+    "dramatic_spotlight": "Dramatic directional accent spotlighting; bold shadows and high contrast.",
+    "night":              "Night scene lit only by the interior artificial lighting plan; warm pools of light, dark windows.",
+}
+
+MATERIAL_ACCENTS = {
+    "wood":      "Accent material: warm natural oak / walnut wood on floors and feature surfaces.",
+    "marble":    "Accent material: veined Calacatta or Carrara marble on counters and feature surfaces.",
+    "concrete":  "Accent material: polished pigmented concrete on floors and select walls.",
+    "linen":     "Accent material: natural unbleached linen on upholstery, drapery, and soft furnishings.",
+    "brass":     "Accent material: brass and bronze hardware, lighting, frames, and decor details.",
+    "leather":   "Accent material: rich saddle or oxblood leather on major upholstered pieces.",
+    "terrazzo":  "Accent material: terrazzo with mixed-color aggregate on floors and select surfaces.",
+}
+
+
+def build_atmosphere_clause(
+    lighting_tone: Optional[str] = None,
+    color_temperature: Optional[int] = None,
+    material_accent: Optional[str] = None,
+) -> str:
+    """Compose the additive lighting / color-temperature / material clause.
+
+    color_temperature is Kelvin (2700-6500). We translate it into words as
+    well as the number because image models follow "warm 2700K candle-like"
+    far more reliably than a bare numeral.
+    """
+    parts: List[str] = []
+    tone = LIGHTING_TONES.get((lighting_tone or "").lower())
+    if tone:
+        parts.append(tone)
+    if color_temperature:
+        k = max(2000, min(8000, int(color_temperature)))
+        if k <= 3000:
+            feel = "very warm, amber candle-like glow"
+        elif k <= 3800:
+            feel = "warm white, cozy residential tone"
+        elif k <= 4800:
+            feel = "neutral white, true-to-life colors"
+        elif k <= 5800:
+            feel = "daylight white, crisp and clean"
+        else:
+            feel = "cool white, slightly blue contemporary tone"
+        parts.append(
+            f"Overall light color temperature approximately {k}K ({feel}); "
+            "apply this white balance consistently across the whole image."
+        )
+    accent = MATERIAL_ACCENTS.get((material_accent or "").lower())
+    if accent:
+        parts.append(accent)
+    return (" " + " ".join(parts)) if parts else ""
+
+
 # Room types for better context
 ROOM_TYPES = {
     "living_room": {
@@ -479,12 +541,17 @@ class InteriorDesignService:
         style_id: Optional[str] = None,
         room_type: Optional[str] = None,
         extra_prompt: str = "",
+        lighting_tone: Optional[str] = None,
+        color_temperature: Optional[int] = None,
+        material_accent: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Floor-plan image → photorealistic isometric interior render.
 
         Uses a floor-plan-specific primary prompt so Gemini isn't confused
         by the generic "redesign this room" instructions used in redesign_room().
+        lighting_tone / color_temperature / material_accent are the 立體圖
+        fine-tune knobs — additive atmosphere clauses, never structural.
         """
         pass  # credentials resolved dynamically via _get_headers_and_url()
 
@@ -507,22 +574,30 @@ class InteriorDesignService:
         if style_id and style_id in DESIGN_STYLES:
             style_hint = f"Apply this interior design style: {DESIGN_STYLES[style_id]['prompt_suffix']}. "
 
+        # Atmosphere knobs default to soft natural daylight when unset.
+        atmosphere = build_atmosphere_clause(lighting_tone, color_temperature, material_accent)
+        light_default = "" if atmosphere else "soft natural daylight through the windows; "
+
         primary_prompt = (
             "The attached image is a 2D architectural floor plan (top-down blueprint). "
-            "Your task: generate a single photorealistic isometric (45-degree bird's-eye) "
-            "interior visualization that faithfully reflects the room shapes, wall positions, "
-            "doorways, and window openings shown in the floor plan. "
-            "STRICT: match the EXACT room count, wall layout, and the number and placement "
-            "of doors and windows shown in the plan. Do NOT add or remove rooms, walls, "
-            "doors or windows, and do NOT invent extra openings, spaces or levels that are "
-            "not drawn in the plan. "
+            "FIRST, read the plan carefully: identify every room and its label, every "
+            "wall, door swing, and window opening, AND every furniture symbol (beds, "
+            "sofas, tables, chairs, counters, fixtures) with its drawn position and size. "
+            "THEN generate a single photorealistic isometric (45-degree bird's-eye) "
+            "interior visualization that faithfully reflects exactly what you read. "
+            "STRICT anti-hallucination rules: match the EXACT room count, wall layout, "
+            "and the number and placement of doors and windows shown in the plan. Place "
+            "each piece of furniture in the SAME room and the SAME position as its symbol "
+            "in the plan — do NOT add furniture that is not drawn, do NOT remove or "
+            "relocate drawn furniture. Do NOT add or remove rooms, walls, doors or "
+            "windows, and do NOT invent extra openings, spaces, levels or decorative "
+            "features that are not drawn in the plan. "
             "Rules: walls should be approximately 2.8 m tall; use realistic materials "
-            "(hardwood or tile flooring, painted plaster walls); soft natural daylight "
-            "through the windows; no people, no dimension text, no measurement labels, "
-            "no overlaid annotations. "
+            f"(hardwood or tile flooring, painted plaster walls); {light_default}"
+            "no people, no dimension text, no measurement labels, no overlaid annotations. "
             "Output must look like a professional architectural render — correct depth, "
             "realistic shadows and reflections, high detail. "
-            f"{room_hint}{style_hint}{extra_prompt}"
+            f"{room_hint}{style_hint}{atmosphere} {extra_prompt}"
         ).strip()
 
         request_body = {
@@ -537,8 +612,9 @@ class InteriorDesignService:
             ],
             "generationConfig": {
                 "responseModalities": ["TEXT", "IMAGE"],
-                # Lowered 0.7→0.5: less invention, closer adherence to the plan.
-                "temperature": 0.5,
+                # Lowered 0.7→0.5→0.4: less invention, closer adherence to
+                # the plan (paired with the read-first furniture rules above).
+                "temperature": 0.4,
             },
         }
         return await self._generate_image(request_body, "floorplan_render")
@@ -551,6 +627,9 @@ class InteriorDesignService:
         structural_fidelity: int = 70,
         style_strength: int = 60,
         extra_prompt: str = "",
+        lighting_tone: Optional[str] = None,
+        color_temperature: Optional[int] = None,
+        material_accent: Optional[str] = None,
     ) -> Dict[str, Any]:
         """"保留結構" render — photorealize an existing design while respecting
         its structure, graded by two sliders (UI spec v1.0, 2026-06-09):
@@ -626,6 +705,11 @@ class InteriorDesignService:
             "levels, windows, or decorative features that are not visible in the input. "
             "Do NOT change the camera viewpoint, framing or the number of objects."
         )
+        # Additive atmosphere knobs (lighting / color temperature / material).
+        # These restyle light and surfaces only, so they're safe alongside the
+        # invariant — the user can fine-tune the mood without geometry drift.
+        atmosphere = build_atmosphere_clause(lighting_tone, color_temperature, material_accent)
+
         primary_prompt = (
             "The attached image is an existing interior/architectural design. Convert "
             "it into a photorealistic real-world photograph, keeping the same camera "
@@ -633,8 +717,8 @@ class InteriorDesignService:
             f"{structure_clause} {style_clause} {invariant} "
             "Render with physically accurate lighting, soft realistic shadows, correct "
             "reflections and global illumination, fine material/texture detail, and "
-            "natural depth of field. Empty space: no people, no text, no labels, no "
-            "watermark. "
+            f"natural depth of field.{atmosphere} Empty space: no people, no text, no "
+            "labels, no watermark. "
             f"{extra_prompt}"
         ).strip()
 
@@ -658,6 +742,60 @@ class InteriorDesignService:
             },
         }
         return await self._generate_image(request_body, "realistic_preserve")
+
+    async def _read_plan_inventory(self, image_base64: str, mime_type: str) -> str:
+        """Vision pass for 平面配置圖: read the uploaded sketch/plan/photo and
+        return a concise textual inventory of rooms, furniture, and design
+        information so the drawing pass reproduces what is actually in the
+        image instead of guessing. Fail-open: returns "" on any error so the
+        floor-plan generation never breaks on the analysis step.
+        """
+        analysis_prompt = (
+            "You are an architectural draughtsman reading a floor-plan sketch, "
+            "drawing, or interior photo. List, concisely and factually, ONLY what "
+            "is visible in the image:\n"
+            "1. Each room/space with its label (transcribe written labels exactly) "
+            "and its position relative to the others (e.g. 'kitchen, top-left, "
+            "adjacent to dining').\n"
+            "2. Every piece of furniture and fixture and which room it is in and "
+            "where within the room (e.g. 'double bed against the north wall').\n"
+            "3. Doors, windows, and openings: how many and on which walls.\n"
+            "4. Any written dimensions, annotations, or interior-design notes "
+            "(materials, colors, styles) — transcribe them exactly.\n"
+            "Do NOT guess at anything that is not visible. If something is "
+            "ambiguous, describe it as drawn. Answer as a compact bullet list."
+        )
+        request_body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {"mime_type": mime_type, "data": image_base64}},
+                        {"text": analysis_prompt},
+                    ],
+                }
+            ],
+            "generationConfig": {"responseModalities": ["TEXT"], "temperature": 0.1},
+        }
+        try:
+            headers, endpoint_url = await self._get_headers_and_url()
+            params: Dict[str, str] = {}
+            if "generativelanguage.googleapis.com" in endpoint_url and self.api_key:
+                params = {"key": self.api_key}
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                response = await client.post(
+                    endpoint_url, params=params, headers=headers, json=request_body,
+                )
+            if response.status_code != 200:
+                logger.warning("[floorplan] inventory pass HTTP %s — skipping", response.status_code)
+                return ""
+            data = response.json()
+            for part in (data.get("candidates") or [{}])[0].get("content", {}).get("parts", []):
+                if part.get("text"):
+                    return str(part["text"]).strip()[:3000]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[floorplan] inventory pass failed (fail-open): %s", exc)
+        return ""
 
     async def generate_floorplan(
         self,
@@ -706,10 +844,31 @@ class InteriorDesignService:
 
         if sketch_image_base64:
             mime_type = "image/png" if sketch_image_base64.startswith("iVBOR") else "image/jpeg"
+            # Read-then-draw: a separate low-temperature vision pass extracts
+            # the rooms / furniture / annotations actually present in the
+            # uploaded image, and the extracted inventory is pinned into the
+            # drawing prompt. This is what makes the plan reproduce the real
+            # furniture and design info instead of hallucinating a generic
+            # layout (owner request 2026-06-12).
+            inventory = await self._read_plan_inventory(sketch_image_base64, mime_type)
+            inventory_clause = ""
+            if inventory:
+                inventory_clause = (
+                    "A careful reading of the attached image found exactly the "
+                    "following rooms, furniture, and design information:\n"
+                    f"{inventory}\n"
+                    "Reproduce EVERY listed room, furniture piece, and annotation in "
+                    "the redrawn plan at its described location. Do NOT add furniture "
+                    "or rooms that are not listed, and do NOT drop any listed item. "
+                )
             full_prompt = (
-                "The attached image is a rough hand sketch / draft floor plan. Redraw it "
-                "as a clean, scaled 2D architectural floor plan, preserving the room "
-                "positions, proportions, and adjacencies shown in the sketch. " + base_prompt
+                "The attached image is a floor-plan sketch, draft plan, or interior "
+                "reference. Redraw it as a clean, scaled 2D architectural floor plan, "
+                "preserving the room positions, proportions, and adjacencies shown — "
+                "and faithfully reproducing the furniture placement and any written "
+                "labels or design notes visible in the image. "
+                + inventory_clause
+                + base_prompt
             )
             parts = [
                 {"inline_data": {"mime_type": mime_type, "data": sketch_image_base64}},
@@ -722,7 +881,9 @@ class InteriorDesignService:
             "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {
                 "responseModalities": ["TEXT", "IMAGE"],
-                "temperature": 0.6,
+                # 0.6→0.45: drafting precision; with the read-then-draw
+                # inventory pinned in the prompt, lower temp = less invention.
+                "temperature": 0.45,
             },
         }
         return await self._generate_image(request_body, "floorplan")

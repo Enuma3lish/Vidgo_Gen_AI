@@ -3,13 +3,17 @@
  * SketchToRender — sketch → photorealistic render (mnml.ai/app/sketch2img parity).
  *
  * Pipeline reuses /api/v1/tools/room-redesign (Flux Kontext image-to-image),
- * which already accepts sketches/line-drawings/plans as input. The user picks
- * whether the sketch is interior or exterior so the matching style catalog
- * (INTERIOR_STYLES / EXTERIOR_STYLES) backs the style picker, plus a free-text
- * prompt that drives the render via 'magic' mode. Dedicated single-purpose
- * page per the owner directive (one topic per page).
+ * which already accepts sketches/line-drawings/plans as input.
+ *
+ * 2026-06-12 — interior and exterior are now SEPARATE PAGES (owner directive:
+ * never mix interior and exterior on one page). This component is rendered by
+ * two routes that pin the `spaceKind` prop:
+ *   /tools/sketch-to-render-interior → spaceKind='interior' (INTERIOR_STYLES)
+ *   /tools/sketch-to-render-exterior → spaceKind='exterior' (EXTERIOR_STYLES)
+ * The old combined /tools/sketch-to-render route redirects to the exterior
+ * page (its previous default). The in-page toggle was removed.
  */
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
@@ -34,7 +38,11 @@ const { isDemoUser } = useDemoMode()
 const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
 type SpaceKind = 'interior' | 'exterior'
-const spaceKind = ref<SpaceKind>('exterior')
+// Pinned per route — see the route entries in router/index.ts.
+const props = withDefaults(defineProps<{ spaceKind?: SpaceKind }>(), { spaceKind: 'exterior' })
+const spaceKind = computed<SpaceKind>(() => (props.spaceKind === 'interior' ? 'interior' : 'exterior'))
+const isInterior = computed(() => spaceKind.value === 'interior')
+
 const imageInput = ref<string | undefined>(undefined)
 const selectedStyle = ref<string>('')
 const customPrompt = ref<string>('')
@@ -45,19 +53,16 @@ const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
 interface StyleCard { id: string; name: string; name_zh: string }
-const styles = ref<Record<SpaceKind, StyleCard[]>>({ interior: [], exterior: [] })
+const styles = ref<StyleCard[]>([])
 
-async function loadStyles(kind: SpaceKind) {
-  if (styles.value[kind].length > 0) return
+onMounted(async () => {
   try {
-    const resp = await apiClient.get(`/api/v1/tools/templates/interior-styles?space_kind=${kind}`)
-    styles.value[kind] = (resp.data || []) as StyleCard[]
+    const resp = await apiClient.get(`/api/v1/tools/templates/interior-styles?space_kind=${spaceKind.value}`)
+    styles.value = (resp.data || []) as StyleCard[]
   } catch (e) {
-    console.warn(`[sketch-to-render] failed to load ${kind} styles:`, e)
+    console.warn(`[sketch-to-render] failed to load ${spaceKind.value} styles:`, e)
   }
-}
-watch(spaceKind, (k) => { selectedStyle.value = ''; loadStyles(k) })
-onMounted(() => { loadStyles('exterior'); loadStyles('interior') })
+})
 
 const disabled = computed(() => !imageInput.value || !selectedStyle.value)
 const creditCost = computed(() => 20)
@@ -110,18 +115,34 @@ async function generate() {
 }
 
 function gotoPricing() { router.push('/pricing') }
+
+// Page copy varies with the pinned space kind.
+const pageTitle = computed(() => isInterior.value
+  ? L('草圖轉渲染（室內）', 'Sketch to Render — Interior', 'スケッチからレンダー（室内）', '스케치 → 렌더 (실내)', 'Boceto a render — Interior')
+  : L('草圖轉渲染（建築外觀）', 'Sketch to Render — Exterior', 'スケッチからレンダー（外観）', '스케치 → 렌더 (외관)', 'Boceto a render — Exterior'))
+const pageSubtitle = computed(() => isInterior.value
+  ? L(
+      '上傳室內空間的手繪草圖或線稿，AI 將其轉換為寫實室內渲染。',
+      'Upload a hand-drawn interior sketch or line drawing and AI turns it into a photorealistic interior render.',
+      '室内の手描きスケッチや線画をアップロードすると、AIがリアルな室内レンダーに変換します。',
+      '실내 손그림 스케치나 선화를 올리면 AI가 사실적인 실내 렌더로 변환합니다.',
+      'Sube un boceto de interior y la IA lo convierte en un render interior realista.')
+  : L(
+      '上傳建築外觀的手繪草圖或線稿，AI 將其轉換為寫實建築渲染。',
+      'Upload a hand-drawn exterior sketch or line drawing and AI turns it into a photorealistic architectural render.',
+      '建物外観の手描きスケッチや線画をアップロードすると、AIがリアルな建築レンダーに変換します。',
+      '건물 외관 손그림 스케치나 선화를 올리면 AI가 사실적인 건축 렌더로 변환합니다.',
+      'Sube un boceto de exterior y la IA lo convierte en un render arquitectónico realista.'))
+const promptPlaceholder = computed(() => isInterior.value
+  ? L('例：北歐風客廳，淺色木地板，大面採光，亞麻沙發。', 'e.g. Scandinavian living room, pale wood floor, large windows, linen sofa.', '例：北欧風リビング、明るい木の床、大きな窓。', '예: 북유럽풍 거실, 밝은 원목 바닥, 큰 창.', 'Ej: salón escandinavo, suelo de madera clara, ventanales.')
+  : L('例：玻璃帷幕現代住宅，午後日光，周圍綠意。', 'e.g. modern glass-facade house, afternoon daylight, surrounding greenery.', '例：ガラスファサードの現代住宅、午後の光、緑。', '예: 유리 외벽 현대 주택, 오후 햇살, 주변 녹지.', 'Ej: casa moderna con fachada de vidrio, luz de tarde, vegetación.'))
 </script>
 
 <template>
   <PiapiPlayground
     :eta-seconds="60"
-    :title="L('草圖轉渲染', 'Sketch to Render', 'スケッチからレンダー', '스케치 → 렌더', 'Boceto a render')"
-    :subtitle="L(
-      '上傳手繪草圖或線稿，AI 將其轉換為寫實建築渲染。',
-      'Upload a hand-drawn sketch or line drawing and AI turns it into a photorealistic architectural render.',
-      '手描きスケッチや線画をアップロードすると、AIがリアルな建築レンダーに変換します。',
-      '손그림 스케치나 선화를 올리면 AI가 사실적인 건축 렌더로 변환합니다.',
-      'Sube un boceto o dibujo lineal y la IA lo convierte en un render arquitectónico realista.')"
+    :title="pageTitle"
+    :subtitle="pageSubtitle"
     :status="status"
     :status-text="statusText"
     :credit-cost="creditCost"
@@ -134,19 +155,18 @@ function gotoPricing() { router.push('/pricing') }
     @generate="generate"
   >
     <template #inputs>
-      <div>
-        <label class="pp-field-label">{{ L('草圖類型', 'Sketch Type', 'スケッチタイプ', '스케치 유형', 'Tipo de boceto') }}</label>
-        <div class="grid grid-cols-2 gap-1.5">
-          <button v-for="opt in [
-              { id: 'exterior' as const, label: L('建築外觀', 'Exterior', '外観', '외관', 'Exterior') },
-              { id: 'interior' as const, label: L('室內空間', 'Interior', '室内', '실내', 'Interior') },
-            ]" :key="opt.id" type="button" @click="spaceKind = opt.id"
-            class="py-2 rounded-lg text-xs font-medium transition-colors"
-            :style="spaceKind === opt.id
-              ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
-              : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
-          >{{ opt.label }}</button>
-        </div>
+      <!-- Cross-link to the sibling page — interior and exterior are
+           dedicated pages now, never a same-page toggle. -->
+      <div class="flex flex-wrap gap-1.5">
+        <RouterLink
+          :to="isInterior ? '/tools/sketch-to-render-exterior' : '/tools/sketch-to-render-interior'"
+          class="text-[11px] px-2.5 py-1 rounded-full"
+          style="background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);"
+        >
+          {{ isInterior
+            ? '🏛️ ' + L('要畫建築外觀？前往外觀版 →', 'Exterior sketch? Go to the exterior tool →', '外観スケッチはこちら →', '외관 스케치는 여기로 →', '¿Boceto exterior? Ir a la herramienta exterior →')
+            : '🛋️ ' + L('要畫室內空間？前往室內版 →', 'Interior sketch? Go to the interior tool →', '室内スケッチはこちら →', '실내 스케치는 여기로 →', '¿Boceto interior? Ir a la herramienta interior →') }}
+        </RouterLink>
       </div>
 
       <div>
@@ -160,17 +180,17 @@ function gotoPricing() { router.push('/pricing') }
       </div>
 
       <div>
-        <label class="pp-field-label">{{ L('目標風格 *', 'Target Style *', 'スタイル *', '스타일 *', 'Estilo *') }} <span style="color:#6b6b7a">({{ styles[spaceKind].length }})</span></label>
+        <label class="pp-field-label">{{ L('目標風格 *', 'Target Style *', 'スタイル *', '스타일 *', 'Estilo *') }} <span style="color:#6b6b7a">({{ styles.length }})</span></label>
         <select v-model="selectedStyle" class="pp-select">
           <option value="">{{ L('— 請選擇 —', '— Select —', '— 選択 —', '— 선택 —', '— Seleccionar —') }}</option>
-          <option v-for="s in styles[spaceKind]" :key="s.id" :value="s.id">{{ isZh ? s.name_zh : s.name }}</option>
+          <option v-for="s in styles" :key="s.id" :value="s.id">{{ isZh ? s.name_zh : s.name }}</option>
         </select>
       </div>
 
       <div>
         <label class="pp-field-label">{{ L('補充描述（選填）', 'Description (optional)', '説明（任意）', '설명 (선택)', 'Descripción (opcional)') }}</label>
         <textarea v-model="customPrompt" rows="3" maxlength="2000"
-          :placeholder="L('例：玻璃帷幕現代住宅，午後日光，周圍綠意。', 'e.g. modern glass-facade house, afternoon daylight, surrounding greenery.', '例：ガラスファサードの現代住宅、午後の光、緑。', '예: 유리 외벽 현대 주택, 오후 햇살, 주변 녹지.', 'Ej: casa moderna con fachada de vidrio, luz de tarde, vegetación.')"
+          :placeholder="promptPlaceholder"
           class="pp-select" style="resize:vertical;"></textarea>
         <p class="pp-field-help">{{ L('風格決定整體外觀；描述用來補充材質、光線或周圍環境等細節（選填）。', 'The style sets the overall look; the description adds details like materials, lighting, or surroundings (optional).', 'スタイルが全体の見た目を決め、説明は素材・光・周辺などの詳細を補います（任意）。', '스타일이 전체 느낌을 정하고, 설명은 재질·조명·주변 등 세부를 더합니다(선택).', 'El estilo define el aspecto; la descripción añade materiales, iluminación o entorno (opcional).') }}</p>
       </div>

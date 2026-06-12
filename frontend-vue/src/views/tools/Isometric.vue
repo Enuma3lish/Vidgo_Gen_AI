@@ -12,8 +12,9 @@ import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useLocalized } from '@/composables'
 import { toolsApi } from '@/api'
-import { interiorApi, type DesignStyle, type RoomType } from '@/api/interior'
+import { interiorApi, type DesignStyle, type RoomType, type InteriorLightingTone, type InteriorMaterialAccent } from '@/api/interior'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
+import AtmosphereControls from '@/components/tools/AtmosphereControls.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
@@ -33,6 +34,11 @@ const imageInput = ref<string | undefined>(undefined)
 const styleId = ref('')
 const roomType = ref('')
 const customPrompt = ref('')
+// Atmosphere fine-tune knobs (lighting / color temperature / material) —
+// let the user dial in mood without touching the locked geometry.
+const lightingTone = ref<'' | InteriorLightingTone>('')
+const colorTemperature = ref(0) // 0 = auto
+const materialAccent = ref<'' | InteriorMaterialAccent>('')
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
@@ -76,6 +82,9 @@ async function generate() {
       room_type: roomType.value || undefined,
       prompt: customPrompt.value.trim() || undefined,
       language: isZh.value ? 'zh' : 'en',
+      lighting_tone: lightingTone.value || undefined,
+      color_temperature: colorTemperature.value > 0 ? colorTemperature.value : undefined,
+      material_accent: materialAccent.value || undefined,
     })
     if (handleCardRequired(result, uiStore, router, isZh.value)) {
       status.value = 'idle'; statusText.value = ''; return
@@ -143,6 +152,12 @@ async function generate() {
           <option v-for="r in roomTypes" :key="r.id" :value="r.id">{{ label(r) }}</option>
         </select>
       </div>
+
+      <AtmosphereControls
+        v-model:lighting-tone="lightingTone"
+        v-model:color-temperature="colorTemperature"
+        v-model:material-accent="materialAccent"
+      />
 
       <div>
         <label class="pp-field-label">{{ L('補充描述（選填）', 'Description (optional)', '説明（任意）', '설명 (선택)', 'Descripción (opcional)') }}</label>

@@ -101,6 +101,8 @@
         "exteriorAi": "建築外觀 AI 設計",
         "commercialSpace": "商業空間設計",
         "sketchToRender": "草圖轉渲染",
+        "sketchToRenderExterior": "草圖轉渲染（建築外觀）",
+        "sketchToRenderInterior": "草圖轉渲染（室內）",
         "renderEnhancer": "渲染圖優化放大",
         "videoBgRemove": "影片去背",
         "claymation": "黏土風生成",

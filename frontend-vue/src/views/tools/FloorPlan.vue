@@ -108,8 +108,8 @@ async function generate() {
     :eta-seconds="45"
     :title="L('平面配置圖', 'Floor Plan', '間取り図', '평면 배치도', 'Plano de planta')"
     :subtitle="L(
-      '輸入空間需求或上傳手繪草圖,AI 產生乾淨的 2D 平面配置圖。',
-      'Type your space requirements or upload a sketch — AI produces a clean 2D floor plan.',
+      '輸入空間需求或上傳手繪草圖,AI 產生完整全室的 2D 平面配置圖 — 客廳、餐廳、廚房、臥室、衛浴等所有空間與家具配置一次到位。',
+      'Type your space requirements or upload a sketch — AI produces a clean whole-unit 2D floor plan covering every room with its furniture layout.',
       '空間の要件を入力するかスケッチをアップロードすると、AIがクリーンな2D間取り図を生成します。',
       '공간 요구사항을 입력하거나 스케치를 올리면 AI가 깔끔한 2D 평면도를 생성합니다.',
       'Escribe los requisitos del espacio o sube un boceto; la IA genera un plano 2D limpio.')"

@@ -566,9 +566,16 @@ class InteriorDesignService:
 
         mime_type = "image/png" if floorplan_image_base64.startswith("iVBOR") else "image/jpeg"
 
+        # 2026-06-12 (owner): 立體圖 is a WHOLE-PLAN dollhouse — every room in
+        # the plan must appear, furnished per its function. The old single-room
+        # context ("residential living room 20-30 sqm with sofa...") made the
+        # model zoom into one room; room_type is now only a focus hint.
         room_hint = ""
         if room_type and room_type in ROOM_TYPES:
-            room_hint = f"The primary room type is: {ROOM_TYPES[room_type]['context']}. "
+            room_hint = (
+                f"Give extra design attention to the {ROOM_TYPES[room_type]['name']}, "
+                "but still render EVERY room shown in the plan. "
+            )
 
         style_hint = ""
         if style_id and style_id in DESIGN_STYLES:
@@ -586,7 +593,10 @@ class InteriorDesignService:
             "THEN generate a single photorealistic isometric (45-degree bird's-eye) "
             "interior visualization that faithfully reflects exactly what you read. "
             "STRICT anti-hallucination rules: match the EXACT room count, wall layout, "
-            "and the number and placement of doors and windows shown in the plan. Place "
+            "and the number and placement of doors and windows shown in the plan. Show "
+            "the WHOLE unit — every room in the plan must appear in the view, furnished "
+            "according to its function (living room, dining, kitchen, bedrooms, "
+            "bathrooms), so the unit reads as one coherent home. Place "
             "each piece of furniture in the SAME room and the SAME position as its symbol "
             "in the plan — do NOT add furniture that is not drawn, do NOT remove or "
             "relocate drawn furniture. Do NOT add or remove rooms, walls, doors or "
@@ -823,18 +833,31 @@ class InteriorDesignService:
             except Exception as exc:
                 return {"success": False, "error": f"Failed to fetch sketch image: {exc}"}
 
+        # 2026-06-12 (owner): 平面配置圖 is the WHOLE-UNIT furniture/layout
+        # plan an interior designer delivers — every functional area on one
+        # drawing, used to review 動線. The previous single-room context
+        # (ROOM_TYPES[..]["context"] = "residential living room 20-30 sqm
+        # with sofa...") biased output to ONE room type; use the room-type
+        # name only as a unit hint instead.
         room_hint = ""
-        if room_type and room_type in ROOM_TYPES:
-            room_hint = f"The primary space is a {ROOM_TYPES[room_type]['context']}. "
+        if room_type:
+            rt = ROOM_TYPES.get(room_type)
+            label = rt["name"] if rt else str(room_type)
+            room_hint = f"Unit / space type: {label}. "
         dim_hint = f"Overall dimensions: {dimensions}. " if dimensions else ""
 
         base_prompt = (
-            "Generate a clean, professional 2D architectural floor-plan drawing — a "
-            "top-down orthographic blueprint view. Draw walls as solid black double "
+            "Generate a clean, professional 2D architectural floor-plan drawing of "
+            "the COMPLETE unit — a top-down orthographic blueprint covering ALL "
+            "functional areas in the brief (living room, dining area, kitchen, every "
+            "bedroom, bathrooms, study, balcony, storage as applicable). Never reduce "
+            "the output to a single room unless the requirements explicitly describe "
+            "only one room. Draw walls as solid black double "
             "lines, doors as quarter-circle door swings, and windows as gaps with sill "
             "lines. Label each room with its name. Include furniture footprints (bed, "
             "sofa, dining table, kitchen counters, fixtures) drawn as simple top-down "
-            "icons. Use a white background, crisp black linework, light room fills, and "
+            "icons in EVERY room, matching each room's function. Use a white "
+            "background, crisp black linework, light room fills, and "
             "thin dimension lines. This must be a flat scaled floor plan — NOT a 3D "
             "render, NOT a perspective view, NOT photorealistic. "
             "Include only the rooms and spaces described; do not invent extra rooms, "

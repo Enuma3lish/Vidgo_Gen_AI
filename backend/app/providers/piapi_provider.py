@@ -1122,12 +1122,18 @@ class PiAPIProvider(BaseProvider):
         # the user a different-looking video from a different model — the main
         # cause of "I2V result is inconsistent run-to-run". attempts=2 bounds
         # the worst case to a single retry (a full-timeout retry is expensive).
+        # Bounded internal fallback legs (_max_wait_override, e.g. the avatar
+        # presenter fallback) must NOT retry a full-timeout attempt — that
+        # doubles the leg's wall clock and blows the parent chain's budget
+        # (2026-06-12: avatar fallback spent 2×300 s here before the static
+        # fallback, pushing the whole chain past the client timeout).
+        _attempts = 1 if params.get("_max_wait_override") else 2
         result = await self._retry_transient(
             "image_to_video",
             lambda: self._submit_and_poll(
                 payload, max_wait_seconds=max_wait, on_submit=_on_submit_i2v,
             ),
-            attempts=2,
+            attempts=_attempts,
         )
 
         # Normalise the output shape — PiAPI is wildly inconsistent across

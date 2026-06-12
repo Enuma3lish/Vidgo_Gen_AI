@@ -82,7 +82,20 @@ KLING_OMNI_TIMEOUT_SEC = int(os.getenv("KLING_OMNI_TIMEOUT_SEC", "1800"))
 
 def _video_poll_timeout(params: Dict[str, Any], floor: int = VIDEO_GEN_TIMEOUT_SEC) -> int:
     """Resolve a video job's poll timeout: the larger of the caller's explicit
-    ``timeout`` and the video floor. Guarantees video ≥ floor > image (600 s)."""
+    ``timeout`` and the video floor. Guarantees video ≥ floor > image (600 s).
+
+    ``_max_wait_override`` bypasses the floor — for INTERNAL fallback legs
+    only (e.g. the avatar presenter-I2V fallback), where the whole multi-step
+    chain must finish inside the client's HTTP timeout. 2026-06-12: a stuck
+    Seedance fallback polled the full 1200 s floor while the browser gave up
+    at 15 min total, so the user saw a connection abort with no error body.
+    """
+    override = params.get("_max_wait_override")
+    if override:
+        try:
+            return max(60, int(override))
+        except (TypeError, ValueError):
+            pass
     try:
         requested = int(params.get("timeout") or 0)
     except (TypeError, ValueError):
@@ -413,12 +426,22 @@ class PiAPIProvider(BaseProvider):
                 "prompt": presenter_prompt,
                 "duration": 5,
                 "resolution": "720P",
+                # Bound this fallback leg well below the 1200 s video floor:
+                # the avatar chain (Kling fail ~2 min + this + lip-sync +
+                # static render) must finish inside the frontend's 15-min
+                # request timeout or the user sees a bodyless abort.
+                "_max_wait_override": 300,
             })
         except Exception as e:
             logger.warning("[PiAPI] Avatar: presenter image-to-video fallback raised: %s", e)
+            logger.warning("[PiAPI] Avatar: falling back to static portrait+speech MP4")
             return await self._render_static_avatar_video(image_url, audio_url)
 
         if not base_video.get("success"):
+            logger.warning(
+                "[PiAPI] Avatar: presenter I2V fallback failed (%s); falling back to static portrait+speech MP4",
+                base_video.get("error"),
+            )
             return await self._render_static_avatar_video(image_url, audio_url)
 
         output = base_video.get("output") or {}
@@ -445,7 +468,9 @@ class PiAPIProvider(BaseProvider):
         }
         logger.warning("[PiAPI] Avatar: trying lip-sync fallback on generated presenter video")
         try:
-            lip_sync = await self._submit_and_poll(lip_sync_payload)
+            # Bounded like the I2V leg above — keep the total chain inside
+            # the client's request timeout.
+            lip_sync = await self._submit_and_poll(lip_sync_payload, max_wait_seconds=300)
         except Exception as e:
             logger.warning("[PiAPI] Avatar: lip-sync fallback raised, returning presenter video: %s", e)
             base_video.setdefault("output", output)

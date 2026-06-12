@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     CORS_ALLOW_ALL: bool = True  # Allow all origins (safe for GCP Cloud Run where URLs are dynamic)
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501", "http://localhost:4173", "https://vidgo.co", "https://www.vidgo.co"]
 
+    # Anthropic Claude API — used by lead_gen script generator
+    ANTHROPIC_API_KEY: str = ""  # get from console.anthropic.com
+
     # AI Services - Provider Configuration (MCP-based)
     # Primary video + image/specialized: PiAPI MCP
     PIAPI_KEY: str = ""

@@ -16,8 +16,9 @@ import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useLocalized } from '@/composables'
 import { toolsApi } from '@/api'
-import { interiorApi, type FloorplanTier, type GrowthTier } from '@/api/interior'
+import { interiorApi, type FloorplanTier, type GrowthTier, type InteriorLightingTone, type InteriorMaterialAccent } from '@/api/interior'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
+import AtmosphereControls from '@/components/tools/AtmosphereControls.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import ThreeViewer from '@/components/tools/ThreeViewer.vue'
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
@@ -42,6 +43,11 @@ const preserveOriginal = computed(() => renderMode.value === 'preserve')
 // 結構控制 sliders (only used in 保留結構 mode).
 const structuralFidelity = ref(70)
 const styleStrength = ref(60)
+// Atmosphere fine-tune knobs (lighting / color temperature / material) —
+// applied in every tier and both render modes; never structural.
+const lightingTone = ref<'' | InteriorLightingTone>('')
+const colorTemperature = ref(0) // 0 = auto
+const materialAccent = ref<'' | InteriorMaterialAccent>('')
 const prompt = ref('')
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
@@ -121,6 +127,9 @@ async function generate() {
       preserve_original: preserveOriginal.value,
       structural_fidelity: structuralFidelity.value,
       style_strength: styleStrength.value,
+      lighting_tone: lightingTone.value || undefined,
+      color_temperature: colorTemperature.value > 0 ? colorTemperature.value : undefined,
+      material_accent: materialAccent.value || undefined,
       language: isZh.value ? 'zh' : 'en',
     })
 
@@ -264,6 +273,13 @@ const hasResult = computed(() => (isVideoTier.value ? !!videoUrl.value : !!rende
           <option v-for="r in roomTypes" :key="r.id" :value="r.id">{{ styleLabel(r) }}</option>
         </select>
       </div>
+
+      <!-- 細部調整：光線 / 色溫 / 材質 (designer request 2026-06-12) -->
+      <AtmosphereControls
+        v-model:lighting-tone="lightingTone"
+        v-model:color-temperature="colorTemperature"
+        v-model:material-accent="materialAccent"
+      />
 
       <div>
         <label class="pp-field-label">{{ L('補充描述（選填）', 'Extra description (optional)', '追加説明（任意）', '추가 설명 (선택)', 'Descripción extra (opcional)') }}</label>

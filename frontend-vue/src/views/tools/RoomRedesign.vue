@@ -330,8 +330,8 @@ onMounted(async () => {
             <RouterLink to="/tools/commercial-space" class="text-[11px] px-2.5 py-1 rounded-full" style="background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);">
               🏪 {{ L('商業空間', 'Commercial', '商業空間', '상업 공간', 'Comercial') }}
             </RouterLink>
-            <RouterLink to="/tools/sketch-to-render" class="text-[11px] px-2.5 py-1 rounded-full" style="background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);">
-              ✏️ {{ L('草圖轉渲染', 'Sketch', 'スケッチ', '스케치', 'Boceto') }}
+            <RouterLink to="/tools/sketch-to-render-interior" class="text-[11px] px-2.5 py-1 rounded-full" style="background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);">
+              ✏️ {{ L('草圖轉渲染（室內）', 'Interior Sketch', '室内スケッチ', '실내 스케치', 'Boceto interior') }}
             </RouterLink>
           </div>
 

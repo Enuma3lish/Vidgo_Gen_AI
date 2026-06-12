@@ -101,6 +101,8 @@
         "exteriorAi": "Exterior AI",
         "commercialSpace": "Commercial Space",
         "sketchToRender": "Sketch to Render",
+        "sketchToRenderExterior": "Sketch to Render (Exterior)",
+        "sketchToRenderInterior": "Sketch to Render (Interior)",
         "renderEnhancer": "Render Enhancer",
         "videoBgRemove": "Video BG Remove",
         "claymation": "Claymation AI",

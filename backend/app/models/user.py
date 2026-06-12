@@ -74,6 +74,12 @@ class User(Base):
     default_carrier_type = Column(String(20), nullable=True)  # mobile_barcode, citizen_cert, email
     default_carrier_number = Column(String(64), nullable=True)
     default_love_code = Column(String(7), nullable=True)  # 愛心碼 for donation
+    # 2026-06-12 — explicit invoice mode (發票設定): 'carrier' | 'donation' | 'b2b'.
+    # Drives auto_issue_invoice after each payment. NULL = legacy inference
+    # (carrier fields → carrier, love code → donation, else email fallback).
+    default_invoice_mode = Column(String(10), nullable=True)
+    default_buyer_tax_id = Column(String(8), nullable=True)          # 統一編號 (B2B)
+    default_buyer_company_name = Column(String(100), nullable=True)  # 公司抬頭 (B2B)
 
     # Cancellation / Work Retention
     subscription_cancelled_at = Column(DateTime(timezone=True), nullable=True)

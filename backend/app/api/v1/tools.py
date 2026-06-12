@@ -2482,21 +2482,41 @@ async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> di
 # Tool 3: AI Try-On
 # ============================================================================
 
-@router.post("/try-on", response_model=ToolResponse)
+@router.post("/try-on")
 async def ai_try_on(
     request: TryOnRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional)
 ):
     """
-    Virtual try-on - place garment on model.
+    Virtual try-on — place garment on model (or prompt-mode outfit edit).
+
+    2026-06-12: wrapped in the 25 s keep-alive heartbeat stream. Kling
+    Try-On takes 1-5+ minutes; this endpoint previously returned plain
+    JSON, so Cloudflare cut the idle connection at ~100 s and the browser
+    reported a network failure even though the backend finished (and
+    charged credits). Same fix every other long tool already has.
 
     USER TIER LOGIC:
     - Demo users: Return pre-generated result from Material DB
     - Subscribers: Real-time try-on generation + save to UserGeneration
 
-    Credits: 15 per generation
+    Credits: 30 per generation
     """
+    async def _do_try_on() -> Dict[str, Any]:
+        result = await _try_on_inner(request, db, current_user)
+        return result.model_dump() if hasattr(result, "model_dump") else result
+
+    return _stream_with_heartbeat(_do_try_on)
+
+
+async def _try_on_inner(
+    request: "TryOnRequest",
+    db: AsyncSession,
+    current_user,
+) -> ToolResponse:
+    """Actual try-on logic — split from the route handler so it can run
+    inside the chunked heartbeat stream (see ``_stream_with_heartbeat``)."""
     # Mode validation up front so the rest of the flow can assume invariants.
     if request.mode == "prompt":
         if not (request.prompt and request.prompt.strip()):

@@ -57,42 +57,44 @@ export const toolHubTiles: ToolHubTile[] = [
   { id: 'video-generator',     labelKey: 'tools.hub.tiles.videoGenerator',     to: '/tools/kling-video',            thumb: `${T}/video-generator.png`,     category: 'advertising' },
   // Row 6 — interior tools (added 2026-05-24 after QA flagged that the
   // tool-hub dropdown was missing room redesign / interior templates
-  // entirely). Thumbnails reuse hub assets that visually match.
-  { id: 'room-redesign',       labelKey: 'tools.hub.tiles.roomRedesign',       to: '/tools/room-redesign',          thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
-  { id: 'interior-templates',  labelKey: 'tools.hub.tiles.interiorTemplates',  to: '/tools/interior-templates',     thumb: `${T}/product-photography.png`, category: 'interior'    },
+  // entirely). 2026-06-12: every interior tile now has its own dedicated
+  // thumbnail (owner flagged the placeholder reuse as confusing duplicates) —
+  // generated via backend/scripts/generate_brand_assets.py, filename = tile id.
+  { id: 'room-redesign',       labelKey: 'tools.hub.tiles.roomRedesign',       to: '/tools/room-redesign',          thumb: `${T}/room-redesign.png`,       category: 'interior'    },
+  { id: 'interior-templates',  labelKey: 'tools.hub.tiles.interiorTemplates',  to: '/tools/interior-templates',     thumb: `${T}/interior-templates.png`,  category: 'interior'    },
   // 2026-06-11 — interior design workflow: 平面配置圖 / 立體圖 / 3D 效果圖.
   // The standalone floorplan-to-video tile was removed; its growth video is now
   // an output option inside 3D 效果圖 (/tools/render-3d).
-  { id: 'floor-plan',          labelKey: 'tools.hub.tiles.floorPlan',          to: '/tools/floor-plan',             thumb: `${T}/edit-with-ai.png`,        category: 'interior'    },
-  { id: 'isometric',           labelKey: 'tools.hub.tiles.isometric',          to: '/tools/isometric',              thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
-  { id: 'render-3d',           labelKey: 'tools.hub.tiles.render3d',           to: '/tools/render-3d',              thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
+  { id: 'floor-plan',          labelKey: 'tools.hub.tiles.floorPlan',          to: '/tools/floor-plan',             thumb: `${T}/floor-plan.png`,          category: 'interior'    },
+  { id: 'isometric',           labelKey: 'tools.hub.tiles.isometric',          to: '/tools/isometric',              thumb: `${T}/isometric.png`,           category: 'interior'    },
+  { id: 'render-3d',           labelKey: 'tools.hub.tiles.render3d',           to: '/tools/render-3d',              thumb: `${T}/render-3d.png`,           category: 'interior'    },
   // 2026-06-03 — exterior/render-enhancer/sketch tools added after the owner
   // asked to mirror mnml.ai's exterior-ai / render-enhancer / sketch2img and
   // broaden the group to cover indoor + outdoor (室內室外設計). Each is its own
   // dedicated page; all reuse existing endpoints (room-redesign / upscale).
-  { id: 'exterior-ai',         labelKey: 'tools.hub.tiles.exteriorAi',         to: '/tools/exterior-ai',            thumb: `${T}/three-d-illustration.png`,category: 'interior'    },
-  { id: 'commercial-space',    labelKey: 'tools.hub.tiles.commercialSpace',    to: '/tools/commercial-space',       thumb: `${T}/product-photography.png`, category: 'interior'    },
-  { id: 'sketch-to-render',    labelKey: 'tools.hub.tiles.sketchToRender',     to: '/tools/sketch-to-render',       thumb: `${T}/edit-with-ai.png`,        category: 'interior'    },
-  { id: 'render-enhancer',     labelKey: 'tools.hub.tiles.renderEnhancer',     to: '/tools/render-enhancer',        thumb: `${T}/product-beautifier.png`,  category: 'interior'    },
+  { id: 'exterior-ai',         labelKey: 'tools.hub.tiles.exteriorAi',         to: '/tools/exterior-ai',            thumb: `${T}/exterior-ai.png`,         category: 'interior'    },
+  { id: 'commercial-space',    labelKey: 'tools.hub.tiles.commercialSpace',    to: '/tools/commercial-space',       thumb: `${T}/commercial-space.png`,    category: 'interior'    },
+  // 2026-06-12 — sketch-to-render split into dedicated exterior + interior
+  // pages (owner directive: never mix interior and exterior on one page).
+  { id: 'sketch-to-render-exterior', labelKey: 'tools.hub.tiles.sketchToRenderExterior', to: '/tools/sketch-to-render-exterior', thumb: `${T}/sketch-to-render-exterior.png`, category: 'interior' },
+  { id: 'sketch-to-render-interior', labelKey: 'tools.hub.tiles.sketchToRenderInterior', to: '/tools/sketch-to-render-interior', thumb: `${T}/sketch-to-render-interior.png`, category: 'interior' },
+  { id: 'render-enhancer',     labelKey: 'tools.hub.tiles.renderEnhancer',     to: '/tools/render-enhancer',        thumb: `${T}/render-enhancer.png`,     category: 'interior'    },
   // Row 7 — NEW Qubico-backed tools added 2026-05-24 after the stability
   // probe. Only video-background-remove was healthy; sibling video tools
   // upscale + watermark-remove dropped because they timed out or 404'd.
-  { id: 'video-bg-remove',     labelKey: 'tools.hub.tiles.videoBgRemove',      to: '/tools/video-bg-remove',        thumb: `${T}/background.png`,          category: 'other'       },
+  { id: 'video-bg-remove',     labelKey: 'tools.hub.tiles.videoBgRemove',      to: '/tools/video-bg-remove',        thumb: `${T}/video-bg-remove.png`,     category: 'other'       },
   // Row 8 — multi-mode generative tool added 2026-05-24 mirroring
   // pippit/piapi's Claymation playground (Seedream + Kling + Seedance).
-  { id: 'claymation',          labelKey: 'tools.hub.tiles.claymation',         to: '/tools/claymation',             thumb: `${T}/edit-with-ai.png`,        category: 'other'       },
+  { id: 'claymation',          labelKey: 'tools.hub.tiles.claymation',         to: '/tools/claymation',             thumb: `${T}/claymation.png`,          category: 'other'       },
   // Row 9 — flagship video/voice tools that existed in the router but
   // were missing from the hub catalog (added 2026-05-26 after the
   // dead-routes audit). Without this, users had no path to /tools/avatar
   // from the hub page.
-  // TODO: replace thumb with dedicated asset when art is ready —
-  // virtual-model.png matches AI Avatar's "talking spokesperson" concept.
-  { id: 'ai-avatar',           labelKey: 'tools.hub.tiles.aiAvatar',           to: '/tools/avatar',                 thumb: `${T}/virtual-model.png`,       category: 'advertising' },
+  { id: 'ai-avatar',           labelKey: 'tools.hub.tiles.aiAvatar',           to: '/tools/avatar',                 thumb: `${T}/ai-avatar.png`,           category: 'advertising' },
   // 2026-06-09 — Sora 2 Pro flagship video (PiAPI primary, Pollo backup).
-  // Reuses video-generator thumb until a dedicated Sora 2 hero shot is shot;
-  // swap `thumb` when art lands. Category=advertising because the flagship
-  // 5-10s clips slot into the same promo workflow as Kling Omni / Veo.
-  { id: 'sora2-pro',           labelKey: 'tools.hub.tiles.sora2Pro',           to: '/tools/sora2-pro',              thumb: `${T}/video-generator.png`,     category: 'advertising' },
+  // Category=advertising because the flagship 5-10s clips slot into the same
+  // promo workflow as Kling Omni / Veo.
+  { id: 'sora2-pro',           labelKey: 'tools.hub.tiles.sora2Pro',           to: '/tools/sora2-pro',              thumb: `${T}/sora2-pro.png`,           category: 'advertising' },
 ]
 
 // Stable order of categories shown in the hub-view filter bar / header

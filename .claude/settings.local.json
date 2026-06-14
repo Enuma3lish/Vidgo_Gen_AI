@@ -502,7 +502,10 @@
       "Bash(echo \"  old same-URL map gone: $\\(grep -c \"map\\(\\(code\\) => \\({ hreflang: code, href: origin + path }\\)\\)\" frontend-vue/src/router/index.ts\\) \\(expect 0\\)\")",
       "Bash(awk '/^<template>/,0' /Users/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/src/views/Pricing.vue)",
       "Bash(awk 'NR>=1789 && NR<=1900 {print NR\": \"$0}' /Users/mlw/Desktop/Vidgo_Gen_AI/frontend-vue/src/locales/zh-TW.json)",
-      "Bash(awk NR>=1830 && NR<=1882 {print NR\": \"$0} *)"
+      "Bash(awk NR>=1830 && NR<=1882 {print NR\": \"$0} *)",
+      "Bash(docker pull *)",
+      "Bash(sed -n '1,6p')",
+      "Bash(sed -n '1130,1145p' backend/app/providers/piapi_provider.py)"
     ],
     "additionalDirectories": [
       "/private/tmp"

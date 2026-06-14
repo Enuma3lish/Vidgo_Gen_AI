@@ -2253,39 +2253,61 @@ async def generate_product_scene(
             context={"scene_type": request.scene_type, "template_id": request.template_id},
         )
 
-        # Single-step I2I edit (Flux Kontext via PiAPI). Kontext takes the
-        # product image as visual context and emits a new image where the
-        # product is preserved and only the background scene is rewritten.
-        logger.info("Kontext I2I: editing product into scene...")
-        i2i_params = {
+        # Single-step I2I edit. Primary: Nano Banana Pro (Gemini 2.5 Flash
+        # Image Pro via PiAPI) — best-in-class subject preservation for
+        # commercial product photography, 2K output. Falls back to Flux
+        # Kontext, then to the legacy 3-step composite if both are
+        # unavailable / rate-limited. Switched off raw Kontext on 2026-06-14
+        # because Kontext outputs were melting product silhouettes and
+        # hallucinating fake packaging text in real subscriber runs.
+        def _extract_url(r):
+            if not r or not r.get("success"):
+                return None
+            out = r.get("output") or {}
+            return (
+                out.get("image_url")
+                or r.get("image_url")
+                or r.get("output_url")
+            )
+
+        primary_params = {
             "image_url": product_url,
             "prompt": full_prompt,
-            "model": "flux_kontext",
+            "model": "nano-banana-pro",
             "width": 1024,
             "height": 768,
+            "aspect_ratio": "4:3",
+            "resolution": "2K",
         }
-        i2i_result = await provider_router.route(TaskType.I2I, i2i_params)
-
-        result_url: Optional[str] = None
+        logger.info("Nano Banana Pro I2I: editing product into scene...")
+        i2i_result = await provider_router.route(TaskType.I2I, primary_params)
+        result_url: Optional[str] = i2i_result and _extract_url(i2i_result)
+        pipeline_label = "nano_banana_pro_i2i"
         composite_fallback_used = False
-        if i2i_result.get("success"):
-            output = i2i_result.get("output") or {}
-            result_url = (
-                output.get("image_url")
-                or i2i_result.get("image_url")
-                or i2i_result.get("output_url")
-            )
 
-        # Defensive fallback: if Kontext is rate-limited or the active plan
-        # does not include it, fall back to the legacy 3-step composite so the
-        # subscriber still gets a deliverable instead of a refund spiral.
         if not result_url:
             logger.warning(
-                "Kontext I2I unavailable (%s) — falling back to legacy "
-                "rembg + T2I + composite pipeline.",
-                i2i_result.get("error"),
+                "Nano Banana Pro I2I unavailable (%s) — trying Flux Kontext.",
+                i2i_result.get("error") if i2i_result else "no_result",
             )
+            kontext_params = dict(primary_params, model="flux_kontext")
+            kontext_params.pop("aspect_ratio", None)
+            kontext_params.pop("resolution", None)
+            kontext_result = await provider_router.route(TaskType.I2I, kontext_params)
+            result_url = _extract_url(kontext_result)
+            if result_url:
+                pipeline_label = "kontext_i2i"
+            else:
+                logger.warning(
+                    "Flux Kontext I2I also unavailable (%s) — falling back to "
+                    "legacy rembg + T2I + composite pipeline.",
+                    kontext_result.get("error") if kontext_result else "no_result",
+                )
+                i2i_result = kontext_result  # for downstream error logging
+
+        if not result_url:
             composite_fallback_used = True
+            pipeline_label = "composite_fallback"
 
             # Step 1: Remove background
             rembg_result = await provider_router.route(
@@ -2339,7 +2361,7 @@ async def generate_product_scene(
                 "custom_prompt": request.custom_prompt,
                 "placement": request.placement,
                 "prompt_refinement": prompt_refinement,
-                "pipeline": "composite_fallback" if composite_fallback_used else "kontext_i2i",
+                "pipeline": pipeline_label,
             },
             input_text=full_prompt,
             result_image_url=result_url,

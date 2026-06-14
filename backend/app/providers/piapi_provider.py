@@ -103,6 +103,32 @@ def _video_poll_timeout(params: Dict[str, Any], floor: int = VIDEO_GEN_TIMEOUT_S
     return max(requested, floor)
 
 
+def _aspect_from_wh(width, height) -> str:
+    """Map (width, height) → PiAPI aspect_ratio string ("1:1", "4:3", "16:9", etc.)
+    used by Gemini-family tasks (nano-banana, seedream) that don't accept
+    raw pixel sizes. Snaps to the nearest catalogue ratio so callers can keep
+    passing the same width/height they use for Flux without code changes.
+    """
+    try:
+        w = float(width) if width else 0.0
+        h = float(height) if height else 0.0
+    except (TypeError, ValueError):
+        return "1:1"
+    if w <= 0 or h <= 0:
+        return "1:1"
+    ratio = w / h
+    candidates = {
+        "1:1": 1.0,
+        "4:3": 4 / 3,
+        "3:4": 3 / 4,
+        "16:9": 16 / 9,
+        "9:16": 9 / 16,
+        "3:2": 3 / 2,
+        "2:3": 2 / 3,
+    }
+    return min(candidates.items(), key=lambda kv: abs(kv[1] - ratio))[0]
+
+
 def _make_on_submit_wrapper(raw_on_submit, provider_name: str):
     """Adapt a caller's ``on_submit(task_id, provider_name)`` callback into
     the single-arg form ``_submit_and_poll`` expects. Returns None if the
@@ -739,9 +765,45 @@ class PiAPIProvider(BaseProvider):
         """
         self._log_request("image_to_image", params)
 
-        model = str(params.get("model") or "").strip()
+        model = str(params.get("model") or "").strip().lower()
         if model in {"wan_pro", "flux_kontext", "kontext", "pro"}:
             return await self.kontext_image(params)
+
+        # Nano Banana / Nano Banana Pro (Google Gemini 2.5 Flash Image via PiAPI)
+        # also accept an input image for context-preserving edits. Schema mirrors
+        # the T2I path but adds an `image_urls` array (PiAPI requires the plural
+        # field, not `image`). Stronger subject preservation than Kontext for
+        # commercial product placement; verified 2026-06-14.
+        if "nano-banana-pro" in model or "nano_banana_pro" in model:
+            aspect = params.get("aspect_ratio") or _aspect_from_wh(
+                params.get("width"), params.get("height")
+            )
+            payload = {
+                "model": PIAPI_MODELS["nano_banana_pro_model"],
+                "task_type": PIAPI_MODELS["nano_banana_pro_task"],
+                "input": {
+                    "prompt": params["prompt"],
+                    "image_urls": [self._resolve_image_url(params["image_url"])],
+                    "aspect_ratio": aspect,
+                    "resolution": params.get("resolution") or "2K",
+                },
+            }
+            return await self._submit_and_poll(payload)
+        if "nano-banana" in model or "nano_banana" in model or "nanobanana" in model:
+            aspect = params.get("aspect_ratio") or _aspect_from_wh(
+                params.get("width"), params.get("height")
+            )
+            payload = {
+                "model": PIAPI_MODELS["nano_banana_2_model"],
+                "task_type": PIAPI_MODELS["nano_banana_2_task"],
+                "input": {
+                    "prompt": params["prompt"],
+                    "image_urls": [self._resolve_image_url(params["image_url"])],
+                    "aspect_ratio": aspect,
+                    "resolution": params.get("resolution") or "1K",
+                },
+            }
+            return await self._submit_and_poll(payload)
 
         payload = {
             "model": PIAPI_MODELS["flux_i2i"],

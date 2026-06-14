@@ -817,6 +817,8 @@ class InteriorDesignService:
         room_type: Optional[str] = None,
         sketch_image_url: Optional[str] = None,
         sketch_image_base64: Optional[str] = None,
+        style_id: Optional[str] = None,
+        palette: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate a clean 2D architectural floor-plan drawing (平面配置圖).
@@ -826,8 +828,12 @@ class InteriorDesignService:
           - A hand sketch / rough plan image → redraw it as a clean scaled plan,
             preserving room positions and adjacencies.
 
+        Optional style_id / palette ship the plan in color, with furniture and
+        room fills tuned to the chosen interior style. Both blank → legacy
+        white-background blueprint look.
+
         Unlike render_from_floorplan() (which produces a 3D render FROM a plan),
-        this produces a flat top-down blueprint as the OUTPUT — so the prompt
+        this produces a flat top-down drawing as the OUTPUT — so the prompt
         explicitly forbids perspective / photorealism.
         """
         if sketch_image_url and not sketch_image_base64:
@@ -849,22 +855,56 @@ class InteriorDesignService:
             room_hint = f"Unit / space type: {label}. "
         dim_hint = f"Overall dimensions: {dimensions}. " if dimensions else ""
 
+        # 2026-06-14 (owner): colored top-down plan. Style picks the furniture
+        # vocabulary (Scandi pale oak vs. industrial dark steel etc.); palette
+        # picks the room-fill family. Both optional → legacy B/W blueprint.
+        style_color_hint = ""
+        if style_id and style_id in DESIGN_STYLES:
+            style_color_hint = (
+                f"Furniture icons and material fills should read in this interior "
+                f"design style: {DESIGN_STYLES[style_id]['name']} — "
+                f"{DESIGN_STYLES[style_id]['prompt_suffix']}. "
+            )
+
+        palette_clauses = {
+            "warm":    "Color palette — warm: cream walls (#F5EDD7), terracotta accents (#C6614F), oak wood floor fills (#B58A65), brass detailing.",
+            "cool":    "Color palette — cool: pale grey walls (#D8DEE6), dusty-blue accents (#5C7FA4), light grey-washed wood floor fills (#A8AEB1), brushed-steel detailing.",
+            "neutral": "Color palette — neutral: off-white walls (#EFEAE2), taupe accents (#B5A99A), pale oak floor fills (#CBB592), matte-black detailing.",
+            "vibrant": "Color palette — vibrant: bold accent rooms in deep emerald (#1E5A4C) and mustard (#D6A24A), rich walnut floor fills (#5C3E2A), brass detailing.",
+            "mono":    "Color palette — monochrome: soft white walls (#F2F2F2), charcoal accents (#3A3A3A), light grey floor fills (#C9C9C9), black hardware.",
+        }
+        palette_hint = palette_clauses.get(palette or "", "") if palette else ""
+
+        color_directive = (
+            "Render the plan IN COLOR using the palette above: fill each room with its "
+            "designated floor color, tint walls with the wall color, and color the "
+            "furniture icons to match the interior style. Wall lines remain crisp "
+            "dark double-lines for readability. Background outside the unit stays "
+            "white. "
+            if palette_hint or style_color_hint
+            else ""
+        )
+
         base_prompt = (
             "Generate a clean, professional 2D architectural floor-plan drawing of "
-            "the COMPLETE unit — a top-down orthographic blueprint covering ALL "
+            "the COMPLETE unit — a top-down orthographic plan covering ALL "
             "functional areas in the brief (living room, dining area, kitchen, every "
             "bedroom, bathrooms, study, balcony, storage as applicable). Never reduce "
             "the output to a single room unless the requirements explicitly describe "
-            "only one room. Draw walls as solid black double "
-            "lines, doors as quarter-circle door swings, and windows as gaps with sill "
-            "lines. Label each room with its name. Include furniture footprints (bed, "
-            "sofa, dining table, kitchen counters, fixtures) drawn as simple top-down "
-            "icons in EVERY room, matching each room's function. Use a white "
-            "background, crisp black linework, light room fills, and "
-            "thin dimension lines. This must be a flat scaled floor plan — NOT a 3D "
-            "render, NOT a perspective view, NOT photorealistic. "
-            "Include only the rooms and spaces described; do not invent extra rooms, "
-            "floors, or spaces beyond what is requested. "
+            "only one room. Draw walls as solid dark double lines, doors as "
+            "quarter-circle door swings, and windows as gaps with sill lines. Label "
+            "each room with its name. Include furniture footprints (bed, sofa, dining "
+            "table, kitchen counters, fixtures) drawn as simple top-down icons in "
+            "EVERY room, matching each room's function. Use thin dimension lines. "
+            "This must be a flat scaled top-down floor plan — NOT a 3D render, NOT a "
+            "perspective view, NOT photorealistic. "
+            "STRICT anti-hallucination: include ONLY the rooms, spaces, and furniture "
+            "described in the brief or extracted from the uploaded sketch. Do NOT "
+            "invent extra rooms, floors, levels, spaces, doors, windows, furniture, "
+            "decorative elements, exterior surroundings, or text/annotations beyond "
+            "what is asked. If the brief is short, keep the plan equally short — do "
+            "not pad it with assumed rooms. "
+            f"{style_color_hint}{palette_hint} {color_directive}"
             f"{room_hint}{dim_hint}{requirements}"
         ).strip()
 

@@ -9,13 +9,13 @@
  * Backend: POST /api/v1/interior/floorplan (Gemini 2.5 Flash Image).
  * service_type interior_floorplan (15 credits).
  */
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useLocalized } from '@/composables'
 import { toolsApi } from '@/api'
-import { interiorApi } from '@/api/interior'
+import { interiorApi, type DesignStyle, type FloorPlanPalette } from '@/api/interior'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -37,6 +37,18 @@ const roomType = ref('')
 const dimensions = ref('')
 const requirements = ref('')
 const sketchInput = ref<string | undefined>(undefined)
+
+// 2026-06-14 (owner): style + palette let the user ship a colored 2D plan
+// instead of the legacy B/W blueprint. Both default empty → backend falls
+// back to the line-only look.
+const styleId = ref('')
+const palette = ref<'' | FloorPlanPalette>('')
+const styles = ref<DesignStyle[]>([])
+onMounted(async () => {
+  try { styles.value = await interiorApi.getStyles() }
+  catch (e) { console.warn('[floor-plan] failed to load styles:', e) }
+})
+const styleLabel = (s: { name: string; name_zh: string }) => (isZh.value ? s.name_zh : s.name)
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
@@ -80,6 +92,8 @@ async function generate() {
       dimensions: mode.value === 'requirements' ? (dimensions.value.trim() || undefined) : undefined,
       requirements: mode.value === 'requirements' ? (requirements.value.trim() || undefined) : undefined,
       sketch_image_url: sketchUrl,
+      style_id: styleId.value || undefined,
+      palette: palette.value || undefined,
       language: isZh.value ? 'zh' : 'en',
     })
     if (handleCardRequired(result, uiStore, router, isZh.value)) {
@@ -124,6 +138,25 @@ async function generate() {
     @generate="generate"
   >
     <template #inputs>
+      <div>
+        <label class="pp-field-label">{{ L('設計風格（選填）', 'Design style (optional)', 'スタイル（任意）', '스타일 (선택)', 'Estilo (opcional)') }}</label>
+        <select v-model="styleId" class="pp-select">
+          <option value="">{{ L('— 不指定（線稿樣式）—', '— None (line-only plan) —', '— 指定なし（線画）—', '— 지정 없음 (선화) —', '— Sin estilo (solo líneas) —') }}</option>
+          <option v-for="s in styles" :key="s.id" :value="s.id">{{ styleLabel(s) }}</option>
+        </select>
+      </div>
+      <div>
+        <label class="pp-field-label">{{ L('色彩配置（選填）', 'Color palette (optional)', 'カラーパレット（任意）', '컬러 팔레트 (선택)', 'Paleta de color (opcional)') }}</label>
+        <select v-model="palette" class="pp-select">
+          <option value="">{{ L('— 沿用風格預設 —', '— Use style default —', '— スタイル既定 —', '— 스타일 기본 —', '— Predeterminado del estilo —') }}</option>
+          <option value="warm">{{ L('暖色（米/橘/木）', 'Warm (cream / terracotta / oak)', '暖色（生成り / テラコッタ / オーク）', '웜 (크림 / 테라코타 / 오크)', 'Cálido (crema / terracota / roble)') }}</option>
+          <option value="cool">{{ L('冷色（灰/藍/淺木）', 'Cool (grey / blue / pale wood)', '寒色（グレー / ブルー / 淡木）', '쿨 (그레이 / 블루 / 페일 우드)', 'Frío (gris / azul / madera clara)') }}</option>
+          <option value="neutral">{{ L('中性（米白/灰褐）', 'Neutral (off-white / taupe)', 'ニュートラル（オフホワイト / トープ）', '뉴트럴 (오프 화이트 / 토프)', 'Neutro (blanco roto / topo)') }}</option>
+          <option value="vibrant">{{ L('鮮明（祖母綠/芥末黃）', 'Vibrant (emerald / mustard)', 'ビビッド（エメラルド / マスタード）', '비비드 (에메랄드 / 머스터드)', 'Vivo (esmeralda / mostaza)') }}</option>
+          <option value="mono">{{ L('黑白單色', 'Monochrome', 'モノクロ', '모노크롬', 'Monocromo') }}</option>
+        </select>
+        <p class="pp-field-help">{{ L('若選擇了風格,平面圖會自動使用該風格家具+色調;另外指定色彩配置可覆寫色系。', 'If a style is chosen the plan colors match it; pick a palette to override the base color family.', 'スタイルを選ぶとそのスタイルの色合いで描かれます。パレットを別途指定すると基本配色を上書きできます。', '스타일을 선택하면 해당 색감으로 그려지며, 팔레트로 기본 색계열을 덮어쓸 수 있습니다.', 'Si eliges un estilo, los colores se ajustan a él; la paleta sobrescribe el color base.') }}</p>
+      </div>
       <div>
         <label class="pp-field-label">{{ L('輸入方式', 'Input Mode', '入力方法', '입력 방식', 'Modo de entrada') }}</label>
         <div class="grid grid-cols-2 gap-1.5">

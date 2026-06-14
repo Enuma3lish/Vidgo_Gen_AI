@@ -107,12 +107,18 @@ export interface Generate3DResponse {
 }
 
 // ── Floor plan (平面配置圖) ─────────────────────────────────────────────────
+export type FloorPlanPalette = 'warm' | 'cool' | 'neutral' | 'vibrant' | 'mono'
+
 export interface FloorPlanRequest {
   room_type?: string
   dimensions?: string
   requirements?: string
   sketch_image_url?: string
   sketch_image_base64?: string
+  /** Optional interior style (Scandi / Industrial / …) to color the plan. */
+  style_id?: string
+  /** Optional palette family overriding the style's default color reading. */
+  palette?: FloorPlanPalette
   language?: string
 }
 
@@ -138,8 +144,14 @@ export interface IsometricRequest {
 
 // ── 3D 效果圖 / Floor-plan → 3D-growth-video pipeline ───────────────────────
 // 'render' = photorealistic 3D 效果圖 only; 'video'/'video_3d' add the growth
-// animation (and optional GLB). All three are output options of the 3D 效果圖 page.
-export type GrowthTier = 'render' | 'video' | 'video_3d'
+// animation (and optional GLB); 'simulation' = 4 light×material variants of
+// the same locked space rendered concurrently for side-by-side comparison.
+export type GrowthTier = 'render' | 'video' | 'video_3d' | 'simulation'
+
+// 2026-06-14 (owner): per-surface texture presets used by 細化 (detail) mode.
+export type SurfaceFloor = 'oak' | 'walnut' | 'marble' | 'concrete' | 'terrazzo' | 'tile'
+export type SurfaceCeiling = 'white' | 'warm_white' | 'exposed_beam' | 'industrial'
+export type SurfaceWall = 'white' | 'warm_grey' | 'feature_brick' | 'wood_panel'
 
 export interface FloorplanToVideoRequest {
   image_url: string
@@ -161,6 +173,18 @@ export interface FloorplanToVideoRequest {
   lighting_tone?: InteriorLightingTone
   color_temperature?: number  // Kelvin
   material_accent?: InteriorMaterialAccent
+  // 細化 (detail) vs 魔法 (magic) mode + per-surface texture overrides.
+  magic_mode?: boolean
+  surface_floor?: SurfaceFloor
+  surface_ceiling?: SurfaceCeiling
+  surface_wall?: SurfaceWall
+}
+
+export interface SimulationVariant {
+  label: string
+  image_url: string
+  lighting_tone?: InteriorLightingTone
+  material_accent?: InteriorMaterialAccent
 }
 
 export interface FloorplanToVideoResponse {
@@ -177,6 +201,8 @@ export interface FloorplanToVideoResponse {
   steps?: Record<string, string>
   stage?: string
   model_3d_error?: string
+  // simulation tier: 4 variants of the same locked space rendered in parallel.
+  simulation_variants?: SimulationVariant[]
   error?: string
 }
 

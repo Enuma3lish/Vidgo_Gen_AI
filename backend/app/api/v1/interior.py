@@ -50,6 +50,53 @@ RENDER_CREDITS = 40
 GROWTH_VIDEO_CREDITS = 600
 GROWTH_VIDEO_3D_CREDITS = 750
 GROWTH_3D_DELTA = GROWTH_VIDEO_3D_CREDITS - GROWTH_VIDEO_CREDITS  # refunded if 3D add-on yields no model
+# Simulation tier = 4 variants of the locked space rendered concurrently for
+# side-by-side comparison. Priced at ~3.5× single render (small bundle discount
+# vs. 4× to encourage the comparison workflow).
+SIMULATION_CREDITS = RENDER_CREDITS * 4 - 20  # 140
+
+# ── Detail-mode surface presets (細化模式) — additive clauses appended to the
+# preserve render's prompt so the user can swap floor/ceiling/wall textures
+# without re-rolling style or geometry.
+SURFACE_FLOOR_PRESETS = {
+    "oak":      "Floor: warm light-oak hardwood in a herringbone pattern.",
+    "walnut":   "Floor: rich dark walnut hardwood with subtle grain.",
+    "marble":   "Floor: polished white marble with light grey veining.",
+    "concrete": "Floor: polished pale concrete with a soft sheen.",
+    "terrazzo": "Floor: cream terrazzo with confetti aggregate.",
+    "tile":     "Floor: matte warm-taupe porcelain tile, fine grout lines.",
+}
+SURFACE_CEILING_PRESETS = {
+    "white":        "Ceiling: flat smooth matte white painted ceiling.",
+    "warm_white":   "Ceiling: warm-white painted ceiling with subtle cove detail.",
+    "exposed_beam": "Ceiling: exposed warm-oak beams against a white plaster ceiling.",
+    "industrial":   "Ceiling: exposed concrete ceiling with visible black steel beams.",
+}
+SURFACE_WALL_PRESETS = {
+    "white":         "Walls: smooth matte white painted walls.",
+    "warm_grey":     "Walls: warm-grey limewash walls with a soft hand-applied texture.",
+    "feature_brick": "Walls: one feature wall in exposed red brick, the rest in matte white.",
+    "wood_panel":    "Walls: one warm-oak vertical wood-panel feature wall, the rest in matte white.",
+}
+
+# Simulation variants — 4 distinct moods of the same locked space.
+SIMULATION_VARIANT_PRESETS = [
+    {"label": "Morning Daylight",  "lighting_tone": "daylight",          "material_accent": "wood"},
+    {"label": "Warm Evening",      "lighting_tone": "warm_evening",      "material_accent": "leather"},
+    {"label": "Overcast Soft",     "lighting_tone": "overcast_soft",     "material_accent": "concrete"},
+    {"label": "Dramatic Golden",   "lighting_tone": "golden_hour",       "material_accent": "marble"},
+]
+
+
+def _build_surface_clause(floor: Optional[str], ceiling: Optional[str], wall: Optional[str]) -> str:
+    parts = []
+    if floor and floor in SURFACE_FLOOR_PRESETS:
+        parts.append(SURFACE_FLOOR_PRESETS[floor])
+    if ceiling and ceiling in SURFACE_CEILING_PRESETS:
+        parts.append(SURFACE_CEILING_PRESETS[ceiling])
+    if wall and wall in SURFACE_WALL_PRESETS:
+        parts.append(SURFACE_WALL_PRESETS[wall])
+    return " ".join(parts)
 
 
 # ============ Schemas ============
@@ -114,6 +161,18 @@ class FloorPlanRequest(BaseModel):
     requirements: Optional[str] = Field(None, max_length=1000, description="Free-text needs (rooms, adjacencies, must-haves).")
     sketch_image_url: Optional[str] = Field(None, description="URL of an uploaded hand sketch / rough plan to clean up.")
     sketch_image_base64: Optional[str] = Field(None, description="Base64 of an uploaded sketch (alternative to URL).")
+    # 2026-06-14 (owner): the 2D plan now ships with color. style_id picks the
+    # interior-design family (scandinavian / industrial / japanese / …) so the
+    # furniture icons + room fills read in that style; palette overrides the
+    # base color family (warm / cool / neutral / vibrant / mono). Both are
+    # optional — when both unset the plan falls back to the legacy white-bg
+    # blueprint look so existing callers keep working.
+    style_id: Optional[str] = Field(None, description="Interior design style (see GET /interior/styles).")
+    palette: Optional[str] = Field(
+        None,
+        pattern="^(warm|cool|neutral|vibrant|mono)$",
+        description="Color palette preset: warm | cool | neutral | vibrant | mono.",
+    )
     language: Optional[str] = Field("en", description="UI locale hint.")
 
 
@@ -185,10 +244,12 @@ class FloorplanToVideoRequest(BaseModel):
     prompt: Optional[str] = Field(None, description="Optional extra request (materials, mood, dimensions).")
     result_tier: str = Field(
         "render",
-        pattern="^(render|video|video_3d)$",
+        pattern="^(render|video|video_3d|simulation)$",
         description="What the user wants: 'render' = photorealistic 3D 效果圖 only; "
                     "'video' = render + Kling 3.0 growth animation; "
-                    "'video_3d' = also reconstruct an interactive 3D model (.glb).",
+                    "'video_3d' = also reconstruct an interactive 3D model (.glb); "
+                    "'simulation' = 4 light×material variants of the SAME locked space "
+                    "for side-by-side comparison.",
     )
     duration: int = Field(5, ge=5, le=10, description="Growth-video length in seconds (5 or 10).")
     model_version: str = Field("v2", description="Trellis version for the 3D model when result_tier='video_3d'.")
@@ -223,6 +284,38 @@ class FloorplanToVideoRequest(BaseModel):
         None,
         description="wood | marble | concrete | linen | brass | leather | terrazzo",
     )
+    # 2026-06-14 (owner): 細化 (detail) vs 魔法 (magic) modes.
+    # - magic_mode=False (default): structure AND style of the uploaded image
+    #   are locked; the user only tunes light + per-surface texture below.
+    # - magic_mode=True: free-prompt path (uses `prompt`), structure still
+    #   locked but style/materials may shift; backend injects extra
+    #   anti-hallucination guards.
+    magic_mode: bool = Field(
+        False,
+        description="True = 魔法模式 (free prompt, looser styling); False = 細化模式 "
+                    "(layout + style locked, only surfaces + light tunable).",
+    )
+    surface_floor: Optional[str] = Field(
+        None,
+        description="Floor texture preset (細化 mode): oak | walnut | marble | concrete | terrazzo | tile.",
+    )
+    surface_ceiling: Optional[str] = Field(
+        None,
+        description="Ceiling preset (細化 mode): white | warm_white | exposed_beam | industrial.",
+    )
+    surface_wall: Optional[str] = Field(
+        None,
+        description="Wall preset (細化 mode): white | warm_grey | feature_brick | wood_panel.",
+    )
+
+
+class SimulationVariant(BaseModel):
+    """One variant in a result_tier='simulation' response — same locked layout,
+    different light × material combination so the user can compare moods."""
+    label: str
+    image_url: str
+    lighting_tone: Optional[str] = None
+    material_accent: Optional[str] = None
 
 
 class FloorplanToVideoResponse(BaseModel):
@@ -239,6 +332,9 @@ class FloorplanToVideoResponse(BaseModel):
     steps: Optional[Dict[str, Any]] = None       # per-stage status map
     stage: Optional[str] = None                  # failing stage on error
     model_3d_error: Optional[str] = None         # set when 3D add-on failed but video succeeded
+    # 2026-06-14: populated only when result_tier='simulation' — 4 variants of
+    # the same locked space rendered with distinct light × material combos.
+    simulation_variants: Optional[List[SimulationVariant]] = None
     error: Optional[str] = None
 
 
@@ -863,6 +959,8 @@ async def generate_floorplan_layout(
             room_type=request.room_type,
             sketch_image_url=request.sketch_image_url,
             sketch_image_base64=request.sketch_image_base64,
+            style_id=request.style_id,
+            palette=request.palette,
         )
     except Exception as exc:  # noqa: BLE001
         await _refund_credits(db, current_user, FLOORPLAN_CREDITS, "interior_floorplan")
@@ -1063,11 +1161,36 @@ async def _preserve_render(request: "FloorplanToVideoRequest", current_user: Use
         request.lighting_tone, request.color_temperature, request.material_accent
     )
     lighting_default = "" if request.lighting_tone or request.color_temperature else "natural lighting, "
+    # 2026-06-14 (owner): detail mode (magic_mode=False) → also lock the
+    # FURNITURE and inject the user's surface presets so the render only
+    # restyles flooring/walls/ceiling lighting and never invents new pieces.
+    # Magic mode keeps the free prompt but adds explicit anti-hallucination
+    # guards so the model doesn't add doors / windows / furniture not in the
+    # uploaded design.
+    surface_clause = _build_surface_clause(
+        getattr(request, "surface_floor", None),
+        getattr(request, "surface_ceiling", None),
+        getattr(request, "surface_wall", None),
+    )
+    if not getattr(request, "magic_mode", False):
+        guard_clause = (
+            "STRICT preserve mode: keep every wall, window, door, and piece of "
+            "furniture from the uploaded image in the same position and proportion; "
+            "do NOT add, remove, or relocate any wall, opening, or furniture. Only "
+            "restyle the surface materials and lighting as described."
+        )
+    else:
+        guard_clause = (
+            "Even in this free-design pass, do NOT add or remove walls, doors, "
+            "windows, or major furniture pieces beyond what the uploaded image "
+            "shows; restyle surfaces, decor, and lighting freely but keep the "
+            "spatial layout intact."
+        )
     cn_prompt = (
         "photorealistic real-world interior photograph, "
         f"{style_clause}, professional architectural visualization, {lighting_default}"
-        "soft realistic shadows, sharp focus, high detail, no people, no text, no watermark."
-        f"{atmosphere} "
+        "soft realistic shadows, sharp focus, high detail, no people, no text, no watermark. "
+        f"{guard_clause} {surface_clause} {atmosphere} "
         + (request.prompt or "")
     ).strip()
     # fidelity 0..100 → control_strength 0.4..0.85 (higher = stricter geometry lock).
@@ -1124,6 +1247,75 @@ async def _floorplan_to_video_inner(
     # ServicePricing overrides the fallback `cost`). Imported lazily to avoid a
     # tools.py ↔ interior.py circular import at module load.
     from app.api.v1.tools import _check_and_deduct_credits, _refund_credits, _credits_charged
+
+    # ── "simulation" tier: 4 light × material variants of the SAME locked
+    # space, rendered concurrently for side-by-side mood comparison. Forces
+    # preserve mode so all 4 variants share identical geometry/furniture
+    # and only the atmosphere shifts.
+    if request.result_tier == "simulation":
+        ok, err = await _check_and_deduct_credits(
+            db, current_user, SIMULATION_CREDITS, "interior_simulation",
+        )
+        if not ok:
+            return FloorplanToVideoResponse(success=False, result_tier="simulation", error=err)
+        try:
+            from copy import deepcopy
+            from asyncio import gather
+
+            async def _one_variant(preset: dict) -> Optional[dict]:
+                v_req = deepcopy(request)
+                v_req.result_tier = "render"
+                v_req.preserve_original = True       # always locked in simulation
+                v_req.magic_mode = False
+                v_req.lighting_tone = preset["lighting_tone"]
+                v_req.material_accent = preset["material_accent"]
+                rendered = await _preserve_render(v_req, current_user)
+                if not rendered.get("success") or not rendered.get("image_url"):
+                    return None
+                return {
+                    "label": preset["label"],
+                    "image_url": rendered["image_url"],
+                    "lighting_tone": preset["lighting_tone"],
+                    "material_accent": preset["material_accent"],
+                }
+
+            results = await gather(*(_one_variant(p) for p in SIMULATION_VARIANT_PRESETS))
+            variants = [SimulationVariant(**r) for r in results if r]
+        except Exception as exc:  # noqa: BLE001
+            await _refund_credits(db, current_user, SIMULATION_CREDITS, "interior_simulation")
+            logger.error("simulation tier raised: %s", exc, exc_info=True)
+            return FloorplanToVideoResponse(
+                success=False, result_tier="simulation",
+                error="Simulation render failed. Please try again.",
+            )
+        if not variants:
+            await _refund_credits(db, current_user, SIMULATION_CREDITS, "interior_simulation")
+            return FloorplanToVideoResponse(
+                success=False, result_tier="simulation",
+                error="Simulation render produced no variants.",
+            )
+        # Partial refund proportional to missing variants (kept proportional so
+        # the user is never charged for failed renders that came back empty).
+        if len(variants) < len(SIMULATION_VARIANT_PRESETS):
+            missing = len(SIMULATION_VARIANT_PRESETS) - len(variants)
+            refund = int(SIMULATION_CREDITS * missing / len(SIMULATION_VARIANT_PRESETS))
+            if refund > 0:
+                await _refund_credits(db, current_user, refund, "interior_simulation")
+        credits_used = _credits_charged(current_user, SIMULATION_CREDITS)
+        if len(variants) < len(SIMULATION_VARIANT_PRESETS):
+            missing = len(SIMULATION_VARIANT_PRESETS) - len(variants)
+            credits_used = max(0, credits_used - int(SIMULATION_CREDITS * missing / len(SIMULATION_VARIANT_PRESETS)))
+        await _record_interior_generation(
+            db, current_user, "interior_simulation",
+            request.image_url, variants[0].image_url, credits_used,
+        )
+        return FloorplanToVideoResponse(
+            success=True,
+            result_tier="simulation",
+            render_image_url=variants[0].image_url,   # convenience: first variant as the "hero"
+            simulation_variants=variants,
+            credits_used=credits_used,
+        )
 
     # ── "render" tier: photorealistic 3D 效果圖 only (no Kling/Trellis) ──
     # Reuses the same Gemini render the growth pipeline uses for its end frame,

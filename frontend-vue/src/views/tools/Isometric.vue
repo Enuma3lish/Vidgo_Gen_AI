@@ -1,20 +1,23 @@
 <script setup lang="ts">
 /**
- * Isometric (立體圖) — isometric 3D "dollhouse" view from an uploaded image.
+ * Isometric (立體圖) — one-click 45° dollhouse view from an uploaded floor plan.
  *
- * Backend: POST /api/v1/interior/isometric (reuses render_from_floorplan, whose
- * prompt yields a 45° isometric interior visualization). service_type
- * interior_isometric (25 credits).
+ * UX simplified 2026-06-14 (owner request "Isometric just lets the floor plan
+ * become more 3D"): the only input is the floor-plan upload. Style / room /
+ * atmosphere / free prompt were removed — the backend
+ * render_from_floorplan() prompt already locks the result to the plan's
+ * layout, so the previous knobs were noise.
+ *
+ * Backend: POST /api/v1/interior/isometric (25 credits).
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useLocalized } from '@/composables'
 import { toolsApi } from '@/api'
-import { interiorApi, type DesignStyle, type RoomType, type InteriorLightingTone, type InteriorMaterialAccent } from '@/api/interior'
+import { interiorApi } from '@/api/interior'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
-import AtmosphereControls from '@/components/tools/AtmosphereControls.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
@@ -31,30 +34,10 @@ const { L } = useLocalized()
 const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
 const imageInput = ref<string | undefined>(undefined)
-const styleId = ref('')
-const roomType = ref('')
-const customPrompt = ref('')
-// Atmosphere fine-tune knobs (lighting / color temperature / material) —
-// let the user dial in mood without touching the locked geometry.
-const lightingTone = ref<'' | InteriorLightingTone>('')
-const colorTemperature = ref(0) // 0 = auto
-const materialAccent = ref<'' | InteriorMaterialAccent>('')
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
-
-const styles = ref<DesignStyle[]>([])
-const roomTypes = ref<RoomType[]>([])
-onMounted(async () => {
-  try {
-    styles.value = await interiorApi.getStyles()
-    roomTypes.value = await interiorApi.getRoomTypes()
-  } catch (e) {
-    console.warn('[isometric] failed to load styles/room types:', e)
-  }
-})
-const label = (s: { name: string; name_zh: string }) => (isZh.value ? s.name_zh : s.name)
 
 const creditCost = computed(() => 25)
 const disabled = computed(() => !imageInput.value)
@@ -78,13 +61,7 @@ async function generate() {
     if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
     const result = await interiorApi.isometric({
       image_url: url,
-      style_id: styleId.value || undefined,
-      room_type: roomType.value || undefined,
-      prompt: customPrompt.value.trim() || undefined,
       language: isZh.value ? 'zh' : 'en',
-      lighting_tone: lightingTone.value || undefined,
-      color_temperature: colorTemperature.value > 0 ? colorTemperature.value : undefined,
-      material_accent: materialAccent.value || undefined,
     })
     if (handleCardRequired(result, uiStore, router, isZh.value)) {
       status.value = 'idle'; statusText.value = ''; return
@@ -112,58 +89,30 @@ async function generate() {
     :eta-seconds="60"
     :title="L('立體圖', 'Isometric View', '立体図', '입체도', 'Vista isométrica')"
     :subtitle="L(
-      '上傳平面配置圖,AI 生成整個空間的 45° 等角立體圖(dollhouse 視角) — 平面圖中的每個房間都會依用途完整呈現。',
-      'Upload a floor plan — AI generates a 45° isometric dollhouse view of the WHOLE unit, every room furnished per its function.',
-      '間取り図や空間写真をアップロードすると、AIが45°アイソメ立体図(ドールハウス)を生成します。',
-      '평면도나 공간 사진을 올리면 AI가 45° 아이소메트릭 입체도(돌하우스)를 생성합니다.',
-      'Sube un plano o foto del espacio; la IA genera una vista isométrica 3D de 45° (casa de muñecas).')"
+      '上傳平面配置圖,AI 一鍵生成整個空間的 45° 等角立體圖(dollhouse 視角) — 每個房間都會依用途呈現,結構完全照原圖。',
+      'Upload a floor plan — AI generates a 45° isometric dollhouse view of the WHOLE unit in one click; layout and rooms stay faithful to the source.',
+      '間取り図をアップロードすると、AIが45°アイソメ立体図(ドールハウス)を1クリックで生成。元の構造を忠実に再現します。',
+      '평면도를 올리면 AI가 45° 아이소메트릭 입체도(돌하우스)를 한 번에 생성합니다. 원본 구조를 그대로 유지합니다.',
+      'Sube un plano; la IA genera con un clic una vista isométrica de 45° (casa de muñecas) fiel al diseño original.')"
     :status="status"
     :status-text="statusText"
     :credit-cost="creditCost"
     :generate-label="L('開始生成', 'Generate', '生成', '생성', 'Generar')"
     :generate-label-running="L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…')"
     :disabled="disabled"
-    :disabled-reason="disabled ? L('請先上傳圖片。', 'Upload an image first.', '画像をアップロードしてください。', '이미지를 먼저 업로드하세요.', 'Sube primero una imagen.') : ''"
-    :empty-hint="L('上傳圖片,立體圖會顯示在這裡。', 'Upload an image — your isometric view appears here.', '画像をアップロードすると、ここに立体図が表示されます。', '이미지를 올리면 여기에 입체도가 표시됩니다.', 'Sube una imagen; la vista isométrica aparecerá aquí.')"
+    :disabled-reason="disabled ? L('請先上傳平面圖。', 'Upload a floor plan first.', '間取り図をアップロードしてください。', '평면도를 먼저 업로드하세요.', 'Sube primero el plano.') : ''"
+    :empty-hint="L('上傳平面圖,立體圖會顯示在這裡。', 'Upload a floor plan — your isometric view appears here.', '間取り図をアップロードすると、ここに立体図が表示されます。', '평면도를 올리면 여기에 입체도가 표시됩니다.', 'Sube un plano; la vista isométrica aparecerá aquí.')"
     @generate="generate"
   >
     <template #inputs>
       <div>
-        <label class="pp-field-label">{{ L('來源圖片 *', 'Source image *', '元画像 *', '원본 이미지 *', 'Imagen de origen *') }}</label>
+        <label class="pp-field-label">{{ L('平面配置圖 *', 'Floor plan *', '間取り図 *', '평면도 *', 'Plano *') }}</label>
         <ImageUploader
           tool-type="room_redesign"
           v-model="imageInput"
           :label="L('點擊或拖放平面圖', 'Click or drag a floor plan', 'クリックまたはドロップ', '클릭 또는 드롭', 'Haz clic o arrastra')"
         />
-      </div>
-
-      <div>
-        <label class="pp-field-label">{{ L('設計風格（選填）', 'Design style (optional)', 'スタイル（任意）', '스타일 (선택)', 'Estilo (opcional)') }}</label>
-        <select v-model="styleId" class="pp-select">
-          <option value="">{{ L('— 預設 —', '— Default —', '— 既定 —', '— 기본 —', '— Predeterminado —') }}</option>
-          <option v-for="s in styles" :key="s.id" :value="s.id">{{ label(s) }}</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="pp-field-label">{{ L('重點空間（選填）', 'Focus room (optional)', '注目する部屋（任意）', '중점 공간 (선택)', 'Habitación destacada (opcional)') }}</label>
-        <select v-model="roomType" class="pp-select">
-          <option value="">{{ L('— 全室均衡呈現 —', '— Whole unit equally —', '— 全室をバランスよく —', '— 전체 균형 표현 —', '— Toda la unidad —') }}</option>
-          <option v-for="r in roomTypes" :key="r.id" :value="r.id">{{ label(r) }}</option>
-        </select>
-        <p class="pp-field-help">{{ L('立體圖一律呈現平面圖中的所有房間；選擇重點空間只是加強該區的細節。', 'The isometric always shows every room in the plan; picking a focus room only adds extra detail there.', '立体図は常に全室を表示します。選択した部屋はディテールが強化されるだけです。', '입체도는 항상 모든 방을 표시하며, 중점 공간은 디테일만 강화됩니다.', 'La vista siempre muestra todas las habitaciones; el foco solo añade detalle.') }}</p>
-      </div>
-
-      <AtmosphereControls
-        v-model:lighting-tone="lightingTone"
-        v-model:color-temperature="colorTemperature"
-        v-model:material-accent="materialAccent"
-      />
-
-      <div>
-        <label class="pp-field-label">{{ L('補充描述（選填）', 'Description (optional)', '説明（任意）', '설명 (선택)', 'Descripción (opcional)') }}</label>
-        <textarea v-model="customPrompt" rows="3" maxlength="1000" class="pp-select" style="resize:vertical;"
-          :placeholder="L('例：暖色木地板、大面採光。', 'e.g. warm wood floor, large windows.', '例：暖色の木製床、大きな窓。', '예: 따뜻한 원목 바닥, 큰 창.', 'p. ej.: suelo de madera cálido, ventanales.')"></textarea>
+        <p class="pp-field-help">{{ L('一鍵生成 — 不需要其他設定。平面圖上的房間、牆與家具配置都會原樣保留。', 'One-click — no other settings needed. Rooms, walls and furniture from the plan are kept as-is.', '1クリックで生成 — 他の設定は不要。間取り図の部屋・壁・家具配置はそのまま保持されます。', '한 번의 클릭으로 생성 — 다른 설정은 필요 없습니다. 평면도의 방·벽·가구 배치가 그대로 유지됩니다.', 'Un clic — sin más ajustes. Habitaciones, muros y muebles del plano se mantienen.') }}</p>
       </div>
     </template>
 

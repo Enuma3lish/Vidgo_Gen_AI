@@ -505,7 +505,17 @@
       "Bash(awk NR>=1830 && NR<=1882 {print NR\": \"$0} *)",
       "Bash(docker pull *)",
       "Bash(sed -n '1,6p')",
-      "Bash(sed -n '1130,1145p' backend/app/providers/piapi_provider.py)"
+      "Bash(sed -n '1130,1145p' backend/app/providers/piapi_provider.py)",
+      "Bash(./backend/.venv/bin/python -c \"import httpx; print\\('httpx', httpx.__version__\\)\")",
+      "Bash(./backend/.venv/bin/python scripts/regenerate-example-thumbnails.py --dry-run --only product-scene-classic --limit 3)",
+      "Bash(backend/.venv/bin/python *)",
+      "Bash(./backend/.venv/bin/python *)",
+      "Bash(/Users/MLW/.local/share/uv/python/cpython-3.12.13-macos-x86_64-none/bin/python3.12 --version)",
+      "Bash(brew --prefix)",
+      "Bash(/opt/homebrew/bin/python3.13 -c \"import httpx\")",
+      "Bash(/opt/homebrew/bin/python3.13 -m pip install --quiet --break-system-packages httpx)",
+      "Bash(npx -y playwright@1.60.0 install chromium)",
+      "Bash(npm init *)"
     ],
     "additionalDirectories": [
       "/private/tmp"

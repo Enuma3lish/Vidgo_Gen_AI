@@ -6,7 +6,7 @@ from typing import Any, Optional
 TEST_PRO_PLAN_NAME = "test_pro_usd_1"
 TEST_PRO_PLAN_SLUG = "test_pro_usd_1"
 TEST_PRO_PLAN_DISPLAY_NAME = "Pro Test $1"
-TEST_PRO_PLAN_CREDITS = 10000
+TEST_PRO_PLAN_CREDITS = 100
 TEST_PRO_PLAN_PRICE_USD = 1
 TEST_PRO_PLAN_PRICE_TWD = 32
 TEST_PRO_PLAN_ALLOWED_EMAILS = {"qaz0978005418@gmail.com"}
@@ -24,10 +24,10 @@ TEST_PRO_PLAN_DEFAULTS = {
     "monthly_credits": TEST_PRO_PLAN_CREDITS,
     "weekly_credits": TEST_PRO_PLAN_CREDITS,
     "credits_per_month": TEST_PRO_PLAN_CREDITS,
-    "allowed_models": ["default", "wan_pro", "gemini_pro", "veo"],
-    "max_resolution": "4k",
-    "max_video_length": 60,
-    "max_concurrent_generations": 10,
+    "allowed_models": ["default"],
+    "max_resolution": "1080p",
+    "max_video_length": 0,
+    "max_concurrent_generations": 1,
     "has_watermark": False,
     "watermark": False,
     "priority_queue": True,
@@ -35,13 +35,13 @@ TEST_PRO_PLAN_DEFAULTS = {
     "can_use_effects": True,
     "social_media_batch_posting": True,
     "enterprise_features": True,
-    "feature_video_gen": True,
+    "feature_video_gen": False,
     "feature_batch_processing": True,
     "feature_custom_styles": True,
     "feature_clothing_transform": True,
     "feature_goenhance": True,
     "description": "Restricted internal Pro test plan with all tools enabled",
-    "is_active": True,
+    "is_active": False,
 }
 
 

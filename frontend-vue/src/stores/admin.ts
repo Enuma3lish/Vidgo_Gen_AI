@@ -129,6 +129,29 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function extendTestSubscription(userId: string, days = 30, refreshCredits = true) {
+    try {
+      const result = await adminApi.extendTestSubscription(userId, days, refreshCredits)
+      await fetchUsers({ page: usersPage.value })
+      return result
+    } catch (e: any) {
+      error.value = e.response?.data?.detail || e.message || 'Failed to extend test subscription'
+      return null
+    }
+  }
+
+  async function revokeTestSubscription(userId: string, zeroCredits = true, reason?: string) {
+    try {
+      const result = await adminApi.revokeTestSubscription(userId, zeroCredits, reason)
+      await fetchUsers({ page: usersPage.value })
+      await fetchDashboardStats()
+      return result
+    } catch (e: any) {
+      error.value = e.response?.data?.detail || e.message || 'Failed to revoke test subscription'
+      return null
+    }
+  }
+
   async function fetchMaterials(params: {
     page?: number
     per_page?: number
@@ -340,6 +363,8 @@ export const useAdminStore = defineStore('admin', () => {
     adjustCredits,
     setPromotionCode,
     grantTestAccount,
+    extendTestSubscription,
+    revokeTestSubscription,
     fetchMaterials,
     reviewMaterial,
     fetchModerationQueue,

@@ -66,6 +66,21 @@ export interface AdminUser {
   is_test_account?: boolean
 }
 
+export interface PromoterRow {
+  user_id: string
+  email: string
+  name: string | null
+  promoter_plan: string
+  referral_code: string
+  signups: number
+  paid_conversions: number
+  conversion_rate: number       // 0..1
+  bonus_credits_paid: number    // lifetime cost we paid out for this promoter
+  last_referral_at: string | null
+  is_active: boolean
+  created_at: string | null
+}
+
 export interface UserDetail extends AdminUser {
   is_admin: boolean
   last_login_at: string | null
@@ -387,6 +402,70 @@ export const adminApi = {
     credits_allocated?: number
   }> {
     const response = await apiClient.post(`/api/v1/admin/users/${userId}/test-account`)
+    return response.data
+  },
+
+  /** Push the $1 test-plan user's subscription end_date forward by `days`
+   *  without a payment. Backend refuses if the user is not already on the
+   *  test plan, so this stays scoped to the QA cohort. */
+  async extendTestSubscription(userId: string, days = 30, refreshCredits = true): Promise<{
+    success: boolean
+    message: string
+    user_id: string
+    plan_name: string
+    days_added: number
+    previous_end_date: string
+    new_end_date: string
+    subscription_credits: number
+    credits_added: number
+  }> {
+    const response = await apiClient.post(
+      `/api/v1/admin/users/${userId}/extend-test-subscription`,
+      { days, refresh_credits: refreshCredits },
+    )
+    return response.data
+  },
+
+  /** End the user's $1 test subscription early and revert to a normal account.
+   *  After this they no longer see the $1 plan in /pricing — gating in
+   *  plans.py only surfaces it when current_plan_id matches the test plan. */
+  async revokeTestSubscription(userId: string, zeroCredits = true, reason?: string): Promise<{
+    success: boolean
+    message: string
+    user_id: string
+    subscription_credits: number
+    subscriptions_cancelled: number
+    previous_credits: number
+  }> {
+    const response = await apiClient.post(
+      `/api/v1/admin/users/${userId}/revoke-test-subscription`,
+      { zero_credits: zeroCredits, reason: reason || undefined },
+    )
+    return response.data
+  },
+
+  // ── Promotion account dashboard ───────────────────────────────────────
+  async getPromotions(params: {
+    page?: number
+    per_page?: number
+    search?: string
+    sort_by?: 'bonus_paid' | 'signups' | 'conversions' | 'last_referral_at' | 'email'
+    sort_order?: 'asc' | 'desc'
+  } = {}): Promise<{
+    promoters: PromoterRow[]
+    summary: {
+      total_promoters: number
+      total_signups: number
+      total_paid_conversions: number
+      global_conversion_rate: number
+      total_bonus_credits_paid: number
+    }
+    total: number
+    page: number
+    per_page: number
+    pages: number
+  }> {
+    const response = await apiClient.get('/api/v1/admin/promotions', { params })
     return response.data
   },
 

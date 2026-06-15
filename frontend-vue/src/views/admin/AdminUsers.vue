@@ -19,6 +19,8 @@ const promotionTarget = ref<AdminUser | null>(null)
 const promotionCodeInput = ref('')
 const promotingUserId = ref<string | null>(null)
 const testingUserId = ref<string | null>(null)
+const extendingUserId = ref<string | null>(null)
+const revokingUserId = ref<string | null>(null)
 
 // Admin Grant Credits modal (2026-05-23). Wired to the long-standing
 // POST /api/v1/admin/users/{user_id}/credits backend endpoint, which lands
@@ -164,6 +166,77 @@ async function grantTestAccount(user: AdminUser) {
     }
   } finally {
     testingUserId.value = null
+  }
+}
+
+async function revokeTestSubscription(user: AdminUser) {
+  if (revokingUserId.value) return
+  if (!confirm(localized(
+    `結束 ${user.email} 的 $1 試用方案?\n\n` +
+    '會做的事:\n' +
+    '• 取消當前訂閱(end_date=now)\n' +
+    '• 移除使用者方案(回到一般帳號)\n' +
+    '• 清空試用點數(購買/獎勵點數不受影響)\n' +
+    '• 該使用者不會再看到 $1 方案',
+    `Revoke ${user.email}'s $1 test subscription?\n\n` +
+    'This will:\n' +
+    '• Cancel the active subscription (end_date=now)\n' +
+    '• Clear the plan (revert to normal account)\n' +
+    '• Zero the test credits (purchased/bonus credits untouched)\n' +
+    '• Hide the $1 plan from this user\'s pricing view',
+  ))) return
+
+  const reason = prompt(
+    localized('原因(選填,會寫入審計):', 'Reason (optional, written to audit):'),
+    '',
+  ) || undefined
+
+  revokingUserId.value = user.id
+  try {
+    const result = await adminStore.revokeTestSubscription(user.id, true, reason)
+    if (result) {
+      alert(localized(
+        `已結束。取消 ${result.subscriptions_cancelled} 個訂閱、清掉 ${result.previous_credits} 點。`,
+        `Revoked. ${result.subscriptions_cancelled} subscription(s) cancelled, ${result.previous_credits} credits cleared.`,
+      ))
+      await loadUsers(adminStore.usersPage)
+    }
+  } finally {
+    revokingUserId.value = null
+  }
+}
+
+async function extendTestSubscription(user: AdminUser) {
+  if (extendingUserId.value) return
+  const raw = prompt(
+    localized(
+      `延長 $1 試用方案 — ${user.email}\n\n要延長幾天？(1-365,預設 30)`,
+      `Extend $1 test plan — ${user.email}\n\nHow many days to add? (1-365, default 30)`
+    ),
+    '30',
+  )
+  if (raw === null) return
+  const days = parseInt(raw.trim() || '30', 10)
+  if (!Number.isFinite(days) || days < 1 || days > 365) {
+    alert(localized('天數必須是 1-365 之間的整數', 'Days must be an integer between 1 and 365'))
+    return
+  }
+  if (!confirm(localized(
+    `延長 ${days} 天且不收費？\n會把當前的訂閱期推後並重置 100 點測試額度。`,
+    `Extend ${days} days at no charge?\nThis pushes back the current end date and refills 100 test credits.`,
+  ))) return
+  extendingUserId.value = user.id
+  try {
+    const result = await adminStore.extendTestSubscription(user.id, days, true)
+    if (result) {
+      alert(localized(
+        `已延長至 ${new Date(result.new_end_date).toLocaleDateString(locale.value)}`,
+        `Extended through ${new Date(result.new_end_date).toLocaleDateString(locale.value)}`,
+      ))
+      await loadUsers(adminStore.usersPage)
+    }
+  } finally {
+    extendingUserId.value = null
   }
 }
 
@@ -313,6 +386,24 @@ function activeLabel(isActive: boolean): string {
                   :title="testAccountActionLabel(user)"
                 >
                   {{ testingUserId === user.id ? localized('設定中...', 'Setting...') : testAccountActionLabel(user) }}
+                </button>
+                <button
+                  v-if="user.is_test_account"
+                  @click="extendTestSubscription(user)"
+                  class="btn-icon tester-extend"
+                  :disabled="extendingUserId === user.id"
+                  :title="localized('延長 $1 試用週期（無需付款）', 'Extend $1 test plan (no payment)')"
+                >
+                  {{ extendingUserId === user.id ? localized('延長中…', 'Extending…') : localized('延長 $1 試用', 'Extend $1 Test') }}
+                </button>
+                <button
+                  v-if="user.is_test_account"
+                  @click="revokeTestSubscription(user)"
+                  class="btn-icon tester-revoke"
+                  :disabled="revokingUserId === user.id"
+                  :title="localized('結束 $1 試用 — 回到一般帳號', 'End $1 test plan — revert to normal user')"
+                >
+                  {{ revokingUserId === user.id ? localized('結束中…', 'Revoking…') : localized('結束 $1 試用', 'End $1 Test') }}
                 </button>
                 <button
                   @click="openGrantCreditsModal(user)"
@@ -755,6 +846,25 @@ function activeLabel(isActive: boolean): string {
 
 .btn-icon.tester:hover {
   background: rgba(245,158,11,0.12);
+}
+
+.btn-icon.tester-extend {
+  border-color: rgba(245,158,11,0.4);
+  color: #fcd34d;
+  background: rgba(245,158,11,0.06);
+}
+
+.btn-icon.tester-extend:hover {
+  background: rgba(245,158,11,0.18);
+}
+
+.btn-icon.tester-revoke {
+  border-color: rgba(239,68,68,0.45);
+  color: #f87171;
+}
+
+.btn-icon.tester-revoke:hover {
+  background: rgba(239,68,68,0.12);
 }
 
 .btn-icon.grant-credits {

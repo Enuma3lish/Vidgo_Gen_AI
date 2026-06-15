@@ -12,18 +12,19 @@ Provides:
 from fastapi import APIRouter, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from sqlalchemy import select, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 import os
 import re
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import uuid
 
 from app.api.deps import get_current_user, get_db, get_redis
 from app.core.config import settings
 from app.core.test_plans import TEST_PRO_PLAN_CREDITS, TEST_PRO_PLAN_DEFAULTS, is_test_pro_plan
-from app.models.billing import Plan
+from app.models.billing import CreditTransaction, Order, Plan, Subscription
 from app.models.hero_demo_pair import HeroDemoPair
 from app.models.site_settings import SiteSettings
 from app.models.user import User, generate_referral_code
@@ -49,6 +50,18 @@ class BanUserRequest(BaseModel):
 class AdjustCreditsRequest(BaseModel):
     amount: int
     reason: str
+
+
+class ExtendTestSubscriptionRequest(BaseModel):
+    """Admin: bump a test-plan user's subscription period without payment."""
+    days: int = 30                        # how many days to add (1-365)
+    refresh_credits: bool = True          # also top up sub credits to TEST_PRO_PLAN_CREDITS
+
+
+class RevokeTestSubscriptionRequest(BaseModel):
+    """Admin: end a user's $1 test subscription early and revert to a normal account."""
+    zero_credits: bool = True             # drop subscription_credits to 0 (purchased/bonus credits untouched)
+    reason: Optional[str] = None          # audit note
 
 
 class PromotionCodeRequest(BaseModel):
@@ -549,6 +562,226 @@ async def grant_test_account(
     }
 
 
+@router.post("/users/{user_id}/extend-test-subscription")
+async def extend_test_subscription(
+    user_id: str,
+    request: ExtendTestSubscriptionRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Extend a $1 test-plan user's subscription period without charging them.
+
+    Admin-only. Refuses if the user is not currently on the test plan — this
+    intentionally keeps the no-payment grace path scoped to the internal QA
+    cohort (TEST_PRO_PLAN_ALLOWED_EMAILS), so it can't be misused to comp a
+    real Pro subscriber. Adds `days` to subscription.end_date AND mirrors to
+    user.plan_expires_at; if the previous end_date is in the past, the
+    extension counts from utc_now() to avoid silently granting zero time.
+    Writes an audit Order row (payment_method=admin_extension, amount=0) so
+    the action shows up in /invoices and the finance dashboard. Optionally
+    re-tops subscription_credits to TEST_PRO_PLAN_CREDITS so the user gets a
+    fresh allowance for the extended period.
+    """
+    days = int(request.days)
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=400, detail="days must be between 1 and 365")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Must already be on the test plan — extension is NOT a way to grant.
+    plan = await db.get(Plan, user.current_plan_id) if user.current_plan_id else None
+    if not plan or not is_test_pro_plan(plan):
+        raise HTTPException(
+            status_code=400,
+            detail="User is not on the $1 test plan; use the test-account endpoint to assign it first.",
+        )
+
+    sub_result = await db.execute(
+        select(Subscription)
+        .where(
+            Subscription.user_id == user.id,
+            Subscription.plan_id == plan.id,
+            Subscription.status == "active",
+        )
+        .order_by(Subscription.end_date.desc())
+        .limit(1)
+    )
+    subscription = sub_result.scalars().first()
+    if not subscription:
+        raise HTTPException(
+            status_code=400,
+            detail="No active test subscription found for this user.",
+        )
+
+    now = datetime.now(timezone.utc)
+    # Extend from whichever is later — current end_date or now — so a lapsed
+    # subscription gets `days` from today, not from a stale past date.
+    current_end = subscription.end_date or now
+    if current_end.tzinfo is None:
+        current_end = current_end.replace(tzinfo=timezone.utc)
+    base = current_end if current_end > now else now
+    new_end = base + timedelta(days=days)
+
+    subscription.end_date = new_end
+    subscription.auto_renew = True
+    user.plan_expires_at = new_end
+    # Clear any cancellation/retention state — admin manually re-affirmed the sub.
+    user.subscription_cancelled_at = None
+    user.work_retention_until = None
+
+    credits_added = 0
+    if request.refresh_credits:
+        target = max(int(user.subscription_credits or 0), TEST_PRO_PLAN_CREDITS)
+        credits_added = target - int(user.subscription_credits or 0)
+        user.subscription_credits = target
+        user.credits_reset_at = now
+        if credits_added > 0:
+            db.add(CreditTransaction(
+                user_id=user.id,
+                amount=credits_added,
+                balance_after=user.total_credits,
+                transaction_type="subscription",
+                description=f"Admin extension top-up to {TEST_PRO_PLAN_CREDITS} test credits",
+                extra_data={
+                    "plan_id": str(plan.id),
+                    "plan_name": plan.name,
+                    "admin_id": str(admin.id),
+                    "source": "extend_test_subscription",
+                },
+            ))
+
+    # Audit Order — every subscription mutation leaves a trail (mirrors the
+    # complimentary-order pattern used by _activate_subscription_directly).
+    order = Order(
+        user_id=user.id,
+        subscription_id=subscription.id,
+        order_number=f"EXTEND-{now.strftime('%Y%m%d%H%M%S')}-{str(user.id)[:8]}-{uuid.uuid4().hex[:6]}",
+        amount=0,
+        status="complimentary",
+        payment_method="admin_extension",
+        payment_data={
+            "source": "admin_extension",
+            "admin_id": str(admin.id),
+            "days_added": days,
+            "previous_end_date": current_end.isoformat(),
+            "new_end_date": new_end.isoformat(),
+            "credits_refreshed": bool(request.refresh_credits),
+            "credits_added": credits_added,
+        },
+        paid_at=now,
+    )
+    db.add(order)
+
+    await db.commit()
+    await db.refresh(user)
+    await db.refresh(subscription)
+
+    return {
+        "success": True,
+        "user_id": str(user.id),
+        "plan_name": plan.name,
+        "days_added": days,
+        "previous_end_date": current_end.isoformat(),
+        "new_end_date": new_end.isoformat(),
+        "subscription_credits": user.subscription_credits,
+        "credits_added": credits_added,
+        "message": f"Extended {days} days; expires {new_end.date().isoformat()}",
+    }
+
+
+@router.post("/users/{user_id}/revoke-test-subscription")
+async def revoke_test_subscription(
+    user_id: str,
+    request: RevokeTestSubscriptionRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """End a $1 test-plan user's subscription early and revert them to a normal
+    account. After this the user falls out of `can_view_test_plan`'s
+    "already-on-plan" branch in plans.py / subscriptions.py, so the $1 plan
+    disappears from their pricing view — exactly the QA-cohort firewall the
+    owner asked for (2026-06-14).
+
+    Admin-only. Refuses if the user is not currently on the test plan.
+    Cancels every active Subscription row, clears current_plan_id +
+    plan_started_at + plan_expires_at, optionally zeroes subscription_credits.
+    Purchased credits and bonus credits are untouched (those were earned, not
+    granted by the test program). Writes an audit Order row so the action is
+    visible in /invoices and the finance dashboard.
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    plan = await db.get(Plan, user.current_plan_id) if user.current_plan_id else None
+    if not plan or not is_test_pro_plan(plan):
+        raise HTTPException(
+            status_code=400,
+            detail="User is not on the $1 test plan; nothing to revoke.",
+        )
+
+    sub_result = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == user.id,
+            Subscription.plan_id == plan.id,
+            Subscription.status == "active",
+        )
+    )
+    active_subs = list(sub_result.scalars().all())
+
+    now = datetime.now(timezone.utc)
+    for sub in active_subs:
+        sub.status = "cancelled"
+        sub.end_date = now
+        sub.auto_renew = False
+
+    previous_credits = int(user.subscription_credits or 0)
+    user.current_plan_id = None
+    user.plan_started_at = None
+    user.plan_expires_at = None
+    user.subscription_cancelled_at = now
+    user.work_retention_until = None
+    if request.zero_credits:
+        user.subscription_credits = 0
+
+    audit_subscription_id = active_subs[0].id if active_subs else None
+    order = Order(
+        user_id=user.id,
+        subscription_id=audit_subscription_id,
+        order_number=f"REVOKE-{now.strftime('%Y%m%d%H%M%S')}-{str(user.id)[:8]}-{uuid.uuid4().hex[:6]}",
+        amount=0,
+        status="complimentary",
+        payment_method="admin_revocation",
+        payment_data={
+            "source": "admin_revocation",
+            "admin_id": str(admin.id),
+            "plan_name": plan.name,
+            "reason": (request.reason or "").strip() or None,
+            "previous_subscription_credits": previous_credits,
+            "zero_credits": bool(request.zero_credits),
+            "subscriptions_cancelled": len(active_subs),
+        },
+        paid_at=now,
+    )
+    db.add(order)
+
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "success": True,
+        "user_id": str(user.id),
+        "message": "Test subscription revoked; $1 plan is no longer visible to this user.",
+        "subscription_credits": user.subscription_credits,
+        "subscriptions_cancelled": len(active_subs),
+        "previous_credits": previous_credits,
+    }
+
+
 @router.post("/users/{user_id}/unban")
 async def unban_user(
     user_id: str,
@@ -628,6 +861,154 @@ async def set_user_promotion_code(
         "referral_code": user.referral_code,
         "referral_count": user.referral_count or 0,
         "is_promotion_account": True,
+    }
+
+
+# ============================================================================
+# Promotion Account Dashboard
+# ============================================================================
+
+@router.get("/promotions")
+async def get_promotions_dashboard(
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
+    search: Optional[str] = Query(default=None, description="Filter by email or promotion code (case-insensitive)"),
+    sort_by: str = Query(default="bonus_paid", pattern="^(bonus_paid|signups|conversions|last_referral_at|email)$"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """List every promotion account with its performance + cost.
+
+    Per-promoter rows return signups, paid conversions, total bonus credits
+    paid out, conversion rate, and last-referral timestamp. Reuses
+    User.referred_by_id (the join key written at signup) and the
+    CreditTransaction trail referral_service writes ("Referral reward: …").
+    """
+    # ── signups per promoter (User.referred_by_id → promoter.id) ──────────
+    signups_subq = (
+        select(
+            User.referred_by_id.label("promoter_id"),
+            func.count(User.id).label("signups"),
+            func.max(User.created_at).label("last_referral_at"),
+        )
+        .where(User.referred_by_id.isnot(None))
+        .group_by(User.referred_by_id)
+        .subquery()
+    )
+
+    # ── paid conversions = referred users currently on any non-null plan ──
+    # (current_plan_id reflects the actively-held plan; cancelled/expired
+    # subscriptions clear it, so this is a live count, not lifetime.)
+    conversions_subq = (
+        select(
+            User.referred_by_id.label("promoter_id"),
+            func.count(User.id).label("conversions"),
+        )
+        .where(
+            User.referred_by_id.isnot(None),
+            User.current_plan_id.isnot(None),
+        )
+        .group_by(User.referred_by_id)
+        .subquery()
+    )
+
+    # ── lifetime bonus credits the referral_service.apply_referral path
+    # awarded this promoter ("Referral reward: …" rows in CreditTransaction).
+    bonus_subq = (
+        select(
+            CreditTransaction.user_id.label("promoter_id"),
+            func.coalesce(func.sum(CreditTransaction.amount), 0).label("bonus_paid"),
+        )
+        .where(
+            CreditTransaction.transaction_type == "bonus",
+            CreditTransaction.description.like("Referral reward:%"),
+        )
+        .group_by(CreditTransaction.user_id)
+        .subquery()
+    )
+
+    promoter_q = (
+        select(
+            User,
+            func.coalesce(signups_subq.c.signups, 0).label("signups"),
+            func.coalesce(conversions_subq.c.conversions, 0).label("conversions"),
+            func.coalesce(bonus_subq.c.bonus_paid, 0).label("bonus_paid"),
+            signups_subq.c.last_referral_at,
+        )
+        .outerjoin(signups_subq, signups_subq.c.promoter_id == User.id)
+        .outerjoin(conversions_subq, conversions_subq.c.promoter_id == User.id)
+        .outerjoin(bonus_subq, bonus_subq.c.promoter_id == User.id)
+        .where(User.referral_code.isnot(None))
+    )
+    count_q = select(func.count()).select_from(User).where(User.referral_code.isnot(None))
+
+    if search:
+        like = f"%{search.strip().lower()}%"
+        cond = or_(func.lower(User.email).like(like), func.lower(User.referral_code).like(like))
+        promoter_q = promoter_q.where(cond)
+        count_q = count_q.where(cond)
+
+    sort_map = {
+        "bonus_paid":       func.coalesce(bonus_subq.c.bonus_paid, 0),
+        "signups":          func.coalesce(signups_subq.c.signups, 0),
+        "conversions":      func.coalesce(conversions_subq.c.conversions, 0),
+        "last_referral_at": signups_subq.c.last_referral_at,
+        "email":            User.email,
+    }
+    sort_expr = sort_map[sort_by]
+    promoter_q = promoter_q.order_by(sort_expr.desc().nullslast() if sort_order == "desc" else sort_expr.asc().nullsfirst())
+
+    total = (await db.execute(count_q)).scalar() or 0
+    promoter_q = promoter_q.offset((page - 1) * per_page).limit(per_page)
+    rows = (await db.execute(promoter_q)).all()
+
+    promoters: List[Dict[str, Any]] = []
+    for u, signups, conversions, bonus_paid, last_at in rows:
+        s = int(signups or 0)
+        c = int(conversions or 0)
+        promoters.append({
+            "user_id": str(u.id),
+            "email": u.email,
+            "name": _display_name(u),
+            "promoter_plan": _plan_name(u),
+            "referral_code": u.referral_code,
+            "signups": s,
+            "paid_conversions": c,
+            "conversion_rate": round(c / s, 3) if s else 0.0,
+            "bonus_credits_paid": int(bonus_paid or 0),
+            "last_referral_at": last_at.isoformat() if last_at else None,
+            "is_active": u.is_active,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        })
+
+    # Global summary (across all promoters, not just this page).
+    global_signups = (await db.execute(select(func.count(User.id)).where(User.referred_by_id.isnot(None)))).scalar() or 0
+    global_conversions = (await db.execute(
+        select(func.count(User.id)).where(
+            User.referred_by_id.isnot(None), User.current_plan_id.isnot(None)
+        )
+    )).scalar() or 0
+    global_bonus = (await db.execute(
+        select(func.coalesce(func.sum(CreditTransaction.amount), 0)).where(
+            CreditTransaction.transaction_type == "bonus",
+            CreditTransaction.description.like("Referral reward:%"),
+        )
+    )).scalar() or 0
+
+    return {
+        "promoters": promoters,
+        "summary": {
+            "total_promoters": total,
+            "total_signups": int(global_signups),
+            "total_paid_conversions": int(global_conversions),
+            "global_conversion_rate": round(global_conversions / global_signups, 3) if global_signups else 0.0,
+            "total_bonus_credits_paid": int(global_bonus),
+        },
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
     }
 
 

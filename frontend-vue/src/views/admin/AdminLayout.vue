@@ -59,6 +59,7 @@ const navGroups: NavGroup[] = [
       { label: { zh: '審核佇列', en: 'Moderation', ja: 'モデレーション', ko: '검수 대기열', es: 'Moderación' }, to: '/admin/moderation' },
       { label: { zh: '素材庫',   en: 'Materials',  ja: '素材',           ko: '소재',         es: 'Materiales' }, to: '/admin/materials' },
       { label: { zh: '使用者',   en: 'Users',      ja: 'ユーザー',       ko: '사용자',       es: 'Usuarios' },  to: '/admin/users' },
+      { label: { zh: '推廣帳號', en: 'Promoters',  ja: 'プロモーター',   ko: '프로모터',     es: 'Promotores' }, to: '/admin/promotions' },
     ],
   },
   {

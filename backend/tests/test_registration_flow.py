@@ -436,7 +436,12 @@ async def test_registration_with_promotion_code_awards_extra_credits_after_verif
 
     verify_payload = verify_response.json()
     assert verify_payload["user"]["referral_count"] == 0
-    assert created_user.total_credits == 80
+    # Registration bonus + referral welcome bonus (track config, don't hardcode —
+    # the Plan-D rate change 2026-06-15 moved welcome 40→30, so a literal would
+    # go stale on every rate tweak).
+    assert created_user.total_credits == (
+        settings.REGISTRATION_BONUS_CREDITS + settings.REFERRAL_WELCOME_CREDITS
+    )
     assert len([tx for tx in fake_db.transactions if tx.description == "Welcome bonus for using a promotion code"]) == 1
 
 

@@ -991,6 +991,21 @@ async def _check_and_deduct_credits(
     # callers can report an accurate `credits_used` to the UI / history instead
     # of re-deriving it from their hardcoded constant.
     setattr(user, "_last_effective_credit_cost", effective_amount)
+
+    # Plan D referral first-generation bonus (2026-06-15) — if this user was
+    # referred AND this is the first generation that actually deducted credits,
+    # pay them the engagement bonus. Idempotent inside the service. Fire-and-
+    # forget: a referral hiccup must never block a successful generation.
+    if effective_amount > 0 and getattr(user, "referred_by_id", None):
+        try:
+            from app.services.referral_service import ReferralService
+            await ReferralService(db).award_first_generation(str(user.id))
+        except Exception as exc:
+            logger.warning(
+                "Referral first-generation bonus failed for user %s: %s",
+                getattr(user, "id", "?"), exc,
+            )
+
     return True, None
 
 
@@ -1236,8 +1251,25 @@ class RoomRedesignRequest(BaseModel):
     variation_count: int = Field(
         1,
         ge=1,
-        le=3,
-        description="How many distinct renders to return in one call (1-3). When >1 the server fires N parallel calls with light prompt diversification and returns all URLs in `results`. Useful for client-deck workflows.",
+        le=4,
+        description="How many distinct renders to return in one call (1-4). When >1 the server fires N parallel calls with light prompt diversification and returns all URLs in `results`. Useful for client-deck workflows.",
+    )
+    # 2026-06-15 (owner: "make it more powerful"): opt into the high-fidelity
+    # model (Nano Banana Pro / Gemini 2.5 Flash Image Pro via PiAPI) which has
+    # markedly stronger instruction-following and structure preservation than
+    # Flux Kontext for room/exterior redesign. Default stays "standard"
+    # (Kontext) so existing callers keep the same cost profile.
+    quality: str = Field(
+        "standard",
+        pattern="^(standard|high)$",
+        description="'standard' = Flux Kontext I2I (default, cheaper). 'high' = Nano Banana Pro — best fidelity & structure preservation.",
+    )
+    # Optional style-reference / inspiration image. When supplied (and
+    # quality='high'), the model blends THIS image's palette, materials, and
+    # styling onto the user's room while keeping the room's own geometry.
+    style_reference_image_url: Optional[str] = Field(
+        None,
+        description="Optional inspiration image whose style/palette/materials are transferred onto the room. Best with quality='high'.",
     )
 
     def get_room_url(self) -> str:
@@ -1245,6 +1277,11 @@ class RoomRedesignRequest(BaseModel):
         if not url:
             raise ValueError("room_image_url or image_url is required")
         return _resolve_public_url(url)
+
+    def get_style_reference_url(self) -> Optional[str]:
+        if not self.style_reference_image_url:
+            return None
+        return _resolve_public_url(self.style_reference_image_url)
 
 
 # ── Video faithfulness controls (2026-06-12, owner request) ────────────────
@@ -1567,6 +1604,35 @@ EXTERIOR_STYLES = [
      "prompt": "converted warehouse loft exterior, restored brick facade, large multi-pane steel windows, contemporary rooftop addition with green planted terrace, mixed-use urban context, soft daylight, photorealistic architectural render, no people no person no human"},
     {"id": "garden_studio", "name": "Garden Studio", "name_zh": "花園工作室",
      "prompt": "small backyard studio cabin exterior, charred timber siding (yakisugi), single sliding glass door, surrounded by ornamental grasses, gravel walkway, golden hour, photorealistic architectural visualization, no people no person no human"},
+]
+
+# 2026-06-15 — Landscape / garden catalog. Exposed under the same
+# /room-redesign endpoint when the request carries space_kind="landscape".
+# Input is a photo of a yard / garden / outdoor space (or an empty plot);
+# the model redesigns the PLANTING, HARDSCAPE and outdoor features while
+# preserving the property boundary, building walls, and major fixed
+# structures. "no people" guard like every other catalog.
+LANDSCAPE_STYLES = [
+    {"id": "japanese_zen_garden", "name": "Japanese Zen Garden", "name_zh": "日式枯山水庭園",
+     "prompt": "Japanese zen garden landscape design, raked white gravel with islands of moss, weathered stone lanterns, sculpted niwaki pine, bamboo water feature (shishi-odoshi), stepping-stone path, low timber fence, serene meditative atmosphere, soft morning light, photorealistic landscape architecture render, no people no person no human"},
+    {"id": "english_cottage_garden", "name": "English Cottage Garden", "name_zh": "英式鄉村花園",
+     "prompt": "lush English cottage garden, dense mixed perennial borders of roses foxgloves and delphiniums, winding gravel path, weathered brick edging, rustic timber arbor with climbing roses, clipped boxwood accents, soft overcast daylight, romantic abundant planting, photorealistic landscape render, no people no person no human"},
+    {"id": "modern_minimal_garden", "name": "Modern Minimal Garden", "name_zh": "現代極簡庭園",
+     "prompt": "modern minimalist garden landscape, clean board-formed concrete planters, architectural grasses and clipped hedging, large-format stone paving, linear water rill, integrated LED step lighting, restrained green-and-grey palette, dusk ambience, photorealistic landscape architecture visualization, no people no person no human"},
+    {"id": "tropical_resort_garden", "name": "Tropical Resort Garden", "name_zh": "熱帶度假庭園",
+     "prompt": "lush tropical resort garden, layered palms banana plants and monstera, natural stone path, timber boardwalk, koi pond with lily pads, tiki-style accent lighting, vibrant saturated greenery, late afternoon golden light, photorealistic landscape render, no people no person no human"},
+    {"id": "desert_xeriscape", "name": "Desert Xeriscape", "name_zh": "沙漠旱景園",
+     "prompt": "modern desert xeriscape garden, sculptural agaves barrel cacti and ocotillo, decomposed-granite ground, weathered corten-steel planters, dry creek bed with river rocks, boulder accents, warm low desert sun, drought-tolerant design, photorealistic landscape architecture render, no people no person no human"},
+    {"id": "mediterranean_courtyard_garden", "name": "Mediterranean Courtyard", "name_zh": "地中海中庭花園",
+     "prompt": "Mediterranean courtyard garden, terracotta tile patio, central tiled fountain, potted citrus trees and lavender, climbing bougainvillea on whitewashed walls, wrought-iron furniture nook, warm golden hour light, relaxed coastal atmosphere, photorealistic landscape render, no people no person no human"},
+    {"id": "modern_backyard_living", "name": "Modern Backyard Living", "name_zh": "現代後院生活區",
+     "prompt": "modern backyard outdoor living space, composite timber deck, built-in seating with outdoor sofa, sunken fire pit, rectangular plunge pool, slatted privacy screen, layered ornamental grasses, warm evening string lights, photorealistic landscape architecture visualization, no people no person no human"},
+    {"id": "cottagecore_vegetable_garden", "name": "Kitchen / Potager Garden", "name_zh": "可食地景菜園",
+     "prompt": "productive potager kitchen garden, raised cedar planter beds with vegetables and herbs, gravel walking paths, rustic timber trellis with climbing beans, small greenhouse, espaliered fruit trees on fence, soft morning light, charming and orderly, photorealistic landscape render, no people no person no human"},
+    {"id": "rooftop_terrace_garden", "name": "Rooftop Terrace Garden", "name_zh": "屋頂露台花園",
+     "prompt": "urban rooftop terrace garden, modular composite decking, lightweight planters with grasses and small trees, built-in bench seating, pergola with climbing vines, city skyline backdrop, warm sunset light, contemporary outdoor lounge, photorealistic landscape architecture render, no people no person no human"},
+    {"id": "naturalistic_prairie", "name": "Naturalistic Prairie", "name_zh": "自然野趣草原園",
+     "prompt": "naturalistic prairie-style garden, drifts of ornamental grasses and flowering perennials (echinacea rudbeckia salvia), informal mown path through meadow, weathered timber bench, biodiverse wildlife-friendly planting, soft backlit golden hour, photorealistic landscape render, no people no person no human"},
 ]
 
 # Preset models for Try-On (IDs match frontend: "female-1", "male-1" etc.)
@@ -2999,6 +3065,8 @@ async def _room_redesign_inner(
         _catalog = EXTERIOR_STYLES
     elif request.space_kind == "commercial":
         _catalog = COMMERCIAL_STYLES
+    elif request.space_kind == "landscape":
+        _catalog = LANDSCAPE_STYLES
     else:
         _catalog = INTERIOR_STYLES
 
@@ -3272,7 +3340,7 @@ async def _room_redesign_inner(
         # the base cost. Each variant gets a small prompt diversifier so
         # the same model+style yields distinct compositions / camera angles.
         # Deduction happens once for variant 1, then we top up for the rest.
-        n_variants = max(1, min(3, request.variation_count or 1))
+        n_variants = max(1, min(4, request.variation_count or 1))
         if n_variants > 1:
             additional = (n_variants - 1) * CREDIT_COST
             ok2, err2 = await _check_and_deduct_credits(db, current_user, additional, "room_redesign")
@@ -3284,25 +3352,37 @@ async def _room_redesign_inner(
             "",
             " Choose an alternate camera composition and lens choice (wider angle, slight reframing); keep room geometry unchanged.",
             " Choose a different time of day and lighting mood (e.g. blue-hour or overcast) and slightly different decor accents; keep room geometry unchanged.",
+            " Choose a complementary alternate palette and material accent while keeping the same style family; keep room geometry unchanged.",
         ]
+
+        # High-quality model opt-in (Nano Banana Pro). The reference image is
+        # only meaningful on the nano-banana path (true multi-image input);
+        # Kontext is single-image so it's ignored there.
+        redesign_model = "nano-banana-pro" if request.quality == "high" else None
+        style_ref_url = request.get_style_reference_url()
 
         async def _one_render(idx: int) -> str | None:
             prompt = style_prompt + (DIVERSIFIERS[idx] if idx < len(DIVERSIFIERS) else "")
+            route_params = {
+                "image_url": str(request.get_room_url()),
+                "prompt": prompt,
+                "style": request.style,
+                # space_kind lets the provider frame the render correctly
+                # (exterior facade vs interior vs commercial) and pick the
+                # matching structure-preservation constraints — without it
+                # exterior renders were mis-framed as "interior design".
+                "space_kind": request.space_kind,
+                "preserve_structure": request.preserve_structure,
+                "strength": request.style_strength,
+                "denoising_strength": denoising_strength,
+            }
+            if redesign_model:
+                route_params["model"] = redesign_model
+            if style_ref_url:
+                route_params["style_reference_url"] = style_ref_url
             r = await router.route(
                 TaskType.INTERIOR,
-                {
-                    "image_url": str(request.get_room_url()),
-                    "prompt": prompt,
-                    "style": request.style,
-                    # space_kind lets the provider frame the render correctly
-                    # (exterior facade vs interior vs commercial) and pick the
-                    # matching structure-preservation constraints — without it
-                    # exterior renders were mis-framed as "interior design".
-                    "space_kind": request.space_kind,
-                    "preserve_structure": request.preserve_structure,
-                    "strength": request.style_strength,
-                    "denoising_strength": denoising_strength,
-                },
+                route_params,
             )
             url = r.get("image_url") or r.get("output_url") or (r.get("output", {}).get("image_url") if isinstance(r.get("output"), dict) else None)
             return await _persist_provider_url(url, "image", current_user)
@@ -5596,6 +5676,8 @@ async def get_interior_styles(space_kind: str = "interior"):
         return _with_preview_urls(EXTERIOR_STYLES)
     if space_kind == "commercial":
         return _with_preview_urls(COMMERCIAL_STYLES)
+    if space_kind == "landscape":
+        return _with_preview_urls(LANDSCAPE_STYLES)
     return _with_preview_urls(INTERIOR_STYLES)
 
 
@@ -5604,6 +5686,13 @@ async def get_exterior_styles():
     """Convenience alias — returns EXTERIOR_STYLES directly so older clients
     can hit a dedicated route without needing the `space_kind` query param."""
     return _with_preview_urls(EXTERIOR_STYLES)
+
+
+@router.get("/templates/landscape-styles")
+async def get_landscape_styles():
+    """Convenience alias — returns LANDSCAPE_STYLES (garden / yard / outdoor
+    landscape design presets). Added 2026-06-15 with the Landscape tool."""
+    return _with_preview_urls(LANDSCAPE_STYLES)
 
 
 @router.get("/templates/commercial-styles")

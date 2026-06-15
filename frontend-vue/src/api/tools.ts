@@ -133,7 +133,7 @@ export const toolsApi = {
     promptId?: string,
     locale?: string,
     opts?: {
-      spaceKind?: 'interior' | 'exterior' | 'commercial'
+      spaceKind?: 'interior' | 'exterior' | 'commercial' | 'landscape'
       styleStrength?: number
       preserveStructure?: boolean
       // ReRoom-inspired knobs (2026-05-18). All optional.
@@ -142,7 +142,10 @@ export const toolsApi = {
       mode?: 'redesign' | 'stage' | 'magic'
       lightingTone?: 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'
       materialAccent?: 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'
-      variationCount?: 1 | 2 | 3
+      variationCount?: 1 | 2 | 3 | 4
+      // 2026-06-15 — high-fidelity model opt-in + style-reference image.
+      quality?: 'standard' | 'high'
+      styleReferenceImageUrl?: string
     },
   ): Promise<ToolResponse> {
     const response = await apiClient.post(
@@ -160,6 +163,8 @@ export const toolsApi = {
         ...(opts?.lightingTone ? { lighting_tone: opts.lightingTone } : {}),
         ...(opts?.materialAccent ? { material_accent: opts.materialAccent } : {}),
         ...(opts?.variationCount && opts.variationCount > 1 ? { variation_count: opts.variationCount } : {}),
+        ...(opts?.quality ? { quality: opts.quality } : {}),
+        ...(opts?.styleReferenceImageUrl ? { style_reference_image_url: opts.styleReferenceImageUrl } : {}),
       },
       { timeout: GENERATION_TIMEOUT_MS }
     )

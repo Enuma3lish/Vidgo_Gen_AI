@@ -245,6 +245,7 @@
         "isometric": "立体図",
         "render3d": "3D効果図",
         "exteriorAi": "外観AIデザイン",
+        "landscapeAi": "庭園・ランドスケープAI",
         "commercialSpace": "商業空間デザイン",
         "sketchToRender": "スケッチからレンダー",
         "sketchToRenderExterior": "スケッチからレンダー（外観）",

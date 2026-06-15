@@ -177,11 +177,11 @@ function gotoPricing() { router.push('/pricing') }
     :eta-seconds="300"
     :title="L('AI 數位人 / 代言人', 'AI Avatar / Spokesperson', 'AIアバター / スポークスパーソン', 'AI 아바타 / 대변인', 'Avatar IA / Portavoz')"
     :subtitle="L(
-      '上傳清晰正面照 + 撰寫腳本，AI 生成口型同步的講話影片（PiAPI Kling Avatar）。',
-      'Upload a clear frontal headshot + write a script; AI generates a lip-synced talking video (PiAPI Kling Avatar).',
-      '正面の顔写真と台本をアップロード、AIがリップシンク動画を生成（PiAPI Kling Avatar）。',
-      '정면 사진과 스크립트를 업로드하면 AI가 립싱크 영상을 생성합니다 (PiAPI Kling Avatar).',
-      'Sube una foto frontal y un guion; la IA genera un vídeo con labios sincronizados (PiAPI Kling Avatar).'
+      '上傳清晰正面照 + 撰寫腳本，AI 生成口型同步的講話影片。',
+      'Upload a clear frontal headshot + write a script; AI generates a lip-synced talking video.',
+      '正面の顔写真と台本をアップロードすると、AIがリップシンク動画を生成します。',
+      '정면 사진과 스크립트를 업로드하면 AI가 립싱크 영상을 생성합니다.',
+      'Sube una foto frontal y un guion; la IA genera un vídeo con labios sincronizados.'
     )"
     :status="status"
     :status-text="statusText"
@@ -195,7 +195,7 @@ function gotoPricing() { router.push('/pricing') }
       <div>
         <label class="pp-field-label">{{ L('模型 *', 'Model *', 'モデル *', '모델 *', 'Modelo *') }}</label>
         <select class="pp-select" disabled>
-          <option>PiAPI Kling Avatar (lip-sync + F5-TTS)</option>
+          <option>{{ L('Vidgo 數位人模型（口型同步 + 語音合成）', 'Vidgo Avatar Model (lip-sync + voice synthesis)', 'Vidgoアバターモデル（リップシンク + 音声合成）', 'Vidgo 아바타 모델 (립싱크 + 음성합성)', 'Modelo Vidgo Avatar (sincronización labial + síntesis de voz)') }}</option>
         </select>
       </div>
 

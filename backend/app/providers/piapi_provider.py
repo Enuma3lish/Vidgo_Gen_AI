@@ -774,6 +774,15 @@ class PiAPIProvider(BaseProvider):
         # the T2I path but adds an `image_urls` array (PiAPI requires the plural
         # field, not `image`). Stronger subject preservation than Kontext for
         # commercial product placement; verified 2026-06-14.
+        # `extra_image_urls` appends additional reference images (e.g. a style /
+        # inspiration image for redesign) — Gemini-family models accept multiple.
+        def _nano_image_urls() -> list:
+            urls = [self._resolve_image_url(params["image_url"])]
+            for extra in (params.get("extra_image_urls") or []):
+                if extra:
+                    urls.append(self._resolve_image_url(extra))
+            return urls
+
         if "nano-banana-pro" in model or "nano_banana_pro" in model:
             aspect = params.get("aspect_ratio") or _aspect_from_wh(
                 params.get("width"), params.get("height")
@@ -783,7 +792,7 @@ class PiAPIProvider(BaseProvider):
                 "task_type": PIAPI_MODELS["nano_banana_pro_task"],
                 "input": {
                     "prompt": params["prompt"],
-                    "image_urls": [self._resolve_image_url(params["image_url"])],
+                    "image_urls": _nano_image_urls(),
                     "aspect_ratio": aspect,
                     "resolution": params.get("resolution") or "2K",
                 },
@@ -798,7 +807,7 @@ class PiAPIProvider(BaseProvider):
                 "task_type": PIAPI_MODELS["nano_banana_2_task"],
                 "input": {
                     "prompt": params["prompt"],
-                    "image_urls": [self._resolve_image_url(params["image_url"])],
+                    "image_urls": _nano_image_urls(),
                     "aspect_ratio": aspect,
                     "resolution": params.get("resolution") or "1K",
                 },
@@ -1721,9 +1730,39 @@ class PiAPIProvider(BaseProvider):
 
         full_prompt = f"{style} {framing}. {prompt}. {constraints}"
 
-        # Try kontext first (more likely to be available). steps=28 (vendor
-        # default; the old 10 under-sampled and cost fidelity). negative_prompt
-        # is intentionally NOT passed — the kontext task rejects it.
+        # 2026-06-15 — high-fidelity opt-in. When the caller asks for the
+        # Nano Banana Pro model, route to the Gemini-family I2I path which
+        # preserves structure better than Kontext and accepts a second
+        # "style reference" image (image_urls array) for inspiration-based
+        # restyling. The reference image is appended so the model treats the
+        # FIRST image as the room to keep and the SECOND as the look to apply.
+        model_id = str(params.get("model") or "").lower()
+        if "nano-banana" in model_id or "nano_banana" in model_id:
+            style_reference_url = params.get("style_reference_url")
+            i2i_params = {
+                "image_url": params["image_url"],
+                "prompt": (
+                    full_prompt
+                    + (
+                        " Use the second provided image ONLY as a style, palette, "
+                        "and material reference; do NOT copy its layout or objects — "
+                        "keep the first image's room geometry."
+                        if style_reference_url else ""
+                    )
+                ),
+                "model": "nano-banana-pro" if "pro" in model_id else "nano-banana",
+                "width": 1024,
+                "height": 768,
+                "aspect_ratio": "4:3",
+                "resolution": "2K",
+            }
+            if style_reference_url:
+                i2i_params["extra_image_urls"] = [style_reference_url]
+            return await self.image_to_image(i2i_params)
+
+        # Default: Flux Kontext I2I. steps=28 (vendor default; the old 10
+        # under-sampled and cost fidelity). negative_prompt is intentionally
+        # NOT passed — the kontext task rejects it.
         return await self.kontext_image({
             "image_url": params["image_url"],
             "prompt": full_prompt,

@@ -45,7 +45,7 @@ const route = useRoute()
 const uiStore = useUIStore()
 const creditsStore = useCreditsStore()
 const { L } = useLocalized()
-const { isDemoUser } = useDemoMode()
+const { isDemoUser, generateOnDemand } = useDemoMode()
 const isZh = computed(() => String(locale.value || '').startsWith('zh'))
 
 // ─── Task type + model catalogs ──────────────────────────────────────
@@ -182,9 +182,22 @@ useExamplePrefill({
 
 // ─── Validation + cost ───────────────────────────────────────────────
 const disabled = computed(() => {
+  // Demo/free users preview a cached example — they just need a preset or
+  // prompt to key it (no image upload required; the example carries its own).
+  if (isDemoUser.value) return !selectedPresetId.value && !prompt.value.trim()
   if (taskType.value === 'image_to_video') return !imageInput.value
   return !prompt.value.trim()  // text_to_video
 })
+
+// Map the page's model dropdown to the demo model catalog (Kling 3.0 / Veo).
+// Standard/cheap models return undefined → the free "default" cached example.
+// Sora 2 lives on its own page (Sora2Pro.vue), not in this model list.
+function demoModelId(): string | undefined {
+  const m = (modelId.value || '').toLowerCase()
+  if (m === 'veo') return 'veo'
+  if (m.includes('kling_v3') || m === 'kling_omni' || m === 'flagship' || m === 'omni') return 'kling_v3'
+  return undefined
+}
 const isRunning = computed(() => status.value === 'running')
 
 const creditCost = computed(() => {
@@ -218,8 +231,46 @@ async function ensureImageUrl(): Promise<string | null> {
 // handleVideoChange removed 2026-05-31 — V2V dropped.
 
 // ─── Generate ────────────────────────────────────────────────────────
+// Demo/free preview: pull the cached example for the picked (model × preset)
+// from the demo cache-through endpoint and show it watermarked. No credits,
+// no real generation — this is the "try a premium model for free" path.
+async function generateDemoPreview() {
+  status.value = 'running'
+  statusText.value = isZh.value ? '載入範例中…' : 'Loading example…'
+  resultUrl.value = null
+  try {
+    const effect = (usingPreset.value ? presetPromptFor(selectedPresetId.value) : prompt.value.trim()) || undefined
+    const url = await generateOnDemand('short_video', undefined, {
+      effect_prompt: effect,
+      model_id: demoModelId(),
+      // A library-picked (non-data:) image can key an I2V example; uploaded
+      // data URIs are ignored in demo mode (the cached example has its own input).
+      input_image_url: imageInput.value && !imageInput.value.startsWith('data:') ? imageInput.value : undefined,
+    })
+    if (url) {
+      resultUrl.value = url
+      status.value = 'done'
+      statusText.value = isZh.value ? '範例預覽（含浮水印）' : 'Example preview (watermarked)'
+    } else {
+      status.value = 'error'
+      statusText.value = isZh.value ? '此模型尚無快取範例' : 'No cached example for this model yet'
+      uiStore.showError(isZh.value
+        ? '此模型尚無快取範例，請改選其他模型或範例。'
+        : 'No cached example for this model yet — try another model or preset.')
+    }
+  } catch (e: any) {
+    status.value = 'error'
+    statusText.value = isZh.value ? '載入失敗' : 'Failed'
+    uiStore.showError(extractApiError(e, isZh.value ? '載入失敗' : 'Failed to load example'))
+  }
+}
+
 async function generate() {
   if (disabled.value || isRunning.value) return
+  // Free/visitor users get the watermarked cached preview for the picked
+  // premium model — the conversion driver. Subscribers fall through to real
+  // generation below.
+  if (isDemoUser.value) { await generateDemoPreview(); return }
   // No client-side subscription block: the backend decides. A free account
   // using an unmodified preset gets the cached example; a custom/edited prompt
   // returns error_code 'subscription_card_required', handled below.
@@ -417,8 +468,8 @@ function gotoPricing() { router.push('/pricing') }
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
         {{ isZh
-          ? '免費帳號可用範例下拉選單一鍵生成；自訂提示詞需訂閱並綁定信用卡。'
-          : 'Free accounts can generate from the example presets; custom prompts require a subscription with a bound card.' }}
+          ? '免費帳號：選一個進階模型（Kling 3.0 / Veo）＋範例，即可預覽含浮水印的成品。訂閱即可去除浮水印並用自訂提示詞生成。'
+          : 'Free account: pick a premium model (Kling 3.0 / Veo) + an example to preview the watermarked result. Subscribe to remove the watermark and generate from your own prompts.' }}
         <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
       </p>
     </template>
@@ -428,7 +479,16 @@ function gotoPricing() { router.push('/pricing') }
     </template>
 
     <template v-if="resultUrl" #result-actions>
+      <!-- Demo preview is watermarked → drive the subscribe conversion instead
+           of offering a clean download. -->
       <button
+        v-if="isDemoUser"
+        @click="gotoPricing"
+        class="px-3 py-1.5 rounded text-xs font-medium"
+        style="background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; border: 0;"
+      >✨ {{ isZh ? '訂閱以去除浮水印' : 'Subscribe for clean output' }} →</button>
+      <button
+        v-else
         @click="downloadAsset(resultUrl!, `vidgo_video_${Date.now()}.mp4`)"
         class="px-3 py-1.5 rounded text-xs font-medium"
         style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
@@ -437,7 +497,7 @@ function gotoPricing() { router.push('/pricing') }
         @click="generate"
         class="px-3 py-1.5 rounded text-xs font-medium ml-2"
         style="background: #141420; color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
-      >🔄 {{ isZh ? '重新生成' : 'Regenerate' }}</button>
+      >🔄 {{ isZh ? (isDemoUser ? '換一個範例' : '重新生成') : (isDemoUser ? 'Try another' : 'Regenerate') }}</button>
     </template>
 
     <template #examples>

@@ -10,8 +10,23 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
-from arq import cron
-from arq.connections import RedisSettings
+# The standalone ARQ worker was retired 2026-06 (background tasks now run via
+# Cloud Scheduler → POST /api/v1/tasks/*, which imports the task functions below
+# directly). `arq` is therefore no longer a runtime/CI dependency. Import it when
+# present (local dev that still runs `arq app.worker.WorkerSettings`), but fall
+# back to inert stubs so this module — and anything importing its task functions
+# — loads cleanly without arq installed.
+try:
+    from arq import cron
+    from arq.connections import RedisSettings
+except ModuleNotFoundError:  # arq not installed (production / CI)
+    def cron(*args, **kwargs):  # type: ignore
+        return None
+
+    class RedisSettings:  # type: ignore
+        @staticmethod
+        def from_dsn(*args, **kwargs):
+            return None
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -473,6 +488,7 @@ TOOL_TYPE_KIND = {
     "claymation":              "video",  # only T2V mode reaches reclaim
     "video_background_remove": "video",
     "image_upscale":           "image",
+    "try_on":                  "image",  # Kling try-on (≤600s poll) — added 2026-06
 }
 
 
@@ -494,6 +510,7 @@ def _build_tool_enum_map():
         "claymation":              _ToolType.SHORT_VIDEO,
         "video_background_remove": _ToolType.SHORT_VIDEO,
         "image_upscale":           _ToolType.EFFECT,  # matches foreground choice
+        "try_on":                  _ToolType.TRY_ON,
     }
 
 

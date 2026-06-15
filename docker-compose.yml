@@ -106,31 +106,7 @@ services:
       retries: 10
       start_period: 3600s  # 60 min - allow time for pre-generation in entrypoint
 
-  # ARQ Worker (Background Tasks)
-  worker:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: vidgo_worker
-    entrypoint: []  # Skip entrypoint for worker
-    command: arq app.worker.WorkerSettings
-    volumes:
-      - ./backend:/app
-      - ./mcp-servers:/app/mcp-servers
-      - vidgo_generated:/app/static/generated
-      - vidgo_materials:/app/static/materials
-      - vidgo_tryon_garments:/app/static/tryon_garments
-    env_file:
-      - ./backend/.env
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/vidgo
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      - postgres
-      - redis
-      - backend
-    networks:
-      - vidgo_network
+
 
   # Material Pre-generation Job (runs once - full generation with TOOL_LIMITS)
   # Usage: docker compose --profile init up init-materials

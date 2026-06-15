@@ -1,8 +1,8 @@
 # VidGo AI Platform - Infrastructure Architecture
 
-> Last updated: 2026-06-12
+> Last updated: 2026-06-15 (2026-06 cost pass)
 
-**Version:** 4.0
+**Version:** 5.0
 **Cloud Provider:** Google Cloud Platform (GCP) — project `vidgo-ai`, region `asia-east1`
 **DNS Provider:** GoDaddy (domain `vidgo.co`)
 **Max Concurrent Users:** 1,000
@@ -20,51 +20,58 @@
 │       │                                                                              │
 │       ▼                                                                              │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐  │
+│   │              Firebase Hosting (project vidgo-gen-ai-prod, global CDN)        │  │
+│   │                                                                              │  │
+│   │   vidgo.co / app.vidgo.co  → Firebase Hosting → Vue SPA (npm run build)     │  │
+│   │   (firebase deploy --only hosting; separate from GCP project vidgo-ai)      │  │
+│   └─────────────────────────────────────────────────────────────────────────────┘  │
+│                                               │                                      │
+│   ┌─────────────────────────────────────────────────────────────────────────────┐  │
 │   │                    GoDaddy DNS (vidgo.co)                                    │  │
 │   │                                                                              │  │
-│   │   vidgo.co          → Cloud Run domain mapping → vidgo-frontend             │  │
-│   │   api.vidgo.co      → Cloud Run domain mapping → vidgo-backend              │  │
-│   │   app.vidgo.co      → Cloud Run domain mapping → vidgo-frontend (pending)   │  │
+│   │   vidgo.co / app.vidgo.co  → Firebase Hosting (Vue SPA, global CDN)         │  │
+│   │   api.vidgo.co             → Cloud Run domain mapping → vidgo-backend       │  │
 │   │                                                                              │  │
-│   │   No GCP Load Balancer — Cloud Run domain mappings handle TLS directly.     │  │
+│   │   No GCP Load Balancer — Cloud Run domain mapping handles backend TLS.      │  │
 │   └─────────────────────────────────────────────────────────────────────────────┘  │
-│                          │                    │                                      │
-│                          ▼                    ▼                                      │
-│   ┌──────────────────────────────┐  ┌──────────────────────────────┐               │
-│   │   Cloud Run: vidgo-frontend  │  │   Cloud Run: vidgo-backend   │               │
-│   │                              │  │                              │               │
-│   │   • Vue 3 + Vite → nginx     │  │   • FastAPI (uvicorn)        │               │
-│   │   • /api proxied to backend  │  │   • Min: 1, Max: 10          │               │
-│   │   • Min: 0, Max: 4           │  │   • 1 vCPU, 2Gi RAM          │               │
-│   │   • 1 vCPU, 256Mi RAM        │  │   • concurrency 80           │               │
-│   │   • port 80                  │  │   • timeout 3600s, port 8000 │               │
-│   └──────────────────────────────┘  └──────────────────────────────┘               │
-│                                                │                                     │
-│   ┌──────────────────────────────┐             │                                     │
-│   │   Cloud Run: vidgo-worker    │◄────────────┤  (same backend image,               │
-│   │                              │             │   custom command:                   │
-│   │   • ARQ background worker    │             │   `python -m http.server 8000 &     │
-│   │   • Min: 1, Max: 2           │             │    exec arq                          │
-│   │   • 1 vCPU, 512Mi RAM        │             │    app.worker.WorkerSettings`)      │
-│   │   • --no-cpu-throttling      │             │                                     │
-│   └──────────────────────────────┘             │                                     │
-│                          │                     │                                     │
-│                          ▼                     ▼                                     │
+│                                               │                                      │
+│                                               ▼                                      │
+│                              ┌──────────────────────────────┐                       │
+│                              │   Cloud Run: vidgo-backend   │                       │
+│                              │                              │                       │
+│                              │   • FastAPI (uvicorn)        │                       │
+│                              │   • Min: 1, Max: 10          │                       │
+│                              │   • 1 vCPU, 1Gi RAM          │                       │
+│                              │   • concurrency 80           │                       │
+│                              │   • request-based CPU billing│                       │
+│                              │   • timeout 3600s, port 8000 │                       │
+│                              └──────────────────────────────┘                       │
+│                                               ▲                                      │
+│   ┌──────────────────────────────┐            │                                     │
+│   │   Cloud Scheduler            │────────────┘  (background/async tasks:            │
+│   │                              │   HTTP POST → /api/v1/tasks/*                     │
+│   │   • cron → HTTP POST         │   authed via X-Tasks-Secret header.              │
+│   │   • /api/v1/tasks/*          │   No vidgo-worker Cloud Run service; no ARQ.)    │
+│   │   • X-Tasks-Secret header    │                                                  │
+│   └──────────────────────────────┘            │                                     │
+│                                               ▼                                      │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐  │
-│   │              VPC `vidgo-vpc` (via connector `vidgo-connector`)               │  │
+│   │     VPC `vidgo-vpc` (Direct VPC egress: subnet vidgo-subnet, all-traffic)    │  │
 │   │                                                                              │  │
-│   │   ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐    │  │
-│   │   │   Cloud SQL        │  │   Memorystore      │  │   Cloud Storage    │    │  │
-│   │   │   `prod-db`        │  │   `vidgo-redis`    │  │   `vidgo-media-    │    │  │
-│   │   │                    │  │                    │  │    vidgo-ai`       │    │  │
-│   │   │   • PostgreSQL 15  │  │   • Basic 1GB      │  │   • static/ +      │    │  │
-│   │   │   • db-f1-micro    │  │   • 10.24.105.251  │  │     generated/     │    │  │
-│   │   │   • PRIVATE IP only│  │   • Cache + ARQ    │  │   • asia-east1     │    │  │
-│   │   │     10.70.0.3      │  │     queue          │  │   • public media   │    │  │
-│   │   └────────────────────┘  └────────────────────┘  └────────────────────┘    │  │
+│   │   ┌────────────────────────────┐        ┌────────────────────────────┐      │  │
+│   │   │   Cloud SQL                │        │   Cloud Storage            │      │  │
+│   │   │   `prod-db`                │        │   `vidgo-media-vidgo-ai`   │      │  │
+│   │   │                            │        │                            │      │  │
+│   │   │   • PostgreSQL 15          │        │   • static/ + generated/   │      │  │
+│   │   │   • db-f1-micro            │        │   • asia-east1             │      │  │
+│   │   │   • PRIVATE IP only        │        │   • public media           │      │  │
+│   │   │     10.70.0.3              │        │                            │      │  │
+│   │   └────────────────────────────┘        └────────────────────────────┘      │  │
+│   │   (No Memorystore Redis — removed in the 2026-06 cost pass.)                 │  │
 │   │                                                                              │  │
 │   │   Cloud NAT static egress IP: 35.201.182.131 (`vidgo-nat-ip`)               │  │
-│   │   — fixed outbound IP for ECPay / Giveme allowlisting                       │  │
+│   │   — egress MUST stay all-traffic so outbound ECPay / Giveme calls           │  │
+│   │     come from this whitelisted IP                                           │  │
 │   └─────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                      │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐  │
@@ -79,24 +86,27 @@
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Key facts (verified against live `gcloud` state on 2026-06-12):
+Key facts (verified against live `gcloud` state, 2026-06 cost pass):
 
 | Resource | Value |
 |----------|-------|
 | GCP project | `vidgo-ai` |
 | Region | `asia-east1` |
-| Cloud Run services | `vidgo-backend`, `vidgo-worker`, `vidgo-frontend` |
+| Cloud Run services | `vidgo-backend` only (frontend: Firebase Hosting; no `vidgo-worker`) |
+| Frontend hosting | Firebase Hosting, project `vidgo-gen-ai-prod` (separate from GCP `vidgo-ai`) |
+| Async/background tasks | Cloud Scheduler → HTTP POST `/api/v1/tasks/*` (authed via `X-Tasks-Secret`); no ARQ, no worker service |
 | Artifact Registry | `asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images` |
 | Cloud SQL | `prod-db` (POSTGRES_15, db-f1-micro, **private IP only** `10.70.0.3`) |
-| Memorystore Redis | `vidgo-redis` (Basic 1GB, `10.24.105.251:6379`, network `vidgo-vpc`) |
-| VPC connector | `vidgo-connector` (`vidgo-vpc`, `10.8.0.0/28`, egress `all-traffic`) |
+| Memorystore Redis | **Removed** in the 2026-06 cost pass (`vidgo-redis` deleted; no `REDIS_URL`) |
+| VPC egress | **Direct VPC egress** (`--network vidgo-vpc --subnet vidgo-subnet --vpc-egress all-traffic`) — no `vidgo-connector`. Static NAT IP retained for Giveme/ECPay whitelist (egress stays `all-traffic`). |
 | Media bucket | `gs://vidgo-media-vidgo-ai` |
-| Service accounts | `vidgo-backend@vidgo-ai.iam.gserviceaccount.com` (backend), `vidgo-worker@vidgo-ai.iam.gserviceaccount.com` (worker) |
+| Service accounts | `vidgo-backend@vidgo-ai.iam.gserviceaccount.com` only (no `vidgo-worker@`). Backend SA also has `roles/bigquery.dataViewer` + `roles/bigquery.jobUser` to read the Cloud Billing→BigQuery export for the admin Cost dashboard. |
 
 Notes:
-- `DATABASE_URL` and `REDIS_URL` come from **Secret Manager** (mounted as env vars); the DB is reached over its private IP through the VPC connector.
-- Both backend and worker carry the `run.googleapis.com/cloudsql-instances` annotation `vidgo-ai:asia-east1:prod-db,vidgo-ai:asia-east1:vidgo-db`. The `vidgo-db` instance **no longer exists** (deleted); the annotation entry is a harmless leftover — the live connection uses `prod-db` private IP, not the SQL Auth Proxy socket.
-- `vidgo-worker` runs the **backend image** with a custom command (`python -m http.server 8000 & exec arq app.worker.WorkerSettings`) — the dummy HTTP server satisfies Cloud Run's port health check while ARQ consumes the Redis queue.
+- `DATABASE_URL` comes from **Secret Manager** (mounted as env var); the DB is reached over its private IP via Direct VPC egress. There is **no `REDIS_URL`** anymore.
+- The backend carries the `run.googleapis.com/cloudsql-instances` annotation for `vidgo-ai:asia-east1:prod-db` (attached via `--add-cloudsql-instances`). Any leftover `vidgo-db` entry is harmless — the live connection uses `prod-db` private IP.
+- **No Redis in prod.** The app uses in-process caching; the model-registry live-override mechanism falls back to DB-on-write + env-on-restart (no Redis pub/sub); rate-limiting/locks fall back to Postgres.
+- **Background/async tasks** run via **Cloud Scheduler → HTTP POST `/api/v1/tasks/*`** (authenticated with an `X-Tasks-Secret` header), handled by the backend service. ARQ-as-a-Cloud-Run-service is gone.
 
 ---
 
@@ -123,22 +133,23 @@ VidGo 已採用 **Cloud Run (Serverless)** 並在生產環境運行:
 ✅ 選擇 Cloud Run 的原因 (已驗證):
 
 1. 成本效益最佳
-   • backend min=1 保持暖機, frontend scale-to-zero
+   • backend min=1 保持暖機 (唯一 Cloud Run service), 前端在 Firebase Hosting (全球 CDN)
    • 1000 並發在 Cloud Run 完全可以處理
+   • 2026-06 cost pass 移除了 Redis / worker / VPC connector
 
 2. 管理簡單
    • 無需管理 Kubernetes 集群
    • 自動擴展、自動修復、revision-based rollback
 
 3. VidGo 使用場景適合
-   • AI 生成是異步任務 (ARQ worker + polling)
+   • AI 生成是異步任務 (Cloud Scheduler → /api/v1/tasks/* + polling)
    • 不需要 GPU (AI 在外部 API: PiAPI / Vertex AI / Pollo / A2E)
    • 不需要長時間 WebSocket (使用 polling / SSE)
 
 ❌ 不需要 GKE 的原因:
 
 1. 沒有自建 AI 模型需求 (使用外部 API)
-2. 沒有複雜微服務架構 (3 個 Cloud Run services)
+2. 沒有複雜微服務架構 (單一 Cloud Run service + Firebase Hosting)
 3. 1000 用戶不需要 Kubernetes 複雜度
 ```
 
@@ -160,32 +171,40 @@ VidGo 已採用 **Cloud Run (Serverless)** 並在生產環境運行:
 
 ### 3.1 Cloud Run Services
 
-| Setting | `vidgo-backend` | `vidgo-worker` | `vidgo-frontend` |
-|---------|-----------------|----------------|------------------|
-| Image | `…/vidgo-images/vidgo-backend:<TAG>` | same backend image | `…/vidgo-images/vidgo-frontend:<TAG>` |
-| Command | default (uvicorn via entrypoint) | `/bin/bash -c "python -m http.server 8000 & exec arq app.worker.WorkerSettings"` | nginx |
-| CPU / Memory | 1 vCPU / 2Gi | 1 vCPU / 512Mi (`--no-cpu-throttling`) | 1 vCPU / 256Mi |
-| Scaling | min 1 / max 10 | min 1 / max 2 | min 0 / max 4 |
-| Concurrency | 80 | 80 | default |
-| Timeout | 3600s | 300s | default |
-| Port | 8000 | 8000 (dummy health server) | 80 |
-| Ingress / auth | all, `--allow-unauthenticated` | `--no-allow-unauthenticated` | all, `--allow-unauthenticated` |
-| VPC | `vidgo-connector`, egress all-traffic | `vidgo-connector`, egress all-traffic | none |
-| Service account | `vidgo-backend@vidgo-ai.iam` | `vidgo-worker@vidgo-ai.iam` | default |
+There is exactly **one** Cloud Run service: `vidgo-backend`. The frontend is served by **Firebase Hosting** (project `vidgo-gen-ai-prod`, not Cloud Run). The old `vidgo-worker` and `vidgo-frontend` Cloud Run services were removed in the 2026-06 cost pass.
 
-Notable env vars on backend/worker (non-secret): `SKIP_PREGENERATION=true`, `SKIP_DEPENDENCY_CHECK=true`, `GCS_BUCKET=vidgo-media-vidgo-ai`, `VERTEX_AI_PROJECT=vidgo-ai`, `VERTEX_AI_LOCATION=asia-east1`, `GEMINI_MODEL=gemini-2.5-flash`, `GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`, `VEO_MODEL=veo-3.0-fast-generate-001`, `FRONTEND_URL=https://vidgo.co`, `BACKEND_URL=https://api.vidgo.co`, `ECPAY_ENV=production`, `PAYPAL_ENV=production`, `GIVEME_ENABLED=true`.
+| Setting | `vidgo-backend` |
+|---------|-----------------|
+| Image | `…/vidgo-images/vidgo-backend:<TAG>` |
+| Command | default (uvicorn via entrypoint) |
+| CPU / Memory | 1 vCPU / 1Gi |
+| CPU billing | request-based (CPU only during requests; **no** `--no-cpu-throttling`) |
+| Scaling | min 1 / max 10 |
+| Concurrency | 80 |
+| Timeout | 3600s |
+| Port | 8000 |
+| Ingress / auth | all, `--allow-unauthenticated` |
+| VPC | **Direct VPC egress** (`--network vidgo-vpc --subnet vidgo-subnet --vpc-egress all-traffic`); static NAT IP for Giveme/ECPay |
+| Cloud SQL | `--add-cloudsql-instances vidgo-ai:asia-east1:prod-db` |
+| Service account | `vidgo-backend@vidgo-ai.iam` (+ `roles/bigquery.dataViewer`, `roles/bigquery.jobUser`) |
 
-Frontend env: `BACKEND_URL=https://vidgo-backend-r2laip67ma-de.a.run.app` (substituted into the nginx template so `/api/*` is proxied server-side to the backend).
+Notable env vars on backend (non-secret): `SKIP_PREGENERATION=true`, `SKIP_DEPENDENCY_CHECK=true`, `GCS_BUCKET=vidgo-media-vidgo-ai`, `VERTEX_AI_PROJECT=vidgo-ai`, `VERTEX_AI_LOCATION=asia-east1`, `GEMINI_MODEL=gemini-2.5-flash`, `GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`, `VEO_MODEL=veo-3.0-fast-generate-001`, `FRONTEND_URL=https://vidgo.co`, `BACKEND_URL=https://api.vidgo.co`, `ECPAY_ENV=production`, `PAYPAL_ENV=production`, `GIVEME_ENABLED=true`, plus `GCP_BILLING_BQ_TABLE` (BigQuery billing-export table for the admin Cost dashboard; falls back to `GCP_*_BUDGET_USD` estimates when unset).
+
+Async/background tasks are driven by **Cloud Scheduler → HTTP POST `/api/v1/tasks/*`** (authenticated with an `X-Tasks-Secret` header), all handled inside the `vidgo-backend` service — there is no separate worker service.
 
 ### 3.2 Networking
 
-```bash
-# VPC + connector (existing — reference only)
-# vidgo-vpc, connector vidgo-connector: 10.8.0.0/28, 2-3 instances, READY
-gcloud compute networks vpc-access connectors describe vidgo-connector \
-    --region=asia-east1 --project=vidgo-ai
+Cloud Run uses **Direct VPC egress** (no Serverless VPC Connector). The `vidgo-connector` was removed in the 2026-06 cost pass.
 
-# Cloud NAT static egress IP (for ECPay / Giveme IP allowlists)
+```bash
+# Direct VPC egress is configured on the service, not as a standalone connector:
+#   --network vidgo-vpc --subnet vidgo-subnet --vpc-egress all-traffic
+# Egress MUST stay all-traffic so outbound Giveme (e-invoice) / ECPay calls
+# leave via the whitelisted static NAT IP (NOT private-ranges-only).
+gcloud run services describe vidgo-backend --project=vidgo-ai --region=asia-east1 \
+    --format="value(spec.template.metadata.annotations)"
+
+# Cloud NAT static egress IP (for ECPay / Giveme IP allowlists) — retained
 # vidgo-nat-ip = 35.201.182.131
 gcloud compute addresses list --project=vidgo-ai
 ```
@@ -198,8 +217,8 @@ There is **no GCP HTTPS Load Balancer, no serverless NEGs, no reserved global IP
 # Cloud SQL — PostgreSQL 15, private IP only (10.70.0.3), no public IP
 gcloud sql instances describe prod-db --project=vidgo-ai
 
-# Memorystore Redis — Basic 1GB on vidgo-vpc (cache + ARQ task queue)
-gcloud redis instances describe vidgo-redis --region=asia-east1 --project=vidgo-ai
+# Memorystore Redis — REMOVED in the 2026-06 cost pass (no vidgo-redis instance).
+# Caching is in-process; rate-limiting/locks fall back to Postgres.
 
 # Media bucket — public generated/static media
 gsutil ls gs://vidgo-media-vidgo-ai/
@@ -212,10 +231,10 @@ gsutil ls gs://vidgo-media-vidgo-ai/
 
 ### 3.4 Secret Manager
 
-Secrets mounted on backend + worker (as env vars, `:latest`):
+Secrets mounted on the `vidgo-backend` service (as env vars, `:latest`). There is **no `REDIS_URL`** anymore (Redis was removed):
 
 ```
-DATABASE_URL  REDIS_URL  SECRET_KEY
+DATABASE_URL  SECRET_KEY  TASKS_SECRET
 PIAPI_KEY  GEMINI_API_KEY  POLLO_API_KEY
 A2E_API_KEY  A2E_API_ID  A2E_DEFAULT_CREATOR_ID
 SMTP_HOST  SMTP_PORT  SMTP_USER  SMTP_PASSWORD
@@ -234,15 +253,17 @@ Additional secrets exist in Secret Manager but are **not mounted** on the servic
 
 ## 4. GoDaddy DNS Configuration
 
-Domain is **`vidgo.co`** (not vidgo.ai). TLS is provisioned automatically by Cloud Run domain mappings — no load balancer or managed SSL cert resources to maintain.
+Domain is **`vidgo.co`** (not vidgo.ai). The backend's TLS is provisioned automatically by its Cloud Run domain mapping; the frontend's TLS is handled by **Firebase Hosting** (project `vidgo-gen-ai-prod`). No load balancer or managed SSL cert resources to maintain.
 
 ### 4.1 Domain Mappings (live)
 
 ```bash
+# Only the backend uses a Cloud Run domain mapping now.
 gcloud beta run domain-mappings list --project=vidgo-ai --region=asia-east1
 #  ✔  api.vidgo.co  → vidgo-backend
-#  ✗  app.vidgo.co  → vidgo-frontend   (mapping created, cert not yet provisioned)
-#  ✔  vidgo.co      → vidgo-frontend
+#
+# vidgo.co / app.vidgo.co are served by Firebase Hosting (vidgo-gen-ai-prod),
+# configured in the Firebase console (custom domains), not Cloud Run.
 ```
 
 ### 4.2 GoDaddy DNS Records
@@ -250,13 +271,13 @@ gcloud beta run domain-mappings list --project=vidgo-ai --region=asia-east1
 ```
 Type    Name    Value                                  TTL
 ────    ────    ─────                                  ───
-A/AAAA  @       Google-provided IPs (from the          600
-                domain-mapping resource records)
+A/AAAA  @       Firebase Hosting IPs (from the         600
+                Firebase custom-domain setup)
 CNAME   api     ghs.googlehosted.com                   600
-CNAME   app     ghs.googlehosted.com                   600
+A/AAAA  app     Firebase Hosting IPs                   600
 ```
 
-Setup: GoDaddy → My Products → Domains → vidgo.co → DNS, enter the resource records shown by:
+Setup (backend mapping): GoDaddy → My Products → Domains → vidgo.co → DNS, enter the resource records shown by:
 
 ```bash
 gcloud beta run domain-mappings describe --domain=vidgo.co \
@@ -286,25 +307,23 @@ Highlights:
 - System deps: `curl postgresql-client redis-tools ffmpeg dos2unix fonts-noto-cjk fonts-noto-cjk-extra` (CJK fonts are required so the image-translator can render Traditional Chinese/Japanese/Korean glyphs instead of tofu).
 - **Node.js + MCP server build removed 2026-05-26** — the Pollo MCP and PiAPI MCP providers were deleted in favor of REST equivalents. This trimmed the image by ~150-200 MB and shaved ~30-60s off every build.
 - Entry: `scripts/docker_entrypoint.sh` (CRLF→LF normalized at build time), default CMD `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
-- The same image serves both `vidgo-backend` and `vidgo-worker` (worker overrides the command).
+- This image serves the `vidgo-backend` Cloud Run service. There is no longer a `vidgo-worker` service — async tasks are driven by Cloud Scheduler → `/api/v1/tasks/*` against this same backend.
 
-### 5.2 Frontend Image (`frontend-vue/Dockerfile.prod`)
+### 5.2 Frontend (Firebase Hosting)
 
-```dockerfile
-# Stage 1: node:20-alpine — npm ci && npm run build
-# Stage 2: mirror.gcr.io/library/nginx:alpine
-#   dist/ → /usr/share/nginx/html
-#   nginx.conf.template → /etc/nginx/templates/default.conf.template
-#   NGINX_ENVSUBST_FILTER=BACKEND_URL  (only $BACKEND_URL is substituted;
-#   nginx runtime vars like $host/$uri are left intact)
-#   EXPOSE 80
+The Vue SPA is no longer containerized for production. It is built with `npm run build` and deployed to **Firebase Hosting** (project `vidgo-gen-ai-prod`, global CDN):
+
+```bash
+cd frontend-vue
+npm run build                       # → dist/
+firebase deploy --only hosting      # uses .firebaserc / firebase.json (project vidgo-gen-ai-prod)
 ```
 
-The nginx template serves the SPA and reverse-proxies `/api/*` to `$BACKEND_URL`, so the browser only ever talks to the frontend origin.
+`frontend-vue/Dockerfile.prod` is retained only for local/CI parity; production traffic to `vidgo.co` / `app.vidgo.co` is served entirely by Firebase Hosting, not Cloud Run.
 
 ### 5.3 Local Development (`docker-compose.yml`)
 
-Services: `postgres` (15-alpine, host port 5433), `redis` (7-alpine, host port 6380), `mailpit` (SMTP testing, UI :8025), `backend` (uvicorn --reload, host port 8001), `worker` (ARQ), `frontend` (Vite dev server, host port 8501), plus profile-gated `init-materials` / `pregenerate` jobs for Material DB seeding. Generated media and materials persist in named Docker volumes (`vidgo_generated`, `vidgo_materials`, `vidgo_tryon_garments`).
+Local dev still uses Redis and an ARQ worker (this is unchanged — only **production** dropped them). Services: `postgres` (15-alpine, host port 5433), `redis` (7-alpine, host port 6380), `mailpit` (SMTP testing, UI :8025), `backend` (uvicorn --reload, host port 8001), `worker` (ARQ), `frontend` (Vite dev server, host port 8501), plus profile-gated `init-materials` / `pregenerate` jobs for Material DB seeding. Generated media and materials persist in named Docker volumes (`vidgo_generated`, `vidgo_materials`, `vidgo_tryon_garments`).
 
 ---
 
@@ -314,9 +333,11 @@ Services: `postgres` (15-alpine, host port 5433), `redis` (7-alpine, host port 6
 
 | File | Purpose |
 |------|---------|
-| `cloudbuild.yaml` | Full pipeline: build backend + frontend images in parallel (with `--cache-from :latest`), push to `vidgo-images`, then deploy `vidgo-backend`, `vidgo-worker` (backend image + custom ARQ command), and `vidgo-frontend` with explicit flags (`SKIP_PREGENERATION=true`, `--add-cloudsql-instances`, scaling/memory per service). |
+| `cloudbuild.yaml` | Backend-only pipeline: build the **backend** image (with `--cache-from :latest`), push to `vidgo-images`, then deploy `vidgo-backend` with explicit flags (`SKIP_PREGENERATION=true`, `--add-cloudsql-instances`, Direct VPC egress, 1Gi / min 1 / max 10). The frontend is **not** built here — it ships to Firebase Hosting (`firebase deploy --only hosting`), not Cloud Run. There is no worker deploy step. |
 | `cloudbuild.backend-only.yaml` | Build + push the backend image only (no deploy). |
 | `cloudbuild.frontend-only.yaml` | Build + push the frontend image only (no deploy). |
+
+The single canonical deploy script is `gcp/deploy.sh` (the old `gcp/deploy-production.sh` was consolidated into it).
 
 ### 6.2 Local-Build Deploy Flow (primary day-to-day path)
 
@@ -326,16 +347,13 @@ Images are typically built on a **linux/amd64** Docker host (Intel Mac, or `--pl
 REG=asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images
 TS=$(date +%Y%m%d-%H%M%S)
 
-# Backend (+ worker shares the image) — tag convention: YYYYMMDD-HHMMSS-be
+# Backend (only Cloud Run service) — tag convention: YYYYMMDD-HHMMSS-be
 docker build --platform linux/amd64 -t $REG/vidgo-backend:${TS}-be -f backend/Dockerfile .
 docker push $REG/vidgo-backend:${TS}-be
 gcloud run services update vidgo-backend  --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
-gcloud run services update vidgo-worker   --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
 
-# Frontend — tag convention: YYYYMMDD-HHMMSS-fe
-docker build --platform linux/amd64 -t $REG/vidgo-frontend:${TS}-fe -f frontend-vue/Dockerfile.prod frontend-vue/
-docker push $REG/vidgo-frontend:${TS}-fe
-gcloud run services update vidgo-frontend --image $REG/vidgo-frontend:${TS}-fe --project vidgo-ai --region asia-east1
+# Frontend — Firebase Hosting (no Cloud Run, no image)
+cd frontend-vue && npm run build && firebase deploy --only hosting   # project vidgo-gen-ai-prod
 ```
 
 Rollback: `gcloud run services update <svc> --image <previous tag>` or `gcloud run services update-traffic <svc> --to-revisions <rev>=100`. See `docs/DEPLOYMENT_GUIDE.md` for the full procedure.
@@ -367,14 +385,14 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS default_buyer_company_name VARCHAR(10
 | **Pollo.ai** (`pollo_provider.py`) | Tertiary backup for I2V; promoted to primary for specific Pollo-exclusive model ids. |
 | **A2E.ai** (`a2e_provider.py`) | Avatar / digital-human fallback after PiAPI. |
 
-Routing/fallback order lives in `app/providers/provider_router.py` (`primary → backup → tertiary → fallback` per `TaskType`). A Redis pub/sub model-registry subscriber (started in the FastAPI lifespan) lets admin model overrides propagate to every Cloud Run instance within seconds, without a redeploy.
+Routing/fallback order lives in `app/providers/provider_router.py` (`primary → backup → tertiary → fallback` per `TaskType`). Admin model overrides are persisted to the DB on write and applied via env-on-restart. (The previous Redis pub/sub propagation path was removed in the 2026-06 cost pass along with Redis; prod no longer fans out overrides to instances within seconds.)
 
 ### 7.1 Backend Lifespan (startup behavior)
 
 `backend/app/main.py` lifespan is designed to start **fast** so the Cloud Run health check passes:
 - Material validation + startup media cleanup run as a **non-blocking background task** (5s delay, 30s timeout, non-fatal).
-- Hourly media-cleanup loop task.
-- Model-registry Redis pub/sub subscriber (best-effort; falls back to DB-on-write + env-on-restart).
+- Media cleanup now runs via **Cloud Scheduler → `/api/v1/tasks/*`** rather than an in-process hourly worker loop.
+- Model-registry overrides use **DB-on-write + env-on-restart** (no Redis pub/sub subscriber in prod).
 - `SKIP_PREGENERATION=true` in production — materials are seeded via admin endpoints/scripts, never at boot.
 
 ---
@@ -384,18 +402,16 @@ Routing/fallback order lives in `app/providers/provider_router.py` (`primary →
 ### 8.1 Cloud Monitoring / Logging
 
 ```bash
-# View backend logs
+# View backend logs (async task runs surface here too, under /api/v1/tasks/*)
 gcloud logging read \
   'resource.type=cloud_run_revision AND resource.labels.service_name=vidgo-backend' \
   --project=vidgo-ai --limit=100
 
-# Worker logs (ARQ job failures surface here)
-gcloud logging read \
-  'resource.type=cloud_run_revision AND resource.labels.service_name=vidgo-worker' \
-  --project=vidgo-ai --limit=100
+# There is no vidgo-worker service — scheduled-task failures appear in the
+# backend logs above (filter on httpRequest.requestUrl=~"/api/v1/tasks/").
 ```
 
-Useful built-in Cloud Run metrics: `run.googleapis.com/request_count` (filter `response_code_class!="2xx"` for error rate), `request_latencies` (p95), instance count, and container memory utilization (backend is 2Gi; watch for OOM on media-heavy endpoints).
+Useful built-in Cloud Run metrics: `run.googleapis.com/request_count` (filter `response_code_class!="2xx"` for error rate), `request_latencies` (p95), instance count, and container memory utilization (backend is 1Gi; watch for OOM on media-heavy endpoints).
 
 ### 8.2 Alert Policies
 
@@ -424,14 +440,11 @@ gcloud alpha monitoring policies create \
 │  Service                        Specs                     Monthly Cost     │
 │  ─────────────────────────────────────────────────────────────────────────│
 │                                                                             │
-│  Cloud Run (vidgo-backend)     1 vCPU, 2Gi, min 1/max 10  $35-55          │
-│  Cloud Run (vidgo-worker)      1 vCPU, 512Mi, min 1/max 2,                 │
-│                                no-cpu-throttling          $20-30          │
-│  Cloud Run (vidgo-frontend)    1 vCPU, 256Mi, min 0/max 4 $2-8            │
+│  Cloud Run (vidgo-backend)     1 vCPU, 1Gi, min 1/max 10  $30-50          │
+│                                request-based CPU billing                    │
+│  Firebase Hosting (frontend)   global CDN, SPA            ~$0 (free tier)  │
 │                                                                             │
 │  Cloud SQL (prod-db)           db-f1-micro, PG15          $10-15          │
-│  Memorystore Redis             Basic 1GB                  $35             │
-│  VPC connector                 2-3 e2 instances           $15-25          │
 │  Cloud NAT + static IP         egress IP for payments     $5-10           │
 │                                                                             │
 │  Cloud Storage                 vidgo-media bucket + ops   $5-15           │
@@ -441,9 +454,13 @@ gcloud alpha monitoring policies create \
 │  Monitoring & Logging          basic usage                $0-5            │
 │                                                                             │
 │  ─────────────────────────────────────────────────────────────────────────│
-│  GCP Infrastructure Subtotal                              ~$140-210       │
+│  GCP Infrastructure Subtotal                              ~$60-105        │
 │                                                                             │
-│  (No Load Balancer / global IP — domain mappings are free.)               │
+│  2026-06 cost pass: removed Memorystore Redis (~$35), VPC connector        │
+│  (~$15-25) and the vidgo-worker service; frontend moved off Cloud Run      │
+│  to Firebase Hosting (effectively free CDN tier).                          │
+│  (No Load Balancer / global IP — backend domain mapping is free; Firebase  │
+│   Hosting fronts the SPA.)                                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -498,13 +515,13 @@ Per-plan pricing/margin modeling lives in `docs/service-cost.md`.
 │  Application Deployment:                                                    │
 │  □ Backend image built + pushed (tag YYYYMMDD-HHMMSS-be)                   │
 │  □ vidgo-backend updated via `gcloud run services update --image`          │
-│  □ vidgo-worker updated to the SAME backend image tag                      │
-│  □ Frontend image built + pushed, vidgo-frontend updated                   │
+│  □ Frontend built (`npm run build`) + `firebase deploy --only hosting`     │
+│    (Firebase project vidgo-gen-ai-prod)                                    │
 │                                                                             │
 │  Post-Deployment:                                                           │
 │  □ https://api.vidgo.co/health responding                                  │
-│  □ https://vidgo.co loads, /api proxy works                                │
-│  □ Worker logs show ARQ consuming jobs (no startup crash-loop)             │
+│  □ https://vidgo.co loads (Firebase Hosting), API calls reach api.vidgo.co │
+│  □ Cloud Scheduler → /api/v1/tasks/* runs OK (check backend logs)         │
 │  □ A test generation completes (PiAPI primary path)                        │
 │  □ Provider fallback intact (Vertex AI ADC — no GEMINI_API_KEY usage)      │
 │  □ PayPal + ECPay webhooks verified; Giveme e-invoice issued on payment    │
@@ -529,8 +546,8 @@ Per-plan pricing/margin modeling lives in `docs/service-cost.md`.
 # ─────────────────────────────────────────────────────────────────────────────
 REG=asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images
 gcloud run services update vidgo-backend  --image $REG/vidgo-backend:<TAG>-be --project vidgo-ai --region asia-east1
-gcloud run services update vidgo-worker   --image $REG/vidgo-backend:<TAG>-be --project vidgo-ai --region asia-east1
-gcloud run services update vidgo-frontend --image $REG/vidgo-frontend:<TAG>   --project vidgo-ai --region asia-east1
+# Frontend (Firebase Hosting, project vidgo-gen-ai-prod):
+#   cd frontend-vue && npm run build && firebase deploy --only hosting
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MONITORING
@@ -549,7 +566,7 @@ psql "host=127.0.0.1 port=5432 dbname=vidgo user=<user>"
 # TROUBLESHOOTING
 # ─────────────────────────────────────────────────────────────────────────────
 gcloud beta run domain-mappings list --project=vidgo-ai --region=asia-east1
-gcloud redis instances describe vidgo-redis --region=asia-east1 --project=vidgo-ai
+# (No Memorystore Redis and no VPC connector to inspect — removed in 2026-06 cost pass.)
 dig vidgo.co
 dig api.vidgo.co
 curl -I https://api.vidgo.co/health
@@ -636,11 +653,12 @@ curl -I https://api.vidgo.co/health
 - Index on `User.subscription_cancelled_at` for retention monitoring
 - Index on `Promotion.code` for fast lookup
 
-**Redis Caching:**
+**Caching (in-process):**
 - Cache promotion code validation results
 - Cache user tier permissions
+- (Production no longer uses Memorystore Redis — caching is in-process and rate-limiting/locks fall back to Postgres. Removed in the 2026-06 cost pass.)
 
 ---
 
-*Document Version: 4.0*
-*Last Updated: 2026-06-12*
+*Document Version: 5.0*
+*Last Updated: 2026-06-15 (2026-06 cost pass)*

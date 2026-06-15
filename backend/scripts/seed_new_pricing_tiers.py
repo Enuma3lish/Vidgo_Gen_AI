@@ -258,6 +258,26 @@ NEW_SERVICE_PRICING_DATA = [
         "description": "進階動態生成 - AI 試穿"
     },
     {
+        # The /tools/try-on endpoint bills service_type="virtual_try_on"
+        # (tools.py: CREDIT_COST=30). Without this row the DB price-override
+        # firewall is dead and it silently falls back to the hardcoded 30 —
+        # ops could not retune try-on pricing. Keep credit_cost in sync with
+        # tools.py. Kling try-on upstream is ~$0.50-1.00; 30 cr ≈ $1.20 revenue.
+        "service_type": "virtual_try_on",
+        "display_name": "AI 換裝 / 試衣",
+        "credit_cost": 30,
+        "api_cost_usd": Decimal("0.75"),
+        "model_type": "kling",
+        "tool_category": "image",
+        "tool_type": "try_on",
+        "resolution": "1024p",
+        "max_duration": None,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["kling"],
+        "description": "Kling AI 換裝 / 試衣（圖生圖）"
+    },
+    {
         "service_type": "ai_avatar",
         "display_name": "AI 虛擬人物",
         "credit_cost": 300,

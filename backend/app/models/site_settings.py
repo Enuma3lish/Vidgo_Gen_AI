@@ -6,7 +6,7 @@ description text that the pricing page renders above the plan cards.
 Stored as one row (id=1) so the admin UI can read / write everything in
 a single call.
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func
 from app.core.database import Base
 
 
@@ -33,6 +33,16 @@ class SiteSettings(Base):
     # Optional small print / disclaimer at the bottom of the pricing page.
     pricing_footnote_zh = Column(Text, nullable=True)
     pricing_footnote_en = Column(Text, nullable=True)
+
+    # Demo/example watermark — admin-configurable. Free/visitor users see
+    # watermarked example outputs (subscribers get the clean result), which is
+    # the conversion driver for the premium-preview gallery. The admin uploads a
+    # transparent PNG logo via /uploads and stores its URL in watermark_image_url.
+    watermark_enabled = Column(Boolean, nullable=False, server_default="true")
+    watermark_image_url = Column(Text, nullable=True)      # transparent PNG logo overlaid on examples
+    watermark_text = Column(String(120), nullable=True)    # fallback / supplementary text watermark
+    watermark_position = Column(String(20), nullable=True, server_default="bottom_right")  # *_left/right, center
+    watermark_opacity = Column(Integer, nullable=True, server_default="70")  # 0-100 (%)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

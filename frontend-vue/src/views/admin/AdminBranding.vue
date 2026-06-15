@@ -24,6 +24,11 @@ const settings = ref<SiteBrandingSettings>({
   pricing_intro_body_en: null,
   pricing_footnote_zh: null,
   pricing_footnote_en: null,
+  watermark_enabled: true,
+  watermark_image_url: null,
+  watermark_text: null,
+  watermark_position: 'bottom_right',
+  watermark_opacity: 70,
 })
 
 const loading = ref(false)
@@ -31,6 +36,65 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const successMsg = ref<string | null>(null)
 const uploadingSlot = ref<string | null>(null)
+const backfilling = ref(false)
+const backfillMsg = ref<string | null>(null)
+
+const WATERMARK_POSITIONS = [
+  { id: 'bottom_right', zh: '右下', en: 'Bottom-right' },
+  { id: 'bottom_left', zh: '左下', en: 'Bottom-left' },
+  { id: 'top_right', zh: '右上', en: 'Top-right' },
+  { id: 'top_left', zh: '左上', en: 'Top-left' },
+  { id: 'center', zh: '置中', en: 'Center' },
+]
+
+async function uploadWatermark(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploadingSlot.value = 'watermark'
+  error.value = null
+  try {
+    const uploaded = await toolsApi.uploadImage(file)
+    settings.value.watermark_image_url = uploaded.url
+    const { settings: row } = await adminApi.updateBranding({ watermark_image_url: uploaded.url })
+    settings.value = { ...settings.value, ...row }
+    successMsg.value = L('浮水印已上傳。記得按「套用到所有範例」。', 'Watermark uploaded. Remember to "Apply to all examples".')
+  } catch (e: any) {
+    error.value = e?.response?.data?.detail || e?.message || 'Upload failed'
+  } finally {
+    uploadingSlot.value = null
+    input.value = ''
+  }
+}
+
+async function runBackfill() {
+  backfilling.value = true
+  backfillMsg.value = null
+  error.value = null
+  try {
+    // Save current watermark settings first so the backfill uses them.
+    await adminApi.updateBranding({
+      watermark_enabled: settings.value.watermark_enabled,
+      watermark_image_url: settings.value.watermark_image_url,
+      watermark_text: settings.value.watermark_text,
+      watermark_position: settings.value.watermark_position,
+      watermark_opacity: settings.value.watermark_opacity,
+    })
+    let total = 0
+    // Loop batches until the server reports no more rows to process.
+    for (let i = 0; i < 100; i++) {
+      const r = await adminApi.runWatermarkBackfill(true)
+      total += r.updated
+      backfillMsg.value = L(`已套用 ${total} 張…`, `Watermarked ${total} so far…`)
+      if (!r.more) break
+    }
+    backfillMsg.value = L(`完成：已為 ${total} 張範例套用浮水印。`, `Done — watermarked ${total} example images.`)
+  } catch (e: any) {
+    error.value = e?.response?.data?.detail || e?.message || 'Backfill failed'
+  } finally {
+    backfilling.value = false
+  }
+}
 
 async function loadBranding() {
   loading.value = true
@@ -150,6 +214,58 @@ onMounted(loadBranding)
       </div>
     </div>
 
+    <!-- Demo/example watermark -->
+    <div v-if="!loading" class="section">
+      <h2>{{ L('範例浮水印', 'Example Watermark') }}</h2>
+      <p class="hint">
+        {{ L('免費 / 訪客用戶看到的範例輸出會加上此浮水印，訂閱用戶則看到無浮水印的乾淨結果 — 用來吸引免費用戶訂閱。建議上傳透明背景 PNG。', 'Free / visitor users see examples with this watermark; subscribers get the clean result — the driver to convert free users. Upload a transparent PNG.') }}
+      </p>
+
+      <label class="toggle-row">
+        <input type="checkbox" v-model="settings.watermark_enabled" />
+        <span>{{ L('啟用範例浮水印', 'Enable example watermark') }}</span>
+      </label>
+
+      <div class="watermark-grid">
+        <div class="logo-slot">
+          <span class="slot-label">{{ L('浮水印圖片 (PNG)', 'Watermark image (PNG)') }}</span>
+          <div class="preview checker">
+            <img v-if="settings.watermark_image_url" :src="settings.watermark_image_url" alt="watermark" />
+            <span v-else class="placeholder">—</span>
+          </div>
+          <label class="file-btn">
+            <input type="file" accept="image/png,image/webp" :disabled="uploadingSlot==='watermark'" @change="uploadWatermark" hidden />
+            <span>{{ uploadingSlot==='watermark' ? L('上傳中…', 'Uploading…') : L('上傳浮水印', 'Upload watermark') }}</span>
+          </label>
+          <input v-model="settings.watermark_image_url" class="url-input" placeholder="https://…" />
+        </div>
+
+        <div class="watermark-controls">
+          <label>
+            <span>{{ L('位置', 'Position') }}</span>
+            <select v-model="settings.watermark_position">
+              <option v-for="p in WATERMARK_POSITIONS" :key="p.id" :value="p.id">{{ L(p.zh, p.en) }}</option>
+            </select>
+          </label>
+          <label>
+            <span>{{ L('不透明度', 'Opacity') }}: {{ settings.watermark_opacity }}%</span>
+            <input type="range" min="10" max="100" step="5" v-model.number="settings.watermark_opacity" />
+          </label>
+          <label>
+            <span>{{ L('文字浮水印（無圖片時使用）', 'Text watermark (used if no image)') }}</span>
+            <input v-model="settings.watermark_text" placeholder="VidGo" />
+          </label>
+        </div>
+      </div>
+
+      <div class="backfill-row">
+        <button class="btn-secondary" :disabled="backfilling" @click="runBackfill">
+          {{ backfilling ? L('套用中…', 'Applying…') : L('套用到所有範例', 'Apply to all examples') }}
+        </button>
+        <span v-if="backfillMsg" class="backfill-msg">{{ backfillMsg }}</span>
+      </div>
+    </div>
+
     <div v-if="!loading" class="section">
       <h2>{{ L('品牌名稱與標語', 'Brand Name & Tagline') }}</h2>
       <div class="grid-2col">
@@ -247,6 +363,22 @@ onMounted(loadBranding)
 }
 .grid-2col input:focus, .grid-2col textarea:focus { border-color: rgba(22,119,255,0.5); outline: 0; }
 .grid-2col textarea { resize: vertical; line-height: 1.45; }
+
+.toggle-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #c4c4d8; margin-bottom: 1rem; cursor: pointer; }
+.toggle-row input { width: 16px; height: 16px; }
+.watermark-grid { display: grid; grid-template-columns: 260px 1fr; gap: 1.5rem; align-items: start; }
+.preview.checker { background: repeating-conic-gradient(#2a2a3a 0% 25%, #1a1a26 0% 50%) 50% / 20px 20px; }
+.watermark-controls { display: flex; flex-direction: column; gap: 1rem; }
+.watermark-controls label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.85rem; color: #9494b0; }
+.watermark-controls select, .watermark-controls input[type=text], .watermark-controls input:not([type]) {
+  background: #0d0d15; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e8e8f0; padding: 0.5rem 0.7rem; font-size: 0.9rem;
+}
+.watermark-controls input[type=range] { accent-color: #1677ff; }
+.backfill-row { display: flex; align-items: center; gap: 1rem; margin-top: 1.25rem; flex-wrap: wrap; }
+.btn-secondary { background: rgba(22,119,255,0.12); border: 1px solid rgba(22,119,255,0.3); color: #6cb1ff; padding: 0.55rem 1.1rem; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
+.btn-secondary:hover { background: rgba(22,119,255,0.2); }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+.backfill-msg { font-size: 0.85rem; color: #6fe0a8; }
 
 .save-row { display: flex; justify-content: flex-end; }
 .btn-primary { background: #1677ff; color: white; border: 0; padding: 0.65rem 1.5rem; border-radius: 8px; font-size: 0.95rem; font-weight: 500; cursor: pointer; }

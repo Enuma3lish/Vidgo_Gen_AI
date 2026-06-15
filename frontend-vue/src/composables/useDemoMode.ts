@@ -66,6 +66,18 @@ export interface EffectCatalogItem {
   category?: string
 }
 
+/**
+ * A model the free-tier demo can preview. `premium: true` items (Kling 3.0 /
+ * Sora 2 / Veo) let free users try a premium model via a cached example — the
+ * result is watermarked, with a subscribe CTA. From GET /api/v1/demo/models/{tool}.
+ */
+export interface DemoModelItem {
+  id: string
+  name: string
+  name_zh?: string
+  premium: boolean
+}
+
 export interface DemoPresetResult {
   success: boolean
   preset_id: string
@@ -103,6 +115,10 @@ export function useDemoMode() {
   const isLoadingInputLibrary = ref(false)
   const effectCatalog = ref<EffectCatalogItem[]>([])
   const isLoadingEffectCatalog = ref(false)
+  // Premium-model preview dropdown. selectedModelId defaults to 'default'
+  // (free); picking a premium model adds model_id to the generate request.
+  const modelCatalog = ref<DemoModelItem[]>([])
+  const selectedModelId = ref<string>('default')
 
   const hasPaidPlan = computed(() => {
     const user = authStore.user
@@ -374,6 +390,26 @@ export function useDemoMode() {
     }
   }
 
+  /**
+   * Load the premium-model dropdown for a tool (free "default" + premium
+   * options). Backed by GET /api/v1/demo/models/{tool_type}. Pass the picked
+   * model via `model_id` in generateOnDemand's extraParams to preview a
+   * premium-model cached example.
+   */
+  async function loadModelCatalog(toolType: string) {
+    try {
+      const response = await apiClient.get(`/api/v1/demo/models/${toolType}`)
+      const models = Array.isArray(response.data?.models) ? response.data.models : []
+      modelCatalog.value = models
+      // Reset selection to the free default whenever the tool changes.
+      selectedModelId.value = models[0]?.id || 'default'
+    } catch (error) {
+      console.error('Failed to load model catalog:', error)
+      modelCatalog.value = []
+      selectedModelId.value = 'default'
+    }
+  }
+
   function resolveSelectedLanguage(locale?: string): 'zh-TW' | 'en' {
     const storedLocale = safeLocalStorage.getItem('locale')
     const browserLocale = typeof navigator !== 'undefined' ? navigator.language : 'en'
@@ -415,6 +451,9 @@ export function useDemoMode() {
     inputLibrary,
     isLoadingInputLibrary,
     effectCatalog,
+    modelCatalog,
+    selectedModelId,
+    loadModelCatalog,
     isLoadingEffectCatalog,
 
     // Computed

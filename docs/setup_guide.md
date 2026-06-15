@@ -224,8 +224,8 @@ gcloud run deploy vidgo-backend \
   --image="asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images/vidgo-backend:${IMAGE_TAG}" \
   --project=vidgo-ai --region=asia-east1 --platform=managed \
   --min-instances=1 --max-instances=10 \
-  --memory=1Gi --cpu=1 --port=8000 --timeout=300 \
-  --vpc-connector="projects/vidgo-ai/locations/asia-east1/connectors/vidgo-connector" \
+  --memory=1Gi --cpu=1 --port=8000 --timeout=3600 \
+  --network=vidgo-vpc --subnet=vidgo-subnet --vpc-egress=all-traffic \
   --add-cloudsql-instances="vidgo-ai:asia-east1:prod-db" \
   --service-account="vidgo-backend@vidgo-ai.iam.gserviceaccount.com" \
   --set-env-vars="\
@@ -254,14 +254,12 @@ PROVIDER_CIRCUIT_BREAKER_COOLDOWN_SECONDS=180,\
 PROVIDER_ALERT_COOLDOWN_MINUTES=15" \
   --set-secrets="\
 DATABASE_URL=DATABASE_URL:latest,\
-REDIS_URL=REDIS_URL:latest,\
 SECRET_KEY=SECRET_KEY:latest,\
 PIAPI_KEY=PIAPI_KEY:latest,\
 POLLO_API_KEY=POLLO_API_KEY:latest,\
 A2E_API_KEY=A2E_API_KEY:latest,\
 A2E_API_ID=A2E_API_ID:latest,\
 A2E_DEFAULT_CREATOR_ID=A2E_DEFAULT_CREATOR_ID:latest,\
-PADDLE_API_KEY=PADDLE_API_KEY:latest,\
 SMTP_HOST=SMTP_HOST:latest,\
 SMTP_PORT=SMTP_PORT:latest,\
 SMTP_USER=SMTP_USER:latest,\

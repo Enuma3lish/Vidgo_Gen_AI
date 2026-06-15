@@ -1,15 +1,25 @@
 #!/bin/bash
 ###############################################################################
 #                     VidGo GCP 完整部署腳本 (Full Deploy Script)
-#                     Version: 1.0  |  Date: 2026-03
+#                     Version: 2.0  |  Updated: 2026-06
 ###############################################################################
+#
+#  Consolidated deploy script. Supersedes the old gcp/deploy-production.sh.
+#  Architecture (2026-06 cost pass):
+#    - NO Memorystore Redis      (in-process cache + Cloud Scheduler instead)
+#    - NO worker Cloud Run svc    (background tasks via Cloud Scheduler → /api/v1/tasks/*)
+#    - NO Serverless VPC Connector (Direct VPC egress on the Cloud Run service)
+#    - Frontend on Firebase Hosting (global CDN), NOT Cloud Run
+#    - Static NAT IP kept — required for Giveme / ECPay outbound IP whitelist
+#    - Real GCP cost on the admin dashboard via BigQuery billing export
 #
 #  Usage:
 #    bash gcp/deploy.sh                                 # 執行全部步驟
 #    bash gcp/deploy.sh --step 3                        # 只執行第 3 步
 #    bash gcp/deploy.sh --from 5                        # 從第 5 步開始
 #    bash gcp/deploy.sh --step secrets                  # 只執行 secrets 步驟
-#    bash gcp/deploy.sh --step fixmedia                  # 只修復 GCS 影片 Content-Type
+#    bash gcp/deploy.sh --step frontend                 # 只 build+deploy 前端到 Firebase
+#    bash gcp/deploy.sh --step fixmedia                 # 只修復 GCS 影片 Content-Type
 #    bash gcp/deploy.sh --step secret_cleanup           # 清理舊版 Secret (省成本)
 #    SECRET_VERSIONS_TO_KEEP=1 bash gcp/deploy.sh --step secret_cleanup
 #
@@ -34,102 +44,57 @@ cd "${REPO_ROOT}"
 # CONFIG — 請修改這裡 (Modify these values)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-PROJECT_ID="vidgo-ai"                       # <-- 你的 GCP 專案 ID
-REGION="asia-east1"                         # <-- 台灣區域
-ZONE="asia-east1-b"                         # <-- 可用區域
+PROJECT_ID="${PROJECT_ID:-vidgo-ai}"           # <-- 你的 GCP 專案 ID
+REGION="${REGION:-asia-east1}"                 # <-- 台灣區域
+ZONE="${ZONE:-asia-east1-b}"                   # <-- 可用區域
 
 # 命名
-APP_NAME="vidgo"                            # <-- 所有資源的前綴
+APP_NAME="vidgo"                               # <-- 所有資源的前綴
 VPC_NAME="${APP_NAME}-vpc"
 SUBNET_NAME="${APP_NAME}-subnet"
-CONNECTOR_NAME="${APP_NAME}-connector"
 SQL_INSTANCE="prod-db"
-REDIS_INSTANCE="${APP_NAME}-redis"
 BUCKET_NAME="${APP_NAME}-media-${PROJECT_ID}"
 ARTIFACT_REPO="${APP_NAME}-images"
 
-# Cloud Run 服務名稱
+# Cloud Run 服務名稱 (backend only — frontend is on Firebase Hosting)
 BACKEND_SERVICE="${APP_NAME}-backend"
-FRONTEND_SERVICE="${APP_NAME}-frontend"
-WORKER_SERVICE="${APP_NAME}-worker"
 
 # Cloud SQL 設定
 DB_NAME="vidgo"
 DB_USER="postgres"
-DB_PASSWORD="Vidgo96003146"  # <-- !! 務必修改 !!
-DB_TIER="db-g1-small"                         # Phase 1; Phase 2 改 db-n1-standard-2
+DB_PASSWORD="${DB_PASSWORD:-Vidgo96003146}"    # <-- !! 務必修改 / 用環境變數覆蓋 !!
+DB_TIER="db-g1-small"                          # Phase 1; Phase 2 改 db-n1-standard-2
 DB_STORAGE="10GB"
 
-# Redis 設定
-# 2026-06 cost audit: Memorystore vidgo-redis ran ~1,501 TWD/mo (BASIC tier,
-# 1GB). This is the GCP floor — BASIC tier minimum is 1GB and pricing is
-# largely fixed per GB-hour regardless of actual key count / RSS.
-# Levers to cut this line item:
-#   1. **Move to Memorystore for Redis Cluster shared-core SKU** (was Preview
-#      in 2024; check current pricing) — substantially cheaper for <1GB working set.
-#   2. **Self-host Redis on the existing worker / a tiny e2-micro VM** —
-#      ~$5/mo for the VM, but you take on backup + uptime responsibility.
-#   3. **Drop Redis entirely** — the only producers are: (a) arq queue,
-#      (b) abuse_prevention rate limiter, (c) credit-deduct distributed lock.
-#      arq supports a Postgres backend; rate limiting can move to Postgres
-#      counters or in-memory (sticky-session caveat); deduct lock already
-#      falls back to PG row-lock when Redis is absent (credit_service.py).
-# All three options are non-trivial; the BASIC-1GB tier is the floor for
-# the managed path.
-REDIS_TIER="basic"                            # Phase 1; Phase 2 改 standard
-REDIS_SIZE_GB=1                               # Phase 1; Phase 2 改 5
-
-# Cloud Run 資源設定 (Phase 1: 0-500 users, ~$88-115/month)
+# Cloud Run 資源設定 (Phase 1: 0-500 users)
+# 2026-06 cost pass: memory 2Gi → 1Gi. Backend uses request-based CPU
+# (no --no-cpu-throttling) so idle instances are cheap; min=1 keeps one warm.
 BACKEND_MIN_INSTANCES=1
 BACKEND_MAX_INSTANCES=10
-BACKEND_MEMORY="2Gi"
+BACKEND_MEMORY="1Gi"
 BACKEND_CPU=1
-
-FRONTEND_MIN_INSTANCES=0                      # Scale to Zero 省錢
-FRONTEND_MAX_INSTANCES=4
-FRONTEND_MEMORY="256Mi"
-FRONTEND_CPU=1
-
-# Worker (arq queue consumer).
-# 2026-06 cost audit (Gemini billing report): previous defaults
-# (cpu=1, memory=512Mi, max=3) combined with --no-cpu-throttling produced
-# ~1,590 TWD/month at 0.4% avg CPU utilization. Breakdown:
-#   - 1,507 TWD "Instance-based billing"  (always-allocated CPU)
-#   - 609 TWD   "Min Instance"            (the always-on instance)
-#
-# The instance MUST stay always-on (min=1) because --no-cpu-throttling is
-# what lets the asyncio event loop keep polling Redis between HTTP requests
-# — on throttled Cloud Run the loop would freeze and queued jobs would
-# pile up. So min=1 + --no-cpu-throttling stays.
-#
-# Constraint: Cloud Run requires --cpu >= 1 when --no-cpu-throttling is set,
-# so we cannot fractional-CPU the worker. Levers we CAN pull here:
-#   1. Memory 512Mi → 256Mi   — halves the memory portion
-#   2. Max 3 → 2              — caps burst spend during a queue backlog
-#
-# Bigger savings require a refactor (NOT in this edit, but documented):
-#   A. Switch worker to **Cloud Run Jobs** (pay per arq invocation, not per
-#      always-on instance). Estimated ~80% cost reduction at current load.
-#      Refactor: drop the `python -m http.server 8000 & exec arq …` shim,
-#      schedule arq via Cloud Scheduler + Pub/Sub trigger.
-#   B. Drop --no-cpu-throttling AND add a Cloud Scheduler ping every 60s
-#      to keep the worker warm during job-poll cycles. ~50% saving.
-#      Trade-off: queued jobs wait up to the ping interval before pickup.
-#   C. Run the worker on a small Compute Engine VM (e2-small ≈ $13/mo) —
-#      cheaper than Cloud Run min=1 + no-throttling, but loses Cloud Run's
-#      autoscaling on backlog.
-WORKER_MIN_INSTANCES=1
-WORKER_MAX_INSTANCES=2
-WORKER_MEMORY="512Mi"
-WORKER_CPU=1
 
 # 預算告警 (USD)
 BUDGET_AMOUNT=300
+
+# Firebase Hosting (frontend). NOTE: the frontend lives in a SEPARATE Firebase
+# project from the GCP backend project — frontend-vue/.firebaserc default is
+# `vidgo-gen-ai-prod`, while the backend GCP project is `vidgo-ai`. Override
+# via FIREBASE_PROJECT if your .firebaserc differs.
+FIREBASE_PROJECT="${FIREBASE_PROJECT:-vidgo-gen-ai-prod}"
 
 # Custom Domain (vidgo.co)
 CUSTOM_DOMAIN_BACKEND="api.vidgo.co"
 CUSTOM_DOMAIN_FRONTEND="vidgo.co"
 CUSTOM_DOMAIN_FRONTEND_WWW="www.vidgo.co"
+
+# ── GCP Billing export (admin Cost dashboard: real weekly GCP spend) ──────────
+# Enable Billing → "Standard usage cost" export to BigQuery, then set the
+# fully-qualified table id here. Empty = the dashboard falls back to the
+# GCP_*_BUDGET_USD env estimates. The backend SA gets bigquery.dataViewer +
+# jobUser in STEP iam.
+GCP_BILLING_BQ_TABLE="${GCP_BILLING_BQ_TABLE:-}"   # e.g. vidgo-ai.billing_export.gcp_billing_export_v1_0123AB_CDEF
+GCP_BILLING_PROJECT="${GCP_BILLING_PROJECT:-${PROJECT_ID}}"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECRETS — loaded from shell environment or CI/CD secret variables.
@@ -164,13 +129,13 @@ PAYPAL_WEBHOOK_ID="${PAYPAL_WEBHOOK_ID:-}"
 PAYPAL_WEBHOOK_SECRET="${PAYPAL_WEBHOOK_SECRET:-}"
 PAYPAL_PLAN_IDS="${PAYPAL_PLAN_IDS:-}"
 
-# ECPay Payment (Taiwan)
+# ECPay Payment (Taiwan) — outbound calls must exit via the static NAT IP (whitelisted)
 ECPAY_ENV=production
 ECPAY_MERCHANT_ID="${ECPAY_MERCHANT_ID:-}"
 ECPAY_HASH_KEY="${ECPAY_HASH_KEY:-}"
 ECPAY_HASH_IV="${ECPAY_HASH_IV:-}"            # <-- 你的 ECPay HashIV
 
-# Giveme E-Invoice
+# Giveme E-Invoice — outbound calls must exit via the static NAT IP (whitelisted)
 GIVEME_IDNO="${GIVEME_IDNO:-}"
 GIVEME_PASSWORD="${GIVEME_PASSWORD:-}"          # <-- 你的 Giveme API 密碼
 
@@ -221,10 +186,9 @@ should_run() {
 
 echo -e "${BOLD}"
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║         VidGo GCP Production Deployment                 ║"
+echo "║         VidGo GCP Production Deployment  (v2.0)         ║"
 echo "║         Project:  ${PROJECT_ID}                              ║"
 echo "║         Region:   ${REGION}                          ║"
-echo "║         Cost Est: \$88–115 USD/month (Phase 1)           ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -239,17 +203,17 @@ if should_run 1 "apis"; then
   APIS=(
     run.googleapis.com
     sqladmin.googleapis.com
-    redis.googleapis.com
     compute.googleapis.com
     artifactregistry.googleapis.com
     cloudbuild.googleapis.com
     secretmanager.googleapis.com
-    vpcaccess.googleapis.com
     cloudresourcemanager.googleapis.com
     monitoring.googleapis.com
     logging.googleapis.com
     servicenetworking.googleapis.com
     aiplatform.googleapis.com
+    bigquery.googleapis.com
+    cloudscheduler.googleapis.com
   )
 
   for api in "${APIS[@]}"; do
@@ -259,10 +223,15 @@ if should_run 1 "apis"; then
 fi
 
 ###############################################################################
-# STEP 2: VPC + Subnet + NAT + VPC Connector
+# STEP 2: VPC + Subnet + Private Service Connection + Static NAT
+#
+# No Serverless VPC Connector — Cloud Run uses Direct VPC egress (--network /
+# --subnet on the service in STEP deploy), which is cheaper (~$10-15/mo saved)
+# and has no min-2-instance connector floor. The static NAT IP is KEPT because
+# outbound calls to Giveme + ECPay must exit from a whitelisted IP.
 ###############################################################################
 if should_run 2 "vpc"; then
-  step 2 "建立 VPC 網路 / Subnet / NAT / Connector"
+  step 2 "建立 VPC 網路 / Subnet / Private Service / Static NAT"
 
   # VPC
   gcloud compute networks create "${VPC_NAME}" \
@@ -278,7 +247,7 @@ if should_run 2 "vpc"; then
     --range="10.0.1.0/24" \
     2>/dev/null && log "Subnet created" || warn "Subnet already exists"
 
-  # Private Service Connection (for Cloud SQL)
+  # Private Service Connection (for private-IP Cloud SQL)
   gcloud compute addresses create google-managed-services-${VPC_NAME} \
     --global \
     --purpose=VPC_PEERING \
@@ -294,37 +263,17 @@ if should_run 2 "vpc"; then
     --project="${PROJECT_ID}" \
     2>/dev/null && log "VPC peering created" || warn "VPC peering already exists"
 
-  # VPC Connector (Cloud Run → VPC)
-  # 2026-06 cost audit: this Serverless VPC Access connector ran ~455 TWD/mo
-  # at 2.3% CPU. Connectors charge per-instance-hour regardless of traffic.
-  # min=2 is the GCP-enforced floor for Serverless VPC Access — cannot go lower.
-  #
-  # CHEAPER ALTERNATIVE (deferred): migrate Cloud Run to **Direct VPC egress**
-  # (GA 2024). Direct VPC removes the connector entirely; Cloud Run attaches
-  # to a VPC subnet directly. Trade-offs:
-  #   + ~$10-15/mo saved (the connector instance fees vanish).
-  #   + No more "connector at capacity" throttling during traffic spikes.
-  #   - Recent feature — test against PiAPI / Vertex AI / Cloud SQL first.
-  # Migration: drop this connector block; replace `--vpc-connector=…` in the
-  # Cloud Run deploy lines with `--network=${VPC_NAME} --subnet=${SUBNET_NAME}
-  # --vpc-egress=all-traffic`.
-  gcloud compute networks vpc-access connectors create "${CONNECTOR_NAME}" \
-    --project="${PROJECT_ID}" \
-    --region="${REGION}" \
-    --network="${VPC_NAME}" \
-    --range="10.8.0.0/28" \
-    --min-instances=2 \
-    --max-instances=3 \
-    2>/dev/null && log "VPC Connector created" || warn "VPC Connector already exists"
-
-  # Cloud Router + NAT (outbound to PiAPI / Gemini / etc.)
+  # Cloud Router + NAT with a STATIC IP.
+  # The static IP is REQUIRED: Giveme (e-invoice) and ECPay enforce an outbound
+  # IP whitelist, and the Cloud Run backend deploys with --vpc-egress=all-traffic
+  # so those calls leave via this IP. Do NOT switch the backend to
+  # private-ranges-only or those payment/invoice calls will be rejected.
   gcloud compute routers create "${APP_NAME}-router" \
     --project="${PROJECT_ID}" \
     --network="${VPC_NAME}" \
     --region="${REGION}" \
     2>/dev/null && log "Router created" || warn "Router already exists"
 
-  # Static IP for NAT (required for Giveme & ECPay IP whitelist)
   gcloud compute addresses create "${APP_NAME}-nat-ip" \
     --project="${PROJECT_ID}" \
     --region="${REGION}" \
@@ -367,20 +316,10 @@ fi
 # STEP 4: Cloud SQL (PostgreSQL 15)
 ###############################################################################
 if should_run 4 "sql"; then
-  step 4 "刪除舊 & 建立新 Cloud SQL (PostgreSQL 15)"
-
-  # Delete existing instances (vidgo-db, vidgo-db2) if they exist
-  for OLD_INSTANCE in "vidgo-db" "vidgo-db2"; do
-    if gcloud sql instances describe "$OLD_INSTANCE" --project="${PROJECT_ID}" &>/dev/null; then
-      warn "Deleting old instance: $OLD_INSTANCE ..."
-      gcloud sql instances delete "$OLD_INSTANCE" --project="${PROJECT_ID}" --quiet \
-        && log "Deleted $OLD_INSTANCE" || warn "Failed to delete $OLD_INSTANCE (may be pending deletion)"
-    fi
-  done
+  step 4 "建立 Cloud SQL (PostgreSQL 15)"
 
   if [[ "$DB_PASSWORD" == "CHANGE_ME_TO_A_STRONG_PASSWORD" ]]; then
-    err "請先修改 DB_PASSWORD！(line ~65 of this script)"
-    err "目前密碼是預設值，不安全！"
+    err "請先修改 DB_PASSWORD！(CONFIG 區塊) 或用環境變數覆蓋"
     exit 1
   fi
 
@@ -421,32 +360,10 @@ if should_run 4 "sql"; then
 fi
 
 ###############################################################################
-# STEP 5: Memorystore Redis
+# STEP 5: Cloud Storage + Lifecycle Policy
 ###############################################################################
-if should_run 5 "redis"; then
-  step 5 "建立 Memorystore Redis"
-
-  gcloud redis instances create "${REDIS_INSTANCE}" \
-    --project="${PROJECT_ID}" \
-    --region="${REGION}" \
-    --tier="${REDIS_TIER}" \
-    --size="${REDIS_SIZE_GB}" \
-    --redis-version=redis_7_0 \
-    --network="${VPC_NAME}" \
-    2>/dev/null && log "Redis created (takes ~3 min)" || warn "Already exists"
-
-  REDIS_IP=$(gcloud redis instances describe "${REDIS_INSTANCE}" \
-    --project="${PROJECT_ID}" \
-    --region="${REGION}" \
-    --format='value(host)' 2>/dev/null || echo "PENDING")
-  log "Redis IP: ${REDIS_IP}"
-fi
-
-###############################################################################
-# STEP 6: Cloud Storage + Lifecycle Policy
-###############################################################################
-if should_run 6 "storage"; then
-  step 6 "建立 Cloud Storage + Lifecycle 政策"
+if should_run 5 "storage"; then
+  step 5 "建立 Cloud Storage + Lifecycle 政策"
 
   gsutil mb -p "${PROJECT_ID}" -l "${REGION}" -c STANDARD \
     "gs://${BUCKET_NAME}" \
@@ -472,45 +389,44 @@ CORS_EOF
 fi
 
 ###############################################################################
-# STEP 7: Service Accounts + IAM
+# STEP 6: Service Account + IAM
+#
+# One backend service account. (Worker + frontend SAs removed — worker is gone
+# and the frontend is a static SPA on Firebase Hosting with no SA.) bigquery.*
+# roles let the admin Cost dashboard read the billing export.
 ###############################################################################
-if should_run 7 "iam"; then
-  step 7 "建立 Service Accounts + IAM 權限"
+if should_run 6 "iam"; then
+  step 6 "建立 Service Account + IAM 權限"
 
-  for SA in "${BACKEND_SERVICE}" "${WORKER_SERVICE}" "${FRONTEND_SERVICE}"; do
-    gcloud iam service-accounts create "${SA}" \
-      --project="${PROJECT_ID}" \
-      --display-name="VidGo ${SA}" \
-      2>/dev/null && log "SA '${SA}' created" || warn "SA '${SA}' already exists"
+  gcloud iam service-accounts create "${BACKEND_SERVICE}" \
+    --project="${PROJECT_ID}" \
+    --display-name="VidGo ${BACKEND_SERVICE}" \
+    2>/dev/null && log "SA '${BACKEND_SERVICE}' created" || warn "SA already exists"
+
+  SA_EMAIL="${BACKEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com"
+  for ROLE in \
+    roles/cloudsql.client \
+    roles/storage.objectAdmin \
+    roles/secretmanager.secretAccessor \
+    roles/run.invoker \
+    roles/aiplatform.user \
+    roles/bigquery.dataViewer \
+    roles/bigquery.jobUser; do
+    gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+      --member="serviceAccount:${SA_EMAIL}" \
+      --role="${ROLE}" \
+      --quiet 2>/dev/null
   done
-
-  # Backend + Worker: SQL, Storage, Secrets
-  for SA in "${BACKEND_SERVICE}" "${WORKER_SERVICE}"; do
-    SA_EMAIL="${SA}@${PROJECT_ID}.iam.gserviceaccount.com"
-    for ROLE in roles/cloudsql.client roles/storage.objectAdmin roles/secretmanager.secretAccessor roles/run.invoker roles/aiplatform.user; do
-      gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-        --member="serviceAccount:${SA_EMAIL}" \
-        --role="${ROLE}" \
-        --quiet 2>/dev/null
-    done
-    log "IAM roles granted to ${SA}"
-  done
-
-  # Frontend: read-only storage
-  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-    --member="serviceAccount:${FRONTEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/storage.objectViewer" \
-    --quiet 2>/dev/null
-  log "IAM roles granted to ${FRONTEND_SERVICE}"
+  log "IAM roles granted to ${BACKEND_SERVICE} (incl. BigQuery billing read)"
 fi
 
 ###############################################################################
-# STEP 8: Secret Manager (存放所有 API Keys)
+# STEP 7: Secret Manager (存放所有 API Keys)
 ###############################################################################
-if should_run 8 "secrets"; then
-  step 8 "存放 Secrets 到 Secret Manager"
+if should_run 7 "secrets"; then
+  step 7 "存放 Secrets 到 Secret Manager"
 
-  # Get IPs for connection strings
+  # Get Cloud SQL private IP for the connection string
   SQL_IP=$(gcloud sql instances describe "${SQL_INSTANCE}" \
     --project="${PROJECT_ID}" \
     --format='value(ipAddresses[0].ipAddress)' 2>/dev/null)
@@ -519,22 +435,13 @@ if should_run 8 "secrets"; then
     exit 1
   fi
 
-  REDIS_IP=$(gcloud redis instances describe "${REDIS_INSTANCE}" \
-    --project="${PROJECT_ID}" \
-    --region="${REGION}" \
-    --format='value(host)' 2>/dev/null || echo "127.0.0.1")
-
   DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${SQL_IP}:5432/${DB_NAME}"
-  REDIS_URL="redis://${REDIS_IP}:6379/0"
 
-  # Number of historical secret versions to keep per secret. Older versions
-  # are destroyed by put_secret + the explicit secret_cleanup step. Each
-  # stored version incurs ongoing "Secret version replica storage" billing
-  # ($0.06/version/month per replica × 2 replicas/region by default), so
-  # keeping unbounded history was costing ~605 TWD/month at 2026-05.
+  # Number of historical secret versions to keep per secret. Each stored version
+  # incurs ongoing "Secret version replica storage" billing, so we prune.
   : "${SECRET_VERSIONS_TO_KEEP:=2}"
 
-  # Helper function: create or update secret
+  # Helper function: create or update secret + prune stale versions
   put_secret() {
     local name=$1
     local value=$2
@@ -550,10 +457,6 @@ if should_run 8 "secrets"; then
         --replication-policy="user-managed" --locations="${REGION}" &>/dev/null
       log "Created secret: $name"
     fi
-    # Destroy all versions older than the most recent SECRET_VERSIONS_TO_KEEP.
-    # `gcloud secrets versions destroy` is irreversible — only enabled or
-    # disabled versions are listed; already-destroyed versions are skipped
-    # by gcloud automatically.
     local stale_versions
     stale_versions=$(gcloud secrets versions list "$name" \
       --project="${PROJECT_ID}" \
@@ -572,7 +475,6 @@ if should_run 8 "secrets"; then
   }
 
   put_secret "DATABASE_URL"          "$DATABASE_URL"
-  put_secret "REDIS_URL"             "$REDIS_URL"
   put_secret "SECRET_KEY"            "$SECRET_KEY"
   put_secret "PIAPI_KEY"             "$PIAPI_KEY"
   put_secret "GEMINI_API_KEY"        "$GEMINI_API_KEY"
@@ -580,7 +482,6 @@ if should_run 8 "secrets"; then
   put_secret "A2E_API_KEY"           "$A2E_API_KEY"
   put_secret "A2E_API_ID"            "$A2E_API_ID"
   put_secret "A2E_DEFAULT_CREATOR_ID" "$A2E_DEFAULT_CREATOR_ID"
-  # Paddle secrets removed 2026-05-31 (no longer used).
   put_secret "PAYPAL_CLIENT_ID"      "$PAYPAL_CLIENT_ID"
   put_secret "PAYPAL_CLIENT_SECRET"  "$PAYPAL_CLIENT_SECRET"
   put_secret "PAYPAL_WEBHOOK_ID"     "$PAYPAL_WEBHOOK_ID"
@@ -604,30 +505,20 @@ if should_run 8 "secrets"; then
 
   log "All secrets stored."
   warn "DATABASE_URL = ${DATABASE_URL}"
-  warn "REDIS_URL    = ${REDIS_URL}"
 fi
 
 ###############################################################################
-# STEP 8b: Secret Manager — prune stale versions (cost optimization)
-###############################################################################
-# This step destroys all but the latest N versions of every secret in the
-# project. Run it on its own when you want to clean up historical bloat:
+# STEP 75: Secret Manager — prune stale versions (cost optimization)
 #
 #   bash gcp/deploy.sh --step secret_cleanup
 #   SECRET_VERSIONS_TO_KEEP=1 bash gcp/deploy.sh --step secret_cleanup
-#
-# Safe to run anytime — Cloud Run loads `<NAME>:latest` so prior versions
-# are never referenced unless you've explicitly pinned (we don't anywhere
-# in this repo). Destruction is irreversible; recover by re-running `put_secret`
-# with the fresh value if needed.
-if should_run 85 "secret_cleanup"; then
-  step 85 "Prune stale Secret Manager versions (keep latest ${SECRET_VERSIONS_TO_KEEP:-2})"
+###############################################################################
+if should_run 75 "secret_cleanup"; then
+  step 75 "Prune stale Secret Manager versions (keep latest ${SECRET_VERSIONS_TO_KEEP:-2})"
 
   : "${SECRET_VERSIONS_TO_KEEP:=2}"
   pruned_total=0
 
-  # List all secrets in the project. Limit to ones managed by this app to
-  # avoid touching anything created out-of-band.
   while IFS= read -r secret_name; do
     [ -z "$secret_name" ] && continue
     stale=$(gcloud secrets versions list "$secret_name" \
@@ -656,21 +547,19 @@ if should_run 85 "secret_cleanup"; then
 fi
 
 ###############################################################################
-# STEP 9: Build & Push Docker Images
+# STEP 8: Build & Push Backend Image
+#
+# Backend only — the frontend is built + deployed to Firebase Hosting in the
+# `frontend` step, not as a Docker image. (CI/CD via cloudbuild.yaml builds the
+# same backend image on push to main; this step is for manual/first deploys.)
 ###############################################################################
-if should_run 9 "build"; then
-  step 9 "Build & Push Docker Images"
+if should_run 8 "build"; then
+  step 8 "Build & Push Backend Image"
 
   IMAGE_TAG=$(date +%Y%m%d-%H%M%S)
   BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${BACKEND_SERVICE}"
-  FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${FRONTEND_SERVICE}"
 
-  # Configure docker for Artifact Registry
   gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-
-  # PiAPI MCP setup step removed 2026-05-26 — MCP providers deleted in
-  # favor of their REST equivalents. mcp-servers/ directory no longer
-  # exists in the repo.
 
   log "Building backend image..."
   docker build \
@@ -679,49 +568,39 @@ if should_run 9 "build"; then
     -f backend/Dockerfile \
     .
 
-  log "Building frontend image..."
-  docker build \
-    -t "${FRONTEND_IMAGE}:${IMAGE_TAG}" \
-    -t "${FRONTEND_IMAGE}:latest" \
-    -f frontend-vue/Dockerfile.prod \
-    frontend-vue/
-
-  log "Pushing images..."
+  log "Pushing image..."
   docker push "${BACKEND_IMAGE}:${IMAGE_TAG}"
   docker push "${BACKEND_IMAGE}:latest"
-  docker push "${FRONTEND_IMAGE}:${IMAGE_TAG}"
-  docker push "${FRONTEND_IMAGE}:latest"
 
-  log "Images pushed: tag=${IMAGE_TAG}"
-
-  # Save tag for deploy step
+  log "Image pushed: tag=${IMAGE_TAG}"
   echo "${IMAGE_TAG}" > /tmp/vidgo-image-tag
 fi
 
 ###############################################################################
-# STEP 10: Deploy to Cloud Run
+# STEP 9: Deploy Backend to Cloud Run (Direct VPC egress)
 ###############################################################################
-if should_run 10 "deploy"; then
-  step 10 "部署到 Cloud Run"
+if should_run 9 "deploy"; then
+  step 9 "部署 Backend 到 Cloud Run"
 
   IMAGE_TAG=$(cat /tmp/vidgo-image-tag 2>/dev/null || echo "latest")
   BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${BACKEND_SERVICE}:${IMAGE_TAG}"
-  FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${FRONTEND_SERVICE}:${IMAGE_TAG}"
   SQL_CONNECTION="${PROJECT_ID}:${REGION}:${SQL_INSTANCE}"
-  CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${REGION}/connectors/${CONNECTOR_NAME}"
 
-  # Use custom domain URLs for production
-  # These must match your GoDaddy DNS → Cloud Run domain mappings (see step "domain")
   _BACKEND_URL="https://${CUSTOM_DOMAIN_BACKEND}"
   _FRONTEND_URL="https://${CUSTOM_DOMAIN_FRONTEND}"
   log "BACKEND_URL  = ${_BACKEND_URL}"
   log "FRONTEND_URL = ${_FRONTEND_URL}"
 
-  # Env vars that Cloud Run needs (non-secret, safe to set directly)
-  COMMON_ENV="SKIP_PREGENERATION=true,SKIP_DEPENDENCY_CHECK=true,DEBUG=false,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=30,REFRESH_TOKEN_EXPIRE_DAYS=7,ECPAY_ENV=production,ECPAY_PAYMENT_URL=https://payment.ecpay.com.tw/Cashier/AioCheckOut/V2,GIVEME_ENABLED=true,GIVEME_BASE_URL=https://www.giveme.com.tw/invoice.do,GIVEME_UNCODE=96003146,FRONTEND_URL=${_FRONTEND_URL},BACKEND_URL=${_BACKEND_URL},PUBLIC_APP_URL=${_BACKEND_URL},CORS_ALLOW_ALL=true,PAYPAL_ENV=${PAYPAL_ENV},SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL},SMTP_FROM_NAME=${SMTP_FROM_NAME},SMTP_TLS=${SMTP_TLS:-true},SMTP_SSL=${SMTP_SSL:-false},SMTP_TIMEOUT_SECONDS=${SMTP_TIMEOUT_SECONDS:-15},GCS_BUCKET=${BUCKET_NAME},VERTEX_AI_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=${REGION},VEO_MODEL=veo-3.0-fast-generate-001,GEMINI_MODEL=gemini-2.5-flash,GEMINI_IMAGE_MODEL=gemini-2.5-flash-image"
+  # Non-secret env vars
+  COMMON_ENV="SKIP_PREGENERATION=true,SKIP_DEPENDENCY_CHECK=true,DEBUG=false,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=30,REFRESH_TOKEN_EXPIRE_DAYS=7,ECPAY_ENV=production,ECPAY_PAYMENT_URL=https://payment.ecpay.com.tw/Cashier/AioCheckOut/V2,GIVEME_ENABLED=true,GIVEME_BASE_URL=https://www.giveme.com.tw/invoice.do,GIVEME_UNCODE=96003146,FRONTEND_URL=${_FRONTEND_URL},BACKEND_URL=${_BACKEND_URL},PUBLIC_APP_URL=${_BACKEND_URL},CORS_ALLOW_ALL=true,PAYPAL_ENV=${PAYPAL_ENV},SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL},SMTP_FROM_NAME=${SMTP_FROM_NAME},SMTP_TLS=${SMTP_TLS:-true},SMTP_SSL=${SMTP_SSL:-false},SMTP_TIMEOUT_SECONDS=${SMTP_TIMEOUT_SECONDS:-15},GCS_BUCKET=${BUCKET_NAME},VERTEX_AI_PROJECT=${PROJECT_ID},VERTEX_AI_LOCATION=${REGION},VEO_MODEL=veo-3.0-fast-generate-001,GEMINI_MODEL=gemini-2.5-flash,GEMINI_IMAGE_MODEL=gemini-2.5-flash-image,PIAPI_MCP_ENABLED=true"
 
-  # Secret env vars (reference from Secret Manager)
-  SECRET_ENV="DATABASE_URL=DATABASE_URL:latest,REDIS_URL=REDIS_URL:latest,SECRET_KEY=SECRET_KEY:latest,PIAPI_KEY=PIAPI_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,POLLO_API_KEY=POLLO_API_KEY:latest,A2E_API_KEY=A2E_API_KEY:latest,A2E_API_ID=A2E_API_ID:latest,A2E_DEFAULT_CREATOR_ID=A2E_DEFAULT_CREATOR_ID:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASSWORD=SMTP_PASSWORD:latest,ECPAY_MERCHANT_ID=ECPAY_MERCHANT_ID:latest,ECPAY_HASH_KEY=ECPAY_HASH_KEY:latest,ECPAY_HASH_IV=ECPAY_HASH_IV:latest,GIVEME_IDNO=GIVEME_IDNO:latest,GIVEME_PASSWORD=GIVEME_PASSWORD:latest"
+  # BigQuery billing export → admin Cost dashboard (only when configured)
+  if [ -n "${GCP_BILLING_BQ_TABLE}" ]; then
+    COMMON_ENV+=",GCP_BILLING_BQ_TABLE=${GCP_BILLING_BQ_TABLE},GCP_BILLING_PROJECT=${GCP_BILLING_PROJECT}"
+  fi
+
+  # Secret env vars (reference from Secret Manager). No REDIS_URL (Redis removed).
+  SECRET_ENV="DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,PIAPI_KEY=PIAPI_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,POLLO_API_KEY=POLLO_API_KEY:latest,A2E_API_KEY=A2E_API_KEY:latest,A2E_API_ID=A2E_API_ID:latest,A2E_DEFAULT_CREATOR_ID=A2E_DEFAULT_CREATOR_ID:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASSWORD=SMTP_PASSWORD:latest,ECPAY_MERCHANT_ID=ECPAY_MERCHANT_ID:latest,ECPAY_HASH_KEY=ECPAY_HASH_KEY:latest,ECPAY_HASH_IV=ECPAY_HASH_IV:latest,GIVEME_IDNO=GIVEME_IDNO:latest,GIVEME_PASSWORD=GIVEME_PASSWORD:latest"
 
   append_optional_secret_ref() {
     local name=$1
@@ -743,7 +622,6 @@ if should_run 10 "deploy"; then
   append_optional_secret_ref "YOUTUBE_CLIENT_ID" "$YOUTUBE_CLIENT_ID"
   append_optional_secret_ref "YOUTUBE_CLIENT_SECRET" "$YOUTUBE_CLIENT_SECRET"
 
-  # ── Deploy Backend ──
   log "Deploying backend..."
   gcloud run deploy "${BACKEND_SERVICE}" \
     --image="${BACKEND_IMAGE}" \
@@ -756,14 +634,13 @@ if should_run 10 "deploy"; then
     --cpu="${BACKEND_CPU}" \
     --port=8000 \
     --timeout=3600 \
-    `# 2026-06: raised from 900s to Cloud Run's 3600s ceiling. The avatar` \
-    `# / Kling Omni / Veo 3.1 endpoints poll the upstream provider for up` \
-    `# to ~50 min on long scripts (see tools.py AVATAR_MAX_TIMEOUT_SEC). The` \
-    `# old 900s killed those requests mid-poll and orphaned the upstream` \
-    `# task — credits charged, no result returned. Keep this strictly` \
-    `# greater than every per-request poll ceiling.` \
-    --vpc-connector="${CONNECTOR_PATH}" \
+    `# 3600s is Cloud Run's ceiling — avatar / Kling Omni / Veo endpoints poll` \
+    `# the upstream provider up to ~50 min. Keep strictly > every poll ceiling.` \
+    --network="${VPC_NAME}" \
+    --subnet="${SUBNET_NAME}" \
     --vpc-egress=all-traffic \
+    `# all-traffic + static NAT IP: Giveme/ECPay outbound must come from the` \
+    `# whitelisted IP. Direct VPC egress (no connector) keeps the cost down.` \
     --add-cloudsql-instances="${SQL_CONNECTION}" \
     --service-account="${BACKEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --set-env-vars="${COMMON_ENV}" \
@@ -772,74 +649,52 @@ if should_run 10 "deploy"; then
     --allow-unauthenticated
   log "Backend deployed"
 
-  # ── Deploy Worker ──
-  log "Deploying worker..."
-  gcloud run deploy "${WORKER_SERVICE}" \
-    --image="${BACKEND_IMAGE}" \
-    --project="${PROJECT_ID}" \
-    --region="${REGION}" \
-    --platform=managed \
-    --min-instances="${WORKER_MIN_INSTANCES}" \
-    --max-instances="${WORKER_MAX_INSTANCES}" \
-    --memory="${WORKER_MEMORY}" \
-    --cpu="${WORKER_CPU}" \
-    --port=8000 \
-    --no-cpu-throttling \
-    --vpc-connector="${CONNECTOR_PATH}" \
-    --vpc-egress=all-traffic \
-    --add-cloudsql-instances="${SQL_CONNECTION}" \
-    --service-account="${WORKER_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --command="/bin/bash" \
-    --args="-c,python -m http.server 8000 & exec arq app.worker.WorkerSettings" \
-    --set-env-vars="${COMMON_ENV}" \
-    --set-secrets="${SECRET_ENV}" \
-    --no-allow-unauthenticated
-  log "Worker deployed"
-
-  # ── Deploy Frontend ──
-  log "Deploying frontend..."
-  BACKEND_URL=$(gcloud run services describe "${BACKEND_SERVICE}" \
-    --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)' 2>/dev/null || echo "")
-
-  gcloud run deploy "${FRONTEND_SERVICE}" \
-    --image="${FRONTEND_IMAGE}" \
-    --project="${PROJECT_ID}" \
-    --region="${REGION}" \
-    --platform=managed \
-    --min-instances="${FRONTEND_MIN_INSTANCES}" \
-    --max-instances="${FRONTEND_MAX_INSTANCES}" \
-    --memory="${FRONTEND_MEMORY}" \
-    --cpu="${FRONTEND_CPU}" \
-    --port=80 \
-    --timeout=3600 \
-    --service-account="${FRONTEND_SERVICE}@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --set-env-vars="BACKEND_URL=${BACKEND_URL}" \
-    --allow-unauthenticated
-  log "Frontend deployed"
-
-  # Print URLs
-  echo ""
   BACKEND_URL=$(gcloud run services describe "${BACKEND_SERVICE}" \
     --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)')
-  FRONTEND_URL=$(gcloud run services describe "${FRONTEND_SERVICE}" \
-    --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)')
-
   log "Backend URL:  ${BACKEND_URL}"
-  log "Frontend URL: ${FRONTEND_URL}"
 fi
 
 ###############################################################################
-# STEP 11: Custom Domain Mapping (vidgo.co)
+# STEP 10: Deploy Frontend to Firebase Hosting (global CDN)
+#
+# The Vue SPA is served by Firebase Hosting, not Cloud Run — global edge CDN,
+# better TTFB worldwide, cheaper. Requires the firebase CLI and frontend-vue/
+# firebase.json + .firebaserc (already in the repo).
+###############################################################################
+if should_run 10 "frontend"; then
+  step 10 "Build & Deploy 前端到 Firebase Hosting"
+
+  if ! command -v firebase >/dev/null 2>&1; then
+    warn "firebase CLI not found. Install with: npm i -g firebase-tools && firebase login"
+    warn "Then re-run: bash gcp/deploy.sh --step frontend"
+  else
+    (
+      cd frontend-vue
+      log "Installing frontend deps..."
+      npm ci 2>/dev/null || npm install
+      log "Building frontend (vite)..."
+      npm run build
+      log "Deploying to Firebase Hosting (project ${FIREBASE_PROJECT})..."
+      firebase deploy --only hosting --project "${FIREBASE_PROJECT}"
+    ) && log "Frontend deployed to Firebase Hosting" \
+      || warn "Firebase deploy failed — check 'firebase login' and frontend-vue/.firebaserc"
+  fi
+fi
+
+###############################################################################
+# STEP 11: Custom Domain Mapping
+#
+# Backend api.vidgo.co → Cloud Run domain mapping (below).
+# Frontend vidgo.co / www → set as a custom domain in the Firebase Hosting
+# console (Hosting → Add custom domain), NOT via Cloud Run.
 ###############################################################################
 if should_run 11 "domain"; then
-  step 11 "設定 Custom Domain → Cloud Run"
+  step 11 "設定 Custom Domain"
 
-  warn "確認你已在 GoDaddy DNS 設定以下 CNAME 記錄:"
-  warn "  ${CUSTOM_DOMAIN_BACKEND}     → ghs.googlehosted.com"
-  warn "  ${CUSTOM_DOMAIN_FRONTEND}    → ghs.googlehosted.com"
-  warn "  ${CUSTOM_DOMAIN_FRONTEND_WWW} → ghs.googlehosted.com"
+  warn "Backend: 確認 GoDaddy DNS 有 CNAME ${CUSTOM_DOMAIN_BACKEND} → ghs.googlehosted.com"
+  warn "Frontend: 在 Firebase Hosting 控制台 → Add custom domain 設定 ${CUSTOM_DOMAIN_FRONTEND} / ${CUSTOM_DOMAIN_FRONTEND_WWW}"
 
-  # Map api.vidgo.co → backend
+  # Map api.vidgo.co → backend (Cloud Run)
   gcloud beta run domain-mappings create \
     --service="${BACKEND_SERVICE}" \
     --domain="${CUSTOM_DOMAIN_BACKEND}" \
@@ -848,35 +703,14 @@ if should_run 11 "domain"; then
     2>/dev/null && log "Domain mapped: ${CUSTOM_DOMAIN_BACKEND} → ${BACKEND_SERVICE}" \
     || warn "Domain mapping for ${CUSTOM_DOMAIN_BACKEND} already exists"
 
-  # Map vidgo.co → frontend
-  gcloud beta run domain-mappings create \
-    --service="${FRONTEND_SERVICE}" \
-    --domain="${CUSTOM_DOMAIN_FRONTEND}" \
-    --region="${REGION}" \
-    --project="${PROJECT_ID}" \
-    2>/dev/null && log "Domain mapped: ${CUSTOM_DOMAIN_FRONTEND} → ${FRONTEND_SERVICE}" \
-    || warn "Domain mapping for ${CUSTOM_DOMAIN_FRONTEND} already exists"
-
-  # Map www.vidgo.co → frontend
-  gcloud run domain-mappings create \
-    --service="${FRONTEND_SERVICE}" \
-    --domain="${CUSTOM_DOMAIN_FRONTEND_WWW}" \
-    --region="${REGION}" \
-    --project="${PROJECT_ID}" \
-    2>/dev/null && log "Domain mapped: ${CUSTOM_DOMAIN_FRONTEND_WWW} → ${FRONTEND_SERVICE}" \
-    || warn "Domain mapping for ${CUSTOM_DOMAIN_FRONTEND_WWW} already exists"
-
-  # Show required DNS records
   echo ""
-  warn "請在 GoDaddy DNS Manager 加入以下記錄:"
+  warn "Backend DNS (GoDaddy):"
   echo "  ┌──────────┬──────────────────────┬─────────────────────────┐"
   echo "  │ Type     │ Name                 │ Value                   │"
   echo "  ├──────────┼──────────────────────┼─────────────────────────┤"
   echo "  │ CNAME    │ api                  │ ghs.googlehosted.com    │"
-  echo "  │ CNAME    │ www                  │ ghs.googlehosted.com    │"
-  echo "  │ CNAME    │ @                    │ ghs.googlehosted.com    │"
   echo "  └──────────┴──────────────────────┴─────────────────────────┘"
-  warn "SSL 憑證由 Cloud Run (Let's Encrypt) 自動簽發，等 DNS 生效後約 15-30 分鐘"
+  warn "Frontend DNS records are shown by Firebase when you add the custom domain."
 fi
 
 ###############################################################################
@@ -959,15 +793,10 @@ if should_run 12 "armor"; then
 fi
 
 ###############################################################################
-# STEP 13: Repair growth videos mis-stored as images in GCS
+# STEP 13: Repair growth videos mis-stored as images in GCS (backfill)
 #
-# Backfill for the KLING_VIDEO media-type fix (2026-06-02): growth MP4s that
-# were persisted under media_type="image" are served by GCS with an image
-# Content-Type, so the frontend <video> won't play them. This rewrites the
-# Content-Type IN PLACE (URLs unchanged) for any object whose bytes are really
-# a video. Runs inside the backend image (built in STEP 9) so it reuses the
-# google-cloud-storage dep and the repaired script. Best-effort: a failure here
-# must not abort the deploy.
+# Rewrites Content-Type IN PLACE (URLs unchanged) for GCS objects whose bytes
+# are really video but were stored with an image Content-Type. Best-effort.
 ###############################################################################
 if should_run 13 "fixmedia"; then
   step 13 "修復 GCS 影片 Content-Type (growth video backfill)"
@@ -975,8 +804,6 @@ if should_run 13 "fixmedia"; then
   IMAGE_TAG=$(cat /tmp/vidgo-image-tag 2>/dev/null || echo "latest")
   BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${BACKEND_SERVICE}:${IMAGE_TAG}"
 
-  # The script authenticates to GCS via Application Default Credentials. Mount
-  # the operator's gcloud config (which holds ADC) read-only into the container.
   GCLOUD_CONFIG_DIR="${HOME}/.config/gcloud"
   if [[ ! -f "${GCLOUD_CONFIG_DIR}/application_default_credentials.json" ]]; then
     warn "No ADC found at ${GCLOUD_CONFIG_DIR}/application_default_credentials.json."
@@ -1005,39 +832,24 @@ if should_run 14 "summary"; then
   echo -e "${BOLD}━━━ 基礎設施 ━━━${NC}"
   echo "  Project:    ${PROJECT_ID}"
   echo "  Region:     ${REGION}"
-  echo "  Domain:     ${CUSTOM_DOMAIN_FRONTEND} / ${CUSTOM_DOMAIN_BACKEND}"
+  echo "  Domain:     ${CUSTOM_DOMAIN_FRONTEND} (Firebase) / ${CUSTOM_DOMAIN_BACKEND} (Cloud Run)"
 
-  # Cloud SQL
   SQL_IP=$(gcloud sql instances describe "${SQL_INSTANCE}" \
     --project="${PROJECT_ID}" --format='value(ipAddresses[0].ipAddress)' 2>/dev/null || echo "N/A")
   echo "  Cloud SQL:  ${SQL_INSTANCE} (${SQL_IP})"
 
-  # Redis
-  REDIS_IP=$(gcloud redis instances describe "${REDIS_INSTANCE}" \
-    --project="${PROJECT_ID}" --region="${REGION}" --format='value(host)' 2>/dev/null || echo "N/A")
-  echo "  Redis:      ${REDIS_INSTANCE} (${REDIS_IP})"
-
-  # NAT Static IP
   NAT_IP=$(gcloud compute addresses describe "${APP_NAME}-nat-ip" \
     --project="${PROJECT_ID}" --region="${REGION}" \
     --format='value(address)' 2>/dev/null || echo "N/A")
   echo "  NAT IP:     ${NAT_IP}  (Giveme/ECPay 白名單用)"
-
-  # Storage
   echo "  Bucket:     gs://${BUCKET_NAME}"
 
   echo ""
   echo -e "${BOLD}━━━ Cloud Run 服務 ━━━${NC}"
-  for SVC in "${BACKEND_SERVICE}" "${FRONTEND_SERVICE}" "${WORKER_SERVICE}"; do
-    URL=$(gcloud run services describe "${SVC}" \
-      --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)' 2>/dev/null || echo "Not deployed")
-    echo "  ${SVC}: ${URL}"
-  done
-
-  echo ""
-  echo -e "${BOLD}━━━ Custom Domain ━━━${NC}"
-  echo "  Frontend: https://${CUSTOM_DOMAIN_FRONTEND}"
-  echo "  Backend:  https://${CUSTOM_DOMAIN_BACKEND}"
+  BACKEND_URL=$(gcloud run services describe "${BACKEND_SERVICE}" \
+    --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)' 2>/dev/null || echo "Not deployed")
+  echo "  ${BACKEND_SERVICE}: ${BACKEND_URL}"
+  echo "  frontend: Firebase Hosting (https://${CUSTOM_DOMAIN_FRONTEND})"
 
   echo ""
   echo -e "${BOLD}━━━ Payment & Invoice ━━━${NC}"
@@ -1046,29 +858,17 @@ if should_run 14 "summary"; then
   echo "  PayPal:   ${PAYPAL_ENV}"
 
   echo ""
-  echo -e "${BOLD}━━━ 預估月費 (Phase 1, 0-500 users) ━━━${NC}"
-  echo "  Cloud Run:     ~\$30–50"
-  echo "  Cloud SQL:     ~\$25–35"
-  echo "  Redis:         ~\$15–20"
-  echo "  Storage + CDN: ~\$5–10"
-  echo "  ─────────────────────"
-  echo "  Total:         ~\$88–115 USD/month"
-  echo ""
-
   echo -e "${BOLD}━━━ 待辦事項 ━━━${NC}"
-  echo "  [ ] 確認 GoDaddy DNS 已設定 CNAME → ghs.googlehosted.com"
-  echo "  [ ] 確認 DNS 已生效: dig ${CUSTOM_DOMAIN_BACKEND} CNAME"
-  echo "  [ ] 將 NAT IP (${NAT_IP}) 加入 Giveme 白名單 (系統設定→白名單設定)"
-  echo "  [ ] 將 NAT IP (${NAT_IP}) 加入 ECPay 允許 IP (系統介接設定→允許的IP)"
-  echo "  [ ] 在 ECPay 商店後台設定回調 URL:"
-  echo "      付款通知: https://${CUSTOM_DOMAIN_BACKEND}/api/v1/payments/ecpay/callback"
-  echo "      完成返回: https://${CUSTOM_DOMAIN_FRONTEND}/subscription/ecpay-result"
+  echo "  [ ] 將 NAT IP (${NAT_IP}) 加入 Giveme 白名單 & ECPay 允許 IP"
+  echo "  [ ] Backend DNS: CNAME ${CUSTOM_DOMAIN_BACKEND} → ghs.googlehosted.com"
+  echo "  [ ] Frontend: Firebase Hosting → Add custom domain ${CUSTOM_DOMAIN_FRONTEND}"
+  echo "  [ ] ECPay 回調 URL: https://${CUSTOM_DOMAIN_BACKEND}/api/v1/payments/ecpay/callback"
   echo "  [ ] 測試: curl https://${CUSTOM_DOMAIN_BACKEND}/health"
-  echo "  [ ] 測試: ECPay 付款流程 (小額測試)"
-  echo "  [ ] 測試: Giveme 發票開立"
   echo "  [ ] 設定 Budget Alert (\$${BUDGET_AMOUNT}): https://console.cloud.google.com/billing/budgets"
-  echo "  [ ] 設定 Cloud Build Trigger (GitHub → main branch)"
-  echo "  [ ] 填入 Social Media OAuth keys (Facebook/TikTok/YouTube) 並重新部署"
+  echo "  [ ] 設定 Cloud Build Trigger (GitHub → main branch, cloudbuild.yaml)"
+  echo "  [ ] 設定 Cloud Scheduler jobs → /api/v1/tasks/* (背景任務, with X-Tasks-Secret)"
+  echo "  [ ] 啟用 Billing→BigQuery export, 設 GCP_BILLING_BQ_TABLE → admin Cost 儀表板顯示實際週費用"
+  echo "  [ ] (穩定 ~3 月後) 購買 Cloud SQL Committed Use Discount (~37% off)"
   echo ""
   echo -e "${GREEN}${BOLD}Deployment complete!${NC}"
 fi

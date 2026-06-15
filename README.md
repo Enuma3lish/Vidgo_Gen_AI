@@ -198,7 +198,7 @@ without redeploy), runtime PayPal config.
 | FastAPI | 0.109+ | API framework (27 routers under `/api/v1`) |
 | SQLAlchemy 2 + asyncpg | — | Async ORM |
 | Alembic | — | Migrations (multi-head history; applied manually with idempotent SQL) |
-| ARQ | — | Background worker (`vidgo-worker`) |
+| Cloud Scheduler | — | Background tasks (`POST /api/v1/tasks/*`); replaced the always-on ARQ worker in prod |
 | httpx | — | Provider REST calls |
 
 ### AI Providers (all REST — MCP removed 2026-05-26)
@@ -289,20 +289,21 @@ docker compose up -d
 **Local admin:** seeded from `FIRST_SUPERUSER_EMAIL` / `FIRST_SUPERUSER_PASSWORD` in `backend/.env`.
 **Reset everything:** `docker compose down -v` (⚠ wipes Postgres + materials).
 
-### GCP environment (production — Cloud Run)
+### GCP environment (production)
 
-GCP project **`vidgo-ai`**, region **`asia-east1`**:
+Backend on **GCP project `vidgo-ai`** (region `asia-east1`); frontend on
+**Firebase Hosting** (project `vidgo-gen-ai-prod`):
 
 | Service | URL |
 |---|---|
-| Frontend | https://vidgo-frontend-38714015566.asia-east1.run.app |
+| Frontend | https://vidgo.co (Firebase Hosting, global CDN) |
 | Backend API | https://vidgo-backend-38714015566.asia-east1.run.app |
-| Worker | (no public UI) |
+| Background tasks | Cloud Scheduler → `POST /api/v1/tasks/*` (no public UI, no worker service) |
 
 ```bash
 # Health checks
 curl -s https://vidgo-backend-38714015566.asia-east1.run.app/health
-curl -I https://vidgo-frontend-38714015566.asia-east1.run.app
+curl -I https://vidgo.co
 
 # Logs
 gcloud run services logs tail vidgo-backend --project vidgo-ai --region asia-east1
@@ -311,9 +312,10 @@ gcloud run services logs tail vidgo-backend --project vidgo-ai --region asia-eas
 ⚠ **Production actions burn real credits and can charge real users.**
 
 **Deploying:** see [docs/DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md) —
-Cloud Build pipeline (`cloudbuild.yaml`) or local build → Artifact Registry →
-`gcloud run services update`. Apply DB migrations **before** deploying a
-backend that contains them.
+backend via Cloud Build (`cloudbuild.yaml`) or local build → Artifact Registry →
+`gcloud run services update`; frontend via `firebase deploy --only hosting`.
+Full bring-up: [`gcp/deploy.sh`](./gcp/deploy.sh). Apply DB migrations **before**
+deploying a backend that contains them.
 
 ---
 
@@ -375,10 +377,9 @@ SMTP_PORT=1025
 ```yaml
 services:
   postgres:        # PostgreSQL 15
-  redis:           # Redis 7 — cache & ARQ queue
+  redis:           # Redis 7 — local cache (prod uses in-process cache, no Memorystore)
   mailpit:         # Email testing (dev only)
   backend:         # FastAPI (host port 8001)
-  worker:          # ARQ background worker
   init-materials:  # One-time pre-generation (profile: init)
   frontend:        # Vue 3 (host port 8501)
 ```
@@ -427,7 +428,7 @@ cd frontend-vue && npm install && npm run dev
 
 | Mechanism | Implementation |
 |-----------|---------------|
-| Rate limiting | Redis-based; per-IP and per-email limits on registration and generation |
+| Rate limiting | Per-IP and per-email limits on registration and generation (Redis-backed when present; Postgres/in-process fallback in prod) |
 | CAPTCHA | Google reCAPTCHA v2 on registration |
 | Watermarking | All demo outputs watermarked; subscribers get clean output |
 | Credit gating | Generation endpoints check balance before processing; deduct-then-refund on failure (deduction firewall, `ServicePricing` overrides) |

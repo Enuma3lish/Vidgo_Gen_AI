@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     # GCS Storage (persist generated media beyond provider CDN expiry)
     GCS_BUCKET: str = ""  # e.g. "vidgo-media-vidgo-ai"
 
+    # GCP Billing export (real infrastructure cost on the admin Cost dashboard).
+    # Enable Billing → "Standard usage cost" export to BigQuery, then set the
+    # fully-qualified table here. When empty, the dashboard falls back to the
+    # GCP_*_BUDGET_USD env estimates so local dev never needs BigQuery.
+    GCP_BILLING_BQ_TABLE: str = ""        # e.g. "vidgo-gen-ai-prod.billing_export.gcp_billing_export_v1_0123AB_CDEF"
+    GCP_BILLING_PROJECT: str = ""         # project to run the query in (defaults to VERTEX_AI_PROJECT, then the table's project)
+    GCP_BILLING_CACHE_HOURS: float = 6.0  # cache the BigQuery result this long to avoid a job on every dashboard open
+
     # Legacy (deprecated — kept for fallback)
     WAN_API_KEY: str = ""
     RUNWAY_API_KEY: str = ""

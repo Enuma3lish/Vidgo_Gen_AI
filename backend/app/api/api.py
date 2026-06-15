@@ -3,7 +3,7 @@ from app.api.v1 import (
     auth, payments, demo, plans, promotions, credits, effects, generation,
     landing, quota, tools, admin, admin_models, session, interior, workflow, subscriptions,
     prompts, user_works, uploads, referrals, social_media, einvoices,
-    example, downloads, share_proxy, hero,
+    example, downloads, share_proxy, hero, tasks,
 )
 
 api_router = APIRouter()
@@ -34,3 +34,4 @@ api_router.include_router(einvoices.router, prefix="/einvoices", tags=["einvoice
 api_router.include_router(example.router, prefix="/examples", tags=["examples"])
 api_router.include_router(share_proxy.router, prefix="/share", tags=["share"])
 api_router.include_router(hero.router, tags=["hero"])
+api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])

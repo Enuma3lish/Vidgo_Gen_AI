@@ -36,6 +36,19 @@ function pct(part: number, whole: number): string {
   return `${((part / whole) * 100).toFixed(1)}%`
 }
 
+// Weekly GCP trend (only present when costs come from the real BigQuery export).
+const weeklyMax = computed(() =>
+  (data.value?.gcp?.weekly || []).reduce((m, x) => Math.max(m, x.cost_usd), 0)
+)
+function weekLabel(iso: string): string {
+  const [, m, d] = iso.split('-')
+  return `${m}/${d}`
+}
+function weekWidth(cost: number): string {
+  if (!weeklyMax.value) return '0%'
+  return `${Math.max(2, (cost / weeklyMax.value) * 100)}%`
+}
+
 // Provider buckets in display order. We surface piapi/pollo/a2e explicitly
 // because they're the three the user asked about; "other" stays as a
 // catch-all but is rendered last and dimmer.
@@ -85,9 +98,33 @@ onMounted(load)
         </div>
       </div>
 
+      <!-- Weekly GCP cost trend (real billing export only) -->
+      <section v-if="data.gcp.weekly && data.gcp.weekly.length" class="section">
+        <h2>
+          {{ L('每週 GCP 費用', 'Weekly GCP Cost') }}
+          <span class="src-badge live">{{ L('實際帳單', 'Live billing') }}</span>
+        </h2>
+        <div class="weekly">
+          <div v-for="w in data.gcp.weekly" :key="w.week_start" class="week-row">
+            <span class="week-label">{{ weekLabel(w.week_start) }}</span>
+            <div class="week-track">
+              <div class="week-bar" :style="{ width: weekWidth(w.cost_usd) }"></div>
+            </div>
+            <span class="week-cost">{{ fmt(w.cost_usd) }}</span>
+          </div>
+        </div>
+        <p class="hint subtle">
+          {{ L('每週以週一為起始，金額為實際淨費用（含折抵）。資料每 6 小時更新一次。', 'Weeks start Monday; amounts are actual net cost (after credits). Refreshed every ~6h.') }}
+        </p>
+      </section>
+
       <!-- GCP breakdown -->
       <section class="section">
-        <h2>GCP {{ L('基礎設施費用明細', 'Infrastructure Breakdown') }}</h2>
+        <h2>
+          GCP {{ L('基礎設施費用明細', 'Infrastructure Breakdown') }}
+          <span v-if="data.gcp.source === 'bigquery'" class="src-badge live">{{ L('實際帳單', 'Live billing') }}</span>
+          <span v-else class="src-badge est">{{ L('估算值', 'Estimate') }}</span>
+        </h2>
         <p v-if="data.gcp.source === 'env_estimate'" class="hint">
           {{ L('目前數據為環境變數估算值（GCP_*_BUDGET_USD）。要顯示實際 BigQuery 計費資料，請設定計費匯出後改接 API。', 'Current numbers come from env-var estimates (GCP_*_BUDGET_USD). To show real BigQuery billing data, configure the billing export and rewire this endpoint.') }}
         </p>
@@ -187,6 +224,18 @@ onMounted(load)
 .cost-table th, .tools-table th { color: #9494b0; font-weight: 500; background: rgba(255,255,255,0.02); }
 .cost-table .num, .tools-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .cost-table .total-row td { border-top: 1px solid rgba(255,255,255,0.1); font-weight: 600; background: rgba(255,255,255,0.02); }
+
+.src-badge { font-size: 0.65rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.6rem; vertical-align: middle; letter-spacing: 0.02em; }
+.src-badge.live { background: rgba(70,200,120,0.14); color: #5fd08a; border: 1px solid rgba(70,200,120,0.3); }
+.src-badge.est { background: rgba(255,205,80,0.12); color: #e8c14e; border: 1px solid rgba(255,205,80,0.3); }
+.hint.subtle { background: transparent; border-left: none; padding: 0.5rem 0 0; }
+
+.weekly { display: flex; flex-direction: column; gap: 0.5rem; }
+.week-row { display: grid; grid-template-columns: 48px 1fr 88px; align-items: center; gap: 0.75rem; }
+.week-label { font-size: 0.8rem; color: #9494b0; font-variant-numeric: tabular-nums; }
+.week-track { background: rgba(255,255,255,0.05); border-radius: 6px; height: 22px; overflow: hidden; }
+.week-bar { height: 100%; border-radius: 6px; background: linear-gradient(90deg, rgba(22,119,255,0.55), rgba(108,177,255,0.9)); min-width: 2px; transition: width 0.3s ease; }
+.week-cost { font-size: 0.85rem; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
 .provider-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 1rem; }

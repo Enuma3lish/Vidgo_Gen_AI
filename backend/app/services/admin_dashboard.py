@@ -9,7 +9,9 @@ Provides:
 - Revenue analytics
 - System health monitoring
 """
+import asyncio
 import logging
+import time
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,8 +23,98 @@ from app.models.billing import Plan, Subscription, Order, CreditTransaction, Gen
 from app.models.material import Material, MaterialStatus, ToolType
 from app.models.user_generation import UserGeneration
 from app.services.session_tracker import session_tracker
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# In-process cache for the GCP billing-export query. A single table feeds the
+# whole dashboard, so one slot is enough; we hold the payload until `expires`
+# (settings.GCP_BILLING_CACHE_HOURS) to avoid launching a BigQuery job on every
+# admin page open. Resets on process restart, which is fine — costs move slowly.
+_GCP_BILLING_CACHE: Dict[str, Any] = {"expires": 0.0, "data": None}
+
+
+def _query_gcp_billing_sync() -> Optional[Dict[str, Any]]:
+    """Read real GCP spend from the BigQuery billing export (blocking).
+
+    Returns current-month per-service breakdown + the last 8 ISO weeks of
+    total spend, or None when no export table is configured. Net cost = raw
+    `cost` plus `credits` (credits are stored negative), matching what the
+    Billing console shows. Runs off the event loop via asyncio.to_thread.
+    """
+    table = settings.GCP_BILLING_BQ_TABLE
+    if not table:
+        return None
+
+    from google.cloud import bigquery
+
+    project = settings.GCP_BILLING_PROJECT or settings.VERTEX_AI_PROJECT or None
+    client = bigquery.Client(project=project) if project else bigquery.Client()
+
+    # Net cost: list price plus any credits/discounts (credits.amount is negative).
+    net = "SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0))"
+
+    # Current calendar month, grouped by GCP service (Cloud Run, Cloud SQL, …).
+    svc_sql = f"""
+        SELECT service.description AS service, ROUND({net}, 2) AS cost
+        FROM `{table}`
+        WHERE usage_start_time >= TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
+        GROUP BY service
+        HAVING cost <> 0
+        ORDER BY cost DESC
+    """
+
+    # Last 8 ISO weeks (Monday-start), total spend per week — the weekly trend.
+    week_sql = f"""
+        SELECT TIMESTAMP_TRUNC(usage_start_time, WEEK(MONDAY)) AS week_start,
+               ROUND({net}, 2) AS cost
+        FROM `{table}`
+        WHERE usage_start_time >= TIMESTAMP_SUB(
+              TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), WEEK(MONDAY)), INTERVAL 7 WEEK)
+        GROUP BY week_start
+        ORDER BY week_start
+    """
+
+    breakdown = [
+        {"name": row["service"] or "Unknown", "cost_usd": float(row["cost"] or 0)}
+        for row in client.query(svc_sql).result()
+    ]
+    weekly = [
+        {"week_start": row["week_start"].date().isoformat(), "cost_usd": float(row["cost"] or 0)}
+        for row in client.query(week_sql).result()
+    ]
+    total = round(sum(b["cost_usd"] for b in breakdown), 2)
+    return {"total_usd": total, "breakdown": breakdown, "weekly": weekly, "source": "bigquery"}
+
+
+async def _get_gcp_billing_costs() -> Optional[Dict[str, Any]]:
+    """Cached, non-blocking accessor for the billing-export query.
+
+    Returns None (so the caller falls back to env estimates) when the export
+    isn't configured or BigQuery errors — the dashboard must never break on a
+    billing hiccup.
+    """
+    if not settings.GCP_BILLING_BQ_TABLE:
+        return None
+
+    now = time.time()
+    if _GCP_BILLING_CACHE["data"] is not None and now < _GCP_BILLING_CACHE["expires"]:
+        return _GCP_BILLING_CACHE["data"]
+
+    try:
+        data = await asyncio.to_thread(_query_gcp_billing_sync)
+    except Exception:
+        logger.exception(
+            "Infrastructure costs: BigQuery billing query failed; "
+            "falling back to env estimates"
+        )
+        return None
+
+    if data is not None:
+        _GCP_BILLING_CACHE["data"] = data
+        _GCP_BILLING_CACHE["expires"] = now + settings.GCP_BILLING_CACHE_HOURS * 3600.0
+    return data
 
 
 class AdminDashboardService:
@@ -675,6 +767,26 @@ class AdminDashboardService:
         ]
         gcp_total = round(sum(item["cost_usd"] for item in gcp_breakdown), 2)
 
+        # Prefer real spend from the BigQuery billing export when configured;
+        # the env figures above are the local-dev / unconfigured fallback. The
+        # `weekly` array (last 8 ISO weeks) only exists in the BigQuery path.
+        gcp_billing = await _get_gcp_billing_costs()
+        if gcp_billing:
+            gcp_block = {
+                "total_usd": gcp_billing["total_usd"],
+                "breakdown": gcp_billing["breakdown"],
+                "weekly": gcp_billing["weekly"],
+                "source": "bigquery",
+            }
+            gcp_total = gcp_billing["total_usd"]
+        else:
+            gcp_block = {
+                "total_usd": gcp_total,
+                "breakdown": gcp_breakdown,
+                "weekly": [],
+                "source": "env_estimate",
+            }
+
         # --- 2/3/4. Provider per-call cost (PiAPI / Pollo / A2E) --------
         # Maps tool_type → which provider bucket the call belongs to. This
         # mirrors provider_router.PROVIDER_MAP primaries. When a primary
@@ -756,11 +868,7 @@ class AdminDashboardService:
         return {
             "month": now.strftime("%Y-%m"),
             "currency": "USD",
-            "gcp": {
-                "total_usd": gcp_total,
-                "breakdown": gcp_breakdown,
-                "source": "env_estimate",
-            },
+            "gcp": gcp_block,
             "providers": providers,
             "providers_total_usd": provider_total,
             "grand_total_usd": round(gcp_total + provider_total, 2),

@@ -1036,7 +1036,8 @@ class PiAPIProvider(BaseProvider):
         upper_garment_url: Optional[str] = None,
         lower_garment_url: Optional[str] = None,
         category: str = "dress",
-        batch_size: int = 1
+        batch_size: int = 1,
+        on_submit=None,
     ) -> Dict[str, Any]:
         """
         Virtual Try-On using Kling AI via PiAPI.
@@ -1097,9 +1098,12 @@ class PiAPIProvider(BaseProvider):
             "input": input_data
         }
 
+        # on_submit captures the upstream task_id the moment it's assigned, so a
+        # request killed mid-poll can be recovered by the reclaim worker.
+        _on_submit = _make_on_submit_wrapper(on_submit, "piapi")
         return await self._retry_transient(
             "virtual_try_on",
-            lambda: self._submit_and_poll(payload),
+            lambda: self._submit_and_poll(payload, on_submit=_on_submit),
         )
 
     # ─────────────────────────────────────────────────────────────────────────

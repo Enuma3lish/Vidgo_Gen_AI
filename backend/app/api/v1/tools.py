@@ -1960,7 +1960,7 @@ async def remove_background(
                     "ai_background_prompt": request.ai_background_prompt,
                 },
                 result_image_url=result_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
             )
             user_gen.set_expiry()
             db.add(user_gen)
@@ -2656,6 +2656,14 @@ async def _try_on_inner(
             input_image_url=user_garment,
         )
 
+    # Garment mode needs a garment image. Validate BEFORE charging so a missing
+    # garment returns a clear 422 instead of deduct → generic-fail → refund.
+    if request.mode != "prompt" and not garment_media_url:
+        return ToolResponse(
+            success=False,
+            message="mode='garment' requires a garment image (garment_image_url or image_url).",
+        )
+
     # ========== SUBSCRIBER: Real-time Generation ==========
     # Try-on upstream (Kling) is $0.50-$1.00 — must charge at the cheap-pack
     # rate to cover cost.
@@ -2663,6 +2671,14 @@ async def _try_on_inner(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "virtual_try_on")
     if not ok:
         return ToolResponse(success=False, message=err)
+    # Amount ACTUALLY charged (honors a ServicePricing override). Use this for
+    # every refund and the reported credits_used so we never under-refund or
+    # misreport when ops retunes the virtual_try_on price away from 30.
+    charged = _credits_charged(current_user, CREDIT_COST)
+    # Reclaim row for the long (≤600s) Kling try-on poll. Created in garment
+    # mode just before the call; if Cloud Run kills the request mid-poll the
+    # worker re-polls upstream and materializes the result or refunds.
+    pending_task = None
 
     # ─── PROMPT MODE (Flux Kontext I2I on the model photo) ────────────────
     # Added 2026-05-24 (owner directive): PiAPI Kling Try-On has no prompt
@@ -2679,7 +2695,7 @@ async def _try_on_inner(
             elif request.model_id:
                 model_url = TRYON_MODELS.get(request.model_id)
             if not model_url:
-                await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+                await _refund_credits(db, current_user, charged, "virtual_try_on")
                 return ToolResponse(
                     success=False,
                     message="mode='prompt' requires a valid model_image_url or model_id.",
@@ -2726,7 +2742,7 @@ async def _try_on_inner(
             }
             result = await provider_router.route(TaskType.I2I, i2i_params)
             if not result.get("success"):
-                await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+                await _refund_credits(db, current_user, charged, "virtual_try_on")
                 return ToolResponse(
                     success=False,
                     message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE,
@@ -2741,7 +2757,7 @@ async def _try_on_inner(
                     result_url = first if isinstance(first, str) else first.get("url") or first.get("image_url")
             result_url = await _persist_provider_url(result_url, "image", current_user)
             if not result_url:
-                await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+                await _refund_credits(db, current_user, charged, "virtual_try_on")
                 return ToolResponse(
                     success=False,
                     message="Try-on returned no result. Please try again.",
@@ -2759,7 +2775,7 @@ async def _try_on_inner(
                     "model_image_url": str(request.model_image_url) if request.model_image_url else None,
                 },
                 result_image_url=result_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
             )
             user_gen.set_expiry()
             db.add(user_gen)
@@ -2768,12 +2784,12 @@ async def _try_on_inner(
             return ToolResponse(
                 success=True,
                 result_url=result_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
                 message="Virtual try-on successful (prompt mode).",
             )
         except Exception as e:
             logger.error(f"Try-On (prompt mode) error: {e}", exc_info=True)
-            await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+            await _refund_credits(db, current_user, charged, "virtual_try_on")
             _notify_admin_of_tool_failure("try_on_prompt", e, current_user)
             return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
 
@@ -2837,7 +2853,7 @@ async def _try_on_inner(
         elif request.model_id:
             model_url = TRYON_MODELS.get(request.model_id)
             if not model_url:
-                await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+                await _refund_credits(db, current_user, charged, "virtual_try_on")
                 return ToolResponse(success=False, message=f"Unknown model_id: {request.model_id}")
 
         # 2026-06-06 — Route through the singleton PiAPIProvider (was
@@ -2849,6 +2865,38 @@ async def _try_on_inner(
         provider_router = get_provider_router()
         piapi = provider_router.piapi
 
+        # Reclaim safety: persist a pending row BEFORE the (up to 600s) Kling
+        # poll so a Cloud-Run-killed request can be recovered/refunded by the
+        # worker (see worker.reclaim_pending_provider_tasks_task) instead of
+        # silently losing the user's credits. Mirrors the short_video/avatar handlers.
+        from app.models.pending_provider_task import PendingProviderTask
+        pending_task = PendingProviderTask(
+            user_id=current_user.id,
+            tool_type="try_on",
+            service_type="virtual_try_on",
+            credits_charged=charged,
+            input_params={
+                "model_id": request.model_id,
+                "image_url": model_url,
+                "garment_url": garment_url,
+                "category": request.category or "dress",
+            },
+            status="submitting",
+        )
+        db.add(pending_task)
+        await db.commit()
+        await db.refresh(pending_task)
+
+        async def _on_tryon_submit(task_id: str, provider_name: str):
+            try:
+                pending_task.provider_task_id = task_id
+                pending_task.provider_name = provider_name
+                pending_task.status = "polling"
+                pending_task.submitted_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception as exc:
+                logger.warning("try_on: failed to record pending_task task_id=%s: %s", task_id, exc)
+
         # provider.virtual_try_on takes `category` directly and maps to the
         # right Kling input slot internally (dress_input / upper_input /
         # lower_input), so we no longer build kwargs slot-by-slot here.
@@ -2857,6 +2905,7 @@ async def _try_on_inner(
                 model_image_url=model_url,
                 garment_image_url=garment_url,
                 category=request.category or "dress",
+                on_submit=_on_tryon_submit,
             )
         except Exception as primary_exc:
             logger.warning(
@@ -2954,7 +3003,7 @@ async def _try_on_inner(
                 "used_kontext_fallback": used_fallback,
             },
             result_image_url=result_url,
-            credits_used=CREDIT_COST,
+            credits_used=charged,
         )
         user_gen.set_expiry()
         db.add(user_gen)
@@ -2968,12 +3017,18 @@ async def _try_on_inner(
             input_params={"model_id": request.model_id},
         )
 
+        # Mark the reclaim row done so the worker never re-polls / double-handles it.
+        if pending_task is not None:
+            pending_task.status = "completed"
+            pending_task.result_url = result_url
+            pending_task.completed_at = datetime.now(timezone.utc)
+
         await db.commit()
 
         return ToolResponse(
             success=True,
             result_url=result_url,
-            credits_used=CREDIT_COST,
+            credits_used=charged,
             message=(
                 "Virtual try-on served via Kontext fallback (Kling Try-On was unavailable)."
                 if used_fallback
@@ -2983,7 +3038,18 @@ async def _try_on_inner(
 
     except Exception as e:
         logger.error(f"Try-On error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "virtual_try_on")
+        # Mark the reclaim row failed BEFORE refunding so the worker won't also
+        # re-poll it and refund a second time (the worker only touches rows
+        # still in submitting/polling).
+        if pending_task is not None:
+            try:
+                pending_task.status = "failed"
+                pending_task.error_message = str(e)[:200]
+                pending_task.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+        await _refund_credits(db, current_user, charged, "virtual_try_on")
         _notify_admin_of_tool_failure("try_on", e, current_user)
         return ToolResponse(
             success=False,
@@ -3190,7 +3256,7 @@ async def _room_redesign_inner(
                     "space_kind": request.space_kind,
                 },
                 result_image_url=result_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
             )
             user_gen.set_expiry()
             db.add(user_gen)
@@ -3198,7 +3264,7 @@ async def _room_redesign_inner(
             return ToolResponse(
                 success=True,
                 result_url=result_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
                 message="Magic redesign successful.",
             )
         except Exception as exc:
@@ -3423,7 +3489,7 @@ async def _room_redesign_inner(
                 },
                 input_text=style_prompt,
                 result_image_url=url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
             )
             user_gen.set_expiry()
             db.add(user_gen)
@@ -4147,7 +4213,7 @@ async def claymation_generate(
             },
             result_image_url=url if output_kind == "image" else None,
             result_video_url=url if output_kind == "video" else None,
-            credits_used=CREDIT_COST,
+            credits_used=charged,
         )
         user_gen.set_expiry()
         db.add(user_gen)
@@ -4162,7 +4228,7 @@ async def claymation_generate(
             result_url=url,
             image_url=url if output_kind == "image" else None,
             video_url=url if output_kind == "video" else None,
-            credits_used=CREDIT_COST,
+            credits_used=charged,
             message="Claymation generated.",
         )
     except Exception as exc:
@@ -4306,7 +4372,7 @@ async def video_background_remove(
             input_video_url=str(request.video_url),
             input_params={"tool": "video_background_remove", "invert_output": request.invert_output},
             result_video_url=video_url,
-            credits_used=CREDIT_COST,
+            credits_used=charged,
         )
         user_gen.set_expiry()
         db.add(user_gen)
@@ -4319,7 +4385,7 @@ async def video_background_remove(
             success=True,
             result_url=video_url,
             video_url=video_url,
-            credits_used=CREDIT_COST,
+            credits_used=charged,
             message="Background removed.",
         )
     except Exception as exc:
@@ -4472,7 +4538,7 @@ async def upscale_image(
                 input_image_url=request.image_url,
                 input_params={"scale": request.scale, "action": "upscale"},
                 result_image_url=image_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
             )
             generation.set_expiry()
             db.add(generation)
@@ -4484,7 +4550,7 @@ async def upscale_image(
             return ToolResponse(
                 success=True,
                 result_url=image_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
                 message=f"Image upscaled {request.scale}x successfully"
             )
         else:
@@ -4645,7 +4711,7 @@ async def recolor_product(
                     "prompt": recolor_prompt,
                 },
                 result_image_url=image_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
             )
             generation.set_expiry()
             db.add(generation)
@@ -4657,7 +4723,7 @@ async def recolor_product(
             return ToolResponse(
                 success=True,
                 result_url=image_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
                 message=f"Product recolored to {color}.",
             )
 
@@ -4968,7 +5034,7 @@ async def _generate_avatar_inner(
                     "action": "photo_to_avatar",
                     "language": request.language
                 },
-                credits_used=CREDIT_COST,
+                credits_used=charged,
             )
             user_gen.set_expiry()
             db.add(user_gen)
@@ -4992,7 +5058,7 @@ async def _generate_avatar_inner(
             return ToolResponse(
                 success=True,
                 result_url=video_url,
-                credits_used=CREDIT_COST,
+                credits_used=charged,
                 message=f"Avatar video generated successfully in {request.language}"
             )
         else:
@@ -5302,7 +5368,7 @@ async def midjourney_imagine(
             success=True,
             result_url=image_url,
             image_url=image_url,
-            credits_used=CREDIT_COST,
+            credits_used=charged,
             message="Image generated.",
         )
     except Exception as exc:

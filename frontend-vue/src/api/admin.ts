@@ -576,6 +576,15 @@ export const adminApi = {
     return response.data
   },
 
+  // Re-watermark example images with the admin logo. Call repeatedly until
+  // `more` is false (it processes in batches of `limit`).
+  async runWatermarkBackfill(force = false, limit = 200): Promise<{ updated: number; failed: number; batch: number; more: boolean }> {
+    const response = await apiClient.post('/api/v1/admin/watermark/backfill', null, {
+      params: { force, limit }
+    })
+    return response.data
+  },
+
   // ────────────────────────────────────────────────────────────────
   // Infrastructure cost dashboard (GCP + PiAPI + Pollo + A2E)
   // ────────────────────────────────────────────────────────────────
@@ -680,6 +689,12 @@ export interface SiteBrandingSettings {
   pricing_intro_body_en: string | null
   pricing_footnote_zh: string | null
   pricing_footnote_en: string | null
+  // Demo/example watermark (admin-configurable).
+  watermark_enabled?: boolean
+  watermark_image_url?: string | null
+  watermark_text?: string | null
+  watermark_position?: string | null
+  watermark_opacity?: number | null
   updated_at?: string | null
 }
 
@@ -696,6 +711,9 @@ export interface InfrastructureCosts {
   gcp: {
     total_usd: number
     breakdown: Array<{ name: string; cost_usd: number }>
+    // Last 8 ISO weeks of total GCP spend. Only populated when `source` is
+    // 'bigquery' (the real billing export); empty for env estimates.
+    weekly: Array<{ week_start: string; cost_usd: number }>
     source: string
   }
   providers: {

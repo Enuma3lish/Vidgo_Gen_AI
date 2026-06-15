@@ -2377,6 +2377,9 @@ _SITE_SETTINGS_EDITABLE = {
     "pricing_intro_title_zh", "pricing_intro_title_en",
     "pricing_intro_body_zh", "pricing_intro_body_en",
     "pricing_footnote_zh", "pricing_footnote_en",
+    # Demo/example watermark (admin-configurable).
+    "watermark_enabled", "watermark_image_url", "watermark_text",
+    "watermark_position", "watermark_opacity",
 }
 
 
@@ -2408,6 +2411,11 @@ def _serialize_site_settings(row: SiteSettings) -> Dict[str, Any]:
         "pricing_intro_body_en": row.pricing_intro_body_en,
         "pricing_footnote_zh": row.pricing_footnote_zh,
         "pricing_footnote_en": row.pricing_footnote_en,
+        "watermark_enabled": getattr(row, "watermark_enabled", True),
+        "watermark_image_url": getattr(row, "watermark_image_url", None),
+        "watermark_text": getattr(row, "watermark_text", None),
+        "watermark_position": getattr(row, "watermark_position", None) or "bottom_right",
+        "watermark_opacity": getattr(row, "watermark_opacity", None) if getattr(row, "watermark_opacity", None) is not None else 70,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
 
@@ -2484,6 +2492,75 @@ async def public_branding(
     if row is None:
         return {"settings": {}}
     return {"settings": _serialize_site_settings(row)}
+
+
+@router.post("/watermark/backfill")
+async def admin_watermark_backfill(
+    limit: int = Query(default=200, ge=1, le=2000),
+    force: bool = Query(default=False, description="Re-watermark even rows that already have a distinct watermarked URL"),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Generate REAL watermarked variants of active example images using the
+    admin-configured logo, and store them in result_watermarked_url.
+
+    Historically result_watermarked_url was just a copy of result_image_url
+    (the clean image), so free users saw un-watermarked examples. This applies
+    the actual watermark. Processes images in batches of `limit`; call
+    repeatedly until `updated` is 0. Videos are watermarked at generation time
+    (ffmpeg) and are out of scope for this image backfill.
+    """
+    from app.services.watermark import build_watermark_service
+    from app.services.gcs_storage_service import get_gcs_storage
+
+    settings_row = await _get_or_create_site_settings(db)
+    if not getattr(settings_row, "watermark_enabled", True):
+        return {"updated": 0, "skipped": 0, "detail": "watermark disabled in settings"}
+    if not (settings_row.watermark_image_url or settings_row.watermark_text):
+        raise HTTPException(status_code=400, detail="No watermark image or text configured")
+
+    wm = build_watermark_service(settings_row)
+    gcs = get_gcs_storage()
+    if not gcs.enabled:
+        raise HTTPException(status_code=400, detail="GCS not configured (GCS_BUCKET)")
+
+    # Active image examples. When not forcing, only rows whose watermarked URL
+    # is missing or identical to the clean result (the old copy-through hack).
+    q = (
+        select(Material)
+        .where(Material.is_active == True)
+        .where(Material.result_image_url.is_not(None))
+        .where(Material.result_image_url != "")
+    )
+    if not force:
+        q = q.where(or_(
+            Material.result_watermarked_url.is_(None),
+            Material.result_watermarked_url == "",
+            Material.result_watermarked_url == Material.result_image_url,
+        ))
+    q = q.limit(limit)
+    rows = (await db.execute(q)).scalars().all()
+
+    updated = 0
+    failed = 0
+    for mat in rows:
+        try:
+            data = await wm.watermark_image_url_to_bytes(mat.result_image_url)
+            if not data:
+                failed += 1
+                continue
+            blob_name = f"watermarked/{mat.id}.png"
+            url = gcs.upload_public(data, blob_name, content_type="image/png")
+            mat.result_watermarked_url = url
+            updated += 1
+        except Exception:
+            logger.exception("[admin] watermark backfill failed for material %s", mat.id)
+            failed += 1
+
+    await db.commit()
+    logger.info("[admin] %s watermark backfill: %s updated, %s failed", admin.email, updated, failed)
+    return {"updated": updated, "failed": failed, "batch": len(rows),
+            "more": len(rows) == limit}
 
 
 # ============================================================================

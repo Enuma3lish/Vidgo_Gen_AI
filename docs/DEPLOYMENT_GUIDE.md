@@ -3,36 +3,53 @@
 > Last updated: 2026-06-12. This replaces the earlier one-off "新定價系統部署指南"
 > (the pricing rollout finished; its steps are preserved in git history).
 
-VidGo production runs on **GCP project `vidgo-ai`**, region **`asia-east1`**:
+VidGo production runs on **GCP project `vidgo-ai`**, region **`asia-east1`**
+(the frontend is hosted in a separate Firebase project, `vidgo-gen-ai-prod`):
 
 | Piece | Resource |
 |---|---|
-| Frontend | Cloud Run `vidgo-frontend` |
-| Backend API | Cloud Run `vidgo-backend` (min 1 / max 10, 2Gi, 3600s timeout) |
-| Background worker | Cloud Run `vidgo-worker` — same backend image, command `arq app.worker.WorkerSettings` |
+| Frontend | **Firebase Hosting** (global CDN), project `vidgo-gen-ai-prod` — built with `npm run build`, deployed via `firebase deploy --only hosting` |
+| Backend API | Cloud Run `vidgo-backend` (min 1 / max 10, **1Gi**, 3600s timeout, Direct VPC egress) |
+| Background tasks | **Cloud Scheduler → `POST /api/v1/tasks/*`** (auth via `X-Tasks-Secret`). No always-on worker service. |
 | Images | Artifact Registry `asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images` |
-| Database | Cloud SQL `prod-db` (PostgreSQL, **private IP only**) + `vidgo-db`, attached via the Cloud SQL connector |
-| Secrets | Secret Manager (`DATABASE_URL`, `REDIS_URL`, superuser credentials, …) |
-| Networking | VPC connector `vidgo-connector` |
+| Database | Cloud SQL `prod-db` (PostgreSQL, **private IP only**), attached via `--add-cloudsql-instances` |
+| Secrets | Secret Manager (`DATABASE_URL`, `SECRET_KEY`, payment/API keys, …) — **no `REDIS_URL`** |
+| Networking | **Direct VPC egress** (`vidgo-vpc`/`vidgo-subnet`, `all-traffic`) + **static NAT IP** for Giveme/ECPay outbound whitelist. No VPC connector. |
 | Media | GCS bucket `vidgo-media-vidgo-ai` |
 
-There are two supported deploy paths. Both end with new Cloud Run revisions.
+> **2026-06 cost pass:** Memorystore Redis, the `vidgo-worker` service, and the
+> Serverless VPC Connector were all removed; the frontend moved from Cloud Run to
+> Firebase Hosting. The single canonical infra/bring-up script is now
+> [`gcp/deploy.sh`](../gcp/deploy.sh) (the old `deploy-production.sh` was folded into it).
+
+There are two supported deploy paths.
 
 ---
 
 ## Path A — Cloud Build (CI pipeline)
 
-`cloudbuild.yaml` builds both images, pushes them, and deploys
-backend + worker + frontend in one run (E2_HIGHCPU_8, layer caching from
-`:latest`). Trigger it manually with:
+`cloudbuild.yaml` builds the **backend** image, pushes it, and deploys
+`vidgo-backend` in one run (E2_HIGHCPU_8, layer caching from `:latest`). The
+frontend is **not** in this pipeline — it ships to Firebase Hosting separately
+(see *Frontend* below). Trigger it manually with:
 
 ```bash
 gcloud builds submit --config cloudbuild.yaml --project vidgo-ai
 ```
 
-Partial pipelines exist for one-sided changes:
-`cloudbuild.backend-only.yaml`, `cloudbuild.frontend-only.yaml`
-(these build + push only; deploy manually per Path B step 4).
+`cloudbuild.backend-only.yaml` builds + pushes the backend image only (deploy
+manually per Path B step 4).
+
+### Frontend (Firebase Hosting)
+
+```bash
+cd frontend-vue
+npm ci && npm run build
+firebase deploy --only hosting --project vidgo-gen-ai-prod
+```
+
+`bash gcp/deploy.sh --step frontend` does the same. (The legacy
+`cloudbuild.frontend-only.yaml` deployed a Cloud Run frontend and is obsolete.)
 
 ---
 
@@ -59,14 +76,14 @@ docker build -f frontend-vue/Dockerfile.prod \
 Tag conventions: backend `YYYYMMDD-HHMMSS-be`, frontend `YYYYMMDD-HHMMSS`.
 Note: local `vue-tsc` may show bogus `TS2688 "@types/* 2"` errors from
 Finder-duplicated dirs in `node_modules` — the Docker build does a clean
-`npm ci` and is the source of truth.
+`npm ci` and is the source of truth. (The frontend image above is only for
+local/preview use — production frontend ships to Firebase Hosting, not Cloud Run.)
 
 ### 2. Push
 
 ```bash
 gcloud auth configure-docker asia-east1-docker.pkg.dev   # once per machine
 docker push --all-tags $REG/vidgo-backend
-docker push --all-tags $REG/vidgo-frontend
 ```
 
 ### 3. Apply DB migrations (when the release contains one)
@@ -79,7 +96,7 @@ The alembic history has **multiple heads**; schema changes are applied
 manually. Migrations are written with idempotent `ADD COLUMN IF NOT EXISTS`
 SQL so they can be replayed safely. Because `prod-db` is private-IP only,
 run the SQL through a one-off **Cloud Run job** that reuses the backend's
-service account, secrets, Cloud SQL attachment, and VPC connector:
+service account, secrets, Cloud SQL attachment, and Direct VPC egress:
 
 ```bash
 gcloud run jobs create vidgo-db-migrate \
@@ -87,8 +104,8 @@ gcloud run jobs create vidgo-db-migrate \
   --image $REG/vidgo-backend:${TS}-be \
   --service-account vidgo-backend@vidgo-ai.iam.gserviceaccount.com \
   --set-secrets DATABASE_URL=DATABASE_URL:latest \
-  --set-cloudsql-instances vidgo-ai:asia-east1:prod-db,vidgo-ai:asia-east1:vidgo-db \
-  --vpc-connector vidgo-connector \
+  --set-cloudsql-instances vidgo-ai:asia-east1:prod-db \
+  --network vidgo-vpc --subnet vidgo-subnet --vpc-egress all-traffic \
   --command python \
   --args '-c,<python snippet that runs the ALTER statements via asyncpg>'
 
@@ -103,16 +120,17 @@ gcloud run jobs execute vidgo-db-migrate --project vidgo-ai --region asia-east1 
 only swaps the image:
 
 ```bash
-gcloud run services update vidgo-backend  --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
-gcloud run services update vidgo-worker   --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
-gcloud run services update vidgo-frontend --image $REG/vidgo-frontend:${TS}   --project vidgo-ai --region asia-east1
+gcloud run services update vidgo-backend --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
 ```
+
+(There is no `vidgo-worker` / `vidgo-frontend` service to update. Background tasks
+run via Cloud Scheduler → `/api/v1/tasks/*`; the frontend ships to Firebase Hosting.)
 
 ### 5. Verify
 
 ```bash
 curl -s https://vidgo-backend-38714015566.asia-east1.run.app/api/v1/health
-curl -I https://vidgo-frontend-38714015566.asia-east1.run.app
+curl -I https://vidgo.co                                   # frontend (Firebase Hosting)
 gcloud run services logs read vidgo-backend --project vidgo-ai --region asia-east1 --limit 50
 ```
 

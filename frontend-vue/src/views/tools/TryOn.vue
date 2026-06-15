@@ -93,7 +93,15 @@ const presetThumb = (id: string) => `${PRESET_MODEL_BASE}/${id}.png`
 const modelImageUrl = ref<string | undefined>(undefined)  // person photo (upload source)
 const garmentImageUrl = ref<string | undefined>(undefined) // clothing photo (garment mode)
 const promptText = ref('')                                  // outfit description (prompt mode)
-const garmentCategory = ref<'upper_body' | 'lower_body' | 'dress' | 'full_body'>('dress')
+// Default to 'upper_body' (the most common single-garment upload). The old
+// 'dress' default made Kling improvise a full outfit and produced the
+// jacket+pants hybrid when someone uploaded a single top/jeans.
+const garmentCategory = ref<'upper_body' | 'lower_body' | 'dress' | 'full_body'>('upper_body')
+
+// ─── Pro controls (collapsed by default — casual users never see them) ──
+const showAdvanced = ref(false)
+const negativePrompt = ref('')                              // things to avoid
+const angle = ref<'front' | 'side' | 'back'>('front')       // camera angle for the result
 
 // Outfit presets for Kontext mode — Kling 3.0 style instruction prompts.
 const outfitPresets = [
@@ -155,6 +163,9 @@ async function generate() {
     const apiPayload: Parameters<typeof toolsApi.tryOn>[1] = usePreset
       ? { modelId: selectedPresetModelId.value }
       : { modelImageUrl: personUrl! }
+    // Pro controls — only sent when set, so defaults stay backend-driven.
+    apiPayload.angle = angle.value
+    if (negativePrompt.value.trim()) apiPayload.negativePrompt = negativePrompt.value.trim()
     let result
     if (mode.value === 'garment') {
       apiPayload.mode = 'garment'
@@ -335,14 +346,14 @@ function gotoPricing() { router.push('/pricing') }
           :label="L('點擊或拖放服裝照片', 'Click or drag a garment photo', '衣服の写真をクリックまたはドラッグ', '의상 사진을 클릭하거나 끌어다 놓기', 'Haz clic o arrastra una foto de la prenda')"
         />
         <div class="mt-2">
-          <p class="pp-field-help">{{ L('服裝類型（決定 Kling 的輸入欄位）', 'Garment category (drives Kling input slot)', '衣服のカテゴリ（Kling の入力スロットを決定）', '의상 카테고리 (Kling 입력 슬롯 결정)', 'Categoría de prenda (define la entrada de Kling)') }}</p>
+          <p class="pp-field-label">{{ L('這是什麼服裝？', 'What are you trying on?', '何を着せますか？', '무엇을 입히나요?', '¿Qué vas a probar?') }}</p>
           <div class="grid grid-cols-2 gap-2 mt-1">
             <button
               v-for="opt in [
-                { id: 'dress' as const,       label: L('連身/洋裝', 'Dress', 'ワンピース', '드레스', 'Vestido') },
-                { id: 'upper_body' as const,  label: L('上身', 'Upper', '上半身', '상의', 'Parte superior') },
-                { id: 'lower_body' as const,  label: L('下身', 'Lower', '下半身', '하의', 'Parte inferior') },
-                { id: 'full_body' as const,   label: L('整套', 'Full Body', '全身', '풀바디', 'Cuerpo entero') },
+                { id: 'upper_body' as const,  label: L('上衣 / 上半身', 'Top / Upper', 'トップス', '상의', 'Parte superior'), icon: '👕' },
+                { id: 'lower_body' as const,  label: L('褲 / 裙', 'Pants / Skirt', 'ボトムス', '하의', 'Parte inferior'), icon: '👖' },
+                { id: 'dress' as const,       label: L('連身 / 洋裝', 'Dress', 'ワンピース', '드레스', 'Vestido'), icon: '👗' },
+                { id: 'full_body' as const,   label: L('整套穿搭', 'Full Outfit', '全身コーデ', '풀착장', 'Conjunto'), icon: '🧥' },
               ]"
               :key="opt.id"
               type="button"
@@ -351,8 +362,9 @@ function gotoPricing() { router.push('/pricing') }
               :style="garmentCategory === opt.id
                 ? 'background: rgba(124,58,237,0.25); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.4);'
                 : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
-            >{{ opt.label }}</button>
+            >{{ opt.icon }} {{ opt.label }}</button>
           </div>
+          <p class="pp-field-help mt-1">{{ L('選對部位，AI 才不會自己補上其他衣物。', 'Pick the right part so the AI doesn\'t invent the rest of the outfit.', '正しい部位を選ぶと、AIが他の服を勝手に追加しません。', '올바른 부위를 선택해야 AI가 나머지 옷을 임의로 추가하지 않습니다.', 'Elige la parte correcta para que la IA no invente el resto.') }}</p>
         </div>
       </div>
 
@@ -391,6 +403,55 @@ function gotoPricing() { router.push('/pricing') }
               class="text-[11px] px-2 py-1 rounded-full"
               style="background: rgba(124,58,237,0.15); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3);"
             >{{ isZh ? p.label_zh : p.label_en }}</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Advanced / pro controls — collapsed by default so casual users see a
+           clean form; professionals expand it for fine control. -->
+      <div class="border-t pt-3 mt-1" style="border-color: rgba(255,255,255,0.06);">
+        <button
+          type="button"
+          @click="showAdvanced = !showAdvanced"
+          class="flex items-center gap-1.5 text-xs font-medium"
+          style="color: #a78bfa;"
+        >
+          <span>{{ showAdvanced ? '▾' : '▸' }}</span>
+          {{ L('進階選項（專業）', 'Advanced (pro)', '詳細設定（プロ）', '고급 설정', 'Avanzado') }}
+        </button>
+
+        <div v-if="showAdvanced" class="mt-3 space-y-3">
+          <!-- Result angle -->
+          <div>
+            <label class="pp-field-label">{{ L('成品角度', 'Result Angle', '結果のアングル', '결과 각도', 'Ángulo') }}</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                v-for="opt in [
+                  { id: 'front' as const, label: L('正面', 'Front', '正面', '정면', 'Frente') },
+                  { id: 'side' as const,  label: L('側面', 'Side', '横', '측면', 'Lado') },
+                  { id: 'back' as const,  label: L('背面', 'Back', '背面', '뒷면', 'Atrás') },
+                ]"
+                :key="opt.id"
+                type="button"
+                @click="angle = opt.id"
+                class="text-xs py-2 rounded transition-colors"
+                :style="angle === opt.id
+                  ? 'background: rgba(124,58,237,0.25); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.4);'
+                  : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
+              >{{ opt.label }}</button>
+            </div>
+          </div>
+
+          <!-- Negative prompt -->
+          <div>
+            <label class="pp-field-label">{{ L('負面提示（避免什麼）', 'Negative Prompt (what to avoid)', 'ネガティブプロンプト', '네거티브 프롬프트', 'Prompt negativo') }}</label>
+            <input
+              v-model="negativePrompt"
+              type="text"
+              maxlength="500"
+              class="pp-input"
+              :placeholder="L('例：變形、多餘衣物、模糊、低品質', 'e.g. distorted, extra clothing, blurry, low quality', '例：歪み、余分な衣服、ぼやけ', '예: 왜곡, 불필요한 옷, 흐림', 'p. ej. distorsión, ropa extra, borroso')"
+            />
           </div>
         </div>
       </div>

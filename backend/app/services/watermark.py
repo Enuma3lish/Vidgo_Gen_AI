@@ -381,14 +381,144 @@ class WatermarkService:
             logger.error(f"Error adding image watermark: {e}")
             return None
 
+    # =========================================================================
+    # Image LOGO watermarking (admin-uploaded PNG composited onto stills)
+    # =========================================================================
+
+    async def _load_logo_rgba(self) -> Optional["Image.Image"]:
+        """Load the configured watermark logo (URL or local path) as RGBA.
+
+        Cached on the instance so a backfill over hundreds of examples fetches
+        the logo once. Returns None when no image watermark is configured.
+        """
+        if not self.watermark_image_path:
+            return None
+        cached = getattr(self, "_logo_rgba_cache", None)
+        if cached is not None:
+            return cached
+        try:
+            src = self.watermark_image_path
+            if src.startswith("http://") or src.startswith("https://"):
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.get(src)
+                    resp.raise_for_status()
+                    logo = Image.open(io.BytesIO(resp.content)).convert("RGBA")
+            else:
+                if not Path(src).exists():
+                    return None
+                logo = Image.open(src).convert("RGBA")
+            self._logo_rgba_cache = logo
+            return logo
+        except Exception as e:
+            logger.error(f"Failed to load watermark logo {self.watermark_image_path!r}: {e}")
+            return None
+
+    def _overlay_logo(self, base_rgba: "Image.Image", logo_rgba: "Image.Image") -> "Image.Image":
+        """Composite the logo onto the base image at the configured position,
+        scaled to ~18% of the base width and faded to the configured opacity."""
+        bw, bh = base_rgba.size
+        target_w = max(1, int(bw * 0.18))
+        scale = target_w / logo_rgba.width
+        logo = logo_rgba.resize((target_w, max(1, int(logo_rgba.height * scale))))
+
+        # Apply opacity by scaling the logo's alpha channel.
+        if self.opacity < 1.0:
+            alpha = logo.split()[3].point(lambda a: int(a * self.opacity))
+            logo.putalpha(alpha)
+
+        lw, lh = logo.size
+        pad = max(12, int(bw * 0.02))
+        positions = {
+            "top_left": (pad, pad),
+            "top_right": (bw - lw - pad, pad),
+            "bottom_left": (pad, bh - lh - pad),
+            "bottom_right": (bw - lw - pad, bh - lh - pad),
+            "center": ((bw - lw) // 2, (bh - lh) // 2),
+        }
+        x, y = positions.get(self.position, positions["bottom_right"])
+        overlay = Image.new("RGBA", base_rgba.size, (0, 0, 0, 0))
+        overlay.paste(logo, (x, y), logo)
+        return Image.alpha_composite(base_rgba, overlay)
+
+    async def watermark_image_url_to_bytes(self, image_url: str) -> Optional[bytes]:
+        """Download an image, overlay the admin logo (or text fallback), and
+        return PNG bytes. Returns None on failure so callers can keep the
+        original. This is the entry point used by the example backfill."""
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.get(image_url)
+                resp.raise_for_status()
+                base = Image.open(io.BytesIO(resp.content)).convert("RGBA")
+
+            logo = await self._load_logo_rgba()
+            if logo is not None:
+                out_img = self._overlay_logo(base, logo)
+            else:
+                # No logo configured → fall back to text watermark on the bytes.
+                text_bytes = self._add_image_watermark(resp.content, self.watermark_text)
+                return text_bytes
+
+            buf = io.BytesIO()
+            out_img.convert("RGB").save(buf, format="PNG", quality=95)
+            return buf.getvalue()
+        except Exception as e:
+            logger.error(f"watermark_image_url_to_bytes failed for {image_url}: {e}")
+            return None
+
 
 # Default watermark service instance
 _watermark_service: Optional[WatermarkService] = None
 
 
+def _opacity_to_float(pct) -> float:
+    """SiteSettings stores opacity as 0-100 (%); the service wants 0.0-1.0."""
+    try:
+        v = float(pct)
+    except (TypeError, ValueError):
+        return 0.7
+    if v > 1.0:
+        v = v / 100.0
+    return max(0.0, min(1.0, v))
+
+
+def build_watermark_service(site_settings=None) -> WatermarkService:
+    """Construct a WatermarkService from the admin SiteSettings row (falling
+    back to env config). Pass the SiteSettings ORM row to honor the
+    admin-uploaded logo / text / position / opacity. Not cached — callers that
+    need the live admin config build a fresh instance per request/job."""
+    from app.core.config import settings as cfg
+
+    text = cfg.WATERMARK_TEXT or "Vidgo AI"
+    image = cfg.WATERMARK_IMAGE_PATH
+    position = "bottom_right"
+    opacity = 0.7
+
+    if site_settings is not None:
+        if getattr(site_settings, "watermark_image_url", None):
+            image = site_settings.watermark_image_url
+        if getattr(site_settings, "watermark_text", None):
+            text = site_settings.watermark_text
+        if getattr(site_settings, "watermark_position", None):
+            position = site_settings.watermark_position
+        if getattr(site_settings, "watermark_opacity", None) is not None:
+            opacity = _opacity_to_float(site_settings.watermark_opacity)
+
+    return WatermarkService(
+        watermark_text=text,
+        watermark_image_path=image,
+        opacity=opacity,
+        position=position,
+    )
+
+
 def get_watermark_service() -> WatermarkService:
-    """Get or create watermark service singleton"""
+    """Get or create the default watermark service singleton (env-config based).
+    For the admin-configured watermark, use build_watermark_service(settings_row)."""
     global _watermark_service
     if _watermark_service is None:
-        _watermark_service = WatermarkService()
+        from app.core.config import settings as cfg
+        _watermark_service = WatermarkService(
+            watermark_text=cfg.WATERMARK_TEXT or "Vidgo AI",
+            watermark_image_path=cfg.WATERMARK_IMAGE_PATH,
+        )
     return _watermark_service

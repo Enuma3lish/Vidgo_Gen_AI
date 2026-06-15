@@ -39,23 +39,6 @@ steps:
       - '.'
 
   # ──────────────────────────────────────────────────────────────────────
-  # Step 2: Build Frontend Image (in parallel with backend)
-  # ──────────────────────────────────────────────────────────────────────
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-frontend'
-    args:
-      - 'build'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_FRONTEND_SERVICE}:${BUILD_ID}'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_FRONTEND_SERVICE}:latest'
-      - '--cache-from'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_FRONTEND_SERVICE}:latest'
-      - '-f'
-      - 'frontend-vue/Dockerfile.prod'
-      - 'frontend-vue/'
-
-  # ──────────────────────────────────────────────────────────────────────
   # Step 3: Push Backend Image
   # ──────────────────────────────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
@@ -65,17 +48,6 @@ steps:
       - 'push'
       - '--all-tags'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_BACKEND_SERVICE}'
-
-  # ──────────────────────────────────────────────────────────────────────
-  # Step 4: Push Frontend Image
-  # ──────────────────────────────────────────────────────────────────────
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-frontend'
-    waitFor: ['build-frontend']
-    args:
-      - 'push'
-      - '--all-tags'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_FRONTEND_SERVICE}'
 
   # ──────────────────────────────────────────────────────────────────────
   # Step 5: Deploy Backend to Cloud Run
@@ -99,7 +71,7 @@ steps:
       - '--max-instances'
       - '10'
       - '--memory'
-      - '2Gi'
+      - '1Gi'
       - '--cpu'
       - '1'
       - '--timeout'
@@ -108,73 +80,25 @@ steps:
       - 'SKIP_PREGENERATION=true,PIAPI_MCP_ENABLED=true'
       - '--add-cloudsql-instances'
       - '${_CLOUD_SQL_INSTANCE}'
+      - '--network'
+      - 'vidgo-vpc'
+      - '--subnet'
+      - 'vidgo-subnet'
+      # all-traffic (NOT private-ranges-only): outbound payment/invoice calls to
+      # Giveme + ECPay must exit via the static NAT IP that's whitelisted on
+      # their side. private-ranges-only would route them through Google's dynamic
+      # egress and the whitelist would reject them. Direct VPC egress (this block,
+      # no VPC connector) still drops the ~$10-15/mo connector cost.
+      - '--vpc-egress'
+      - 'all-traffic'
       - '--allow-unauthenticated'
 
-  # ──────────────────────────────────────────────────────────────────────
-  # Step 6: Deploy Worker to Cloud Run
-  # ──────────────────────────────────────────────────────────────────────
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-worker'
-    waitFor: ['push-backend']
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - '${_WORKER_SERVICE}'
-      - '--image'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_BACKEND_SERVICE}:${BUILD_ID}'
-      - '--region'
-      - '${_REGION}'
-      - '--platform'
-      - 'managed'
-      - '--min-instances'
-      - '1'
-      - '--max-instances'
-      - '3'
-      - '--memory'
-      - '512Mi'
-      - '--cpu'
-      - '1'
-      - '--no-cpu-throttling'
-      - '--command'
-      - '/bin/bash'
-      - '--args'
-      - '-c,python -m http.server 8000 & exec arq app.worker.WorkerSettings'
-      - '--update-env-vars'
-      - 'SKIP_PREGENERATION=true,PIAPI_MCP_ENABLED=true'
-      - '--add-cloudsql-instances'
-      - '${_CLOUD_SQL_INSTANCE}'
-      - '--no-allow-unauthenticated'
-
-  # ──────────────────────────────────────────────────────────────────────
-  # Step 7: Deploy Frontend to Cloud Run
-  # ──────────────────────────────────────────────────────────────────────
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-frontend'
-    waitFor: ['push-frontend']
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - '${_FRONTEND_SERVICE}'
-      - '--image'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_FRONTEND_SERVICE}:${BUILD_ID}'
-      - '--region'
-      - '${_REGION}'
-      - '--platform'
-      - 'managed'
-      - '--min-instances'
-      - '0'
-      - '--max-instances'
-      - '4'
-      - '--memory'
-      - '256Mi'
-      - '--cpu'
-      - '1'
-      - '--allow-unauthenticated'
+  # NOTE: The frontend is served by Firebase Hosting (global CDN), not Cloud Run.
+  # Build & deploy it with: cd frontend-vue && npm run build && firebase deploy --only hosting
+  # (The old build-frontend / push-frontend / deploy-frontend Cloud Run steps were
+  # removed — they double-deployed the SPA and cost build minutes + an idle service.)
 
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_BACKEND_SERVICE}:${BUILD_ID}'
-  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_FRONTEND_SERVICE}:${BUILD_ID}'
 
 timeout: '1200s'

@@ -44,9 +44,9 @@ SECRETS_FILE="${REPO_ROOT}/.qa-secrets"
 # the Job can't reach Cloud SQL and fails at startup.
 APP_NAME="${APP_NAME:-vidgo}"
 SQL_INSTANCE="${SQL_INSTANCE:-prod-db}"
-CONNECTOR_NAME="${CONNECTOR_NAME:-${APP_NAME}-connector}"
+VPC_NAME="${VPC_NAME:-${APP_NAME}-vpc}"
+SUBNET_NAME="${SUBNET_NAME:-${APP_NAME}-subnet}"
 SQL_CONNECTION="${PROJECT_ID}:${REGION}:${SQL_INSTANCE}"
-CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${REGION}/connectors/${CONNECTOR_NAME}"
 
 # Note: .local is rejected by pydantic's email-validator as a reserved TLD.
 # Use a fictional but syntactically valid public-TLD domain so the /auth/login
@@ -109,7 +109,7 @@ seed_persona() {
     --region="${REGION}" \
     --project="${PROJECT_ID}" \
     --service-account="${BACKEND_SA}" \
-    --vpc-connector="${CONNECTOR_PATH}" \
+    --network="${VPC_NAME}" --subnet="${SUBNET_NAME}" --vpc-egress=all-traffic \
     --set-cloudsql-instances="${SQL_CONNECTION}" \
     --set-secrets="DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,QA_PASSWORD=${qa_secret_name}:latest" \
     --task-timeout=300 \

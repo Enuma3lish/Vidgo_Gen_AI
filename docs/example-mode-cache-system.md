@@ -116,7 +116,7 @@ Key flags:
 - `--limit N` — caps the number of combos per run.
 - `--yes` — non-interactive; skips the "burns real credits" prompt.
 
-The job reuses the live `vidgo-backend:latest` image and needs the backend's VPC connector + Cloud SQL wiring (the pregen-materials.sh script now sets these explicitly — an earlier revision omitted them and the job couldn't reach Postgres).
+The job reuses the live `vidgo-backend:latest` image and needs the backend's Direct VPC egress + Cloud SQL wiring (the pregen-materials.sh script sets these explicitly — `--network vidgo-vpc --subnet vidgo-subnet --vpc-egress all-traffic` + `--set-cloudsql-instances` — so the job can reach private-IP Postgres).
 
 ## Backend components
 

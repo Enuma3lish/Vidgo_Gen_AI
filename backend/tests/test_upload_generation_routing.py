@@ -14,9 +14,21 @@ from app.providers.provider_router import TaskType
 pytestmark = pytest.mark.asyncio
 
 
+class _FakeScalarResult:
+    """Minimal stand-in for a SQLAlchemy Result. _trigger_generation only calls
+    .scalar_one_or_none() on the User lookup it uses to resolve the tier;
+    returning None makes get_user_tier fall back to "free", which is fine for
+    these routing assertions."""
+    def scalar_one_or_none(self) -> Any:
+        return None
+
+
 class FakeDb:
     def __init__(self) -> None:
         self.commits = 0
+
+    async def execute(self, *args: Any, **kwargs: Any) -> _FakeScalarResult:
+        return _FakeScalarResult()
 
     async def commit(self) -> None:
         self.commits += 1
@@ -26,7 +38,9 @@ async def test_upload_avatar_generation_routes_script_and_text(monkeypatch: pyte
     captured: dict[str, Any] = {}
 
     class FakeProviderRouter:
-        async def route(self, task_type: TaskType, params: dict[str, Any]) -> dict[str, Any]:
+        # Accept **kwargs so the route() call's user_tier= (margin gate, 2026-06)
+        # and any future keyword args don't break the capture.
+        async def route(self, task_type: TaskType, params: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
             captured["task_type"] = task_type
             captured["params"] = params
             return {

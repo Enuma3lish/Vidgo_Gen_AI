@@ -18,6 +18,7 @@ jobs:
   frontend:
     name: Frontend · type-check · test · build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend-vue
@@ -47,9 +48,16 @@ jobs:
   backend:
     name: Backend · pytest
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
+    # Tests must run WITHOUT real provider keys / .env (which is gitignored and
+    # absent in CI). App modules are import-safe on a read-only/absent /app path
+    # (main.py + uploads.py fall back to a temp dir), and provider-router tests
+    # stub config-disable so they don't depend on PIAPI_KEY/POLLO_API_KEY.
+    env:
+      PYTHONUNBUFFERED: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4

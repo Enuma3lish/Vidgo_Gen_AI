@@ -130,8 +130,27 @@ IMAGE_UPLOAD_TOOLS = {
 # valid and just always return False.
 VIDEO_UPLOAD_TOOLS: set = set()
 
-UPLOAD_DIR = "/app/static/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Local fallback upload dir. Defaults to the container path but is overridable
+# via the UPLOAD_DIR env var so tests / local dev / CI (where `/app` is a
+# read-only or non-existent path) can point it at a writable location.
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/static/uploads")
+
+
+def _ensure_upload_dir() -> None:
+    """Create UPLOAD_DIR on demand. Called lazily before a local write rather
+    than at import time — importing this module must NEVER crash just because
+    the configured directory isn't writable (the prod path `/app/...` doesn't
+    exist outside the Docker image, which previously broke `pytest` collection
+    with `OSError: Read-only file system: '/app'`). In production the GCS path
+    is used and this local dir is never touched."""
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+    except OSError as exc:  # read-only FS, missing parent, etc.
+        logger.warning("Could not create UPLOAD_DIR %s: %s", UPLOAD_DIR, exc)
+
+
+# Best-effort at import (no-op / warning if the FS is read-only).
+_ensure_upload_dir()
 
 DOWNLOAD_MEDIA_TYPES_BY_EXTENSION = {
     ".jpg": "image/jpeg",
@@ -401,6 +420,7 @@ async def _save_upload(file: UploadFile, user_id: str, tool_type: str) -> tuple[
         )
         return file_url, file_size, content_type
 
+    _ensure_upload_dir()
     dest = os.path.join(UPLOAD_DIR, filename)
     with open(dest, "wb") as f:
         f.write(content)

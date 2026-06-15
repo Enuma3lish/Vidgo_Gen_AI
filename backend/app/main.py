@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import tempfile
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,14 +32,30 @@ async def _media_cleanup_loop():
             logger.error(f"[MediaCleanup] Error during cleanup: {e}")
 
 
-# Ensure static directory exists
-STATIC_DIR = Path("/app/static")
-STATIC_DIR.mkdir(parents=True, exist_ok=True)
-(STATIC_DIR / "generated").mkdir(parents=True, exist_ok=True)
-(STATIC_DIR / "generated" / "interior").mkdir(parents=True, exist_ok=True)
-(STATIC_DIR / "materials").mkdir(parents=True, exist_ok=True)
-(STATIC_DIR / "uploads").mkdir(parents=True, exist_ok=True)   # subscriber uploads
-(STATIC_DIR / "tryon_garments").mkdir(parents=True, exist_ok=True)  # cached Virtual Try-On garments
+# Ensure static directory exists. Default to the container path but allow a
+# STATIC_DIR env override, and fall back to a writable temp dir when the
+# configured path can't be created — importing this module (e.g. under pytest
+# or in CI, where `/app` is read-only or absent) must never crash, and the
+# StaticFiles mount below needs the directory to exist.
+_STATIC_SUBDIRS = ("generated", "generated/interior", "materials", "uploads", "tryon_garments")
+
+
+def _prepare_static_dir() -> Path:
+    base = Path(os.getenv("STATIC_DIR", "/app/static"))
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        for sub in _STATIC_SUBDIRS:
+            (base / sub).mkdir(parents=True, exist_ok=True)
+        return base
+    except OSError as exc:
+        fallback = Path(tempfile.gettempdir()) / "vidgo-static"
+        logger.warning("STATIC_DIR %s not writable (%s); falling back to %s", base, exc, fallback)
+        for sub in ("",) + _STATIC_SUBDIRS:
+            (fallback / sub).mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
+STATIC_DIR = _prepare_static_dir()
 
 
 async def validate_materials_on_startup() -> dict:

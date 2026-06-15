@@ -18,6 +18,9 @@ def _mock_db_with_empty_execute():
     scalars_obj = Mock()
     scalars_obj.first.return_value = None
     empty_result.scalars.return_value = scalars_obj
+    # The refund-allowance plan lookup uses .scalar_one_or_none(); without this
+    # an auto-Mock leaks through as the "plan" and int(plan.monthly_credits) blows up.
+    empty_result.scalar_one_or_none.return_value = None
     db.execute = AsyncMock(return_value=empty_result)
     db.add = Mock()
     db.commit = AsyncMock()
@@ -40,13 +43,19 @@ def _build_user():
     )
 
 
-def _build_subscription(active_days=2):
+def _build_subscription(active_days=2, is_refundable=True):
     return SimpleNamespace(
         id=uuid4(),
         start_date=utc_now() - timedelta(days=active_days),
         end_date=utc_now() + timedelta(days=28),
         status="active",
         auto_renew=True,
+        # Mirrors Subscription.is_refundable (Column default=True). cancel_subscription
+        # fast-paths on `is_refundable is False`, so the fake must carry the flag.
+        is_refundable=is_refundable,
+        # The refund-allowance check resolves the plan via subscription.plan_id;
+        # the mocked db.execute returns no plan → allowance 0 → refund allowed.
+        plan_id=uuid4(),
     )
 
 
@@ -87,8 +96,11 @@ async def test_cancel_with_refund_auto_processed_message_and_state():
     assert "immediately" in result["message"].lower()
     assert subscription.status == "cancelled"
     assert user.current_plan_id is None
-    assert user.purchased_credits == 0
-    assert user.bonus_credits == 0
+    # Credit revocation is delegated to _revoke_subscription_credits (mocked
+    # here). That helper only zeroes subscription_credits — purchased and bonus
+    # credits are intentionally NOT clawed back on a subscription refund — so we
+    # assert the helper was invoked rather than asserting credit side effects
+    # that happen inside the mocked-out method.
     service._revoke_subscription_credits.assert_awaited_once()
 
 

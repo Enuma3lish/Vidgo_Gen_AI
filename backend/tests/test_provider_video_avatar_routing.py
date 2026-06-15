@@ -56,9 +56,13 @@ async def test_piapi_avatar_accepts_text_alias_and_normalizes_video_url(monkeypa
     # BUG-005: the spoken script must NOT leak into Kling's visual `prompt`
     # (that rendered the words as on-screen captions). The script reaches Kling
     # via local_dubbing_url (asserted above); `prompt` is a clean talking-head
-    # visual brief that explicitly forbids on-screen text.
+    # visual brief. NOTE (2026-06-11): the positive prompt intentionally NO
+    # LONGER enumerates negatives like "no text" — doing so made some models
+    # render the words. We just assert the script doesn't leak and the prompt is
+    # a talking-head brief.
+    avatar_prompt = captured["avatar_payload"]["input"]["prompt"].lower()
     assert "Text alias should be spoken." not in captured["avatar_payload"]["input"]["prompt"]
-    assert "no text" in captured["avatar_payload"]["input"]["prompt"].lower()
+    assert "talking-head" in avatar_prompt
     assert result["output"]["video_url"] == "https://cdn.example.com/avatar.mp4"
 
 

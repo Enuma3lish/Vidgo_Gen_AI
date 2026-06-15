@@ -152,6 +152,16 @@ class SubscriptionService:
                 return {"success": False, "error": "Test plan requires payment checkout"}
             if payment_method != "ecpay" and action != "refresh":
                 return {"success": False, "error": "Test plan requires ECPay checkout"}
+            
+            # Limit test plan to once per account
+            past_test_sub = await db.execute(
+                select(Subscription).where(
+                    Subscription.user_id == user_id,
+                    Subscription.plan_id == plan.id
+                ).limit(1)
+            )
+            if past_test_sub.scalar_one_or_none():
+                return {"success": False, "error": "The test plan can only be purchased once per account"}
 
         # Check if already subscribed to same plan. Reject every duplicate
         # unless the caller is an admin path (skip_payment=True) AND has
@@ -448,6 +458,29 @@ class SubscriptionService:
         await db.refresh(user)
 
         logger.info(f"Subscription activated: {subscription.id}")
+
+        # Plan D referral conversion bonus (2026-06-15) — if this user was
+        # referred AND just activated a real paid plan (not the $1 test plan,
+        # not a zero-price freebie), pay the promoter the conversion credit.
+        # Idempotent inside the service (second activations don't double-pay).
+        # Fire-and-forget: a referral hiccup must NEVER block subscription
+        # activation, so we swallow exceptions and log them.
+        try:
+            if (
+                user.referred_by_id
+                and not is_test_pro_plan(plan)
+                and float(getattr(plan, "price_monthly", 0) or 0) > 0
+            ):
+                from app.services.referral_service import ReferralService
+                await ReferralService(db).award_paid_conversion(
+                    referred_user_id=str(user.id),
+                    plan_name=plan.name,
+                )
+        except Exception as exc:
+            logger.warning(
+                "Referral conversion bonus failed for user %s on plan %s: %s",
+                user.id, plan.name, exc,
+            )
 
         msg = "Subscription activated successfully (development mode)"
         if is_upgrade:
@@ -1558,6 +1591,27 @@ class SubscriptionService:
                                 description=f"Subscription credits for {plan.name}"
                             )
                             db.add(transaction)
+
+                        # Plan D referral conversion bonus (2026-06-15) on the
+                        # webhook-driven activation path. Mirrors the same call
+                        # in _activate_subscription_directly. Fire-and-forget —
+                        # never block payment completion on a referral hiccup.
+                        try:
+                            if (
+                                user.referred_by_id
+                                and not is_test_pro_plan(plan)
+                                and float(getattr(plan, "price_monthly", 0) or 0) > 0
+                            ):
+                                from app.services.referral_service import ReferralService
+                                await ReferralService(db).award_paid_conversion(
+                                    referred_user_id=str(user.id),
+                                    plan_name=plan.name,
+                                )
+                        except Exception as exc:
+                            logger.warning(
+                                "Referral conversion bonus failed (webhook path) for user %s: %s",
+                                user.id, exc,
+                            )
         else:
             package_id = payment_data.get("package_id")
             purchased_credits = int(payment_data.get("credits") or 0)

@@ -171,9 +171,14 @@ class Settings(BaseSettings):
     # Mock payment completion must never be accidentally available in production.
     PAYMENT_MOCK_COMPLETION_ENABLED: bool = False
 
-    # Referral System
-    REFERRAL_BONUS_CREDITS: int = 50       # Credits awarded to referrer per successful referral
-    REFERRAL_WELCOME_CREDITS: int = 40     # Credits awarded to new user who used a promotion/referral code
+    # Referral System (Plan D, 2026-06-15 — cost-aligned with paid conversion)
+    # Signup pays small, conversion pays big — incentivizes promoters to bring
+    # users that actually convert instead of mass-spamming the welcome bonus.
+    REFERRAL_BONUS_CREDITS: int = 10                       # promoter, at referred-user signup
+    REFERRAL_WELCOME_CREDITS: int = 30                     # referred user, at signup
+    REFERRAL_PAID_CONVERSION_PROMOTER_CREDITS: int = 100   # promoter, when referred user activates first PAID sub
+    REFERRAL_FIRST_GENERATION_REFEREE_CREDITS: int = 30    # referred user, on first credit-deducted generation
+    REFERRAL_SIGNUP_MONTHLY_CAP: int = 30                  # max signup bonuses awarded per promoter per rolling 30 days
 
     # Upload settings (subscriber material upload)
     MAX_UPLOAD_SIZE_MB: int = 20           # Max file size for subscriber uploads

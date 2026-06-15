@@ -10,10 +10,27 @@ PiAPI vendor model bumps (Kling 2.6 → 2.5 etc.) flow through here so ops can
 swap models in seconds without a redeploy. See ``ModelRegistryService`` for
 the DB → env → hardcoded fallback chain.
 
-Caveat — until a follow-up ships in-process cache refresh + pub/sub, admin
-edits propagate to running provider code only after the Cloud Run instance
-restarts. A `gcloud run services update --update-env-vars MODEL_REGISTRY_RESEED=$(date +%s)`
-forces a rolling restart in ~30 seconds.
+Propagation — admin edits publish a Redis pub/sub invalidate (``set_override`` →
+``publish_invalidate``) and every instance refreshes its in-process model cache
+within one pub/sub cycle (subscriber started in the FastAPI lifespan; see
+``model_registry_pubsub.py``). This path is **Redis-gated** (``if not redis_client:
+return``): it is active wherever Redis is reachable, e.g. local dev. PROD removed
+Memorystore Redis in the 2026-06 cost pass, so there pub/sub is inactive and edits
+propagate on instance restart — force a ~30s rolling restart with
+`gcloud run services update --update-env-vars MODEL_REGISTRY_RESEED=$(date +%s)`.
+
+SCOPE — what this registry DOES and does NOT do (read before writing tests):
+  ✅ Supported: per-``service_key`` override of the MODEL STRING + version
+     (``current_model`` / ``current_version``), with audit history. This is the
+     "hot model-string override" capability.
+  ❌ NOT supported (roadmap): admin enable/disable of a provider, or reordering
+     provider PRIORITY (e.g. promoting Pollo from Backup → Primary). The
+     ``ROUTING_CONFIG`` in ``provider_router`` is static; ``_route_candidates``
+     only skips a provider on a missing API key or an open circuit breaker —
+     there is no admin-controllable ``enabled``/``priority`` field on
+     ``ModelRegistryOverride``. Acceptance tests must NOT assert these; verify
+     the model-string override instead. Building enable/disable + priority is a
+     deliberate follow-up (new columns + provider_router DB-merge + propagation).
 """
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, List

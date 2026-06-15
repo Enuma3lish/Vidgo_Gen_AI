@@ -1017,6 +1017,25 @@ def _credits_charged(user, fallback: int) -> int:
     return int(val) if val is not None else int(fallback)
 
 
+# Canonical tool_type → ServicePricing service_type mapping (Bug #3 credit-gateway
+# convergence). The upload entry points (uploads.py, generation.py) deduct via the
+# SAME gateway + key as the main tools here, so a ServicePricing price change hits
+# every entry point identically. Tools with a static deduct above reuse that key;
+# `short_video` is dynamic (per-model `_vrow["service_type"]`) so it is resolved by
+# the caller, not via this map; `effect`/`pattern_generate` have no main-tools
+# deduct, so they keep their own key and require seeded ServicePricing rows.
+UPLOAD_TOOL_SERVICE_TYPE = {
+    "background_removal": "bg_removal",
+    "product_scene":      "product_scene_gen",
+    "try_on":             "virtual_try_on",
+    "room_redesign":      "room_redesign",
+    "ai_avatar":          "ai_avatar",
+    "effect":             "effect",             # no main-tools deduct — seed a row
+    "pattern_generate":   "pattern_generate",   # no main-tools deduct — seed a row
+    "short_video":        "short_video",        # flat fallback; real per-model key resolved dynamically
+}
+
+
 # ============================================================================
 # Request/Response Models
 # ============================================================================

@@ -75,6 +75,16 @@ async def refresh_in_process_cache(redis_client: Optional[redis.Redis]) -> int:
             effective = info["effective"]
             model = effective.get("model")
             version = effective.get("version")
+            # NOTE (Bug #7 — known edge, intentionally unfixed under Bug #2 Route B):
+            # the `and model` guard only skips when the EFFECTIVE model is empty.
+            # For every known key `effective` falls back to the non-empty static
+            # default (ModelRegistryService.resolve: DB → env → PIAPI_MODELS), and
+            # list_all only iterates keys present in PIAPI_MODELS — so clearing/
+            # deleting an override DOES propagate today (this rewrites the in-process
+            # dict back to the default). The guard would only swallow a propagation
+            # if a future "disable / clear-to-empty" semantics is added (Bug #2
+            # Route A); that feature must restore the static default (or set an
+            # explicit disabled marker) here rather than skip on an empty model.
             if key in static_registry.PIAPI_MODELS and model:
                 if static_registry.PIAPI_MODELS[key] != model:
                     static_registry.PIAPI_MODELS[key] = model

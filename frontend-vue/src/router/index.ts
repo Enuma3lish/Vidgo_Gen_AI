@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
-import { applySeo, buildAlternateLocales } from '@/composables/useSeo'
+import { applySeo } from '@/composables/useSeo'
 import { safeLocalStorage } from '@/utils/safeStorage'
 
 // 2026-05-18 — subscription result pages are eagerly imported. They
@@ -116,6 +116,15 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
 
+  // Landscape / Garden AI — new 2026-06-15. Reuses /tools/room-redesign with
+  // space_kind='landscape' (LANDSCAPE_STYLES catalog).
+  {
+    path: '/tools/landscape-ai',
+    name: 'landscape-ai',
+    component: () => import('@/views/tools/LandscapeAI.vue'),
+    meta: { requiresAuth: false }
+  },
+
   // Sketch → photorealistic render. Reuses /tools/room-redesign image-to-image
   // (mnml.ai/app/sketch2img parity). 2026-06-12 — split into dedicated
   // interior and exterior pages (owner directive: never mix interior and
@@ -200,12 +209,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tools/ShortVideo.vue'),
     meta: { requiresAuth: false }
   },
-  {
-    path: '/tools/image-to-video',
-    name: 'image-to-video',
-    component: () => import('@/views/tools/ShortVideo.vue'),
-    meta: { requiresAuth: false }
-  },
+  // /tools/image-to-video rendered the SAME ShortVideo.vue with identical
+  // behaviour (applyRouteToTaskType defaults both to image_to_video), so it was
+  // a duplicate indexable URL. Redirect to the canonical /tools/short-video so
+  // Google consolidates them (was GSC "duplicate" on the alternate URL). Old
+  // links (e.g. VideoTopic.vue) keep working via the redirect.
+  { path: '/tools/image-to-video', redirect: '/tools/short-video' },
 
   // /tools/video-transform route removed 2026-05-31 — V2V dropped repo-wide.
 
@@ -439,6 +448,7 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: 'dashboard',         name: 'admin-dashboard',        component: () => import('@/views/admin/AdminDashboard.vue') },
       { path: 'users',             name: 'admin-users',            component: () => import('@/views/admin/AdminUsers.vue') },
+      { path: 'promotions',        name: 'admin-promotions',       component: () => import('@/views/admin/AdminPromotions.vue') },
       { path: 'materials',         name: 'admin-materials',        component: () => import('@/views/admin/AdminMaterials.vue') },
       { path: 'moderation',        name: 'admin-moderation',       component: () => import('@/views/admin/AdminModeration.vue') },
       { path: 'revenue',           name: 'admin-revenue',          component: () => import('@/views/admin/AdminRevenue.vue') },
@@ -586,19 +596,31 @@ const ROUTE_SEO: Record<string, RouteSeo> = {
 router.afterEach((to) => {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const path = to.path || '/'
-  const canonical = origin ? origin + path : undefined
+  // /info/<slug> renders the SAME StaticInfoPage as /<slug>. Keep the namespaced
+  // route working (external links use it) but point its canonical at the clean
+  // /<slug> form so Google indexes ONE URL per static page instead of treating
+  // /info/about as a duplicate of /about.
+  let canonicalPath = path
+  if (to.name === 'static-info-namespaced' && to.params.slug) {
+    canonicalPath = '/' + String(to.params.slug)
+  }
+  const canonical = origin ? origin + canonicalPath : undefined
   const name = (to.name as string) || ''
   const seo = ROUTE_SEO[name]
   const lang = typeof document !== 'undefined' ? document.documentElement.getAttribute('lang') || 'en' : 'en'
-  // Each locale gets its own ?lang= URL — pointing every hreflang at the same
-  // href (the old behaviour) is invalid and ignored by search engines (T-04).
-  const alternateLocales = buildAlternateLocales(origin, path)
+  // 2026-06-15 — single canonical URL per page. We deliberately DO NOT emit
+  // per-locale ?lang= hreflang alternates: the canonical here is the param-less
+  // path (origin + path), so advertising ?lang= variants as separate indexable
+  // URLs contradicted the canonical and produced Google Search Console's
+  // "Alternate page with proper canonical tag" exclusions. The ?lang= query
+  // still works for users (getInitialLocale honours it) — it's just not
+  // surfaced to search engines as a distinct URL. applySeo() clears any stale
+  // hreflang on every navigation.
   applySeo({
     title: seo?.title,
     description: seo?.description,
     canonical,
     locale: lang,
-    alternateLocales,
     // Guest-only pages (login/register/etc.) shouldn't be indexed once logged in,
     // but as guest-discoverable pages they're fine to leave open. /admin etc. is
     // explicitly noindex.

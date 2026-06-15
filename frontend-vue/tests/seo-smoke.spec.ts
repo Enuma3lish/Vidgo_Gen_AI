@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { applySeo, buildAlternateLocales } from '@/composables/useSeo'
+import { applySeo } from '@/composables/useSeo'
 
 // Smoke test for the home-grown SEO head manager (we deliberately did NOT adopt
-// @vueuse/head — see useSeo.ts). Locks in the T-04 fix: hreflang alternates must
-// be DISTINCT per locale, and title/description/canonical must land in <head>.
+// @vueuse/head — see useSeo.ts). Verifies title/description/canonical/robots
+// land in <head>, and locks in the 2026-06-15 single-canonical-URL policy: the
+// router no longer emits per-locale ?lang= hreflang alternates (they contradicted
+// the param-less canonical and produced GSC "Alternate page with proper canonical
+// tag" exclusions), and applySeo() clears any stale hreflang each navigation.
 
 const head = () => document.head
 
@@ -36,35 +39,24 @@ describe('seo-smoke', () => {
     expect(head().querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex, nofollow')
   })
 
-  it('emits one hreflang link per locale, each with a DISTINCT href (T-04)', () => {
+  it('emits NO per-locale hreflang alternates (single canonical URL policy)', () => {
     applySeo({
       title: 'Pricing',
       canonical: 'https://vidgo.co/pricing',
-      alternateLocales: buildAlternateLocales('https://vidgo.co', '/pricing'),
     })
-    const links = Array.from(head().querySelectorAll('link[rel="alternate"][hreflang]'))
-    const hrefs = links.map((l) => l.getAttribute('href'))
-    expect(links.length).toBe(6) // en, zh-TW, ja, ko, es + x-default
-    expect(new Set(hrefs).size).toBe(hrefs.length) // every href is unique
+    const links = head().querySelectorAll('link[rel="alternate"][hreflang]')
+    expect(links.length).toBe(0)
   })
 
-  it('buildAlternateLocales maps each locale to its own ?lang= URL', () => {
-    const alts = buildAlternateLocales('https://vidgo.co', '/')
-    const byLang = Object.fromEntries(alts.map((a) => [a.hreflang, a.href]))
-    expect(byLang['en']).toBe('https://vidgo.co/?lang=en')
-    expect(byLang['zh-TW']).toBe('https://vidgo.co/?lang=zh-TW')
-    expect(byLang['ja']).toBe('https://vidgo.co/?lang=ja')
-    expect(byLang['x-default']).toBe('https://vidgo.co/')
-    expect(buildAlternateLocales('', '/')).toEqual([])
-  })
+  it('clears any stale hreflang already in <head> on the next applySeo', () => {
+    // Simulate a leftover hreflang (e.g. injected by an old build or index.html).
+    const stale = document.createElement('link')
+    stale.setAttribute('rel', 'alternate')
+    stale.setAttribute('hreflang', 'ja')
+    stale.setAttribute('href', 'https://vidgo.co/?lang=ja')
+    document.head.appendChild(stale)
 
-  it('replaces the hreflang block across navigations (no stale leakage)', () => {
-    applySeo({ title: 'A', alternateLocales: buildAlternateLocales('https://vidgo.co', '/a') })
-    applySeo({ title: 'B', alternateLocales: buildAlternateLocales('https://vidgo.co', '/b') })
-    const hrefs = Array.from(head().querySelectorAll('link[rel="alternate"][hreflang]')).map((l) =>
-      l.getAttribute('href'),
-    )
-    expect(hrefs.every((h) => h!.includes('/b'))).toBe(true)
-    expect(hrefs.some((h) => h!.includes('/a'))).toBe(false)
+    applySeo({ title: 'Pricing', canonical: 'https://vidgo.co/pricing' })
+    expect(head().querySelectorAll('link[rel="alternate"][hreflang]').length).toBe(0)
   })
 })

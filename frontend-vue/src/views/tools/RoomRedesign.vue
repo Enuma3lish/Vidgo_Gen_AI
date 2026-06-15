@@ -71,10 +71,41 @@ const customPrompt = ref<string>('')          // magic-mode prompt
 const styleStrength = ref<number>(0.7)
 const lightingTone = ref<'' | 'daylight' | 'warm_evening' | 'dramatic_spotlight' | 'golden_hour' | 'moody'>('')
 const materialAccent = ref<'' | 'wood' | 'marble' | 'concrete' | 'linen' | 'brass' | 'leather' | 'terrazzo'>('')
+// 2026-06-15 — high-fidelity model, reference-style image, multi-variant.
+const quality = ref<'standard' | 'high'>('high')
+const variationCount = ref<1 | 2 | 3 | 4>(1)
+const styleRefImage = ref<string | undefined>(undefined)
+const styleRefFile = ref<File | null>(null)
+
+// 2026-06-15 — progressive disclosure so the tool serves both beginners and
+// pros. Simple mode shows just upload → style → generate (smart defaults for
+// everything else); Advanced reveals quality / reference image / variations /
+// strength / magic. Choice is remembered across visits.
+type UiLevel = 'simple' | 'advanced'
+const UI_LEVEL_KEY = 'vidgo.tool.uiLevel'
+const uiLevel = ref<UiLevel>(
+  (typeof localStorage !== 'undefined' && (localStorage.getItem(UI_LEVEL_KEY) as UiLevel)) || 'simple',
+)
+const isAdvanced = computed(() => uiLevel.value === 'advanced')
+function setUiLevel(level: UiLevel) {
+  uiLevel.value = level
+  try { localStorage.setItem(UI_LEVEL_KEY, level) } catch { /* ignore */ }
+  if (level === 'simple') {
+    // Reset advanced-only knobs to beginner-safe defaults so a hidden control
+    // can never silently affect a simple-mode generation.
+    if (mode.value === 'magic') mode.value = 'redesign'
+    quality.value = 'high'
+    variationCount.value = 1
+    styleStrength.value = 0.7
+    styleRefImage.value = undefined
+    styleRefFile.value = null
+  }
+}
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultImage = ref<string | null>(null)
+const resultVariants = ref<string[]>([])
 
 // ─── Style catalog (loaded from backend) ─────────────────────────────
 interface StyleCard { id: string; name: string; name_zh: string; preview_url?: string; prompt?: string }
@@ -109,8 +140,19 @@ async function generate() {
   status.value = 'running'
   statusText.value = L('生成中… 通常需要 30 秒至 2 分鐘', 'Generating… typically 30s to 2 minutes', '生成中… 通常30秒〜2分かかります', '생성 중… 보통 30초~2분 소요', 'Generando… normalmente de 30 s a 2 min')
   resultImage.value = null
+  resultVariants.value = []
 
   try {
+    // Optional style-reference image — upload first so we can pass its URL.
+    let styleRefUrl: string | undefined
+    if (styleRefFile.value) {
+      try {
+        const upRef = await demoApi.uploadImage(styleRefFile.value)
+        styleRefUrl = upRef.url
+      } catch (e) {
+        console.warn('[room-redesign] style reference upload failed:', e)
+      }
+    }
     // All three modes route through the subscriber endpoint
     // /tools/room-redesign so they share the provider_router fallback
     // chain (PiAPI Kontext primary → Vertex backup) and respect the
@@ -134,6 +176,9 @@ async function generate() {
         styleStrength: styleStrength.value,
         lightingTone: lightingTone.value || undefined,
         materialAccent: materialAccent.value || undefined,
+        quality: quality.value,
+        variationCount: variationCount.value,
+        styleReferenceImageUrl: styleRefUrl,
       },
     )
     if (handleCardRequired(result, uiStore, router, isZh.value)) {
@@ -144,6 +189,14 @@ async function generate() {
     if (result.success && (result.image_url || result.result_url)) {
       const u = result.image_url || result.result_url || ''
       resultImage.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
+      // Collect all variants for the multi-result grid.
+      const arr = (result as any).results
+      if (Array.isArray(arr) && arr.length > 1) {
+        resultVariants.value = arr
+          .map((r: any) => r.image_url || r.result_url || '')
+          .filter(Boolean)
+          .map((x: string) => (x.startsWith('http') ? x : `${window.location.origin}${x}`))
+      }
       status.value = 'done'
       statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
       if (result.credits_used) creditsStore.deductCredits(result.credits_used)
@@ -335,18 +388,47 @@ onMounted(async () => {
             </RouterLink>
           </div>
 
-          <!-- Mode tabs -->
+          <!-- Simple ⟷ Advanced level toggle -->
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-[11px] font-mono tracking-wider uppercase" style="color: #94949f;">
+              {{ L('介面', 'Interface', 'インターフェース', '인터페이스', 'Interfaz') }}
+            </p>
+            <div class="inline-flex rounded-lg p-0.5" style="background:#0a0a0f; border:1px solid rgba(255,255,255,0.08);">
+              <button type="button" @click="setUiLevel('simple')"
+                class="px-3 py-1 rounded-md text-[11px] font-medium transition-colors"
+                :style="!isAdvanced ? 'background: linear-gradient(135deg,#7c3aed,#a78bfa); color:#fff;' : 'background:transparent; color:#94949f;'">
+                {{ L('簡易', 'Simple', '簡単', '간단', 'Simple') }}
+              </button>
+              <button type="button" @click="setUiLevel('advanced')"
+                class="px-3 py-1 rounded-md text-[11px] font-medium transition-colors"
+                :style="isAdvanced ? 'background: linear-gradient(135deg,#7c3aed,#a78bfa); color:#fff;' : 'background:transparent; color:#94949f;'">
+                {{ L('進階', 'Advanced', '詳細', '고급', 'Avanzado') }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Beginner 3-step hint (simple mode only) -->
+          <div v-if="!isAdvanced" class="rounded-lg px-3 py-2 text-[11px] leading-relaxed"
+            style="background: rgba(124,58,237,0.08); border:1px solid rgba(124,58,237,0.2); color:#c4b5fd;">
+            {{ L('三步驟：① 上傳房間照片 ② 選一個設計風格 ③ 點「開始生成」。其餘交給 AI（高擬真、保留格局）。',
+                 'Three steps: ① Upload a room photo ② Pick a design style ③ Hit Generate. AI handles the rest (high fidelity, layout preserved).',
+                 '3ステップ：① 部屋の写真をアップロード ② スタイルを選択 ③ 生成。あとはAIにお任せ。',
+                 '3단계: ① 방 사진 업로드 ② 스타일 선택 ③ 생성. 나머지는 AI가 처리합니다.',
+                 'Tres pasos: ① Sube una foto ② Elige un estilo ③ Genera. La IA hace el resto.') }}
+          </div>
+
+          <!-- Mode tabs — Simple shows redesign/stage; Advanced adds Magic -->
           <div>
             <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
               {{ L('模式', 'Mode', 'モード', '모드', 'Modo') }}
             </p>
-            <div class="grid grid-cols-3 gap-1.5">
+            <div class="grid gap-1.5" :class="isAdvanced ? 'grid-cols-3' : 'grid-cols-2'">
               <button
                 v-for="opt in [
-                  { id: 'redesign' as const, label: L('改造', 'Redesign', 'リデザイン', '리디자인', 'Rediseño') },
-                  { id: 'stage' as const,    label: L('佈置', 'Stage', 'ステージング', '스테이징', 'Staging') },
-                  { id: 'magic' as const,    label: L('魔法', 'Magic', 'マジック', '매직', 'Mágico') },
-                ]"
+                  { id: 'redesign' as const, label: L('改造', 'Redesign', 'リデザイン', '리디자인', 'Rediseño'), adv: false },
+                  { id: 'stage' as const,    label: L('佈置', 'Stage', 'ステージング', '스테이징', 'Staging'), adv: false },
+                  { id: 'magic' as const,    label: L('魔法', 'Magic', 'マジック', '매직', 'Mágico'), adv: true },
+                ].filter(o => isAdvanced || !o.adv)"
                 :key="opt.id"
                 type="button"
                 @click="mode = opt.id"
@@ -415,8 +497,61 @@ onMounted(async () => {
             </p>
           </div>
 
+          <!-- Quality (model) toggle — standard (Kontext) vs high (Nano Banana Pro) -->
+          <div v-if="isAdvanced">
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('畫質模式', 'Quality', '画質モード', '품질 모드', 'Calidad') }}
+            </p>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" @click="quality = 'high'"
+                class="py-2 rounded-lg text-xs font-medium transition-colors"
+                :style="quality === 'high' ? 'background: linear-gradient(135deg,#7c3aed,#a78bfa); color:#fff;' : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'">
+                {{ L('高擬真（推薦）', 'High fidelity (recommended)', '高精細（推奨）', '고품질 (추천)', 'Alta fidelidad') }}
+              </button>
+              <button type="button" @click="quality = 'standard'"
+                class="py-2 rounded-lg text-xs font-medium transition-colors"
+                :style="quality === 'standard' ? 'background: linear-gradient(135deg,#7c3aed,#a78bfa); color:#fff;' : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'">
+                {{ L('標準（較快）', 'Standard (faster)', '標準（速い）', '표준 (빠름)', 'Estándar (rápido)') }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Style-reference / inspiration image (best with high fidelity, not magic) -->
+          <div v-if="isAdvanced && mode !== 'magic'">
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('參考風格圖（選填）', 'Style reference image (optional)', '参考スタイル画像（任意）', '참고 스타일 이미지 (선택)', 'Imagen de referencia (opcional)') }}
+            </p>
+            <ImageUploader
+              tool-type="room_redesign"
+              v-model="styleRefImage"
+              @file-selected="(f: File | null) => styleRefFile = f"
+              :label="L('上傳靈感圖（風格/配色/材質）', 'Upload an inspiration image (style/palette/materials)', 'インスピレーション画像をアップロード', '영감 이미지 업로드', 'Sube una imagen de inspiración')"
+            />
+            <p class="text-[11px] mt-1" style="color: #6b6b7a;">
+              {{ L('AI 會套用這張圖的風格與配色到你的房間，但保留你房間的格局。需搭配「高擬真」。', "AI applies this image's style & palette to your room while keeping your room's layout. Use with High fidelity.", 'この画像のスタイルと配色を適用しつつ部屋の構造は保持します。', '이 이미지의 스타일·색감을 적용하되 방 구조는 유지합니다.', 'Aplica el estilo de esta imagen manteniendo la distribución.') }}
+            </p>
+          </div>
+
+          <!-- Variation count (redesign / stage only) -->
+          <div v-if="isAdvanced && mode !== 'magic'">
+            <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
+              {{ L('方案數量', 'Number of options', '案の数', '방안 수', 'Nº de opciones') }}
+              <span class="ml-2" style="color: #a78bfa;">{{ variationCount }}×</span>
+            </p>
+            <div class="grid grid-cols-4 gap-2">
+              <button v-for="n in ([1,2,3,4] as const)" :key="n" type="button" @click="variationCount = n"
+                class="py-2 rounded-lg text-xs font-medium transition-colors"
+                :style="variationCount === n ? 'background: linear-gradient(135deg,#7c3aed,#a78bfa); color:#fff;' : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'">
+                {{ n }}
+              </button>
+            </div>
+            <p class="text-[11px] mt-1" style="color: #6b6b7a;">
+              {{ L('一次生成多個方案比較，費用按方案數計算。', 'Generate several options at once to compare; cost scales with the count.', '複数案を一度に生成。費用は案数に比例。', '여러 방안을 한 번에 생성; 비용은 개수에 비례.', 'Genera varias opciones a la vez; el coste escala con la cantidad.') }}
+            </p>
+          </div>
+
           <!-- Strength slider (redesign / stage only) -->
-          <div v-if="mode !== 'magic'">
+          <div v-if="isAdvanced && mode !== 'magic'">
             <p class="text-[11px] font-mono tracking-wider uppercase mb-2" style="color: #94949f;">
               {{ L('風格強度', 'Style Strength', 'スタイル強度', '스타일 강도', 'Fuerza del estilo') }}
               <span class="ml-2" style="color: #a78bfa;">{{ Math.round(styleStrength * 100) }}%</span>
@@ -449,7 +584,7 @@ onMounted(async () => {
               {{ L('單次消耗', 'Cost per run', '1回コスト', '1회 비용', 'Coste por uso') }}
             </span>
             <span class="text-sm font-bold tabular-nums" style="color: #fff;">
-              {{ creditCost }}
+              {{ creditCost * (mode === 'magic' ? 1 : variationCount) }}
               <span class="text-xs opacity-70 font-normal ml-0.5">{{ L('點', 'credits', 'クレジット', '크레딧', 'créditos') }}</span>
             </span>
           </div>
@@ -494,8 +629,16 @@ onMounted(async () => {
           </div>
 
           <div class="flex-1 rounded-xl overflow-hidden flex items-center justify-center" style="background: #0a0a0f; border: 1px dashed rgba(255,255,255,0.08); min-height: 360px;">
+            <!-- Multi-variant grid (2+ options) -->
+            <div v-if="resultVariants.length > 1" class="w-full p-3 grid grid-cols-2 gap-2 self-stretch">
+              <a v-for="(v, i) in resultVariants" :key="v" :href="v" target="_blank" rel="noopener"
+                class="block rounded-lg overflow-hidden" style="border:1px solid rgba(124,58,237,0.25);">
+                <img :src="v" :alt="`option ${i+1}`" loading="lazy" class="w-full h-full object-cover" style="aspect-ratio: 4/3;"
+                  @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }" />
+              </a>
+            </div>
             <BeforeAfterSlider
-              v-if="resultImage && uploadedImage"
+              v-else-if="resultImage && uploadedImage"
               :before-image="uploadedImage"
               :after-image="resultImage"
               :before-label="L('原始', 'Before', 'オリジナル', '원본', 'Antes')"

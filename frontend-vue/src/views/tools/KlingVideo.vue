@@ -148,7 +148,7 @@ async function handleGenerate() {
                   <template v-else>{{ t(`klingVideo.tiers.${tk}`) }}</template>
                 </div>
                 <div class="text-xs opacity-75 mt-1">
-                  <template v-if="tk === 'omni'">{{ L('多模態 + 音訊與口型同步（約 750 點）', 'Multimodal + audio & lip-sync (~750 credits)', 'マルチモーダル + 音声・リップシンク（約750ポイント）', '멀티모달 + 오디오·립싱크 (약 750 포인트)', 'Multimodal + audio y sincronización labial (~750 créditos)') }}</template>
+                  <template v-if="tk === 'omni'">{{ L('多模態 + 音訊與口型同步', 'Multimodal + audio & lip-sync', 'マルチモーダル + 音声・リップシンク', '멀티모달 + 오디오·립싱크', 'Multimodal + audio y sincronización labial') }}</template>
                   <template v-else>{{ t(`klingVideo.tierHints.${tk}`) }}</template>
                 </div>
               </button>

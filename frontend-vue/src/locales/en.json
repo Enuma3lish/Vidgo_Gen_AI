@@ -100,6 +100,7 @@
         "isometric": "Isometric View",
         "render3d": "3D Render",
         "exteriorAi": "Exterior AI",
+        "landscapeAi": "Landscape AI",
         "commercialSpace": "Commercial Space",
         "sketchToRender": "Sketch to Render",
         "sketchToRenderExterior": "Sketch to Render (Exterior)",

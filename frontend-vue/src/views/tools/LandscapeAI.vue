@@ -1,13 +1,11 @@
 <script setup lang="ts">
 /**
- * ExteriorAI — building-exterior render tool (mnml.ai/app/exterior-ai parity).
+ * LandscapeAI — garden / yard / outdoor landscape design tool (new 2026-06-15).
  *
- * Pipeline reuses the existing /api/v1/tools/room-redesign endpoint with
- * space_kind='exterior', so it shares the provider_router fallback chain
- * (PiAPI Kontext → Vertex backup) and the EXTERIOR_STYLES catalog already
- * served by /tools/templates/interior-styles?space_kind=exterior. Kept as a
- * dedicated single-purpose page (not folded into RoomRedesign) per the owner
- * directive to keep each topic on its own maintainable page.
+ * Reuses /api/v1/tools/room-redesign with space_kind='landscape' so it shares
+ * the provider_router fallback chain and the high-fidelity model + variant
+ * power-ups. Styles come from /tools/templates/interior-styles?space_kind=landscape
+ * (LANDSCAPE_STYLES catalog). Dedicated single-purpose page, like ExteriorAI.
  */
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -42,9 +40,9 @@ const quality = ref<'standard' | 'high'>('high')
 const variationCount = ref<1 | 2 | 3 | 4>(1)
 const resultVariants = ref<string[]>([])
 
-// Progressive disclosure (shared pattern with RoomRedesign): Simple shows
-// upload → style → generate with smart defaults; Advanced reveals lighting /
-// quality / variations / strength. Choice remembered across visits.
+// Progressive disclosure (shared pattern): Simple shows upload → style →
+// generate with smart defaults; Advanced reveals lighting / quality /
+// variations / strength. Choice remembered across visits.
 type UiLevel = 'simple' | 'advanced'
 const UI_LEVEL_KEY = 'vidgo.tool.uiLevel'
 const uiLevel = ref<UiLevel>(
@@ -71,24 +69,21 @@ const styles = ref<StyleCard[]>([])
 
 onMounted(async () => {
   try {
-    const resp = await apiClient.get('/api/v1/tools/templates/interior-styles?space_kind=exterior')
+    const resp = await apiClient.get('/api/v1/tools/templates/interior-styles?space_kind=landscape')
     styles.value = (resp.data || []) as StyleCard[]
   } catch (e) {
-    console.warn('[exterior-ai] failed to load exterior styles:', e)
+    console.warn('[landscape-ai] failed to load landscape styles:', e)
   }
-  // Templates-gallery deeplink (?style=<id>) pre-fills the picker.
   const qStyle = String(route.query.style || '').trim()
   if (qStyle) selectedStyle.value = qStyle
 })
 
 const disabled = computed(() => !imageInput.value || !selectedStyle.value)
 const creditCost = computed(() => 20)
-// Tell the user exactly what's still missing so a disabled button isn't a
-// dead end (mistake prevention).
 const disabledReason = computed(() => {
   if (imageInput.value && selectedStyle.value) return ''
-  if (!imageInput.value) return L('請先上傳建築外觀照片或草圖。', 'Upload a building exterior photo or sketch first.', '建物外観の写真かスケッチをアップロードしてください。', '건물 외관 사진이나 스케치를 먼저 업로드하세요.', 'Sube primero una foto o boceto del exterior.')
-  return L('請選擇一個外觀風格。', 'Pick an exterior style to continue.', '外観スタイルを選択してください。', '외관 스타일을 선택하세요.', 'Elige un estilo de exterior.')
+  if (!imageInput.value) return L('請先上傳庭園 / 院子 / 戶外空間照片。', 'Upload a garden / yard / outdoor photo first.', '庭・庭先・屋外の写真をアップロードしてください。', '정원·마당·실외 사진을 먼저 업로드하세요.', 'Sube primero una foto del jardín o exterior.')
+  return L('請選擇一個庭園風格。', 'Pick a landscape style to continue.', '庭園スタイルを選択してください。', '조경 스타일을 선택하세요.', 'Elige un estilo de jardín.')
 })
 
 async function ensureImageUrl(): Promise<string | null> {
@@ -110,7 +105,7 @@ async function generate() {
     const url = await ensureImageUrl()
     if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
     const result = await toolsApi.roomRedesign(url, selectedStyle.value, undefined, undefined, undefined, {
-      spaceKind: 'exterior',
+      spaceKind: 'landscape',
       styleStrength: styleStrength.value,
       lightingTone: lightingTone.value || undefined,
       quality: quality.value,
@@ -149,13 +144,13 @@ function gotoPricing() { router.push('/pricing') }
 <template>
   <PiapiPlayground
     :eta-seconds="60"
-    :title="L('建築外觀 AI 設計', 'Exterior AI', '外観AIデザイン', '외관 AI 디자인', 'Diseño de exteriores IA')"
+    :title="L('庭園 / 景觀 AI 設計', 'Landscape AI', '庭園・ランドスケープAI', '조경 AI 디자인', 'Diseño de jardines IA')"
     :subtitle="L(
-      '上傳建築外觀照片、草圖或 3D 渲染，選擇風格，一鍵生成寫實外觀渲染。',
-      'Upload a building exterior photo, sketch, or 3D render, pick a style, and generate a photorealistic facade.',
-      '建物外観の写真・スケッチ・3Dレンダーをアップロードし、スタイルを選んでリアルな外観を生成。',
-      '건물 외관 사진·스케치·3D 렌더를 업로드하고 스타일을 선택해 사실적인 외관을 생성하세요.',
-      'Sube una foto, boceto o render del exterior, elige un estilo y genera una fachada fotorrealista.')"
+      '上傳庭園、院子或戶外空間照片，選擇景觀風格，一鍵生成寫實庭園設計。',
+      'Upload a garden, yard, or outdoor photo, pick a landscape style, and generate a photorealistic garden design.',
+      '庭・庭先・屋外の写真をアップロードし、ランドスケープスタイルを選んでリアルな庭園を生成。',
+      '정원·마당·실외 사진을 업로드하고 조경 스타일을 선택해 사실적인 정원을 생성하세요.',
+      'Sube una foto del jardín o exterior, elige un estilo y genera un diseño de jardín fotorrealista.')"
     :status="status"
     :status-text="statusText"
     :credit-cost="creditCost"
@@ -164,7 +159,7 @@ function gotoPricing() { router.push('/pricing') }
     :disabled="disabled || isDemoUser"
     :disabled-reason="disabledReason"
     :eta-label="L('預計約 30–90 秒', 'Usually ~30–90s', '約30〜90秒', '약 30~90초', 'Normalmente ~30–90 s')"
-    :empty-hint="L('上傳外觀照片並選擇風格，渲染結果會顯示在這裡。', 'Upload an exterior photo and pick a style — your render will appear here.', '外観写真をアップロードしスタイルを選ぶと、ここに結果が表示されます。', '외관 사진을 올리고 스타일을 선택하면 여기에 결과가 표시됩니다.', 'Sube una foto y elige un estilo; el render aparecerá aquí.')"
+    :empty-hint="L('上傳庭園照片並選擇風格，渲染結果會顯示在這裡。', 'Upload a garden photo and pick a style — your render will appear here.', '庭の写真をアップロードしスタイルを選ぶと、ここに結果が表示されます。', '정원 사진을 올리고 스타일을 선택하면 여기에 결과가 표시됩니다.', 'Sube una foto y elige un estilo; el render aparecerá aquí.')"
     @generate="generate"
   >
     <template #inputs>
@@ -187,25 +182,25 @@ function gotoPricing() { router.push('/pricing') }
 
       <div v-if="!isAdvanced" class="rounded-lg px-3 py-2 text-[11px] leading-relaxed"
         style="background: rgba(124,58,237,0.08); border:1px solid rgba(124,58,237,0.2); color:#c4b5fd;">
-        {{ L('三步驟：① 上傳建築外觀照片 ② 選一個外觀風格 ③ 點「開始生成」。其餘交給 AI（高擬真、保留結構）。',
-             'Three steps: ① Upload an exterior photo ② Pick a style ③ Hit Generate. AI handles the rest (high fidelity, structure preserved).',
-             '3ステップ：① 外観写真をアップロード ② スタイルを選択 ③ 生成。あとはAIにお任せ。',
-             '3단계: ① 외관 사진 업로드 ② 스타일 선택 ③ 생성. 나머지는 AI가 처리합니다.',
+        {{ L('三步驟：① 上傳庭園 / 院子照片 ② 選一個景觀風格 ③ 點「開始生成」。其餘交給 AI（高擬真、保留地形）。',
+             'Three steps: ① Upload a garden / yard photo ② Pick a landscape style ③ Hit Generate. AI handles the rest (high fidelity, terrain preserved).',
+             '3ステップ：① 庭の写真をアップロード ② スタイルを選択 ③ 生成。あとはAIにお任せ。',
+             '3단계: ① 정원 사진 업로드 ② 스타일 선택 ③ 생성. 나머지는 AI가 처리합니다.',
              'Tres pasos: ① Sube una foto ② Elige un estilo ③ Genera. La IA hace el resto.') }}
       </div>
 
       <div>
-        <label class="pp-field-label">{{ L('外觀照片 / 草圖 *', 'Exterior photo / sketch *', '外観写真・スケッチ *', '외관 사진·스케치 *', 'Foto / boceto *') }}</label>
+        <label class="pp-field-label">{{ L('庭園 / 戶外照片 *', 'Garden / outdoor photo *', '庭・屋外写真 *', '정원·실외 사진 *', 'Foto del jardín *') }}</label>
         <ImageUploader
           tool-type="room_redesign"
           v-model="imageInput"
-          :label="L('點擊或拖放建築外觀照片', 'Click or drag a building exterior', 'クリックまたはドロップ', '클릭 또는 드롭', 'Haz clic o arrastra')"
+          :label="L('點擊或拖放庭園照片', 'Click or drag a garden photo', 'クリックまたはドロップ', '클릭 또는 드롭', 'Haz clic o arrastra')"
         />
-        <p class="pp-field-help">{{ L('支援 JPG / PNG / WebP。建議使用清晰、光線充足、能看到完整外觀的照片。', 'Supports JPG / PNG / WebP. Use a clear, well-lit photo showing the whole facade.', 'JPG / PNG / WebP 対応。建物全体が写った明るく鮮明な写真を推奨。', 'JPG / PNG / WebP 지원. 외관 전체가 보이는 밝고 선명한 사진을 권장.', 'Admite JPG / PNG / WebP. Usa una foto nítida y bien iluminada de toda la fachada.') }}</p>
+        <p class="pp-field-help">{{ L('支援 JPG / PNG / WebP。建議使用清晰、能看到完整院子或庭園範圍的照片。', 'Supports JPG / PNG / WebP. Use a clear photo showing the whole yard or garden area.', 'JPG / PNG / WebP 対応。庭全体が写った鮮明な写真を推奨。', 'JPG / PNG / WebP 지원. 마당 전체가 보이는 선명한 사진을 권장.', 'Admite JPG / PNG / WebP. Usa una foto nítida de todo el jardín.') }}</p>
       </div>
 
       <div>
-        <label class="pp-field-label">{{ L('外觀風格 *', 'Exterior Style *', '外観スタイル *', '외관 스타일 *', 'Estilo *') }} <span style="color:#6b6b7a">({{ styles.length }})</span></label>
+        <label class="pp-field-label">{{ L('景觀風格 *', 'Landscape Style *', 'ランドスケープスタイル *', '조경 스타일 *', 'Estilo *') }} <span style="color:#6b6b7a">({{ styles.length }})</span></label>
         <select v-model="selectedStyle" class="pp-select">
           <option value="">{{ L('— 請選擇 —', '— Select —', '— 選択 —', '— 선택 —', '— Seleccionar —') }}</option>
           <option v-for="s in styles" :key="s.id" :value="s.id">{{ isZh ? s.name_zh : s.name }}</option>
@@ -256,7 +251,7 @@ function gotoPricing() { router.push('/pricing') }
           <span class="ml-2" style="color:#a78bfa">{{ Math.round(styleStrength * 100) }}%</span>
         </label>
         <input type="range" min="0.3" max="1" step="0.05" v-model.number="styleStrength" class="w-full" style="accent-color:#a78bfa" />
-        <p class="pp-field-help">{{ L('越高越大膽改造，越低越保留原始結構。', 'Higher = bolder restyle; lower preserves original structure.', '高いほど大胆、低いほど構造維持。', '높을수록 과감, 낮을수록 구조 유지.', 'Mayor = más audaz; menor conserva la estructura.') }}</p>
+        <p class="pp-field-help">{{ L('越高越大膽改造，越低越保留原始地形與建物。', 'Higher = bolder redesign; lower preserves the existing terrain & buildings.', '高いほど大胆、低いほど地形と建物を維持。', '높을수록 과감, 낮을수록 지형·건물 유지.', 'Mayor = más audaz; menor conserva el terreno y edificios.') }}</p>
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color:#fbbf24;">
@@ -280,11 +275,11 @@ function gotoPricing() { router.push('/pricing') }
         :before-label="L('原始', 'Before', 'オリジナル', '원본', 'Antes')"
         :after-label="L('AI 渲染', 'After', 'AI後', 'AI 후', 'Después')"
       />
-      <img v-else :src="resultUrl" alt="Exterior" class="max-w-full max-h-[520px] object-contain rounded-lg" />
+      <img v-else :src="resultUrl" alt="Landscape" class="max-w-full max-h-[520px] object-contain rounded-lg" />
     </template>
 
     <template v-if="resultUrl" #result-actions>
-      <button @click="downloadAsset(resultUrl!, `vidgo_exterior_${Date.now()}.png`)"
+      <button @click="downloadAsset(resultUrl!, `vidgo_landscape_${Date.now()}.png`)"
         class="px-3 py-1.5 rounded text-xs font-medium"
         style="background:#141420; color:#c4b5fd; border:1px solid rgba(124,58,237,0.3);"
       >📥 {{ L('下載', 'Download', 'ダウンロード', '다운로드', 'Descargar') }}</button>

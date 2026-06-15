@@ -245,6 +245,7 @@
         "isometric": "입체도",
         "render3d": "3D 효과도",
         "exteriorAi": "외관 AI 디자인",
+        "landscapeAi": "조경 AI 디자인",
         "commercialSpace": "상업 공간 디자인",
         "sketchToRender": "스케치 → 렌더",
         "sketchToRenderExterior": "스케치 → 렌더 (외관)",

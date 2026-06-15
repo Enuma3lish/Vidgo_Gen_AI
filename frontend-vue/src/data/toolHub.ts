@@ -85,6 +85,7 @@ export const toolHubTiles: ToolHubTile[] = [
   { id: 'render-enhancer',     labelKey: 'tools.hub.tiles.renderEnhancer',     to: '/tools/render-enhancer',        thumb: `${T}/render-enhancer.png`,     category: 'interior'    },
   // ── 室外設計 (exterior) group — each tool is its own dedicated page ──
   { id: 'exterior-ai',         labelKey: 'tools.hub.tiles.exteriorAi',         to: '/tools/exterior-ai',            thumb: `${T}/exterior-ai.png`,         category: 'exterior'    },
+  { id: 'landscape-ai',        labelKey: 'tools.hub.tiles.landscapeAi',        to: '/tools/landscape-ai',           thumb: `${T}/landscape-ai.png`,        category: 'exterior'    },
   { id: 'sketch-to-render-exterior', labelKey: 'tools.hub.tiles.sketchToRenderExterior', to: '/tools/sketch-to-render-exterior', thumb: `${T}/sketch-to-render-exterior.png`, category: 'exterior' },
   { id: 'exterior-templates',  labelKey: 'tools.hub.tiles.exteriorTemplates',  to: '/tools/exterior-templates',     thumb: `${T}/exterior-templates.png`,  category: 'exterior'    },
   // Row 7 — NEW Qubico-backed tools added 2026-05-24 after the stability

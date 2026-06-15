@@ -100,6 +100,7 @@
         "isometric": "立體圖",
         "render3d": "3D 效果圖",
         "exteriorAi": "建築外觀 AI 設計",
+        "landscapeAi": "庭園景觀 AI 設計",
         "commercialSpace": "商業空間設計",
         "sketchToRender": "草圖轉渲染",
         "sketchToRenderExterior": "草圖轉渲染（建築外觀）",

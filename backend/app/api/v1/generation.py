@@ -32,6 +32,7 @@ from app.services.prompt_library import lookup_prompt as _lookup_curated_prompt
 from app.services.access_gate import custom_prompt_gate
 from app.api.deps import get_current_user_optional, get_db, get_redis, is_subscribed_user
 from app.core.upload_validation import image_dimension_rules_for_tool, validate_uploaded_content
+from app.core.config import get_settings
 from app.models.demo import ToolShowcase, PromptCache
 from app.models.material import Material, ToolType
 from app.models.user_generation import UserGeneration
@@ -72,6 +73,10 @@ async def _gen_demo_response(
 
 # Initialize provider router singleton
 provider_router = get_provider_router()
+
+# Admin-tunable upload size limit (matches uploads.py — was hardcoded 20MB here,
+# so MAX_UPLOAD_SIZE_MB changes didn't apply to /generation/upload). Bug #4.
+settings = get_settings()
 
 
 # ============================================================================
@@ -1153,7 +1158,7 @@ async def upload_and_generate(
         content=contents,
         declared_content_type=file.content_type,
         expected_kind="image",
-        max_bytes=20 * 1024 * 1024,
+        max_bytes=settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
         dimension_rules=image_dimension_rules_for_tool(tool_type),
     )
     b64 = base64.b64encode(contents).decode("utf-8")
@@ -1176,15 +1181,31 @@ async def upload_and_generate(
     if not model:
         credit_cost = tool_cost_defaults.get(tool_type, 5)
 
-    # Check credits
-    from app.services.credit_service import CreditService
-    credit_svc = CreditService(db)
-    has_credits = await credit_svc.check_sufficient(str(current_user.id), credit_cost)
-    if not has_credits:
+    # Validate tool_type BEFORE charging so an unsupported tool can never deduct.
+    SUPPORTED_UPLOAD_TOOLS = {"background_removal", "product_scene", "effect", "short_video", "pattern_generate"}
+    if tool_type not in SUPPORTED_UPLOAD_TOOLS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported tool_type: {tool_type}",
+        )
+
+    # Bug #3 — single credit gateway. Reserve upfront via the SAME
+    # _check_and_deduct_credits as tools.py (ServicePricing override + a real
+    # CreditTransaction), keyed by the canonical service_type, then refund on
+    # any failure. This makes a ServicePricing price change apply to this entry
+    # point identically to the main tools.
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+        UPLOAD_TOOL_SERVICE_TYPE,
+    )
+    service_type = UPLOAD_TOOL_SERVICE_TYPE.get(tool_type, f"upload_{tool_type}")
+    ok, err = await _check_and_deduct_credits(db, current_user, credit_cost, service_type)
+    if not ok:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Insufficient credits. This operation requires {credit_cost} credits.",
+            detail=err or f"Insufficient credits. This operation requires {credit_cost} credits.",
         )
+    charged = _credits_charged(current_user, credit_cost)
 
     # 2026-06: pass the real user tier so provider_router's margin gate
     # (downgrade premium models for free/basic) can actually enforce.
@@ -1243,6 +1264,7 @@ async def upload_and_generate(
             )
 
         if not result or not result.get("success"):
+            await _refund_credits(db, current_user, charged, service_type)
             return GenerationResponse(
                 success=False,
                 message=result.get("error", "Generation failed") if result else "Generation failed",
@@ -1259,15 +1281,7 @@ async def upload_and_generate(
             result_url, media_kind, str(current_user.id)
         )
 
-        # Deduct credits
-        await credit_svc.deduct_credits(
-            user_id=str(current_user.id),
-            amount=credit_cost,
-            service_type=f"upload_{tool_type}" + (f"_{model}" if model else ""),
-            description=f"Upload & generate: {tool_type}" + (f" (model: {model})" if model else ""),
-        )
-
-        # Save to UserGeneration (no watermark for subscribers)
+        # Credits were already reserved upfront via the gateway. Save the result.
         generation = UserGeneration(
             user_id=current_user.id,
             tool_type=tool_type_enum,
@@ -1276,7 +1290,7 @@ async def upload_and_generate(
             input_params={"style": style, "model": model, "tool_type": tool_type},
             result_image_url=result_url if tool_type != "short_video" else None,
             result_video_url=result_url if tool_type == "short_video" else None,
-            credits_used=credit_cost,
+            credits_used=charged,
         )
         db.add(generation)
         await db.commit()
@@ -1285,14 +1299,18 @@ async def upload_and_generate(
         return GenerationResponse(
             success=True,
             result_url=result_url,
-            credits_used=credit_cost,
+            credits_used=charged,
             message=f"Generated successfully using {model or 'default model'}. No watermark - ready to download.",
         )
 
     except HTTPException:
+        # Validation errors only fire BEFORE the reserve (tool_type guard) — but
+        # refund defensively in case a downstream raised one post-reserve.
+        await _refund_credits(db, current_user, charged, service_type)
         raise
     except Exception as e:
         logger.error(f"Upload generation error: {e}")
+        await _refund_credits(db, current_user, charged, service_type)
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     GCP_BILLING_PROJECT: str = ""         # project to run the query in (defaults to VERTEX_AI_PROJECT, then the table's project)
     GCP_BILLING_CACHE_HOURS: float = 6.0  # cache the BigQuery result this long to avoid a job on every dashboard open
 
+    # Demo / example PRESET-ONLY mode (production default). When True, a demo
+    # cache-miss must NOT fall through to a real Provider call — free/visitor
+    # traffic is served ONLY from pre-generated Material rows, never burning
+    # credits. The /health endpoint reports mode="preset-only". If you see
+    # materials_ready=false, run the pre-generation (scripts/main_pregenerate.py)
+    # to populate the cache; this flag is the safety net that stops the burn.
+    DEMO_PRESET_ONLY: bool = True
+
     # Legacy (deprecated — kept for fallback)
     WAN_API_KEY: str = ""
     RUNWAY_API_KEY: str = ""

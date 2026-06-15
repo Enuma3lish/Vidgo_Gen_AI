@@ -303,7 +303,21 @@ async def _refund_failed_upload(
         logger.error("Cannot refund failed upload %s: user not found", upload.id)
         return
 
-    _refund_upload_credits(user, credit_breakdown)
+    # Bug #3 — refund via the single _refund_credits gateway (records a refund
+    # CreditTransaction + restores the exact buckets, capped at the charged
+    # amount). New uploads persist refund_amount/refund_service_type; legacy
+    # uploads (pre-gateway) only have the old field-format breakdown, so fall
+    # back to the direct restore for those.
+    service_type = extra_params.get("refund_service_type")
+    amount = int(extra_params.get("refund_amount") or 0)
+    if amount > 0 and service_type:
+        from app.api.v1.tools import _refund_credits
+        # _refund_credits reads user._last_credit_deduction to restore the exact
+        # buckets; seed it from the persisted gateway breakdown.
+        setattr(user, "_last_credit_deduction", credit_breakdown or extra_params.get("credit_breakdown") or {})
+        await _refund_credits(db, user, amount, service_type)
+    else:
+        _refund_upload_credits(user, credit_breakdown)  # legacy direct restore
     extra_params["credits_refunded"] = True
     upload.extra_params = json.dumps(extra_params)
     await db.commit()
@@ -398,7 +412,23 @@ def _schedule_generation_task(
 
 async def _save_upload(file: UploadFile, user_id: str, tool_type: str) -> tuple[str, int, str]:
     """Save uploaded file to durable storage. Returns (file_url, file_size)."""
-    content = await file.read()
+    # Stream the upload in chunks so an oversized file is rejected the moment it
+    # crosses MAX_UPLOAD_BYTES, instead of being fully read into memory first
+    # (Cloud Run memory protection — Bug #5). Mirrors normalize_video's
+    # chunked-with-abort pattern. Within-limit files are then held in memory for
+    # the magic-byte + dimension checks validate_uploaded_content needs.
+    buf = bytearray()
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        if len(buf) + len(chunk) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB upload limit.",
+            )
+        buf.extend(chunk)
+    content = bytes(buf)
     file_size = len(content)
 
     expected_kind = "video" if tool_type in VIDEO_UPLOAD_TOOLS else "image"
@@ -809,14 +839,34 @@ async def upload_and_generate(
     await db.flush()
     upload_id = str(upload.id)
 
-    credit_breakdown = (
-        {"subscription_credits": 0, "purchased_credits": 0, "bonus_credits": 0}
-        if is_admin
-        else _deduct_upload_credits(current_user, credit_cost)
+    # Bug #3 — single credit gateway. Deduct through the SAME
+    # _check_and_deduct_credits as tools.py (ServicePricing override + a real
+    # CreditTransaction), keyed by the canonical service_type, so a price change
+    # applies to this entry point identically. The bucket breakdown the gateway
+    # stashes on the user is persisted to extra_params so the background task can
+    # refund the exact buckets via _refund_credits on failure.
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _credits_charged, UPLOAD_TOOL_SERVICE_TYPE,
     )
+    service_type = UPLOAD_TOOL_SERVICE_TYPE.get(tool_type, f"upload_{tool_type}")
+    if is_admin:
+        credit_breakdown = {}
+        charged = 0
+    else:
+        ok, err = await _check_and_deduct_credits(db, current_user, credit_cost, service_type)
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=err or f"Insufficient credits. This generation costs {credit_cost} credits.",
+            )
+        credit_breakdown = dict(getattr(current_user, "_last_credit_deduction", {}) or {})
+        charged = _credits_charged(current_user, credit_cost)
+    upload.credits_used = charged
     upload.extra_params = json.dumps({
         "credit_breakdown": credit_breakdown,
         "credits_refunded": False,
+        "refund_service_type": service_type,
+        "refund_amount": charged,
     })
 
     await db.commit()
@@ -833,7 +883,7 @@ async def upload_and_generate(
     return UploadResponse(
         upload_id=upload_id,
         status=UploadStatus.PROCESSING.value,
-        credits_used=credit_cost,
+        credits_used=charged,
         message="Generation started. Check status at /uploads/{upload_id}",
     )
 

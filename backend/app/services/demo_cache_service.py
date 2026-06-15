@@ -175,6 +175,22 @@ class DemoCacheService:
                 if cached:
                     return cached
 
+        # PRESET-ONLY guard (P0 2026-06): production runs preset-only, so a demo
+        # cache miss must NOT fall through to a real Provider — that burns
+        # credits on free/visitor traffic and breaks the "no Provider for demo"
+        # invariant when materials_ready=false. Return None so callers surface a
+        # graceful 503 / "try again" instead. Fix the root cause by
+        # pre-generating materials (scripts/main_pregenerate.py).
+        from app.core.config import settings as _settings
+        if getattr(_settings, "DEMO_PRESET_ONLY", True):
+            logger.warning(
+                "[DemoCache] preset-only: cache MISS for %s:%s product=%s input=%s — "
+                "NOT calling provider (would burn credits). Pre-generate materials to fix.",
+                tool_type, topic, product_id,
+                (user_input[:80] + "…") if user_input and len(user_input) > 80 else user_input,
+            )
+            return None
+
         # 4. On-demand generation — honor user-chosen input and effect.
         logger.info(
             "[DemoCache] Cache miss for %s:%s product=%s lang=%s input=%s — on-demand gen.",

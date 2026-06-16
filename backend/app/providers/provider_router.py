@@ -1004,6 +1004,23 @@ class ProviderRouter:
             return "Service credits are currently depleted. Please try again later."
         if "timeout" in error.lower():
             return "The request timed out. Please try again with a simpler prompt."
+        # Surface the actionable reason for the two most common image-input
+        # failures BEFORE the vague task-type generic below. Sora 2 / Kling
+        # reject many uploads at the provider's content filter (real faces,
+        # public figures, logos), and providers 403 on images they can't
+        # fetch — both were previously masked as "services experiencing issues".
+        _el = error.lower()
+        if any(k in _el for k in ("moderation", "content policy", "nsfw", "safety", "blocked by")):
+            return (
+                "This image or prompt was rejected by the model's content policy — "
+                "it usually triggers on a real person's face, a public figure, logos, "
+                "or otherwise restricted content. Try a different image or rephrase the prompt."
+            )
+        if ("403" in _el or "forbidden" in _el or ("download" in _el and ("image" in _el or "url" in _el))):
+            return (
+                "The model couldn't fetch your input image. Please re-upload the image "
+                "and try again (external image links sometimes block the provider)."
+            )
         video_tasks = {TaskType.I2V, TaskType.T2V, TaskType.KLING_VIDEO, TaskType.SORA2_VIDEO}
         if task_type in video_tasks:
             return "Video generation services are experiencing issues on all providers. Please try again in a few minutes."

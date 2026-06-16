@@ -5552,11 +5552,39 @@ async def _kling_video_inner(
             await _refund_credits(db, current_user, credit_cost_fallback, service_type)
             return ToolResponse(success=False, message="Kling returned no video URL. Please try again.")
 
+        # Persist to the user's gallery ("My Works"). Same gap as Sora 2 Pro:
+        # the render was returned but never saved, so Kling videos never showed
+        # up in the personal gallery. Wrapped so a save failure can't fail a
+        # render the user already paid for. 2026-06-16 fix.
+        charged = _credits_charged(current_user, credit_cost_fallback)
+        try:
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.KLING_VIDEO,
+                input_image_url=str(request.image_url) if request.image_url else None,
+                input_text=final_prompt,
+                input_params={
+                    "model_id": f"kling_{tier}",
+                    "tier": tier,
+                    "duration": request.duration,
+                    "aspect_ratio": request.aspect_ratio,
+                    "cfg_scale": request.cfg_scale,
+                },
+                result_video_url=video_url,
+                credits_used=charged,
+            )
+            user_gen.set_expiry()
+            db.add(user_gen)
+            await db.commit()
+        except Exception:
+            logger.warning("kling_video: failed to persist UserGeneration to gallery", exc_info=True)
+            await db.rollback()
+
         return ToolResponse(
             success=True,
             result_url=video_url,
             video_url=video_url,
-            credits_used=credit_cost_fallback,
+            credits_used=charged,
             message=f"Video generated via Kling ({tier}).",
         )
     except Exception as exc:
@@ -5708,11 +5736,39 @@ async def _sora2_pro_inner(
             await _refund_credits(db, current_user, credit_cost_fallback, service_type)
             return ToolResponse(success=False, message="Sora 2 Pro returned no video URL. Please try again.")
 
+        # Persist to the user's gallery ("My Works"). Previously this handler
+        # returned the video but never saved a UserGeneration row, so Sora 2
+        # renders never showed up in the personal gallery. Wrapped so a save
+        # failure can't fail a render the user already paid for. 2026-06-16 fix.
+        charged = _credits_charged(current_user, credit_cost_fallback)
+        try:
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.SORA2,
+                input_image_url=str(request.image_url) if request.image_url else None,
+                input_text=final_prompt,
+                input_params={
+                    "model_id": "sora2_pro",
+                    "duration": request.duration,
+                    "resolution": request.resolution,
+                    "aspect_ratio": request.aspect_ratio,
+                    "enable_audio": request.enable_audio,
+                },
+                result_video_url=video_url,
+                credits_used=charged,
+            )
+            user_gen.set_expiry()
+            db.add(user_gen)
+            await db.commit()
+        except Exception:
+            logger.warning("sora2_pro: failed to persist UserGeneration to gallery", exc_info=True)
+            await db.rollback()
+
         return ToolResponse(
             success=True,
             result_url=video_url,
             video_url=video_url,
-            credits_used=_credits_charged(current_user, credit_cost_fallback),
+            credits_used=charged,
             message="Video generated via Sora 2 Pro.",
         )
     except Exception as exc:

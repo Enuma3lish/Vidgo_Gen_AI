@@ -40,6 +40,11 @@ class ToolType(str, enum.Enum):
     UPSCALE = "upscale"
     IMAGE_TRANSLATOR = "image_translator"
     MIDJOURNEY_IMAGINE = "midjourney_imagine"
+    # 2026-06-16 — Sora 2 Pro video. Added so /tools/sora2-pro results persist
+    # to UserGeneration (the personal "My Works" gallery); previously the
+    # handler returned the video but never saved a row, so Sora 2 renders never
+    # appeared in the gallery. Matching migration c3d4e5f6a7b8 adds the enum value.
+    SORA2 = "sora2"
 
 
 class MaterialSource(str, enum.Enum):

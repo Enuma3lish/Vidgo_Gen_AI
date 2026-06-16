@@ -214,6 +214,19 @@ const hasResult = computed(() => {
     @generate="generate"
   >
     <template #inputs>
+      <!-- What this page supports (owner request 2026-06-16): make the four
+           output tiers explicit so users know the page does more than a still. -->
+      <div class="rounded-lg px-3 py-2.5 text-[11px] leading-relaxed"
+        style="background: rgba(124,58,237,0.08); border:1px solid rgba(124,58,237,0.2); color:#c4b5fd;">
+        <div class="font-semibold mb-1" style="color:#ddd6fe;">{{ L('本頁支援', 'This page supports', 'このページの機能', '이 페이지가 지원', 'Esta página admite') }}</div>
+        <ul class="space-y-0.5" style="list-style:none; padding:0; margin:0;">
+          <li>🖼️ {{ L('3D 效果圖（細化）— 鎖定原配置,只調光線與材質的寫實渲染', '3D render (refine) — photorealistic, layout locked, light + materials only', '3D効果図(詳細化)— レイアウト固定で光と素材のみ', '3D 효과도(디테일) — 배치 고정, 조명·재질만', 'Render 3D (refinado) — distribución bloqueada') }}</li>
+          <li>🎚️ {{ L('4 種光線 × 材質模擬,一次比較', '4 lighting × material simulations to compare', '4種のライト×素材シミュレーション', '4가지 조명×재질 시뮬레이션', '4 simulaciones de luz × material') }}</li>
+          <li>🎬 {{ L('成長影片 — 由平面「長出」3D 房間（Kling 3.0/Omni）', 'Growth video — the plan “grows” into the 3D room (Kling 3.0/Omni)', '成長動画 — 平面が3D空間へ(Kling 3.0/Omni)', '성장 영상 — 평면이 3D로(Kling 3.0/Omni)', 'Vídeo de crecimiento (Kling 3.0/Omni)') }}</li>
+          <li>🧊 {{ L('可旋轉 3D 模型（Trellis2 .glb,360° 檢視）', 'Rotatable 3D model (Trellis2 .glb, 360° view)', '回転可能な3Dモデル(Trellis2 .glb)', '회전 가능한 3D 모델(Trellis2 .glb)', 'Modelo 3D giratorio (Trellis2 .glb)') }}</li>
+        </ul>
+      </div>
+
       <div>
         <label class="pp-field-label">{{ L('平面圖 / 房間照片 *', 'Floor plan / room photo *', '間取り図・部屋写真 *', '평면도 / 방 사진 *', 'Plano / foto *') }}</label>
         <ImageUploader

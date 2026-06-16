@@ -43,7 +43,28 @@ const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
-const disabled = computed(() => !headshot.value || !script.value.trim() || script.value.trim().length < 5)
+// Service availability — backend takes AI Avatar offline (GET /tools/availability)
+// when its providers are down, rather than charging 300 credits for a degraded
+// render. When offline we block the page: redirect away + disable generation.
+const available = ref(true)
+async function checkAvailability() {
+  try {
+    const resp = await apiClient.get('/api/v1/tools/availability')
+    available.value = resp.data?.ai_avatar !== false
+  } catch { available.value = true /* fail-open: don't block on a transient error */ }
+  if (!available.value) {
+    uiStore.showError(L(
+      'AI 虛擬主播正在升級影片引擎,暫時無法使用,且不會扣點。請稍後再試。',
+      'AI Avatar is temporarily unavailable while we upgrade the video engine (no credits charged). Please check back soon.',
+      'AIアバターは動画エンジンのアップグレード中で一時的に利用できません(課金なし)。',
+      'AI 아바타는 동영상 엔진 업그레이드로 일시적으로 사용할 수 없습니다(요금 미청구).',
+      'AI Avatar no está disponible temporalmente mientras actualizamos el motor de vídeo (sin cargo).',
+    ))
+    router.replace('/tools')
+  }
+}
+
+const disabled = computed(() => !available.value || !headshot.value || !script.value.trim() || script.value.trim().length < 5)
 const creditCost = computed(() => 300)
 
 // Sample headshot picker — added 2026-05-25. Cold users without a clean
@@ -113,7 +134,7 @@ async function loadVoices() {
     console.warn('[avatar] voice list failed', e)
   }
 }
-onMounted(loadVoices)
+onMounted(() => { checkAvailability(); loadVoices() })
 
 async function ensureImageUrl(): Promise<string | null> {
   if (!headshot.value) return null

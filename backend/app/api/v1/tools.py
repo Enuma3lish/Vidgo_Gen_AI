@@ -4814,6 +4814,20 @@ async def _generate_avatar_inner(
     ``ToolResponse`` so the wrapper can serialise the final JSON payload."""
     from app.models.material import MaterialSource, MaterialStatus
 
+    # Kill-switch (owner rule 2026-06-16): when avatar's providers are down
+    # (PiAPI Kling submit timeout + A2E paid-plan 403) the tool is taken
+    # offline rather than billing 300 credits for a degraded static image.
+    # Returns BEFORE any validation/charge so nobody is debited while it's off.
+    if not getattr(settings, "AI_AVATAR_ENABLED", True):
+        return ToolResponse(
+            success=False,
+            error_code="service_unavailable",
+            message=(
+                "AI Avatar is temporarily unavailable while we upgrade the video "
+                "engine. No credits were charged. Please check back soon."
+            ),
+        )
+
     validate_media_url_or_raise(str(request.image_url), "image", "AI avatar headshot")
     await validate_image_url_dimensions_or_raise(str(request.image_url), AVATAR_HEADSHOT_DIMENSION_RULES)
     request.image_url = await _ensure_public_image_url(
@@ -5776,6 +5790,17 @@ async def _sora2_pro_inner(
         await _refund_credits(db, current_user, credit_cost_fallback, service_type)
         _notify_admin_of_tool_failure("sora2_pro", exc, current_user)
         return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+@router.get("/availability")
+async def tools_availability():
+    """Per-tool availability flags the frontend reads to hide/disable tiles
+    and routes. Lets us take a tool offline (e.g. AI Avatar when its providers
+    are down) by flipping a config flag — no frontend redeploy needed. Public;
+    no auth so the tool hub and route guards can call it pre-login."""
+    return {
+        "ai_avatar": bool(getattr(settings, "AI_AVATAR_ENABLED", True)),
+    }
 
 
 # ============================================================================

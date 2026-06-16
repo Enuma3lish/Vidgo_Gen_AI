@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     # to populate the cache; this flag is the safety net that stops the burn.
     DEMO_PRESET_ONLY: bool = True
 
+    # AI Avatar kill-switch. When False the /tools/ai-avatar endpoint returns
+    # "service_unavailable" WITHOUT charging, and the frontend hides the tool
+    # tile/route (GET /tools/availability reports it). Owner rule (2026-06-16):
+    # avatar runs PiAPI primary → A2E backup; if BOTH providers fail the tool
+    # is taken offline rather than billing 300 credits for a degraded static
+    # image. Set true again once PiAPI Kling-avatar (MCP submit timeout) or A2E
+    # (paid-plan 403) is healthy.
+    AI_AVATAR_ENABLED: bool = True
+
     # Legacy (deprecated — kept for fallback)
     WAN_API_KEY: str = ""
     RUNWAY_API_KEY: str = ""

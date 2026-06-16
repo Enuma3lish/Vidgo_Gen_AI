@@ -2514,6 +2514,7 @@ async def admin_watermark_backfill(
     """
     from app.services.watermark import build_watermark_service
     from app.services.gcs_storage_service import get_gcs_storage
+    from app.models.material import Material
 
     settings_row = await _get_or_create_site_settings(db)
     if not getattr(settings_row, "watermark_enabled", True):

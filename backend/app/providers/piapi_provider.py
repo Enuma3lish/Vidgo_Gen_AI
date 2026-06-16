@@ -2211,7 +2211,11 @@ class PiAPIProvider(BaseProvider):
             httpx.URL(audio_url).host if audio_url.startswith(("http://", "https://")) else "local",
             mode,
         )
-        max_wait = int(params.get("timeout") or 600)
+        # Kling Avatar renders are slow (audio length + queue) and idle for
+        # minutes between status transitions; give them a long poll floor so a
+        # healthy-but-slow render isn't aborted and dropped to the degraded
+        # presenter/static fallback. Caller can still pass a larger timeout.
+        max_wait = max(int(params.get("timeout") or 0), 1800)  # ≥30 min
         # Retry transient Kling Avatar failures (upload_verify_timeout,
         # kling-engine upload failed, queue stalls — all in the transient hint
         # list) on the SAME path before degrading. Previously ANY failure

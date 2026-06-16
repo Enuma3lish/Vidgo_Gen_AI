@@ -745,6 +745,33 @@ class PiAPIProvider(BaseProvider):
     # IMAGE TO IMAGE (using Flux via PiAPI)
     # ─────────────────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _normalize_image_url(result: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure ``output['image_url']`` is set even when the model returns the
+        plural ``image_urls`` array. Nano-Banana / Nano-Banana-Pro (and Qubico
+        z-image) return ``image_urls`` (a list); Flux/Kontext return the singular
+        ``image_url``. ``text_to_image`` already normalises this inline, but
+        ``image_to_image`` did not — so the Exterior/Interior redesign path
+        (doodle_interior → image_to_image with nano-banana-pro) got a result
+        with no ``image_url``, every variant extracted None, and the tool
+        reported "all variants failed" despite a successful generation.
+        Idempotent and safe on already-normalised or video results."""
+        if result and result.get("success"):
+            output = result.get("output") or {}
+            if not output.get("image_url"):
+                imgs = output.get("image_urls") or output.get("images") or []
+                first: Optional[str] = None
+                if isinstance(imgs, list) and imgs:
+                    fi = imgs[0]
+                    if isinstance(fi, str):
+                        first = fi
+                    elif isinstance(fi, dict):
+                        first = fi.get("url") or fi.get("image_url")
+                if first:
+                    output["image_url"] = first
+                    result["output"] = output
+        return result
+
     async def image_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Transform image using Flux img2img via PiAPI.
@@ -797,7 +824,7 @@ class PiAPIProvider(BaseProvider):
                     "resolution": params.get("resolution") or "2K",
                 },
             }
-            return await self._submit_and_poll(payload)
+            return self._normalize_image_url(await self._submit_and_poll(payload))
         if "nano-banana" in model or "nano_banana" in model or "nanobanana" in model:
             aspect = params.get("aspect_ratio") or _aspect_from_wh(
                 params.get("width"), params.get("height")
@@ -812,7 +839,7 @@ class PiAPIProvider(BaseProvider):
                     "resolution": params.get("resolution") or "1K",
                 },
             }
-            return await self._submit_and_poll(payload)
+            return self._normalize_image_url(await self._submit_and_poll(payload))
 
         payload = {
             "model": PIAPI_MODELS["flux_i2i"],
@@ -825,7 +852,7 @@ class PiAPIProvider(BaseProvider):
             }
         }
 
-        return await self._submit_and_poll(payload)
+        return self._normalize_image_url(await self._submit_and_poll(payload))
 
     async def kontext_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """

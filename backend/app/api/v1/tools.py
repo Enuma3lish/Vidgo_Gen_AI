@@ -261,13 +261,17 @@ async def _refine_generation_prompt(
 # (imported above as _has_bound_card / _is_test_account / _custom_prompt_gate)
 # so the tools router and the generation router share one source of truth.
 # The block RESPONSE is router-specific (ToolResponse here), so it stays local.
-def _subscribe_card_required_response() -> "ToolResponse":
-    """Soft failure shown when a free account tries a custom/edited prompt.
-    error_code lets the frontend pop a subscribe + add-payment CTA."""
+def _subscribe_card_required_response(message: str | None = None) -> "ToolResponse":
+    """Soft failure shown when a free account tries a paid-only action.
+    error_code lets the frontend pop a subscribe + add-payment CTA.
+
+    Pass `message` to override the default copy — used by upload-only tools
+    (e.g. Product Scene) that have no free/demo preset tier, so the CTA must
+    not promise an "example dropdown" the tool doesn't offer."""
     return ToolResponse(
         success=False,
         error_code="subscription_card_required",
-        message=(
+        message=message or (
             "自訂提示詞需要有效訂閱並綁定信用卡。免費帳號可直接使用範例下拉選單一鍵生成。"
             " / Custom prompts require an active subscription with a bound credit card. "
             "Free accounts can generate instantly using the example presets in the dropdown."
@@ -1863,6 +1867,7 @@ async def remove_background(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "bg_removal")
     if not ok:
         return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     try:
         provider_router = get_provider_router()
@@ -2247,23 +2252,17 @@ async def generate_product_scene(
         or bool((request.custom_prompt or "").strip())
         or bool(request.template_id)
     )
+    # Product Scene is a PAID-ONLY tool: it requires a user-uploaded product
+    # photo and real I2I generation, so there is no free/demo preset tier to
+    # serve. Any non-subscriber/non-superuser gets the subscribe + bind-card
+    # CTA (NOT the demo path, which would 503 since this cache is intentionally
+    # unwarmed). Superusers/subscribers fall through to real generation.
     _gate = await _custom_prompt_gate(db, current_user, _is_custom)
-    if _gate == "blocked":
-        return _subscribe_card_required_response()
-    if _gate == "demo":
-        user_product_url = None
-        try:
-            user_product_url = str(request.get_product_url())
-        except ValueError:
-            user_product_url = None
-        return await _demo_response(
-            db,
-            ToolType.PRODUCT_SCENE,
-            topic=request.scene_type,
-            product_id=request.product_id,
-            cta="Subscribe to generate custom scenes.",
-            input_image_url=user_product_url,
-            effect_prompt=scene_prompt,
+    if _gate != "allow":
+        return _subscribe_card_required_response(
+            "商品場景圖需上傳您自己的商品照片,需有效訂閱並綁定信用卡。"
+            " / Product Scene needs your own uploaded product photo and requires "
+            "an active subscription with a bound credit card."
         )
 
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
@@ -3183,6 +3182,7 @@ async def _room_redesign_inner(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "room_redesign")
     if not ok:
         return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     # ─── MAGIC REDESIGN (single plain-language prompt → Kontext I2I) ──────
     # Added 2026-05-24 (HomeDesignsAI Magic-Redesign parity). When the user
@@ -4021,6 +4021,7 @@ async def claymation_generate(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "claymation")
     if not ok:
         return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     # User prompt reaches the model verbatim (just prefixed with the
     # claymation styling). No Gemini rewrite, no fusion.
@@ -4312,6 +4313,7 @@ async def video_background_remove(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "video_background_remove")
     if not ok:
         return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     # 2026-06: insert a pending_provider_tasks row BEFORE polling. Long
     # videos (up to 2000 frames) can take 5-10 min upstream; a Cloud Run
@@ -4475,6 +4477,7 @@ async def upscale_image(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "image_upscale")
     if not ok:
         return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     # 2026-06: insert a pending_provider_tasks row BEFORE polling. PiAPI
     # image-toolkit usually finishes in seconds, but has been observed to
@@ -4647,6 +4650,7 @@ async def recolor_product(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "product_recolor")
     if not ok:
         return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     target = (request.target_part or "").strip() or "the main product"
     color = request.target_color.strip()
@@ -4897,6 +4901,7 @@ async def _generate_avatar_inner(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "ai_avatar")
     if not ok:
         return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     try:
         # Validate language. TTS-1 voices are multilingual so we COULD accept
@@ -5343,6 +5348,7 @@ async def midjourney_imagine(
     )
     if not ok:
         return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     # Map MJ aspect_ratio (e.g. "16:9") to a Flux-compatible WxH size.
     aspect_to_size = {

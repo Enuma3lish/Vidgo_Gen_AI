@@ -15,7 +15,10 @@ import sqlalchemy as sa
 
 
 revision = 'a1c2w3m4k5r6'
-down_revision = 'z1a2b3c4d5e6'
+# Chain off the real single head (n3o4p5q6r7s8, the v2.1/i18n merge) so
+# `alembic upgrade head` stays unambiguous. Originally pointed at z1a2b3c4d5e6,
+# which is deep in the tree (3 children) and created a 2nd head → startup crash.
+down_revision = 'n3o4p5q6r7s8'
 branch_labels = None
 depends_on = None
 

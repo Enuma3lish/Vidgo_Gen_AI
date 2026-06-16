@@ -466,6 +466,71 @@ class WatermarkService:
             return None
 
 
+    # =========================================================================
+    # Video LOGO/text watermarking (download → FFmpeg overlay → GCS)
+    # =========================================================================
+
+    async def _ensure_local_logo(self, tmp_dir: str) -> Optional[str]:
+        """Materialize the configured watermark logo to a local file for FFmpeg
+        (-i needs a path, not a URL). Returns the local path or None."""
+        src = self.watermark_image_path
+        if not src:
+            return None
+        try:
+            dest = Path(tmp_dir) / "logo.png"
+            if src.startswith("http://") or src.startswith("https://"):
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.get(src)
+                    resp.raise_for_status()
+                    dest.write_bytes(resp.content)
+            elif Path(src).exists():
+                dest.write_bytes(Path(src).read_bytes())
+            else:
+                return None
+            return str(dest)
+        except Exception as e:
+            logger.error(f"Failed to localize watermark logo: {e}")
+            return None
+
+    async def watermark_video_url_to_gcs(self, video_url: str, blob_name: str) -> Optional[str]:
+        """Download a video, FFmpeg-overlay the watermark (logo if configured,
+        else text), upload the result to GCS, and return its public URL. Returns
+        None on any failure so the caller keeps the original. Used by the
+        example-video watermark backfill."""
+        if not self._ffmpeg_available:
+            logger.warning("watermark_video_url_to_gcs: ffmpeg unavailable")
+            return None
+        try:
+            from app.services.gcs_storage_service import get_gcs_storage
+            gcs = get_gcs_storage()
+            if not gcs.enabled:
+                return None
+            with tempfile.TemporaryDirectory(prefix="vidgo-wm-") as td:
+                inp = Path(td) / "in.mp4"
+                out = Path(td) / "wm.mp4"
+                # Stream the source video to disk (bounded memory).
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    async with client.stream("GET", video_url) as r:
+                        r.raise_for_status()
+                        with open(inp, "wb") as f:
+                            async for chunk in r.aiter_bytes(1024 * 1024):
+                                f.write(chunk)
+
+                logo_path = await self._ensure_local_logo(td)
+                if logo_path:
+                    success, msg = await self.add_image_watermark(str(inp), str(out), logo_path)
+                else:
+                    success, msg = await self.add_text_watermark(str(inp), str(out))
+                if not success or not out.exists() or out.stat().st_size == 0:
+                    logger.error(f"video watermark failed for {video_url}: {msg}")
+                    return None
+
+                return gcs.upload_public(out.read_bytes(), blob_name, content_type="video/mp4")
+        except Exception as e:
+            logger.error(f"watermark_video_url_to_gcs failed for {video_url}: {e}")
+            return None
+
+
 # Default watermark service instance
 _watermark_service: Optional[WatermarkService] = None
 

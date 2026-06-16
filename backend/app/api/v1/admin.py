@@ -12,7 +12,7 @@ Provides:
 from fastapi import APIRouter, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 import os
@@ -2498,69 +2498,92 @@ async def public_branding(
 async def admin_watermark_backfill(
     limit: int = Query(default=200, ge=1, le=2000),
     force: bool = Query(default=False, description="Re-watermark even rows that already have a distinct watermarked URL"),
+    tool_type: Optional[str] = Query(default=None, description="Restrict to one tool_type (e.g. ai_avatar)"),
+    kind: str = Query(default="both", pattern="^(image|video|both)$", description="Which media to watermark"),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """Generate REAL watermarked variants of active example images using the
-    admin-configured logo, and store them in result_watermarked_url.
+    """Generate REAL watermarked variants of active example media and store them
+    in result_watermarked_url: images via PIL, **videos via FFmpeg**.
 
-    Historically result_watermarked_url was just a copy of result_image_url
-    (the clean image), so free users saw un-watermarked examples. This applies
-    the actual watermark. Processes images in batches of `limit`; call
-    repeatedly until `updated` is 0. Videos are watermarked at generation time
-    (ffmpeg) and are out of scope for this image backfill.
+    Historically result_watermarked_url was just a copy of the clean result, so
+    free users saw un-watermarked examples. This applies the actual watermark
+    (admin logo if configured, else the text fallback). Process in batches of
+    `limit`; call repeatedly until `updated` is 0. Scope with `tool_type`
+    (e.g. ai_avatar) and `kind` (image|video|both).
     """
     from app.services.watermark import build_watermark_service
     from app.services.gcs_storage_service import get_gcs_storage
 
     settings_row = await _get_or_create_site_settings(db)
     if not getattr(settings_row, "watermark_enabled", True):
-        return {"updated": 0, "skipped": 0, "detail": "watermark disabled in settings"}
-    if not (settings_row.watermark_image_url or settings_row.watermark_text):
-        raise HTTPException(status_code=400, detail="No watermark image or text configured")
+        return {"updated": 0, "detail": "watermark disabled in settings"}
 
+    # build_watermark_service always has a text fallback, so we can always
+    # watermark even if no logo image is uploaded.
     wm = build_watermark_service(settings_row)
     gcs = get_gcs_storage()
     if not gcs.enabled:
         raise HTTPException(status_code=400, detail="GCS not configured (GCS_BUCKET)")
 
-    # Active image examples. When not forcing, only rows whose watermarked URL
-    # is missing or identical to the clean result (the old copy-through hack).
-    q = (
-        select(Material)
-        .where(Material.is_active == True)
-        .where(Material.result_image_url.is_not(None))
-        .where(Material.result_image_url != "")
-    )
-    if not force:
-        q = q.where(or_(
-            Material.result_watermarked_url.is_(None),
-            Material.result_watermarked_url == "",
-            Material.result_watermarked_url == Material.result_image_url,
-        ))
-    q = q.limit(limit)
-    rows = (await db.execute(q)).scalars().all()
-
     updated = 0
     failed = 0
-    for mat in rows:
-        try:
-            data = await wm.watermark_image_url_to_bytes(mat.result_image_url)
-            if not data:
+    batch = 0
+
+    def _base_query(url_col):
+        q = (
+            select(Material)
+            .where(Material.is_active == True)
+            .where(url_col.is_not(None))
+            .where(url_col != "")
+        )
+        if tool_type:
+            q = q.where(cast(Material.tool_type, String) == tool_type)
+        if not force:
+            q = q.where(or_(
+                Material.result_watermarked_url.is_(None),
+                Material.result_watermarked_url == "",
+                Material.result_watermarked_url == url_col,
+            ))
+        return q.limit(limit)
+
+    # ── Images (PIL) ──────────────────────────────────────────────────────
+    if kind in ("image", "both"):
+        rows = (await db.execute(_base_query(Material.result_image_url))).scalars().all()
+        batch += len(rows)
+        for mat in rows:
+            try:
+                data = await wm.watermark_image_url_to_bytes(mat.result_image_url)
+                if not data:
+                    failed += 1
+                    continue
+                url = gcs.upload_public(data, f"watermarked/{mat.id}.png", content_type="image/png")
+                mat.result_watermarked_url = url
+                updated += 1
+            except Exception:
+                logger.exception("[admin] image watermark backfill failed for material %s", mat.id)
                 failed += 1
-                continue
-            blob_name = f"watermarked/{mat.id}.png"
-            url = gcs.upload_public(data, blob_name, content_type="image/png")
-            mat.result_watermarked_url = url
-            updated += 1
-        except Exception:
-            logger.exception("[admin] watermark backfill failed for material %s", mat.id)
-            failed += 1
+
+    # ── Videos (FFmpeg overlay) ───────────────────────────────────────────
+    if kind in ("video", "both"):
+        rows = (await db.execute(_base_query(Material.result_video_url))).scalars().all()
+        batch += len(rows)
+        for mat in rows:
+            try:
+                url = await wm.watermark_video_url_to_gcs(mat.result_video_url, f"watermarked/{mat.id}.mp4")
+                if not url:
+                    failed += 1
+                    continue
+                mat.result_watermarked_url = url
+                updated += 1
+            except Exception:
+                logger.exception("[admin] video watermark backfill failed for material %s", mat.id)
+                failed += 1
 
     await db.commit()
-    logger.info("[admin] %s watermark backfill: %s updated, %s failed", admin.email, updated, failed)
-    return {"updated": updated, "failed": failed, "batch": len(rows),
-            "more": len(rows) == limit}
+    logger.info("[admin] %s watermark backfill (kind=%s tool=%s): %s updated, %s failed",
+                admin.email, kind, tool_type, updated, failed)
+    return {"updated": updated, "failed": failed, "batch": batch, "more": batch >= limit}
 
 
 # ============================================================================

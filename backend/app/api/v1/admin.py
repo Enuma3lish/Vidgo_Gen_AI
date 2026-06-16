@@ -2500,6 +2500,7 @@ async def admin_watermark_backfill(
     force: bool = Query(default=False, description="Re-watermark even rows that already have a distinct watermarked URL"),
     tool_type: Optional[str] = Query(default=None, description="Restrict to one tool_type (e.g. ai_avatar)"),
     kind: str = Query(default="both", pattern="^(image|video|both)$", description="Which media to watermark"),
+    reset: bool = Query(default=False, description="Instead of watermarking, set result_watermarked_url back to the CLEAN result (serve un-watermarked examples for the scoped tool)."),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
@@ -2515,6 +2516,33 @@ async def admin_watermark_backfill(
     from app.services.watermark import build_watermark_service
     from app.services.gcs_storage_service import get_gcs_storage
     from app.models.material import Material
+
+    # RESET mode — clear watermarks for the scoped media: point
+    # result_watermarked_url back at the CLEAN result so free users get the
+    # un-watermarked example (e.g. ai_avatar, which the owner wants shown clean).
+    # No watermarking / GCS needed.
+    if reset:
+        from sqlalchemy import update as _sa_update
+
+        def _reset_stmt(clean_col):
+            s = (
+                _sa_update(Material)
+                .where(Material.is_active == True)
+                .where(clean_col.is_not(None))
+                .where(clean_col != "")
+            )
+            if tool_type:
+                s = s.where(cast(Material.tool_type, String) == tool_type)
+            return s.values(result_watermarked_url=clean_col)
+
+        n = 0
+        if kind in ("video", "both"):
+            n += (await db.execute(_reset_stmt(Material.result_video_url))).rowcount or 0
+        if kind in ("image", "both"):
+            n += (await db.execute(_reset_stmt(Material.result_image_url))).rowcount or 0
+        await db.commit()
+        logger.info("[admin] %s watermark RESET (kind=%s tool=%s): %s rows", admin.email, kind, tool_type, n)
+        return {"reset": n, "tool_type": tool_type, "kind": kind}
 
     settings_row = await _get_or_create_site_settings(db)
     if not getattr(settings_row, "watermark_enabled", True):

@@ -1585,122 +1585,163 @@ class VidGoPreGenerator:
     # SHORT VIDEO GENERATOR
     # ========================================================================
 
+    # Content frames for the short-video demos. The dropdown PRESET supplies the
+    # MOTION (camera move), not the subject, so one appealing product frame works
+    # across all of a preset's models. Rotated per preset for gallery variety.
+    SHORT_VIDEO_CONTENT_PROMPTS = [
+        "Cinematic product hero shot of a frosted glass bottle of cold-brew coffee on a wet stone slab, soft window light, shallow depth of field, premium beverage commercial still, 4K",
+        "Cinematic product hero shot of a pair of white sneakers on a glossy reflective platform, soft studio key light with cool rim, premium footwear commercial still, 4K",
+        "Cinematic product hero shot of a skincare serum dropper bottle among fresh green leaves and water droplets, soft daylight, clean beauty commercial still, 4K",
+        "Cinematic product hero shot of a bubble milk tea in a clear cup with glossy tapioca pearls on a warm wooden counter, soft warm key light, appetizing beverage still, 4K",
+        "Cinematic product hero shot of a handmade scented candle beside dried flowers on a marble surface, soft warm light, cozy lifestyle commercial still, 4K",
+    ]
+
+    async def _short_video_i2v(self, image_url: str, motion_prompt: str, model_id: str) -> Optional[Dict[str, Any]]:
+        """Image-to-video on a SPECIFIC dropdown model, routed exactly like the
+        runtime short-video tool: kling_* → TaskType.KLING_VIDEO, everything else
+        → TaskType.I2V, with ``model`` = the dropdown model_id. user_tier="pro"
+        so premium models (veo / seedance / kling_v3) aren't gated. Returns the
+        raw provider_router result (``{"success":…, "output":{"video_url":…}}``).
+        """
+        from app.providers.provider_router import get_provider_router, TaskType
+        router = get_provider_router()
+        params = {"image_url": image_url, "prompt": motion_prompt, "model": model_id}
+        is_kling = "kling" in (model_id or "").lower()
+        task = TaskType.KLING_VIDEO if is_kling else TaskType.I2V
+        return await router.route(task, params, user_tier="pro")
+
     async def generate_short_video(self, limit: int = 10):
         """
-        Generate Short Video examples.
+        Generate Short Video demo rows — one per (PRESET, MODEL).
 
-        Flow: Prompt → T2I → I2V → Video
-        
-        This provides both a before image and an after video for proper
-        before/after display in the frontend.
+        The short-video tool's demo cache is keyed by (prompt_id, model_id): the
+        motion PRESET the visitor picks (``sv_001``…, from prompt_library.json)
+        crossed with the MODEL dropdown (hailuo / wan / kling_* / seedance_* /
+        veo, from tier_config.VIDEO_CREDIT_COSTS). We pregenerate a clip per pair
+        and store it with ``topic=<preset id>`` and ``input_params.model_id=<model>``
+        — exactly what ``DemoCacheService._get_from_db`` filters on. ``hash_context``
+        makes each pair a distinct lookup_hash so none dedupe.
 
-        Each motion type gets its own examples to showcase the effect.
-        Prompts are bilingual (en/zh) for proper display in frontend.
+        Flow per preset: ONE shared T2I source frame → I2V on each model with the
+        preset's motion prompt (routing mirrors runtime via provider_router).
+
+        Volume is gated by ``limit`` (global) when per_topic_limit is None, else
+        per-preset. To fully populate, run with ``--per-topic-limit >= #models``.
+        Override the model set with ``SHORT_VIDEO_PREGEN_MODELS=hailuo,wan,…``.
         """
+        import json
+        from pathlib import Path
+
         logger.info("=" * 60)
-        logger.info("SHORT VIDEO - T2I + I2V with Motion Types")
+        logger.info("SHORT VIDEO - per-(preset, model) demo rows")
         logger.info("=" * 60)
 
         self.stats["by_tool"]["short_video"] = {"success": 0, "failed": 0}
         self.local_results["short_video"] = []
         count = 0
         topic_counts: Dict[str, int] = {}
-        pollo_disabled = False  # Set True after repeated "Not enough credits" from Pollo
 
-        # Iterate through each motion type
-        for motion_id, motion_data in SHORT_VIDEO_MAPPING.items():
+        # Preset source = the SAME library the frontend dropdown uses, so the
+        # stored topic == request.prompt_id at lookup time.
+        try:
+            lib = json.loads(
+                (Path(__file__).resolve().parents[1] / "app/data/prompt_library.json").read_text()
+            )
+            presets = lib["tools"]["short_video"]["prompts"]
+        except Exception as e:
+            logger.error("short_video: cannot load prompt_library presets: %s", e)
+            presets = []
+
+        # Model dropdown = tier_config.VIDEO_CREDIT_COSTS keys (single source of
+        # truth). Override with SHORT_VIDEO_PREGEN_MODELS=comma,sep,list.
+        try:
+            from app.services.tier_config import VIDEO_CREDIT_COSTS
+            all_models = list(VIDEO_CREDIT_COSTS.keys())
+        except Exception:
+            all_models = ["hailuo", "wan", "kling_std", "seedance_720p", "kling_v3_std", "veo"]
+        env_models = os.getenv("SHORT_VIDEO_PREGEN_MODELS", "").strip()
+        models = [m.strip() for m in env_models.split(",") if m.strip()] or all_models
+        logger.info(
+            "short_video: %d presets × %d models = %d max rows (limit=%s, per_topic=%s)",
+            len(presets), len(models), len(presets) * len(models), limit, self.per_topic_limit,
+        )
+
+        for preset in presets:
             if self.per_topic_limit is None and count >= limit:
                 break
+            preset_id = preset.get("id")
+            motion_en = (preset.get("en") or "").strip()
+            motion_zh = (preset.get("zh") or "").strip()
+            if not preset_id or not motion_en:
+                continue
+            if not self._topic_can_generate(preset_id, topic_counts, limit, count):
+                continue
 
-            motion_name = motion_data["name"]
-            motion_name_zh = motion_data["name_zh"]
+            # Step 1: ONE shared T2I source frame for this preset (rotated content
+            # for variety). The preset supplies MOTION, not subject, so the same
+            # frame animates correctly on every model.
+            content_prompt = self.SHORT_VIDEO_CONTENT_PROMPTS[count % len(self.SHORT_VIDEO_CONTENT_PROMPTS)]
+            logger.info("[preset %s] Step 1 T2I source: %s...", preset_id, content_prompt[:48])
+            t2i = await self.piapi.generate_image(prompt=content_prompt, width=1024, height=1024)
+            if not t2i.get("success"):
+                logger.error("  T2I failed for preset %s: %s", preset_id, t2i.get("error"))
+                continue
+            source_image_url = t2i["image_url"]
+            remote_image_url = t2i.get("remote_url", source_image_url)
 
-            for prompt_data in motion_data["prompts"]:
-                if not self._topic_can_generate(motion_id, topic_counts, limit, count):
+            # Step 2: I2V on each dropdown model with the preset's motion prompt.
+            for model_id in models:
+                if not self._topic_can_generate(preset_id, topic_counts, limit, count):
+                    break
+                if self.per_topic_limit is None and count >= limit:
                     break
 
-                prompt_en = prompt_data["en"]
-                prompt_zh = prompt_data["zh"]
+                logger.info("  [preset %s | model %s] Step 2 I2V...", preset_id, model_id)
+                try:
+                    i2v = await self._short_video_i2v(remote_image_url, motion_en, model_id)
+                except Exception as e:
+                    logger.error("  I2V raised (preset %s model %s): %s", preset_id, model_id, e)
+                    i2v = None
 
-                logger.info(f"[{count+1}] Motion: {motion_name} ({motion_id})")
-                logger.info(f"  Prompt (EN): {prompt_en[:50]}...")
-                logger.info(f"  Prompt (ZH): {prompt_zh[:30]}...")
-
-                # Step 1: Generate T2I image first (for before/after display)
-                logger.info("  Step 1: T2I...")
-                t2i = await self.piapi.generate_image(prompt=prompt_en, width=1024, height=1024)
-
-                if not t2i["success"]:
-                    logger.error(f"  T2I Failed: {t2i.get('error')}")
+                video_url = None
+                if i2v and i2v.get("success"):
+                    out = i2v.get("output") or {}
+                    video_url = out.get("video_url") or i2v.get("video_url")
+                if not video_url:
+                    logger.error(
+                        "  I2V failed (preset %s model %s): %s",
+                        preset_id, model_id, (i2v or {}).get("error"),
+                    )
                     self.stats["failed"] += 1
                     self.stats["by_tool"]["short_video"]["failed"] += 1
                     count += 1
-                    self._topic_mark_generated(motion_id, topic_counts)
+                    self._topic_mark_generated(preset_id, topic_counts)
                     continue
 
-                source_image_url = t2i["image_url"]  # local path for storage
-                remote_image_url = t2i.get("remote_url", source_image_url)  # remote URL for Pollo
-                logger.info(f"  Source image: {source_image_url}")
-
-                # Step 2: Convert T2I image to video using I2V
-                # Pollo first; fallback to PiAPI Wan I2V when Pollo is out of credits
-                logger.info(f"  Step 2: I2V ({'PiAPI Wan' if pollo_disabled else 'Pollo → PiAPI fallback'})...")
-                result = None
-                i2v_api = "pollo"
-                if not pollo_disabled:
-                    result = await self.pollo.generate_video(
-                        prompt=prompt_en,
-                        image_url=remote_image_url,
-                        length=SHORT_VIDEO_LENGTH
-                    )
-                    if not result["success"]:
-                        err = result.get("error", "")
-                        if "Not enough credits" in err or "403" in err:
-                            logger.warning("  Pollo credits exhausted - switching to PiAPI Wan I2V for remaining videos")
-                            pollo_disabled = True
-                        else:
-                            logger.error(f"  Pollo I2V failed: {err}")
-
-                if pollo_disabled or (result and not result["success"]):
-                    logger.info("  Trying PiAPI Wan I2V as fallback...")
-                    result = await self.piapi.image_to_video(
-                        image_url=remote_image_url,
-                        prompt=prompt_en
-                    )
-                    i2v_api = "piapi_wan"
-
-                if not result or not result["success"]:
-                    logger.error(f"  I2V Failed (both providers): {result.get('error') if result else 'No result'}")
-                    self.stats["failed"] += 1
-                    self.stats["by_tool"]["short_video"]["failed"] += 1
-                    count += 1
-                    self._topic_mark_generated(motion_id, topic_counts)
-                    continue
-
-                local_entry = {
-                    "topic": motion_id,
-                    "prompt": prompt_en,
-                    "prompt_zh": prompt_zh,
+                self.local_results["short_video"].append({
+                    "topic": preset_id,                 # == request.prompt_id at lookup time
+                    "prompt": motion_en,
+                    "prompt_en": motion_en,
+                    "prompt_zh": motion_zh,
                     "input_image_url": source_image_url,
-                    "result_video_url": result["video_url"],
+                    "result_video_url": video_url,
+                    # Fold the model into the hash (so (preset, model) never
+                    # dedupes) and into input_params (so DemoCacheService._get_from_db
+                    # filters Material.input_params.model_id to THIS clip).
+                    "hash_context": f"preset={preset_id}|model={model_id}",
+                    "input_params": {"model_id": model_id},
                     "generation_steps": [
                         {"step": 1, "api": "piapi", "action": "t2i", "result_url": source_image_url},
-                        {"step": 2, "api": i2v_api, "action": "i2v", "result_url": result["video_url"]}
+                        {"step": 2, "api": model_id, "action": "i2v", "result_url": video_url},
                     ],
-                    "generation_cost": 0.12,  # T2I + I2V cost
-                    "metadata": {
-                        "motion": motion_id,
-                        "motion_name": motion_name,
-                        "motion_name_zh": motion_name_zh
-                    }
-                }
-                self.local_results["short_video"].append(local_entry)
-
-                logger.info(f"  Result: {result['video_url']}")
+                    "generation_cost": 0.20,
+                    "metadata": {"preset_id": preset_id, "model_id": model_id},
+                })
+                logger.info("  ✓ stored (preset %s | model %s)", preset_id, model_id)
                 self.stats["success"] += 1
                 self.stats["by_tool"]["short_video"]["success"] += 1
                 count += 1
-                self._topic_mark_generated(motion_id, topic_counts)
+                self._topic_mark_generated(preset_id, topic_counts)
                 await asyncio.sleep(5)
 
         await self._store_local_to_db("short_video")

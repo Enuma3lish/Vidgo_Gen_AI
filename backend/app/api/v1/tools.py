@@ -3609,21 +3609,22 @@ async def _generate_short_video_inner(
     if _gate == "blocked":
         return _subscribe_card_required_response()
     if _gate == "demo":
-        user_frame_url = _resolve_public_url(str(request.image_url)) if request.image_url else None
-        # Motion prompt — prefer an explicit style hint from the client; otherwise
-        # derive a terse motion description from motion_strength so the cache key
-        # differentiates between "gentle" and "dramatic" selections.
-        demo_effect_prompt = request.style or (
-            "dramatic cinematic motion" if (request.motion_strength or 5) >= 7
-            else "gentle cinematic motion" if (request.motion_strength or 5) >= 4
-            else "subtle cinematic motion"
-        )
+        # Demo cache key = (preset, model): one stored example video per
+        # dropdown combination. `prompt_id` is the stable preset NAME shown in
+        # the motion dropdown; `model_id` is the model dropdown (hailuo / wan /
+        # kling_* / seedance_* / veo). We do NOT key on the visitor's uploaded
+        # frame or the volatile motion text — a demo shows a PRE-RENDERED example
+        # for the chosen (preset, model), not the visitor's photo, and keying on
+        # the per-visitor frame guaranteed an exact-pair miss → 503.
+        # DemoCacheService filters short_video rows by input_params.model_id and
+        # falls back (same preset → any model → any short-video) so an
+        # un-pregenerated combo still returns a representative clip.
         return await _demo_response(
             db,
             ToolType.SHORT_VIDEO,
+            topic=(request.prompt_id or None),
+            product_id=(request.model_id or None),
             cta="Subscribe to create your own videos.",
-            input_image_url=user_frame_url,
-            effect_prompt=demo_effect_prompt,
         )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
@@ -4892,13 +4893,22 @@ async def _generate_avatar_inner(
     if _gate == "blocked":
         return _subscribe_card_required_response()
     if _gate == "demo":
-        user_headshot = _resolve_public_url(str(request.image_url)) if request.image_url else None
+        # Re-key the avatar demo cache by the STABLE preset id (prompt_id).
+        # Previously this keyed on the visitor's own headshot URL + the script
+        # text: the headshot is unique per visitor (guaranteeing an exact-pair
+        # cache miss) and, because a user_input was present, the generic topic
+        # lookup was skipped too — so every avatar demo fell through to the
+        # preset-only guard and 503'd. A demo shows a PRE-RENDERED example for
+        # the chosen preset (not the visitor's photo), and the script is
+        # auto-translated per locale, so neither belongs in the key. Keying on
+        # prompt_id lets all visitors who pick the same preset share its one
+        # cached demo; the generic avatar fallback (topic=None) in
+        # DemoCacheService keeps it from 503-ing when a preset has no row yet.
         return await _demo_response(
             db,
             ToolType.AI_AVATAR,
+            topic=(request.prompt_id or None),
             cta="Subscribe to create your own avatars.",
-            input_image_url=user_headshot,
-            effect_prompt=request.script,
         )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
@@ -4915,6 +4925,10 @@ async def _generate_avatar_inner(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "ai_avatar")
     if not ok:
         return ToolResponse(success=False, message=err)
+    # The ServicePricing override (and admin 0-charge) means the amount actually
+    # deducted can differ from the nominal CREDIT_COST. `charged` is the real
+    # deduction — every refund below MUST hand back `charged`, not the hardcoded
+    # 300, or a ServicePricing change silently over- or under-refunds on failure.
     charged = _credits_charged(current_user, CREDIT_COST)
 
     try:
@@ -4923,7 +4937,7 @@ async def _generate_avatar_inner(
         # — the only two markets we ship voices for. Reject other languages
         # so a tech-savvy user can't bypass the UI picker via direct API call.
         if request.language not in ["en", "zh-TW"]:
-            await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
+            await _refund_credits(db, current_user, charged, "ai_avatar")
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported language: {request.language}. Supported: en, zh-TW",
@@ -4931,7 +4945,7 @@ async def _generate_avatar_inner(
 
         # Validate duration
         if request.duration < 5 or request.duration > 120:
-            await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
+            await _refund_credits(db, current_user, charged, "ai_avatar")
             raise HTTPException(
                 status_code=400,
                 detail="Duration must be between 5 and 120 seconds"
@@ -4975,7 +4989,11 @@ async def _generate_avatar_inner(
             user_id=current_user.id,
             tool_type="ai_avatar",
             service_type="ai_avatar",
-            credits_charged=CREDIT_COST,
+            # Record the REAL deduction, not the nominal 300. The worker reclaim
+            # job refunds `credits_charged` on a recovered failure (worker.py),
+            # so a hardcoded 300 here would over-refund whenever ServicePricing
+            # set a different price.
+            credits_charged=charged,
             input_params={
                 "image_url": _resolve_public_url(str(request.image_url)),
                 "script": request.script,
@@ -5036,7 +5054,7 @@ async def _generate_avatar_inner(
             # treat as failure and refund. Previously we silently logged a
             # gallery row with video_url=None and kept the 300 credits.
             if not video_url:
-                await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
+                await _refund_credits(db, current_user, charged, "ai_avatar")
                 pending_task.status = "failed"
                 pending_task.error_message = "no video_url in provider response"
                 pending_task.completed_at = datetime.now(timezone.utc)
@@ -5068,7 +5086,14 @@ async def _generate_avatar_inner(
                 input_text=request.script,
                 result_video_url=video_url,
                 result_metadata={
-                    "api": "gemini-avatar",
+                    # Record the provider that ACTUALLY served this render, taken
+                    # from the router's response (piapi=Kling Avatar primary,
+                    # a2e=A2E digital-human backup). The old hardcoded
+                    # "gemini-avatar" was a stale prototype label — Gemini never
+                    # generates avatars; the real chain is PiAPI→A2E via
+                    # provider_router.route(TaskType.AVATAR).
+                    "api": result.get("provider_used") or result.get("primary_provider") or "piapi",
+                    "used_backup": bool(result.get("used_backup")),
                     "action": "photo_to_avatar",
                     "language": request.language
                 },
@@ -5100,7 +5125,7 @@ async def _generate_avatar_inner(
                 message=f"Avatar video generated successfully in {request.language}"
             )
         else:
-            await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
+            await _refund_credits(db, current_user, charged, "ai_avatar")
             pending_task.status = "failed"
             pending_task.error_message = str(result.get("error") or "")[:1000]
             pending_task.completed_at = datetime.now(timezone.utc)
@@ -5114,7 +5139,7 @@ async def _generate_avatar_inner(
         raise
     except Exception as e:
         logger.error(f"Avatar generation error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "ai_avatar")
+        await _refund_credits(db, current_user, charged, "ai_avatar")
         _notify_admin_of_tool_failure("ai_avatar", e, current_user)
         return ToolResponse(
             success=False,

@@ -2124,6 +2124,43 @@ class PiAPIProvider(BaseProvider):
     # AVATAR (Kling Avatar via PiAPI — talking head video)
     # ─────────────────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _avatar_degrade_fallback_enabled() -> bool:
+        """Whether to serve PiAPI's local degraded avatar fallbacks.
+
+        Owner rule (2026-06-16): PiAPI → A2E → if BOTH fail, stop the service.
+        The local degraded fallbacks (presenter image-to-video, static
+        portrait+audio MP4) used to return ``success=True``, so the provider
+        router recorded a success and NEVER failed over to A2E — billing the
+        user 300 credits for an often-silent still image. Default OFF: a Kling
+        Avatar failure now returns ``success=False`` so the router tries A2E,
+        and if A2E also fails the tool fails and refunds.
+
+        Set ``PIAPI_AVATAR_DEGRADE_FALLBACK=true`` to deliberately restore the
+        old local-degrade behaviour as a last resort.
+        """
+        return os.getenv("PIAPI_AVATAR_DEGRADE_FALLBACK", "false").strip().lower() in (
+            "1", "true", "yes", "on",
+        )
+
+    async def _avatar_failover(
+        self, image_url: str, audio_url: str, script: str, reason: str
+    ) -> Dict[str, Any]:
+        """Degrade locally (legacy, gated) or signal failure so the provider
+        router fails over to A2E. See ``_avatar_degrade_fallback_enabled``."""
+        if self._avatar_degrade_fallback_enabled():
+            return await self._fallback_avatar_video(image_url, audio_url, script)
+        logger.warning(
+            "[PiAPI] Avatar: Kling Avatar unavailable (%s); local degrade disabled "
+            "— returning success=False so provider_router fails over to A2E.",
+            reason,
+        )
+        return {
+            "success": False,
+            "error": f"PiAPI Kling Avatar unavailable ({reason})",
+            "provider_degraded": True,
+        }
+
     async def generate_avatar(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate talking-head avatar video using Kling Avatar via PiAPI.
@@ -2178,15 +2215,15 @@ class PiAPIProvider(BaseProvider):
                     "voice": voice_hint,
                 })
             except Exception as e:
-                logger.warning("[PiAPI] Avatar: TTS raised, using visual fallback: %s", e)
-                return await self._fallback_avatar_video(image_url, "", script)
+                logger.warning("[PiAPI] Avatar: TTS raised, failing over: %s", e)
+                return await self._avatar_failover(image_url, "", script, f"TTS raised: {e}")
             if tts_result.get("success"):
                 audio_url = tts_result.get("output", {}).get("audio_url")
                 logger.info(f"[PiAPI] Avatar: TTS audio ready: {audio_url[:80] if audio_url else 'None'}")
             else:
                 tts_error = tts_result.get("error", "TTS failed")
-                logger.warning("[PiAPI] Avatar: TTS failed, using visual fallback: %s", tts_error)
-                return await self._fallback_avatar_video(image_url, "", script)
+                logger.warning("[PiAPI] Avatar: TTS failed, failing over: %s", tts_error)
+                return await self._avatar_failover(image_url, "", script, f"TTS failed: {tts_error}")
 
         if not audio_url:
             return {"success": False, "error": "Audio generation failed. Please provide an audio URL or script text."}
@@ -2265,12 +2302,14 @@ class PiAPIProvider(BaseProvider):
                 attempts=2,
             )
         except Exception as e:
-            logger.warning("[PiAPI] Avatar: dedicated Kling Avatar raised, using fallback: %s", e)
-            return await self._fallback_avatar_video(image_url, audio_url, script)
+            logger.warning("[PiAPI] Avatar: dedicated Kling Avatar raised, failing over: %s", e)
+            return await self._avatar_failover(image_url, audio_url, script, f"Kling Avatar raised: {e}")
 
         if not result.get("success"):
-            logger.warning("[PiAPI] Avatar: dedicated Kling Avatar failed, using fallback: %s", result.get("error"))
-            return await self._fallback_avatar_video(image_url, audio_url, script)
+            logger.warning("[PiAPI] Avatar: dedicated Kling Avatar failed, failing over: %s", result.get("error"))
+            return await self._avatar_failover(
+                image_url, audio_url, script, f"Kling Avatar failed: {result.get('error')}"
+            )
 
         # Normalize output: Kling returns video in output
         if result.get("success"):

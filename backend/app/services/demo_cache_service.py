@@ -140,7 +140,10 @@ class DemoCacheService:
         # have a separate selector (background_removal) or already encode
         # the selection in the input URL itself.
         extra_context = ""
-        if tt_key == "try_on" and product_id:
+        if product_id and tt_key in ("try_on", "short_video"):
+            # try_on folds the chosen MODEL into the key; short_video folds the
+            # chosen video MODEL (model_id from the dropdown) so the same preset
+            # on a different model resolves to a different stored example video.
             extra_context = f"model={product_id}"
 
         # 1. Exact-pair lookup (user picked a specific input + effect).
@@ -160,7 +163,7 @@ class DemoCacheService:
         # the model_id selector via the generic lookup before resorting to
         # expensive on-demand generation that could still pick the wrong
         # model.
-        if not user_input or (tt_key == "try_on" and product_id):
+        if not user_input or (tt_key in ("try_on", "short_video") and product_id):
             demo = await self._get_from_db(
                 tool_type, topic, product_id=product_id, language=language
             )
@@ -174,6 +177,31 @@ class DemoCacheService:
                 cached = await self._get_from_cache(tool_type, topic)
                 if cached:
                     return cached
+
+        # AI Avatar teaser fallback: avatar demos are keyed by preset id
+        # (prompt_id), so a preset that has not been pregenerated yet has no
+        # exact-topic row. Rather than 503 on a paywalled teaser, return ANY
+        # approved avatar example so the visitor still sees a representative
+        # result. Scoped to ai_avatar (no user-picked input) so no other tool
+        # silently serves an unrelated demo.
+        tt_lower = tt_key.lower()
+        if tt_lower == "ai_avatar" and topic and not user_input:
+            generic = await self._get_from_db(tool_type, None, language=language)
+            if generic:
+                return generic
+
+        # Short-video teaser fallback: demos are keyed by (preset, model). A
+        # (preset, model) combo that has not been pregenerated yet has no row;
+        # rather than 503 on a paywalled teaser, relax to the same preset on ANY
+        # model, then to ANY approved short-video clip, so the visitor still sees
+        # a representative result. Scoped to short_video.
+        if tt_lower == "short_video" and product_id:
+            relaxed = await self._get_from_db(tool_type, topic, language=language)
+            if relaxed:
+                return relaxed
+            generic = await self._get_from_db(tool_type, None, language=language)
+            if generic:
+                return generic
 
         # PRESET-ONLY guard (P0 2026-06): production runs preset-only, so a demo
         # cache miss must NOT fall through to a real Provider — that burns
@@ -337,6 +365,7 @@ class DemoCacheService:
                 result = await self._generate_short_video(
                     provider, TaskType, topic,
                     input_image_url=input_image_url, effect_prompt=effect_prompt,
+                    model_id=product_id,
                 )
             elif tool_type in ("pattern_generate", "PATTERN_GENERATE"):
                 result = await self._generate_pattern(
@@ -695,12 +724,18 @@ class DemoCacheService:
         topic: Optional[str],
         input_image_url: Optional[str] = None,
         effect_prompt: Optional[str] = None,
+        model_id: Optional[str] = None,
     ) -> Optional[Dict]:
         """Generate a short video example on-demand.
 
         When `input_image_url` is given we skip the T2I stage and go straight
         to I2V on the user-picked pregenerated frame. `effect_prompt` becomes
         the motion/style prompt passed to the I2V provider.
+
+        `model_id` is the dropdown video model (hailuo / wan / kling_* /
+        seedance_* / veo). It is forwarded to the I2V provider so the example is
+        rendered with the SAME model the visitor picked, and stored on the row
+        (input_params.model_id) so the (preset, model) lookup hits this clip.
         """
         # CONTENT prompts — only used as the source description when we have
         # no user image (T2I fallback path). They MUST NOT be used as the I2V
@@ -748,9 +783,16 @@ class DemoCacheService:
                 return {"success": False}
             i2v_prompt = prompt
 
-        # Step 2: I2V — animate the chosen frame with the chosen motion prompt.
-        logger.info(f"[DemoCache] Short video: I2V on {'user frame' if input_image_url else 'T2I frame'}...")
-        i2v = await provider.route(TaskType.I2V, {"image_url": source_url, "prompt": i2v_prompt}, user_tier="pro")
+        # Step 2: I2V — animate the chosen frame with the chosen motion prompt,
+        # on the model the visitor picked from the dropdown when given.
+        logger.info(
+            "[DemoCache] Short video: I2V on %s (model=%s)...",
+            "user frame" if input_image_url else "T2I frame", model_id or "default",
+        )
+        i2v_params = {"image_url": source_url, "prompt": i2v_prompt}
+        if model_id:
+            i2v_params["model_id"] = model_id
+        i2v = await provider.route(TaskType.I2V, i2v_params, user_tier="pro")
         if not i2v.get("success"):
             return {"success": False}
 
@@ -765,6 +807,9 @@ class DemoCacheService:
             "effect_prompt": i2v_prompt,
             "input_image_url": source_url,
             "result_video_url": video_url,
+            # Stored on the Material row so the (preset, model) lookup filters
+            # input_params.model_id to this clip.
+            "input_params": {"model_id": model_id} if model_id else {},
         }
 
     async def _generate_pattern(
@@ -1181,7 +1226,9 @@ class DemoCacheService:
             tt = tool_type.value if hasattr(tool_type, "value") else str(tool_type)
             if tt == "ai_avatar":
                 key = "avatar_id"
-            elif tt == "try_on":
+            elif tt in ("try_on", "short_video"):
+                # short_video stores the chosen video model under model_id, so a
+                # (preset, model) demo lookup filters on the same key as try_on.
                 key = "model_id"
             else:
                 key = "product_id"

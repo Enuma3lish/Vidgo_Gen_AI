@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy import func, or_, select, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 import asyncio
 import os
 import re
@@ -940,6 +941,11 @@ async def get_promotions_dashboard(
         .outerjoin(conversions_subq, conversions_subq.c.promoter_id == User.id)
         .outerjoin(bonus_subq, bonus_subq.c.promoter_id == User.id)
         .where(User.referral_code.isnot(None))
+        # Eager-load current_plan: _plan_name(u) reads the relationship in the
+        # row loop below, and async SQLAlchemy can't lazy-load it there
+        # (MissingGreenlet → 500). selectinload post-loads it for the page in
+        # one extra query without multiplying rows under offset/limit.
+        .options(selectinload(User.current_plan))
     )
     count_q = select(func.count()).select_from(User).where(User.referral_code.isnot(None))
 

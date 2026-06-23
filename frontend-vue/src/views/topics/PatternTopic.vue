@@ -26,10 +26,15 @@ const { options: patternPromptOptions, promptFor: patternPromptTextFor } = usePr
 const isZh = computed(() => locale.value.startsWith('zh'))
 
 type ModelId = 'flux' | 'qwen' | 'z-image'
+// 2026-06-23: costs corrected to match backend tier_config.IMAGE_CREDIT_COSTS.
+// All three are the "standard" tier (Flux schnell / Z-Image / Qwen image),
+// service_type=text_to_image, 2 credits per generation. The prior display
+// (5/1/5) didn't match the deduction — user saw "1 cr Z-Image" but balance
+// dropped by the response's hardcoded credits_used=5 (since fixed below).
 const modelOptions: Array<{ id: ModelId; nameZh: string; nameEn: string; cost: number }> = [
-  { id: 'flux',    nameZh: 'Flux Schnell（預設）',    nameEn: 'Flux Schnell (default)',    cost: 5 },
-  { id: 'z-image', nameZh: 'Z-Image Turbo（最便宜）', nameEn: 'Z-Image Turbo (cheapest)',  cost: 1 },
-  { id: 'qwen',    nameZh: 'Qwen Image（中文擅長）',   nameEn: 'Qwen Image (zh-friendly)',  cost: 5 },
+  { id: 'flux',    nameZh: 'Flux Schnell（預設）',    nameEn: 'Flux Schnell (default)',    cost: 2 },
+  { id: 'z-image', nameZh: 'Z-Image Turbo（最便宜）', nameEn: 'Z-Image Turbo (cheapest)',  cost: 2 },
+  { id: 'qwen',    nameZh: 'Qwen Image（中文擅長）',   nameEn: 'Qwen Image (zh-friendly)',  cost: 2 },
 ]
 const modelId = ref<ModelId>('flux')
 

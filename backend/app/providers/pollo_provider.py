@@ -296,10 +296,17 @@ class PolloProvider(BaseProvider):
             "seedance":      _POLLO_REG["seedance_default"],
             "seedance_v2":   _POLLO_REG["seedance_default"],
             "seedance-fast": _POLLO_REG["seedance_default"],
+            # Frontend's 1080p tier requires the full seedance-2 task — the
+            # -fast variant tops out at 720p (verified docs.pollo.ai 2026-06-23).
+            "seedance_1080p": _POLLO_REG["seedance_full"],
+            "seedance_2_0":   _POLLO_REG["seedance_full"],
             "hailuo":        _POLLO_REG["hailuo_default"],
             "hailuo_fast":   _POLLO_REG["hailuo_default"],
             "minimax":       _POLLO_REG["hailuo_default"],
-            "hunyuan":       _POLLO_REG["hunyuan_default"],
+            # Hunyuan removed 2026-06-23 — Pollo doesn't expose it (404 in prod);
+            # PiAPI's Qubico/hunyuan also rejects the payload. Frontend menu
+            # dropped the option, but soft-failing here protects any cached
+            # client still sending model_id=hunyuan.
             "kling_omni":    _POLLO_REG["kling_omni"],
             "kling-3":       _POLLO_REG["kling_omni"],
             "kling_v3":      _POLLO_REG["kling_omni"],

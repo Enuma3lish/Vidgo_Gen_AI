@@ -193,6 +193,19 @@ class ProviderRouter:
         "sora2",
     }
 
+    # Models where the secondary lane is Vertex AI Veo (NOT Pollo). Pollo
+    # has no Veo endpoint, so the dual-provider directive ("must have two
+    # providers") is satisfied via Vertex's Veo 3 — same model family on a
+    # different backend. 2026-06-23 owner directive: re-added Veo to the
+    # short-video menu with this PiAPI → Vertex backup chain.
+    VERTEX_VIDEO_MODEL_IDS = {
+        "veo",
+        "veo_31",
+        "veo-31",
+        "veo_3",
+        "veo3",
+    }
+
     SYSTEM_FAILURE_HINTS = (
         "internal",
         "http 500",
@@ -439,11 +452,18 @@ class ProviderRouter:
             return ["piapi"]
 
         if has_explicit_model:
+            if task_type in {TaskType.I2V, TaskType.T2V} and model_id in self.VERTEX_VIDEO_MODEL_IDS:
+                # Veo: PiAPI primary, Vertex AI Veo as the dual-provider
+                # backup. Pollo has no Veo endpoint, so the "must have two
+                # providers" rule is satisfied via Vertex's native Veo 3
+                # (VEO_MODEL env var, default veo-3.0-fast-generate-001).
+                return ["piapi", "vertex_ai"]
+
             if task_type in {TaskType.I2V, TaskType.T2V} and model_id in self.POLLO_VIDEO_MODEL_IDS:
                 # When a model_id IS one Pollo genuinely supports (kling_v1.5 /
-                # kling_v2 I2V, pixverse, seedance, hailuo, hunyuan, pollo-v1-6,
-                # sora-2), try Pollo first then fall back to PiAPI. Vertex is no
-                # longer in the video chain (2026-06-23 owner directive).
+                # kling_v2 I2V, pixverse, seedance, hailuo, pollo-v1-6,
+                # sora-2), try Pollo first then fall back to PiAPI. Vertex is
+                # only in the chain for Veo (see VERTEX_VIDEO_MODEL_IDS above).
                 return self._provider_order_with_first(
                     "pollo",
                     ["piapi"],

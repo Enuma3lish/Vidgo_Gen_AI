@@ -230,8 +230,10 @@ POLLO_MODELS: Dict[str, str] = {
     # Names match Pollo's endpoint slugs (verify against pollo.ai/docs when
     # the platform renames). All env-overridable for ops rotation.
     "seedance_default":  os.environ.get("POLLO_SEEDANCE_MODEL",         "seedance_v2"),
+    # Full Seedance 2.0 endpoint (no -fast suffix) — 1080p support.
+    "seedance_full":     os.environ.get("POLLO_SEEDANCE_FULL_MODEL",    "seedance_2_0"),
     "hailuo_default":    os.environ.get("POLLO_HAILUO_MODEL",           "hailuo_fast"),
-    "hunyuan_default":   os.environ.get("POLLO_HUNYUAN_MODEL",          "hunyuan_v1"),
+    # Hunyuan removed 2026-06-23: NOT on Pollo (404). Frontend menu also dropped.
     "kling_omni":        os.environ.get("POLLO_KLING_OMNI_MODEL",       "kling_v3"),
     # Sora 2 (2026-06-09). Pollo's unified platform exposes OpenAI's Sora 2
     # at /generation/sora/sora-2 — our backup when PiAPI is rate-limited or

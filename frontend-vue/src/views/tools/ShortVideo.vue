@@ -61,10 +61,17 @@ interface ModelOpt {
 // VidGo 3.0 扣點表 — each model id maps to a fixed credit cost in tools.py
 // (resolve_video_credits). Labels, ids, and the creditCost computed below all
 // agree with the backend so the user never gets a sticker-shock deduction.
+// 2026-06-23 menu policy: only expose models with BOTH a verified PiAPI
+// primary AND a verified secondary provider (per owner directive "must have
+// two providers, remove non-duplicates"). Secondary is Pollo for the
+// Hailuo/Seedance/Kling family; for Veo specifically Pollo has no endpoint,
+// so the secondary is Vertex AI Veo (provider_router VERTEX_VIDEO_MODEL_IDS).
+// Models removed in this pass:
+//   - wan      — no Pollo endpoint exists, no other backup
+//   - hunyuan  — not in Pollo's catalog (404'd in prod) AND PiAPI rejects
+//                Qubico/hunyuan + img2video-concat with "invalid request"
 const I2V_MODELS: ModelOpt[] = [
   { id: 'hailuo',         nameZh: 'Hailuo Fast（最便宜）',      nameEn: 'Hailuo Fast (cheapest)' },
-  { id: 'wan',            nameZh: 'Wan 480p',                  nameEn: 'Wan 480p' },
-  { id: 'hunyuan',        nameZh: 'Hunyuan（中文擅長）',        nameEn: 'Hunyuan (Chinese-friendly)' },
   { id: 'kling_v2',       nameZh: 'Kling V2.5（標準）',          nameEn: 'Kling V2.5 (standard)' },
   { id: 'seedance',       nameZh: 'Seedance 720p',             nameEn: 'Seedance 720p', badge: 'premium' },
   { id: 'seedance_1080p', nameZh: 'Seedance 1080p',            nameEn: 'Seedance 1080p', badge: 'premium' },
@@ -208,13 +215,12 @@ const creditCost = computed(() => {
     return 28                                     // Kling V2.5 STD
   }
   const m = modelId.value || ''
-  if (m === 'veo') return 80
+  if (m === 'veo') return 80                      // Veo 3.1 (PiAPI primary, Vertex backup)
   if (m === 'seedance_1080p') return 160
   if (m === 'seedance') return 65                 // Seedance 720p
   if (m === 'kling_omni') return 130              // Kling V3.0 PRO (audio)
   if (m === 'kling_v3_std') return 65             // Kling V3.0 STD
   if (m.includes('kling')) return 28              // Kling V2.5 standard
-  if (m === 'wan' || m === 'hunyuan') return 20
   return 18                                       // hailuo / default
 })
 

@@ -422,6 +422,27 @@ async def generate_pattern(
     # are basic. Skipped when no model is sent (Flux default).
     await require_model_access(db, current_user, request.model)
 
+    # Credit deduction — was missing entirely before 2026-06-23 (revenue leak:
+    # users saw the response's hardcoded credits_used=5 reduce their balance
+    # display, but no CreditTransaction was ever written, so the balance
+    # restored itself on the next /credits/balance refresh). Now mirrors
+    # midjourney_imagine: resolve the per-model "standard" tier via
+    # IMAGE_CREDIT_COSTS, deduct via the canonical _check_and_deduct_credits,
+    # and refund on any provider failure below.
+    from app.services.tier_config import resolve_image_credits
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    _irow = resolve_image_credits(request.model)
+    CREDIT_COST = _irow["credits"]
+    service_type = _irow["service_type"]
+    ok, err = await _check_and_deduct_credits(
+        db, current_user, CREDIT_COST, service_type
+    )
+    if not ok:
+        return GenerationResponse(success=False, message=err or f"Insufficient credits ({CREDIT_COST} required).")
+    charged = _credits_charged(current_user, CREDIT_COST)
+
     # Subscriber path: call real API
     try:
         style_prompts = {
@@ -485,7 +506,7 @@ async def generate_pattern(
                 input_text=request.prompt,
                 input_params={"style": request.style, "width": request.width, "height": request.height},
                 result_image_url=result_url,
-                credits_used=5,
+                credits_used=charged,
             )
             db.add(generation)
             await db.commit()
@@ -494,16 +515,18 @@ async def generate_pattern(
                 success=True,
                 result_url=result_url,
                 results=images,
-                credits_used=5,
+                credits_used=charged,
                 message="Pattern generated successfully"
             )
         else:
+            await _refund_credits(db, current_user, charged, service_type)
             return GenerationResponse(
                 success=False,
                 message=result.get("error", "Pattern generation failed")
             )
     except Exception as e:
         logger.error(f"Pattern generation error: {e}")
+        await _refund_credits(db, current_user, charged, service_type)
         raise HTTPException(status_code=500, detail=str(e))
 
 

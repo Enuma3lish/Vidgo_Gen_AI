@@ -1268,11 +1268,40 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             }
 
         if video_b64:
+            video_bytes = base64.b64decode(video_b64)
+            filename = f"veo_{uuid.uuid4().hex[:8]}.mp4"
+
+            # 2026-06-23 fix — previously wrote to /app/static/generated/ on the
+            # Cloud Run instance's ephemeral disk. After a redeploy or instance
+            # rotation the next request hits a different instance with no file
+            # and the gallery shows a 404'd "stuck generating" video. Upload
+            # straight to GCS so the URL persists for the user's retention
+            # window. Falls back to local /static only if GCS isn't configured
+            # (dev / unbucketed test env).
+            try:
+                from app.services.gcs_storage_service import get_gcs_storage
+                gcs = get_gcs_storage()
+                if getattr(gcs, "enabled", False):
+                    blob_name = f"generated/video/{filename}"
+                    gcs_url = gcs.upload_public(
+                        video_bytes, blob_name, content_type="video/mp4",
+                    )
+                    self._log_response("veo_generation", True)
+                    return {
+                        "success": True,
+                        "task_id": result.get("name", ""),
+                        "output": {"video_url": gcs_url},
+                    }
+            except Exception as exc:
+                logger.warning(
+                    "[VertexAI:Veo] GCS upload failed, falling back to local /static: %s",
+                    exc,
+                )
+
             output_dir = Path("/app/static/generated")
             output_dir.mkdir(parents=True, exist_ok=True)
-            filename = f"veo_{uuid.uuid4().hex[:8]}.mp4"
             filepath = output_dir / filename
-            filepath.write_bytes(base64.b64decode(video_b64))
+            filepath.write_bytes(video_bytes)
             local_url = f"/static/generated/{filename}"
             self._log_response("veo_generation", True)
             return {

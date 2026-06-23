@@ -58,24 +58,36 @@ POLLO_MODELS = {
     # Endpoint slugs follow Pollo's documented pattern /generation/<vendor>/<slug>.
     # If Pollo renames any of these we rotate via the env vars in
     # core/model_registry.py — code stays unchanged.
+    # 2026-06-23: verified slugs against docs.pollo.ai. The prior
+    # /generation/seedance/seedance-2-fast and /generation/minimax/hailuo-fast
+    # 404'd in prod — Pollo's actual vendor prefix is `bytedance` for Seedance
+    # and the Hailuo Fast slug is the explicit version (minimax-hailuo-2.3-fast).
     "seedance_v2": {
-        "endpoint": "/generation/seedance/seedance-2-fast",
+        "endpoint": "/generation/bytedance/seedance-2-0-fast",
         "name": "Seedance 2.0 Fast",
-        "description": "Best CP value / stable / high-success default",
+        "description": "Best CP value / stable / high-success default (480p/720p)",
+        "lengths": [5, 10]
+    },
+    # Full Seedance 2.0 task — needed for 1080p. Frontend's seedance_1080p
+    # routes here; the -fast variant tops out at 720p.
+    "seedance_2_0": {
+        "endpoint": "/generation/bytedance/seedance-2-0",
+        "name": "Seedance 2.0",
+        "description": "Full Seedance (supports 1080p)",
         "lengths": [5, 10]
     },
     "hailuo_fast": {
-        "endpoint": "/generation/minimax/hailuo-fast",
+        "endpoint": "/generation/minimax/minimax-hailuo-2.3-fast",
         "name": "Hailuo Fast",
         "description": "Cheapest, fastest tier",
-        "lengths": [5, 6]
+        # Pollo's hailuo-2.3-fast accepts ONLY 6 or 10 seconds (verified
+        # 2026-06-23). Was [5,6]; 5 → 6 via _normalize_length.
+        "lengths": [6, 10]
     },
-    "hunyuan_v1": {
-        "endpoint": "/generation/hunyuan/hunyuan-v1",
-        "name": "Hunyuan",
-        "description": "Strong Chinese prompts + rich dynamic motion",
-        "lengths": [5, 8]
-    },
+    # Hunyuan removed 2026-06-23: NOT in Pollo's catalog. Was 404ing every
+    # call in prod (`/generation/hunyuan/hunyuan-v1` doesn't exist). With no
+    # Pollo backup and PiAPI's Qubico/hunyuan rejecting our payload, the model
+    # is being removed from the user-facing menu in frontend ShortVideo.vue.
     "kling_v3": {
         "endpoint": "/generation/kling-ai/kling-v3",
         "name": "Kling AI 3.0 / Omni",

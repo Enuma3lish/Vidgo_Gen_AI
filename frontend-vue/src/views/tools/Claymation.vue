@@ -57,7 +57,11 @@ const disabled = computed(() => {
   if (needsImage.value && !imageInput.value) return true
   return false
 })
-const creditCost = computed(() => isVideoMode.value ? 50 : 50)
+// Image modes (T2I / I2I) cost 10 credits; video (T2V) costs 50.
+// Mirrors backend tools.claymation_generate (CREDIT_COST = 50 if is_video else 10).
+// Was hardcoded 50/50 (2026-06-23 fix) — T2I users saw 50 but were charged 10,
+// then balance display "jumped back" 40 on next refresh.
+const creditCost = computed(() => isVideoMode.value ? 50 : 10)
 
 function pickMode(next: Mode) {
   mode.value = next

@@ -45,9 +45,9 @@ const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
 const disabled = computed(() => !imageInput.value)
-// Upscale is 10 credits; the optional AI enhance pass adds the 20-credit
-// room-redesign charge. Shown so the picker reflects the real deduction.
-const creditCost = computed(() => (aiEnhance.value ? 30 : 10))
+// Upscale is 15 credits; the optional AI enhance pass adds the 20-credit
+// room-redesign charge (total 35). Shown so the picker reflects the real deduction.
+const creditCost = computed(() => (aiEnhance.value ? 35 : 15))
 const disabledReason = computed(() => disabled.value
   ? L('請先上傳要優化的渲染圖。', 'Upload the render you want to enhance first.', '高画質化するレンダーをアップロードしてください。', '향상할 렌더를 먼저 업로드하세요.', 'Sube primero el render que quieres mejorar.')
   : '')

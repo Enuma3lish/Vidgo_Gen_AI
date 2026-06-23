@@ -42,6 +42,12 @@ const voices = ref<Array<{ id: string; name: string }>>([])
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
+// Demo only: both the EN and zh-TW pre-rendered videos for a script preset, so
+// the visitor can watch both language versions.
+const demoVideos = ref<Array<{ language: string; url: string }> | null>(null)
+function langLabel(code: string): string {
+  return String(code || '').toLowerCase().startsWith('zh') ? '中文 (zh-TW)' : 'English'
+}
 
 // Service availability — backend takes AI Avatar offline (GET /tools/availability)
 // when its providers are down, rather than charging 300 credits for a degraded
@@ -128,7 +134,12 @@ const usingScriptPreset = computed(() =>
 async function loadVoices() {
   try {
     const resp = await apiClient.get(`/api/v1/tools/avatar/voices?language=${language.value}`)
-    voices.value = (resp.data?.voices || []).map((v: any) => ({ id: v.id, name: v.name || v.id }))
+    // The endpoint returns a bare JSON array when a language is given (and a
+    // {lang: [...]} dict otherwise), not {voices: [...]} — tolerate both so the
+    // voice selector actually populates instead of staying permanently empty.
+    const raw = resp.data
+    const list = Array.isArray(raw) ? raw : (raw?.voices || raw?.[language.value] || [])
+    voices.value = list.map((v: any) => ({ id: v.id, name: v.name || v.id }))
     if (!voiceId.value && voices.value[0]) voiceId.value = voices.value[0].id
   } catch (e) {
     console.warn('[avatar] voice list failed', e)
@@ -153,6 +164,7 @@ async function generate() {
   status.value = 'running'
   statusText.value = L('生成中…通常 2-5 分鐘', 'Generating… typically 2-5 min', '生成中…通常2〜5分', '생성 중… 보통 2-5분', 'Generando… normalmente 2-5 min')
   resultUrl.value = null
+  demoVideos.value = null
   try {
     const url = await ensureImageUrl()
     if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
@@ -170,6 +182,8 @@ async function generate() {
     }
     if (result.success && (result.video_url || result.result_url)) {
       resultUrl.value = result.video_url || result.result_url || null
+      // Demo path returns both language videos — show them side by side.
+      demoVideos.value = result.demo_videos && result.demo_videos.length > 1 ? result.demo_videos : null
       status.value = 'done'
       statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
       if (result.credits_used) creditsStore.deductCredits(result.credits_used)
@@ -315,7 +329,14 @@ function gotoPricing() { router.push('/pricing') }
     </template>
 
     <template v-if="resultUrl" #result>
-      <video :src="resultUrl" class="max-w-full max-h-[520px] rounded-lg" controls />
+      <!-- Demo: both EN + zh-TW versions of the preset, side by side. -->
+      <div v-if="demoVideos" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div v-for="v in demoVideos" :key="v.language">
+          <div class="text-xs mb-1 text-dark-400">{{ langLabel(v.language) }}</div>
+          <video :src="v.url" class="max-w-full max-h-[420px] rounded-lg" controls />
+        </div>
+      </div>
+      <video v-else :src="resultUrl" class="max-w-full max-h-[520px] rounded-lg" controls />
     </template>
 
     <template v-if="resultUrl" #result-actions>

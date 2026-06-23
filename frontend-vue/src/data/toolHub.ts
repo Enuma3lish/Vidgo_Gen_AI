@@ -43,8 +43,6 @@ export const toolHubTiles: ToolHubTile[] = [
   { id: 'product-staging',     labelKey: 'tools.hub.tiles.productStaging',     to: '/tools/product-scene-classic',  thumb: `${T}/product-staging.png`,     category: 'advertising' },
   // Row 2
   { id: 'edit-with-ai',        labelKey: 'tools.hub.tiles.editWithAi',         to: '/tools/midjourney-imagine',     thumb: `${T}/edit-with-ai.png`,        category: 'branding'    },
-  { id: 'ghost-mannequin',     labelKey: 'tools.hub.tiles.ghostMannequin',     to: '/tools/background-removal',     thumb: `${T}/ghost-mannequin.png`,     category: 'other'       },
-  { id: 'ironing',             labelKey: 'tools.hub.tiles.ironing',            to: '/tools/upscale',                thumb: `${T}/ironing.png`,             category: 'other'       },
   { id: 'flat-lay',            labelKey: 'tools.hub.tiles.flatLay',            to: '/tools/product-scene-classic',  thumb: `${T}/flat-lay.png`,            category: 'advertising' },
   // Row 3
   { id: 'logo',                labelKey: 'tools.hub.tiles.logo',               to: '/tools/midjourney-imagine',     thumb: `${T}/logo.png`,                category: 'branding'    },

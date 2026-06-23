@@ -185,6 +185,13 @@ class ImageUnderstandingService:
                 f"— {notes}. Restyle only cladding, surfaces, materials, finishes, landscaping and "
                 f"lighting; do NOT change the massing, rooflines, window positions, or footprint."
             )
+        if (space_kind or "").lower() == "landscape":
+            return (
+                f" Preserve the site's existing terrain, building footprint and hardscape exactly "
+                f"as in the source photo — {notes}. Restyle only planting, lawn, garden features and "
+                f"outdoor lighting; do NOT enclose the space as a room, add interior furniture, or "
+                f"alter the site boundary or built structures."
+            )
         return (
             f" Preserve the space's existing architecture exactly as in the source photo "
             f"— {notes}. Restyle only finishes, materials, lighting, furniture and decor; do NOT "

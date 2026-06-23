@@ -30,6 +30,11 @@ SUPPORTED_TOOLS = {
     "short_video",
     "ai_avatar",
     "pattern_generate",
+    # 2026-06-23 — added so the premium T2I (MidjourneyImagine) page can resolve
+    # curated dropdown prompts server-side for the free-visitor demo path, and so
+    # Kling-video presets validate. Backed by the synced prompt_library.json.
+    "premium_image",
+    "kling_video",
 }
 
 

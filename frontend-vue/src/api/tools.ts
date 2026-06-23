@@ -23,6 +23,10 @@ export interface ToolResponse {
   cached?: boolean
   demo_input_url?: string
   demo_prompt?: string
+  // AI Avatar demo: both the EN and zh-TW pre-rendered videos for a script
+  // preset, so a visitor can watch both language versions.
+  demo_videos?: Array<{ language: string; url: string }>
+
   // 2026-05-18 — image-understanding fusion fields. Populated by tools
   // that take image+prompt (room redesign, product scene). The frontend
   // VisionFusionInfo component reads these to show "we see: __" and
@@ -93,7 +97,6 @@ export const toolsApi = {
     opts?: {
       modelImageUrl?: string
       modelId?: string
-      angle?: string
       templateId?: string
       category?: 'upper_body' | 'lower_body' | 'dress' | 'full_body'
       // Added 2026-05-24: prompt mode routes through Flux Kontext I2I on
@@ -110,7 +113,6 @@ export const toolsApi = {
         garment_image_url: garmentImageUrl,
         model_image_url: opts?.modelImageUrl,
         model_id: opts?.modelId,
-        angle: opts?.angle ?? 'front',
         template_id: opts?.templateId,
         // Category controls which Kling input slot the garment goes into.
         // 'dress' (default) sends to dress_input → Kling expects a full
@@ -296,15 +298,19 @@ export const toolsApi = {
   async midjourneyImagine(params: {
     prompt: string
     aspectRatio?: string
-    processMode?: 'relax' | 'fast' | 'turbo'
     model?: 'flux' | 'qwen' | 'z-image' | 'nano-banana' | 'nano-banana-pro' | 'seedream'
+    // Curated premium_image preset id (pi_###). When set + unmodified, free
+    // visitors receive the cached demo example instead of the subscribe wall.
+    promptId?: string
+    locale?: string
   }): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/midjourney-imagine',
       {
         prompt: params.prompt,
         aspect_ratio: params.aspectRatio ?? '1:1',
-        process_mode: params.processMode,
+        prompt_id: params.promptId,
+        locale: params.locale,
         // Backend reads `model` and forwards it to provider_router.route(T2I).
         // piapi_provider.text_to_image() dispatches Flux / Qwen / Z-Image /
         // Nano Banana (v2 + Pro) / Seedream 5 Lite. All verified end-to-end

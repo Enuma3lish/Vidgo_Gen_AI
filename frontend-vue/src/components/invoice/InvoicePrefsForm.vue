@@ -18,7 +18,7 @@ import type { InvoiceMode } from '@/api/einvoice'
 const { t } = useI18n()
 
 const mode = ref<InvoiceMode>('carrier')
-const carrierType = ref<'mobile_barcode' | 'citizen_cert' | 'email'>('mobile_barcode')
+const carrierType = ref<'mobile_barcode' | 'email'>('mobile_barcode')
 const carrierNumber = ref('')
 const loveCode = ref('')
 const buyerTaxId = ref('')
@@ -51,7 +51,9 @@ onMounted(async () => {
     } else {
       mode.value = 'carrier'
     }
-    if (p.default_carrier_type) carrierType.value = p.default_carrier_type
+    // Coerce any legacy/unsupported carrier type (e.g. a previously-saved
+    // citizen_cert, which we no longer offer) to the mobile-barcode default.
+    if (p.default_carrier_type) carrierType.value = p.default_carrier_type === 'email' ? 'email' : 'mobile_barcode'
     carrierNumber.value = p.default_carrier_number || ''
     loveCode.value = p.default_love_code || ''
     buyerTaxId.value = p.default_buyer_tax_id || ''
@@ -107,7 +109,7 @@ async function save() {
           <input type="radio" v-model="mode" value="carrier" class="accent-primary-500 mt-1" />
           <span>
             <span class="block font-medium">{{ t('einvoice.modeCarrier', 'Personal invoice with carrier (個人發票 + 載具)') }}</span>
-            <span class="block text-xs text-dark-500 mt-0.5">{{ t('einvoice.modeCarrierHint', 'Invoice is stored to your carrier (mobile barcode, citizen certificate, or email).') }}</span>
+            <span class="block text-xs text-dark-500 mt-0.5">{{ t('einvoice.modeCarrierHint', 'Invoice is stored to your carrier (mobile barcode or email).') }}</span>
           </span>
         </label>
         <label class="flex items-start gap-3 cursor-pointer p-3 rounded-lg border"
@@ -135,7 +137,6 @@ async function save() {
           <select v-model="carrierType"
                   class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-400 bg-white">
             <option value="mobile_barcode">{{ t('einvoice.mobileBarcode', 'Mobile Barcode (手機條碼)') }}</option>
-            <option value="citizen_cert">{{ t('einvoice.citizenCert', 'Citizen Certificate (自然人憑證)') }}</option>
             <option value="email">Email</option>
           </select>
         </div>
@@ -143,7 +144,7 @@ async function save() {
           <label class="block text-sm font-medium mb-1">{{ t('einvoice.carrierNumber', 'Carrier Number') }} *</label>
           <input v-model="carrierNumber" type="text" maxlength="64"
                  class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-400 bg-white"
-                 :placeholder="carrierType === 'mobile_barcode' ? '/ABC+123' : carrierType === 'email' ? 'name@example.com' : ''" />
+                 :placeholder="carrierType === 'email' ? 'name@example.com' : '/ABC+123'" />
         </div>
       </div>
 

@@ -1168,10 +1168,17 @@ class PiAPIProvider(BaseProvider):
         # either "invalid model" or "invalid request" and the entire short-
         # video flow falls through provider_router to "all providers failed".
         if family == "seedance":
+            # Seedance 2 (verified piapi.ai/docs 2026-06-23): mode + resolution
+            # are required; default resolution is 480p, so omitting it served a
+            # low-res clip. 1080p needs the full "seedance-2" task, so we may
+            # override the task_type picked from the map above.
+            seed_res, task_type = self._seedance_res_and_task(params)
             input_payload: Dict[str, Any] = {
                 "prompt":       prompt,
+                "mode":         "first_last_frames",  # single source image = first frame
                 "image_urls":   [image_url],
                 "duration":     duration,
+                "resolution":   seed_res,
                 "aspect_ratio": params.get("aspect_ratio", "16:9"),
             }
         elif family == "hailuo":
@@ -1314,6 +1321,23 @@ class PiAPIProvider(BaseProvider):
         # Unknown alias → fall back to default tier (Seedance Fast).
         return "seedance"
 
+    @staticmethod
+    def _seedance_res_and_task(params: Dict[str, Any]) -> tuple:
+        """Pick Seedance resolution + task_type for the request.
+
+        Seedance 2's input.resolution defaults to 480p, so we always set it
+        explicitly. 1080p is ONLY available on the full "seedance-2" task — the
+        "-fast" variant tops out at 720p — so a 1080p request upgrades the task.
+        Resolution is read from params["resolution"] or inferred from the model
+        id (e.g. "seedance_1080p" → 1080p). Default is 720p (the standard tier).
+        """
+        raw = f"{params.get('resolution') or ''} {params.get('model') or ''}".lower()
+        if "1080" in raw:
+            return "1080p", PIAPI_MODELS["seedance_full_task"]
+        if "480" in raw:
+            return "480p", PIAPI_MODELS["seedance_fast_task"]
+        return "720p", PIAPI_MODELS["seedance_fast_task"]
+
     async def text_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate video from text via PiAPI. Model family is selected by
@@ -1335,9 +1359,13 @@ class PiAPIProvider(BaseProvider):
 
         # Per-family input shape (see image_to_video for context).
         if family == "seedance":
+            # mode + resolution required; 1080p upgrades to the full task.
+            seed_res, task_type = self._seedance_res_and_task(params)
             input_payload: Dict[str, Any] = {
                 "prompt":       prompt,
+                "mode":         "text_to_video",
                 "duration":     duration,
+                "resolution":   seed_res,
                 "aspect_ratio": params.get("aspect_ratio", "16:9"),
             }
         elif family == "hailuo":
@@ -1748,6 +1776,19 @@ class PiAPIProvider(BaseProvider):
                 f"and the overall floor plan. {anti_drift} "
                 "Photorealistic commercial interior photography, sharp focus, "
                 "no people, no pets, no text, no watermark."
+            )
+        elif space_kind == "landscape":
+            # Outdoor garden/landscaping — must NOT be framed as an indoor room
+            # (the old else-branch staged it as a furnished living room, which
+            # contaminated landscape renders with indoor cues).
+            framing = "professional landscape and garden design visualization"
+            constraints = (
+                "Preserve the existing terrain, building footprint, hardscape "
+                "(paths, walls, fences, paving) and the site boundary; restyle only "
+                "the planting, lawn, garden features and outdoor lighting. Do NOT add "
+                "interior elements or furniture and do NOT enclose the space as a room. "
+                f"{anti_drift} Photorealistic outdoor landscape photography, natural "
+                "daylight, sharp focus, no people, no pets, no text, no watermark."
             )
         else:
             room_type = params.get("room_type", "living room")

@@ -319,7 +319,8 @@ class SubscriptionService:
             status="pending_downgrade",
             start_date=end_date,
             end_date=end_date + timedelta(days=30) if end_date else utc_now() + timedelta(days=60),
-            auto_renew=True
+            auto_renew=True,
+            billing_cycle=billing_cycle,
         )
         db.add(pending_sub)
         await db.commit()
@@ -383,7 +384,8 @@ class SubscriptionService:
             status="active",
             start_date=now,
             end_date=end_date,
-            auto_renew=True
+            auto_renew=True,
+            billing_cycle=billing_cycle,
         )
         db.add(subscription)
         await db.flush()  # make subscription.id available for the audit Order
@@ -557,7 +559,8 @@ class SubscriptionService:
             status="pending",
             start_date=now,
             end_date=end_date,
-            auto_renew=True
+            auto_renew=True,
+            billing_cycle=billing_cycle,
         )
         db.add(subscription)
         await db.flush()
@@ -634,11 +637,16 @@ class SubscriptionService:
         billing_cycle: str
     ) -> Dict[str, Any]:
         """Create PayPal checkout session for payment."""
-        # Get price based on billing cycle
+        # PayPal is the USD gateway, so the local Order/invoice must record the
+        # USD price (19.99/49.99/89.99), NOT plan.price_monthly/price_yearly which
+        # hold the TWD figures (399/999/1799) — otherwise invoices and refund
+        # emails report e.g. "399.00 USD". Yearly = monthly ×12 (matches the
+        # frontend OVERSEAS_USD pricing). The actual charge still comes from the
+        # PayPal Plan ID; this only fixes the customer-facing record.
         if billing_cycle == "yearly":
-            price = float(plan.price_yearly or plan.price_usd or 0)
+            price = float(plan.price_usd) * 12 if plan.price_usd else float(plan.price_yearly or 0)
         else:
-            price = float(plan.price_monthly or plan.price_usd or 0)
+            price = float(plan.price_usd or plan.price_monthly or 0)
 
         # Create pending subscription record
         now = utc_now()
@@ -653,7 +661,8 @@ class SubscriptionService:
             status="pending",
             start_date=now,
             end_date=end_date,
-            auto_renew=True
+            auto_renew=True,
+            billing_cycle=billing_cycle,
         )
         db.add(subscription)
         await db.flush()
@@ -671,7 +680,9 @@ class SubscriptionService:
             payment_data={
                 "plan_id": str(plan.id),
                 "plan_name": plan.name,
-                "billing_cycle": billing_cycle
+                "billing_cycle": billing_cycle,
+                "currency": "USD",
+                "currency_code": "USD",
             }
         )
         db.add(order)
@@ -1576,8 +1587,18 @@ class SubscriptionService:
                     # prorated grant (see 2026-06 margin pass).
                     plan = await db.get(Plan, subscription.plan_id)
                     if plan:
+                        # Prefer the subscription's own cycle; fall back to the
+                        # cycle stamped on the order at checkout, then monthly.
+                        # getattr guards pre-migration rows/instances so this
+                        # webhook can never AttributeError and silently fail the
+                        # whole activation (charged-but-no-credits bug).
+                        billing_cycle = (
+                            getattr(subscription, "billing_cycle", None)
+                            or (order.payment_data or {}).get("billing_cycle")
+                            or "monthly"
+                        )
                         credits = subscription_period_credits(
-                            plan, order.payment_method, subscription.billing_cycle or "monthly"
+                            plan, order.payment_method, billing_cycle
                         )
                         if credits > 0:
                             user.subscription_credits = credits

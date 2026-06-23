@@ -1,12 +1,15 @@
 """
 Provider Router — Routes AI tasks to the correct provider.
 
-Architecture:
-1. PiAPI MCP/REST — PRIMARY for normal generation flows
-2. Pollo.ai       — BACKUP when PiAPI paths fail, especially video
-3. Vertex AI      — FINAL backup for image/video tasks and primary for Gemini workflows
-4. A2E            — BACKUP for avatar tasks when PiAPI fails
-5. GCS Storage   — Persists CDN URLs to Google Cloud Storage
+Architecture (2026-06-23):
+1. PiAPI      — PRIMARY for every generation task.
+2. Pollo.ai   — BACKUP for every task it can serve: image_to_video, text_to_video,
+                text_to_image, image_to_image (and Kling/Sora I2V). Upscale +
+                background-removal have no Pollo endpoint → PiAPI-only.
+3. A2E        — BACKUP for avatar tasks when PiAPI's Kling avatar fails.
+4. Vertex AI  — NOT a generation backup anymore; used ONLY as the primary for
+                the Gemini moderation + material-generation tasks.
+5. GCS Storage — Persists CDN URLs to Google Cloud Storage.
 """
 from typing import Dict, Any, Optional
 from enum import Enum
@@ -107,33 +110,32 @@ class ProviderRouter:
     #   remains the final fallback for video tasks. MCP provider files
     #   stay on disk so we can re-enable later by editing this config only.
     ROUTING_CONFIG = {
-        # Video tasks — PiAPI REST first, Vertex AI/Veo as backup.
-        # Pollo REST has narrow coverage (kling_v1.5/v2 + pixverse + hailuo +
-        # minimax + wan + pollo-v1-6) and only for image_to_video. The
-        # _get_providers_for_task model-aware override at line ~378 already
-        # promotes Pollo to PRIMARY when those specific model_ids are
-        # requested (see POLLO_VIDEO_MODEL_IDS); the ROUTING_CONFIG below is
-        # the generic chain when no Pollo-supported model is specified.
+        # 2026-06-23 — owner directive: Pollo.ai is the BACKUP for every task
+        # it can serve; Vertex AI is removed from the generation fallback
+        # chains entirely (it stays ONLY as the primary for the Gemini
+        # moderation / material-generation tasks below). Pollo now implements
+        # text_to_image + image_to_image (verified /generation/<vendor>/<slug>/
+        # image endpoints) and text_to_video, in addition to its existing
+        # image_to_video — see pollo_provider.py + services/pollo_ai.py.
         #
-        # 2026-05-26 — added Pollo as I2V tertiary so that even when an
-        # un-listed model_id is used, if PiAPI + Vertex both fail we still
-        # take one last shot at Pollo (it will soft-fail fast for unknown
-        # models, costing only ~200 ms; for known Kling models it actually
-        # serves a video). T2V chain stays Pollo-free because Pollo REST has
-        # no T2V endpoint at all ("not implemented" 404 every call).
-        TaskType.I2V: {"primary": "piapi", "backup": "vertex_ai", "tertiary": "pollo", "fallback": None},
-        TaskType.T2V: {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        # Video tasks — PiAPI primary, Pollo backup. The _get_providers_for_task
+        # model-aware override below still promotes Pollo to PRIMARY when an
+        # explicit Pollo-supported model_id is requested (POLLO_VIDEO_MODEL_IDS).
+        TaskType.I2V: {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
+        TaskType.T2V: {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
 
-        # Image tasks — PiAPI REST → Vertex AI fallback. Pollo image
-        # generation overlapped with PiAPI's catalog and added no value.
-        TaskType.T2I:                {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
-        TaskType.I2I:                {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
-        TaskType.EFFECTS:            {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
-        TaskType.UPSCALE:            {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
-        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        # Image tasks — PiAPI primary, Pollo backup.
+        # UPSCALE + BACKGROUND_REMOVAL have NO Pollo endpoint, so they run
+        # PiAPI-only and surface a clean error on failure rather than routing
+        # to a backup that cannot serve them.
+        TaskType.T2I:                {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
+        TaskType.I2I:                {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
+        TaskType.EFFECTS:            {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
+        TaskType.UPSCALE:            {"primary": "piapi", "backup": None,    "tertiary": None, "fallback": None},
+        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi", "backup": None,    "tertiary": None, "fallback": None},
 
         # Specialized tasks
-        TaskType.INTERIOR:    {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        TaskType.INTERIOR:    {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
         TaskType.INTERIOR_3D: {"primary": "piapi", "backup": None,        "tertiary": None, "fallback": None},
         # Avatar uses PiAPI first, then A2E.ai for avatar/digital-human fallback.
         TaskType.AVATAR:      {"primary": "piapi", "backup": "a2e",       "tertiary": None, "fallback": None},
@@ -172,14 +174,16 @@ class ProviderRouter:
         "kling_v1.5",
         "kling_v1_5",
         "kling_v2",
-        "kling2.5",
         "kling_v3",
         "kling_omni",
         "hailuo",
         "hailuo_fast",
         "minimax",
-        "wan2.6",
-        "wan",
+        # NOTE: "wan", "wan2.6", "kling2.5" were REMOVED 2026-06-23 — Pollo has
+        # no endpoint for them, so promoting Pollo to primary only forced a
+        # silent Pixverse substitution. They now stay PiAPI-primary (which
+        # serves the real Wan/Kling-2.5). _normalize_model also soft-fails any
+        # un-mapped slug as a second line of defense.
         "pollo-v1-6",
         # 2026-06-09 — Sora 2 lives at Pollo's /generation/sora/sora-2; an
         # explicit model_id="sora-2" promotes Pollo to PRIMARY when the
@@ -436,14 +440,13 @@ class ProviderRouter:
 
         if has_explicit_model:
             if task_type in {TaskType.I2V, TaskType.T2V} and model_id in self.POLLO_VIDEO_MODEL_IDS:
-                # Pollo's REST coverage is patchy (HTTP 404 for `seedance`,
-                # "not implemented" for T2V). When a model_id IS one Pollo
-                # genuinely supports (kling_v1.5 / kling_v2 I2V, pixverse,
-                # pollo-v1-6), try Pollo first then fall back to PiAPI / Vertex.
-                # MCP entries removed 2026-05-25 — see ROUTING_CONFIG header.
+                # When a model_id IS one Pollo genuinely supports (kling_v1.5 /
+                # kling_v2 I2V, pixverse, seedance, hailuo, hunyuan, pollo-v1-6,
+                # sora-2), try Pollo first then fall back to PiAPI. Vertex is no
+                # longer in the video chain (2026-06-23 owner directive).
                 return self._provider_order_with_first(
                     "pollo",
-                    ["piapi", "vertex_ai"],
+                    ["piapi"],
                 )
 
             if task_type in {
@@ -777,9 +780,13 @@ class ProviderRouter:
     async def _execute_pollo(
         self, task_type: TaskType, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute on Pollo REST — T2I backup + video fallback."""
+        """Execute on Pollo REST — image + video backup for PiAPI."""
         if task_type == TaskType.T2I:
             return await self.pollo.text_to_image(params)
+        elif task_type in (TaskType.I2I, TaskType.EFFECTS, TaskType.INTERIOR):
+            # Image-edit backup. INTERIOR is a styled image-to-image on the
+            # room/sketch photo; effects/I2I likewise carry an input image.
+            return await self.pollo.image_to_image(params)
         elif task_type == TaskType.I2V:
             return await self.pollo.image_to_video(params)
         elif task_type == TaskType.T2V:
@@ -794,10 +801,13 @@ class ProviderRouter:
                     "success": False,
                     "error": "Pollo Kling backup requires image_url (T2V Kling not supported by Pollo REST).",
                 }
-            # Map tier → Pollo model. "flagship" picks kling_v2; "default" picks
-            # kling_v1.5 since that's the closest analog Pollo exposes.
+            # Map tier → Pollo Kling slug so the backup matches what the user
+            # paid for. "omni" (Kling 3.0 PRO, with audio) → kling_v3;
+            # "flagship" → kling_v2; "default" → kling_v1.5. Without the omni
+            # branch a 130-credit omni request silently degraded to kling_v1.5
+            # (no audio) on the failover path.
             tier = (params.get("tier") or "default").lower()
-            pollo_model = "kling_v2" if tier == "flagship" else "kling_v1.5"
+            pollo_model = {"omni": "kling_v3", "flagship": "kling_v2"}.get(tier, "kling_v1.5")
             pollo_params = {**params, "model": pollo_model}
             return await self.pollo.image_to_video(pollo_params)
         elif task_type == TaskType.SORA2_VIDEO:

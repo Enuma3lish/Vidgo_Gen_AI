@@ -449,6 +449,63 @@ async def _demo_response(
         message=f"This is a demo example. {cta}",
     )
 
+async def _avatar_demo_response(
+    db: AsyncSession,
+    topic: str | None,
+    preferred_language: str | None,
+    cta: str,
+):
+    """Avatar demo that surfaces BOTH the EN and zh-TW pre-rendered videos.
+
+    The avatar demo cache stores one video per (script preset, language). A
+    visitor should be able to watch both language versions regardless of their
+    own locale, so we return every language row for the preset: the visitor's
+    own-locale video is the primary `result_url`, and all languages are listed
+    in `demo_videos` for an in-page language toggle. Falls back to the generic
+    single-video demo when a preset has no pre-rendered rows yet.
+    """
+    from sqlalchemy import select, and_
+    from app.models.material import Material, MaterialStatus
+
+    if not topic:
+        return await _demo_response(db, ToolType.AI_AVATAR, topic=None, cta=cta)
+
+    rows = (await db.execute(
+        select(Material).where(and_(
+            Material.tool_type == ToolType.AI_AVATAR,
+            Material.topic == topic,
+            Material.is_active.is_(True),
+            Material.status.in_([MaterialStatus.APPROVED, MaterialStatus.FEATURED]),
+            Material.result_video_url.isnot(None),
+        ))
+    )).scalars().all()
+    if not rows:
+        return await _demo_response(db, ToolType.AI_AVATAR, topic=None, cta=cta)
+
+    def _norm(lang: str | None) -> str:
+        return "zh-TW" if str(lang or "").lower().startswith("zh") else "en"
+
+    by_lang: Dict[str, str] = {}
+    for m in rows:
+        url = m.result_watermarked_url or m.result_video_url
+        if url:
+            by_lang.setdefault(_norm(m.language), url)
+
+    pref = _norm(preferred_language)
+    primary = by_lang.get(pref) or by_lang.get("en") or next(iter(by_lang.values()))
+    videos = [{"language": lang, "url": url} for lang, url in by_lang.items()]
+    return ToolResponse(
+        success=True,
+        result_url=primary,
+        video_url=primary,
+        credits_used=0,
+        cached=True,
+        is_demo=True,
+        demo_videos=videos,
+        message=f"This is a demo example. {cta}",
+    )
+
+
 router = APIRouter()
 
 
@@ -1455,6 +1512,10 @@ class ToolResponse(BaseModel):
     is_demo: bool = False
     demo_input_url: Optional[str] = None   # "before" image from the pre-generated example
     demo_prompt: Optional[str] = None      # prompt used to generate the example
+    # Multiple pre-rendered demo videos in different languages (AI Avatar) so a
+    # visitor can watch BOTH the EN and zh-TW version of a script preset. Each
+    # item: {"language": "en"|"zh-TW", "url": <video url>}.
+    demo_videos: Optional[List[Dict[str, str]]] = None
     # 2026-05-18 — image-understanding fusion (see image_understanding_service.py).
     # Set on tools that take BOTH an uploaded image and a text prompt
     # (room redesign, product scene, effects, I2V, avatar). Lets the
@@ -2002,7 +2063,10 @@ async def remove_background(
             return ToolResponse(
                 success=True,
                 result_url=result_url,
-                credits_used=3,
+                # Return the amount actually charged (ServicePricing-override and
+                # admin-aware), not a hardcoded 3 — otherwise the client store
+                # over-deducts the displayed balance by 1 on every call.
+                credits_used=_credits_charged(current_user, CREDIT_COST),
                 message="Background removed successfully"
             )
         else:
@@ -2750,6 +2814,12 @@ async def _try_on_inner(
                     f"studio lighting."
                 )
 
+            # Kontext has no negative_prompt field, so fold the user's
+            # negatives into the positive instruction (mirrors how
+            # product-scene appends negatives to its prompt).
+            if request.negative_prompt:
+                final_prompt = f"{final_prompt} Avoid: {request.negative_prompt}."
+
             provider_router = get_provider_router()
             i2i_params = {
                 "image_url": model_url,
@@ -3442,9 +3512,11 @@ async def _room_redesign_inner(
 
         # High-quality model opt-in (Nano Banana Pro). The reference image is
         # only meaningful on the nano-banana path (true multi-image input);
-        # Kontext is single-image so it's ignored there.
-        redesign_model = "nano-banana-pro" if request.quality == "high" else None
+        # Kontext is single-image so it's ignored there. So a style reference
+        # also promotes the model — otherwise an uploaded reference would be
+        # silently dropped on Standard quality.
         style_ref_url = request.get_style_reference_url()
+        redesign_model = "nano-banana-pro" if (request.quality == "high" or style_ref_url) else None
 
         async def _one_render(idx: int) -> str | None:
             prompt = style_prompt + (DIVERSIFIERS[idx] if idx < len(DIVERSIFIERS) else "")
@@ -3814,6 +3886,12 @@ async def _generate_short_video_inner(
 
         if request.model_id:
             task_params["model"] = request.model_id
+            # The "Veo 3.1 (with audio)" short-video option is a premium choice;
+            # the Veo I2V branch defaults generate_audio=False, so without this
+            # the user pays for audio and gets a silent clip. Enable it for the
+            # Veo family (Kling audio is handled separately via KLING_VIDEO).
+            if "veo" in str(request.model_id).lower():
+                task_params["generate_audio"] = True
 
         # Kling family routing — when the user picks a Kling tier from the
         # short-video model dropdown (kling_omni / kling_v3 / kling_v2 / etc.)
@@ -3833,12 +3911,21 @@ async def _generate_short_video_inner(
                 kling_tier = "flagship"
             else:
                 kling_tier = "default"
+            # kling_v3_std and kling_omni are BOTH Kling 3.0; the SKU the UI
+            # sells is audio — "V3.0 standard" (silent, 65cr) vs "V3.0 PRO with
+            # audio" (130cr). Drive enable_audio off the model id so the two
+            # tiers genuinely differ (without this both rendered 3.0 + audio and
+            # the 130cr tier delivered nothing extra). At version 3.0 the
+            # provider keeps mode='pro' but honors enable_audio=False → a real
+            # silent standard render.
+            kling_with_audio = ("omni" in mid or "pro" in mid or "audio" in mid)
             from app.services.tier_config import get_user_tier
             result = await provider_router.route(
                 TaskType.KLING_VIDEO,
                 {
                     **task_params,
                     "tier": kling_tier,
+                    "enable_audio": kling_with_audio,
                     "on_submit": _on_short_video_submit,
                 },
                 user_tier=get_user_tier(current_user),
@@ -4902,13 +4989,15 @@ async def _generate_avatar_inner(
         # the chosen preset (not the visitor's photo), and the script is
         # auto-translated per locale, so neither belongs in the key. Keying on
         # prompt_id lets all visitors who pick the same preset share its one
-        # cached demo; the generic avatar fallback (topic=None) in
-        # DemoCacheService keeps it from 503-ing when a preset has no row yet.
-        return await _demo_response(
+        # cached demo. We return BOTH the EN and zh-TW pre-rendered videos so
+        # every visitor can watch both language versions (owner request); the
+        # generic avatar fallback inside keeps it from 503-ing when a preset has
+        # no row yet.
+        return await _avatar_demo_response(
             db,
-            ToolType.AI_AVATAR,
-            topic=(request.prompt_id or None),
-            cta="Subscribe to create your own avatars.",
+            request.prompt_id or None,
+            request.language,
+            "Subscribe to create your own avatars.",
         )
 
     # ========== SUBSCRIBER: Real-time Generation ==========
@@ -5025,6 +5114,7 @@ async def _generate_avatar_inner(
                     task_id, exc,
                 )
 
+        from app.services.tier_config import get_user_tier
         result = await provider_router.route(
             TaskType.AVATAR,
             {
@@ -5041,7 +5131,8 @@ async def _generate_avatar_inner(
                 # hard ceiling — keep AVATAR_MAX_TIMEOUT_SEC strictly below.
                 "timeout": _avatar_timeout,
                 "on_submit": _on_avatar_submit,
-            }
+            },
+            user_tier=get_user_tier(current_user),
         )
 
         if result.get("success"):
@@ -5347,6 +5438,18 @@ class MidjourneyImagineRequest(BaseModel):
             "against PiAPI's live catalog 2026-05-20)."
         ),
     )
+    prompt_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Curated premium_image preset id (e.g. 'pi_001'). When set and the "
+            "prompt is the unmodified preset text, free visitors receive the "
+            "cached demo example instead of the subscribe wall."
+        ),
+    )
+    locale: Optional[str] = Field(
+        None, max_length=10,
+        description="UI locale hint for prompt_id resolution (zh-* → Chinese variant).",
+    )
 
 
 @router.post("/midjourney-imagine", response_model=ToolResponse)
@@ -5367,10 +5470,24 @@ async def midjourney_imagine(
 
     UI still calls this path; clients don't need any change.
     """
-    # Premium image generation is a custom-prompt tool → subscription + bound
-    # card required (admins / test accounts bypass).
-    if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
+    # ========== ACCESS GATE: preset → cached demo, custom prompt → subscribe ==========
+    # Resolve the curated premium_image dropdown prompt server-side. A free
+    # visitor who picks an UNMODIFIED preset gets the pregenerated cached example
+    # (Nano Banana Pro), so they can "try" the tool for free; a typed/edited
+    # prompt still requires subscription + bound card. (admins/test bypass.)
+    curated = _resolve_curated_prompt("premium_image", request.prompt_id, request.locale)
+    if curated:
+        request.prompt = curated
+    _gate = await _custom_prompt_gate(db, current_user, is_custom=not bool(curated))
+    if _gate == "blocked":
         return _subscribe_card_required_response()
+    if _gate == "demo":
+        return await _demo_response(
+            db,
+            ToolType.MIDJOURNEY_IMAGINE,
+            topic=(request.prompt_id or None),
+            cta="Subscribe to generate your own images.",
+        )
 
     # Plan-tier gate for the optional T2I model dropdown — Qwen is pro+,
     # Flux/Z-Image are basic. Skipped when no model is sent (Flux default).
@@ -5406,6 +5523,11 @@ async def midjourney_imagine(
         route_params: Dict[str, Any] = {
             "prompt": request.prompt,
             "size": size,
+            # Forward the raw ratio too: the nano-banana / nano-banana-pro /
+            # seedream branches in text_to_image() read params["aspect_ratio"]
+            # (not size→WxH like flux/qwen/z-image), so without this they
+            # always render 1:1 regardless of the user's selection.
+            "aspect_ratio": request.aspect_ratio,
         }
         if request.model and request.model.lower() != "flux":
             # piapi_provider.text_to_image() picks the family by params["model"]:

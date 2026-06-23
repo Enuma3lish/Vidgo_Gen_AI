@@ -872,3 +872,40 @@ if should_run 14 "summary"; then
   echo ""
   echo -e "${GREEN}${BOLD}Deployment complete!${NC}"
 fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POST-DEPLOY: visitor demo-example cache (T2I / T2V / AI Avatar)
+#
+# Runs AFTER the new revision is live (so the pregen Job pins the new image that
+# carries the synced prompt_library.json + demo code). CHECKS the cache FIRST:
+# if the demos are already populated it skips pregeneration entirely (no credits
+# spent) — only when missing does it run `gcp/pregen.sh demos`, which is
+# itself idempotent + cost-confirmed. So routine deploys never re-spend.
+#
+#   PREGEN_DEMOS=skip   → never run this hook
+#   PREGEN_READY_MIN=N  → per-tool demo count considered "ready" (default 30)
+#   PREGEN_FLAGS="..."  → flags passed to the runner (default: --full --yes)
+# ═══════════════════════════════════════════════════════════════════════════
+if [[ "${PREGEN_DEMOS:-auto}" != "skip" ]]; then
+  step "POST" "Visitor demo cache (T2I / T2V / AI Avatar)"
+  READY_MIN="${PREGEN_READY_MIN:-30}"
+  _demo_count() {
+    curl -fsS "https://${CUSTOM_DOMAIN_BACKEND}/api/v1/demo/presets/$1" 2>/dev/null \
+      | python3 -c 'import sys,json;print(int(json.load(sys.stdin).get("count",0)))' 2>/dev/null || echo 0
+  }
+  T2I_N=$(_demo_count midjourney_imagine)
+  T2V_N=$(_demo_count short_video)
+  AV_N=$(_demo_count ai_avatar)
+  log "Demo cache counts — t2i=${T2I_N}  t2v=${T2V_N}  avatar=${AV_N}  (ready when each ≥ ${READY_MIN})"
+  if [[ "${T2I_N}" -ge "${READY_MIN}" && "${T2V_N}" -ge "${READY_MIN}" && "${AV_N}" -ge "${READY_MIN}" ]]; then
+    log "Demo cache already populated — skipping pregeneration (no credits spent)."
+  else
+    warn "Demo cache not fully populated → running pregeneration (spends real credits, multi-hour)."
+    PREGEN_FLAGS_DEFAULT="--full --yes"
+    if bash "${SCRIPT_DIR}/pregen.sh" demos ${PREGEN_FLAGS:-${PREGEN_FLAGS_DEFAULT}}; then
+      log "Demo-example pregeneration finished — visitor demos are live."
+    else
+      warn "Pregeneration job failed — re-run later: bash gcp/pregen.sh demos --full"
+    fi
+  fi
+fi

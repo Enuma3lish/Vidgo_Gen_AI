@@ -98,16 +98,16 @@ All three scripts use PiAPI Flux T2I with strict prompts ("head and shoulders", 
 
 ```bash
 # All 64 product × scene combos (3–5 min runtime, ~$2 PiAPI)
-bash gcp/pregen-materials.sh --tool product_scene --limit 64 --clean --yes
+bash gcp/pregen.sh materials --tool product_scene --limit 64 --clean --yes
 
 # All 88 source × style combos (~40 min runtime, ~$1 PiAPI)
-bash gcp/pregen-materials.sh --tool effect --limit 88 --clean --yes
+bash gcp/pregen.sh materials --tool effect --limit 88 --clean --yes
 
 # Try-on: 30 combos (3F × 6 garments + 3M × 4 garments, gender-restricted items filtered)
-bash gcp/pregen-materials.sh --tool try_on --limit 36 --clean --yes
+bash gcp/pregen.sh materials --tool try_on --limit 36 --clean --yes
 
 # AI avatar: 24 combos (6 avatars × 2 languages × 2 scripts, ~60 min, slow Kling Avatar)
-bash gcp/pregen-materials.sh --tool ai_avatar --limit 24 --clean --yes
+bash gcp/pregen.sh materials --tool ai_avatar --limit 24 --clean --yes
 ```
 
 Key flags:
@@ -116,7 +116,7 @@ Key flags:
 - `--limit N` — caps the number of combos per run.
 - `--yes` — non-interactive; skips the "burns real credits" prompt.
 
-The job reuses the live `vidgo-backend:latest` image and needs the backend's Direct VPC egress + Cloud SQL wiring (the pregen-materials.sh script sets these explicitly — `--network vidgo-vpc --subnet vidgo-subnet --vpc-egress all-traffic` + `--set-cloudsql-instances` — so the job can reach private-IP Postgres).
+The job reuses the live `vidgo-backend:latest` image and needs the backend's Direct VPC egress + Cloud SQL wiring (the pregen.sh script sets these explicitly — `--network vidgo-vpc --subnet vidgo-subnet --vpc-egress all-traffic` + `--set-cloudsql-instances` — so the job can reach private-IP Postgres).
 
 ## Backend components
 
@@ -159,7 +159,7 @@ curl -sS "https://api.vidgo.co/api/v1/demo/presets/product_scene?limit=200" \
 
 # Drop all rows for a tool and re-pregen (destructive — visitors see loading
 # spinners until the new rows land)
-bash gcp/pregen-materials.sh --tool effect --clean --limit 88 --yes
+bash gcp/pregen.sh materials --tool effect --clean --limit 88 --yes
 ```
 
 ## Adding a new preset combo

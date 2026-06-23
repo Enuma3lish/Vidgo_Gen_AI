@@ -27,7 +27,7 @@ const successMsg = ref('')
 const buyerEmail = ref('')
 const taxType = ref<'taxable' | 'zero_tax' | 'tax_free' | 'mixed'>('taxable')
 const receiptMode = ref<'carrier' | 'donation'>('carrier')
-const carrierType = ref<'mobile_barcode' | 'citizen_cert' | 'email'>('mobile_barcode')
+const carrierType = ref<'mobile_barcode' | 'email'>('mobile_barcode')
 const carrierNumber = ref('')
 const loveCode = ref('')
 
@@ -202,7 +202,6 @@ async function handleSubmit() {
           <select v-model="carrierType"
                   class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-400 bg-white">
             <option value="mobile_barcode">{{ t('einvoice.mobileBarcode') }}</option>
-            <option value="citizen_cert">{{ t('einvoice.citizenCert') }}</option>
             <option value="email">Email</option>
           </select>
         </div>

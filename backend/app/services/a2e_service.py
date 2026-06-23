@@ -178,6 +178,13 @@ class A2EAvatarService:
             Tuple of (success, audio_url or error)
         """
         tts_id = tts_id or self.DEFAULT_TTS_ID
+        # A2E's TTS expects a 24-char hex voice id. The /avatar/voices list
+        # serves OpenAI-style names (alloy/echo/…) that the PiAPI-primary path
+        # uses; if one of those reaches A2E it would be an invalid voice, so
+        # fall back to A2E's default voice and still render (rather than 400).
+        import re
+        if not re.fullmatch(r"[0-9a-fA-F]{24}", str(tts_id)):
+            tts_id = self.DEFAULT_TTS_ID
 
         payload = {
             "msg": text,
@@ -339,7 +346,10 @@ class A2EAvatarService:
                                 status = "succeed"
                             elif status in ["failed", "error", "fail"]:
                                 status = "failed"
-                            elif status in ["init", "process", "processing"]:
+                            elif status in ["init", "start", "process", "processing", "queue", "queueing"]:
+                                # A2E's generate response returns status "start"
+                                # initially; treat all in-flight states as pending
+                                # so the poller keeps waiting instead of bailing.
                                 status = "pending"
 
                             return {

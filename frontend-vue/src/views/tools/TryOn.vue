@@ -101,7 +101,6 @@ const garmentCategory = ref<'upper_body' | 'lower_body' | 'dress' | 'full_body'>
 // ─── Pro controls (collapsed by default — casual users never see them) ──
 const showAdvanced = ref(false)
 const negativePrompt = ref('')                              // things to avoid
-const angle = ref<'front' | 'side' | 'back'>('front')       // camera angle for the result
 
 // Outfit presets for Kontext mode — Kling 3.0 style instruction prompts.
 const outfitPresets = [
@@ -164,7 +163,6 @@ async function generate() {
       ? { modelId: selectedPresetModelId.value }
       : { modelImageUrl: personUrl! }
     // Pro controls — only sent when set, so defaults stay backend-driven.
-    apiPayload.angle = angle.value
     if (negativePrompt.value.trim()) apiPayload.negativePrompt = negativePrompt.value.trim()
     let result
     if (mode.value === 'garment') {
@@ -421,27 +419,6 @@ function gotoPricing() { router.push('/pricing') }
         </button>
 
         <div v-if="showAdvanced" class="mt-3 space-y-3">
-          <!-- Result angle -->
-          <div>
-            <label class="pp-field-label">{{ L('成品角度', 'Result Angle', '結果のアングル', '결과 각도', 'Ángulo') }}</label>
-            <div class="grid grid-cols-3 gap-2">
-              <button
-                v-for="opt in [
-                  { id: 'front' as const, label: L('正面', 'Front', '正面', '정면', 'Frente') },
-                  { id: 'side' as const,  label: L('側面', 'Side', '横', '측면', 'Lado') },
-                  { id: 'back' as const,  label: L('背面', 'Back', '背面', '뒷면', 'Atrás') },
-                ]"
-                :key="opt.id"
-                type="button"
-                @click="angle = opt.id"
-                class="text-xs py-2 rounded transition-colors"
-                :style="angle === opt.id
-                  ? 'background: rgba(124,58,237,0.25); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.4);'
-                  : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
-              >{{ opt.label }}</button>
-            </div>
-          </div>
-
           <!-- Negative prompt -->
           <div>
             <label class="pp-field-label">{{ L('負面提示（避免什麼）', 'Negative Prompt (what to avoid)', 'ネガティブプロンプト', '네거티브 프롬프트', 'Prompt negativo') }}</label>

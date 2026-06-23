@@ -486,7 +486,16 @@ async def handle_subscription_renewal(db: AsyncSession, data: dict):
         logger.warning(f"Renewal: missing plan/user for {paypal_sub_id}")
         return {"success": False, "error": "missing plan or user"}
 
-    credits = plan.monthly_credits or plan.weekly_credits or 0
+    # Use the cycle-aware grant so yearly subscribers get the 11/12 prorated
+    # allotment on renewal (mirrors handle_payment_success), instead of the full
+    # monthly_credits every cycle.
+    from app.services.subscription_service import subscription_period_credits
+    billing_cycle = (
+        getattr(subscription, "billing_cycle", None)
+        or (order.payment_data or {}).get("billing_cycle")
+        or "monthly"
+    )
+    credits = subscription_period_credits(plan, order.payment_method, billing_cycle)
     if credits > 0:
         # Subscription credits are a *replacement* allotment, not additive,
         # to mirror what handle_payment_success does on the first activation.

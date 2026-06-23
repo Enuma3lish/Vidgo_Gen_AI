@@ -346,11 +346,11 @@ onMounted(loadPlans)
       <div class="grid-2col">
         <label>
           <span>{{ L('描述（中文）', 'Description (中文)') }}</span>
-          <input v-model="editing.description_zh" :placeholder="L('例：1080p HD、無浮水印、450 點/月', 'e.g. 1080p HD, no watermark, 450 cr/mo')" />
+          <input v-model="editing.description_zh" :placeholder="L('例：1080p HD、無浮水印、450 點/月', 'e.g. 1080p HD, no watermark, 450/mo')" />
         </label>
         <label>
           <span>{{ L('描述（English）', 'Description (English)') }}</span>
-          <input v-model="editing.description_en" :placeholder="L('例：1080p HD, no watermark, 450 cr/mo', 'e.g. 1080p HD, no watermark, 450 cr/mo')" />
+          <input v-model="editing.description_en" :placeholder="L('例：1080p HD, no watermark, 450/mo', 'e.g. 1080p HD, no watermark, 450/mo')" />
         </label>
       </div>
 

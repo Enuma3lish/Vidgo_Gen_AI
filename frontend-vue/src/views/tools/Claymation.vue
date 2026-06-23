@@ -57,7 +57,7 @@ const disabled = computed(() => {
   if (needsImage.value && !imageInput.value) return true
   return false
 })
-const creditCost = computed(() => isVideoMode.value ? 50 : 8)
+const creditCost = computed(() => isVideoMode.value ? 50 : 50)
 
 function pickMode(next: Mode) {
   mode.value = next

@@ -110,6 +110,11 @@ class Subscription(Base):
     start_date = Column(DateTime(timezone=True))
     end_date = Column(DateTime(timezone=True))
     auto_renew = Column(Boolean, default=True)
+    # Per-subscription billing cycle ("monthly" | "yearly"). Read by the webhook
+    # activation path + the recurring-credit worker + credit_service to decide
+    # the prorated grant. Without this column those reads raised AttributeError,
+    # which silently failed every PayPal subscription activation.
+    billing_cycle = Column(String, default="monthly", server_default="monthly")
 
     # Persisted refund-eligibility flag. Owner directive 2026-05-25.
     # Starts TRUE on subscribe; auto-flipped to FALSE the first time the

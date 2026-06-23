@@ -691,7 +691,7 @@ class CreditService:
                     .limit(1)
                 )
                 sub = sub_res.scalar_one_or_none()
-                billing_cycle = (sub.billing_cycle if sub else "monthly") or "monthly"
+                billing_cycle = (getattr(sub, "billing_cycle", None) if sub else "monthly") or "monthly"
                 is_yearly = billing_cycle == "yearly"
 
                 if plan:

@@ -24,7 +24,12 @@ from typing import Any, Dict, List, Optional
 
 from app.providers.base import BaseProvider
 from app.core.model_registry import POLLO_MODELS as _POLLO_REG
-from app.services.pollo_ai import POLLO_MODELS, PolloAIClient
+from app.services.pollo_ai import (
+    POLLO_MODELS,
+    POLLO_IMAGE_MODELS,
+    DEFAULT_IMAGE_MODEL,
+    PolloAIClient,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,20 +57,83 @@ class PolloProvider(BaseProvider):
     # ─────────────────────────────────────────────────────────────────────────
 
     async def text_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        # Pollo does not expose a generic T2I REST endpoint that we use; the
-        # router will fall through to PiAPI/Vertex.
-        return {
-            "success": False,
-            "error": "Pollo REST does not implement text_to_image; falling through.",
-        }
+        """Text-to-image via Pollo's per-model /generation/<vendor>/<slug>/image endpoint.
+
+        Pollo is the backup for PiAPI on image generation. Endpoint + body
+        verified against docs.pollo.ai 2026-06-23.
+        """
+        self._log_request("text_to_image", params)
+
+        prompt = params.get("prompt") or ""
+        if not prompt:
+            return {"success": False, "error": "prompt required for Pollo text_to_image"}
+
+        endpoint = self._image_endpoint(params.get("model"))
+        result = await self._client.generate_image(
+            prompt=prompt,
+            endpoint=endpoint,
+            aspect_ratio=self._aspect_ratio(params),
+            resolution=self._image_resolution(params),
+            timeout=int(params.get("timeout", 600)),
+        )
+        if result.get("success") and result.get("image_url"):
+            return {"success": True, "task_id": result.get("task_id"), "output": {"image_url": result["image_url"]}}
+        return {"success": False, "error": result.get("error") or "Pollo text_to_image failed"}
+
+    async def image_to_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Image-to-image / image-edit via Pollo image models (input.imageUrl).
+
+        Backs up PiAPI for I2I, effects, recolor and interior (styled I2I).
+        """
+        self._log_request("image_to_image", params)
+
+        image_url = params.get("image_url") or params.get("image")
+        if not image_url:
+            return {"success": False, "error": "image_url required for Pollo image_to_image"}
+
+        endpoint = self._image_endpoint(params.get("model"))
+        result = await self._client.generate_image(
+            prompt=params.get("prompt") or params.get("custom_prompt") or "",
+            endpoint=endpoint,
+            aspect_ratio=self._aspect_ratio(params),
+            resolution=self._image_resolution(params),
+            image_url=image_url,
+            timeout=int(params.get("timeout", 600)),
+        )
+        if result.get("success") and result.get("image_url"):
+            return {"success": True, "task_id": result.get("task_id"), "output": {"image_url": result["image_url"]}}
+        return {"success": False, "error": result.get("error") or "Pollo image_to_image failed"}
 
     async def text_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        # Pollo's per-model T2V endpoints differ per model and are not yet
-        # wired here. Reject so the router falls back to Pollo MCP / PiAPI Wan.
-        return {
-            "success": False,
-            "error": "Pollo REST text_to_video not implemented; falling through.",
-        }
+        """Pure text-to-video via a Pollo per-model video endpoint (no source image).
+
+        Body verified against docs.pollo.ai 2026-06-23 (pollo-v1-6 T2V).
+        """
+        self._log_request("text_to_video", params)
+
+        prompt = params.get("prompt") or ""
+        if not prompt:
+            return {"success": False, "error": "prompt required for Pollo text_to_video"}
+
+        # pollo-v1-6 is the verified T2V default; an explicit model_id still wins
+        # (e.g. kling/hailuo, which also accept the prompt-only T2V body).
+        requested = params.get("model")
+        model = self._normalize_model(requested) if requested else "pollo-v1-6"
+        endpoint = POLLO_MODELS.get(model, {}).get("endpoint")
+        if not endpoint:
+            return {"success": False, "error": f"Pollo has no T2V endpoint for model '{model}'"}
+
+        result = await self._client.generate_text_to_video(
+            prompt=prompt,
+            endpoint=endpoint,
+            resolution=str(params.get("resolution") or "720p"),
+            length=self._normalize_length(model, params.get("duration") or params.get("length")),
+            aspect_ratio=self._aspect_ratio(params, default="16:9"),
+            timeout=int(params.get("timeout", 1200)),
+        )
+        if result.get("success") and result.get("video_url"):
+            return {"success": True, "task_id": result.get("task_id"), "output": {"video_url": result["video_url"]}}
+        return {"success": False, "error": result.get("error") or "Pollo text_to_video failed"}
 
     async def image_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -81,6 +149,14 @@ class PolloProvider(BaseProvider):
             return {"success": False, "error": "image_url required for Pollo I2V"}
 
         model = self._normalize_model(params.get("model"))
+        if model is None:
+            # Explicit model Pollo can't serve → soft-fail so the router falls
+            # back to PiAPI (which serves the real Wan/Veo/etc.) instead of
+            # silently rendering a Pixverse substitute the user didn't pick.
+            return {
+                "success": False,
+                "error": f"Pollo has no endpoint for requested model '{params.get('model')}'",
+            }
         prompt = params.get("prompt") or "smooth motion, cinematic quality"
         negative_prompt = params.get("negative_prompt") or (
             "blurry, distorted, low quality, jerky motion"
@@ -97,6 +173,9 @@ class PolloProvider(BaseProvider):
             model=model,
             negative_prompt=negative_prompt,
             length=length,
+            # Honor a caller-supplied ratio (Kling/Sora I2V backup sends 9:16
+            # etc.); None on the short-video I2V tab → Pollo's model default.
+            aspect_ratio=params.get("aspect_ratio") or params.get("aspectRatio"),
         )
         if not success:
             return {"success": False, "error": task_id, "model": model}
@@ -142,8 +221,59 @@ class PolloProvider(BaseProvider):
     # ─────────────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _normalize_model(model: Optional[str]) -> str:
-        """Map frontend model_id aliases to keys present in POLLO_MODELS."""
+    def _image_endpoint(model: Optional[str]) -> str:
+        """Map a requested image model to a Pollo image endpoint.
+
+        The router's backup path usually passes the PiAPI slug (flux/qwen/…) or
+        'default'; Pollo has its own image catalogue, so we map known families
+        to their Pollo analog and fall back to the verified default
+        (nano-banana-2) for anything unrecognized — the backup must never
+        hard-fail on routing.
+        """
+        m = str(model or "").strip().lower()
+        aliases = {
+            "nano-banana": "nano_banana_2",
+            "nano_banana": "nano_banana_2",
+            "nano-banana-2": "nano_banana_2",
+            "nano-banana-pro": "nano_banana_pro",
+            "nano_banana_pro": "nano_banana_pro",
+            "gpt-image": "gpt_image_2",
+            "gpt_image_2": "gpt_image_2",
+            "seedream": "seedream_5_lite",
+            "seedream_5_lite": "seedream_5_lite",
+            "midjourney": "pollojourney",
+            "pollojourney": "pollojourney",
+        }
+        key = aliases.get(m, DEFAULT_IMAGE_MODEL)
+        info = POLLO_IMAGE_MODELS.get(key) or POLLO_IMAGE_MODELS[DEFAULT_IMAGE_MODEL]
+        return info["endpoint"]
+
+    @staticmethod
+    def _aspect_ratio(params: Dict[str, Any], default: str = "1:1") -> str:
+        ar = params.get("aspect_ratio") or params.get("aspectRatio") or params.get("ratio")
+        return str(ar) if ar else default
+
+    @staticmethod
+    def _image_resolution(params: Dict[str, Any]) -> str:
+        """Map our quality/resolution hints to Pollo's 1K/2K/4K enum."""
+        res = str(params.get("resolution") or "").upper()
+        if res in ("1K", "2K", "4K"):
+            return res
+        quality = str(params.get("quality") or "").lower()
+        if quality in ("high", "hd", "ultra"):
+            return "2K"
+        return "1K"
+
+    @staticmethod
+    def _normalize_model(model: Optional[str]) -> Optional[str]:
+        """Map a requested model id to a key in POLLO_MODELS.
+
+        Returns the pixverse default ONLY when the caller requested no specific
+        model. For an explicitly-requested model that Pollo cannot serve this
+        returns None, so the caller soft-fails and the router falls through to
+        PiAPI — rather than silently substituting a different (cheaper) model
+        the user never picked (the wan/wan2.6/kling2.5 → pixverse defect).
+        """
         default_model = _POLLO_REG["pixverse_default"]
         if not model:
             return default_model
@@ -186,8 +316,11 @@ class PolloProvider(BaseProvider):
         m = aliases.get(m, m)
         if m in POLLO_MODELS:
             return m
-        logger.warning(f"[Pollo REST] Unknown model '{model}', defaulting to {default_model}")
-        return default_model
+        logger.warning(
+            f"[Pollo REST] No Pollo endpoint for requested model '{model}' — "
+            f"soft-failing so the router falls back to PiAPI (no silent substitution)."
+        )
+        return None
 
     @staticmethod
     def _normalize_length(model: str, length: Any) -> int:

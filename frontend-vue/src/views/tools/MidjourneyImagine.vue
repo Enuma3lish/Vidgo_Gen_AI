@@ -10,11 +10,12 @@
  * endpoint name is kept for backward URL compatibility but Flux is the
  * actual primary route.)
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useDemoMode, useLocalized } from '@/composables'
+import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
@@ -54,22 +55,53 @@ const modelOptions: Array<{ id: ModelId; nameZh: string; nameEn: string; tag?: s
 const modelId = ref<ModelId>('flux')
 const prompt = ref('')
 const aspectRatio = ref<'1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'>('1:1')
-const processMode = ref<'relax' | 'fast' | 'turbo'>('fast')
+
+// Curated dropdown presets (premium_image). Free visitors who pick an
+// unmodified preset get the pregenerated cached demo (top-model Nano Banana
+// Pro); subscribers send the same verbatim prompt for a real generation.
+const { options: presetOptions, promptFor: presetPromptFor } = usePromptLibrary('premium_image')
+const selectedPresetId = ref('')
+function applyPreset() {
+  if (!selectedPresetId.value) return
+  prompt.value = presetPromptFor(selectedPresetId.value)
+}
+// Editing the prompt away from the preset text de-selects it (so it counts as a
+// custom prompt → subscribe wall, matching the backend gate).
+watch(prompt, (val) => {
+  if (selectedPresetId.value && val.trim() !== presetPromptFor(selectedPresetId.value).trim()) {
+    selectedPresetId.value = ''
+  }
+})
+const usingPreset = computed(() =>
+  !!selectedPresetId.value && prompt.value.trim() === presetPromptFor(selectedPresetId.value).trim()
+)
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
 const disabled = computed(() => !prompt.value.trim())
+// Free visitors may run an unmodified preset (cached demo); a custom prompt
+// needs a subscription. So a demo user is only "ready" once a preset is picked.
+const generateDisabled = computed(() =>
+  isDemoUser.value ? !usingPreset.value : disabled.value
+)
 const currentModel = computed(() => modelOptions.find(m => m.id === modelId.value) || modelOptions[0])
 const creditCost = computed(() => currentModel.value.cost)
 
 async function generate() {
-  if (disabled.value || status.value === 'running') return
-  if (isDemoUser.value) {
-    uiStore.showInfo(L('請訂閱以使用此工具', 'Please subscribe to use this tool', 'サブスク登録してください', '구독해 주세요', 'Suscríbete'))
+  if (status.value === 'running') return
+  if (isDemoUser.value && !usingPreset.value) {
+    uiStore.showInfo(L(
+      '選擇一個範例提示詞即可免費試用，或訂閱以使用自訂提示詞',
+      'Pick a preset to try it free, or subscribe to use a custom prompt',
+      'プリセットを選んで無料体験、またはサブスク登録',
+      '프리셋을 선택해 무료 체험하거나 구독하세요',
+      'Elige un preajuste para probar gratis o suscríbete',
+    ))
     return
   }
+  if (disabled.value) return
   status.value = 'running'
   statusText.value = isZh.value ? '生成中…' : 'Generating…'
   resultUrl.value = null
@@ -77,8 +109,11 @@ async function generate() {
     const result = await toolsApi.midjourneyImagine({
       prompt: prompt.value.trim(),
       aspectRatio: aspectRatio.value,
-      processMode: processMode.value,
       model: modelId.value,
+      // When an unmodified preset is selected, send its id so free visitors get
+      // the cached demo and the backend uses the canonical prompt text.
+      promptId: usingPreset.value ? selectedPresetId.value : undefined,
+      locale: String(locale.value || ''),
     })
     if (handleCardRequired(result, uiStore, router, isZh.value)) {
       status.value = 'idle'
@@ -115,7 +150,7 @@ function gotoPricing() { router.push('/pricing') }
     :credit-cost="creditCost"
     :generate-label="isZh ? '生成圖片' : 'Generate'"
     :generate-label-running="isZh ? '生成中…' : 'Generating…'"
-    :disabled="disabled || isDemoUser"
+    :disabled="generateDisabled"
     @generate="generate"
   >
     <template #inputs>
@@ -132,6 +167,14 @@ function gotoPricing() { router.push('/pricing') }
         <label class="pp-field-label">{{ isZh ? '任務類型 *' : 'Task Type *' }}</label>
         <select class="pp-select" disabled>
           <option>txt2img</option>
+        </select>
+      </div>
+
+      <div v-if="presetOptions.length > 0">
+        <label class="pp-field-label">{{ isZh ? '範例提示詞（免費試用）' : 'Example prompt (free to try)' }}</label>
+        <select v-model="selectedPresetId" @change="applyPreset" class="pp-select">
+          <option value="">{{ isZh ? '— 自訂提示詞 —' : '— Custom prompt —' }}</option>
+          <option v-for="opt in presetOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
         </select>
       </div>
 
@@ -155,20 +198,11 @@ function gotoPricing() { router.push('/pricing') }
         </select>
       </div>
 
-      <div>
-        <label class="pp-field-label">{{ isZh ? '處理模式（速度 / 成本）' : 'Process Mode (speed / cost)' }}</label>
-        <div class="grid grid-cols-3 gap-1.5">
-          <button v-for="opt in ['relax', 'fast', 'turbo'] as const" :key="opt" type="button" @click="processMode = opt"
-            class="py-2 rounded text-xs font-medium"
-            :style="processMode === opt
-              ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: #fff;'
-              : 'background: #0a0a0f; color: #94949f; border: 1px solid rgba(255,255,255,0.08);'"
-          >{{ opt }}</button>
-        </div>
-      </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">
-        {{ isZh ? '訂閱後即可使用。' : 'Subscribe to generate your own images.' }}
+        {{ isZh
+          ? '選擇上方範例提示詞即可免費預覽；自訂提示詞需訂閱。'
+          : 'Pick an example prompt above to preview free; custom prompts need a subscription.' }}
         <button @click="gotoPricing" class="underline ml-1">{{ isZh ? '查看方案' : 'View Plans' }} →</button>
       </p>
     </template>

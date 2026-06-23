@@ -45,6 +45,15 @@ POLLO_MODELS = {
         "description": "Fast generation, good quality",
         "lengths": [5, 10]
     },
+    # Pollo's own model — supports BOTH text-to-video and image-to-video
+    # (verified body shape against docs.pollo.ai 2026-06-23). Used as the
+    # default endpoint for the text_to_video backup path.
+    "pollo-v1-6": {
+        "endpoint": "/generation/pollo/pollo-v1-6",
+        "name": "Pollo 1.6",
+        "description": "Pollo's own T2V/I2V model",
+        "lengths": [5, 8]
+    },
     # ── New tier (2026-05-19) — Pollo as backup to PiAPI on these models.
     # Endpoint slugs follow Pollo's documented pattern /generation/<vendor>/<slug>.
     # If Pollo renames any of these we rotate via the env vars in
@@ -89,8 +98,48 @@ POLLO_MODELS = {
 }
 
 
+# ── Pollo IMAGE models (text-to-image + image-to-image) ──────────────────────
+# Endpoint pattern (verified against docs.pollo.ai 2026-06-23):
+#   POST /generation/<vendor>/<slug>/image
+#   body {"input": {"prompt", "aspectRatio", "resolution", ["imageUrl"|"images"]}}
+#   resp {"taskId", "status"}  (status polled via the SAME /generation/{id}/status)
+# nano-banana-2 is the safe default (T2I + I2I both verified end-to-end). The
+# other slugs are env-overridable so ops can rotate without a rebuild; the
+# provider normalizer falls back to the default for any unknown model so the
+# image backup never hard-fails on an unverified slug.
+POLLO_IMAGE_MODELS = {
+    "nano_banana_2": {
+        "endpoint": "/generation/google/nano-banana-2/image",
+        "name": "Nano Banana 2",
+        "resolutions": ["1K", "2K", "4K"],
+    },
+    "nano_banana_pro": {
+        "endpoint": "/generation/google/nano-banana-pro/image",
+        "name": "Nano Banana Pro",
+        "resolutions": ["1K", "2K", "4K"],
+    },
+    "gpt_image_2": {
+        "endpoint": "/generation/openai/gpt-image-2-0/image",
+        "name": "GPT Image 2",
+        "resolutions": ["1K", "2K", "4K"],
+    },
+    "seedream_5_lite": {
+        "endpoint": "/generation/seedream/seedream-5-0-lite/image",
+        "name": "Seedream 5.0 Lite",
+        "resolutions": ["1K", "2K", "4K"],
+    },
+    "pollojourney": {
+        "endpoint": "/generation/pollo/pollojourney/image",
+        "name": "Pollojourney",
+        "resolutions": ["1K", "2K"],
+    },
+}
+
+DEFAULT_IMAGE_MODEL = "nano_banana_2"
+
+
 class PolloAIClient:
-    """Pollo AI API Client for Image-to-Video generation"""
+    """Pollo AI API Client — image-to-video, text-to-image, image-to-image, text-to-video."""
 
     BASE_URL = "https://pollo.ai/api/platform"
 
@@ -107,7 +156,8 @@ class PolloAIClient:
         prompt: str,
         model: str = DEFAULT_MODEL,
         negative_prompt: str = "blurry, distorted, low quality, jerky motion",
-        length: int = 5
+        length: int = 5,
+        aspect_ratio: Optional[str] = None,
     ) -> Tuple[bool, str, Optional[str]]:
         """
         Generate video from image.
@@ -133,14 +183,18 @@ class PolloAIClient:
         if length not in valid_lengths:
             length = valid_lengths[0]  # Default to shortest
 
-        payload = {
-            "input": {
-                "image": image_url,
-                "prompt": f"{prompt}, smooth motion, cinematic",
-                "negativePrompt": negative_prompt,
-                "length": length
-            }
+        _input = {
+            "image": image_url,
+            "prompt": f"{prompt}, smooth motion, cinematic",
+            "negativePrompt": negative_prompt,
+            "length": length
         }
+        # Forward the requested aspect ratio when the caller supplied one (the
+        # Kling/Sora I2V backup path passes 9:16 / 1:1 etc.); omit it otherwise
+        # so Pollo keeps its per-model default.
+        if aspect_ratio:
+            _input["aspectRatio"] = aspect_ratio
+        payload = {"input": _input}
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -173,12 +227,123 @@ class PolloAIClient:
             logger.error(f"Pollo API error: {e}")
             return False, str(e), None
 
+    async def _create_task(
+        self,
+        endpoint: str,
+        input_payload: Dict[str, Any],
+        timeout: float = 60.0,
+    ) -> Tuple[bool, str, Optional[str]]:
+        """POST a generation task to any Pollo per-model endpoint.
+
+        Shared by image / text-to-video / (future) paths. Parses the taskId
+        defensively because Pollo returns it either at the root ({"taskId": …})
+        or wrapped ({"code": "SUCCESS", "data": {"taskId": …}}) depending on the
+        model family. Returns (success, task_id_or_error, None).
+        """
+        if not self.api_key:
+            return False, "Pollo API key not configured", None
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}{endpoint}",
+                    headers=self.headers,
+                    json={"input": input_payload},
+                )
+
+                if response.status_code != 200:
+                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    logger.error(f"Pollo create-task error ({endpoint}): {error}")
+                    return False, error, None
+
+                data = response.json()
+                logger.info(f"Pollo create-task response ({endpoint}): {data}")
+
+                code = data.get("code")
+                if code is not None and code != "SUCCESS":
+                    return False, data.get("message", "Unknown error"), None
+
+                task_id = (data.get("data") or {}).get("taskId") or data.get("taskId")
+                if not task_id:
+                    return False, data.get("message", "Pollo returned no taskId"), None
+                return True, task_id, None
+        except Exception as e:
+            logger.error(f"Pollo create-task exception ({endpoint}): {e}")
+            return False, str(e), None
+
+    async def generate_image(
+        self,
+        prompt: str,
+        endpoint: str,
+        aspect_ratio: str = "1:1",
+        resolution: str = "1K",
+        image_url: Optional[str] = None,
+        images: Optional[list] = None,
+        timeout: int = 600,
+    ) -> Dict[str, Any]:
+        """Text-to-image (no image) or image-to-image (imageUrl/images) via Pollo.
+
+        Returns {"success", "image_url"} on success. Reuses the shared status
+        poller — the completed task's media URL lands in generations[0].url.
+        """
+        input_payload: Dict[str, Any] = {
+            "prompt": prompt or "",
+            "aspectRatio": aspect_ratio or "1:1",
+            "resolution": resolution or "1K",
+        }
+        if images:
+            input_payload["images"] = images
+        elif image_url:
+            input_payload["imageUrl"] = image_url
+
+        success, task_id, _ = await self._create_task(endpoint, input_payload)
+        if not success:
+            return {"success": False, "error": task_id}
+
+        result = await self.wait_for_completion(task_id, timeout=timeout)
+        if (result.get("status") or "").lower() == "succeed" and result.get("media_url"):
+            return {"success": True, "task_id": task_id, "image_url": result["media_url"]}
+        return {
+            "success": False,
+            "task_id": task_id,
+            "error": result.get("error") or f"Pollo image task ended with status={result.get('status')}",
+        }
+
+    async def generate_text_to_video(
+        self,
+        prompt: str,
+        endpoint: str,
+        resolution: str = "720p",
+        length: int = 5,
+        aspect_ratio: str = "16:9",
+        timeout: int = 1200,
+    ) -> Dict[str, Any]:
+        """Pure text-to-video (no source image) via a Pollo per-model endpoint."""
+        input_payload = {
+            "prompt": prompt or "",
+            "resolution": resolution or "720p",
+            "length": length,
+            "aspectRatio": aspect_ratio or "16:9",
+        }
+        success, task_id, _ = await self._create_task(endpoint, input_payload)
+        if not success:
+            return {"success": False, "error": task_id}
+
+        result = await self.wait_for_completion(task_id, timeout=timeout)
+        if (result.get("status") or "").lower() == "succeed" and result.get("media_url"):
+            return {"success": True, "task_id": task_id, "video_url": result["media_url"]}
+        return {
+            "success": False,
+            "task_id": task_id,
+            "error": result.get("error") or f"Pollo T2V task ended with status={result.get('status')}",
+        }
+
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """
         Check task status using the correct Pollo API endpoint.
 
         Returns:
-            Dict with status, video_url when complete
+            Dict with status, media_url/video_url when complete
             Status values: "pending", "processing", "succeed", "failed"
         """
         try:
@@ -197,13 +362,17 @@ class PolloAIClient:
                     if generations:
                         gen = generations[0]
                         task_status = gen.get("status", "unknown")
-                        video_url = gen.get("url", "")
+                        media_url = gen.get("url", "")
                         fail_msg = gen.get("failMsg", "")
 
                         return {
                             "success": True,
                             "status": task_status,
-                            "video_url": video_url if video_url else None,
+                            # media_url is modality-agnostic (image OR video);
+                            # video_url kept for backward-compat with I2V callers.
+                            "media_url": media_url if media_url else None,
+                            "media_type": gen.get("mediaType"),
+                            "video_url": media_url if media_url else None,
                             "error": fail_msg if fail_msg else None,
                             "raw": data
                         }

@@ -151,8 +151,14 @@ PIAPI_MODELS: Dict[str, str] = {
     # (verified 2026-05-22 via live probes). Updated to the values shown in
     # PiAPI's official docs + a working 200-response curl probe:
     #
-    #   Seedance: model="seedance",      task_type="seedance-2-fast-preview"
-    #             input.image_urls=[…]   (array, NOT image_url)
+    #   Seedance: model="seedance"  (verified against piapi.ai/docs Seedance 2,
+    #             2026-06-23). task_type ∈ {seedance-2, seedance-2-fast, ...}.
+    #             input REQUIRES: prompt, mode ("text_to_video" | "first_last_frames"
+    #             | "omni_reference"), and resolution ("480p"|"720p"|"1080p",
+    #             default 480p). image_urls=[…] (array). IMPORTANT: 1080p is only
+    #             supported by the full "seedance-2" task — the "-fast" variant
+    #             tops out at 720p. The provider picks the task by requested
+    #             resolution (see piapi_provider._seedance_res_and_task).
     #   Hailuo:   model="hailuo",        task_type="video_generation"
     #             input.model="i2v-01" or "t2v-01"  (NESTED variant id)
     #   Hunyuan:  model="Qubico/hunyuan", task_type="img2video-concat" / "txt2video"
@@ -162,8 +168,15 @@ PIAPI_MODELS: Dict[str, str] = {
     # Per-family input-shape variance is handled in piapi_provider.image_to_video
     # / text_to_video — these env vars only carry the top-level model+task_type.
     "seedance_video":      os.environ.get("PIAPI_SEEDANCE_VIDEO_MODEL", "seedance"),
-    "seedance_t2v_task":   os.environ.get("PIAPI_SEEDANCE_T2V_TASK",    "seedance-2-fast-preview"),
-    "seedance_i2v_task":   os.environ.get("PIAPI_SEEDANCE_I2V_TASK",    "seedance-2-fast-preview"),
+    # 2026-06-23: updated to the current PiAPI task names. "seedance-2-fast"
+    # serves 480p/720p; the full "seedance-2" task is required for 1080p. The
+    # provider upgrades fast→full automatically when 1080p is requested.
+    "seedance_fast_task":  os.environ.get("PIAPI_SEEDANCE_FAST_TASK",   "seedance-2-fast"),  # 480p / 720p
+    "seedance_full_task":  os.environ.get("PIAPI_SEEDANCE_FULL_TASK",   "seedance-2"),       # supports 1080p
+    # Generic defaults still consumed by _VIDEO_MODEL_MAP (overridden per-call
+    # by resolution in the provider's seedance branch).
+    "seedance_t2v_task":   os.environ.get("PIAPI_SEEDANCE_T2V_TASK",    "seedance-2-fast"),
+    "seedance_i2v_task":   os.environ.get("PIAPI_SEEDANCE_I2V_TASK",    "seedance-2-fast"),
     "seedance_t2i_task":   os.environ.get("PIAPI_SEEDANCE_T2I_TASK",    "seedance2-txt2img"),  # T2I not exposed on PiAPI — placeholder
 
     "hailuo_video":        os.environ.get("PIAPI_HAILUO_VIDEO_MODEL",   "hailuo"),

@@ -109,13 +109,12 @@ async def _issue_b2c_giveme(
         for item in items
     ]
 
-    # Map carrier type to Giveme fields
-    phone = None
-    order_code = None
-    if carrier_type == "mobile_barcode" and carrier_number:
-        phone = carrier_number  # e.g. "/1234567"
-    elif carrier_type and carrier_number:
-        order_code = carrier_number
+    # Taiwan e-invoice 載具 (carrier): the buyer just inputs their carrier code,
+    # i.e. the 手機條碼載具 (mobile barcode, "/XXXXXXX") → Giveme's `phone` field.
+    # No carrier code (or the buyer chose donation / email) → the invoice is
+    # issued as a cloud/member invoice keyed to the buyer `email`. (自然人憑證 is
+    # intentionally not offered — per product scope we only collect the code.)
+    phone = carrier_number if (carrier_type == "mobile_barcode" and carrier_number) else None
 
     response = await giveme.create_b2c_invoice(
         total_fee=int(total_amount),
@@ -123,7 +122,6 @@ async def _issue_b2c_giveme(
         items=giveme_items,
         customer_name=f"VidGo Order {order.order_number}",
         phone=phone,
-        order_code=order_code,
         email=buyer_email,
         is_donation=is_donation,
         donation_code=love_code,

@@ -317,6 +317,35 @@ backend via Cloud Build (`cloudbuild.yaml`) or local build → Artifact Registry
 Full bring-up: [`gcp/deploy.sh`](./gcp/deploy.sh). Apply DB migrations **before**
 deploying a backend that contains them.
 
+### Operational scripts (`gcp/`)
+
+All scripts need `gcloud` authed to project `vidgo-ai` (`gcloud config set
+project vidgo-ai`) and **internet** — they orchestrate Cloud Run / Cloud Build /
+Cloud SQL. ⚠ Pregeneration scripts spend **real provider credits** (each prints a
+cost estimate and asks to confirm; pass `--yes` to skip the prompt).
+
+| Script | Purpose | Run |
+|---|---|---|
+| `deploy.sh` | **Full deploy** — infra + backend + frontend, idempotent. Step-selectable; auto-runs the demo pregen at the end (cache-gated, see below). | `bash gcp/deploy.sh` · `bash gcp/deploy.sh --step frontend` · `bash gcp/deploy.sh --from 5` |
+| `deploy-service.sh` | **Code-only re-deploy** (no infra change) — ship a new image fast. | `bash gcp/deploy-service.sh` · `--backend` · `--frontend` |
+| `pregen.sh` | **Unified pre-generation** runner (Cloud Run Job pinned to the live image; writes the demo cache directly, no redeploy). Subcommands below. | `bash gcp/pregen.sh <subcommand> [flags]` |
+| `seed-qa-personas.sh` | Seed QA test personas (admin + sample users) on prod. | `bash gcp/seed-qa-personas.sh` |
+| `cloud-armor-policy.sh` | Apply the Cloud Armor WAF + `/auth/*` rate-limit policy. | `bash gcp/cloud-armor-policy.sh vidgo-ai` |
+| `storage-lifecycle.json` | GCS object-lifecycle config (not a script). | `gsutil lifecycle set gcp/storage-lifecycle.json gs://vidgo-media-vidgo-ai` |
+
+**`pregen.sh` subcommands** (all idempotent — already-cached rows are skipped):
+
+| Subcommand | Populates | Example |
+|---|---|---|
+| `demos` | Visitor "try-for-free" cache: **T2I** (Nano Banana Pro) · **T2V** (Kling V3.0) · **AI Avatar** (PiAPI Kling), from the dropdown presets, EN + zh-TW. | `bash gcp/pregen.sh demos --full --yes` (smoke: omit `--full`) |
+| `avatar-shortvideo` | AI Avatar + Short-Video across the video-model matrix. | `bash gcp/pregen.sh avatar-shortvideo --full --models hailuo,wan,veo` |
+| `materials` | General per-tool material demos (8 tools). | `bash gcp/pregen.sh materials --tool ai_avatar --limit 4` |
+| `inputs` | Vertex Imagen/Veo **input** library for the (input × effect) picker. | `bash gcp/pregen.sh inputs --count 4` |
+
+`deploy.sh` auto-runs `pregen.sh demos` **after** the new revision is live — but
+first probes the demo-cache counts and **skips if already populated** (no spend).
+Disable with `PREGEN_DEMOS=skip`; tune the readiness bar with `PREGEN_READY_MIN`.
+
 ---
 
 ## Configuration

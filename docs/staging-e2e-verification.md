@@ -34,7 +34,7 @@ cross-instance test in §4 needs it, so staging must re-enable it):
 | **Guest** | No account — just browse / hit demo endpoints unauthenticated. |
 | **Free** | Register through the UI (or `backend/scripts/seed_test_user.py`), no subscription. |
 | **Subscriber** | `bash gcp/seed-qa-personas.sh` → seeds `qa-pro@vidgo.local` + `qa-premium@vidgo.local` (needs a `.qa-secrets` file). |
-| **Admin** | `ADMIN_ACCOUNT` / `ADMIN_PASSWORD` seeded by `gcp/full-deploy.sh` (Phase 3, `seed_admin`). |
+| **Admin** | `ADMIN_ACCOUNT` / `ADMIN_PASSWORD` seeded by `gcp/deploy.sh` (Phase 3, `seed_admin`). |
 
 ---
 

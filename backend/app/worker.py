@@ -171,7 +171,7 @@ async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                     # Extend subscription. Yearly auto-renew adds 365 days
                     # and grants the 11/12 prorated full-year allowance;
                     # monthly auto-renew adds 30 days and grants one month.
-                    is_yearly = (sub.billing_cycle or "monthly") == "yearly"
+                    is_yearly = (getattr(sub, "billing_cycle", None) or "monthly") == "yearly"
                     old_end = sub.end_date
                     new_end = old_end + timedelta(days=365 if is_yearly else 30)
                     sub.start_date = old_end
@@ -194,7 +194,7 @@ async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                         .order_by(_Order.created_at.desc())
                     )).scalars().first()
                     _pay_method = _last_order.payment_method if _last_order else None
-                    credits = _period_credits(plan, _pay_method, sub.billing_cycle or "monthly")
+                    credits = _period_credits(plan, _pay_method, getattr(sub, "billing_cycle", None) or "monthly")
                     if credits > 0:
                         # Expire remaining old subscription credits
                         old_credits = user.subscription_credits or 0
@@ -306,7 +306,7 @@ async def monthly_credit_reset_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                         .limit(1)
                     )
                     sub = sub_res.scalar_one_or_none()
-                    is_yearly = bool(sub and (sub.billing_cycle or "monthly") == "yearly")
+                    is_yearly = bool(sub and (getattr(sub, "billing_cycle", None) or "monthly") == "yearly")
 
                     old_credits = user.subscription_credits or 0
                     full_credits = plan.monthly_credits

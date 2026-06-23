@@ -148,7 +148,7 @@ function gotoPricing() { router.push('/pricing') }
         <label class="pp-field-label">{{ isZh ? '模型 *' : 'Model *' }}</label>
         <select v-model="modelId" class="pp-select">
           <option v-for="m in modelOptions" :key="m.id" :value="m.id">
-            {{ (isZh ? m.nameZh : m.nameEn) }} · {{ m.cost }} cr
+            {{ (isZh ? m.nameZh : m.nameEn) }} · {{ m.cost }}
           </option>
         </select>
       </div>

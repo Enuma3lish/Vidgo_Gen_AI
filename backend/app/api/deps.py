@@ -1,5 +1,5 @@
 from typing import Generator, Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from pydantic import ValidationError
@@ -22,6 +22,29 @@ reusable_oauth2_optional = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login/form",
     auto_error=False
 )
+
+async def capture_client_task_id(
+    x_client_task_id: Optional[str] = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[str]:
+    """Stash the client-minted correlation id (P0-2) on the request DB session.
+
+    The ``before_insert`` listeners in app/models/_client_task_stamp.py read
+    ``session.info['client_task_id']`` and copy it onto every UserGeneration /
+    PendingProviderTask inserted during this request. Wired as a router-level
+    dependency on the tools + generation routers, so no per-endpoint changes are
+    needed. A new GET /api/v1/user/tasks/{id} endpoint then lets the client poll
+    by this id to recover a result whose synchronous request timed out.
+    """
+    if x_client_task_id:
+        # Write to the underlying sync Session's info dict — that is exactly the
+        # object `object_session(target).info` returns inside the before_insert
+        # listener (the flush runs on the sync session). getattr fallback keeps
+        # this correct whether `db` is an AsyncSession or a plain Session.
+        sess = getattr(db, "sync_session", db)
+        sess.info["client_task_id"] = str(x_client_task_id)[:64]
+    return x_client_task_id
+
 
 # Redis connection pool
 _redis_pool: Optional[aioredis.Redis] = None

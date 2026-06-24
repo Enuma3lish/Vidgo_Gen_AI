@@ -20,3 +20,6 @@ from app.models.hero_demo_pair import HeroDemoPair
 from app.models.model_registry import ModelRegistryOverride, ModelRegistryAudit, GenerationMetric
 from app.models.pending_provider_task import PendingProviderTask, PENDING_TASK_STATUS_CHOICES
 from app.core.database import Base
+
+# Register the client_task_id auto-stamp before_insert listeners (P0-2).
+from app.models import _client_task_stamp  # noqa: E402,F401

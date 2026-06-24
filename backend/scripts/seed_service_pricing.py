@@ -398,6 +398,48 @@ SERVICE_PRICING_DATA = [
         "min_plan": "basic",
         "description": "Kling Try-On — 虛擬試穿"
     },
+
+    # ─── P0-1 (2026-06-23) — split/added so the displayed price (from this
+    # table via GET /credits/pricing) always equals the actual deduction. ──
+    # Claymation was a SINGLE "claymation"=50 row that flattened image mode's
+    # intended 10 → 50; now image and video each have their own row and the
+    # endpoint deducts via the matching key.
+    {
+        "service_type": "claymation_image",
+        "display_name": "黏土風圖片 (Claymation Image)",
+        "credit_cost": 10,
+        "api_cost_usd": Decimal("0.025"),
+        "resolution": "1024x1024",
+        "max_duration": None,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "description": "黏土風格 AI 圖片 (Seedream / Flux Kontext)"
+    },
+    {
+        "service_type": "claymation_video",
+        "display_name": "黏土風影片 (Claymation Video)",
+        "credit_cost": 50,
+        "api_cost_usd": Decimal("0.50"),
+        "resolution": "1080p",
+        "max_duration": 5,
+        "subscribers_only": True,
+        "min_plan": "pro",
+        "description": "黏土風格 AI 影片 (Kling 3.0 Omni)"
+    },
+    # Render enhancer: single combined charge for enhance + upscale (was two
+    # separate deductions room_redesign 20 + image_upscale 3 = 23 while the UI
+    # mislabeled it 35). Plain upscale still bills via image_upscale (3).
+    {
+        "service_type": "render_enhance",
+        "display_name": "渲染圖優化 (Render Enhance)",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.10"),
+        "resolution": "4k",
+        "max_duration": None,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "description": "AI 細節增強 + 超解析放大 (Flux Kontext + upscale)"
+    },
 ]
 
 # Plan data (VidGo 2.0 — monthly subscription credit system)

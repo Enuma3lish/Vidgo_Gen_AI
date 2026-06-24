@@ -64,6 +64,12 @@ class PendingProviderTask(Base):
     # What the user paid up-front; the reclaim job refunds this on abandon.
     credits_charged = Column(Integer, nullable=False, default=0)
 
+    # Client correlation id (P0-2) — copied from the X-Client-Task-Id header so
+    # the frontend can poll GET /api/v1/user/tasks/{client_task_id} for the live
+    # status of a still-running job, and the reclaim worker can stamp the same
+    # id onto the UserGeneration it materialises.
+    client_task_id = Column(String(64), nullable=True, index=True)
+
     # The original route() params (image_url, script, prompt, …) so the
     # reclaim job can rebuild the UserGeneration row on success.
     input_params = Column(JSONB, default={})

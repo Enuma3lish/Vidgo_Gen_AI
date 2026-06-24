@@ -364,26 +364,28 @@ async def _maybe_recycle_for_demo(
 # generated via backend/scripts/generate_brand_assets.py --set demos and
 # uploaded to GCS. Re-running the script regenerates these files at the
 # same blob paths, so URLs stay stable.
+# Keyed by ToolType.value — `_demo_response` looks this up with the
+# `tool_type` enum it's called with (a str-Enum, so the string keys below
+# match). These keys were previously the *service_type* strings
+# ("image_generation_premium" / "video_generation_*"), which NEVER matched
+# the ToolType passed in, so the lookup always returned None and the premium
+# image demo (Midjourney Imagine) fell through to DemoCacheService — which
+# has no Material rows and no _generate_on_demand handler for it — and 503'd
+# every free-visitor preset ("error for all models"). Fixed 2026-06-23.
 _PREMIUM_DEMO_FALLBACKS = {
-    "image_generation_premium": {
+    ToolType.MIDJOURNEY_IMAGINE.value: {
         "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/premium/demos/premium-image.png",
         "kind": "image",
         "prompt": "Cinematic golden-hour city skyline with dramatic clouds (Premium AI Image demo).",
     },
-    # Kling Video — standard tier (tier="default" in the request, used by
-    # most non-premium subscribers). Same MP4 as the premium-tier slot
-    # because the upstream model is the same family.
-    "video_generation_standard": {
+    # Kling Video — single pre-rendered MP4 for any tier; the dedicated
+    # /kling-video endpoint is always custom-prompt (subscribe-gated) today,
+    # so this is here for parity / future demo wiring.
+    ToolType.KLING_VIDEO.value: {
         "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/premium/demos/kling-video.mp4",
         "kind": "video",
         "prompt": "Cinematic ocean waves at sunset (Kling Video demo).",
     },
-    "video_generation_premium": {
-        "result_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/premium/demos/kling-video.mp4",
-        "kind": "video",
-        "prompt": "Cinematic ocean waves at sunset (Kling Video demo).",
-    },
-    # video_generation_professional was the Luma tier — removed 2026-05-19.
 }
 
 
@@ -437,7 +439,23 @@ async def _demo_response(
         effect_prompt=effect_prompt,
     )
     if not demo:
-        raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable. Please try again.")
+        # No seeded demo for this tool yet (the preset-only guard in
+        # DemoCacheService deliberately skips on-demand generation to avoid
+        # free-tier credit burn). Degrade GRACEFULLY to the subscribe CTA
+        # instead of raising 503: a hard 503 here is masked by the frontend
+        # nginx (proxy_intercept_errors → `error_page 503 /index.html`) and
+        # reaches the user as a blank SPA shell, i.e. "the tool is broken".
+        # This was the root cause of remove-bg / upscale / recolor (and the
+        # premium-image demo) appearing unusable to visitors. Subscribers never
+        # reach this branch — they run the real generation below the gate.
+        logger.info(
+            "[demo] no demo available for tool=%s topic=%s — returning subscribe CTA instead of 503",
+            tool_type.value if hasattr(tool_type, "value") else tool_type, topic,
+        )
+        return _subscribe_card_required_response(
+            "訂閱即可在自己的檔案上使用此工具。"
+            f" / Subscribe to use this tool on your own files. {cta}".strip()
+        )
     return ToolResponse(
         success=True,
         result_url=demo["result_url"],
@@ -4105,8 +4123,16 @@ async def claymation_generate(
     if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
         return _subscribe_card_required_response()
 
+    # Distinct service_type per mode so a single ServicePricing row can't
+    # flatten the two prices. Previously BOTH modes deducted via "claymation"
+    # → ServicePricing["claymation"]=50 overrode the image fallback (10) and
+    # image generations were silently charged 50 while the UI showed 10 and
+    # the gallery recorded 10 (P0-1 display↔deduction mismatch). Now image →
+    # claymation_image (10), video → claymation_video (50); the gallery and
+    # response both report the actual effective charge.
     CREDIT_COST = 50 if is_video else 10
-    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "claymation")
+    service_type = "claymation_video" if is_video else "claymation_image"
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, service_type)
     if not ok:
         return ToolResponse(success=False, message=err)
     charged = _credits_charged(current_user, CREDIT_COST)
@@ -4125,8 +4151,8 @@ async def claymation_generate(
         pending_task = PendingProviderTask(
             user_id=current_user.id,
             tool_type="claymation",
-            service_type="claymation",
-            credits_charged=CREDIT_COST,
+            service_type=service_type,
+            credits_charged=charged,
             input_params={
                 "mode": request.mode,
                 "prompt": request.prompt,
@@ -4214,14 +4240,14 @@ async def claymation_generate(
 
         else:
             # video_to_video mode removed 2026-05-31 (V2V dropped repo-wide).
-            await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+            await _refund_credits(db, current_user, CREDIT_COST, service_type)
             return ToolResponse(
                 success=False,
                 message="Video-to-video mode has been removed. Use text-to-video for new clips.",
             )
 
         if not result.get("success"):
-            await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+            await _refund_credits(db, current_user, CREDIT_COST, service_type)
             if pending_task is not None:
                 pending_task.status = "failed"
                 pending_task.error_message = str(result.get("error") or "")[:1000]
@@ -4290,7 +4316,7 @@ async def claymation_generate(
                             break
         url = await _persist_provider_url(url, output_kind, current_user)
         if not url:
-            await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+            await _refund_credits(db, current_user, CREDIT_COST, service_type)
             if pending_task is not None:
                 pending_task.status = "failed"
                 pending_task.error_message = "provider success but no URL"
@@ -4341,7 +4367,7 @@ async def claymation_generate(
         )
     except Exception as exc:
         logger.error("claymation error: %s", exc, exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "claymation")
+        await _refund_credits(db, current_user, CREDIT_COST, service_type)
         if pending_task is not None:
             try:
                 pending_task.status = "failed"
@@ -4684,6 +4710,182 @@ async def upscale_image(
         return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
 
 
+class RenderEnhanceRequest(BaseModel):
+    """Enhance + upscale an architectural render in ONE billed operation.
+
+    ai_enhance=True  → Flux Kontext detail-enhance (geometry-preserving) then
+                       super-resolution upscale, charged ONCE as render_enhance.
+    ai_enhance=False → plain super-resolution upscale, charged as image_upscale.
+    """
+    image_url: str
+    scale: int = Field(2, ge=2, le=4)
+    ai_enhance: bool = True
+    creativity: float = Field(0.45, ge=0.0, le=1.0)
+
+
+def _build_render_enhance_prompt(creativity: float) -> str:
+    """Server-side enhancement prompt (ported from RenderEnhancer.vue so the
+    prompt authority lives on the backend). Flux Kontext has no numeric
+    strength knob, so the creativity slider is expressed as a natural-language
+    intensity tier. Geometry/layout are always preserved."""
+    base = (
+        "Edit the provided architectural render into a crisp photorealistic "
+        "high-detail image. Preserve its exact geometry, layout, camera angle, "
+        "perspective, and composition. Remove render noise, banding, and "
+        "artifacts. Do NOT add, remove, duplicate, or distort any objects, "
+        "walls, windows, doors, or furniture; keep everything not mentioned "
+        "identical. "
+    )
+    if creativity <= 0.33:
+        tier = (
+            "Make only minimal, faithful improvements — stay very close to the "
+            "original; sharpen edges and clean up noise without reinterpreting "
+            "materials or lighting."
+        )
+    elif creativity <= 0.5:
+        tier = (
+            "Apply moderate enhancement — improve material realism, lighting, "
+            "reflections, and fine texture detail while keeping the design "
+            "essentially unchanged."
+        )
+    else:
+        tier = (
+            "Apply strong enhancement — richly re-render materials, lighting, "
+            "reflections, and textures for maximum photorealism, while still "
+            "preserving the original geometry, layout, and camera angle."
+        )
+    return base + tier
+
+
+@router.post("/render-enhance", response_model=ToolResponse)
+async def render_enhance(
+    request: RenderEnhanceRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """Consolidated render enhancer: enhance (optional) + upscale, billed ONCE.
+
+    Replaces the prior frontend two-call orchestration (room-redesign 20 +
+    upscale 3 = 23, while the UI mislabeled it 35). Now a single deduction —
+    render_enhance (20) when ai_enhance is on, image_upscale (3) for a plain
+    upscale — so the displayed price, the actual deduction, and the gallery
+    record are always the same number (P0-1 fix).
+    """
+    validate_media_url_or_raise(str(request.image_url), "image", "Render enhance input")
+    await validate_image_url_dimensions_or_raise(str(request.image_url), COMMON_IMAGE_DIMENSION_RULES)
+
+    request.image_url = await _ensure_public_image_url(
+        str(request.image_url),
+        user_id=str(current_user.id) if current_user else None,
+    )
+
+    if not is_subscribed_user(current_user):
+        return await _demo_response(
+            db,
+            ToolType.EFFECT,
+            cta="Subscribe for AI render enhancement.",
+            input_image_url=_resolve_public_url(str(request.image_url)) if request.image_url else None,
+            effect_prompt=f"render_enhance_{request.scale}x",
+        )
+
+    requested_resolution = "4k" if request.scale >= 4 else "1080p"
+    res_ok, res_err = await _check_plan_resolution(db, current_user, requested_resolution)
+    if not res_ok:
+        return ToolResponse(success=False, message=res_err)
+
+    # ONE charge for the whole operation. ServicePricing overrides if seeded.
+    if request.ai_enhance:
+        CREDIT_COST = 20
+        service_type = "render_enhance"
+    else:
+        CREDIT_COST = 3
+        service_type = "image_upscale"
+    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, service_type)
+    if not ok:
+        return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, CREDIT_COST)
+
+    def _extract_image_url(res: Dict[str, Any]) -> Optional[str]:
+        out = res.get("output") or {}
+        url = out.get("image_url") or res.get("image_url")
+        if not url:
+            imgs = out.get("image_urls") or out.get("images") or []
+            if isinstance(imgs, list) and imgs:
+                first = imgs[0]
+                url = first if isinstance(first, str) else (first.get("url") or first.get("image_url"))
+        return url
+
+    try:
+        provider_router = get_provider_router()
+        working_url = _resolve_public_url(request.image_url)
+
+        # Stage 1 — optional geometry-preserving detail enhancement (Flux Kontext).
+        if request.ai_enhance:
+            enhance_prompt = _build_render_enhance_prompt(request.creativity)
+            enh = await provider_router.route(TaskType.I2I, {
+                "image_url": working_url,
+                "prompt": enhance_prompt,
+                "model": "flux_kontext",
+                "width": 1024,
+                "height": 1024,
+            })
+            enhanced_url = _extract_image_url(enh) if enh.get("success") else None
+            if enhanced_url:
+                persisted = await _persist_provider_url(enhanced_url, "image", current_user)
+                working_url = _resolve_public_url(persisted) if persisted else working_url
+            else:
+                # Enhance failed — still upscale the original so the user gets a
+                # usable result for the credits charged (don't dead-end the op).
+                logger.warning(
+                    "[render_enhance] enhance stage produced no image (%s); upscaling original",
+                    enh.get("error") if isinstance(enh, dict) else "?",
+                )
+
+        # Stage 2 — super-resolution upscale.
+        result = await provider_router.route(TaskType.UPSCALE, {
+            "image_url": working_url,
+            "scale": request.scale,
+        })
+        if not result.get("success"):
+            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            return _provider_failure_response("render_enhance", result, current_user)
+
+        image_url = await _persist_provider_url(_extract_image_url(result), "image", current_user)
+        if not image_url:
+            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            return ToolResponse(success=False, message="Render enhance returned no result. Please try again.")
+
+        generation = UserGeneration(
+            user_id=current_user.id,
+            tool_type=ToolType.EFFECT,
+            input_image_url=request.image_url,
+            input_params={
+                "tool": "render_enhance",
+                "scale": request.scale,
+                "ai_enhance": request.ai_enhance,
+                "creativity": request.creativity,
+            },
+            result_image_url=image_url,
+            credits_used=charged,
+        )
+        generation.set_expiry()
+        db.add(generation)
+        await db.commit()
+
+        return ToolResponse(
+            success=True,
+            result_url=image_url,
+            image_url=image_url,
+            credits_used=charged,
+            message=f"Render enhanced and upscaled {request.scale}x.",
+        )
+    except Exception as e:
+        logger.error("render_enhance error: %s", e, exc_info=True)
+        await _refund_credits(db, current_user, CREDIT_COST, service_type)
+        _notify_admin_of_tool_failure("render_enhance", e, current_user)
+        return ToolResponse(success=False, message=str(e) or GENERIC_TOOL_FAILURE_MESSAGE)
+
+
 # ============================================================================
 # Product Recolor (商品換色) — added 2026-06-12 (owner request: the hub tile
 # pointed at /tools/pattern-generate, which generates patterns, not recolors).
@@ -5020,6 +5222,7 @@ async def _generate_avatar_inner(
     # 300, or a ServicePricing change silently over- or under-refunds on failure.
     charged = _credits_charged(current_user, CREDIT_COST)
 
+    pending_task = None  # set inside the try; the except handler marks it failed
     try:
         # Validate language. TTS-1 voices are multilingual so we COULD accept
         # more, but the spec (修正單 v2.1) restricts the avatar to en + zh-TW
@@ -5058,12 +5261,14 @@ async def _generate_avatar_inner(
         _script = (request.script or "").strip()
         _word_count = len(_script.split()) if _script else 0
         _avatar_base = int(os.getenv("AVATAR_TIMEOUT_BASE_SEC", "600"))
-        _avatar_max = int(os.getenv("AVATAR_MAX_TIMEOUT_SEC", "3000"))
+        # Increased default from 3000s to 3300s (55 min) to accommodate very long scripts
+        # while staying under Cloud Run 3600s ceiling (300s buffer for overhead)
+        _avatar_max = int(os.getenv("AVATAR_MAX_TIMEOUT_SEC", "3300"))
         _avatar_timeout = _avatar_base + 10 * int(request.duration or 30) + int(1.5 * _word_count)
         _avatar_timeout = max(1200, min(_avatar_timeout, _avatar_max))
         logger.info(
-            "ai_avatar: dynamic timeout=%ds (duration=%ds, script_words=%d)",
-            _avatar_timeout, request.duration, _word_count,
+            "ai_avatar: dynamic timeout=%ds (base=%ds, duration=%ds, script_words=%d, max=%ds)",
+            _avatar_timeout, _avatar_base, request.duration, _word_count, _avatar_max,
         )
 
         logger.info(f"Calling Gemini Avatar API for subscriber: {request.script[:50]}...")
@@ -5230,6 +5435,20 @@ async def _generate_avatar_inner(
         raise
     except Exception as e:
         logger.error(f"Avatar generation error: {e}", exc_info=True)
+        # Mark the reclaim row failed BEFORE refunding so the worker won't also
+        # re-poll it and refund a second time (the worker only touches rows
+        # still in submitting/polling). This mirrors the try_on handler pattern.
+        try:
+            pending_task.status = "failed"
+            pending_task.error_message = str(e)[:1000]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception as task_exc:
+            logger.warning("Avatar: failed to update pending_task on exception: %s", task_exc)
+            try:
+                await db.rollback()
+            except Exception:
+                pass
         await _refund_credits(db, current_user, charged, "ai_avatar")
         _notify_admin_of_tool_failure("ai_avatar", e, current_user)
         return ToolResponse(

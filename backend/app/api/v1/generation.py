@@ -59,7 +59,19 @@ async def _gen_demo_response(
         redis = None
     demo = await DemoCacheService(db, redis).get_or_generate(tool_type, topic)
     if not demo:
-        raise HTTPException(status_code=503, detail="Demo generation temporarily unavailable. Please try again.")
+        # Degrade GRACEFULLY to the subscribe CTA instead of raising 503 when no
+        # seeded demo exists (preset-only guard skips on-demand generation). A
+        # raw 503 is masked by the frontend nginx (proxy_intercept_errors →
+        # error_page 503 → SPA shell) and reads to the user as "tool broken".
+        # Mirrors tools._demo_response. Subscribers never reach this branch.
+        return GenerationResponse(
+            success=False,
+            error_code="subscription_card_required",
+            message=(
+                "訂閱即可在自己的檔案上使用此工具。"
+                f" / Subscribe to use this tool on your own files. {cta}".strip()
+            ),
+        )
     return GenerationResponse(
         success=True,
         result_url=demo["result_url"],

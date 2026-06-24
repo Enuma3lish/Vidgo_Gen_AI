@@ -477,9 +477,9 @@ class A2EAvatarService:
             try:
                 await on_submit(task_id)
             except Exception as cb_exc:
-                logger.warning(
-                    "A2E on_submit callback for task %s raised: %s",
-                    task_id, cb_exc,
+                logger.error(
+                    "A2E on_submit callback for task %s raised (will continue polling): %s",
+                    task_id, cb_exc, exc_info=True,
                 )
 
         # If immediate URL returned, use it

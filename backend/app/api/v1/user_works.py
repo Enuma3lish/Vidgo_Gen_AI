@@ -36,6 +36,12 @@ class GenerationItem(BaseModel):
     tool_type: str
     input_image_url: Optional[str] = None
     input_text: Optional[str] = None
+    # Included so the gallery can disambiguate the many distinct tools that
+    # share a broad tool_type (e.g. room_redesign covers interior/exterior/
+    # commercial/landscape/sketch; effect covers upscale/recolor/render_enhance/
+    # claymation). The frontend derives a specific label from space_kind / tool /
+    # action here instead of collapsing them all to one name.
+    input_params: Optional[dict] = None
     result_image_url: Optional[str] = None
     result_video_url: Optional[str] = None
     credits_used: int = 0
@@ -81,6 +87,7 @@ def _build_item(g: UserGeneration) -> GenerationItem:
         tool_type=g.tool_type.value if hasattr(g.tool_type, 'value') else g.tool_type,
         input_image_url=g.input_image_url,
         input_text=g.input_text,
+        input_params=g.input_params,
         # Return None for media URLs if expired (record kept but files gone)
         result_image_url=None if is_expired else g.result_image_url,
         result_video_url=None if is_expired else g.result_video_url,
@@ -170,6 +177,80 @@ async def list_user_generations(
         page=page,
         per_page=per_page,
     )
+
+
+class TaskStatusResponse(BaseModel):
+    """Live status of a generation, keyed by the client-minted correlation id."""
+    status: str  # completed | processing | failed | abandoned | unknown
+    client_task_id: str
+    generation: Optional[GenerationItem] = None
+    result_url: Optional[str] = None
+    credits_used: Optional[int] = None
+    error_message: Optional[str] = None
+
+
+@router.get("/tasks/{client_task_id}", response_model=TaskStatusResponse)
+async def get_task_status(
+    client_task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Single source of truth for a generation's lifecycle (P0-2).
+
+    The client mints ``client_task_id`` and sends it as the ``X-Client-Task-Id``
+    header when it submits a generation. If the synchronous request times out
+    client-side (or the page is refreshed mid-render), the client polls THIS
+    endpoint to recover the result instead of showing an error.
+
+    Resolution order:
+      1. A UserGeneration with this client_task_id → "completed" (covers both
+         the foreground success AND the reclaim-worker recovery of a killed job).
+      2. Else a PendingProviderTask → its live status (submitting/polling →
+         "processing"; "failed"; "abandoned").
+      3. Else → "unknown" (never started, or a fast tool still mid-request with
+         no durable pending row — the client keeps polling / falls back to the
+         gallery list).
+    """
+    gen = (await db.execute(
+        select(UserGeneration).where(
+            UserGeneration.user_id == current_user.id,
+            UserGeneration.client_task_id == client_task_id,
+        ).order_by(desc(UserGeneration.created_at)).limit(1)
+    )).scalar_one_or_none()
+    if gen is not None:
+        item = _build_item(gen)
+        return TaskStatusResponse(
+            status="completed",
+            client_task_id=client_task_id,
+            generation=item,
+            result_url=item.result_video_url or item.result_image_url,
+            credits_used=item.credits_used,
+        )
+
+    from app.models.pending_provider_task import PendingProviderTask
+    pend = (await db.execute(
+        select(PendingProviderTask).where(
+            PendingProviderTask.user_id == current_user.id,
+            PendingProviderTask.client_task_id == client_task_id,
+        ).order_by(desc(PendingProviderTask.created_at)).limit(1)
+    )).scalar_one_or_none()
+    if pend is not None:
+        mapped = {
+            "submitting": "processing",
+            "polling": "processing",
+            "completed": "completed",
+            "failed": "failed",
+            "abandoned": "abandoned",
+        }.get(pend.status, "processing")
+        return TaskStatusResponse(
+            status=mapped,
+            client_task_id=client_task_id,
+            result_url=pend.result_url,
+            credits_used=pend.credits_charged,
+            error_message=pend.error_message,
+        )
+
+    return TaskStatusResponse(status="unknown", client_task_id=client_task_id)
 
 
 @router.get("/generations/{generation_id}", response_model=GenerationDetail)

@@ -2061,7 +2061,9 @@ class PiAPIProvider(BaseProvider):
                 return {"success": False, "error": f"tts-1 returned HTTP {r.status_code}: {detail}"}
             audio_bytes = r.content
             if not audio_bytes or len(audio_bytes) < 1024:
-                return {"success": False, "error": "tts-1 returned empty audio"}
+                audio_len = len(audio_bytes) if audio_bytes else 0
+                logger.error("[PiAPI] tts-1 returned malformed audio: %d bytes (expected >= 1024)", audio_len)
+                return {"success": False, "error": f"tts-1 returned empty/malformed audio ({audio_len} bytes)"}
             # Persist to GCS so the dubbing ffmpeg mux can fetch it later.
             gcs = get_gcs_storage()
             blob_name = f"generated/audio/tts_{uuid.uuid4().hex[:12]}.mp3"
@@ -2249,24 +2251,27 @@ class PiAPIProvider(BaseProvider):
         # because alloy is English-leaning. Reported 2026-05-22.
         if script and not audio_url:
             voice_hint = params.get("voice_id") or ""
-            logger.info("[PiAPI] Avatar: generating speech via tts-1 (voice=%s)", voice_hint or "alloy")
+            logger.info("[PiAPI] Avatar: generating speech via tts-1 (voice=%s, script_len=%d chars)", voice_hint or "alloy", len(script))
             try:
                 tts_result = await self.text_to_speech({
                     "text": script,
                     "voice": voice_hint,
                 })
             except Exception as e:
-                logger.warning("[PiAPI] Avatar: TTS raised, failing over: %s", e)
+                logger.warning("[PiAPI] Avatar: TTS raised exception, failing over: %s", e, exc_info=True)
                 return await self._avatar_failover(image_url, "", script, f"TTS raised: {e}")
             if tts_result.get("success"):
                 audio_url = tts_result.get("output", {}).get("audio_url")
-                logger.info(f"[PiAPI] Avatar: TTS audio ready: {audio_url[:80] if audio_url else 'None'}")
+                audio_info = f"URL={audio_url[:80]}" if audio_url else "URL=None"
+                logger.info("[PiAPI] Avatar: TTS audio ready (%s)", audio_info)
             else:
                 tts_error = tts_result.get("error", "TTS failed")
-                logger.warning("[PiAPI] Avatar: TTS failed, failing over: %s", tts_error)
+                logger.error("[PiAPI] Avatar: TTS failed (voice=%s, error=%s), failing over to provider backup", 
+                             voice_hint or "alloy", tts_error)
                 return await self._avatar_failover(image_url, "", script, f"TTS failed: {tts_error}")
 
         if not audio_url:
+            logger.error("[PiAPI] Avatar: no audio_url after TTS/fallback (script_provided=%s)", bool(script))
             return {"success": False, "error": "Audio generation failed. Please provide an audio URL or script text."}
 
         audio_url = await self._prepare_avatar_audio_url(audio_url, params.get("user_id"))
@@ -2490,9 +2495,9 @@ class PiAPIProvider(BaseProvider):
             try:
                 await on_submit(task_id)
             except Exception as cb_exc:
-                logger.warning(
-                    "[PiAPI] on_submit callback for task %s raised: %s",
-                    task_id, cb_exc,
+                logger.error(
+                    "[PiAPI] on_submit callback for task %s raised (will continue polling): %s",
+                    task_id, cb_exc, exc_info=True,
                 )
 
         # Poll for result. 5-second cadence, so attempts ≈ seconds / 5.

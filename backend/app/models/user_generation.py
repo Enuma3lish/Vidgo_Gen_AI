@@ -40,6 +40,13 @@ class UserGeneration(Base):
     credits_used = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+    # Client correlation id (P0-2). The frontend mints this per generation and
+    # sends it as the X-Client-Task-Id header. It lets the client poll
+    # GET /api/v1/user/tasks/{client_task_id} and recover a result whose
+    # synchronous request timed out client-side, or whose page was refreshed
+    # mid-generation — so a backend success never surfaces as a UI error.
+    client_task_id = Column(String(64), nullable=True, index=True)
+
     # ── Media Expiry (14-day retention) ──────────────────────────────────────
     # After expires_at, result_image_url and result_video_url are cleared.
     # The generation record itself (tool_type, input_params, credits_used, etc.)

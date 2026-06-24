@@ -37,13 +37,12 @@ class TestProviderRouterModelAwareRouting:
             {"model": "pixverse_v4.5"},
         )
 
-        # Pollo MCP removed 2026-05-26; PiAPI MCP de-listed from primary
-        # routing 2026-05-25 (was being silently filtered by env-var disable
-        # on every request). Override chain is now: Pollo REST → PiAPI REST
-        # → Vertex AI.
-        assert providers == ["pollo", "piapi", "vertex_ai"]
+        # 2026-06-23: Pollo replaced Vertex AI as the generation backup (Vertex
+        # now only serves moderation/material + Veo). For a Pollo-native video
+        # model the chain is Pollo REST → PiAPI REST; Vertex is no longer in it.
+        assert providers == ["pollo", "piapi"]
 
-    def test_i2v_without_model_uses_piapi_then_vertex_chain(self):
+    def test_i2v_without_model_uses_piapi_then_pollo_chain(self):
         router = ProviderRouter.__new__(ProviderRouter)
 
         providers = router._get_providers_for_task(
@@ -51,10 +50,10 @@ class TestProviderRouterModelAwareRouting:
             {},
         )
 
-        # ROUTING_CONFIG[I2V] gained a Pollo tertiary on 2026-05-26 (one last
-        # Kling I2V attempt when PiAPI + Vertex both fail) — see the
-        # provider_router.py ROUTING_CONFIG note.
-        assert providers == ["piapi", "vertex_ai", "pollo"]
+        # 2026-06-23: ROUTING_CONFIG[I2V] is {primary: piapi, backup: pollo}.
+        # Vertex AI was dropped from the generation chain (it only serves Veo /
+        # moderation / material now), so the default I2V chain is PiAPI → Pollo.
+        assert providers == ["piapi", "pollo"]
 
     def test_avatar_uses_piapi_then_a2e(self):
         router = ProviderRouter.__new__(ProviderRouter)
@@ -84,9 +83,10 @@ class TestProviderRouterModelAwareRouting:
             {"prompt": "studio product shot", "model": "flux-dev"},
         )
 
-        # MCP providers (pollo_mcp + piapi_mcp) removed 2026-05-26 —
-        # ROUTING_CONFIG simplified to REST + Vertex AI only.
-        assert providers == ["piapi", "vertex_ai"]
+        # 2026-06-23: ROUTING_CONFIG[T2I] is {primary: piapi, backup: pollo}.
+        # An explicit non-Pollo model still runs PiAPI first, then the configured
+        # backup (Pollo). Vertex AI is no longer in the image chain.
+        assert providers == ["piapi", "pollo"]
 
 
 @pytest.mark.asyncio

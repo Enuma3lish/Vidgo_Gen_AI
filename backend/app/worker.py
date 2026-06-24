@@ -828,6 +828,10 @@ async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, 
                                     "pending_task_id": str(p.id),
                                 },
                                 credits_used=p.credits_charged,
+                                # Carry the client correlation id (P0-2) forward so a
+                                # client polling GET /user/tasks/{id} sees "completed"
+                                # the moment the reclaim worker materialises the row.
+                                client_task_id=p.client_task_id,
                             )
                             user_gen.set_expiry()
                             db.add(user_gen)

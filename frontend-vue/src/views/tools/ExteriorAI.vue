@@ -9,11 +9,11 @@
  * dedicated single-purpose page (not folded into RoomRedesign) per the owner
  * directive to keep each topic on its own maintainable page.
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useGenerationTask } from '@/composables'
 import { toolsApi } from '@/api'
 import apiClient from '@/api/client'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
@@ -66,10 +66,34 @@ const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+const task = useGenerationTask('exterior_ai')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.image_url || r.result_url)) {
+    const u = r.image_url || r.result_url || ''
+    resultUrl.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    uiStore.showError(task.error.value || (isZh.value ? '生成失敗' : 'Generation failed'))
+  }
+})
+
 interface StyleCard { id: string; name: string; name_zh: string; preview_url?: string }
 const styles = ref<StyleCard[]>([])
 
 onMounted(async () => {
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的生成…', 'Resuming your previous generation…', '前回の生成を復元中…', '이전 생성을 복구하는 중…', 'Reanudando tu generación…')
+  }
   try {
     const resp = await apiClient.get('/api/v1/tools/templates/interior-styles?space_kind=exterior')
     styles.value = (resp.data || []) as StyleCard[]
@@ -106,40 +130,49 @@ async function generate() {
   statusText.value = L('生成中… 通常需要 30 秒至 2 分鐘', 'Generating… typically 30s to 2 minutes', '生成中… 通常30秒〜2分', '생성 중… 보통 30초~2분', 'Generando… 30 s a 2 min')
   resultUrl.value = null
   resultVariants.value = []
+
+  // Upload BEFORE the task wrapper (must not carry the client id).
+  const url = await ensureImageUrl()
+  if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+
+  let result: any
   try {
-    const url = await ensureImageUrl()
-    if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
-    const result = await toolsApi.roomRedesign(url, selectedStyle.value, undefined, undefined, undefined, {
+    result = await task.run((cid) => toolsApi.roomRedesign(url, selectedStyle.value, undefined, undefined, undefined, {
       spaceKind: 'exterior',
       styleStrength: styleStrength.value,
       lightingTone: lightingTone.value || undefined,
       quality: quality.value,
       variationCount: variationCount.value,
-    })
-    if (handleCardRequired(result, uiStore, router, isZh.value)) {
-      status.value = 'idle'; statusText.value = ''; return
-    }
-    if (result.success && (result.image_url || result.result_url)) {
-      const u = result.image_url || result.result_url || ''
-      resultUrl.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
-      const arr = (result as any).results
-      if (Array.isArray(arr) && arr.length > 1) {
-        resultVariants.value = arr
-          .map((r: any) => r.image_url || r.result_url || '')
-          .filter(Boolean)
-          .map((x: string) => (x.startsWith('http') ? x : `${window.location.origin}${x}`))
-      }
-      status.value = 'done'
-      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '生成失敗' : 'Generation failed'))
-    }
+    }, cid))
   } catch (e: any) {
     status.value = 'error'
     uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Generation failed'))
+    return
+  }
+
+  if (result === null) {
+    status.value = 'running'
+    statusText.value = L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.')
+    return
+  }
+  if (task.suggestGallery.value) return  // recovered via polling — watch applied it
+
+  if (handleCardRequired(result, uiStore, router, isZh.value)) {
+    status.value = 'idle'; statusText.value = ''; return
+  }
+  if (result.success && (result.image_url || result.result_url)) {
+    renderTaskResult(result)
+    const arr = (result as any).results
+    if (Array.isArray(arr) && arr.length > 1) {
+      resultVariants.value = arr
+        .map((r: any) => r.image_url || r.result_url || '')
+        .filter(Boolean)
+        .map((x: string) => (x.startsWith('http') ? x : `${window.location.origin}${x}`))
+    }
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '生成失敗' : 'Generation failed'))
   }
 }
 

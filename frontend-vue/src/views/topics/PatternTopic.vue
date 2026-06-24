@@ -6,7 +6,7 @@
  * Style picker + curated-prompt dropdown + free-form prompt + product_name
  * (QA #6 added 2026-05-24). User text reaches Flux/Qwen/Z-Image verbatim.
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
@@ -26,17 +26,21 @@ const { options: patternPromptOptions, promptFor: patternPromptTextFor } = usePr
 const isZh = computed(() => locale.value.startsWith('zh'))
 
 type ModelId = 'flux' | 'qwen' | 'z-image'
-// 2026-06-23: costs corrected to match backend tier_config.IMAGE_CREDIT_COSTS.
-// All three are the "standard" tier (Flux schnell / Z-Image / Qwen image),
-// service_type=text_to_image, 2 credits per generation. The prior display
-// (5/1/5) didn't match the deduction — user saw "1 cr Z-Image" but balance
-// dropped by the response's hardcoded credits_used=5 (since fixed below).
-const modelOptions: Array<{ id: ModelId; nameZh: string; nameEn: string; cost: number }> = [
-  { id: 'flux',    nameZh: 'Flux Schnell（預設）',    nameEn: 'Flux Schnell (default)',    cost: 2 },
-  { id: 'z-image', nameZh: 'Z-Image Turbo（最便宜）', nameEn: 'Z-Image Turbo (cheapest)',  cost: 2 },
-  { id: 'qwen',    nameZh: 'Qwen Image（中文擅長）',   nameEn: 'Qwen Image (zh-friendly)',  cost: 2 },
+// Displayed credit cost comes ENTIRELY from the backend ServicePricing API
+// (GET /credits/pricing) — never hardcoded here — so the picker can never
+// drift from the actual deduction (P0-1). Flux schnell / Z-Image / Qwen all
+// resolve to the backend "standard" image tier (resolve_image_credits →
+// service_type=text_to_image); kept as a fn so a future premium model can map
+// to its own service_type. The numeric 2 is only a pre-fetch fallback.
+const modelOptions: Array<{ id: ModelId; nameZh: string; nameEn: string }> = [
+  { id: 'flux',    nameZh: 'Flux Schnell（預設）',    nameEn: 'Flux Schnell (default)' },
+  { id: 'z-image', nameZh: 'Z-Image Turbo（最便宜）', nameEn: 'Z-Image Turbo (cheapest)' },
+  { id: 'qwen',    nameZh: 'Qwen Image（中文擅長）',   nameEn: 'Qwen Image (zh-friendly)' },
 ]
 const modelId = ref<ModelId>('flux')
+function serviceTypeFor(_id: ModelId): string { return 'text_to_image' }
+function costFor(id: ModelId): number { return creditsStore.getServiceCost(serviceTypeFor(id), 2) }
+onMounted(() => { creditsStore.ensurePricing() })
 
 const styleOptions = [
   { id: 'seamless',     labelZh: '無縫拼接',       labelEn: 'Seamless' },
@@ -60,7 +64,7 @@ const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
 const disabled = computed(() => !prompt.value.trim())
-const creditCost = computed(() => modelOptions.find(m => m.id === modelId.value)?.cost ?? 5)
+const creditCost = computed(() => costFor(modelId.value))
 
 watch([selectedPromptId, locale], () => {
   if (selectedPromptId.value) prompt.value = patternPromptTextFor(selectedPromptId.value)
@@ -153,7 +157,7 @@ function gotoPricing() { router.push('/pricing') }
         <label class="pp-field-label">{{ isZh ? '模型 *' : 'Model *' }}</label>
         <select v-model="modelId" class="pp-select">
           <option v-for="m in modelOptions" :key="m.id" :value="m.id">
-            {{ (isZh ? m.nameZh : m.nameEn) }} · {{ m.cost }}
+            {{ (isZh ? m.nameZh : m.nameEn) }} · {{ costFor(m.id) }}
           </option>
         </select>
       </div>

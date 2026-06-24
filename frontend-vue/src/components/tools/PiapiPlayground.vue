@@ -195,7 +195,7 @@ function onGenerateClick() {
               class="px-3 py-1 rounded-full text-xs font-medium border"
               :style="statusColor"
             >
-              {{ statusText || (status === 'idle' ? 'Idle' : status === 'running' ? 'Generating…' : status === 'done' ? 'Done' : 'Error') }}
+              {{ statusText || (status === 'idle' ? L('閒置', 'Idle', '待機', '대기', 'Inactivo') : status === 'running' ? L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…') : status === 'done' ? L('完成', 'Done', '完了', '완료', 'Listo') : L('錯誤', 'Error', 'エラー', '오류', 'Error')) }}
             </span>
             <slot name="result-actions" />
           </div>
@@ -206,7 +206,7 @@ function onGenerateClick() {
               <div class="text-center px-6 py-10">
                 <p class="text-5xl mb-3 opacity-40">🎨</p>
                 <p class="text-sm" style="color: #94949f;">
-                  {{ emptyHint || 'Generate to see the result here.' }}
+                  {{ emptyHint || L('產生後，結果會顯示在這裡。', 'Generate to see the result here.', '生成すると、ここに結果が表示されます。', '생성하면 여기에 결과가 표시됩니다.', 'Genera para ver el resultado aquí.') }}
                 </p>
               </div>
             </slot>

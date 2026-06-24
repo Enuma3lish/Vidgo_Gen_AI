@@ -27,7 +27,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill, useGenerationTask } from '@/composables'
 import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
@@ -114,6 +114,33 @@ const imageInput = ref<string | undefined>(undefined)   // data URI from ImageUp
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
+
+// P0-2: single source of truth for the in-flight task. Recovers on timeout
+// (background-poll instead of erroring) and on page refresh (resume()).
+const task = useGenerationTask('short_video')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.video_url || r.result_url)) {
+    resultUrl.value = r.video_url || r.result_url
+    status.value = 'done'
+    statusText.value = isZh.value ? '完成' : 'Done'
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    statusText.value = isZh.value ? '生成失敗' : 'Failed'
+    uiStore.showError(task.error.value || (isZh.value ? '生成失敗' : 'Generation failed'))
+  }
+})
+onMounted(() => {
+  // Resume a generation left in-flight by a previous page load (refresh recovery).
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = isZh.value ? '正在恢復先前的生成…' : 'Resuming your previous generation…'
+  }
+})
 
 // Curated prompt library (kv_*-style entries under `short_video` in
 // prompt_library.json). Same source the flagship video / image tools
@@ -284,27 +311,34 @@ async function generate() {
   statusText.value = isZh.value ? '生成中… 通常需要 1-3 分鐘' : 'Generating… typically 1-3 min'
   resultUrl.value = null
 
+  // Upload the still BEFORE handing to the task wrapper (the upload must not be
+  // tagged with the generation's client_task_id).
+  let imageUrl: string | null = null
+  if (taskType.value === 'image_to_video') {
+    imageUrl = await ensureImageUrl()
+    if (!imageUrl) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+  }
+
+  let result: any
   try {
-    let result: any
-    if (taskType.value === 'image_to_video') {
-      const imageUrl = await ensureImageUrl()
-      if (!imageUrl) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
-      result = await toolsApi.shortVideo(imageUrl, {
-        motionStrength: motionStrength.value,
-        modelId: modelId.value,
-        prompt: prompt.value.trim() || undefined,
-        promptId: usingPreset.value ? selectedPresetId.value : undefined,
-        negativePrompt: negativePrompt.value.trim() || undefined,
-        locale: String(locale.value || ''),
-        cameraMove: cameraMove.value || undefined,
-        subjectLock: faithLock.value,
-      })
-    } else {
+    result = await task.run((cid) => {
+      if (taskType.value === 'image_to_video') {
+        return toolsApi.shortVideo(imageUrl as string, {
+          motionStrength: motionStrength.value,
+          modelId: modelId.value,
+          prompt: prompt.value.trim() || undefined,
+          promptId: usingPreset.value ? selectedPresetId.value : undefined,
+          negativePrompt: negativePrompt.value.trim() || undefined,
+          locale: String(locale.value || ''),
+          cameraMove: cameraMove.value || undefined,
+          subjectLock: faithLock.value,
+        }, cid)
+      }
       // text_to_video — /api/v1/tools/kling-video. tier maps from modelId.
       const tier = (modelId.value === 'flagship' || modelId.value === 'omni')
         ? modelId.value
         : 'default'
-      result = await toolsApi.klingVideo({
+      return toolsApi.klingVideo({
         prompt: prompt.value.trim(),
         tier,
         aspectRatio: aspectRatio.value,
@@ -312,29 +346,39 @@ async function generate() {
         negativePrompt: negativePrompt.value.trim() || undefined,
         cameraMove: cameraMove.value || undefined,
         strictPrompt: faithLock.value,
-      })
-    }
-
-    if (handleCardRequired(result, uiStore, router, isZh.value)) {
-      status.value = 'idle'
-      return
-    }
-
-    if (result?.success && (result.video_url || result.result_url)) {
-      resultUrl.value = result.video_url || result.result_url
-      status.value = 'done'
-      statusText.value = isZh.value ? '完成' : 'Done'
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      statusText.value = isZh.value ? '生成失敗' : 'Failed'
-      uiStore.showError(result?.message || result?.error || (isZh.value ? '生成失敗' : 'Generation failed'))
-    }
+      }, cid)
+    })
   } catch (e: any) {
+    // Only non-recoverable errors reach here; timeouts are handled by task.run.
     status.value = 'error'
     statusText.value = isZh.value ? '錯誤' : 'Error'
     uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Generation failed'))
+    return
+  }
+
+  if (result === null) {
+    // Timed out client-side but the backend is still running — DON'T error.
+    // Keep showing progress; the result will appear here when polling resolves
+    // and is also saved to 作品庫 (gallery CTA is shown via task.suggestGallery).
+    status.value = 'running'
+    statusText.value = isZh.value
+      ? '仍在生成中，完成後會自動顯示，也會存入「我的作品」。'
+      : 'Still generating — it will appear here when done, and is saved to My Works.'
+    return
+  }
+
+  if (handleCardRequired(result, uiStore, router, isZh.value)) {
+    status.value = 'idle'
+    return
+  }
+
+  if (result?.success && (result.video_url || result.result_url)) {
+    renderTaskResult(result)
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    statusText.value = isZh.value ? '生成失敗' : 'Failed'
+    uiStore.showError(result?.message || result?.error || (isZh.value ? '生成失敗' : 'Generation failed'))
   }
 }
 
@@ -353,7 +397,7 @@ function gotoPricing() { router.push('/pricing') }
 
 <template>
   <PiapiPlayground
-    :eta-seconds="150"
+    :eta-seconds="240"
     :title="pageTitle"
     :subtitle="pageSubtitle"
     :status="status"
@@ -365,6 +409,17 @@ function gotoPricing() { router.push('/pricing') }
     @generate="generate"
   >
     <template #inputs>
+      <!-- P0-2: background-recovery banner. Shown when the request timed out
+           client-side but the backend is still running; result appears here
+           when polling resolves and is also saved to My Works. -->
+      <div v-if="task.suggestGallery.value" class="rounded-lg p-3 text-xs"
+           style="background:#141420; color:#c4b5fd; border:1px solid rgba(124,58,237,0.3);">
+        <p>{{ isZh ? '生成時間較長，仍在背景處理中。完成後會自動顯示，也會存入「我的作品」。' : 'This is taking a while — still processing in the background. It will appear here when done, and is saved to My Works.' }}</p>
+        <button type="button" class="underline mt-1" @click="router.push({ name: 'my-works' })">
+          {{ isZh ? '前往「我的作品」 →' : 'Go to My Works →' }}
+        </button>
+      </div>
+
       <!-- Task type — 3 options switch the rest of the form -->
       <div>
         <label class="pp-field-label">{{ isZh ? '任務類型 *' : 'Task Type *' }}</label>

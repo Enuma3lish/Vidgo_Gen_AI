@@ -252,9 +252,10 @@ export const interiorApi = {
   /**
    * 平面配置圖 — generate a clean 2D floor plan from typed requirements OR a sketch.
    */
-  async floorplan(request: FloorPlanRequest): Promise<DesignResponse> {
+  async floorplan(request: FloorPlanRequest, clientTaskId?: string): Promise<DesignResponse> {
     const response = await apiClient.post('/api/v1/interior/floorplan', request, {
       timeout: 120000,
+      clientTaskId,
     })
     return response.data
   },
@@ -262,9 +263,10 @@ export const interiorApi = {
   /**
    * 立體圖 — isometric 3D "dollhouse" view from an uploaded image.
    */
-  async isometric(request: IsometricRequest): Promise<DesignResponse> {
+  async isometric(request: IsometricRequest, clientTaskId?: string): Promise<DesignResponse> {
     const response = await apiClient.post('/api/v1/interior/isometric', request, {
       timeout: 120000,
+      clientTaskId,
     })
     return response.data
   },
@@ -394,13 +396,14 @@ export const interiorApi = {
    * Gemini analysis → 3D render → Kling 3.0/Omni first→last-frame growth video
    * → (optional) Trellis2 interactive 3D model.
    */
-  async floorplanToVideo(request: FloorplanToVideoRequest): Promise<FloorplanToVideoResponse> {
+  async floorplanToVideo(request: FloorplanToVideoRequest, clientTaskId?: string): Promise<FloorplanToVideoResponse> {
     // Kling 3.0/Omni polling caps at 1800s server-side and the video_3d tier
     // adds a Trellis pass afterwards, so give the request a generous 40-min
     // wall-clock budget. The backend streams a 25s keep-alive heartbeat so
     // proxies (Cloudflare / GCLB) hold the connection open in the meantime.
     const response = await apiClient.post('/api/v1/interior/floorplan-to-video', request, {
-      timeout: 2_400_000 // 40 minutes
+      timeout: 2_400_000, // 40 minutes
+      clientTaskId,
     })
     return response.data
   }

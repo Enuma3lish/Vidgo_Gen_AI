@@ -70,9 +70,21 @@ export const useCreditsStore = defineStore('credits', () => {
     }
   }
 
-  function getServiceCost(service: string): number {
+  // `fallback` is returned when the ServicePricing row hasn't been fetched yet
+  // (or isn't seeded). Callers pass the backend's hardcoded default so the UI
+  // never flashes "0 credits" before pricing loads / for an unseeded service.
+  function getServiceCost(service: string, fallback = 0): number {
     const found = pricing.value.find(p => p.service === service)
-    return found?.credits_per_use ?? 0
+    return found?.credits_per_use ?? fallback
+  }
+
+  // Fetch pricing once if it hasn't loaded yet — lets tool pages that are
+  // visited directly (not via the dashboard) still show backend-driven prices.
+  async function ensurePricing() {
+    if (!pricing.value.length) {
+      try { await fetchPricing() } catch { /* fallback values cover this */ }
+    }
+    return pricing.value
   }
 
   function canAfford(service: string): boolean {
@@ -117,6 +129,7 @@ export const useCreditsStore = defineStore('credits', () => {
     fetchBalance,
     fetchPackages,
     fetchPricing,
+    ensurePricing,
     fetchTransactions,
     getServiceCost,
     canAfford,

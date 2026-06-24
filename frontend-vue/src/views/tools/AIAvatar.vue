@@ -10,7 +10,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill, useGenerationTask } from '@/composables'
 import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import apiClient from '@/api/client'
@@ -145,7 +145,14 @@ async function loadVoices() {
     console.warn('[avatar] voice list failed', e)
   }
 }
-onMounted(() => { checkAvailability(); loadVoices() })
+onMounted(() => {
+  checkAvailability()
+  loadVoices()
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的生成…', 'Resuming your previous generation…', '前回の生成を復元中…', '이전 생성을 복구하는 중…', 'Reanudando tu generación…')
+  }
+})
 
 async function ensureImageUrl(): Promise<string | null> {
   if (!headshot.value) return null
@@ -156,6 +163,27 @@ async function ensureImageUrl(): Promise<string | null> {
   return up.url
 }
 
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+// Avatar is the slowest tool (backend cap ~50min); keep the live recovery poll
+// running past that so it never gives up while the backend is still rendering.
+const task = useGenerationTask('ai_avatar', { maxPollMs: 55 * 60 * 1000 })
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.video_url || r.result_url)) {
+    resultUrl.value = r.video_url || r.result_url || null
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    uiStore.showError(task.error.value || L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Error al generar'))
+  }
+})
+
 async function generate() {
   if (disabled.value || status.value === 'running') return
   // Backend governs access: a free account using an unmodified preset script
@@ -165,36 +193,47 @@ async function generate() {
   statusText.value = L('生成中…通常 2-5 分鐘', 'Generating… typically 2-5 min', '生成中…通常2〜5分', '생성 중… 보통 2-5분', 'Generando… normalmente 2-5 min')
   resultUrl.value = null
   demoVideos.value = null
+
+  // Upload the portrait BEFORE the task wrapper (the upload must not carry the
+  // generation's client_task_id).
+  const url = await ensureImageUrl()
+  if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+
+  let result: any
   try {
-    const url = await ensureImageUrl()
-    if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
-    const result = await toolsApi.avatar({
+    result = await task.run((cid) => toolsApi.avatar({
       image_url: url,
       script: script.value.trim(),
       voice_id: voiceId.value || undefined,
       language: language.value,
       prompt_id: usingScriptPreset.value ? selectedScriptPresetId.value : undefined,
       locale: String(locale.value || ''),
-    })
-    if (handleCardRequired(result, uiStore, router, isZh.value)) {
-      status.value = 'idle'
-      return
-    }
-    if (result.success && (result.video_url || result.result_url)) {
-      resultUrl.value = result.video_url || result.result_url || null
-      // Demo path returns both language videos — show them side by side.
-      demoVideos.value = result.demo_videos && result.demo_videos.length > 1 ? result.demo_videos : null
-      status.value = 'done'
-      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      uiStore.showError((result as any).message || (result as any).error || L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Error al generar'))
-    }
+    }, cid))
   } catch (e: any) {
     status.value = 'error'
     uiStore.showError(extractApiError(e, L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Error al generar')))
+    return
+  }
+
+  if (result === null) {
+    // Timed out client-side but the backend is still running — DON'T error.
+    status.value = 'running'
+    statusText.value = L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.')
+    return
+  }
+
+  if (handleCardRequired(result, uiStore, router, isZh.value)) {
+    status.value = 'idle'
+    return
+  }
+  if (result.success && (result.video_url || result.result_url)) {
+    renderTaskResult(result)
+    // Demo path returns both language videos — show them side by side.
+    demoVideos.value = result.demo_videos && result.demo_videos.length > 1 ? result.demo_videos : null
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    uiStore.showError((result as any).message || (result as any).error || L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Error al generar'))
   }
 }
 
@@ -209,7 +248,7 @@ function gotoPricing() { router.push('/pricing') }
 
 <template>
   <PiapiPlayground
-    :eta-seconds="300"
+    :eta-seconds="480"
     :title="L('AI 數位人 / 代言人', 'AI Avatar / Spokesperson', 'AIアバター / スポークスパーソン', 'AI 아바타 / 대변인', 'Avatar IA / Portavoz')"
     :subtitle="L(
       '上傳清晰正面照 + 撰寫腳本，AI 生成口型同步的講話影片。',

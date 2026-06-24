@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useGenerationTask } from '@/composables'
 import { usePromptLibrary } from '@/composables/usePromptLibrary'
 import { toolsApi } from '@/api'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -64,6 +64,26 @@ watch(locale, () => {
 // /admin/models still drive the actual deduction.
 const displayCost = computed(() => 80)
 
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+const task = useGenerationTask('sora2')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.video_url || r.result_url)) {
+    resultVideo.value = r.video_url || r.result_url
+    isProcessing.value = false
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    isProcessing.value = false
+    uiStore.showError(task.error.value || t('sora2Pro.errors.generic'))
+  }
+})
+onMounted(() => {
+  if (task.resume()) isProcessing.value = true
+})
+
 async function handleGenerate() {
   if (!prompt.value.trim()) {
     uiStore.showWarning(t('sora2Pro.warnings.emptyPrompt'))
@@ -71,8 +91,10 @@ async function handleGenerate() {
   }
   isProcessing.value = true
   resultVideo.value = undefined
+
+  let result: any
   try {
-    const result = await toolsApi.sora2Pro({
+    result = await task.run((cid) => toolsApi.sora2Pro({
       prompt: prompt.value,
       aspectRatio: startImage.value ? undefined : aspectRatio.value,
       duration: duration.value,
@@ -83,26 +105,36 @@ async function handleGenerate() {
       cameraMove: cameraMove.value || undefined,
       subjectLock: faithLock.value,
       strictPrompt: faithLock.value,
-    })
-    if (handleCardRequired(result, uiStore, router, String(locale.value || '').startsWith('zh'))) {
-      return
-    }
-    if (result.success && (result.video_url || result.result_url)) {
-      resultVideo.value = result.video_url || result.result_url
-      if (!isDemoUser.value) {
-        creditsStore.fetchBalance()
-        uiStore.showSuccess(t('sora2Pro.toasts.success'))
-      } else {
-        uiStore.showSuccess(t('sora2Pro.toasts.demoReady'))
-      }
-    } else {
-      uiStore.showError(result.message || t('sora2Pro.errors.generic'))
-    }
+    }, cid))
   } catch (err: any) {
     uiStore.showError(extractApiError(err, t('sora2Pro.errors.generic')))
-  } finally {
     isProcessing.value = false
+    return
   }
+
+  if (result === null) {
+    // Timed out client-side but the backend is still running — DON'T error.
+    uiStore.showInfo(L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.'))
+    isProcessing.value = false
+    return
+  }
+
+  if (handleCardRequired(result, uiStore, router, String(locale.value || '').startsWith('zh'))) {
+    isProcessing.value = false
+    return
+  }
+  if (result.success && (result.video_url || result.result_url)) {
+    renderTaskResult(result)
+    if (!isDemoUser.value) {
+      creditsStore.fetchBalance()
+      uiStore.showSuccess(t('sora2Pro.toasts.success'))
+    } else {
+      uiStore.showSuccess(t('sora2Pro.toasts.demoReady'))
+    }
+  } else {
+    uiStore.showError(result.message || t('sora2Pro.errors.generic'))
+  }
+  isProcessing.value = false
 }
 </script>
 
@@ -245,7 +277,7 @@ async function handleGenerate() {
         </div>
 
         <div class="rounded-xl p-4 flex items-center justify-center min-h-[400px]" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-          <LoadingOverlay :show="isProcessing" :eta-seconds="240" :message="t('sora2Pro.loading')" />
+          <LoadingOverlay :show="isProcessing" :eta-seconds="600" :message="t('sora2Pro.loading')" />
           <div v-if="!isProcessing && resultVideo" class="w-full">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('sora2Pro.resultLabel') }}</label>
             <video :src="resultVideo" controls class="w-full rounded-lg" style="max-height: 500px;" />

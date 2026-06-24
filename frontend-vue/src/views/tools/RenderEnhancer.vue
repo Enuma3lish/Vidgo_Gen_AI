@@ -12,11 +12,11 @@
  * With the enhance toggle off it is a pure upscale. Dedicated single-purpose
  * page per the owner directive (one topic per page).
  */
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useGenerationTask } from '@/composables'
 import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
@@ -45,9 +45,39 @@ const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
 const disabled = computed(() => !imageInput.value)
-// Upscale is 15 credits; the optional AI enhance pass adds the 20-credit
-// room-redesign charge (total 35). Shown so the picker reflects the real deduction.
-const creditCost = computed(() => (aiEnhance.value ? 35 : 15))
+// Credit cost comes from the backend ServicePricing API (GET /credits/pricing)
+// via the credits store — never hardcoded. The whole operation is ONE billed
+// call now: render_enhance (20) with AI enhance on, image_upscale (3) for a
+// plain upscale. The numbers here are only pre-fetch fallbacks. (P0-1: the old
+// 35/15 display never matched the real two-call deduction of 23/3.)
+const creditCost = computed(() =>
+  creditsStore.getServiceCost(aiEnhance.value ? 'render_enhance' : 'image_upscale', aiEnhance.value ? 20 : 3))
+
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+const task = useGenerationTask('render_enhance')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.image_url || r.result_url)) {
+    resultUrl.value = r.image_url || r.result_url || null
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    uiStore.showError(task.error.value || (isZh.value ? '處理失敗' : 'Processing failed'))
+  }
+})
+onMounted(() => {
+  creditsStore.ensurePricing()
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的處理…', 'Resuming your previous job…', '前回の処理を復元中…', '이전 작업을 복구하는 중…', 'Reanudando tu trabajo…')
+  }
+})
 const disabledReason = computed(() => disabled.value
   ? L('請先上傳要優化的渲染圖。', 'Upload the render you want to enhance first.', '高画質化するレンダーをアップロードしてください。', '향상할 렌더를 먼저 업로드하세요.', 'Sube primero el render que quieres mejorar.')
   : '')
@@ -56,28 +86,6 @@ const disabledReason = computed(() => disabled.value
 const etaLabel = computed(() => aiEnhance.value
   ? L('預計約 60–120 秒（增強＋放大）', 'Usually ~60–120s (enhance + upscale)', '約60〜120秒（強化＋拡大）', '약 60~120초 (향상＋확대)', '~60–120 s (mejora + ampliación)')
   : L('預計約 20–40 秒', 'Usually ~20–40s', '約20〜40秒', '약 20~40초', '~20–40 s'))
-
-// Build the enhancement prompt. The "magic" path sends this VERBATIM to Flux
-// Kontext (no Gemini fusion, no style/clause pollution), and Kontext has no
-// numeric strength param — so the Creativity slider is expressed as a
-// natural-language intensity tier here, mirroring how tools.py communicates
-// style_strength via its intensity_clause. Lower creativity = stay faithful;
-// higher = richer re-render. Geometry/layout are always preserved.
-function buildEnhancePrompt(creativity: number): string {
-  const base =
-    'Enhance this architectural render into a crisp photorealistic high-detail image. ' +
-    'Keep the exact geometry, layout, camera angle, and composition unchanged. ' +
-    'Remove render noise, banding, and artifacts. Do NOT add or remove any objects, walls, windows, or furniture. '
-  let tier: string
-  if (creativity <= 0.33) {
-    tier = 'Make only minimal, faithful improvements — stay very close to the original; sharpen edges and clean up noise without reinterpreting materials or lighting.'
-  } else if (creativity <= 0.5) {
-    tier = 'Apply moderate enhancement — improve material realism, lighting, reflections, and fine texture detail while keeping the design essentially unchanged.'
-  } else {
-    tier = 'Apply strong enhancement — richly re-render materials, lighting, reflections, and textures for maximum photorealism, while still preserving the original geometry, layout, and camera angle.'
-  }
-  return base + tier
-}
 
 async function ensureImageUrl(): Promise<string | null> {
   if (!imageInput.value) return null
@@ -96,45 +104,46 @@ async function generate() {
   }
   status.value = 'running'
   resultUrl.value = null
+
+  // Upload BEFORE the task wrapper so the upload isn't tagged with the
+  // generation's client_task_id.
+  const workingUrl = await ensureImageUrl()
+  if (!workingUrl) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+
+  // Single billed call: backend runs enhance (optional) + upscale and
+  // charges ONCE (render_enhance 20 / image_upscale 3) — display == deduction.
+  statusText.value = aiEnhance.value
+    ? L('AI 細節增強 + 放大中…', 'Enhancing + upscaling…', 'ディテール強化＋拡大中…', '디테일 향상＋업스케일 중…', 'Mejorando y ampliando…')
+    : L(`放大 ${scale.value}x 中…`, `Upscaling ${scale.value}x…`, `${scale.value}x拡大中…`, `${scale.value}x 업스케일 중…`, `Ampliando ${scale.value}x…`)
+
+  let result: any
   try {
-    let workingUrl = await ensureImageUrl()
-    if (!workingUrl) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
-
-    // Stage 1 — optional AI detail enhancement (geometry-preserving).
-    if (aiEnhance.value) {
-      statusText.value = L('AI 細節增強中…', 'Enhancing detail…', 'ディテール強化中…', '디테일 향상 중…', 'Mejorando detalle…')
-      const enh = await toolsApi.roomRedesign(workingUrl, '', buildEnhancePrompt(creativity.value), undefined, undefined, {
-        mode: 'magic',
-        preserveStructure: true,
-      })
-      if (handleCardRequired(enh, uiStore, router, isZh.value)) { status.value = 'idle'; statusText.value = ''; return }
-      if (enh.success && (enh.image_url || enh.result_url)) {
-        const u = enh.image_url || enh.result_url || ''
-        workingUrl = u.startsWith('http') ? u : `${window.location.origin}${u}`
-        if (enh.credits_used) creditsStore.deductCredits(enh.credits_used)
-      } else {
-        status.value = 'error'
-        uiStore.showError((enh as any).message || (enh as any).error || (isZh.value ? '增強失敗' : 'Enhance failed'))
-        return
-      }
-    }
-
-    // Stage 2 — super-resolution upscale.
-    statusText.value = L(`放大 ${scale.value}x 中…`, `Upscaling ${scale.value}x…`, `${scale.value}x拡大中…`, `${scale.value}x 업스케일 중…`, `Ampliando ${scale.value}x…`)
-    const result = await toolsApi.upscale(workingUrl, scale.value)
-    if (result.success && (result.image_url || result.result_url)) {
-      resultUrl.value = result.image_url || result.result_url || null
-      status.value = 'done'
-      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '放大失敗' : 'Upscale failed'))
-    }
+    result = await task.run((cid) => toolsApi.renderEnhance({
+      imageUrl: workingUrl,
+      scale: scale.value,
+      aiEnhance: aiEnhance.value,
+      creativity: creativity.value,
+    }, cid))
   } catch (e: any) {
     status.value = 'error'
     uiStore.showError(extractApiError(e, isZh.value ? '處理失敗' : 'Processing failed'))
+    return
+  }
+
+  if (result === null) {
+    // Timed out client-side but backend still running — DON'T error.
+    status.value = 'running'
+    statusText.value = L('仍在處理中，完成後會存入「我的作品」。', 'Still processing — it will be saved to My Works when done.', '処理中です。完了後「マイ作品」に保存されます。', '처리 중입니다. 완료되면 내 작품에 저장됩니다.', 'Procesando; se guardará en Mis Trabajos.')
+    return
+  }
+
+  if (handleCardRequired(result, uiStore, router, isZh.value)) { status.value = 'idle'; statusText.value = ''; return }
+  if (result.success && (result.image_url || result.result_url)) {
+    renderTaskResult(result)
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '處理失敗' : 'Processing failed'))
   }
 }
 

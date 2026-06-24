@@ -486,6 +486,11 @@ const router = createRouter({
 // without an entry fall back to the site-wide default in applySeo().
 type RouteSeo = { title: string; description: string }
 const ROUTE_SEO: Record<string, RouteSeo> = {
+  'landscape-ai': {
+    title: 'AI 景觀設計渲染｜庭園/外構風格範本 - VidGo',
+    description:
+      '上傳庭園、綠地或外構照片，挑選風格，AI 生成多版本景觀設計提案圖。',
+  },
   home: {
     title: 'VidGo AI｜AI 商品攝影、去背、短影音與室內設計工具',
     description:

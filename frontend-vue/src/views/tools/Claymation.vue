@@ -15,11 +15,11 @@
  * The user's prompt reaches the model VERBATIM — only a one-line
  * "claymation style…" prefix is prepended server-side.
  */
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useGenerationTask } from '@/composables'
 import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
@@ -57,11 +57,44 @@ const disabled = computed(() => {
   if (needsImage.value && !imageInput.value) return true
   return false
 })
-// Image modes (T2I / I2I) cost 10 credits; video (T2V) costs 50.
-// Mirrors backend tools.claymation_generate (CREDIT_COST = 50 if is_video else 10).
-// Was hardcoded 50/50 (2026-06-23 fix) — T2I users saw 50 but were charged 10,
-// then balance display "jumped back" 40 on next refresh.
-const creditCost = computed(() => isVideoMode.value ? 50 : 10)
+// Credit cost comes from the backend ServicePricing API (GET /credits/pricing)
+// via the credits store — never hardcoded — so display always equals the
+// actual deduction (P0-1). Image modes (T2I / I2I) → claymation_image; video
+// (T2V) → claymation_video. The 10/50 here are only pre-fetch fallbacks that
+// mirror the backend defaults in tools.claymation_generate.
+const creditCost = computed(() =>
+  creditsStore.getServiceCost(
+    isVideoMode.value ? 'claymation_video' : 'claymation_image',
+    isVideoMode.value ? 50 : 10,
+  ))
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+const task = useGenerationTask('claymation')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.image_url || r.video_url || r.result_url)) {
+    const url = r.image_url || r.video_url || r.result_url || ''
+    resultUrl.value = url.startsWith('http') ? url : `${window.location.origin}${url}`
+    resultKind.value = r.video_url ? 'video' : (r.image_url ? 'image' : (isVideoMode.value ? 'video' : 'image'))
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Error')
+    uiStore.showError(task.error.value || L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'Error al generar'))
+  }
+})
+onMounted(() => {
+  creditsStore.ensurePricing()
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的生成…', 'Resuming your previous generation…', '前回の生成を復元中…', '이전 생성을 복구하는 중…', 'Reanudando tu generación…')
+  }
+})
 
 function pickMode(next: Mode) {
   mode.value = next
@@ -102,41 +135,51 @@ async function generate() {
     ? L('生成中…通常 1-3 分鐘', 'Generating… 1-3 min', '生成中…通常 1〜3 分', '생성 중… 보통 1-3분', 'Generando… 1-3 min')
     : L('生成中…通常 15-30 秒', 'Generating… 15-30s', '生成中…通常 15〜30 秒', '생성 중… 보통 15-30초', 'Generando… 15-30 s')
   resultUrl.value = null
+
+  // Upload the input image BEFORE handing to the task wrapper (the upload must
+  // not carry the generation's client_task_id).
+  let imageUrl: string | undefined
+  if (needsImage.value) {
+    const u = await ensureUploadedImage()
+    if (!u) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像のアップロードに失敗しました', '이미지 업로드 실패', 'Error al subir la imagen')); return }
+    imageUrl = u
+  }
+
+  let result: any
   try {
-    let imageUrl: string | undefined
-    if (needsImage.value) {
-      const u = await ensureUploadedImage()
-      if (!u) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像のアップロードに失敗しました', '이미지 업로드 실패', 'Error al subir la imagen')); return }
-      imageUrl = u
-    }
-    const result = await toolsApi.claymation({
+    result = await task.run((cid) => toolsApi.claymation({
       mode: mode.value,
       prompt: prompt.value.trim(),
       imageUrl,
       aspectRatio: aspectRatio.value,
-    })
-    if (handleCardRequired(result, uiStore, router, isZh.value)) {
-      status.value = 'idle'
-      return
-    }
-    if (result.success && (result.image_url || result.video_url || result.result_url)) {
-      const url = result.image_url || result.video_url || result.result_url || ''
-      resultUrl.value = url.startsWith('http') ? url : `${window.location.origin}${url}`
-      resultKind.value = isVideoMode.value ? 'video' : 'image'
-      status.value = 'done'
-      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Error')
-      // Backend (result.message / result.error) returns zh/en only — ja/ko/es fall through to English (BUG-017).
-      uiStore.showError((result as any).message || (result as any).error || L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'Error al generar'))
-    }
+    }, cid))
   } catch (e: any) {
+    // Only non-recoverable errors reach here; timeouts are handled by task.run.
     status.value = 'error'
     statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
     uiStore.showError(e?.message || L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'Error al generar'))
+    return
+  }
+
+  if (result === null) {
+    // Timed out client-side but the backend is still running — DON'T error.
+    status.value = 'running'
+    statusText.value = L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.')
+    return
+  }
+
+  if (handleCardRequired(result, uiStore, router, isZh.value)) {
+    status.value = 'idle'
+    return
+  }
+  if (result.success && (result.image_url || result.video_url || result.result_url)) {
+    renderTaskResult(result)
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Error')
+    // Backend (result.message / result.error) returns zh/en only — ja/ko/es fall through to English (BUG-017).
+    uiStore.showError((result as any).message || (result as any).error || L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'Error al generar'))
   }
 }
 
@@ -145,7 +188,7 @@ function gotoPricing() { router.push('/pricing') }
 
 <template>
   <PiapiPlayground
-    :eta-seconds="150"
+    :eta-seconds="isVideoMode ? 240 : 40"
     :title="L('黏土風生成 (Claymation AI)', 'Claymation AI Generator', 'クレイメーション生成 (Claymation AI)', '클레이메이션 생성 (Claymation AI)', 'Generador Claymation AI')"
     :subtitle="L(
       '把任何主題變成手工黏土的定格動畫感。支援文字生圖、圖生圖、文字生影片、影片轉黏土風。',

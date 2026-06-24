@@ -19,11 +19,11 @@
  * Owner directive: ui colors stay (#0a0a0f bg, violet gradient buttons),
  * only UX shape changes.
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill, useGenerationTask } from '@/composables'
 import { toolsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -118,6 +118,32 @@ const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+const task = useGenerationTask('try_on')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.image_url || r.result_url)) {
+    resultUrl.value = r.image_url || r.result_url || null
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Falló')
+    uiStore.showError(task.error.value || L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'Falló la generación'))
+  }
+})
+onMounted(() => {
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的生成…', 'Resuming your previous generation…', '前回の生成を復元中…', '이전 생성을 복구하는 중…', 'Reanudando tu generación…')
+  }
+})
+
 // Disable Generate when required inputs are missing.
 const personReady = computed(() =>
   personSource.value === 'preset' ? !!selectedPresetModelId.value : !!modelImageUrl.value)
@@ -138,57 +164,72 @@ async function generate() {
   status.value = 'running'
   statusText.value = L('生成中…通常需要 30-60 秒', 'Generating… typically 30-60s', '生成中…通常 30〜60 秒かかります', '생성 중… 보통 30-60초 소요', 'Generando… normalmente 30-60 s')
   resultUrl.value = null
+
+  // Promote any local data: URIs to public URLs BEFORE the task wrapper (uploads
+  // must not carry the client id). Done concurrently — independent uploads.
+  // Preset models skip the person upload: the backend resolves model_id itself.
+  const usePreset = personSource.value === 'preset'
+  let personUrl: string | null
+  let garmentUrl: string | null
   try {
-    // Promote any local data: URIs to public URLs (Kontext / Kling cannot
-    // fetch a data URI). Done concurrently — they're independent uploads.
-    // Preset models skip the person upload entirely: the backend resolves
-    // model_id → TRYON_MODELS URL itself.
-    const usePreset = personSource.value === 'preset'
-    const [personUrl, garmentUrl] = await Promise.all([
+    [personUrl, garmentUrl] = await Promise.all([
       usePreset ? Promise.resolve(null) : ensurePublicUrl(modelImageUrl.value),
       mode.value === 'garment' ? ensurePublicUrl(garmentImageUrl.value) : Promise.resolve(null),
     ])
-    if (!usePreset && !personUrl) {
-      status.value = 'error'
-      uiStore.showError(L('人物照片上傳失敗', 'Person photo upload failed', '人物写真のアップロードに失敗しました', '인물 사진 업로드 실패', 'Error al subir la foto de la persona'))
-      return
-    }
-    if (mode.value === 'garment' && !garmentUrl) {
-      status.value = 'error'
-      uiStore.showError(L('服裝照片上傳失敗', 'Garment photo upload failed', '衣服の写真のアップロードに失敗しました', '의상 사진 업로드 실패', 'Error al subir la foto de la prenda'))
-      return
-    }
-
-    const apiPayload: Parameters<typeof toolsApi.tryOn>[1] = usePreset
-      ? { modelId: selectedPresetModelId.value }
-      : { modelImageUrl: personUrl! }
-    // Pro controls — only sent when set, so defaults stay backend-driven.
-    if (negativePrompt.value.trim()) apiPayload.negativePrompt = negativePrompt.value.trim()
-    let result
-    if (mode.value === 'garment') {
-      apiPayload.mode = 'garment'
-      apiPayload.category = garmentCategory.value
-      result = await toolsApi.tryOn(garmentUrl!, apiPayload)
-    } else {
-      apiPayload.mode = 'prompt'
-      apiPayload.prompt = promptText.value.trim()
-      result = await toolsApi.tryOn('', apiPayload)
-    }
-    if (result.success && (result.image_url || result.result_url)) {
-      resultUrl.value = result.image_url || result.result_url || null
-      status.value = 'done'
-      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success'))
-    } else {
-      status.value = 'error'
-      statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Falló')
-      uiStore.showError((result as any).message || (result as any).error || L('生成失敗，請稍後再試', 'Generation failed, please retry.', '生成に失敗しました。再試行してください。', '생성에 실패했습니다. 다시 시도해 주세요.', 'Falló la generación. Inténtalo de nuevo.'))
-    }
   } catch (e: any) {
     status.value = 'error'
     statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
     uiStore.showError(extractApiError(e, L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'Falló la generación')))
+    return
+  }
+  if (!usePreset && !personUrl) {
+    status.value = 'error'
+    uiStore.showError(L('人物照片上傳失敗', 'Person photo upload failed', '人物写真のアップロードに失敗しました', '인물 사진 업로드 실패', 'Error al subir la foto de la persona'))
+    return
+  }
+  if (mode.value === 'garment' && !garmentUrl) {
+    status.value = 'error'
+    uiStore.showError(L('服裝照片上傳失敗', 'Garment photo upload failed', '衣服の写真のアップロードに失敗しました', '의상 사진 업로드 실패', 'Error al subir la foto de la prenda'))
+    return
+  }
+
+  const apiPayload: Parameters<typeof toolsApi.tryOn>[1] = usePreset
+    ? { modelId: selectedPresetModelId.value }
+    : { modelImageUrl: personUrl! }
+  // Pro controls — only sent when set, so defaults stay backend-driven.
+  if (negativePrompt.value.trim()) apiPayload.negativePrompt = negativePrompt.value.trim()
+
+  let result: any
+  try {
+    result = await task.run((cid) => {
+      if (mode.value === 'garment') {
+        apiPayload.mode = 'garment'
+        apiPayload.category = garmentCategory.value
+        return toolsApi.tryOn(garmentUrl!, apiPayload, cid)
+      }
+      apiPayload.mode = 'prompt'
+      apiPayload.prompt = promptText.value.trim()
+      return toolsApi.tryOn('', apiPayload, cid)
+    })
+  } catch (e: any) {
+    status.value = 'error'
+    statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
+    uiStore.showError(extractApiError(e, L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'Falló la generación')))
+    return
+  }
+
+  if (result === null) {
+    status.value = 'running'
+    statusText.value = L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.')
+    return
+  }
+  if (result.success && (result.image_url || result.result_url)) {
+    renderTaskResult(result)
+    uiStore.showSuccess(t('common.success'))
+  } else {
+    status.value = 'error'
+    statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Falló')
+    uiStore.showError((result as any).message || (result as any).error || L('生成失敗，請稍後再試', 'Generation failed, please retry.', '生成に失敗しました。再試行してください。', '생성에 실패했습니다. 다시 시도해 주세요.', 'Falló la generación. Inténtalo de nuevo.'))
   }
 }
 

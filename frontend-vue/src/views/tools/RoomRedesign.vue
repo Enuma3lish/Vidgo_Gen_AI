@@ -35,11 +35,11 @@
  * #7c3aed→#a78bfa violet accents, #f5f5fa/#94949f text. Only the SHAPE
  * changes — palette stays.
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill, useGenerationTask } from '@/composables'
 import { demoApi, toolsApi } from '@/api'
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -107,6 +107,34 @@ const statusText = ref('')
 const resultImage = ref<string | null>(null)
 const resultVariants = ref<string[]>([])
 
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()). Recovery restores the
+// primary image; extra variants (if any) remain in 作品庫.
+const task = useGenerationTask('room_redesign')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.image_url || r.result_url)) {
+    const u = r.image_url || r.result_url || ''
+    resultImage.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Generación fallida')
+    uiStore.showError(task.error.value || L('生成失敗', 'Generation failed', '生成失敗', '생성 실패', 'Generación fallida'))
+  }
+})
+onMounted(() => {
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的生成…', 'Resuming your previous generation…', '前回の生成を復元中…', '이전 생성을 복구하는 중…', 'Reanudando tu generación…')
+  }
+})
+
 // ─── Style catalog (loaded from backend) ─────────────────────────────
 interface StyleCard { id: string; name: string; name_zh: string; preview_url?: string; prompt?: string }
 const styles = ref<Record<SpaceKind, StyleCard[]>>({ interior: [], commercial: [], exterior: [] })
@@ -142,9 +170,10 @@ async function generate() {
   resultImage.value = null
   resultVariants.value = []
 
+  // Uploads happen BEFORE the task wrapper (they must not carry the client id).
+  let styleRefUrl: string | undefined
+  let uploadedUrl: string
   try {
-    // Optional style-reference image — upload first so we can pass its URL.
-    let styleRefUrl: string | undefined
     if (styleRefFile.value) {
       try {
         const upRef = await demoApi.uploadImage(styleRefFile.value)
@@ -153,19 +182,22 @@ async function generate() {
         console.warn('[room-redesign] style reference upload failed:', e)
       }
     }
-    // All three modes route through the subscriber endpoint
-    // /tools/room-redesign so they share the provider_router fallback
-    // chain (PiAPI Kontext primary → Vertex backup) and respect the
-    // full RoomRedesignRequest contract (styleStrength, space_kind,
-    // lighting/material chips, variation_count). Previously redesign +
-    // stage went to /interior/demo/redesign which uses Gemini-only with
-    // no fallback — that path produced inconsistent results (sometimes
-    // unchanged input, sometimes text-only) and silently dropped the
-    // styleStrength slider, the exterior/commercial style catalogs,
-    // and the variation_count knob.
     const uploaded = await demoApi.uploadImage(uploadedFile.value!)
-    const result = await toolsApi.roomRedesign(
-      uploaded.url,
+    uploadedUrl = uploaded.url
+  } catch (e: any) {
+    status.value = 'error'
+    statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
+    uiStore.showError(extractApiError(e, L('生成失敗', 'Generation failed', '生成失敗', '생성 실패', 'Generación fallida')))
+    return
+  }
+
+  // All three modes route through the subscriber endpoint /tools/room-redesign
+  // so they share the provider_router fallback chain and the full
+  // RoomRedesignRequest contract (styleStrength, space_kind, chips, variations).
+  let result: any
+  try {
+    result = await task.run((cid) => toolsApi.roomRedesign(
+      uploadedUrl,
       mode.value === 'magic' ? '' : selectedStyle.value,
       customPrompt.value.trim(),
       undefined,
@@ -180,36 +212,42 @@ async function generate() {
         variationCount: variationCount.value,
         styleReferenceImageUrl: styleRefUrl,
       },
-    )
-    if (handleCardRequired(result, uiStore, router, isZh.value)) {
-      status.value = 'idle'
-      statusText.value = ''
-      return
-    }
-    if (result.success && (result.image_url || result.result_url)) {
-      const u = result.image_url || result.result_url || ''
-      resultImage.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
-      // Collect all variants for the multi-result grid.
-      const arr = (result as any).results
-      if (Array.isArray(arr) && arr.length > 1) {
-        resultVariants.value = arr
-          .map((r: any) => r.image_url || r.result_url || '')
-          .filter(Boolean)
-          .map((x: string) => (x.startsWith('http') ? x : `${window.location.origin}${x}`))
-      }
-      status.value = 'done'
-      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Generación fallida')
-      uiStore.showError((result as any).message || (result as any).error || 'Generation failed.')
-    }
+      cid,
+    ))
   } catch (e: any) {
     status.value = 'error'
     statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
     uiStore.showError(extractApiError(e, L('生成失敗', 'Generation failed', '生成失敗', '생성 실패', 'Generación fallida')))
+    return
+  }
+
+  if (result === null) {
+    status.value = 'running'
+    statusText.value = L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.')
+    return
+  }
+  if (task.suggestGallery.value) return  // recovered via polling — watch applied it
+
+  if (handleCardRequired(result, uiStore, router, isZh.value)) {
+    status.value = 'idle'
+    statusText.value = ''
+    return
+  }
+  if (result.success && (result.image_url || result.result_url)) {
+    renderTaskResult(result)
+    // Collect all variants for the multi-result grid.
+    const arr = (result as any).results
+    if (Array.isArray(arr) && arr.length > 1) {
+      resultVariants.value = arr
+        .map((r: any) => r.image_url || r.result_url || '')
+        .filter(Boolean)
+        .map((x: string) => (x.startsWith('http') ? x : `${window.location.origin}${x}`))
+    }
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Generación fallida')
+    uiStore.showError((result as any).message || (result as any).error || 'Generation failed.')
   }
 }
 

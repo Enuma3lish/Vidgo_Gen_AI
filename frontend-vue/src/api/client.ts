@@ -2,6 +2,14 @@ import axios from 'axios'
 import type { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { safeLocalStorage } from '@/utils/safeStorage'
 
+// P0-2: per-request correlation id forwarded as the X-Client-Task-Id header.
+declare module 'axios' {
+  // eslint-disable-next-line @typescript-eslint/no-empty-interface
+  export interface AxiosRequestConfig {
+    clientTaskId?: string
+  }
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 // Create axios instance
@@ -31,6 +39,14 @@ apiClient.interceptors.request.use(
     const locale = safeLocalStorage.getItem('locale') || safeLocalStorage.getItem('vidgo-locale') || navigator.language || 'en'
     if (config.headers) {
       config.headers['Accept-Language'] = locale
+    }
+    // P0-2: a generation call may set `clientTaskId` on its request config;
+    // forward it as X-Client-Task-Id so the backend stamps it onto the
+    // UserGeneration / PendingProviderTask, letting the client poll
+    // GET /api/v1/user/tasks/{id} to recover a timed-out / refreshed task.
+    const clientTaskId = (config as any).clientTaskId
+    if (clientTaskId && config.headers) {
+      config.headers['X-Client-Task-Id'] = clientTaskId
     }
     return config
   },

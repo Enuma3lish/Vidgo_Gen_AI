@@ -10,11 +10,11 @@
  * the model dropdown (1 option), video upload, invert toggle. Right
  * column shows status + result video player.
  */
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized } from '@/composables'
+import { useDemoMode, useLocalized, useGenerationTask } from '@/composables'
 import { toolsApi, uploadsApi } from '@/api'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ExampleGallery from '@/components/tools/ExampleGallery.vue'
@@ -57,6 +57,32 @@ function handleFileChange(e: Event) {
   resultUrl.value = null
 }
 
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+const task = useGenerationTask('video_bg_remove')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.video_url || r.result_url)) {
+    resultUrl.value = r.video_url || r.result_url || null
+    status.value = 'done'
+    statusText.value = isZh.value ? '完成' : 'Done'
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    statusText.value = isZh.value ? '處理失敗' : 'Failed'
+    uiStore.showError(task.error.value || (isZh.value ? '處理失敗' : 'Processing failed'))
+  }
+})
+onMounted(() => {
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = isZh.value ? '正在恢復先前的處理…' : 'Resuming your previous job…'
+  }
+})
+
 async function generate() {
   if (disabled.value || status.value === 'running') return
   if (isDemoUser.value) {
@@ -64,34 +90,49 @@ async function generate() {
     return
   }
   status.value = 'running'
-  statusText.value = isZh.value ? '處理中…通常需要 1-3 分鐘' : 'Processing… typically 1-3 minutes'
   resultUrl.value = null
+
+  // Upload + normalize BEFORE the task wrapper (the upload must not carry the
+  // generation's client_task_id). PiAPI rejects base64; backend needs a public
+  // URL — normalizeVideo transcodes to a known-good MP4 in GCS.
+  let publicUrl: string
   try {
-    // PiAPI rejects base64; backend needs a public URL. Use the existing
-    // server-side normalize endpoint (it transcodes to a known-good MP4
-    // and stores in GCS, matching what PiAPI's video tools accept).
     statusText.value = isZh.value ? '上傳並正規化影片…' : 'Uploading & normalizing video…'
     const normalized = await uploadsApi.normalizeVideo(videoFile.value!)
-    const publicUrl = normalized.video_url
+    publicUrl = normalized.video_url
     if (!publicUrl) throw new Error('upload returned no url')
-    statusText.value = isZh.value ? '處理中…通常需要 1-3 分鐘' : 'Processing… typically 1-3 minutes'
-
-    const result = await toolsApi.videoBackgroundRemove(publicUrl, { invertOutput: invertOutput.value })
-    if (result.success && (result.video_url || result.result_url)) {
-      resultUrl.value = result.video_url || result.result_url || null
-      status.value = 'done'
-      statusText.value = isZh.value ? '完成' : 'Done'
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      statusText.value = isZh.value ? '處理失敗' : 'Failed'
-      uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '處理失敗' : 'Processing failed'))
-    }
   } catch (e: any) {
     status.value = 'error'
     statusText.value = isZh.value ? '錯誤' : 'Error'
     uiStore.showError(e?.message || (isZh.value ? '處理失敗' : 'Processing failed'))
+    return
+  }
+  statusText.value = isZh.value ? '處理中…通常需要 1-3 分鐘' : 'Processing… typically 1-3 minutes'
+
+  let result: any
+  try {
+    result = await task.run((cid) => toolsApi.videoBackgroundRemove(publicUrl, { invertOutput: invertOutput.value }, cid))
+  } catch (e: any) {
+    status.value = 'error'
+    statusText.value = isZh.value ? '錯誤' : 'Error'
+    uiStore.showError(e?.message || (isZh.value ? '處理失敗' : 'Processing failed'))
+    return
+  }
+
+  if (result === null) {
+    // Timed out client-side but the backend is still running — DON'T error.
+    status.value = 'running'
+    statusText.value = isZh.value ? '仍在處理中，完成後會存入「我的作品」。' : 'Still processing — it will be saved to My Works when done.'
+    return
+  }
+
+  if (result.success && (result.video_url || result.result_url)) {
+    renderTaskResult(result)
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    statusText.value = isZh.value ? '處理失敗' : 'Failed'
+    uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '處理失敗' : 'Processing failed'))
   }
 }
 

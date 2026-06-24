@@ -15,6 +15,8 @@ export { adminApi, createAdminWebSocket } from './admin'
 export { interiorApi } from './interior'
 export { subscriptionApi } from './subscription'
 export { userApi } from './user'
+export { tasksApi } from './tasks'
+export type { TaskStatus, TaskStatusValue, TaskGeneration } from './tasks'
 
 export type { LoginRequest, RegisterRequest, VerifyCodeRequest, User, AuthResponse } from './auth'
 export type { GenerateRequest, GenerateResponse, ToolShowcase, Inspiration } from './demo'

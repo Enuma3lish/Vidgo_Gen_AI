@@ -1,6 +1,12 @@
 import apiClient from './client'
 
 const GENERATION_TIMEOUT_MS = 15 * 60 * 1000
+// AI Avatar polls up to AVATAR_MAX_TIMEOUT_SEC (3000s ≈ 50min) server-side and
+// streams a 25s heartbeat to keep the connection alive. The generic 15-min
+// ceiling aborted healthy long avatars client-side (credits already charged) —
+// "long time, no result". Give the request the backend's full window; if the
+// connection still drops, useGenerationTask recovers via status polling.
+const AVATAR_TIMEOUT_MS = 50 * 60 * 1000
 
 export interface ToolResponse {
   success: boolean
@@ -75,6 +81,7 @@ export const toolsApi = {
     templateId?: string,
     promptId?: string,
     locale?: string,
+    clientTaskId?: string,
   ): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/product-scene',
@@ -87,7 +94,7 @@ export const toolsApi = {
         prompt_id: promptId,
         locale,
       },
-      { timeout: GENERATION_TIMEOUT_MS }
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
     )
     return response.data
   },
@@ -106,6 +113,7 @@ export const toolsApi = {
       prompt?: string
       negativePrompt?: string
     },
+    clientTaskId?: string,
   ): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/try-on',
@@ -123,7 +131,7 @@ export const toolsApi = {
         prompt: opts?.prompt,
         negative_prompt: opts?.negativePrompt,
       },
-      { timeout: GENERATION_TIMEOUT_MS }
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
     )
     return response.data
   },
@@ -149,6 +157,7 @@ export const toolsApi = {
       quality?: 'standard' | 'high'
       styleReferenceImageUrl?: string
     },
+    clientTaskId?: string,
   ): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/room-redesign',
@@ -168,7 +177,7 @@ export const toolsApi = {
         ...(opts?.quality ? { quality: opts.quality } : {}),
         ...(opts?.styleReferenceImageUrl ? { style_reference_image_url: opts.styleReferenceImageUrl } : {}),
       },
-      { timeout: GENERATION_TIMEOUT_MS }
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
     )
     return response.data
   },
@@ -192,6 +201,7 @@ export const toolsApi = {
       cameraMove?: string
       subjectLock?: boolean
     },
+    clientTaskId?: string,
   ): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/short-video',
@@ -209,14 +219,15 @@ export const toolsApi = {
         camera_move: opts?.cameraMove || undefined,
         subject_lock: opts?.subjectLock ?? true,
       },
-      { timeout: GENERATION_TIMEOUT_MS }
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
     )
     return response.data
   },
 
-  async avatar(params: { image_url: string; script?: string; voice_id?: string; language?: string; prompt_id?: string; locale?: string }): Promise<ToolResponse> {
+  async avatar(params: { image_url: string; script?: string; voice_id?: string; language?: string; prompt_id?: string; locale?: string }, clientTaskId?: string): Promise<ToolResponse> {
     const response = await apiClient.post('/api/v1/tools/avatar', params, {
-      timeout: GENERATION_TIMEOUT_MS,
+      timeout: AVATAR_TIMEOUT_MS,
+      clientTaskId,
     })
     return response.data
   },
@@ -232,7 +243,7 @@ export const toolsApi = {
     prompt: string
     imageUrl?: string
     aspectRatio?: string
-  }): Promise<ToolResponse> {
+  }, clientTaskId?: string): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/claymation',
       {
@@ -241,7 +252,7 @@ export const toolsApi = {
         image_url: params.imageUrl,
         aspect_ratio: params.aspectRatio ?? '1:1',
       },
-      { timeout: GENERATION_TIMEOUT_MS }
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
     )
     return response.data
   },
@@ -249,14 +260,14 @@ export const toolsApi = {
   // Video Background Remove — Qubico video-toolkit via PiAPI (added 2026-05-24
   // after stability probe verified this endpoint healthy; sibling Qubico
   // video tools upscale/watermark-remove dropped per probe results).
-  async videoBackgroundRemove(videoUrl: string, opts?: { invertOutput?: boolean }): Promise<ToolResponse> {
+  async videoBackgroundRemove(videoUrl: string, opts?: { invertOutput?: boolean }, clientTaskId?: string): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/video-background-remove',
       {
         video_url: videoUrl,
         invert_output: opts?.invertOutput ?? false,
       },
-      { timeout: GENERATION_TIMEOUT_MS }
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
     )
     return response.data
   },
@@ -289,6 +300,29 @@ export const toolsApi = {
         scale,
       },
       { timeout: GENERATION_TIMEOUT_MS }
+    )
+    return response.data
+  },
+
+  // Render enhancer — enhance (optional) + upscale in ONE billed call.
+  // Backend charges render_enhance (20) when aiEnhance is on, else image_upscale
+  // (3). Replaces the old two-call (room-redesign + upscale) orchestration so
+  // the displayed price equals the single actual deduction.
+  async renderEnhance(params: {
+    imageUrl: string
+    scale?: 2 | 4
+    aiEnhance?: boolean
+    creativity?: number
+  }, clientTaskId?: string): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/render-enhance',
+      {
+        image_url: params.imageUrl,
+        scale: params.scale ?? 2,
+        ai_enhance: params.aiEnhance ?? true,
+        creativity: params.creativity ?? 0.45,
+      },
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
     )
     return response.data
   },
@@ -337,7 +371,7 @@ export const toolsApi = {
     cameraMove?: string
     subjectLock?: boolean   // I2V: keep the start frame's subject identical
     strictPrompt?: boolean  // T2V: render only what the prompt describes
-  }): Promise<ToolResponse> {
+  }, clientTaskId?: string): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/kling-video',
       {
@@ -353,7 +387,7 @@ export const toolsApi = {
         subject_lock: params.subjectLock ?? true,
         strict_prompt: params.strictPrompt ?? true,
       },
-      { timeout: GENERATION_TIMEOUT_MS }
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
     )
     return response.data
   },
@@ -372,7 +406,7 @@ export const toolsApi = {
     cameraMove?: string
     subjectLock?: boolean   // I2V: keep the start frame's subject identical
     strictPrompt?: boolean  // T2V: render only what the prompt describes
-  }): Promise<ToolResponse> {
+  }, clientTaskId?: string): Promise<ToolResponse> {
     const response = await apiClient.post(
       '/api/v1/tools/sora2-pro',
       {
@@ -391,7 +425,7 @@ export const toolsApi = {
       // Sora 2 Pro polls up to 1800s (KLING_OMNI_TIMEOUT_SEC) server-side; the
       // 15-min shared GENERATION_TIMEOUT_MS aborted healthy renders client-side
       // while credits were already charged. Give it a 35-min ceiling (> server).
-      { timeout: 35 * 60 * 1000 }
+      { timeout: 35 * 60 * 1000, clientTaskId }
     )
     return response.data
   },

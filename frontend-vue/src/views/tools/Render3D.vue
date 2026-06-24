@@ -15,10 +15,10 @@
  *
  * Backend: POST /api/v1/interior/floorplan-to-video
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useLocalized } from '@/composables'
+import { useLocalized, useGenerationTask } from '@/composables'
 import { toolsApi } from '@/api'
 import {
   interiorApi,
@@ -74,7 +74,35 @@ const expandedSimUrl = ref<string | null>(null)
 
 // ─── Catalog (tiers) from the backend ────────────────────────────────
 const tiers = ref<FloorplanTier[]>([])
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()). These long render/video
+// jobs (8–25 min) routinely exceed the client timeout, so recovery matters.
+// Recovery can only restore the primary image/video (the gallery row); the
+// 3D model + simulation variants still appear in 作品庫.
+const task = useGenerationTask('render3d')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.video_url || r.image_url || r.result_url)) {
+    if (r.video_url) videoUrl.value = r.video_url
+    if (r.image_url) renderImageUrl.value = r.image_url
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Generación fallida')
+    uiStore.showError(task.error.value || L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'La generación falló'))
+  }
+})
+
 onMounted(async () => {
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的生成…', 'Resuming your previous generation…', '前回の生成を復元中…', '이전 생성을 복구하는 중…', 'Reanudando tu generación…')
+  }
   try {
     const opts = await interiorApi.getFloorplanOptions()
     tiers.value = opts.tiers || []
@@ -127,15 +155,17 @@ async function generate() {
   modelUrl.value = null
   simulationVariants.value = []
 
-  try {
-    const imageUrl = await ensureImageUrl()
-    if (!imageUrl) {
-      status.value = 'error'
-      uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida'))
-      return
-    }
+  // Upload BEFORE the task wrapper (the upload must not carry the client id).
+  const imageUrl = await ensureImageUrl()
+  if (!imageUrl) {
+    status.value = 'error'
+    uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida'))
+    return
+  }
 
-    const result = await interiorApi.floorplanToVideo({
+  let result: any
+  try {
+    result = await task.run((cid) => interiorApi.floorplanToVideo({
       image_url: imageUrl,
       result_tier: resultTier.value,
       // Layout is ALWAYS locked under the new UX — preserve_original=true
@@ -148,8 +178,28 @@ async function generate() {
       lighting_tone: lightingTone.value,
       prompt: magicMode.value ? (magicPrompt.value.trim() || undefined) : undefined,
       language: isZh.value ? 'zh' : 'en',
-    })
+    }, cid))
+  } catch (e: any) {
+    status.value = 'error'
+    statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
+    uiStore.showError(extractApiError(e, L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'La generación falló')))
+    return
+  }
 
+  if (result === null) {
+    // Timed out client-side but the backend is still running — DON'T error.
+    status.value = 'running'
+    statusText.value = L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.')
+    return
+  }
+  if (task.suggestGallery.value) {
+    // Recovered via background polling — renderTaskResult already applied the
+    // primary image/video (the full multi-tier result is in 作品庫).
+    return
+  }
+
+  // Direct happy path — full multi-tier result handling (unchanged).
+  {
     const okSimulation = isSimulationTier.value && (result?.simulation_variants?.length || 0) > 0
     const okVideo = isVideoTier.value && !!result.video_url
     const okRender = !isSimulationTier.value && !isVideoTier.value && !!result.render_image_url
@@ -178,10 +228,6 @@ async function generate() {
       statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Generación fallida')
       uiStore.showError(result?.error || L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'La generación falló'))
     }
-  } catch (e: any) {
-    status.value = 'error'
-    statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
-    uiStore.showError(extractApiError(e, L('生成失敗', 'Generation failed', '生成に失敗しました', '생성에 실패했습니다', 'La generación falló')))
   }
 }
 

@@ -10,11 +10,11 @@
  *
  * Backend: POST /api/v1/interior/isometric (25 credits).
  */
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useLocalized } from '@/composables'
+import { useLocalized, useGenerationTask } from '@/composables'
 import { toolsApi } from '@/api'
 import { interiorApi } from '@/api/interior'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
@@ -42,6 +42,32 @@ const resultUrl = ref<string | null>(null)
 const creditCost = computed(() => 25)
 const disabled = computed(() => !imageInput.value)
 
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+const task = useGenerationTask('isometric')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.image_url || r.result_url)) {
+    const u = r.image_url || r.result_url || ''
+    resultUrl.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    uiStore.showError(task.error.value || (isZh.value ? '生成失敗' : 'Generation failed'))
+  }
+})
+onMounted(() => {
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的生成…', 'Resuming your previous generation…', '前回の生成を復元中…', '이전 생성을 복구하는 중…', 'Reanudando tu generación…')
+  }
+})
+
 async function ensureImageUrl(): Promise<string | null> {
   if (!imageInput.value) return null
   if (!imageInput.value.startsWith('data:')) return imageInput.value
@@ -56,30 +82,37 @@ async function generate() {
   status.value = 'running'
   statusText.value = L('生成中… 約 30–90 秒', 'Generating… ~30–90s', '生成中… 約30〜90秒', '생성 중… 약 30~90초', 'Generando… ~30–90 s')
   resultUrl.value = null
+
+  // Upload BEFORE the task wrapper (must not carry the client id).
+  const url = await ensureImageUrl()
+  if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+
+  let result: any
   try {
-    const url = await ensureImageUrl()
-    if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
-    const result = await interiorApi.isometric({
+    result = await task.run((cid) => interiorApi.isometric({
       image_url: url,
       language: isZh.value ? 'zh' : 'en',
-    })
-    if (handleCardRequired(result, uiStore, router, isZh.value)) {
-      status.value = 'idle'; statusText.value = ''; return
-    }
-    if (result.success && result.image_url) {
-      const u = result.image_url
-      resultUrl.value = u.startsWith('http') ? u : `${window.location.origin}${u}`
-      status.value = 'done'
-      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '生成失敗' : 'Generation failed'))
-    }
+    }, cid))
   } catch (e: any) {
     status.value = 'error'
     uiStore.showError(extractApiError(e, isZh.value ? '生成失敗' : 'Generation failed'))
+    return
+  }
+
+  if (result === null) {
+    status.value = 'running'
+    statusText.value = L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.')
+    return
+  }
+  if (handleCardRequired(result, uiStore, router, isZh.value)) {
+    status.value = 'idle'; statusText.value = ''; return
+  }
+  if (result.success && result.image_url) {
+    renderTaskResult(result)
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    uiStore.showError((result as any).message || (result as any).error || (isZh.value ? '生成失敗' : 'Generation failed'))
   }
 }
 </script>

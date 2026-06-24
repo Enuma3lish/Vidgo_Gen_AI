@@ -7,11 +7,11 @@
  * OR a custom prompt to Flux Kontext I2I. The Kontext I2I path is what
  * preserves the product silhouette / label / color through the restyling.
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUIStore, useCreditsStore } from '@/stores'
-import { useDemoMode, useLocalized, useExamplePrefill } from '@/composables'
+import { useDemoMode, useLocalized, useExamplePrefill, useGenerationTask } from '@/composables'
 import { toolsApi } from '@/api'
 import apiClient from '@/api/client'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
@@ -42,6 +42,25 @@ const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
 const resultUrl = ref<string | null>(null)
 
+// P0-2: single source of truth for the in-flight task — recovers on timeout
+// (background poll) and on page refresh (resume()).
+const task = useGenerationTask('product_scene')
+function renderTaskResult(r: any) {
+  if (r && r.success && (r.image_url || r.result_url)) {
+    resultUrl.value = r.image_url || r.result_url || null
+    status.value = 'done'
+    statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+    if (r.credits_used) creditsStore.deductCredits(r.credits_used)
+  }
+}
+watch(() => task.result.value, (r) => renderTaskResult(r))
+watch(() => task.phase.value, (p) => {
+  if (p === 'error') {
+    status.value = 'error'
+    uiStore.showError(task.error.value || L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Generación fallida'))
+  }
+})
+
 const disabled = computed(() => {
   if (!productImage.value) return true
   if (mode.value === 'custom') return !customPrompt.value.trim()
@@ -57,7 +76,13 @@ async function loadScenes() {
     console.warn('[product-scene] failed to load scene templates', e)
   }
 }
-onMounted(loadScenes)
+onMounted(() => {
+  if (task.resume()) {
+    status.value = 'running'
+    statusText.value = L('正在恢復先前的生成…', 'Resuming your previous generation…', '前回の生成を復元中…', '이전 생성을 복구하는 중…', 'Reanudando tu generación…')
+  }
+  loadScenes()
+})
 
 // "Try this example" deeplink — Inspiration Gallery pushes ?prompt= and
 // ?image= into the route. Wire them into the existing form state so the
@@ -94,10 +119,14 @@ async function generate() {
   status.value = 'running'
   statusText.value = L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…')
   resultUrl.value = null
+
+  // Upload BEFORE the task wrapper (must not carry the client id).
+  const url = await ensureImageUrl()
+  if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+
+  let result: any
   try {
-    const url = await ensureImageUrl()
-    if (!url) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
-    const result = await toolsApi.productScene(
+    result = await task.run((cid) => toolsApi.productScene(
       url,
       mode.value === 'preset' ? sceneType.value : 'custom',
       mode.value === 'custom' ? customPrompt.value.trim() : undefined,
@@ -105,24 +134,29 @@ async function generate() {
       undefined,
       undefined,
       String(locale.value || ''),
-    )
-    if (handleCardRequired(result, uiStore, router, isZh.value)) {
-      status.value = 'idle'
-      return
-    }
-    if (result.success && (result.image_url || result.result_url)) {
-      resultUrl.value = result.image_url || result.result_url || null
-      status.value = 'done'
-      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
-      if (result.credits_used) creditsStore.deductCredits(result.credits_used)
-      uiStore.showSuccess(t('common.success') || 'Success')
-    } else {
-      status.value = 'error'
-      uiStore.showError((result as any).message || (result as any).error || L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Generación fallida'))
-    }
+      cid,
+    ))
   } catch (e: any) {
     status.value = 'error'
     uiStore.showError(extractApiError(e, L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Generación fallida')))
+    return
+  }
+
+  if (result === null) {
+    status.value = 'running'
+    statusText.value = L('仍在生成中，完成後會存入「我的作品」。', 'Still generating — it will be saved to My Works when done.', '生成中です。完了後「マイ作品」に保存されます。', '생성 중입니다. 완료되면 내 작품에 저장됩니다.', 'Generando; se guardará en Mis Trabajos.')
+    return
+  }
+  if (handleCardRequired(result, uiStore, router, isZh.value)) {
+    status.value = 'idle'
+    return
+  }
+  if (result.success && (result.image_url || result.result_url)) {
+    renderTaskResult(result)
+    uiStore.showSuccess(t('common.success') || 'Success')
+  } else {
+    status.value = 'error'
+    uiStore.showError((result as any).message || (result as any).error || L('生成失敗', 'Failed', '生成に失敗しました', '생성 실패', 'Generación fallida'))
   }
 }
 

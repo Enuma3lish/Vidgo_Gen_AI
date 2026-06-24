@@ -2,12 +2,14 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useLocalized } from '@/composables'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/user'
 import type { UserGeneration } from '@/api/user'
 import ShareToSocialModal from '@/components/social/ShareToSocialModal.vue'
 
 const { t, locale } = useI18n()
+const { L } = useLocalized()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -154,9 +156,33 @@ function getExpiryColor(work: UserGeneration): string {
   return '#4a7bb5'                     // 正常藍色
 }
 
-function getToolName(toolType: string): string {
-  const key = toolTranslationKeys[toolType]
-  return key ? t(key) : toolType.replace(/_/g, ' ')
+// Many distinct tools are persisted under a broad tool_type, which collapsed
+// them to one gallery label (e.g. RoomRedesign / LandscapeAI / ExteriorAI /
+// CommercialSpace / SketchToRender all → "毛胚屋/線稿秒渲染"; upscale / recolor /
+// render-enhance / claymation all → "風格特效"). Disambiguate from the saved
+// input_params (space_kind / tool / action) so the gallery shows the actual
+// source tool. Falls back to the broad tool_type label for everything else.
+function getToolName(work: { tool_type: string; input_params?: Record<string, unknown> | null }): string {
+  const tt = work.tool_type
+  const p = (work.input_params || {}) as Record<string, unknown>
+  if (tt === 'room_redesign') {
+    const sk = String(p.space_kind || 'interior')
+    if (sk === 'exterior') return L('建築外觀渲染', 'Exterior Render', '建築外観レンダリング', '건축 외관 렌더링', 'Render de exteriores')
+    if (sk === 'commercial') return L('商業空間設計', 'Commercial Space', '商業空間デザイン', '상업 공간 디자인', 'Espacio comercial')
+    if (sk === 'landscape') return L('景觀設計', 'Landscape Design', '景観デザイン', '조경 디자인', 'Diseño de paisaje')
+    return L('室內設計渲染', 'Interior Redesign', 'インテリアデザイン', '인테리어 리디자인', 'Rediseño de interiores')
+  }
+  if (tt === 'effect') {
+    const hint = String(p.tool || p.action || '')
+    if (hint === 'upscale') return L('圖片高清放大', 'HD Upscale', '高画質化', '고화질 확대', 'Mejora HD')
+    if (hint === 'render_enhance') return L('渲染圖優化', 'Render Enhance', 'レンダー高画質化', '렌더 향상', 'Mejora de render')
+    if (hint === 'recolor') return L('商品換色', 'Product Recolor', '商品の色変更', '제품 색상 변경', 'Recolorear producto')
+    if (hint === 'claymation') return L('黏土風', 'Claymation', 'クレイ風', '클레이풍', 'Claymation')
+    if (hint === 'video_background_remove') return L('影片去背', 'Video BG Remove', '動画背景除去', '영상 배경 제거', 'Quitar fondo de vídeo')
+    return L('風格特效', 'Style Effect', 'スタイルエフェクト', '스타일 효과', 'Efecto de estilo')
+  }
+  const key = toolTranslationKeys[tt]
+  return key ? t(key) : tt.replace(/_/g, ' ')
 }
 
 /** 取得生成參數的可讀摘要 */
@@ -353,7 +379,7 @@ function closeShareModal() {
             <!-- Info + Actions -->
             <div class="p-4">
               <p class="text-sm font-medium capitalize mb-1" style="color: #e8f4ff;">
-                {{ getToolName(work.tool_type) }}
+                {{ getToolName(work) }}
               </p>
               <div class="flex items-center justify-between text-xs mb-2" style="color: #4a7bb5;">
                 <span>{{ formatDate(work.created_at) }}</span>
@@ -462,7 +488,7 @@ function closeShareModal() {
               <div class="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span class="block text-xs mb-1" style="color: #4a7bb5;">{{ t('dashboard.myWorks.tool') }}</span>
-                  <span style="color: #e8f4ff;">{{ getToolName(selectedWork.tool_type) }}</span>
+                  <span style="color: #e8f4ff;">{{ getToolName(selectedWork) }}</span>
                 </div>
                 <div>
                   <span class="block text-xs mb-1" style="color: #4a7bb5;">{{ t('dashboard.myWorks.createdAt') }}</span>
@@ -536,7 +562,7 @@ function closeShareModal() {
             <!-- Info -->
             <div class="p-6">
               <h3 class="text-lg font-bold mb-2" style="color: #e8f4ff;">
-                {{ getToolName(selectedWork.tool_type) }}
+                {{ getToolName(selectedWork) }}
               </h3>
               <div class="flex items-center gap-4 text-sm mb-3" style="color: #6b9ab8;">
                 <span>{{ t('dashboard.myWorks.createdOn', { date: formatDate(selectedWork.created_at) }) }}</span>

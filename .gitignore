@@ -7,6 +7,9 @@
 # ── OS / editor cruft ────────────────────────────────────────────────────────
 .DS_Store
 **/.DS_Store
+# macOS AppleDouble / resource-fork files (._Foo) that appear on non-HFS volumes
+._*
+**/._*
 Thumbs.db
 *.bak
 *.vue.bak

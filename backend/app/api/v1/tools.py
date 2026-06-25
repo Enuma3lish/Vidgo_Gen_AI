@@ -5982,6 +5982,159 @@ async def _kling_video_inner(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# TEXT-TO-VIDEO (added 2026-06-25) — genuine dual-provider basic tier
+# ─────────────────────────────────────────────────────────────────────────
+# Routes through the generic TaskType.T2V path: PiAPI primary
+# (piapi.text_to_video — seedance/hailuo families) → Pollo backup
+# (pollo.text_to_video, pollo-v1-6). Unlike /kling-video (Pollo can't do Kling
+# T2V), this path has a REAL working backup on BOTH providers. Default model is
+# Hailuo (18 cr — the cheapest model both providers serve), so the "basic" T2V
+# default is dual-provider redundant. Kling V3 tiers stay on /kling-video.
+class TextToVideoRequest(BaseModel):
+    """Text-to-video on the dual-provider path (PiAPI → Pollo).
+
+    Default model Hailuo (18 cr). ``prompt_id`` resolves a curated short_video
+    preset (free visitors get the cached demo; a typed prompt needs a sub).
+    """
+    prompt: str = Field(default="", max_length=2500)
+    model_id: str = Field(default="hailuo", description="hailuo (default, cheapest) | seedance | seedance_1080p")
+    aspect_ratio: str = Field(default="16:9", description="16:9 / 9:16 / 1:1")
+    duration: int = Field(default=5, description="5 or 10 seconds")
+    resolution: Optional[str] = Field(default=None, description="720p / 1080p (Seedance only)")
+    negative_prompt: Optional[str] = Field(default=None, max_length=2500)
+    camera_move: Optional[str] = Field(default=None, description="Deterministic camera move id (static | dolly_in | …).")
+    strict_prompt: bool = Field(default=True, description="Append the strict-adherence clause so the model renders only what the prompt describes.")
+    prompt_id: Optional[str] = Field(default=None, description="Curated short_video preset id; resolves canonical text and routes free visitors to the cached demo.")
+    locale: Optional[str] = Field(default=None, description="UI locale hint for prompt_id resolution (zh-* → Chinese variant).")
+
+
+@router.post("/text-to-video")
+async def text_to_video(
+    request: TextToVideoRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user_optional),
+):
+    """Streaming wrapper around dual-provider text-to-video (heartbeat keeps the
+    connection warm during 60-300 s renders, same as /kling-video)."""
+    async def _do_text_to_video() -> Dict[str, Any]:
+        result = await _text_to_video_inner(request, db, current_user)
+        return result.model_dump() if hasattr(result, "model_dump") else result
+
+    return _stream_with_heartbeat(_do_text_to_video)
+
+
+async def _text_to_video_inner(
+    request: TextToVideoRequest,
+    db: AsyncSession,
+    current_user,
+) -> ToolResponse:
+    # ===== ACCESS GATE: preset → cached demo, custom prompt → subscribe + card =====
+    curated_motion = _resolve_curated_prompt("short_video", request.prompt_id, request.locale)
+    if curated_motion:
+        request.prompt = curated_motion
+    _is_custom = bool((request.prompt or "").strip()) and not bool(curated_motion)
+    _gate = await _custom_prompt_gate(db, current_user, _is_custom)
+    if _gate == "blocked":
+        return _subscribe_card_required_response()
+    if _gate == "demo":
+        return await _demo_response(
+            db,
+            ToolType.SHORT_VIDEO,
+            topic=(request.prompt_id or None),
+            product_id=(request.model_id or None),
+            cta="Subscribe to create your own videos.",
+        )
+
+    if not (request.prompt or "").strip():
+        return ToolResponse(success=False, message="A prompt is required for text-to-video.")
+
+    # Plan-tier gate (premium models like seedance) before billing.
+    await require_model_access(db, current_user, request.model_id)
+
+    from app.services.tier_config import resolve_video_credits
+    _vrow = resolve_video_credits(request.model_id, getattr(request, "resolution", None))
+    credit_cost = _vrow["credits"]
+    service_type = _vrow["service_type"]
+    ok, err = await _check_and_deduct_credits(db, current_user, credit_cost, service_type)
+    if not ok:
+        return ToolResponse(success=False, message=err)
+    charged = _credits_charged(current_user, credit_cost)
+
+    # Additive faithfulness clauses — the user's prompt stays first and verbatim.
+    final_prompt = request.prompt
+    camera_clause = VIDEO_CAMERA_MOVES.get((request.camera_move or "").strip().lower())
+    if camera_clause:
+        final_prompt += f" Camera: {camera_clause}"
+    if request.strict_prompt:
+        final_prompt += VIDEO_PROMPT_ADHERENCE_CLAUSE
+    final_negative = (
+        f"{VIDEO_BASELINE_NEGATIVE}. Also avoid: {request.negative_prompt}"
+        if request.negative_prompt else VIDEO_BASELINE_NEGATIVE
+    )
+
+    try:
+        provider_router = get_provider_router()
+        # TaskType.T2V → PiAPI primary (text_to_video) + Pollo backup
+        # (text_to_video, pollo-v1-6). Genuine dual-provider redundancy.
+        result = await provider_router.route(
+            TaskType.T2V,
+            {
+                "prompt": final_prompt,
+                "model": request.model_id,
+                "aspect_ratio": request.aspect_ratio,
+                "duration": request.duration,
+                "resolution": request.resolution,
+                "negative_prompt": final_negative,
+            },
+            user_tier=get_user_tier(current_user),
+        )
+        if not result.get("success"):
+            await _refund_credits(db, current_user, credit_cost, service_type)
+            return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
+
+        output = result.get("output") or {}
+        video_url = output.get("video_url")
+        video_url = await _persist_provider_url(video_url, "video", current_user)
+        if not video_url:
+            await _refund_credits(db, current_user, credit_cost, service_type)
+            return ToolResponse(success=False, message="Text-to-video returned no video URL. Please try again.")
+
+        try:
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.SHORT_VIDEO,
+                input_text=final_prompt,
+                input_params={
+                    "model_id": request.model_id,
+                    "duration": request.duration,
+                    "aspect_ratio": request.aspect_ratio,
+                    "mode": "text_to_video",
+                },
+                result_video_url=video_url,
+                credits_used=charged,
+            )
+            user_gen.set_expiry()
+            db.add(user_gen)
+            await db.commit()
+        except Exception:
+            logger.warning("text_to_video: failed to persist UserGeneration to gallery", exc_info=True)
+            await db.rollback()
+
+        return ToolResponse(
+            success=True,
+            result_url=video_url,
+            video_url=video_url,
+            credits_used=charged,
+            message=f"Video generated ({request.model_id}).",
+        )
+    except Exception as exc:
+        logger.error("text_to_video error: %s", exc, exc_info=True)
+        await _refund_credits(db, current_user, credit_cost, service_type)
+        _notify_admin_of_tool_failure("text_to_video", exc, current_user)
+        return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # SORA 2 PRO (added 2026-06-09)
 # ─────────────────────────────────────────────────────────────────────────
 # Mirrors /kling-video: streaming wrapper + inner async function. Billing

@@ -199,7 +199,10 @@ PIAPI_MODELS: Dict[str, str] = {
 # explicitly rather than relying on PiAPI's silent default so a vendor-side
 # version bump never lands in prod without us deciding.
 PIAPI_KLING_VERSIONS: Dict[str, str] = {
-    "default":  os.environ.get("PIAPI_KLING_VIDEO_VERSION",          "2.6"),
+    # 2026-06-25: default pinned to 2.5 (GA, matches the UI's "Kling V2.5"
+    # label). 2.6 T2V was failing upstream at PiAPI ("task failed") while the
+    # menu still advertised 2.5 — the mismatch surfaced as a dead default.
+    "default":  os.environ.get("PIAPI_KLING_VIDEO_VERSION",          "2.5"),
     "flagship": os.environ.get("PIAPI_KLING_VIDEO_FLAGSHIP_VERSION", "2.1-master"),
     "omni":     os.environ.get("PIAPI_KLING_OMNI_VERSION",           "3.0"),
 }

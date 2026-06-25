@@ -394,6 +394,40 @@ export const toolsApi = {
 
   // lumaVideo() removed 2026-05-19 — use shortVideo() with model_id picks.
 
+  // Text-to-video on the dual-provider path (PiAPI → Pollo). Default model
+  // Hailuo (cheapest, 18 cr) — both providers serve it, so the backup works.
+  // Kling V3 tiers keep using klingVideo(); this is for hailuo/seedance.
+  async textToVideo(params: {
+    prompt: string
+    modelId?: string          // 'hailuo' (default) | 'seedance' | 'seedance_1080p'
+    aspectRatio?: string
+    duration?: 5 | 10
+    resolution?: string
+    negativePrompt?: string
+    cameraMove?: string
+    strictPrompt?: boolean
+    promptId?: string         // curated short_video preset id
+    locale?: string
+  }, clientTaskId?: string): Promise<ToolResponse> {
+    const response = await apiClient.post(
+      '/api/v1/tools/text-to-video',
+      {
+        prompt: params.prompt,
+        model_id: params.modelId ?? 'hailuo',
+        aspect_ratio: params.aspectRatio ?? '16:9',
+        duration: params.duration ?? 5,
+        resolution: params.resolution,
+        negative_prompt: params.negativePrompt,
+        camera_move: params.cameraMove || undefined,
+        strict_prompt: params.strictPrompt ?? true,
+        prompt_id: params.promptId || undefined,
+        locale: params.locale || undefined,
+      },
+      { timeout: GENERATION_TIMEOUT_MS, clientTaskId }
+    )
+    return response.data
+  },
+
   async sora2Pro(params: {
     prompt: string
     aspectRatio?: '16:9' | '9:16' | '1:1'

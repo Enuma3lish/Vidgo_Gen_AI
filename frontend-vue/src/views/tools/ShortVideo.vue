@@ -79,8 +79,14 @@ const I2V_MODELS: ModelOpt[] = [
   { id: 'kling_omni',     nameZh: 'Kling V3.0 PRO（含音訊）',    nameEn: 'Kling V3.0 PRO (with audio)', badge: 'premium' },
   { id: 'veo',            nameZh: 'Veo 3.1（含音訊）',           nameEn: 'Veo 3.1 (with audio)', badge: 'premium' },
 ]
+// 2026-06-25 — Hailuo is the basic T2V default: cheapest (18 cr) AND the only
+// model both PiAPI and Pollo serve in text-to-video, so it has a real backup
+// (routes through /text-to-video → TaskType.T2V dual-provider). Seedance is the
+// mid premium tier on the same path. The three Kling tiers keep /kling-video.
 const T2V_MODELS: ModelOpt[] = [
-  { id: 'default',    nameZh: 'Kling V2.5（標準）',         nameEn: 'Kling V2.5 (standard)' },
+  { id: 'hailuo',     nameZh: 'Hailuo Fast（最便宜）',      nameEn: 'Hailuo Fast (cheapest)' },
+  { id: 'seedance',   nameZh: 'Seedance 720p',            nameEn: 'Seedance 720p', badge: 'premium' },
+  { id: 'default',    nameZh: 'Kling V2.5（標準）',         nameEn: 'Kling V2.5 (standard)', badge: 'premium' },
   { id: 'flagship',   nameZh: 'Kling V3.0（標準）',         nameEn: 'Kling V3.0 (standard)', badge: 'premium' },
   { id: 'omni',       nameZh: 'Kling V3.0 PRO（含音訊）',    nameEn: 'Kling V3.0 PRO (with audio)', badge: 'premium' },
 ]
@@ -91,7 +97,7 @@ function modelOptionsFor(tt: TaskType): ModelOpt[] {
 // Default model per task type — chosen as the cheapest/most-reliable
 const DEFAULT_MODEL: Record<TaskType, string> = {
   image_to_video: 'seedance',
-  text_to_video:  'default',
+  text_to_video:  'hailuo',
 }
 
 // ─── State ───────────────────────────────────────────────────────────
@@ -240,7 +246,9 @@ const creditCost = computed(() => {
   if (taskType.value === 'text_to_video') {
     if (modelId.value === 'omni') return 130      // Kling V3.0 PRO (audio)
     if (modelId.value === 'flagship') return 65   // Kling V3.0 STD
-    return 28                                     // Kling V2.5 STD
+    if (modelId.value === 'seedance') return 65   // Seedance 720p (dual-provider)
+    if (modelId.value === 'default') return 28    // Kling V2.5 STD
+    return 18                                     // Hailuo (basic, dual-provider)
   }
   const m = modelId.value || ''
   if (m === 'veo') return 80                      // Veo 3.1 (PiAPI primary, Vertex backup)
@@ -335,18 +343,35 @@ async function generate() {
           subjectLock: faithLock.value,
         }, cid)
       }
-      // text_to_video — /api/v1/tools/kling-video. tier maps from modelId.
-      const tier = (modelId.value === 'flagship' || modelId.value === 'omni')
-        ? modelId.value
-        : 'default'
-      return toolsApi.klingVideo({
+      // text_to_video. Kling tiers (V2.5 default / V3.0 flagship / V3.0 PRO omni)
+      // route to /kling-video; the cheaper Hailuo / Seedance route to the
+      // dual-provider /text-to-video (PiAPI → Pollo), so the basic default has a
+      // real backup. 2026-06-25.
+      const klingTiers = ['default', 'flagship', 'omni']
+      if (klingTiers.includes(modelId.value)) {
+        const tier = (modelId.value === 'flagship' || modelId.value === 'omni')
+          ? modelId.value
+          : 'default'
+        return toolsApi.klingVideo({
+          prompt: prompt.value.trim(),
+          tier: tier as 'default' | 'flagship' | 'omni',
+          aspectRatio: aspectRatio.value,
+          duration: duration.value as 5 | 10,
+          negativePrompt: negativePrompt.value.trim() || undefined,
+          cameraMove: cameraMove.value || undefined,
+          strictPrompt: faithLock.value,
+        }, cid)
+      }
+      return toolsApi.textToVideo({
         prompt: prompt.value.trim(),
-        tier,
+        modelId: modelId.value,
         aspectRatio: aspectRatio.value,
         duration: duration.value as 5 | 10,
         negativePrompt: negativePrompt.value.trim() || undefined,
         cameraMove: cameraMove.value || undefined,
         strictPrompt: faithLock.value,
+        promptId: usingPreset.value ? selectedPresetId.value : undefined,
+        locale: String(locale.value || ''),
       }, cid)
     })
   } catch (e: any) {

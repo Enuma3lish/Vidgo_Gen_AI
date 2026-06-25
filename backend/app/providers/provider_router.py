@@ -813,36 +813,28 @@ class ProviderRouter:
             return await self.pollo.text_to_video(params)
         elif task_type == TaskType.KLING_VIDEO:
             # Pollo as a backup when PiAPI Kling is out of credit or rate-limited.
-            # Pollo only exposes Kling via its I2V endpoint, so a true T2V Kling
-            # request (no image_url) returns success=false here and the soft-fail
-            # path surfaces PiAPI's original error to the user.
-            if not (params.get("image_url") or params.get("image")):
-                return {
-                    "success": False,
-                    "error": "Pollo Kling backup requires image_url (T2V Kling not supported by Pollo REST).",
-                }
-            # Map tier → Pollo Kling slug so the backup matches what the user
-            # paid for. "omni" (Kling 3.0 PRO, with audio) → kling_v3;
-            # "flagship" → kling_v2; "default" → kling_v1.5. Without the omni
-            # branch a 130-credit omni request silently degraded to kling_v1.5
-            # (no audio) on the failover path.
-            tier = (params.get("tier") or "default").lower()
-            pollo_model = {"omni": "kling_v3", "flagship": "kling_v2"}.get(tier, "kling_v1.5")
-            pollo_params = {**params, "model": pollo_model}
-            return await self.pollo.image_to_video(pollo_params)
+            if params.get("image_url") or params.get("image"):
+                # I2V — Pollo exposes Kling via its image_to_video endpoint.
+                # Map tier → Pollo Kling slug so the backup matches what the user
+                # paid for. "omni" (Kling 3.0 PRO, with audio) → kling_v3;
+                # "flagship" → kling_v2; "default" → kling_v1.5. Without the omni
+                # branch a 130-credit omni request silently degraded to kling_v1.5
+                # (no audio) on the failover path.
+                tier = (params.get("tier") or "default").lower()
+                pollo_model = {"omni": "kling_v3", "flagship": "kling_v2"}.get(tier, "kling_v1.5")
+                return await self.pollo.image_to_video({**params, "model": pollo_model})
+            # T2V — Pollo's Kling endpoints are I2V-only, so we fall back to
+            # Pollo's own pollo-v1-6 T2V model (verified text-to-video). This
+            # gives text-to-video a REAL backup instead of the old soft-fail
+            # (2026-06-25). pollo_provider.text_to_video defaults to pollo-v1-6.
+            return await self.pollo.text_to_video({**params, "model": "pollo-v1-6"})
         elif task_type == TaskType.SORA2_VIDEO:
-            # Pollo backup for Sora 2 — only the I2V path is wired (Pollo's
-            # /generation/sora/sora-2 endpoint takes input.image + prompt).
-            # T2V Sora 2 requests have no image_url and soft-fail through,
-            # which surfaces the original PiAPI error to the caller. Same
-            # degradation pattern as KLING_VIDEO above.
-            if not (params.get("image_url") or params.get("image")):
-                return {
-                    "success": False,
-                    "error": "Pollo Sora 2 backup requires image_url (T2V Sora 2 not supported by Pollo REST).",
-                }
-            pollo_params = {**params, "model": "sora-2"}
-            return await self.pollo.image_to_video(pollo_params)
+            # Pollo backup for Sora 2. I2V uses Pollo's /generation/sora/sora-2;
+            # T2V (no image) has no Pollo Sora endpoint, so we fall back to
+            # Pollo's pollo-v1-6 T2V model — a real backup rather than a soft-fail.
+            if params.get("image_url") or params.get("image"):
+                return await self.pollo.image_to_video({**params, "model": "sora-2"})
+            return await self.pollo.text_to_video({**params, "model": "pollo-v1-6"})
         else:
             raise ValueError(f"Pollo doesn't support: {task_type}")
 

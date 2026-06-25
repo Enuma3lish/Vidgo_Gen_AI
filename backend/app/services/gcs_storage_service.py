@@ -49,6 +49,15 @@ class GCSStorageService:
         # forever with no signing. Resolved once (a bucket property) and cached.
         self._objects_public: Optional[bool] = None
 
+    # Generated/persisted media is immutable (every result gets a unique,
+    # hash-named blob — a new generation never overwrites an old one), so it can
+    # be cached by the browser/CDN essentially forever. Default GCS public
+    # objects only get max-age=3600, which forced a re-download every hour even
+    # though the bytes never change — slowing the repeat view of a cached demo
+    # result. One year + immutable lets the same/next user re-press a preset and
+    # get the media straight from cache.
+    IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
     @property
     def client(self) -> storage.Client:
         if self._client is None:
@@ -104,6 +113,7 @@ class GCSStorageService:
 
             # Upload to GCS
             blob = self.bucket.blob(blob_name)
+            blob.cache_control = self.IMMUTABLE_CACHE_CONTROL
             blob.upload_from_string(content, content_type=content_type)
 
             # Return public URL or signed URL
@@ -142,6 +152,7 @@ class GCSStorageService:
             raise RuntimeError("GCS not configured — set GCS_BUCKET env var")
 
         blob = self.bucket.blob(blob_name)
+        blob.cache_control = self.IMMUTABLE_CACHE_CONTROL
         blob.upload_from_string(data, content_type=content_type)
         blob.make_public()
         logger.info(f"[GCS] Uploaded public: {blob_name} ({len(data)} bytes)")

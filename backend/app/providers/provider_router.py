@@ -459,11 +459,16 @@ class ProviderRouter:
                 # (VEO_MODEL env var, default veo-3.0-fast-generate-001).
                 return ["piapi", "vertex_ai"]
 
-            if task_type in {TaskType.I2V, TaskType.T2V} and model_id in self.POLLO_VIDEO_MODEL_IDS:
-                # When a model_id IS one Pollo genuinely supports (kling_v1.5 /
-                # kling_v2 I2V, pixverse, seedance, hailuo, pollo-v1-6,
-                # sora-2), try Pollo first then fall back to PiAPI. Vertex is
-                # only in the chain for Veo (see VERTEX_VIDEO_MODEL_IDS above).
+            if task_type == TaskType.I2V and model_id in self.POLLO_VIDEO_MODEL_IDS:
+                # IMAGE-to-video only: Pollo's per-model video endpoints
+                # (minimax-hailuo, kling-v2, seedance, …) are I2V-only — they
+                # REQUIRE input.image. So we promote Pollo to primary only for
+                # I2V. For TEXT-to-video, Pollo can serve a prompt-only body on
+                # exactly ONE model (pollo-v1-6); the others 400 with
+                # "input.image Required" (verified 2026-06-25). T2V therefore
+                # keeps PiAPI primary and uses pollo-v1-6 as the Pollo backup
+                # (see _execute_pollo T2V branch). Vertex is only in the chain
+                # for Veo (see VERTEX_VIDEO_MODEL_IDS above).
                 return self._provider_order_with_first(
                     "pollo",
                     ["piapi"],
@@ -810,7 +815,13 @@ class ProviderRouter:
         elif task_type == TaskType.I2V:
             return await self.pollo.image_to_video(params)
         elif task_type == TaskType.T2V:
-            return await self.pollo.text_to_video(params)
+            # Pollo's per-model video endpoints are all I2V-only (they 400 with
+            # "input.image Required" on a prompt-only body). pollo-v1-6 is the
+            # ONLY Pollo model that genuinely does text-to-video, so force it
+            # for every T2V backup regardless of the PiAPI model requested
+            # (verified 2026-06-25). The user still gets a real video on
+            # failover rather than a Pollo validation error.
+            return await self.pollo.text_to_video({**params, "model": "pollo-v1-6"})
         elif task_type == TaskType.KLING_VIDEO:
             # Pollo as a backup when PiAPI Kling is out of credit or rate-limited.
             if params.get("image_url") or params.get("image"):

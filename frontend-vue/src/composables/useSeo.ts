@@ -25,7 +25,7 @@ const DEFAULTS = {
   titleSuffix: ' | VidGo AI',
   description:
     'VidGo AI — AI product photography, background removal, short video, interior design and AI digital human in one platform.',
-  image: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/examples/hero/product_scene_after.png',
+  image: 'https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/og-cover.jpg',
 }
 
 function upsertMeta(selector: string, attrs: Record<string, string>) {

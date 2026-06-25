@@ -697,7 +697,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             <div class="interior-preview-pane interior-preview-before">
               <img
                 v-if="!interiorBeforeFailed"
-                src="https://storage.googleapis.com/vidgo-media-vidgo-ai/examples/room/living-room.png"
+                src="https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/room-before.jpg"
                 :alt="t('lp.interior.beforeAlt')"
                 @error="interiorBeforeFailed = true"
               />
@@ -709,7 +709,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             <div class="interior-preview-pane interior-preview-after">
               <img
                 v-if="!interiorAfterFailed"
-                src="https://storage.googleapis.com/vidgo-media-vidgo-ai/examples/hero/room_redesign_after.png"
+                src="https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/room-after.jpg"
                 :alt="t('lp.interior.afterAlt')"
                 @error="interiorAfterFailed = true"
               />

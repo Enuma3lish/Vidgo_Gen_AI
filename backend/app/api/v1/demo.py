@@ -1109,10 +1109,13 @@ async def get_presets(
         #                       from static/examples/_inputs/room-empty.jpg).
         #                       Without this prefix the curated seeds were
         #                       silently filtered out (audit 2026-05-26).
-        existing_gen = gcs.list_blob_names_cached("generated/", ttl_seconds=300)
-        existing_examples = gcs.list_blob_names_cached("examples/", ttl_seconds=300)
-        existing_users = gcs.list_blob_names_cached("users/", ttl_seconds=300)
-        existing_static = gcs.list_blob_names_cached("static/", ttl_seconds=300)
+        # 900s + stale-while-revalidate (see list_blob_names_cached): only the
+        # first gallery load per instance pays the GCS LIST cost; later loads
+        # return instantly and refresh in the background.
+        existing_gen = gcs.list_blob_names_cached("generated/", ttl_seconds=900)
+        existing_examples = gcs.list_blob_names_cached("examples/", ttl_seconds=900)
+        existing_users = gcs.list_blob_names_cached("users/", ttl_seconds=900)
+        existing_static = gcs.list_blob_names_cached("static/", ttl_seconds=900)
         existing = (
             (existing_gen or set())
             | (existing_examples or set())

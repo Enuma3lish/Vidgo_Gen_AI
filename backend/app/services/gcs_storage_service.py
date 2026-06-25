@@ -13,6 +13,8 @@ import hashlib
 import logging
 import mimetypes
 import os
+import threading
+import time
 import uuid
 from datetime import timedelta
 from typing import Optional
@@ -34,6 +36,14 @@ class GCSStorageService:
         self.bucket_name = settings.GCS_BUCKET
         self.enabled = bool(self.bucket_name)
         self._client: Optional[storage.Client] = None
+        # In-instance cache of freshly-signed V4 URLs so repeat read paths
+        # (use-preset clicks, gallery thumbnails) don't re-run the IAM signBlob
+        # network calls every time. Keyed by (blob, disposition, response_type,
+        # expiration_hours). Cached for SIGNED_URL_CACHE_TTL — comfortably less
+        # than the 24h URL expiry, so a served URL always has hours of validity.
+        self._signed_url_cache: dict = {}
+        self._signed_url_cache_ttl = 12 * 3600  # 12h (URLs are valid 24h)
+        self._signed_url_cache_max = 10000
 
     @property
     def client(self) -> storage.Client:
@@ -189,30 +199,64 @@ class GCSStorageService:
             logger.warning(f"[GCS] list_blob_names failed: {e}")
             return set()
 
-    # Module-level cache of {prefix: (set, expires_at_ts)} for short-lived
-    # existence checks. Populated lazily by `list_blob_names_cached`.
+    # Class-level (singleton-shared) cache of {prefix: (set, expires_at_ts)} for
+    # the existence checks, plus a per-prefix "refresh in flight" guard and a
+    # lock to set it atomically.
     _blob_listing_cache: dict = {}
+    _blob_refresh_inflight: dict = {}
+    _blob_listing_lock = threading.Lock()
 
-    def list_blob_names_cached(self, prefix: str = "generated/", ttl_seconds: int = 300) -> set:
-        """Cached variant of `list_blob_names` for hot read paths.
+    def list_blob_names_cached(self, prefix: str = "generated/", ttl_seconds: int = 900) -> set:
+        """Cached variant of `list_blob_names` for hot read paths, with
+        stale-while-revalidate.
 
         Production discovered stale Material rows pointing at GCS objects that
         no longer exist (deleted by lifecycle, failed pregenerate uploads, etc.)
         — signing succeeds but the resulting URL 404s, breaking the LandingPage
-        hero. The presets endpoint uses this set to drop dead rows from the
-        response without paying GCS list cost on every request.
+        hero. The presets endpoint uses this set to drop dead rows.
+
+        The GCS LIST is multi-second, so we never let it block a request once
+        the cache is warm: a stale entry is returned IMMEDIATELY and refreshed
+        in a background daemon thread. Only the very first call per prefix per
+        instance pays the LIST cost. (The frontend also has an @error image
+        fallback, so a briefly-stale entry never shows a broken image.)
         """
-        import time
         now = time.time()
         cached = self._blob_listing_cache.get(prefix)
-        if cached and cached[1] > now:
-            return cached[0]
+        if cached:
+            names, expiry = cached
+            if expiry <= now:
+                # Stale → kick a single background refresh, serve stale now.
+                self._kick_blob_refresh(prefix, ttl_seconds)
+            return names
+        # Cold (no cache yet, e.g. fresh instance): block once to populate so we
+        # don't filter against an empty set and drop every row.
         names = self.list_blob_names(prefix)
         # Only cache non-empty results — an empty set might mean GCS error or
         # genuine empty prefix; we don't want to mask transient errors.
         if names:
             self._blob_listing_cache[prefix] = (names, now + ttl_seconds)
         return names
+
+    def _kick_blob_refresh(self, prefix: str, ttl_seconds: int) -> None:
+        """Refresh one prefix's blob listing in the background (at most one
+        refresh in flight per prefix)."""
+        with self._blob_listing_lock:
+            if self._blob_refresh_inflight.get(prefix):
+                return
+            self._blob_refresh_inflight[prefix] = True
+
+        def _run():
+            try:
+                names = self.list_blob_names(prefix)
+                if names:
+                    self._blob_listing_cache[prefix] = (names, time.time() + ttl_seconds)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[GCS] background blob-list refresh failed for %s: %s", prefix, e)
+            finally:
+                self._blob_refresh_inflight[prefix] = False
+
+        threading.Thread(target=_run, name=f"gcs-blob-refresh-{prefix.strip('/')}", daemon=True).start()
 
     @staticmethod
     def extract_blob_name(url: Optional[str], bucket_name: str) -> Optional[str]:
@@ -260,6 +304,17 @@ class GCSStorageService:
             blob_name = clean.split(bucket_marker, 1)[1]
             if not blob_name:
                 return url
+
+            # Serve a recently-signed URL from the in-instance cache when one is
+            # still well within its validity window — skips the per-URL IAM
+            # signBlob round-trips (the dominant cost of use-preset/gallery
+            # reads). Keyed so different dispositions/types don't collide.
+            cache_key = (blob_name, download_filename or "", response_type or "", expiration_hours)
+            now = time.monotonic()
+            cached = self._signed_url_cache.get(cache_key)
+            if cached and cached[0] > now:
+                return cached[1]
+
             blob = self.bucket.blob(blob_name)
 
             sign_kwargs = {
@@ -283,8 +338,16 @@ class GCSStorageService:
             # which cannot sign locally. Fall back to IAM signBlob via the
             # service-account email + an OAuth access token so signed URLs
             # work without a private-key JSON file.
+            def _store(signed: str) -> str:
+                # Cap the cache so a long-lived instance can't grow unbounded;
+                # a full clear is fine (worst case = a few re-signs).
+                if len(self._signed_url_cache) >= self._signed_url_cache_max:
+                    self._signed_url_cache.clear()
+                self._signed_url_cache[cache_key] = (now + self._signed_url_cache_ttl, signed)
+                return signed
+
             try:
-                return blob.generate_signed_url(**sign_kwargs)
+                return _store(blob.generate_signed_url(**sign_kwargs))
             except Exception:
                 import google.auth
                 from google.auth.transport.requests import Request as AuthRequest
@@ -299,11 +362,11 @@ class GCSStorageService:
                 )
                 if not sa_email:
                     raise
-                return blob.generate_signed_url(
+                return _store(blob.generate_signed_url(
                     **sign_kwargs,
                     service_account_email=sa_email,
                     access_token=creds.token,
-                )
+                ))
         except Exception as e:
             logger.warning(f"[GCS] refresh_signed_url failed for {url}: {e}")
             return url

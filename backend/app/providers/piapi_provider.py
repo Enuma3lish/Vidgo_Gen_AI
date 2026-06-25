@@ -209,6 +209,26 @@ class PiAPIProvider(BaseProvider):
         assert last_exc is not None
         raise last_exc
 
+    def _priority_video_attempts(self, params: Dict[str, Any], base: int = 2) -> int:
+        """Tier-aware retry budget for a video submit (subscriber priority).
+
+        The PiAPI "public" pool shares upstream capacity (esp. MiniMax-Hailuo),
+        which intermittently returns "too many requests / upstream busy". A
+        high-priority caller (paying subscriber) retries the SAME premium model
+        a couple of times before the router fails over to Pollo, so they stay on
+        their chosen model. A low-priority caller (background pregeneration /
+        non-subscriber) gets ONE attempt and fails over immediately — so it
+        neither waits nor piles retries onto the congested pool, leaving the
+        scarce PiAPI capacity for subscribers. A bounded internal fallback leg
+        (``_max_wait_override``) never retries (a full-timeout retry would blow
+        the parent chain's budget). ``_priority`` is set by provider_router from
+        the request's user_tier; it defaults to high so direct callers are
+        unaffected. (2026-06-25)
+        """
+        if params.get("_max_wait_override"):
+            return 1
+        return base if (params.get("_priority") or "high") == "high" else 1
+
     async def health_check(self) -> bool:
         """Check whether PiAPI is reachable without creating a billable task."""
         if not self.api_key:
@@ -1236,7 +1256,7 @@ class PiAPIProvider(BaseProvider):
         # doubles the leg's wall clock and blows the parent chain's budget
         # (2026-06-12: avatar fallback spent 2×300 s here before the static
         # fallback, pushing the whole chain past the client timeout).
-        _attempts = 1 if params.get("_max_wait_override") else 2
+        _attempts = self._priority_video_attempts(params, base=2)
         result = await self._retry_transient(
             "image_to_video",
             lambda: self._submit_and_poll(
@@ -1401,8 +1421,17 @@ class PiAPIProvider(BaseProvider):
         payload = {"model": model_id, "task_type": task_type, "input": input_payload}
         max_wait = _video_poll_timeout(params)
         _on_submit_t2v = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
-        result = await self._submit_and_poll(
-            payload, max_wait_seconds=max_wait, on_submit=_on_submit_t2v,
+        # Retry transient PiAPI "upstream busy / too many requests" on the SAME
+        # model before the router fails over to Pollo — parity with
+        # image_to_video, which had this and text_to_video didn't (so subscriber
+        # T2V on the congested Hailuo pool failed over instantly instead of
+        # getting a retry). Attempts are tier-aware (subscriber priority).
+        result = await self._retry_transient(
+            "text_to_video",
+            lambda: self._submit_and_poll(
+                payload, max_wait_seconds=max_wait, on_submit=_on_submit_t2v,
+            ),
+            attempts=self._priority_video_attempts(params, base=2),
         )
 
         # Normalise output (same logic as image_to_video).

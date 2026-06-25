@@ -304,6 +304,20 @@ class ProviderRouter:
         # everyone to "basic" would be a regression. The warning fires at
         # most once per process per task_type so unmigrated service-layer
         # paths don't spam logs.
+        # Subscriber priority on the rate-limited PiAPI "public" pool: derive a
+        # request priority from the tier the CALLER actually passed, BEFORE the
+        # None→"pro" permissive default below. Paying subscribers (basic/pro)
+        # get the full retry budget on the congested premium provider (esp.
+        # MiniMax-Hailuo) before failover; background pregeneration and
+        # non-subscriber calls (no/free tier) get a single attempt and fail over
+        # to Pollo immediately, leaving scarce PiAPI capacity for subscribers.
+        # See piapi_provider._priority_video_attempts. (2026-06-25)
+        _caller_tier = (user_tier or "").lower()
+        if "_priority" not in params:
+            params["_priority"] = "high" if _caller_tier in (
+                "basic", "pro", "starter", "pro_plus", "premium", "enterprise", "paid"
+            ) else "low"
+
         if user_tier is None:
             if task_type not in self._tier_warn_seen:
                 logger.warning(

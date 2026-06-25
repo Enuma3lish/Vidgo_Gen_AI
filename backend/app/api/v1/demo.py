@@ -603,12 +603,16 @@ async def use_preset(
     # Increment use count
     await lookup_service.increment_use_count(str(material.id))
 
-    # Determine which URL to surface, refreshing GCS signed URLs on the fly
+    # Permanent public URLs (no signing, no TTL). These preset rows are the
+    # SHARED demo cache every visitor loads — the objects are uploaded public
+    # (make_public), so their bare URL works forever and is CDN/browser-
+    # cacheable. Re-signing them on every click was pure overhead (~200ms) and
+    # bought no access control (the blob path is in the signed URL anyway).
     from app.services.gcs_storage_service import get_gcs_storage
     gcs = get_gcs_storage()
 
-    full_result_url = gcs.refresh_signed_url(material.result_video_url or material.result_image_url)
-    watermarked_url = gcs.refresh_signed_url(material.result_watermarked_url) or full_result_url
+    full_result_url = gcs.public_url(material.result_video_url or material.result_image_url)
+    watermarked_url = gcs.public_url(material.result_watermarked_url) or full_result_url
 
     if subscribed:
         return PresetResultResponse(
@@ -616,8 +620,8 @@ async def use_preset(
             preset_id=request.preset_id,
             result_url=full_result_url,
             result_watermarked_url=watermarked_url,
-            result_thumbnail_url=gcs.refresh_signed_url(getattr(material, "result_thumbnail_url", None)),
-            input_image_url=gcs.refresh_signed_url(material.input_image_url),
+            result_thumbnail_url=gcs.public_url(getattr(material, "result_thumbnail_url", None)),
+            input_image_url=gcs.public_url(material.input_image_url),
             prompt=material.prompt,
             prompt_zh=material.prompt_zh,
             can_download=True,
@@ -630,8 +634,8 @@ async def use_preset(
         preset_id=request.preset_id,
         result_url=None,
         result_watermarked_url=watermarked_url,
-        result_thumbnail_url=gcs.refresh_signed_url(getattr(material, "result_thumbnail_url", None)),
-        input_image_url=gcs.refresh_signed_url(material.input_image_url),
+        result_thumbnail_url=gcs.public_url(getattr(material, "result_thumbnail_url", None)),
+        input_image_url=gcs.public_url(material.input_image_url),
         prompt=material.prompt,
         prompt_zh=material.prompt_zh,
         can_download=False,
@@ -673,7 +677,9 @@ async def download_preset_result(
         raise HTTPException(status_code=404, detail="No result available for download")
 
     from app.services.gcs_storage_service import get_gcs_storage
-    download_url = get_gcs_storage().refresh_signed_url(download_url) or download_url
+    # Subscriber gate already enforced above; the object is public, so a
+    # permanent public URL (no signing/TTL) is the right redirect target.
+    download_url = get_gcs_storage().public_url(download_url) or download_url
 
     return RedirectResponse(url=download_url)
 
@@ -1153,7 +1159,9 @@ async def get_presets(
     presets = presets[:limit]
 
     def _r(u):
-        return gcs.refresh_signed_url(u) if u else u
+        # Permanent public URL (no signing, no TTL) — these preset rows are the
+        # shared demo cache every visitor loads; the objects are public.
+        return gcs.public_url(u) if u else u
 
     def _safe_thumb(p):
         """Return a still-image thumbnail URL or None.

@@ -44,6 +44,10 @@ class GCSStorageService:
         self._signed_url_cache: dict = {}
         self._signed_url_cache_ttl = 12 * 3600  # 12h (URLs are valid 24h)
         self._signed_url_cache_max = 10000
+        # Whether objects in this bucket carry per-object public ACLs (set by
+        # persist's make_public()) → their bare storage.googleapis.com URL works
+        # forever with no signing. Resolved once (a bucket property) and cached.
+        self._objects_public: Optional[bool] = None
 
     @property
     def client(self) -> storage.Client:
@@ -370,6 +374,39 @@ class GCSStorageService:
         except Exception as e:
             logger.warning(f"[GCS] refresh_signed_url failed for {url}: {e}")
             return url
+
+    @property
+    def objects_are_public(self) -> bool:
+        """True when objects in this bucket are served via permanent public ACLs
+        (persist/upload call make_public() unless the bucket uses uniform
+        bucket-level access, which forbids object ACLs and forces signing).
+        Cached — it's a bucket-level property that doesn't change at runtime."""
+        if self._objects_public is None:
+            try:
+                self._objects_public = not self.bucket.iam_configuration.uniform_bucket_level_access_enabled
+            except Exception:
+                self._objects_public = False
+        return self._objects_public
+
+    def public_url(self, url: Optional[str]) -> Optional[str]:
+        """Permanent, never-expiring URL for an object in our bucket.
+
+        For shared, world-readable content (demo/example results — every visitor
+        loads the SAME cached rows), there is no reason to mint an expiring
+        signed URL: the objects are uploaded public (make_public), so the bare
+        ``https://storage.googleapis.com/<bucket>/<blob>`` form works forever and
+        is CDN/browser-cacheable. This strips any signature/query so the result
+        is a stable, cacheable, TTL-free URL. Non-bucket URLs (Unsplash, etc.)
+        pass through unchanged. If the bucket ever switches to uniform access
+        (objects no longer public), we transparently fall back to a signed URL.
+        """
+        if not url or not self.enabled:
+            return url
+        if f"/{self.bucket_name}/" not in url:
+            return url
+        if not self.objects_are_public:
+            return self.refresh_signed_url(url)
+        return url.split("?", 1)[0].split("#", 1)[0]
 
     def _guess_content_type(self, media_type: str) -> str:
         return {

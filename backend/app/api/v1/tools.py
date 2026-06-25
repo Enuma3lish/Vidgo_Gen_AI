@@ -6051,7 +6051,7 @@ async def _text_to_video_inner(
     # Plan-tier gate (premium models like seedance) before billing.
     await require_model_access(db, current_user, request.model_id)
 
-    from app.services.tier_config import resolve_video_credits
+    from app.services.tier_config import resolve_video_credits, get_user_tier
     _vrow = resolve_video_credits(request.model_id, getattr(request, "resolution", None))
     credit_cost = _vrow["credits"]
     service_type = _vrow["service_type"]

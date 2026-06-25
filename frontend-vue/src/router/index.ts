@@ -388,12 +388,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Pricing.vue')
   },
 
-  // Inspiration Gallery
-  {
-    path: '/gallery',
-    name: 'gallery',
-    component: () => import('@/views/InspirationGallery.vue')
-  },
   {
     path: '/:slug(about|contact|blog|affiliate|terms|terms-of-service|terms-and-conditions|privacy|privacy-policy|cookies|refunds|refund|refund-policy)',
     name: 'static-info',
@@ -500,11 +494,6 @@ const ROUTE_SEO: Record<string, RouteSeo> = {
     title: 'VidGo 定價方案｜AI 商品圖、影片與室內設計點數方案',
     description:
       '比較 VidGo AI 訂閱方案與點數包：4K 影音、無浮水印、優先佇列、API 存取，依用量選擇最適方案。',
-  },
-  gallery: {
-    title: 'AI 創作靈感庫｜VidGo 商品圖、室內設計與影音範本',
-    description:
-      '瀏覽 VidGo AI 的 AI 創作範本：商品場景、模特試穿、室內提案、短影音與數位人，一鍵套用素材。',
   },
   'background-removal': {
     title: 'AI 智能去背工具｜商品圖透明 PNG 與換景 - VidGo',

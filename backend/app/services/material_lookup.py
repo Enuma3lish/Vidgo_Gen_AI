@@ -152,6 +152,16 @@ class MaterialLookupService:
             ),
             or_(Material.input_params["readiness_seed"].astext.is_(None), Material.input_params["readiness_seed"].astext != "true"),
             or_(Material.input_params["reused_generated_media"].astext.is_(None), Material.input_params["reused_generated_media"].astext != "true"),
+            # Exclude user-session demo generations that leaked into public
+            # presets: the homepage try_on surfaced visitors' own "garment-user"
+            # uploads (often arbitrary Unsplash URLs) instead of curated pairs.
+            # Curated try_on presets always carry a real garment id
+            # (garment-coat, garment-tshirt, …), never the garment-user marker,
+            # so this is a no-op for every other tool (clothing_id is NULL).
+            or_(
+                Material.input_params["clothing_id"].astext.is_(None),
+                Material.input_params["clothing_id"].astext != "garment-user",
+            ),
             or_(
                 Material.prompt.is_(None),
                 and_(

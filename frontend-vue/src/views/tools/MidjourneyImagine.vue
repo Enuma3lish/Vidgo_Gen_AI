@@ -173,7 +173,11 @@ function gotoPricing() { router.push('/pricing') }
       <div v-if="presetOptions.length > 0">
         <label class="pp-field-label">{{ isZh ? '範例提示詞（免費試用）' : 'Example prompt (free to try)' }}</label>
         <select v-model="selectedPresetId" @change="applyPreset" class="pp-select">
-          <option value="">{{ isZh ? '— 自訂提示詞 —' : '— Custom prompt —' }}</option>
+          <!-- Members get the free-form "Custom prompt" choice; visitors/free
+               users only ever pick a curated example, so they see a disabled
+               placeholder instead (no custom-prompt path). -->
+          <option v-if="!isDemoUser" value="">{{ isZh ? '— 自訂提示詞 —' : '— Custom prompt —' }}</option>
+          <option v-else value="" disabled>{{ isZh ? '— 請選擇範例 —' : '— Select an example —' }}</option>
           <option v-for="opt in presetOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
         </select>
       </div>
@@ -181,8 +185,14 @@ function gotoPricing() { router.push('/pricing') }
       <div>
         <label class="pp-field-label">{{ isZh ? '提示詞 *' : 'Prompt *' }}</label>
         <textarea v-model="prompt" rows="5" maxlength="2000" class="pp-textarea"
-          :placeholder="isZh ? '描述你想要的圖片…' : 'Describe the image you want…'"></textarea>
-        <p class="pp-field-help">{{ isZh ? '提示會原封不動傳給模型。' : 'Your prompt reaches the model verbatim.' }}</p>
+          :readonly="isDemoUser"
+          :class="{ 'opacity-60 cursor-not-allowed': isDemoUser }"
+          :placeholder="isDemoUser
+            ? (isZh ? '請從上方下拉選單挑選範例（免費帳號僅能使用範例）' : 'Pick an example from the dropdown above (free accounts can only use examples)')
+            : (isZh ? '描述你想要的圖片…' : 'Describe the image you want…')"></textarea>
+        <p class="pp-field-help">{{ isDemoUser
+          ? (isZh ? '免費帳號只能從下拉選單選擇範例提示詞；自訂提示詞需訂閱。' : 'Free accounts can only pick an example prompt from the dropdown; custom prompts require a subscription.')
+          : (isZh ? '提示會原封不動傳給模型。' : 'Your prompt reaches the model verbatim.') }}</p>
       </div>
 
       <div>

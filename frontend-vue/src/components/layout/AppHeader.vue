@@ -21,7 +21,6 @@ const isScrolled = ref(false)
 const mobileMenuOpen = ref(false)
 const toolsOpen = ref(false)
 const showCreditBadge = computed(() => authStore.isAuthenticated && !authStore.isAdmin)
-const showPublicGalleryLinks = computed(() => !authStore.isAdmin)
 
 // 2026-05-29 — tools regrouped into the four "big topic" buckets the owner
 // asked for (廣告宣傳 / 室內設計 / 品牌設計 / 其他酷炫的AI功能). Both the
@@ -130,7 +129,6 @@ onUnmounted(() => {
         <!-- Center Nav -->
         <nav class="hidden md:flex items-center gap-1">
           <RouterLink to="/" class="nav-link">{{ t('nav.home') }}</RouterLink>
-          <RouterLink v-if="showPublicGalleryLinks" to="/gallery" class="nav-link">{{ t('gallery.title') }}</RouterLink>
 
           <!-- Tools Dropdown -->
           <div class="relative" @mouseenter="toolsOpen = true" @mouseleave="toolsOpen = false">
@@ -290,7 +288,6 @@ onUnmounted(() => {
       >
         <div class="px-4 py-4 space-y-1 max-h-[80vh] overflow-y-auto">
           <RouterLink to="/" class="dropdown-item w-full" @click="closeMobile">{{ t('nav.home') }}</RouterLink>
-          <RouterLink v-if="showPublicGalleryLinks" to="/gallery" class="dropdown-item w-full" @click="closeMobile">{{ t('gallery.title') }}</RouterLink>
           <RouterLink to="/pricing" class="dropdown-item w-full" @click="closeMobile">{{ t('nav.pricing') }}</RouterLink>
 
           <template v-for="group in hubGroupsAll" :key="group.cat">

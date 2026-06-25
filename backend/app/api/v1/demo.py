@@ -1552,6 +1552,22 @@ async def generate_demo_for_tool(
             },
         )
 
+    # Defense-in-depth (2026-06-25): the supported visitor/free flow is "pick a
+    # dropdown preset, unchanged" — never a typed prompt. So a non-subscriber's
+    # inbound free-form `effect_prompt` is ignored ENTIRELY here, independent of
+    # the global DEMO_PRESET_ONLY flag, so it can never seed a cache-miss
+    # generation. The example is still resolved from the curated dropdown levers
+    # (topic / model_id). This mirrors the custom-prompt gate on the real tool
+    # endpoints. Subscribers don't use this demo path (they hit the real tool
+    # endpoint), so their generation is unaffected.
+    if effect_prompt and not is_subscribed_user(current_user):
+        logger.info(
+            "[demo] ignoring free-form effect_prompt from non-subscriber for tool=%s "
+            "(preset-only visitor flow)",
+            tool_type,
+        )
+        effect_prompt = None
+
     # When the caller provided a specific (input_url, effect_prompt), skip the
     # generic preset list and route straight through the cache service so the
     # lookup_hash path runs first.

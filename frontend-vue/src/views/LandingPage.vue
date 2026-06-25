@@ -144,6 +144,40 @@ const heroDemoTabs = [
   { key: 'room_redesign' },
 ] as const
 const activeDemoTab = ref<typeof heroDemoTabs[number]['key']>('product_scene')
+
+// ── Multi-example helpers ─────────────────────────────────────────────
+// Show up to `n` real, validated before/after pairs per category instead
+// of just list[0]. Generalises the old per-filename overrides into one
+// rule set: drop empty/identical pairs and auto-generated near-identical
+// inputs, dedupe by result, and always LEAD with the curated FALLBACK so
+// every region opens with a known-correct example even when seeded rows
+// are sparse or low quality.
+function demoList(cat: string, n = 4): { before: string; after: string }[] {
+  const out: { before: string; after: string }[] = []
+  const seen = new Set<string>()
+  const push = (p?: { before: string; after: string } | null) => {
+    if (!p || !p.after) return
+    if (p.after === p.before) return            // identical pair → looks broken
+    if (seen.has(p.after)) return               // dedupe by result
+    seen.add(p.after)
+    out.push({ before: p.before, after: p.after })
+  }
+  push(FALLBACK[cat])                            // guaranteed-correct lead
+  for (const p of demoImages.value[cat] || []) {
+    // Skip auto-generated inputs whose before≈after (the recolor /
+    // clean-white-input seeds the old overrides special-cased one by one).
+    if (/piapi_[0-9a-f]+\.|\/ps\/bubbletea\.|\/fx\/bubbletea\./.test(p.before || '')) continue
+    push(p)
+  }
+  return out.slice(0, n)
+}
+
+// Which example index is showing in the hero card and each deep-dive row.
+const activeExampleIdx = ref(0)
+const heroExamples = computed(() => demoList(activeDemoTab.value, 4))
+const deepDiveIdx = ref<Record<string, number>>({})
+function ddExamples(cat: string) { return demoList(cat, 4) }
+function setDeepDiveIdx(key: string, idx: number) { deepDiveIdx.value[key] = idx }
 let heroTabTimer: ReturnType<typeof setInterval> | null = null
 
 async function loadDemos() {
@@ -178,7 +212,7 @@ async function loadDemos() {
 
   const results = await Promise.allSettled(
     demoCats.map(cat =>
-      import('@/api/client').then(m => m.default.get(`/api/v1/demo/presets/${cat}?limit=2`))
+      import('@/api/client').then(m => m.default.get(`/api/v1/demo/presets/${cat}?limit=8`))
     )
   )
   // Try-on Materials store input_image_url = the GARMENT (e.g. a flat coat
@@ -372,6 +406,29 @@ function seasonLabel(preset: any, seasonId?: string): string {
   return cleaned || seasonTag || t('lp.seasonShowcase')
 }
 
+// Neutral, untagged product_scene presets used to pad a thin seasonal grid.
+// Most seasons have 0–1 topic-tagged materials, so a topic-only grid shows a
+// single tile (or the empty state) even though the section advertises four.
+// These generic studio shots are safe filler: the dropped-fallback note above
+// was about off-SEASON imagery (an autumn shot under 春季), not neutral product
+// photos — so we never borrow a sibling season's topic, only untagged scenes.
+// Fetched once and shared across every tab.
+let generalScenePromise: Promise<any[]> | null = null
+function loadGeneralScenes(): Promise<any[]> {
+  if (!generalScenePromise) {
+    generalScenePromise = (async () => {
+      try {
+        const client = (await import('@/api/client')).default
+        const resp = await client.get('/api/v1/demo/presets/product_scene?limit=8')
+        return resp.data?.presets || []
+      } catch {
+        return []
+      }
+    })()
+  }
+  return generalScenePromise
+}
+
 async function loadSeasonPresets(seasonId: string) {
   const season = seasons.value.find(s => s.id === seasonId)
   if (!season || seasonData.value[seasonId]) return
@@ -381,11 +438,15 @@ async function loadSeasonPresets(seasonId: string) {
       season.topics.map(topic => client.get(`/api/v1/demo/presets/product_scene?topic=${topic}&limit=4`))
     )
     const seen = new Set<string>()
-    const presets = topicResults.flatMap(result =>
+    const tagged = topicResults.flatMap(result =>
       result.status === 'fulfilled' ? (result.value.data?.presets || []) : []
     )
+    // Season-tagged presets lead; neutral studio shots backfill so the grid is
+    // never left with a lone tile (or empty) for the many seasons that have no
+    // dedicated material yet.
+    const presets = [...tagged, ...(await loadGeneralScenes())]
     seasonData.value[seasonId] = presets
-      .filter((p: any) => p.result_image_url || p.thumbnail_url)
+      .filter((p: any) => p.result_watermarked_url || p.result_image_url || p.thumbnail_url)
       .filter((p: any) => {
         const key = p.id || p.result_image_url || p.thumbnail_url
         if (seen.has(key)) return false
@@ -465,6 +526,7 @@ onMounted(() => {
   heroTabTimer = setInterval(() => {
     const idx = heroDemoTabs.findIndex(t => t.key === activeDemoTab.value)
     activeDemoTab.value = heroDemoTabs[(idx + 1) % heroDemoTabs.length].key
+    activeExampleIdx.value = 0
   }, 4000)
 })
 onUnmounted(() => {
@@ -529,19 +591,27 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
               <div class="hero-demo-tabs">
                 <button v-for="cat in heroDemoTabs" :key="cat.key"
                   class="hero-demo-tab" :class="{ 'is-active': activeDemoTab === cat.key }"
-                  @click="activeDemoTab = cat.key">
+                  @click="activeDemoTab = cat.key; activeExampleIdx = 0">
                   {{ t(`lp.heroDemo.tabs.${cat.key}`) }}
                 </button>
               </div>
               <div class="hero-demo-stage">
                 <div class="hero-demo-pane">
-                  <img :src="demo(activeDemoTab, 'before') || FALLBACK[activeDemoTab]?.before" alt="Before" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'before')" />
+                  <img :src="heroExamples[activeExampleIdx]?.before || FALLBACK[activeDemoTab]?.before" alt="Before" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'before')" />
                   <span class="hero-demo-badge hero-demo-badge-before">{{ t('lp.heroDemo.before') }}</span>
                 </div>
                 <div class="hero-demo-pane">
-                  <img :src="demo(activeDemoTab, 'after') || FALLBACK[activeDemoTab]?.after" alt="After" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'after')" />
+                  <img :src="heroExamples[activeExampleIdx]?.after || FALLBACK[activeDemoTab]?.after" alt="After" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'after')" />
                   <span class="hero-demo-badge hero-demo-badge-after">{{ t('lp.heroDemo.after') }}</span>
                 </div>
+              </div>
+              <!-- Example selector — up to 4 real results for the active tab -->
+              <div v-if="heroExamples.length > 1" class="hero-demo-thumbs">
+                <button v-for="(ex, exIdx) in heroExamples" :key="exIdx" type="button"
+                  class="hero-demo-thumb" :class="{ 'is-active': activeExampleIdx === exIdx }"
+                  @click="activeExampleIdx = exIdx" :aria-label="`Example ${exIdx + 1}`">
+                  <img :src="ex.after" alt="" @error="fallbackImg($event, activeDemoTab, 'after')" />
+                </button>
               </div>
               <div class="hero-demo-meta">
                 <div class="hero-demo-meta-left">
@@ -789,10 +859,6 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
                   <span>🏠</span> {{ t('lp.allTools.roomRedesign.name') }}
                   <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </RouterLink>
-                <RouterLink to="/gallery" class="flex items-center gap-2 text-sm font-medium transition-colors" style="color: #c4c4d8;" @mouseenter="($event.target as HTMLElement).style.color='#f59e0b'" @mouseleave="($event.target as HTMLElement).style.color='#a8a29e'">
-                  <span>🖼️</span> {{ t('gallery.title') }}
-                  <svg class="w-3 h-3 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                </RouterLink>
               </div>
             </div>
           </div>
@@ -941,21 +1007,30 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
         <div v-for="(feature, i) in deepDiveDefs" :key="feature.key"
           class="flex flex-col lg:flex-row items-center gap-10 md:gap-16"
           :class="i % 2 === 1 ? 'lg:flex-row-reverse' : ''">
-          <!-- Before/After image pair -->
+          <!-- Before/After image pair + up to 4 example selector -->
           <div class="lg:w-1/2 w-full">
             <div class="grid grid-cols-2 gap-3 rounded-2xl overflow-hidden" style="box-shadow: 0 8px 40px rgba(0,0,0,0.5);">
               <div class="relative overflow-hidden" style="aspect-ratio: 3/4;">
-                <img :src="demo(feature.cat, 'before') || FALLBACK[feature.cat]?.before"
+                <img :src="ddExamples(feature.cat)[deepDiveIdx[feature.key] || 0]?.before || FALLBACK[feature.cat]?.before"
                   :alt="t('lp.deepDives.' + feature.key + '.before')" class="w-full h-full object-cover"
                   @error="fallbackImg($event, feature.cat, 'before')" />
                 <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); color: #ffffff;">Before</div>
               </div>
               <div class="relative overflow-hidden" style="aspect-ratio: 3/4;">
-                <img :src="demo(feature.cat, 'after') || FALLBACK[feature.cat]?.after"
+                <img :src="ddExamples(feature.cat)[deepDiveIdx[feature.key] || 0]?.after || FALLBACK[feature.cat]?.after"
                   :alt="t('lp.deepDives.' + feature.key + '.after')" class="w-full h-full object-cover"
                   @error="fallbackImg($event, feature.cat, 'after')" />
                 <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" :style="'background: ' + feature.accentColor + '; color: #ffffff;'">After</div>
               </div>
+            </div>
+            <!-- Example thumbnails (up to 4) -->
+            <div v-if="ddExamples(feature.cat).length > 1" class="dd-thumbs">
+              <button v-for="(ex, exIdx) in ddExamples(feature.cat)" :key="exIdx" type="button"
+                class="dd-thumb" :class="{ 'is-active': (deepDiveIdx[feature.key] || 0) === exIdx }"
+                @click="setDeepDiveIdx(feature.key, exIdx)" :aria-label="`Example ${exIdx + 1}`"
+                :style="(deepDiveIdx[feature.key] || 0) === exIdx ? ('border-color: ' + feature.accentColor) : ''">
+                <img :src="ex.after" alt="" class="w-full h-full object-cover" @error="fallbackImg($event, feature.cat, 'after')" />
+              </button>
             </div>
           </div>
           <!-- Text -->
@@ -1615,6 +1690,38 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
   box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18), 0 0 10px rgba(16,185,129,0.45);
   animation: pulse-dot 1.6s ease-in-out infinite;
 }
+
+/* Example selector thumbnails (hero card) */
+.hero-demo-thumbs {
+  display: flex; gap: 8px; margin-top: 12px;
+  position: relative; z-index: 1;
+}
+.hero-demo-thumb {
+  flex: 1 1 0; aspect-ratio: 1 / 1; max-width: 64px;
+  padding: 0; border-radius: 9px; overflow: hidden; cursor: pointer;
+  background: rgba(8, 8, 18, 0.6);
+  border: 1px solid rgba(255,255,255,0.10);
+  opacity: 0.55; transition: opacity .2s ease, border-color .2s ease, transform .2s ease;
+}
+.hero-demo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hero-demo-thumb:hover { opacity: 0.85; transform: translateY(-1px); }
+.hero-demo-thumb.is-active {
+  opacity: 1;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 1px #7c3aed, 0 4px 14px rgba(124, 58, 237, 0.35);
+}
+
+/* Example selector thumbnails (deep-dive rows) */
+.dd-thumbs { display: flex; gap: 8px; margin-top: 12px; }
+.dd-thumb {
+  flex: 1 1 0; aspect-ratio: 1 / 1; max-width: 84px;
+  padding: 0; border-radius: 10px; overflow: hidden; cursor: pointer;
+  background: #141420;
+  border: 2px solid rgba(255,255,255,0.10);
+  opacity: 0.6; transition: opacity .2s ease, border-color .2s ease, transform .2s ease;
+}
+.dd-thumb:hover { opacity: 0.9; transform: translateY(-1px); }
+.dd-thumb.is-active { opacity: 1; }
 
 @media (max-width: 1024px) { .hero-demo-card { margin-top: 8px; } }
 @media (max-width: 768px) {

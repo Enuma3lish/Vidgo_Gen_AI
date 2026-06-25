@@ -2,9 +2,7 @@
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
-import { useAuthStore } from '@/stores'
 const { t } = useI18n()
-const authStore = useAuthStore()
 
 interface FooterCol { titleKey: string; links: { to?: string; href?: string; key: string }[] }
 
@@ -14,7 +12,6 @@ const cols: FooterCol[] = [
     links: [
       { to: '/tools/try-on',      key: 'lp.allTools.tryOn.name' },
       { to: '/tools/short-video', key: 'lp.allTools.fashionReels.name' },
-      { to: '/gallery',           key: 'gallery.title' },
     ],
   },
   {
@@ -48,10 +45,7 @@ const cols: FooterCol[] = [
 ]
 
 const visibleCols = computed(() =>
-  cols.map(col => ({
-    ...col,
-    links: authStore.isAdmin ? col.links.filter(link => link.to !== '/gallery') : col.links,
-  })).filter(col => col.links.length > 0)
+  cols.filter(col => col.links.length > 0)
 )
 </script>
 

@@ -216,9 +216,10 @@ useExamplePrefill({
 
 // ─── Validation + cost ───────────────────────────────────────────────
 const disabled = computed(() => {
-  // Demo/free users preview a cached example — they just need a preset or
-  // prompt to key it (no image upload required; the example carries its own).
-  if (isDemoUser.value) return !selectedPresetId.value && !prompt.value.trim()
+  // Demo/free users may ONLY preview a cached example from the dropdown — the
+  // prompt box is read-only for them, so "ready" means a preset is picked.
+  // (They cannot type a custom prompt; that needs a subscription.)
+  if (isDemoUser.value) return !usingPreset.value
   if (taskType.value === 'image_to_video') return !imageInput.value
   return !prompt.value.trim()  // text_to_video
 })
@@ -463,7 +464,12 @@ function gotoPricing() { router.push('/pricing') }
              one-click prompt instead of an empty textarea. -->
         <div v-if="presetOptions.length > 0" class="mb-2">
           <select v-model="selectedPresetId" @change="applyPreset" class="pp-select">
-            <option value="">{{ isZh ? '— 選擇範例（一鍵填入）—' : '— Pick a preset (one-click fill) —' }}</option>
+            <!-- Visitors/free users can only run a curated example, so the empty
+                 "custom" choice is a disabled placeholder for them; members keep
+                 it as the one-click fill / clear option. -->
+            <option value="" :disabled="isDemoUser">{{ isDemoUser
+              ? (isZh ? '— 請選擇範例 —' : '— Select an example —')
+              : (isZh ? '— 選擇範例（一鍵填入）—' : '— Pick a preset (one-click fill) —') }}</option>
             <option v-for="opt in presetOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
           </select>
         </div>
@@ -473,11 +479,17 @@ function gotoPricing() { router.push('/pricing') }
           rows="4"
           maxlength="2000"
           class="pp-textarea"
-          :placeholder="isZh
-            ? (taskType === 'image_to_video' ? '例：相機緩慢推近，產品微微旋轉，黃金時段陽光柔和。' : '描述你想要的影片內容…')
-            : (taskType === 'image_to_video' ? 'e.g. Slow camera push-in, product slowly rotates, soft golden-hour light.' : 'Describe the video you want…')"
+          :readonly="isDemoUser"
+          :class="{ 'opacity-60 cursor-not-allowed': isDemoUser }"
+          :placeholder="isDemoUser
+            ? (isZh ? '請從上方下拉選單挑選範例（免費帳號僅能使用範例）' : 'Pick an example from the dropdown above (free accounts can only use examples)')
+            : (isZh
+              ? (taskType === 'image_to_video' ? '例：相機緩慢推近，產品微微旋轉，黃金時段陽光柔和。' : '描述你想要的影片內容…')
+              : (taskType === 'image_to_video' ? 'e.g. Slow camera push-in, product slowly rotates, soft golden-hour light.' : 'Describe the video you want…'))"
         ></textarea>
-        <p class="pp-field-help">{{ isZh ? '提示會原封不動傳給模型；越具體越好。' : 'Your prompt reaches the model verbatim. The more specific, the better.' }}</p>
+        <p class="pp-field-help">{{ isDemoUser
+          ? (isZh ? '免費帳號只能從下拉選單選擇範例提示詞；自訂提示詞需訂閱。' : 'Free accounts can only pick an example prompt from the dropdown; custom prompts require a subscription.')
+          : (isZh ? '提示會原封不動傳給模型；越具體越好。' : 'Your prompt reaches the model verbatim. The more specific, the better.') }}</p>
       </div>
 
       <!-- Anti-hallucination controls: camera move + faith lock (2026-06-12).

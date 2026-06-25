@@ -50,6 +50,27 @@ from app.core.upload_validation import (
 settings = get_settings()
 logger = logging.getLogger(__name__)
 SHORT_VIDEO_LENGTH = int(getattr(settings, "SHORT_VIDEO_LENGTH", 8))
+
+
+def _runtime_demo_generation_disabled() -> None:
+    """Raise a clean 410 for the retired legacy runtime example-generation
+    endpoints (generate-paid, search-or-generate, generate-image,
+    generate-realtime). On-demand demo generation was replaced by
+    developer-managed pre-generated presets. These endpoints stay mounted for
+    backwards compatibility but must return a clear "gone" — previously this
+    helper was REFERENCED but never DEFINED, so each call raised NameError → 500.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "runtime_demo_generation_disabled",
+            "message": (
+                "Runtime demo generation is disabled. Use /api/v1/demo/presets "
+                "for pre-generated examples, or the tool endpoints under "
+                "/api/v1/tools to generate your own."
+            ),
+        },
+    )
 from app.services.material import MaterialLibraryService, UserContentCollector, MATERIAL_REQUIREMENTS
 from app.config.topic_registry import (
     get_topics_for_tool,

@@ -69,10 +69,12 @@ async def setup():
         print(f"[!] Redis flush failed: {e}")
 
     print()
-    print("Developer staff account:")
-    print(f"  Email:    {DEV_EMAIL}")
-    print(f"  Password: {DEV_PASSWORD}")
-    print(f"  Role:     Administrator (is_superuser=True)")
+    print("Developer staff accounts:")
+    for admin in DEV_ADMINS:
+        print(f"  Email:    {admin['email']}")
+        print(f"  Password: {admin['password']}")
+        print(f"  Role:     Administrator (is_superuser=True)")
+        print()
     print()
     print("Material DB: emptied")
     print("Redis cache: flushed")

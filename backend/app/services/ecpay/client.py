@@ -179,7 +179,18 @@ class ECPayClient:
         if is_valid:
             logger.info(f"Payment callback verified for order: {callback_data.get('MerchantTradeNo')}")
         else:
-            logger.error(f"Payment callback verification failed for order: {callback_data.get('MerchantTradeNo')}")
+            # Diagnostic (safe — these are SHA256 hashes + field names, NOT the
+            # HashKey/HashIV or the raw signing string). If the param SET matches
+            # ECPay's and only the hash differs, the deployed ECPAY_HASH_KEY/IV no
+            # longer match the merchant portal (rotate/realign the secret). If the
+            # field set differs, it's an encoding/param bug instead.
+            logger.error(
+                "Payment callback verification failed for order %s: received=%s calculated=%s fields=%s",
+                callback_data.get("MerchantTradeNo"),
+                received_check_mac,
+                calculated_check_mac,
+                sorted(k for k in callback_data.keys() if k != "CheckMacValue"),
+            )
 
         return is_valid
 

@@ -7,6 +7,9 @@ import { useBrandingStore } from '@/stores/branding'
 import { subscriptionApi } from '@/api'
 import apiClient from '@/api/client'
 import ConfirmModal from '@/components/molecules/ConfirmModal.vue'
+import InvoiceCheckoutDialog from '@/components/invoice/InvoiceCheckoutDialog.vue'
+import { einvoiceApi } from '@/api/einvoice'
+import type { InvoicePrefs } from '@/api/einvoice'
 import type { PlanInfo, SubscriptionStatus } from '@/api'
 import { subscribeRedirect, creditPackRedirect, loginWithRedirect } from '@/utils/checkout'
 
@@ -331,15 +334,51 @@ function submitECPayForm(ecpayForm: { action_url: string; params: Record<string,
   form.submit()
 }
 
+// ── Checkout-time e-invoice (TW / ECPay) ────────────────────────────────────
+// Collect 載具 / 統編+公司抬頭 / 捐贈 in a dialog before redirecting to ECPay,
+// save it to the user's invoice preference, then proceed. The existing
+// post-payment auto_issue_invoice issues exactly what was picked here.
+const invoiceDialogOpen = ref(false)
+const pendingCheckout = ref<null | (() => void | Promise<void>)>(null)
+
+async function onInvoiceConfirm(prefs: InvoicePrefs | null) {
+  invoiceDialogOpen.value = false
+  if (prefs) {
+    try {
+      await einvoiceApi.updatePreferences(prefs)
+    } catch (e) {
+      // Non-fatal: proceed to payment; invoice falls back to the saved default.
+      console.warn('[invoice] failed to save checkout invoice prefs', e)
+    }
+  }
+  const action = pendingCheckout.value
+  pendingCheckout.value = null
+  if (action) await action()
+}
+
+function onInvoiceCancel() {
+  invoiceDialogOpen.value = false
+  pendingCheckout.value = null
+  subscribing.value = null
+}
+
 async function handleCreditPurchase(
   pkg: CreditTopUpPackage,
   paymentMethod: 'ecpay' | 'paypal' = 'ecpay',
+  invoiceConfirmed = false,
 ) {
   if (!isLoggedIn.value) {
     // Carry the chosen pack through login so the user lands back on
     // /pricing#credit-packs with autoBuy enabled instead of having to
     // hunt for the same card again.
     router.push(loginWithRedirect(creditPackRedirect(pkg.name, paymentMethod)))
+    return
+  }
+
+  // ECPay (TW) → collect the e-invoice choice first, then re-enter confirmed.
+  if (paymentMethod === 'ecpay' && !invoiceConfirmed) {
+    pendingCheckout.value = () => handleCreditPurchase(pkg, paymentMethod, true)
+    invoiceDialogOpen.value = true
     return
   }
 
@@ -393,7 +432,7 @@ async function handleCreditPurchase(
 }
 
 // Subscribe to a plan
-async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paypal' | 'ecpay' = 'ecpay') {
+async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paypal' | 'ecpay' = 'ecpay', invoiceConfirmed = false) {
   if (!isLoggedIn.value) {
     const billing = isTestPlan(plan) ? 'monthly' : billingPeriod.value
     router.push(loginWithRedirect(subscribeRedirect(plan.name, billing, paymentMethod)))
@@ -403,6 +442,13 @@ async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paypal' | 'ecpay'
   if (plan.name === 'free' || plan.name === 'demo') {
     // Free plan - just redirect to dashboard
     router.push('/dashboard/my-works')
+    return
+  }
+
+  // ECPay (TW) → collect the e-invoice choice first, then re-enter confirmed.
+  if (paymentMethod === 'ecpay' && !invoiceConfirmed) {
+    pendingCheckout.value = () => handleSubscribe(plan, paymentMethod, true)
+    invoiceDialogOpen.value = true
     return
   }
 
@@ -906,6 +952,13 @@ onMounted(async () => {
         :loading="cancelling"
         @confirm="onConfirmCancel"
         @close="showCancelModal = false"
+      />
+
+      <!-- TW e-invoice picker, shown before the ECPay redirect. -->
+      <InvoiceCheckoutDialog
+        :open="invoiceDialogOpen"
+        @confirm="onInvoiceConfirm"
+        @cancel="onInvoiceCancel"
       />
 
       <!-- Success/Error Messages -->

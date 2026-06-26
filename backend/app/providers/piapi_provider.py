@@ -1148,10 +1148,28 @@ class PiAPIProvider(BaseProvider):
         # on_submit captures the upstream task_id the moment it's assigned, so a
         # request killed mid-poll can be recovered by the reclaim worker.
         _on_submit = _make_on_submit_wrapper(on_submit, "piapi")
-        return await self._retry_transient(
+        result = await self._retry_transient(
             "virtual_try_on",
             lambda: self._submit_and_poll(payload, on_submit=_on_submit),
         )
+
+        # Kling's ai_try_on nests the result under
+        # output.works[0].image.resource_without_watermark — a shape the generic
+        # image normalizer (_normalize_image_url) does NOT handle. Without this,
+        # a SUCCESSFUL Kling try-on returns no output.image_url, the caller thinks
+        # it failed, and falls back to the inferior Kontext I2I edit (which barely
+        # changes the photo → "try-on just returns the original"). Promote it here.
+        if isinstance(result, dict) and result.get("success"):
+            output = result.get("output") or {}
+            if not output.get("image_url"):
+                works = output.get("works") or []
+                if isinstance(works, list) and works and isinstance(works[0], dict):
+                    img_obj = works[0].get("image") or {}
+                    url = img_obj.get("resource_without_watermark") or img_obj.get("resource")
+                    if url:
+                        output["image_url"] = url
+                        result["output"] = output
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # IMAGE TO VIDEO (Wan 2.6 via PiAPI)

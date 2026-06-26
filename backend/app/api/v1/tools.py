@@ -2742,19 +2742,10 @@ async def _try_on_inner(
             user_id=str(current_user.id) if current_user else None,
         )
 
-    # ========== DEMO USER: Return cached demo example ==========
-    if not is_subscribed_user(current_user):
-        try:
-            user_garment = str(request.get_garment_url())
-        except ValueError:
-            user_garment = None
-        return await _demo_response(
-            db,
-            ToolType.TRY_ON,
-            cta="Subscribe to try on your own garments.",
-            product_id=request.model_id,
-            input_image_url=user_garment,
-        )
+    # No demo/cache for Try-On (2026-06 owner directive): EVERY user runs the
+    # real generation. A free member's 40 starter credits cover one run (30
+    # credits), so they can genuinely test it; the credit check below is the
+    # only gate and returns "insufficient credits" if they can't afford it.
 
     # Garment mode needs a garment image. Validate BEFORE charging so a missing
     # garment returns a clear 422 instead of deduct → generic-fail → refund.
@@ -2764,7 +2755,7 @@ async def _try_on_inner(
             message="mode='garment' requires a garment image (garment_image_url or image_url).",
         )
 
-    # ========== SUBSCRIBER: Real-time Generation ==========
+    # ========== Real-time Generation (any user with credits) ==========
     # Try-on upstream (Kling) is $0.50-$1.00 — must charge at the cheap-pack
     # rate to cover cost.
     CREDIT_COST = 30

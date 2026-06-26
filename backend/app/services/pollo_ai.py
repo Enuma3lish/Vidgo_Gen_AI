@@ -52,7 +52,9 @@ POLLO_MODELS = {
         "endpoint": "/generation/pollo/pollo-v1-6",
         "name": "Pollo 1.6",
         "description": "Pollo's own T2V/I2V model",
-        "lengths": [5, 8]
+        # T2V length enum per docs.pollo.ai is 5 or 10 (NOT 8). With [5, 8] a
+        # 10 s request normalized to 8 → Pollo 400 "Input validation failed".
+        "lengths": [5, 10]
     },
     # ── New tier (2026-05-19) — Pollo as backup to PiAPI on these models.
     # Endpoint slugs follow Pollo's documented pattern /generation/<vendor>/<slug>.
@@ -231,7 +233,7 @@ class PolloAIClient:
                         logger.error(f"Pollo API error: {error}")
                         return False, error, None
                 else:
-                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    error = f"HTTP {response.status_code}: {response.text[:1000]}"
                     logger.error(f"Pollo API error: {error}")
                     return False, error, None
 
@@ -264,7 +266,7 @@ class PolloAIClient:
                 )
 
                 if response.status_code != 200:
-                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    error = f"HTTP {response.status_code}: {response.text[:1000]}"
                     logger.error(f"Pollo create-task error ({endpoint}): {error}")
                     return False, error, None
 

@@ -489,6 +489,7 @@ TOOL_TYPE_KIND = {
     "video_background_remove": "video",
     "image_upscale":           "image",
     "try_on":                  "image",  # Kling try-on (≤600s poll) — added 2026-06
+    "kling_video":             "video",  # Kling video (≤1800s poll) — added 2026-06
 }
 
 
@@ -511,6 +512,7 @@ def _build_tool_enum_map():
         "video_background_remove": _ToolType.SHORT_VIDEO,
         "image_upscale":           _ToolType.EFFECT,  # matches foreground choice
         "try_on":                  _ToolType.TRY_ON,
+        "kling_video":             _ToolType.KLING_VIDEO,
     }
 
 

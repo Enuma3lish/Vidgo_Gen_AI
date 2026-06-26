@@ -5898,6 +5898,48 @@ async def _kling_video_inner(
         if request.negative_prompt else VIDEO_BASELINE_NEGATIVE
     )
 
+    # Durable reclaim/poll row (P0-2). Kling jobs run up to ~30 min — far longer
+    # than the client request survives — so the frontend falls back to polling
+    # GET /user/tasks/{client_task_id}. Without a PendingProviderTask there is
+    # NOTHING for that poll to find, so it returns status="unknown" forever and
+    # the page spins endlessly (and a FAILED job never surfaces an error). Create
+    # the row BEFORE the route call: it is auto-stamped with the X-Client-Task-Id
+    # header, the reclaim worker can recover/refund it, and on_submit records the
+    # upstream task id. This is the same pattern try-on / avatar already use.
+    from app.models.pending_provider_task import PendingProviderTask
+    pending_task = PendingProviderTask(
+        user_id=current_user.id,
+        tool_type="kling_video",
+        service_type=service_type,
+        credits_charged=credit_cost_fallback,
+        input_params={"tier": tier, "duration": request.duration, "aspect_ratio": request.aspect_ratio},
+        status="submitting",
+    )
+    db.add(pending_task)
+    await db.commit()
+    await db.refresh(pending_task)
+
+    async def _on_kling_submit(task_id: str, provider_name: str):
+        try:
+            pending_task.provider_task_id = task_id
+            pending_task.provider_name = provider_name
+            pending_task.status = "polling"
+            pending_task.submitted_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception as exc:
+            logger.warning("kling_video: failed to record pending_task id=%s: %s", task_id, exc)
+
+    async def _fail_pending(msg) -> None:
+        # Flip the reclaim row to a terminal 'failed' so the frontend recovery
+        # poll returns "failed" (→ error shown) instead of spinning on "unknown".
+        try:
+            pending_task.status = "failed"
+            pending_task.error_message = str(msg)[:200]
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
     try:
         provider_router = get_provider_router()
         result = await provider_router.route(
@@ -5911,9 +5953,11 @@ async def _kling_video_inner(
                 "image_tail_url": request.image_tail_url,
                 "negative_prompt": final_negative,
                 "cfg_scale": request.cfg_scale,
+                "on_submit": _on_kling_submit,
             },
         )
         if not result.get("success"):
+            await _fail_pending(result.get("error") or "task failed")
             await _refund_credits(db, current_user, credit_cost_fallback, service_type)
             return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
 
@@ -5921,6 +5965,7 @@ async def _kling_video_inner(
         video_url = output.get("video_url")
         video_url = await _persist_provider_url(video_url, "video", current_user)
         if not video_url:
+            await _fail_pending("Kling returned no video URL")
             await _refund_credits(db, current_user, credit_cost_fallback, service_type)
             return ToolResponse(success=False, message="Kling returned no video URL. Please try again.")
 
@@ -5952,6 +5997,15 @@ async def _kling_video_inner(
             logger.warning("kling_video: failed to persist UserGeneration to gallery", exc_info=True)
             await db.rollback()
 
+        # Close out the reclaim row so the worker never re-polls it.
+        try:
+            pending_task.status = "completed"
+            pending_task.result_url = video_url
+            pending_task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
         return ToolResponse(
             success=True,
             result_url=video_url,
@@ -5961,6 +6015,7 @@ async def _kling_video_inner(
         )
     except Exception as exc:
         logger.error("kling_video error: %s", exc, exc_info=True)
+        await _fail_pending(exc)
         await _refund_credits(db, current_user, credit_cost_fallback, service_type)
         _notify_admin_of_tool_failure("kling_video", exc, current_user)
         # Surface the upstream message so users see the real reason (PiAPI

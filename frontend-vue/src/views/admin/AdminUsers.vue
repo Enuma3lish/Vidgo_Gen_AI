@@ -245,6 +245,24 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString(locale.value)
 }
 
+// Total remaining credits = subscription (resets each cycle) + purchased
+// (top-ups) + bonus (never-expiring admin/referral grants). Mirrors how the
+// backend spends them, so this is the real balance the user can still use.
+function totalCredits(u: { subscription_credits?: number; purchased_credits?: number; bonus_credits?: number }): number {
+  return (u.subscription_credits || 0) + (u.purchased_credits || 0) + (u.bonus_credits || 0)
+}
+
+function formatCredits(n: number): string {
+  return new Intl.NumberFormat(locale.value).format(n)
+}
+
+function creditsTooltip(u: AdminUser): string {
+  return localized(
+    `訂閱點數 ${formatCredits(u.subscription_credits || 0)} ／ 購買點數 ${formatCredits(u.purchased_credits || 0)} ／ 獎勵點數 ${formatCredits(u.bonus_credits || 0)}`,
+    `Subscription ${formatCredits(u.subscription_credits || 0)} / Purchased ${formatCredits(u.purchased_credits || 0)} / Bonus ${formatCredits(u.bonus_credits || 0)}`,
+  )
+}
+
 function formatPlan(plan?: string | null): string {
   return (plan || 'demo').replace(/_/g, ' ')
 }
@@ -312,6 +330,7 @@ function activeLabel(isActive: boolean): string {
         <option value="created_at">{{ localized('註冊日期', 'Join Date') }}</option>
         <option value="email">Email</option>
         <option value="plan">{{ localized('方案', 'Plan') }}</option>
+        <option value="subscription_credits">{{ localized('訂閱點數', 'Subscription Credits') }}</option>
       </select>
       <select v-model="sortOrder" class="filter-select">
         <option value="desc">{{ localized('由新到舊', 'Newest First') }}</option>
@@ -329,6 +348,7 @@ function activeLabel(isActive: boolean): string {
             <th>{{ localized('方案', 'Plan') }}</th>
             <th>{{ localized('推廣碼', 'Promotion Code') }}</th>
             <th>{{ localized('使用次數', 'Uses') }}</th>
+            <th>{{ localized('剩餘點數', 'Remaining Credits') }}</th>
             <th>{{ localized('狀態', 'Status') }}</th>
             <th>{{ localized('加入日期', 'Joined') }}</th>
             <th>{{ localized('操作', 'Actions') }}</th>
@@ -356,6 +376,16 @@ function activeLabel(isActive: boolean): string {
               </div>
             </td>
             <td>{{ user.referral_count || 0 }}</td>
+            <td>
+              <div class="credits-cell" :title="creditsTooltip(user)">
+                <span class="credits-total">{{ formatCredits(totalCredits(user)) }}</span>
+                <span class="credits-breakdown">
+                  {{ localized('訂閱', 'Sub') }} {{ formatCredits(user.subscription_credits || 0) }}
+                  · {{ localized('購買', 'Buy') }} {{ formatCredits(user.purchased_credits || 0) }}
+                  · {{ localized('獎勵', 'Bonus') }} {{ formatCredits(user.bonus_credits || 0) }}
+                </span>
+              </div>
+            </td>
             <td>
               <span class="status-badge" :class="{ active: user.is_active, inactive: !user.is_active }">
                 {{ activeLabel(user.is_active) }}
@@ -484,6 +514,17 @@ function activeLabel(isActive: boolean): string {
             <div class="detail-item">
               <label>{{ localized('生成次數', 'Generations') }}</label>
               <span>{{ selectedUser.generation_count }}</span>
+            </div>
+            <div class="detail-item credits-detail">
+              <label>{{ localized('剩餘點數', 'Remaining Credits') }}</label>
+              <span>
+                <strong>{{ formatCredits(totalCredits(selectedUser)) }}</strong>
+                <span class="credits-breakdown">
+                  {{ localized('訂閱', 'Sub') }} {{ formatCredits(selectedUser.subscription_credits || 0) }}
+                  · {{ localized('購買', 'Buy') }} {{ formatCredits(selectedUser.purchased_credits || 0) }}
+                  · {{ localized('獎勵', 'Bonus') }} {{ formatCredits(selectedUser.bonus_credits || 0) }}
+                </span>
+              </span>
             </div>
             <div class="detail-item">
               <label>{{ localized('推廣碼', 'Promotion Code') }}</label>
@@ -782,6 +823,31 @@ function activeLabel(isActive: boolean): string {
 .plan-badge.premium { background: rgba(236,72,153,0.15); color: #f472b6; }
 .plan-badge.enterprise { background: rgba(245,158,11,0.15); color: #f57c00; }
 .plan-badge.test-pro-usd-1 { background: rgba(245,158,11,0.16); color: #fbbf24; }
+
+.credits-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  white-space: nowrap;
+}
+
+.credits-total {
+  font-weight: 700;
+  color: #f5f5fa;
+  font-variant-numeric: tabular-nums;
+}
+
+.credits-breakdown {
+  font-size: 0.7rem;
+  color: #6b6b8a;
+}
+
+.credits-detail strong {
+  display: inline-block;
+  margin-right: 0.5rem;
+  font-size: 1.1rem;
+  color: #34d399;
+}
 
 .status-badge {
   padding: 0.25rem 0.5rem;

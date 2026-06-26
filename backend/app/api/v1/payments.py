@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 from typing import Optional
 import logging
@@ -303,7 +305,7 @@ async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
     # Find order by transaction ID (normalize to string for JSONB comparison)
     result = await db.execute(
         select(Order).where(
-            Order.payment_data["paypal_transaction_id"].astext == transaction_id
+            cast(Order.payment_data, JSONB)["paypal_transaction_id"].astext == transaction_id
         )
     )
     order = result.scalars().first()
@@ -393,7 +395,7 @@ def _extract_paypal_custom_data(data: dict) -> dict:
 async def _find_order_by_paypal_transaction(db: AsyncSession, transaction_id: str) -> Optional[Order]:
     result = await db.execute(
         select(Order).where(
-            Order.payment_data["paypal_transaction_id"].astext == transaction_id
+            cast(Order.payment_data, JSONB)["paypal_transaction_id"].astext == transaction_id
         )
     )
     return result.scalars().first()

@@ -76,3 +76,60 @@ jobs:
 
       - name: Run pytest
         run: pytest
+
+  migrations:
+    name: Backend · alembic upgrade head
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    # Unlike the pytest job (DB mocked), this job stands up a real Postgres and
+    # applies the full migration chain from an empty database, so a broken or
+    # non-linear migration fails CI instead of only surfacing on deploy.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vidgo_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d vidgo_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PYTHONUNBUFFERED: '1'
+      # alembic's console script doesn't add the working dir to sys.path, so
+      # `from app...` in env.py needs PYTHONPATH — same as the backend Dockerfile
+      # (ENV PYTHONPATH=/app). pytest gets this for free via its rootdir insertion.
+      PYTHONPATH: ${{ github.workspace }}/backend
+      # alembic/env.py reads settings.DATABASE_URL (async asyncpg driver). Point
+      # it at the ephemeral Postgres service container above.
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/vidgo_ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Apply all migrations (alembic upgrade head)
+        run: alembic upgrade head
+
+      - name: Assert a single head and report current revision
+        run: |
+          alembic heads
+          alembic current

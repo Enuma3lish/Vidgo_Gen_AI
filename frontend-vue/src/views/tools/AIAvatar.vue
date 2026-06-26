@@ -37,7 +37,12 @@ const language = ref<Language>(isZh.value ? 'zh-TW' : 'en')
 const script = ref('')
 const voiceId = ref('')
 const headshot = ref<string | undefined>(undefined)
-const voices = ref<Array<{ id: string; name: string }>>([])
+const voices = ref<Array<{ id: string; name: string; gender: string }>>([])
+// When a *sample* headshot is picked its gender is known (sample ids are
+// female-* / male-*), so we lock the voice picker to matching-gender + neutral
+// voices — this stops e.g. a female avatar being paired with a male voice.
+// Uploaded photos have unknown gender → null → no filtering (per product call).
+const headshotGender = ref<'female' | 'male' | null>(null)
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
@@ -89,6 +94,15 @@ const SAMPLE_HEADSHOTS = [
 ]
 function pickSampleHeadshot(url: string) { headshot.value = url }
 
+// Single source of truth for the locked gender: derive it from whatever is in
+// the headshot slot. A sample tile sets a known SAMPLE_HEADSHOTS url (gender
+// from its id); an upload, gallery prefill, or the uploader's clear button
+// leaves an unknown/empty image → null → voices unfiltered.
+watch(headshot, (url) => {
+  const sample = SAMPLE_HEADSHOTS.find((s) => s.url === url)
+  headshotGender.value = sample ? (sample.id.startsWith('female') ? 'female' : 'male') : null
+})
+
 // Gallery deeplink — the avatar tool consumes a headshot image and a script,
 // so map ?image → headshot and ?prompt → script when present.
 useExamplePrefill({
@@ -139,12 +153,28 @@ async function loadVoices() {
     // voice selector actually populates instead of staying permanently empty.
     const raw = resp.data
     const list = Array.isArray(raw) ? raw : (raw?.voices || raw?.[language.value] || [])
-    voices.value = list.map((v: any) => ({ id: v.id, name: v.name || v.id }))
+    voices.value = list.map((v: any) => ({ id: v.id, name: v.name || v.id, gender: String(v.gender || 'neutral') }))
     if (!voiceId.value && voices.value[0]) voiceId.value = voices.value[0].id
   } catch (e) {
     console.warn('[avatar] voice list failed', e)
   }
 }
+// Voices offered in the picker. When a sample avatar pins a gender, restrict to
+// that gender plus the gender-neutral voice (Alloy); uploads keep the full list.
+const visibleVoices = computed(() => {
+  if (!headshotGender.value) return voices.value
+  return voices.value.filter((v) => v.gender === headshotGender.value || v.gender === 'neutral')
+})
+
+// If the current pick falls outside the allowed set — e.g. a male voice was
+// chosen, then a female sample avatar is selected — snap to the first allowed
+// voice so a mismatched voice can never be submitted.
+watch(visibleVoices, (list) => {
+  if (list.length && !list.some((v) => v.id === voiceId.value)) {
+    voiceId.value = list[0].id
+  }
+})
+
 onMounted(() => {
   checkAvailability()
   loadVoices()
@@ -329,11 +359,16 @@ function gotoPricing() { router.push('/pricing') }
         </div>
       </div>
 
-      <div v-if="voices.length > 0">
+      <div v-if="visibleVoices.length > 0">
         <label class="pp-field-label">{{ L('聲音', 'Voice', '声', '음성', 'Voz') }}</label>
         <select v-model="voiceId" class="pp-select">
-          <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option>
+          <option v-for="v in visibleVoices" :key="v.id" :value="v.id">{{ v.name }}</option>
         </select>
+        <p v-if="headshotGender" class="pp-field-help">
+          {{ headshotGender === 'female'
+            ? L('已依所選女性頭像鎖定女聲（避免聲音性別不符）。', 'Locked to female voices to match the selected female avatar.', '選択した女性アバターに合わせて女性の声に固定しました。', '선택한 여성 아바타에 맞춰 여성 음성으로 고정했습니다.', 'Bloqueado a voces femeninas para el avatar femenino seleccionado.')
+            : L('已依所選男性頭像鎖定男聲（避免聲音性別不符）。', 'Locked to male voices to match the selected male avatar.', '選択した男性アバターに合わせて男性の声に固定しました。', '선택한 남성 아바타에 맞춰 남성 음성으로 고정했습니다.', 'Bloqueado a voces masculinas para el avatar masculino seleccionado.') }}
+        </p>
       </div>
 
       <div>

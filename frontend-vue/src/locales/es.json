@@ -811,8 +811,8 @@
     },
     "creditPacks": {
       "sectionBadge": "Compra única de créditos",
-      "title": "Compra créditos directamente, sin suscripción",
-      "subtitle": "Tres paquetes oficiales en TWD para propuestas puntuales, renders de interiores, imágenes de producto por lotes y videos adicionales. Los créditos comprados no se reinician mensualmente.",
+      "title": "¿Qué son los créditos de IA?",
+      "subtitle": "¡Los créditos de IA potencian tu experiencia Vidgo! Necesitas una suscripción Basic o Pro activa para comprarlos.",
       "checkoutNote": "Pago internacional con PayPal",
       "badges": {
         "bestValue": "Mejor valor",
@@ -831,8 +831,10 @@
         "buy": "Comprar créditos",
         "buyCard": "Pagar con tarjeta",
         "buyPayPal": "Pagar con PayPal",
-        "signInToBuy": "Inicia sesión para comprar"
+        "signInToBuy": "Inicia sesión para comprar",
+        "subscribeFirst": "Suscríbete a Basic / Pro primero"
       },
+      "subscribeRequiredMsg": "Suscríbete a un plan Basic o Pro antes de comprar créditos.",
       "purchaseFailed": "No se pudo comprar el paquete de créditos. Inténtalo de nuevo.",
       "orderCreated": "Pedido creado",
       "fallbackNames": {

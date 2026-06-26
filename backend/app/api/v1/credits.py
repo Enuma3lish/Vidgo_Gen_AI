@@ -184,6 +184,34 @@ async def purchase_credits(
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
 
+    # Policy (2026-06): credit top-ups require an ACTIVE paid subscription
+    # (Basic or above). Buying credits without a base plan is not allowed.
+    # Uses get_subscription_status, which is expiry-aware (an expired plan no
+    # longer counts as has_subscription), so a lapsed subscriber is correctly
+    # blocked until they renew.
+    from app.services.subscription_service import get_subscription_service
+    _PAID_PLAN_RANK = {
+        "basic": 1, "starter": 1, "standard": 1,
+        "pro": 2, "test_pro_usd_1": 2,
+        "premium": 3, "pro_plus": 3, "enterprise": 4,
+    }
+    sub_status = await get_subscription_service().get_subscription_status(
+        db=db, user_id=current_user.id
+    )
+    active_plan_name = ""
+    if sub_status.get("has_subscription"):
+        active_plan_name = str((sub_status.get("plan") or {}).get("name") or "").lower()
+    if _PAID_PLAN_RANK.get(active_plan_name, 0) < 1:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "subscription_required",
+                "message": "An active Basic or Pro subscription is required to buy credits.",
+                "required_plan": "basic",
+                "current_plan": active_plan_name or "free",
+            },
+        )
+
     # Check if user's plan qualifies for this package. Return a structured
     # 403 with the required plan + the user's current plan so the frontend
     # can render an "Upgrade to <plan>" CTA instead of a generic error toast.

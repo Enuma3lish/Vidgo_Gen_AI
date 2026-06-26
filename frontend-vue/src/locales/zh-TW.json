@@ -846,8 +846,8 @@
     },
     "creditPacks": {
       "sectionBadge": "單買點數收費",
-      "title": "不訂閱也可以直接購買點數",
-      "subtitle": "三個正式 TWD 點數包已固定，適合臨時提案、室內設計渲染、批次商品圖與影片補量。購買點數不會在每月週期重置。",
+      "title": "AI 點數是什麼？",
+      "subtitle": "AI Credits 就像是為您的 Vidgo 體驗加強！您需要 Basic 或 Pro 作為基礎訂閱才能購買。",
       "checkoutNote": "台灣 ECPay 金流付款",
       "badges": {
         "bestValue": "最划算",
@@ -866,8 +866,10 @@
         "buy": "購買點數",
         "buyCard": "信用卡付款",
         "buyPayPal": "PayPal 付款",
-        "signInToBuy": "登入後購買"
+        "signInToBuy": "登入後購買",
+        "subscribeFirst": "先訂閱 Basic / Pro"
       },
+      "subscribeRequiredMsg": "購買點數前，請先訂閱 Basic 或 Pro 方案。",
       "purchaseFailed": "點數包購買失敗，請稍後再試。",
       "orderCreated": "訂單已建立",
       "fallbackNames": {

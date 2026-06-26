@@ -846,8 +846,8 @@
     },
     "creditPacks": {
       "sectionBadge": "One-time Credit Pricing",
-      "title": "Buy credits directly without a subscription",
-      "subtitle": "Three official TWD packs are available for ad hoc proposals, interior renders, batch product images, and extra video runs. Purchased credits do not reset with monthly billing.",
+      "title": "What are AI Credits?",
+      "subtitle": "AI Credits supercharge your Vidgo experience! You need an active Basic or Pro subscription to purchase them.",
       "checkoutNote": "PayPal international checkout",
       "badges": {
         "bestValue": "Best Value",
@@ -866,8 +866,10 @@
         "buy": "Buy Credits",
         "buyCard": "Pay by Credit Card",
         "buyPayPal": "Pay with PayPal",
-        "signInToBuy": "Sign In to Buy"
+        "signInToBuy": "Sign In to Buy",
+        "subscribeFirst": "Subscribe to Basic / Pro first"
       },
+      "subscribeRequiredMsg": "Please subscribe to a Basic or Pro plan before buying credits.",
       "purchaseFailed": "Credit package purchase failed. Please try again.",
       "orderCreated": "Order created",
       "fallbackNames": {

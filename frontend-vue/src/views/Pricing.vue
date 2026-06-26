@@ -375,8 +375,18 @@ async function handleCreditPurchase(
       successMessage.value = t('pricing.creditPacks.orderCreated')
     }
   } catch (err: unknown) {
-    const e = err as { response?: { data?: { detail?: string } } }
-    error.value = e.response?.data?.detail || t('pricing.creditPacks.purchaseFailed')
+    const e = err as { response?: { status?: number; data?: { detail?: unknown } } }
+    const detail = e.response?.data?.detail
+    // Structured 403 from the server: needs a (better) subscription before buying.
+    if (e.response?.status === 403 && detail && typeof detail === 'object') {
+      const code = (detail as { error?: string }).error
+      if (code === 'subscription_required' || code === 'plan_upgrade_required') {
+        error.value = t('pricing.creditPacks.subscribeRequiredMsg')
+        scrollToPlans()
+        return
+      }
+    }
+    error.value = (typeof detail === 'string' ? detail : null) || t('pricing.creditPacks.purchaseFailed')
   } finally {
     subscribing.value = null
   }
@@ -710,6 +720,19 @@ function isCurrentPlan(planId: string): boolean {
   return currentPlanId.value === planId && isSubscriptionActive.value
 }
 
+// Credit top-ups require an active paid subscription (Basic/Pro or above). This
+// mirrors the server-side guard in /credits/purchase; has_subscription is
+// expiry-aware so a lapsed plan no longer qualifies.
+const isSubscribed = computed(() => !!subscriptionStatus.value?.has_subscription)
+// Only block a logged-in non-subscriber; logged-out users keep the existing
+// sign-in CTA (the backend enforces after they log in).
+const mustSubscribeForCredits = computed(() => isLoggedIn.value && !isSubscribed.value)
+
+// Scroll the user up to the subscription plan cards.
+function scrollToPlans() {
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 // Whether each payment gateway is wired up server-side. PayPal credentials
 // are unset in production right now (PAYPAL_CLIENT_ID empty in Secret
 // Manager), so the service is in MOCK mode and a real checkout cannot be
@@ -982,6 +1005,18 @@ onMounted(async () => {
               </p>
 
               <div class="space-y-2">
+                <!-- Credit packs require an active Basic/Pro subscription. A
+                     logged-in non-subscriber gets a CTA to the plans instead
+                     of a buy button (the backend also rejects the purchase). -->
+                <button
+                  v-if="mustSubscribeForCredits"
+                  @click="scrollToPlans"
+                  class="w-full py-3 rounded font-medium transition-all duration-200 text-white"
+                  style="background: #1677ff;"
+                >
+                  {{ t('pricing.creditPacks.cta.subscribeFirst') }}
+                </button>
+                <template v-else>
                 <button
                   v-if="isZh"
                   @click="handleCreditPurchase(pkg, 'ecpay')"
@@ -1016,6 +1051,7 @@ onMounted(async () => {
                     {{ t('pricing.creditPacks.cta.buyPayPal') }}
                   </span>
                 </button>
+                </template>
               </div>
             </article>
           </div>

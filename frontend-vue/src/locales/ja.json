@@ -811,8 +811,8 @@
     },
     "creditPacks": {
       "sectionBadge": "クレジット単品購入",
-      "title": "サブスクなしでもクレジットを直接購入できます",
-      "subtitle": "3つの公式TWDパックを用意。スポット提案、インテリアレンダリング、商品画像のバッチ、動画の追加生成に最適です。購入したクレジットは月次でリセットされません。",
+      "title": "AIクレジットとは？",
+      "subtitle": "AIクレジットはあなたのVidgo体験を強化します！購入にはBasicまたはProの有効なサブスクリプションが必要です。",
       "checkoutNote": "PayPal 国際決済",
       "badges": {
         "bestValue": "最もお得",
@@ -831,8 +831,10 @@
         "buy": "クレジットを購入",
         "buyCard": "クレジットカードで支払う",
         "buyPayPal": "PayPalで支払う",
-        "signInToBuy": "ログインして購入"
+        "signInToBuy": "ログインして購入",
+        "subscribeFirst": "まず Basic / Pro に登録"
       },
+      "subscribeRequiredMsg": "クレジットを購入する前に、BasicまたはProプランにご登録ください。",
       "purchaseFailed": "クレジットパックの購入に失敗しました。後ほどお試しください。",
       "orderCreated": "注文が作成されました",
       "fallbackNames": {

@@ -694,9 +694,20 @@ function getYearlySavingsPct(plan: PlanInfo): number {
   return Math.round((1 - yearlyTotal / monthlyTotal) * 100)
 }
 
+// A subscription is only truly active if its status is 'active' AND its end_date
+// hasn't passed. The backend now filters expired rows out of the status endpoint,
+// but guard here too so a stale/expired payload never shows an "active" badge or
+// a live cancel button (e.g. the $1 test plan whose status stays "active").
+const isSubscriptionActive = computed(() => {
+  const s = subscriptionStatus.value
+  if (!s?.has_subscription || s.status !== 'active') return false
+  if (s.end_date && new Date(s.end_date).getTime() <= Date.now()) return false
+  return true
+})
+
 // Check if this is the current plan
 function isCurrentPlan(planId: string): boolean {
-  return currentPlanId.value === planId && subscriptionStatus.value?.status === 'active'
+  return currentPlanId.value === planId && isSubscriptionActive.value
 }
 
 // Whether each payment gateway is wired up server-side. PayPal credentials
@@ -807,8 +818,8 @@ onMounted(async () => {
               </h3>
               <p class="text-sm" style="color: #6b6b8a;">
                 {{ t('pricing.status') }}:
-                <span :style="subscriptionStatus.status === 'active' ? 'color: #10b981;' : 'color: #f59e0b;'">
-                  {{ subscriptionStatus.status }}
+                <span :style="isSubscriptionActive ? 'color: #10b981;' : 'color: #f59e0b;'">
+                  {{ isSubscriptionActive ? subscriptionStatus.status : t('pricing.statusExpired', 'expired') }}
                 </span>
                 <span v-if="subscriptionStatus.end_date" class="ml-2">
                   | {{ t('pricing.validUntil') }}: {{ new Date(subscriptionStatus.end_date).toLocaleDateString() }}
@@ -828,7 +839,7 @@ onMounted(async () => {
                 <span class="text-xs ml-1">({{ refundDaysRemaining }} {{ t('pricing.daysLeft') }})</span>
               </button>
               <button
-                v-if="subscriptionStatus.status === 'active'"
+                v-if="isSubscriptionActive"
                 @click="askCancel(false)"
                 :disabled="cancelling"
                 class="px-4 py-2 rounded-lg transition-colors disabled:opacity-50 text-sm font-medium"

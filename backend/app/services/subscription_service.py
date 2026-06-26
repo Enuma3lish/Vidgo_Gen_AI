@@ -1733,6 +1733,14 @@ class SubscriptionService:
         now = utc_now()
         for sub in subscriptions:
             if sub.status in ("active", "pending"):
+                # An active/pending row whose end_date has passed is effectively
+                # expired. The status column is never flipped to 'expired' on its
+                # own (auto-renew only runs for auto_renew=True plans, e.g. the $1
+                # test plan stays "active" forever after its end_date), so check
+                # end_date here — otherwise the pricing page shows an expired plan
+                # as active with a live cancel button.
+                if sub.end_date and sub.end_date <= now:
+                    continue
                 return sub
             if sub.status == "cancelled" and sub.end_date and sub.end_date > now:
                 return sub

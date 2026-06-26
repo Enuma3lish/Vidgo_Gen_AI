@@ -850,6 +850,7 @@
     "features": "기능",
     "status": "상태",
     "validUntil": "유효 기간",
+    "statusExpired": "만료됨",
     "daysLeft": "일 남음",
     "processing": "처리 중...",
     "subscribing": "구독 중...",

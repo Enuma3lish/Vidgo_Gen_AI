@@ -885,6 +885,7 @@
     "features": "Features",
     "status": "Status",
     "validUntil": "Valid until",
+    "statusExpired": "expired",
     "daysLeft": "days left",
     "processing": "Processing...",
     "subscribing": "Subscribing...",

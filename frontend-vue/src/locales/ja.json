@@ -850,6 +850,7 @@
     "features": "機能",
     "status": "ステータス",
     "validUntil": "有効期限",
+    "statusExpired": "期限切れ",
     "daysLeft": "日残り",
     "processing": "処理中...",
     "subscribing": "登録中...",

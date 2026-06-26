@@ -850,6 +850,7 @@
     "features": "Características",
     "status": "Estado",
     "validUntil": "Válido hasta",
+    "statusExpired": "caducado",
     "daysLeft": "días restantes",
     "processing": "Procesando...",
     "subscribing": "Suscribiendo...",

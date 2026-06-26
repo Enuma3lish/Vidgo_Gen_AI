@@ -885,6 +885,7 @@
     "features": "功能特色",
     "status": "狀態",
     "validUntil": "有效期至",
+    "statusExpired": "已過期",
     "daysLeft": "天",
     "processing": "處理中...",
     "subscribing": "訂閱中...",

@@ -105,7 +105,7 @@ const visibleCols = computed(() =>
 
       <!-- Bottom Bar -->
       <div class="mt-12 pt-8 flex flex-col md:flex-row items-center justify-between gap-4" style="border-top: 1px solid rgba(255,255,255,0.06);">
-        <p class="text-sm text-muted">{{ '\u00A9' }} 2025 VidGo AI. All rights reserved.</p>
+        <p class="text-sm text-muted">{{ '\u00A9' }} {{ new Date().getFullYear() }} VidGo AI. All rights reserved.</p>
         <div class="flex items-center gap-3">
           <span class="badge">{{ t('footer.securePayment') }}</span>
         </div>

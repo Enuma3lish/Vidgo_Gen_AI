@@ -2670,6 +2670,39 @@ async def _composite_product_scene(product_no_bg_url: str, scene_url: str) -> di
 # Tool 3: AI Try-On
 # ============================================================================
 
+def _build_tryon_prompt(request: "TryOnRequest") -> str:
+    """Build a constrained garment-mode instruction from the page's choices
+    (category / angle / background). Pinning the person + garment + view + scene
+    sharply reduces the instruction-following backup's hallucination (wrong
+    body, mannequin, invented outfit, drifting background)."""
+    cat = (getattr(request, "category", None) or "dress").lower()
+    garment_area = {
+        "upper_body": "upper-body top (e.g. shirt / jacket / blouse)",
+        "lower_body": "lower-body bottoms (e.g. pants / skirt / shorts)",
+        "dress": "full one-piece dress",
+        "full_body": "full-body outfit",
+    }.get(cat, "outfit")
+    angle = (getattr(request, "angle", None) or "front").lower()
+    view = {"front": "front view", "side": "side-profile view", "back": "back view"}.get(angle, "front view")
+    bg = (getattr(request, "background", None) or "white").lower()
+    background = {
+        "white": "a clean solid white studio background",
+        "transparent": "a plain neutral background",
+        "studio": "a soft professional studio backdrop",
+    }.get(bg, "a clean solid white studio background")
+    return (
+        "Image 1 is a person; image 2 is a clothing garment. Dress the person from "
+        f"image 1 in the garment from image 2 as their {garment_area}. Keep the "
+        "person's face, hair, skin tone, body shape, and pose EXACTLY the same — it "
+        "must be the SAME person, never a mannequin and never a different model. "
+        "Replace ONLY the relevant clothing and match the garment's exact color, "
+        "pattern, texture, and shape from image 2 — do not invent or restyle it. "
+        f"Render a {view} of the result on {background}. Photorealistic, natural "
+        "fabric drape and fit, consistent lighting; no added accessories, no text, "
+        "no watermark."
+    )
+
+
 @router.post("/try-on")
 async def ai_try_on(
     request: TryOnRequest,
@@ -3011,13 +3044,8 @@ async def _try_on_inner(
             )
             result = {"success": False, "error": str(primary_exc)}
 
-        # ── Fallback: Kontext I2I outfit edit ────────────────────────────────
-        # Pollo has no virtual try-on endpoint, so the chain is piapi → Kontext
-        # (PiAPI Flux Kontext with vertex fallback). We caption the garment via
-        # Gemini Vision and instruct Kontext to repaint just the outfit on the
-        # model photo. Quality is below dedicated Kling Try-On (no exact pattern
-        # match), but the user still gets a usable result instead of an error.
-        # Same pattern the prompt-mode branch above uses.
+        # Primary result: Kling's try-on image. The provider already promotes
+        # output.works[].image → output.image_url; keep the array forms as belt.
         result_url = None
         used_fallback = False
         if result.get("success"):
@@ -3030,54 +3058,27 @@ async def _try_on_inner(
                 if images:
                     result_url = images[0].get("url") if isinstance(images[0], dict) else images[0]
 
+        # ── Backup: Pollo nano-banana-2 multi-image try-on ───────────────────
+        # PiAPI Kling is primary; the failover composites the garment onto the
+        # model photo via Pollo nano-banana-2 (model + garment in input.images),
+        # instructed with the page's category/angle/background choices (see
+        # _build_tryon_prompt) so the backup hallucinates far less — right body,
+        # right garment, right view — instead of returning a near-original image.
         if not result_url:
             try:
-                from app.services.gemini_service import get_gemini_service
-                caption_resp = await get_gemini_service().describe_image(
-                    image_url=garment_url, language="en"
+                fb = await provider_router.pollo.virtual_try_on(
+                    model_image_url=model_url,
+                    garment_image_url=garment_url,
+                    category=request.category or "dress",
+                    prompt=_build_tryon_prompt(request),
                 )
-                garment_desc = (caption_resp or {}).get("description") or ""
-                garment_desc = garment_desc.strip()
-                if not garment_desc:
-                    garment_desc = "the garment shown in the reference photo"
-
-                # 2026-06-12: garment reference photos often show the piece on
-                # a ghost mannequin, so the Gemini caption can include
-                # "mannequin" — and Kontext then repainted the PERSON into a
-                # mannequin. Pin the person hard and scope the caption to the
-                # clothing only.
-                fallback_prompt = (
-                    "Edit this photo of a person: keep the person's face, hair, "
-                    "skin, body, pose, and the background EXACTLY the same — the "
-                    "result must show the SAME PERSON, never a mannequin and "
-                    "never a different model. Change ONLY the clothing they are "
-                    f"wearing to this garment: {garment_desc}. Ignore any "
-                    "mannequin or display stand mentioned in the garment "
-                    "description — only the garment itself matters. Realistic "
-                    "fabric texture, natural fit, consistent studio lighting."
-                )
-                fb = await provider_router.route(TaskType.I2I, {
-                    "image_url": model_url,
-                    "prompt": fallback_prompt,
-                    "model": "flux_kontext",
-                    "width": 1024,
-                    "height": 1024,
-                })
                 if fb.get("success"):
-                    fb_out = fb.get("output") or {}
-                    result_url = fb_out.get("image_url")
-                    if not result_url:
-                        imgs = fb_out.get("image_urls") or fb_out.get("images") or []
-                        if isinstance(imgs, list) and imgs:
-                            first = imgs[0]
-                            result_url = first if isinstance(first, str) else (
-                                first.get("url") or first.get("image_url")
-                            )
+                    result_url = (fb.get("output") or {}).get("image_url")
                     if result_url:
                         used_fallback = True
-                        logger.info("Try-On served via Kontext I2I fallback")
+                        logger.info("Try-On served via Pollo nano-banana-2 backup")
             except Exception as fb_exc:
-                logger.warning("Try-On Kontext fallback also failed: %s", fb_exc)
+                logger.warning("Try-On Pollo nano-banana-2 backup failed: %s", fb_exc)
 
         if not result_url:
             raise Exception(
@@ -3097,7 +3098,7 @@ async def _try_on_inner(
                 "model_image_url": str(request.model_image_url) if request.model_image_url else None,
                 "angle": request.angle,
                 "category": request.category,
-                "used_kontext_fallback": used_fallback,
+                "used_backup_provider": used_fallback,  # Pollo nano-banana-2 backup
             },
             result_image_url=result_url,
             credits_used=charged,

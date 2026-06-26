@@ -104,6 +104,50 @@ class PolloProvider(BaseProvider):
             return {"success": True, "task_id": result.get("task_id"), "output": {"image_url": result["image_url"]}}
         return {"success": False, "error": result.get("error") or "Pollo image_to_image failed"}
 
+    async def virtual_try_on(
+        self,
+        model_image_url: str,
+        garment_image_url: str,
+        category: str = "dress",
+        prompt: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Backup virtual try-on via Pollo nano-banana-2 multi-image composition.
+
+        Pollo has no dedicated Kling try-on endpoint, but nano-banana-2 takes a
+        multi-image `input.images` array and follows an edit instruction well
+        enough to composite a garment onto a model photo — used as the failover
+        for PiAPI Kling AI Try-On. Returns the provider-router shape
+        {"success", "output": {"image_url"}}.
+        """
+        self._log_request("virtual_try_on", {
+            "model_image_url": model_image_url,
+            "garment_image_url": garment_image_url,
+            "category": category,
+        })
+        if not (model_image_url and garment_image_url):
+            return {"success": False, "error": "model and garment image URLs are required"}
+
+        instruction = prompt or (
+            "Image 1 is a person; image 2 is a clothing garment. Dress the person "
+            "from image 1 in the garment from image 2. Keep the person's face, "
+            "hair, skin, body, pose, and the background EXACTLY the same — same "
+            "person, never a mannequin. Replace ONLY their outfit with the "
+            "garment, matching its exact color, pattern, and shape. Photorealistic, "
+            "natural fabric drape and fit, consistent studio lighting."
+        )
+        endpoint = self._image_endpoint("nano-banana-2")
+        result = await self._client.generate_image(
+            prompt=instruction,
+            endpoint=endpoint,
+            aspect_ratio="3:4",
+            resolution="2K",
+            images=[model_image_url, garment_image_url],
+            timeout=600,
+        )
+        if result.get("success") and result.get("image_url"):
+            return {"success": True, "task_id": result.get("task_id"), "output": {"image_url": result["image_url"]}}
+        return {"success": False, "error": result.get("error") or "Pollo nano-banana-2 try-on failed"}
+
     async def text_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Pure text-to-video via a Pollo per-model video endpoint (no source image).
 

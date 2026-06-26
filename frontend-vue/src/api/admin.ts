@@ -375,6 +375,20 @@ export const adminApi = {
     return response.data
   },
 
+  /** Re-run subscription provisioning for a user who paid but whose plan/credits
+   *  were never granted (e.g. a failed PayPal webhook). Idempotent. */
+  async reprovisionSubscription(userId: string): Promise<{
+    success: boolean
+    order_number: string
+    plan: string | null
+    subscription_credits: number
+    provisioned: boolean
+    message: string
+  }> {
+    const response = await apiClient.post(`/api/v1/admin/users/${userId}/reprovision-subscription`)
+    return response.data
+  },
+
   async setPromotionCode(userId: string, promotionCode?: string): Promise<{
     success: boolean
     message: string

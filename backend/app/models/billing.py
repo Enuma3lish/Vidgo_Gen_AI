@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, DateTime, Float, JSON, Text, func, DECIMAL
 from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import relationship
 import uuid
 from app.core.database import Base
@@ -144,7 +145,11 @@ class Order(Base):
     amount = Column(DECIMAL(10, 2), nullable=False)
     status = Column(String, default="pending") # pending, paid, failed
     payment_method = Column(String, nullable=True)
-    payment_data = Column(JSON, default={}) # Store ECPay/PayPal return data
+    # MutableDict so in-place writes like `order.payment_data["paypal_transaction_id"] = ...`
+    # are tracked and persisted. Plain JSON does NOT track in-place mutation, which
+    # silently dropped the PayPal subscription id at checkout → the webhook could
+    # never find the order to activate it (paid-but-not-provisioned bug, 2026-06).
+    payment_data = Column(MutableDict.as_mutable(JSON), default=dict) # Store ECPay/PayPal return data
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     paid_at = Column(DateTime(timezone=True), nullable=True)

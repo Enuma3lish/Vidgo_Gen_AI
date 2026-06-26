@@ -31,6 +31,7 @@ const grantCreditsTarget = ref<AdminUser | null>(null)
 const grantCreditsAmount = ref<number>(100)
 const grantCreditsReason = ref<string>('')
 const grantingCreditsUserId = ref<string | null>(null)
+const reprovisioningUserId = ref<string | null>(null)
 
 const plans = ['demo', 'basic', 'pro', 'premium', 'enterprise', 'test_pro_usd_1']
 
@@ -240,6 +241,34 @@ async function extendTestSubscription(user: AdminUser) {
   }
 }
 
+async function reprovisionSubscription(user: AdminUser) {
+  if (reprovisioningUserId.value) return
+  if (!confirm(localized(
+    `重新開通 ${user.email} 的訂閱？\n\n用於「已付款但方案／點數未開通」（例如 PayPal webhook 失敗）。會以最近一筆未完成的訂閱訂單重跑開通流程，可安全重複執行。`,
+    `Re-provision ${user.email}'s subscription?\n\nFor "paid but plan/credits never granted" (e.g. a failed PayPal webhook). Re-runs provisioning on their most recent unpaid subscription order. Safe to run more than once.`,
+  ))) return
+  reprovisioningUserId.value = user.id
+  try {
+    const result = await adminApi.reprovisionSubscription(user.id)
+    if (result.provisioned) {
+      alert(localized(
+        `已開通：方案 ${result.plan}，訂閱點數 ${result.subscription_credits}。`,
+        `Provisioned: plan ${result.plan}, ${result.subscription_credits} subscription credits.`,
+      ))
+    } else {
+      alert(localized(
+        `已處理訂單 ${result.order_number}，但未設定方案（可能缺少 subscription 紀錄）。`,
+        `Processed order ${result.order_number}, but no plan was set (subscription row may be missing).`,
+      ))
+    }
+    await loadUsers(adminStore.usersPage)
+  } catch (err: any) {
+    alert(err?.response?.data?.detail || err?.message || localized('重新開通失敗', 'Re-provision failed'))
+  } finally {
+    reprovisioningUserId.value = null
+  }
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleDateString(locale.value)
@@ -442,6 +471,14 @@ function activeLabel(isActive: boolean): string {
                   :title="localized('贈送 / 調整點數', 'Grant / adjust credits')"
                 >
                   {{ grantingCreditsUserId === user.id ? localized('調整中…', 'Adjusting…') : localized('贈點', 'Grant Credits') }}
+                </button>
+                <button
+                  @click="reprovisionSubscription(user)"
+                  class="btn-icon reprovision"
+                  :disabled="reprovisioningUserId === user.id"
+                  :title="localized('已付款但未開通方案時，重新開通訂閱', 'Re-provision subscription (paid but plan not granted)')"
+                >
+                  {{ reprovisioningUserId === user.id ? localized('開通中…', 'Provisioning…') : localized('重新開通', 'Re-provision') }}
                 </button>
                 <button
                   @click="toggleBan(user.id, user.is_active)"
@@ -940,6 +977,15 @@ function activeLabel(isActive: boolean): string {
 
 .btn-icon.grant-credits:hover {
   background: rgba(16,185,129,0.12);
+}
+
+.btn-icon.reprovision {
+  border-color: rgba(99,102,241,0.5);
+  color: #a5b4fc;
+}
+
+.btn-icon.reprovision:hover {
+  background: rgba(99,102,241,0.14);
 }
 
 .pagination {

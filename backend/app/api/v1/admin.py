@@ -820,6 +820,65 @@ async def adjust_user_credits(
     return {"success": True, "message": message}
 
 
+@router.post("/users/{user_id}/reprovision-subscription")
+async def reprovision_subscription(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Re-run subscription provisioning for a user whose payment succeeded but
+    whose plan/credits were never granted (e.g. a failed PayPal webhook).
+
+    Finds the user's most recent not-yet-paid subscription order and runs the
+    normal handle_payment_success path by order_number. Idempotent: an order
+    already marked paid returns 'already processed' without double-granting.
+    """
+    result = await db.execute(
+        select(Order)
+        .where(
+            Order.user_id == user_id,
+            Order.subscription_id.isnot(None),
+            Order.status != "paid",
+        )
+        .order_by(Order.created_at.desc())
+    )
+    order = result.scalars().first()
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending subscription order found for this user.",
+        )
+
+    from app.services.subscription_service import get_subscription_service
+    res = await get_subscription_service().handle_payment_success(
+        db,
+        order.order_number,
+        {
+            "status": "completed",
+            "manual_reprovision": True,
+            "reprovisioned_by": str(admin.id),
+            "reprovisioned_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Re-provision failed")
+
+    user = await db.get(User, user_id)
+    plan_name = None
+    if user and user.current_plan_id:
+        plan = await db.get(Plan, user.current_plan_id)
+        plan_name = plan.name if plan else None
+
+    return {
+        "success": True,
+        "order_number": order.order_number,
+        "plan": plan_name,
+        "subscription_credits": int(user.subscription_credits or 0) if user else 0,
+        "provisioned": bool(plan_name),
+        "message": res.get("message") or "Subscription re-provisioned.",
+    }
+
+
 @router.post("/users/{user_id}/promotion-code")
 async def set_user_promotion_code(
     user_id: str,

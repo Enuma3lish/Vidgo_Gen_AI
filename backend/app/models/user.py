@@ -78,7 +78,9 @@ class User(Base):
     # Drives auto_issue_invoice after each payment. NULL = legacy inference
     # (carrier fields → carrier, love code → donation, else email fallback).
     default_invoice_mode = Column(String(10), nullable=True)
-    default_buyer_tax_id = Column(String(8), nullable=True)          # 統一編號 (B2B)
+    # 8-digit TW 統一編號, OR a free-format international VAT/EIN for overseas
+    # PayPal buyers (column widened to 20 in migration k5l6m7n8o9p0).
+    default_buyer_tax_id = Column(String(20), nullable=True)         # 統一編號 (B2B) / intl VAT
     default_buyer_company_name = Column(String(100), nullable=True)  # 公司抬頭 (B2B)
 
     # Cancellation / Work Retention

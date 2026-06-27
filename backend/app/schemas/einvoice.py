@@ -106,8 +106,17 @@ class InvoicePrefsUpdateRequest(BaseModel):
     @field_validator("default_buyer_tax_id")
     @classmethod
     def validate_tax_id(cls, v):
-        if v and (len(v) != 8 or not v.isdigit()):
-            raise ValueError("Tax ID (統一編號) must be exactly 8 digits")
+        # Channel-specific format is enforced at ISSUE time (invoice_service):
+        # TW (ECPay/Giveme) B2B needs an 8-digit 統編; PayPal (overseas) accepts
+        # a free-format VAT/EIN. Here we only trim + cap length to fit the
+        # column (VARCHAR(20)) so the preference can hold either.
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            return None
+        if len(v) > 20:
+            raise ValueError("Tax ID too long (max 20 characters)")
         return v
 
 

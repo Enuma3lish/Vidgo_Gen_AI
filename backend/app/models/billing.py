@@ -180,7 +180,7 @@ class Invoice(Base):
 
     # Buyer info (B2B)
     buyer_company_name = Column(String(100), nullable=True)
-    buyer_tax_id = Column(String(8), nullable=True)  # 統一編號
+    buyer_tax_id = Column(String(20), nullable=True)  # TW 統一編號 (8 digits) OR intl VAT/EIN (PayPal)
 
     # Buyer info (B2C)
     buyer_email = Column(String(255), nullable=True)

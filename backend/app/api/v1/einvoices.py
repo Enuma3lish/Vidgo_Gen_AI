@@ -223,10 +223,13 @@ async def update_invoice_preferences(
                 detail="Donation mode requires a love code (捐贈模式需要愛心碼)",
             )
     elif mode == "b2b":
-        if not request.default_buyer_tax_id or not (request.default_buyer_company_name or "").strip():
+        # Company name is always required. The tax ID is required for TW 統編
+        # invoices but OPTIONAL for overseas PayPal buyers (free-format VAT/EIN),
+        # so it is validated per-channel at issue time, not here.
+        if not (request.default_buyer_company_name or "").strip():
             raise HTTPException(
                 status_code=400,
-                detail="B2B mode requires tax ID and company name (公司發票需要統一編號與公司抬頭)",
+                detail="B2B mode requires a company name (公司發票需要公司抬頭)",
             )
     else:
         # Legacy (no mode): keep the original carrier-vs-donation exclusion.

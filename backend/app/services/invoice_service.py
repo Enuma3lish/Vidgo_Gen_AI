@@ -469,23 +469,41 @@ async def create_b2b_invoice(
     user_id: str,
     order_id: str,
     buyer_company_name: str,
-    buyer_tax_id: str,
+    buyer_tax_id: Optional[str],
     buyer_email: Optional[str],
     tax_type: str,
     items: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """Create a B2B e-invoice (with tax ID / 統一編號)."""
+    """Create a B2B e-invoice (with tax ID / 統一編號).
 
-    # Validate tax ID: must be exactly 8 digits
-    if not buyer_tax_id or len(buyer_tax_id) != 8 or not buyer_tax_id.isdigit():
-        return {"success": False, "error": "Tax ID must be exactly 8 digits"}
+    Tax-ID rules are channel-specific (resolved from the order's payment
+    method): a Taiwan ECPay/Giveme B2B invoice requires an 8-digit 統一編號,
+    while an overseas PayPal invoice accepts a free-format VAT/EIN that is
+    OPTIONAL (a company name alone is enough — it prints as the business name).
+    """
 
-    # Validate order
+    # Validate order first — the payment channel decides the tax-ID rule below.
     order = await db.get(Order, order_id)
     if not order:
         return {"success": False, "error": "Order not found"}
     if str(order.user_id) != str(user_id):
         return {"success": False, "error": "Order does not belong to user"}
+
+    # Company name (公司抬頭 / business name) is always required for B2B.
+    if not buyer_company_name or not buyer_company_name.strip():
+        return {"success": False, "error": "Company name required"}
+
+    # Channel-specific tax-ID validation.
+    buyer_tax_id = (buyer_tax_id or "").strip() or None
+    if _is_paypal_order(order):
+        # Overseas: free-format VAT/EIN, optional. Only bound the length so it
+        # fits invoices.buyer_tax_id (VARCHAR(20)).
+        if buyer_tax_id and len(buyer_tax_id) > 20:
+            return {"success": False, "error": "Tax ID too long (max 20 characters)"}
+    else:
+        # Taiwan 統一編號: exactly 8 digits.
+        if not buyer_tax_id or len(buyer_tax_id) != 8 or not buyer_tax_id.isdigit():
+            return {"success": False, "error": "Tax ID must be exactly 8 digits"}
 
     # Check no invoice exists
     existing = await db.execute(
@@ -862,8 +880,13 @@ async def auto_issue_invoice(
 
     # 2026-06-12 — explicit B2B preference (公司發票 + 統一編號). Checked
     # first because it routes to a different invoice type entirely.
+    # 2026-06-27 — the tax ID is OPTIONAL for overseas PayPal orders (company
+    # name alone is enough); TW orders still need the 統編, which
+    # create_b2b_invoice enforces per-channel.
     mode = (getattr(user, "default_invoice_mode", None) or "").lower()
-    if mode == "b2b" and user.default_buyer_tax_id and user.default_buyer_company_name:
+    if mode == "b2b" and user.default_buyer_company_name and (
+        _is_paypal_order(order) or user.default_buyer_tax_id
+    ):
         items = [{
             "item_name": f"VidGo Service - Order {order.order_number}",
             "item_count": 1,

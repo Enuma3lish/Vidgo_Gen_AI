@@ -339,6 +339,9 @@ function submitECPayForm(ecpayForm: { action_url: string; params: Record<string,
 // save it to the user's invoice preference, then proceed. The existing
 // post-payment auto_issue_invoice issues exactly what was picked here.
 const invoiceDialogOpen = ref(false)
+// true → show the overseas (PayPal) layout: Individual vs Company + optional
+// free-format VAT/Tax ID. false → the Taiwan (ECPay) 載具/統編/捐贈 layout.
+const invoiceDialogOverseas = ref(false)
 const pendingCheckout = ref<null | (() => void | Promise<void>)>(null)
 
 async function onInvoiceConfirm(prefs: InvoicePrefs | null) {
@@ -375,8 +378,10 @@ async function handleCreditPurchase(
     return
   }
 
-  // ECPay (TW) → collect the e-invoice choice first, then re-enter confirmed.
-  if (paymentMethod === 'ecpay' && !invoiceConfirmed) {
+  // Collect the invoice choice first — TW 載具/統編/捐贈 for ECPay, or company
+  // info for overseas PayPal — then re-enter confirmed.
+  if (!invoiceConfirmed) {
+    invoiceDialogOverseas.value = paymentMethod === 'paypal'
     pendingCheckout.value = () => handleCreditPurchase(pkg, paymentMethod, true)
     invoiceDialogOpen.value = true
     return
@@ -445,8 +450,10 @@ async function handleSubscribe(plan: PlanInfo, paymentMethod: 'paypal' | 'ecpay'
     return
   }
 
-  // ECPay (TW) → collect the e-invoice choice first, then re-enter confirmed.
-  if (paymentMethod === 'ecpay' && !invoiceConfirmed) {
+  // Collect the invoice choice first — TW 載具/統編/捐贈 for ECPay, or company
+  // info for overseas PayPal — then re-enter confirmed.
+  if (!invoiceConfirmed) {
+    invoiceDialogOverseas.value = paymentMethod === 'paypal'
     pendingCheckout.value = () => handleSubscribe(plan, paymentMethod, true)
     invoiceDialogOpen.value = true
     return
@@ -957,6 +964,7 @@ onMounted(async () => {
       <!-- TW e-invoice picker, shown before the ECPay redirect. -->
       <InvoiceCheckoutDialog
         :open="invoiceDialogOpen"
+        :overseas="invoiceDialogOverseas"
         @confirm="onInvoiceConfirm"
         @cancel="onInvoiceCancel"
       />

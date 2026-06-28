@@ -587,8 +587,15 @@ const ROUTE_SEO: Record<string, RouteSeo> = {
   },
 }
 
+// Canonical host is always the apex vidgo.co, NOT window.location.origin.
+// The same SPA is served on both vidgo.co and www.vidgo.co (Cloud Run domain
+// mappings, 2026-06-28); if canonical were derived from the live host, www
+// pages would self-reference www and Google would index two copies of every
+// page. Pinning the apex consolidates all SEO signal onto vidgo.co.
+const CANONICAL_ORIGIN = 'https://vidgo.co'
+
 router.afterEach((to) => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const origin = CANONICAL_ORIGIN
   const path = to.path || '/'
   // /info/<slug> renders the SAME StaticInfoPage as /<slug>. Keep the namespaced
   // route working (external links use it) but point its canonical at the clean

@@ -1,0 +1,42 @@
+[
+  {
+    "name": "keep-recent-15",
+    "action": {
+      "type": "Keep"
+    },
+    "mostRecentVersions": {
+      "keepCount": 15
+    }
+  },
+  {
+    "name": "keep-worker-rollback",
+    "action": {
+      "type": "Keep"
+    },
+    "condition": {
+      "tagState": "ANY",
+      "versionNamePrefixes": [
+        "sha256:7237e2427faec031f8ab3da508bd2899f42d07df5663dbb2ddfa6723c",
+        "sha256:18e6d04ea7b5cc30d30ab30720ce64b137b446ca6d8a86d38b99e10ea",
+        "sha256:9e767f6ae3c6759fc28ae5d275c81e9f41ce79d6ed8c0a5de3f73ddd3",
+        "sha256:41ab0dd50da0dd86100f53ca572ab3eaf4ac3351af9e1b1fa06ca98d6",
+        "sha256:4952fd8a6158c5cf51c4f4ca6a7ee438a4d327fdee8a3b6c10504a7ac",
+        "sha256:fabadd2a94547bda60e6559a067e6d6d26ef8cbaefb39bbf511a14e20",
+        "sha256:f57d1ba08804d2a9959a00277f94371b5746fa71f3282ba2232332bee",
+        "sha256:47a525abad3e0d2205859c87c8384f6c90208c09258b078a90e3375df",
+        "sha256:df6f3186a9e84f5873749d457e36a0a229f947e58e6f034e1e460ba2f",
+        "sha256:ebdfb78f55be472caba44c3ae37acfa33797c3df79972ed411343142b"
+      ]
+    }
+  },
+  {
+    "name": "delete-old",
+    "action": {
+      "type": "Delete"
+    },
+    "condition": {
+      "tagState": "ANY",
+      "olderThan": "2592000s"
+    }
+  }
+]

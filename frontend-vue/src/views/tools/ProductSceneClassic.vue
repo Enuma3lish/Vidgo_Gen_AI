@@ -235,7 +235,7 @@ function gotoPricing() { router.push('/pricing') }
         <label class="pp-field-label">{{ L('自訂場景描述 *', 'Custom Scene Prompt *', 'カスタムシーンの説明 *', '커스텀 장면 설명 *', 'Prompt de escena personalizada *') }}</label>
         <textarea v-model="customPrompt" rows="4" maxlength="300" class="pp-textarea"
           :placeholder="L('例：木質吧檯、暖色 Edison 燈、背景輕微散景', 'e.g. wooden bar counter, warm Edison-bulb lighting, subtle background bokeh', '例：木製カウンター、暖色のエジソン電球、背景にやわらかなボケ', '예: 원목 바 카운터, 따뜻한 에디슨 전구, 은은한 배경 보케', 'p. ej., barra de madera, luz cálida tipo Edison, fondo con bokeh sutil')"></textarea>
-        <p class="pp-field-help">{{ L('提示會原封不動傳給 Kontext I2I。', 'Your prompt reaches Kontext I2I verbatim.', 'プロンプトはそのまま Kontext I2I に渡されます。', '입력한 프롬프트는 Kontext I2I에 그대로 전달됩니다.', 'Tu prompt llega a Kontext I2I tal cual.') }}</p>
+        <p class="pp-field-help">{{ L('您的描述主導生成畫面,商品本身會被完整保留;可自由加入人物、道具或文字。', 'Your description drives the scene; the product itself is kept intact. You can ask for people, props, or text.', 'あなたの説明がシーンを決定し、商品自体はそのまま保持されます。人物・小道具・文字も指定できます。', '입력한 설명이 장면을 결정하며 제품 자체는 그대로 유지됩니다. 인물·소품·텍스트도 요청할 수 있습니다.', 'Tu descripción define la escena y el producto se mantiene intacto. Puedes pedir personas, props o texto.') }}</p>
       </div>
 
       <p v-if="isDemoUser" class="pp-field-help" style="color: #fbbf24;">

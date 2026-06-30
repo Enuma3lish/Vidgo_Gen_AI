@@ -279,6 +279,62 @@ def _subscribe_card_required_response(message: str | None = None) -> "ToolRespon
     )
 
 
+def _content_blocked_response(result=None) -> "ToolResponse":
+    """Soft failure shown when a user's prompt contains prohibited content."""
+    return ToolResponse(
+        success=False,
+        error_code="content_moderation_blocked",
+        message=(
+            "您的提示詞包含不被允許的內容,已被攔截。請修改後再試。"
+            " / Your prompt contains prohibited content and was blocked. "
+            "Please edit your prompt and try again."
+        ),
+    )
+
+
+async def _moderate_prompt_or_reject(*texts: Optional[str]) -> Optional["ToolResponse"]:
+    """Block generation when any user-supplied free text is prohibited.
+
+    Runs each non-empty text through the shared ModerationService (fast local
+    multilingual wordlist + Redis block cache first, Gemini deep-check only for
+    ambiguous cases). Returns a rejection ToolResponse if anything is unsafe,
+    else None. Only the LOCAL wordlist is authoritative for hard blocks; the
+    Gemini layer is additive and fails open, so on any unexpected error we let
+    the request through rather than failing a paid generation outright — the
+    keyword/cache pass that catches clearly-illegal words never raises.
+
+    Call this with the user's OWN free-text fields (custom_prompt / prompt /
+    script / ai_background_prompt) AFTER the access gate and BEFORE charging
+    credits. Curated preset text (resolved via prompt_id) is vetted and need
+    not be passed.
+    """
+    cleaned = [(t or "").strip() for t in texts]
+    cleaned = [t for t in cleaned if t]
+    if not cleaned:
+        return None
+    try:
+        from app.services.moderation import get_moderation_service
+        svc = get_moderation_service()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("moderation service unavailable (allowing): %s", exc)
+        return None
+    for text in cleaned:
+        try:
+            result = await svc.moderate(text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("prompt moderation errored (allowing): %s", exc)
+            continue
+        if not result.is_safe:
+            logger.info(
+                "prompt blocked by moderation: source=%s categories=%s keywords=%s",
+                getattr(result, "source", "?"),
+                [getattr(c, "value", c) for c in (result.categories or [])],
+                result.flagged_keywords,
+            )
+            return _content_blocked_response(result)
+    return None
+
+
 PRODUCT_SCENE_MAX_DIMENSION = 1536
 PRODUCT_SCENE_CUSTOM_PROMPT_MAX_CHARS = 300
 PRODUCT_SCENE_CUSTOM_SCENE_TYPE = "custom"
@@ -1421,10 +1477,51 @@ VIDEO_BASELINE_NEGATIVE = (
     "random logos"
 )
 
+# ── First/last-frame (start+end image) jobs ───────────────────────────────
+# When a user supplies BOTH a start frame (image_url) and an end frame
+# (image_tail_url), the subject-lock clause above is actively harmful: it
+# tells the model to keep everything identical to the source, so Kling holds
+# on the opening image and never transitions to the end frame ("only the
+# start shows"). The clause below replaces subject-lock for those jobs — it
+# guarantees the clip PROGRESSES to the final frame (fixes "only start"),
+# while still forbidding invented content not present in either frame (the
+# anti-hallucination half). It is appended after the user's verbatim prompt,
+# same as every other additive clause.
+VIDEO_FIRST_LAST_TRANSITION_CLAUSE = (
+    " This is a first-frame-to-last-frame job: the provided first image is "
+    "EXACTLY the opening frame and the provided last image is EXACTLY the "
+    "closing frame. Animate a smooth, natural transition between them across "
+    "the FULL duration — the clip MUST visibly progress and end on the final "
+    "frame, never hold or freeze on the opening image. Move and transform the "
+    "subject only as needed to bridge the two frames, keeping its identity "
+    "consistent, and do NOT add objects, people, on-screen text, or logos "
+    "that appear in neither the first nor the last frame."
+)
+
+# Negative prompt for first/last-frame jobs: same anti-hallucination terms as
+# the baseline MINUS the interpolation-killers ("distorted, warped geometry,
+# morphing, melting"). A start→end transition is itself a morph, so negating
+# those words suppresses the transition and yields a static start frame.
+VIDEO_TRANSITION_NEGATIVE = (
+    "extra limbs, extra fingers, duplicated objects, "
+    "unrequested objects appearing, low quality, blurry, flickering, "
+    "watermark, text overlay, subtitles, random logos"
+)
+
 
 class ShortVideoRequest(BaseModel):
     """Short Video - image to video with optional TTS"""
     image_url: str = Field(..., description="Input image URL used as the starting frame for video generation.")
+    image_tail_url: Optional[str] = Field(
+        None,
+        description=(
+            "Optional END frame for a first/last-frame transition. Honored only "
+            "for Kling models (kling_omni / kling_v3 / kling_v2 …); ignored for "
+            "other families, which have no end-frame input. When set, the job is "
+            "routed as a Kling first/last-frame render and the subject-lock clause "
+            "is replaced with a transition clause so the clip animates start→end."
+        ),
+    )
     motion_strength: int = Field(5, ge=1, le=10, description="Motion intensity from 1 to 10. Higher values produce more camera or object movement.")
     model_id: Optional[str] = Field(
         None,
@@ -1943,6 +2040,10 @@ async def remove_background(
     # ========== SUBSCRIBER: Real-time Generation ==========
     # VidGo 3.0 扣點表: background removal = 2 credits (~$0.001 upstream).
     CREDIT_COST = 2
+    _blocked = await _moderate_prompt_or_reject(getattr(request, "ai_background_prompt", None))
+    if _blocked:
+        return _blocked
+
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "bg_removal")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -2138,6 +2239,9 @@ async def remove_background_batch(
     # If the caller asked for an AI-generated scene, render it once and
     # reuse the same background image across the whole batch (saves
     # money and keeps the set visually consistent).
+    _blocked = await _moderate_prompt_or_reject(request.ai_background_prompt)
+    if _blocked:
+        return _blocked
     shared_ai_background: Optional[str] = None
     if request.ai_background_prompt:
         try:
@@ -2300,6 +2404,12 @@ async def generate_product_scene(
         if not scene_prompt:
             raise HTTPException(status_code=400, detail="Template not found or inactive.")
 
+    # Track whether the scene came from a vetted catalog preset (vs. a
+    # user-written custom prompt or a curated template). Preset prompts carry
+    # their own constraints and get the strong preservation wrapper below;
+    # user-driven scenes get a lighter wrapper that lets their own description
+    # (people, props, added text, etc.) actually drive the result.
+    used_preset = False
     if not scene_prompt:
         if request.custom_prompt:
             scene_prompt = request.custom_prompt
@@ -2311,6 +2421,7 @@ async def generate_product_scene(
                     detail="Custom scene requires custom_prompt or template_id.",
                 )
             scene_prompt = scene["prompt"]
+            used_preset = True
 
     # Custom-prompt access gating now happens via _custom_prompt_gate below
     # (preset → cached demo, custom/template → subscribe + bound card), so the
@@ -2346,6 +2457,11 @@ async def generate_product_scene(
             " / Product Scene needs your own uploaded product photo and requires "
             "an active subscription with a bound credit card."
         )
+
+    # Block prohibited free-text before any work/billing.
+    _blocked = await _moderate_prompt_or_reject(request.custom_prompt)
+    if _blocked:
+        return _blocked
 
     # ========== SUBSCRIBER: Real-time I2I Generation ==========
     CREDIT_COST = 10
@@ -2394,23 +2510,44 @@ async def generate_product_scene(
             "background": " Place the product slightly back in the scene with the surrounding scene more dominant.",
         }
         placement_clause = placement_map.get(request.placement or "", "")
-        base_full_prompt = (
-            "PRESERVE PRODUCT IDENTITY: do not alter the product's silhouette, "
-            "label position, brand colors, packaging shape, material reflectance, "
-            "logos, or any printed text. Composite the product unchanged into "
-            "the new scene as if photographed in place. "
-            f"Place THIS exact product, preserving every label, shape, color, "
-            f"material, proportion, and perspective, into the following scene: "
-            f"{scene_prompt}.{placement_clause} "
-            f"Photorealistic commercial product photography, "
-            f"natural studio-quality lighting that matches the new scene, "
-            f"realistic shadow and contact ground reflection under the product, "
-            f"high resolution, sharp focus, no extra products, no extra text, "
-            f"no logos other than what is already on the product, no people. "
-            "Negative: do not redesign, recolor, restyle, or replace the "
-            "product; do not modify packaging artwork or text; do not crop "
-            "the product."
-        )
+        if used_preset:
+            # Vetted catalog scene — keep the strong, fully-constrained wrapper
+            # (these presets are designed to be people-free product shots).
+            base_full_prompt = (
+                "PRESERVE PRODUCT IDENTITY: do not alter the product's silhouette, "
+                "label position, brand colors, packaging shape, material reflectance, "
+                "logos, or any printed text. Composite the product unchanged into "
+                "the new scene as if photographed in place. "
+                f"Place THIS exact product, preserving every label, shape, color, "
+                f"material, proportion, and perspective, into the following scene: "
+                f"{scene_prompt}.{placement_clause} "
+                f"Photorealistic commercial product photography, "
+                f"natural studio-quality lighting that matches the new scene, "
+                f"realistic shadow and contact ground reflection under the product, "
+                f"high resolution, sharp focus, no extra products, no extra text, "
+                f"no logos other than what is already on the product, no people. "
+                "Negative: do not redesign, recolor, restyle, or replace the "
+                "product; do not modify packaging artwork or text; do not crop "
+                "the product."
+            )
+        else:
+            # User-driven scene (custom prompt / template). LEAD with the user's
+            # description so it actually drives the output, and keep ONLY the
+            # product-identity preservation — NOT the scene-restricting negatives
+            # (no people / no extra props / no extra text). Those previously made
+            # the result ignore prompts that asked for a model, props, added text,
+            # etc. ("result doesn't match the prompt").
+            base_full_prompt = (
+                f"{scene_prompt}.{placement_clause} "
+                "Keep THIS exact uploaded product unchanged — identical silhouette, "
+                "label position, brand colors, packaging shape, material, logos, and "
+                "printed text — and composite it naturally into the scene described "
+                "above, with lighting, realistic shadow, and contact reflection that "
+                "match the scene. Photorealistic commercial product photography, high "
+                "resolution, sharp focus. "
+                "Negative: do not redesign, recolor, restyle, replace, or crop the "
+                "product, and do not modify its packaging artwork or printed text."
+            )
         full_prompt, prompt_refinement = await _refine_generation_prompt(
             base_full_prompt,
             "product_scene",
@@ -2792,6 +2929,10 @@ async def _try_on_inner(
     # Try-on upstream (Kling) is $0.50-$1.00 — must charge at the cheap-pack
     # rate to cover cost.
     CREDIT_COST = 30
+    _blocked = await _moderate_prompt_or_reject(getattr(request, "prompt", None))
+    if _blocked:
+        return _blocked
+
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "virtual_try_on")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -3239,6 +3380,10 @@ async def _room_redesign_inner(
     # a typed custom_prompt or Magic mode requires subscription + bound card.
     _is_custom = (request.mode == "magic") or (bool((request.custom_prompt or "").strip()) and not bool(curated))
     _gate = await _custom_prompt_gate(db, current_user, _is_custom)
+    if _gate == "allow":
+        _blocked = await _moderate_prompt_or_reject(request.custom_prompt)
+        if _blocked:
+            return _blocked
     if _gate == "blocked":
         return _subscribe_card_required_response()
     if _gate == "demo":
@@ -3374,7 +3519,21 @@ async def _room_redesign_inner(
 
     interior = next((s for s in _catalog if s["id"] == request.style), None)
     if not interior:
-        interior = _catalog[0]
+        # Style id isn't in the catalog for this space_kind. Before silently
+        # rendering the FIRST style (→ visibly wrong effect), try every catalog
+        # — covers a client whose space_kind drifted out of sync with a still
+        # valid style id. Only fall back to catalog[0] for a genuinely unknown
+        # id, and log it loudly so the mismatch is never silent.
+        for _cat in (INTERIOR_STYLES, EXTERIOR_STYLES, COMMERCIAL_STYLES, LANDSCAPE_STYLES):
+            interior = next((s for s in _cat if s["id"] == request.style), None)
+            if interior:
+                break
+        if not interior:
+            logger.warning(
+                "[room_redesign] unknown style '%s' for space_kind=%s; falling back to '%s'",
+                request.style, request.space_kind, _catalog[0]["id"],
+            )
+            interior = _catalog[0]
 
     # 2026-05-18 — image-understanding fusion runs only when the user
     # supplied custom text. Curated catalog prompts are already vetted
@@ -3399,7 +3558,16 @@ async def _room_redesign_inner(
     effective_user_text = (
         fusion.fused_prompt if fusion and fusion.fused_prompt else request.custom_prompt
     )
-    style_prompt = effective_user_text or interior["prompt"]
+    # The chosen style's curated prompt DEFINES the aesthetic and must lead. When
+    # the user also typed a description, it ADDS specifics (materials, lighting,
+    # surroundings) — it must NOT replace the style. Previously this was
+    # `effective_user_text or interior["prompt"]`, which discarded the curated
+    # style prompt whenever any text was present, so the selected style barely
+    # applied (it survived only as 2-3 raw id words at the provider) → the
+    # render came out in the wrong style. (mode=='magic' is handled earlier and
+    # never reaches here, so it stays pure-verbatim.)
+    _user_text = (effective_user_text or "").strip()
+    style_prompt = f'{interior["prompt"]} {_user_text}'.strip() if _user_text else interior["prompt"]
     # Inject style_strength as explicit intensity guidance into the prompt.
     # Underlying Kontext / Gemini I2I has no native `strength` param, so we
     # communicate intensity via natural language. The router still receives
@@ -3452,7 +3620,17 @@ async def _room_redesign_inner(
     # Architectural / staging renders must show the space itself, not
     # photographer / occupants / pets. Reinforced redundantly because some
     # upstream models (Gemini, PiAPI Flux) drop a single negative cue.
-    no_people_clause = (
+    # 2026-06-30 — but the empty-room default must NOT override a user who
+    # explicitly asks for occupants in their own prompt (e.g. "a couple dining",
+    # "a model on the sofa"). Skip the clause when the custom prompt requests
+    # people, so it stops contradicting the user ("result doesn't match prompt").
+    _people_words = (
+        "people", "person", "human", "man", "woman", "women", "men", "child",
+        "children", "kid", "staff", "diner", "guest", "occupant", "customer",
+        "人", "人物", "模特", "男", "女", "孩", "顧客", "顾客", "員工", "客人",
+    )
+    _wants_people = any(w in (request.custom_prompt or "").lower() for w in _people_words)
+    no_people_clause = "" if _wants_people else (
         " Empty room: NO people, NO humans, NO faces, NO hands, NO pets, "
         "NO photographer in frame, NO occupants — render the space only, "
         "as a clean unpopulated architectural proposal."
@@ -3533,7 +3711,11 @@ async def _room_redesign_inner(
             route_params = {
                 "image_url": str(request.get_room_url()),
                 "prompt": prompt,
-                "style": request.style,
+                # Use the RESOLVED style id (interior["id"]) so the provider's raw
+                # style hint matches the curated prompt above. If the requested
+                # id fell back, forwarding request.style here produced a hybrid
+                # (catalog[0] prompt + user's mismatched style word) → wrong look.
+                "style": interior["id"],
                 # space_kind lets the provider frame the render correctly
                 # (exterior facade vs interior vs commercial) and pick the
                 # matching structure-preservation constraints — without it
@@ -3688,6 +3870,10 @@ async def _generate_short_video_inner(
     # a typed/edited motion prompt requires subscription + bound card.
     _is_custom = bool((request.prompt or "").strip()) and not bool(curated_motion)
     _gate = await _custom_prompt_gate(db, current_user, _is_custom)
+    if _gate == "allow":
+        _blocked = await _moderate_prompt_or_reject(request.prompt, request.script)
+        if _blocked:
+            return _blocked
     if _gate == "blocked":
         return _subscribe_card_required_response()
     if _gate == "demo":
@@ -3842,47 +4028,72 @@ async def _generate_short_video_inner(
             context={"motion_strength": strength, "style": request.style},
         )
 
-        # Image understanding pass — caption the user's frame with Gemini
-        # Vision and fuse the description into the motion prompt. Without
-        # this the I2V model often hallucinates props ("bubble tea on
-        # product shot") because Wan/Seedance get no info about *what*
-        # the source image actually depicts beyond the literal pixels.
-        # Fail-open: if Gemini errors out we just use the motion prompt
-        # as-is so the tool keeps working.
         public_image_url = _resolve_public_url(str(request.image_url))
-        try:
-            from app.services.image_understanding_service import (
-                get_image_understanding_service,
-            )
-            fusion = await get_image_understanding_service().describe_and_fuse(
-                image_url=public_image_url,
-                user_prompt=motion_prompt,
-                tool_context=f"short_video motion_strength={strength}",
-            )
-            if fusion.fused_prompt:
-                motion_prompt = fusion.fused_prompt
-        except Exception as exc:  # noqa: BLE001
-            logger.info("short_video image understanding skipped: %s", exc)
 
-        # 2026-06-12 — subject lock (user-controlled, default on): additive
-        # preservation clause appended AFTER the user's verbatim text. This is
-        # the prompt-side twin of the image_fidelity / negative_prompt levers.
-        if request.subject_lock:
-            motion_prompt = f"{motion_prompt}{VIDEO_SUBJECT_LOCK_CLAUSE}"
+        # End frame (image_tail_url) → first/last-frame transition. Only Kling
+        # honors an end frame, so we gate on a Kling model; for any other family
+        # the uploaded end frame is silently ignored (no provider input exists).
+        is_kling_model = bool(request.model_id) and "kling" in str(request.model_id).lower()
+        end_frame_url = (
+            _resolve_public_url(str(request.image_tail_url))
+            if (is_kling_model and request.image_tail_url) else None
+        )
 
-        task_params = {
-            "image_url": public_image_url,
-            "prompt": motion_prompt,
-            "duration": 5,
-            # Anti-hallucination baseline: keep the input product/subject; suppress
-            # PiAPI Wan I2V's known tendency to insert unrelated food/drink props.
-            "negative_prompt": (
+        if end_frame_url:
+            # First/last-frame job. The Gemini image-understanding fusion and the
+            # subject-lock clause both caption/anchor to the START frame only, so
+            # they bias the model toward holding on the opening image and never
+            # reaching the end frame. Skip both; append the transition clause
+            # instead, and use the morph-safe negative so the start→end
+            # interpolation isn't suppressed.
+            motion_prompt = f"{motion_prompt}{VIDEO_FIRST_LAST_TRANSITION_CLAUSE}"
+            sv_negative = (
+                f"{VIDEO_TRANSITION_NEGATIVE}. Also avoid: {request.negative_prompt}"
+                if request.negative_prompt else VIDEO_TRANSITION_NEGATIVE
+            )
+        else:
+            # Image understanding pass — caption the user's frame with Gemini
+            # Vision and fuse the description into the motion prompt. Without
+            # this the I2V model often hallucinates props ("bubble tea on
+            # product shot") because Wan/Seedance get no info about *what*
+            # the source image actually depicts beyond the literal pixels.
+            # Fail-open: if Gemini errors out we just use the motion prompt
+            # as-is so the tool keeps working.
+            try:
+                from app.services.image_understanding_service import (
+                    get_image_understanding_service,
+                )
+                fusion = await get_image_understanding_service().describe_and_fuse(
+                    image_url=public_image_url,
+                    user_prompt=motion_prompt,
+                    tool_context=f"short_video motion_strength={strength}",
+                )
+                if fusion.fused_prompt:
+                    motion_prompt = fusion.fused_prompt
+            except Exception as exc:  # noqa: BLE001
+                logger.info("short_video image understanding skipped: %s", exc)
+
+            # 2026-06-12 — subject lock (user-controlled, default on): additive
+            # preservation clause appended AFTER the user's verbatim text. This is
+            # the prompt-side twin of the image_fidelity / negative_prompt levers.
+            if request.subject_lock:
+                motion_prompt = f"{motion_prompt}{VIDEO_SUBJECT_LOCK_CLAUSE}"
+            sv_negative = (
                 "food, drink, beverage, bubble tea, boba, coffee, tea, juice, alcohol, snacks, "
                 "extra hands, extra fingers, extra limbs, deformed, distorted, low quality, "
                 "blurry, watermark, text overlay, subtitles, brand logos not in source, "
                 "changed product shape, changed product color, changed packaging"
                 + (f". Also avoid: {request.negative_prompt}" if request.negative_prompt else "")
-            ),
+            )
+
+        task_params = {
+            "image_url": public_image_url,
+            "prompt": motion_prompt,
+            "duration": 5,
+            # Anti-hallucination baseline (single-frame) or morph-safe negative
+            # (first/last-frame); selected above based on whether an end frame
+            # was supplied.
+            "negative_prompt": sv_negative,
             # Strong product-identity preservation. Lower motion_strength implies
             # we want the product even more locked-in, so push image_fidelity up
             # and motion_bucket down for subtle motion settings.
@@ -3893,6 +4104,12 @@ async def _generate_short_video_inner(
             # which intermittently aborts healthy jobs mid-render.
             "timeout": 1200,
         }
+
+        # First/last-frame: hand the end frame to the Kling provider. Only set
+        # when a Kling model + end frame were supplied (end_frame_url is None
+        # otherwise), so the generic I2V path never receives it.
+        if end_frame_url:
+            task_params["image_tail_url"] = end_frame_url
 
         if request.model_id:
             task_params["model"] = request.model_id
@@ -3909,7 +4126,7 @@ async def _generate_short_video_inner(
         # provider method runs. Without this short-circuit, _resolve_video_model
         # in piapi_provider would fall through to Seedance and the user would
         # silently get a Seedance video instead of the Kling they selected.
-        is_kling_model = bool(request.model_id) and "kling" in str(request.model_id).lower()
+        # (is_kling_model computed above, where the end-frame gate also uses it.)
         if is_kling_model:
             # Map model_id → Kling tier. "kling_omni" / "kling_v3" / "kling3"
             # all hit the new Omni tier (3.0 multimodal). Older Kling v2 /
@@ -4114,6 +4331,10 @@ async def claymation_generate(
     # card required. Admins / test accounts bypass.
     if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
         return _subscribe_card_required_response()
+
+    _blocked = await _moderate_prompt_or_reject(request.prompt)
+    if _blocked:
+        return _blocked
 
     # Distinct service_type per mode so a single ServicePricing row can't
     # flatten the two prices. Previously BOTH modes deducted via "claymation"
@@ -4929,6 +5150,10 @@ async def recolor_product(
         )
 
     CREDIT_COST = 15
+    _blocked = await _moderate_prompt_or_reject(getattr(request, "custom_prompt", None))
+    if _blocked:
+        return _blocked
+
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "product_recolor")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -5171,6 +5396,10 @@ async def _generate_avatar_inner(
     # Avatar always needs speech text; a preset (prompt_id) script is the free
     # path, a custom script requires subscription + bound card.
     _gate = await _custom_prompt_gate(db, current_user, is_custom=not used_preset)
+    if _gate == "allow":
+        _blocked = await _moderate_prompt_or_reject(request.script)
+        if _blocked:
+            return _blocked
     if _gate == "blocked":
         return _subscribe_card_required_response()
     if _gate == "demo":
@@ -5547,6 +5776,10 @@ async def image_transform(
     tier = get_user_tier(current_user)
     cost = get_credit_cost("i2i", current_user)
 
+    _blocked = await _moderate_prompt_or_reject(getattr(request, "prompt", None))
+    if _blocked:
+        return _blocked
+
     ok, err = await _check_and_deduct_credits(db, current_user, cost, "image_transform")
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -5690,6 +5923,10 @@ async def midjourney_imagine(
     if curated:
         request.prompt = curated
     _gate = await _custom_prompt_gate(db, current_user, is_custom=not bool(curated))
+    if _gate == "allow":
+        _blocked = await _moderate_prompt_or_reject(request.prompt)
+        if _blocked:
+            return _blocked
     if _gate == "blocked":
         return _subscribe_card_required_response()
     if _gate == "demo":
@@ -5861,6 +6098,10 @@ async def _kling_video_inner(
     if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
         return _subscribe_card_required_response()
 
+    _blocked = await _moderate_prompt_or_reject(request.prompt)
+    if _blocked:
+        return _blocked
+
     # Plan-tier gate: flagship (Kling 2.5) and omni (Kling 3.0) require the
     # premium plan. A basic-plan subscriber could otherwise hit this endpoint
     # with tier="omni" and burn 750 premium credits.
@@ -5885,17 +6126,30 @@ async def _kling_video_inner(
     # first and verbatim; camera move / subject lock / strict adherence are
     # appended only when the user left them on, and a baseline negative
     # prompt applies when the user didn't write their own.
-    final_prompt = request.prompt
+    final_prompt = request.prompt or ""
+    has_end_frame = bool(request.image_tail_url)
     camera_clause = VIDEO_CAMERA_MOVES.get((request.camera_move or "").strip().lower())
     if camera_clause:
         final_prompt += f" Camera: {camera_clause}"
-    if request.image_url and request.subject_lock:
+    if has_end_frame:
+        # Start+end (first/last-frame) job. Subject-lock would make Kling hold
+        # on the start frame ("only the start shows"), so SKIP it and append a
+        # transition clause that guarantees the clip reaches the end frame
+        # (and still bans invented props). Use the morph-safe negative so the
+        # interpolation between the two frames isn't suppressed.
+        final_prompt += VIDEO_FIRST_LAST_TRANSITION_CLAUSE
+        base_negative = VIDEO_TRANSITION_NEGATIVE
+    elif request.image_url and request.subject_lock:
         final_prompt += VIDEO_SUBJECT_LOCK_CLAUSE
+        base_negative = VIDEO_BASELINE_NEGATIVE
     elif not request.image_url and request.strict_prompt:
         final_prompt += VIDEO_PROMPT_ADHERENCE_CLAUSE
+        base_negative = VIDEO_BASELINE_NEGATIVE
+    else:
+        base_negative = VIDEO_BASELINE_NEGATIVE
     final_negative = (
-        f"{VIDEO_BASELINE_NEGATIVE}. Also avoid: {request.negative_prompt}"
-        if request.negative_prompt else VIDEO_BASELINE_NEGATIVE
+        f"{base_negative}. Also avoid: {request.negative_prompt}"
+        if request.negative_prompt else base_negative
     )
 
     # Durable reclaim/poll row (P0-2). Kling jobs run up to ~30 min — far longer
@@ -6081,6 +6335,10 @@ async def _text_to_video_inner(
         request.prompt = curated_motion
     _is_custom = bool((request.prompt or "").strip()) and not bool(curated_motion)
     _gate = await _custom_prompt_gate(db, current_user, _is_custom)
+    if _gate == "allow":
+        _blocked = await _moderate_prompt_or_reject(request.prompt)
+        if _blocked:
+            return _blocked
     if _gate == "blocked":
         return _subscribe_card_required_response()
     if _gate == "demo":
@@ -6261,6 +6519,10 @@ async def _sora2_pro_inner(
     # / test accounts bypass via _custom_prompt_gate).
     if await _custom_prompt_gate(db, current_user, is_custom=True) != "allow":
         return _subscribe_card_required_response()
+
+    _blocked = await _moderate_prompt_or_reject(request.prompt)
+    if _blocked:
+        return _blocked
 
     # Plan-tier floor: Sora 2 Pro is premium. A basic / pro user could
     # otherwise hit this endpoint and burn 80 premium credits.

@@ -1097,6 +1097,11 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
                 "aspectRatio": aspect_ratio,
                 "durationSeconds": duration,
                 "sampleCount": 1,
+                # Veo's LLM prompt-rewriter (enhancePrompt) defaults ON and
+                # expands/invents content not in the prompt (hallucination).
+                # Force it off so Veo follows the prompt verbatim. Preview Veo
+                # models don't allow disabling it, so we omit the flag there.
+                **({} if "preview" in self.veo_model else {"enhancePrompt": False}),
             },
         }
 
@@ -1152,6 +1157,9 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
                 "aspectRatio": params.get("aspect_ratio", "16:9"),
                 "durationSeconds": duration,
                 "sampleCount": 1,
+                # See text_to_video: disable Veo's prompt-rewriter so it follows
+                # the prompt verbatim (omitted on preview models that lock it on).
+                **({} if "preview" in self.veo_model else {"enhancePrompt": False}),
             },
         }
 

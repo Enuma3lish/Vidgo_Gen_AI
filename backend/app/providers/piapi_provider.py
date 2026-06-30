@@ -674,7 +674,8 @@ class PiAPIProvider(BaseProvider):
                 "model": PIAPI_MODELS["nano_banana_pro_model"],
                 "task_type": PIAPI_MODELS["nano_banana_pro_task"],
                 "input": {
-                    "prompt": params["prompt"],
+                    # No native negative field — fold it into the prompt.
+                    "prompt": self._fold_negative(params["prompt"], params.get("negative_prompt")),
                     "aspect_ratio": aspect,
                     "resolution": params.get("resolution") or "2K",
                 },
@@ -684,7 +685,8 @@ class PiAPIProvider(BaseProvider):
                 "model": PIAPI_MODELS["nano_banana_2_model"],
                 "task_type": PIAPI_MODELS["nano_banana_2_task"],
                 "input": {
-                    "prompt": params["prompt"],
+                    # No native negative field — fold it into the prompt.
+                    "prompt": self._fold_negative(params["prompt"], params.get("negative_prompt")),
                     "aspect_ratio": aspect,
                     "resolution": params.get("resolution") or "1K",
                 },
@@ -838,7 +840,8 @@ class PiAPIProvider(BaseProvider):
                 "model": PIAPI_MODELS["nano_banana_pro_model"],
                 "task_type": PIAPI_MODELS["nano_banana_pro_task"],
                 "input": {
-                    "prompt": params["prompt"],
+                    # No native negative field — fold it into the prompt.
+                    "prompt": self._fold_negative(params["prompt"], params.get("negative_prompt")),
                     "image_urls": _nano_image_urls(),
                     "aspect_ratio": aspect,
                     "resolution": params.get("resolution") or "2K",
@@ -853,7 +856,8 @@ class PiAPIProvider(BaseProvider):
                 "model": PIAPI_MODELS["nano_banana_2_model"],
                 "task_type": PIAPI_MODELS["nano_banana_2_task"],
                 "input": {
-                    "prompt": params["prompt"],
+                    # No native negative field — fold it into the prompt.
+                    "prompt": self._fold_negative(params["prompt"], params.get("negative_prompt")),
                     "image_urls": _nano_image_urls(),
                     "aspect_ratio": aspect,
                     "resolution": params.get("resolution") or "1K",
@@ -1224,7 +1228,11 @@ class PiAPIProvider(BaseProvider):
                 "prompt":       prompt,
                 "image_url":    image_url,
                 "model":        PIAPI_MODELS["hailuo_i2v_variant"],
-                "duration":     duration,
+                # Hailuo only accepts duration 6 or 10 (UI offers 5/8/10).
+                "duration":     self._hailuo_duration(duration),
+                # See text_to_video: disable MiniMax's prompt expander so the
+                # model follows the prompt verbatim instead of inventing props.
+                "expand_prompt": False,
             }
         elif family == "hunyuan":
             input_payload = {
@@ -1376,6 +1384,37 @@ class PiAPIProvider(BaseProvider):
             return "480p", PIAPI_MODELS["seedance_fast_task"]
         return "720p", PIAPI_MODELS["seedance_fast_task"]
 
+    @staticmethod
+    def _fold_negative(prompt: str, negative: Optional[str]) -> str:
+        """Fold a negative_prompt into the positive prompt as an instruction.
+
+        Several PiAPI image models (Nano Banana / Nano Banana Pro — Google
+        Gemini) have NO structured negative_prompt field, so a caller's negative
+        is silently dropped and the model can render the excluded content. These
+        are instruction-following models, so we append the negative as an
+        explicit "do not include" instruction, which they honor. NOT used for
+        diffusion models (Seedream / video), where naming a concrete thing to
+        avoid can actually summon it.
+        """
+        neg = (negative or "").strip()
+        if not neg:
+            return prompt
+        return f"{prompt}. Do not include or add the following: {neg}."
+
+    @staticmethod
+    def _hailuo_duration(duration: Any) -> int:
+        """Snap any requested duration to PiAPI Hailuo's allowed values (6 | 10).
+
+        The UI offers 5/8/10s, but the Hailuo endpoint only accepts 6 or 10 and
+        rejects anything else as an invalid request. Snap to the nearest valid
+        value (≤7 → 6, otherwise 10); fall back to 6 on unparseable input.
+        """
+        try:
+            d = int(float(duration))
+        except (TypeError, ValueError):
+            return 6
+        return 6 if d <= 7 else 10
+
     async def text_to_video(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate video from text via PiAPI. Model family is selected by
@@ -1410,7 +1449,13 @@ class PiAPIProvider(BaseProvider):
             input_payload = {
                 "prompt":   prompt,
                 "model":    PIAPI_MODELS["hailuo_t2v_variant"],
-                "duration": duration,
+                # Hailuo only accepts duration 6 or 10 (UI offers 5/8/10).
+                "duration": self._hailuo_duration(duration),
+                # MiniMax's prompt expander defaults ON, which rewrites/expands
+                # the prompt and invents content not asked for (hallucination) —
+                # and violates the platform's verbatim-prompt directive. Force it
+                # off so Hailuo renders exactly what the user wrote.
+                "expand_prompt": False,
             }
         elif family == "hunyuan":
             input_payload = {"prompt": prompt}

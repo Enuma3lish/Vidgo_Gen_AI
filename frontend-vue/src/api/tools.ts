@@ -187,6 +187,9 @@ export const toolsApi = {
     opts?: {
       motionStrength?: number
       modelId?: string
+      // Optional END frame for a first/last-frame transition. Only honored
+      // for Kling models; ignored by other families server-side.
+      imageTailUrl?: string
       style?: string
       script?: string
       voiceId?: string
@@ -209,6 +212,7 @@ export const toolsApi = {
         image_url: imageUrl,
         motion_strength: opts?.motionStrength ?? 5,
         model_id: opts?.modelId,
+        image_tail_url: opts?.imageTailUrl || undefined,
         style: opts?.style,
         script: opts?.script,
         voice_id: opts?.voiceId,

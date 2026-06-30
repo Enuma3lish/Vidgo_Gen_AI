@@ -272,6 +272,12 @@ async function applyDeeplink() {
     return
   }
   if (qStyle) selectedStyle.value = qStyle
+  // Defense in depth: drop a deeplinked/stale style id that isn't in the loaded
+  // catalog, so the backend never receives a foreign id (which would otherwise
+  // silently render the wrong style).
+  if (selectedStyle.value && !styles.value[spaceKind.value].some(s => s.id === selectedStyle.value)) {
+    selectedStyle.value = ''
+  }
 }
 
 // Portfolio grid — interior styles only (exterior/commercial moved to their

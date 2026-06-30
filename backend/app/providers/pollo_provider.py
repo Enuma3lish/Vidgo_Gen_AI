@@ -192,6 +192,18 @@ class PolloProvider(BaseProvider):
         if not image_url:
             return {"success": False, "error": "image_url required for Pollo I2V"}
 
+        # Pollo's per-model I2V endpoints have no end-frame (image_tail_url)
+        # parameter. If a Kling first/last-frame job fails over here, Pollo
+        # would silently render from the START frame only — delivering a wrong
+        # video the user paid for. Soft-fail instead so the router surfaces the
+        # PiAPI error and the job refunds, same pattern as the unsupported-model
+        # soft-fail below. (Single-frame I2V is unaffected.)
+        if params.get("image_tail_url"):
+            return {
+                "success": False,
+                "error": "Pollo backup cannot serve first/last-frame (end-frame) jobs",
+            }
+
         model = self._normalize_model(params.get("model"))
         if model is None:
             # Explicit model Pollo can't serve → soft-fail so the router falls

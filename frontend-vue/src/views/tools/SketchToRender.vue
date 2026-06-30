@@ -86,6 +86,11 @@ onMounted(async () => {
   } catch (e) {
     console.warn(`[sketch-to-render] failed to load ${spaceKind.value} styles:`, e)
   }
+  // Defense in depth: drop a stale/prefilled style id not in the loaded catalog,
+  // so the backend never receives a foreign id (wrong-style fallback).
+  if (selectedStyle.value && !styles.value.some(s => s.id === selectedStyle.value)) {
+    selectedStyle.value = ''
+  }
 })
 
 const disabled = computed(() => !imageInput.value || !selectedStyle.value)

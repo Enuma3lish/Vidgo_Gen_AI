@@ -103,6 +103,11 @@ onMounted(async () => {
   // Templates-gallery deeplink (?style=<id>) pre-fills the picker.
   const qStyle = String(route.query.style || '').trim()
   if (qStyle) selectedStyle.value = qStyle
+  // Defense in depth: drop a deeplinked/stale style id not in the loaded
+  // catalog, so the backend never receives a foreign id (wrong-style fallback).
+  if (selectedStyle.value && !styles.value.some(s => s.id === selectedStyle.value)) {
+    selectedStyle.value = ''
+  }
 })
 
 const disabled = computed(() => !imageInput.value || !selectedStyle.value)

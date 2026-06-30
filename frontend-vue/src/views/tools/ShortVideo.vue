@@ -116,6 +116,13 @@ const cameraMove = ref('')
 const faithLock = ref(true)
 
 const imageInput = ref<string | undefined>(undefined)   // data URI from ImageUploader (for I2V)
+const tailInput = ref<string | undefined>(undefined)    // optional END frame (Kling first/last-frame I2V)
+
+// End frame (image_tail_url) is only honored by Kling models server-side, so
+// only surface the uploader for an I2V Kling pick. Other families ignore it.
+const isKlingI2V = computed(
+  () => taskType.value === 'image_to_video' && modelId.value.toLowerCase().includes('kling')
+)
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')
@@ -270,6 +277,16 @@ async function ensureImageUrl(): Promise<string | null> {
   return up.url
 }
 
+// Upload the optional end frame (same data-URI → URL path as the start frame).
+async function ensureTailUrl(): Promise<string | null> {
+  if (!tailInput.value) return null
+  if (!tailInput.value.startsWith('data:')) return tailInput.value
+  const blob = dataURItoBlob(tailInput.value)
+  if (!blob) return null
+  const up = await toolsApi.uploadImage(blob as File)
+  return up.url
+}
+
 // handleVideoChange removed 2026-05-31 — V2V dropped.
 
 // ─── Generate ────────────────────────────────────────────────────────
@@ -323,9 +340,15 @@ async function generate() {
   // Upload the still BEFORE handing to the task wrapper (the upload must not be
   // tagged with the generation's client_task_id).
   let imageUrl: string | null = null
+  let tailUrl: string | null = null
   if (taskType.value === 'image_to_video') {
     imageUrl = await ensureImageUrl()
     if (!imageUrl) { status.value = 'error'; uiStore.showError(L('圖片上傳失敗', 'Image upload failed', '画像アップロード失敗', '이미지 업로드 실패', 'Subida fallida')); return }
+    // Only upload the end frame when it can actually be used (Kling I2V pick).
+    if (isKlingI2V.value && tailInput.value) {
+      tailUrl = await ensureTailUrl()
+      if (!tailUrl) { status.value = 'error'; uiStore.showError(L('結束圖片上傳失敗', 'End-frame upload failed', '終了フレームのアップロード失敗', '엔드 프레임 업로드 실패', 'Subida del fotograma final fallida')); return }
+    }
   }
 
   let result: any
@@ -335,6 +358,7 @@ async function generate() {
         return toolsApi.shortVideo(imageUrl as string, {
           motionStrength: motionStrength.value,
           modelId: modelId.value,
+          imageTailUrl: tailUrl || undefined,
           prompt: prompt.value.trim() || undefined,
           promptId: usingPreset.value ? selectedPresetId.value : undefined,
           negativePrompt: negativePrompt.value.trim() || undefined,
@@ -472,6 +496,21 @@ function gotoPricing() { router.push('/pricing') }
           tool-type="short_video"
           v-model="imageInput"
           :label="isZh ? '點擊或拖放圖片' : 'Click or drag an image'"
+        />
+      </div>
+
+      <!-- End frame (Kling first/last-frame only). Shown once a start frame is
+           set and a Kling model is picked, since only Kling honors an end frame.
+           Hidden for demo users (they run cached examples, not custom inputs). -->
+      <div v-if="taskType === 'image_to_video' && isKlingI2V && imageInput && !isDemoUser">
+        <label class="pp-field-label">{{ isZh ? '結束圖片（選填）' : 'End Frame (optional)' }}</label>
+        <p class="pp-field-help mb-2">{{ isZh
+          ? '上傳結束圖片即可生成從起始到結束的轉場（僅 Kling 模型支援）。'
+          : 'Add an end frame to animate a transition from the start to the end image (Kling models only).' }}</p>
+        <ImageUploader
+          tool-type="short_video"
+          v-model="tailInput"
+          :label="isZh ? '點擊或拖放結束圖片' : 'Click or drag the end frame'"
         />
       </div>
 

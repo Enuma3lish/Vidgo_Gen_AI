@@ -51,6 +51,7 @@ from app.models.user_generation import UserGeneration
 from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
 from app.services.credit_service import CreditService
 from app.services.plan_gates import require_model_access
+from app.services.tier_config import get_user_tier
 from app.services.demo_cache_service import DemoCacheService
 from app.services.gcs_storage_service import get_gcs_storage
 from app.services.email_service import send_admin_tool_failure_email
@@ -2053,7 +2054,8 @@ async def remove_background(
         provider_router = get_provider_router()
         result = await provider_router.route(
             TaskType.BACKGROUND_REMOVAL,
-            {"image_url": _resolve_public_url(str(request.image_url))}
+            {"image_url": _resolve_public_url(str(request.image_url))},
+            user_tier=get_user_tier(current_user),
         )
 
         if result.get("success"):
@@ -2095,6 +2097,7 @@ async def remove_background(
                             # good neutral that crops to most product shots.
                             "size": "1152*864",
                         },
+                        user_tier=get_user_tier(current_user),
                     )
                     bg_url = (bg_result.get("output") or {}).get("image_url") if bg_result.get("success") else None
                     bg_url = await _persist_provider_url(bg_url, "image", current_user) if bg_url else None
@@ -2248,6 +2251,7 @@ async def remove_background_batch(
             bg_result = await provider_router.route(
                 TaskType.T2I,
                 {"prompt": request.ai_background_prompt, "size": "1152*864"},
+                user_tier=get_user_tier(current_user),
             )
             bg_url = (bg_result.get("output") or {}).get("image_url") if bg_result.get("success") else None
             shared_ai_background = await _persist_provider_url(bg_url, "image", current_user) if bg_url else None
@@ -2264,7 +2268,8 @@ async def remove_background_batch(
             # Use provider router for background removal (PiAPI)
             result = await provider_router.route(
                 TaskType.BACKGROUND_REMOVAL,
-                {"image_url": str(image_url)}
+                {"image_url": str(image_url)},
+                user_tier=get_user_tier(current_user),
             )
             if result.get("success"):
                 output = result.get("output", {})
@@ -2583,7 +2588,9 @@ async def generate_product_scene(
             "resolution": "2K",
         }
         logger.info("Nano Banana Pro I2I: editing product into scene...")
-        i2i_result = await provider_router.route(TaskType.I2I, primary_params)
+        i2i_result = await provider_router.route(
+            TaskType.I2I, primary_params, user_tier=get_user_tier(current_user)
+        )
         result_url: Optional[str] = i2i_result and _extract_url(i2i_result)
         pipeline_label = "nano_banana_pro_i2i"
         composite_fallback_used = False
@@ -2596,7 +2603,9 @@ async def generate_product_scene(
             kontext_params = dict(primary_params, model="flux_kontext")
             kontext_params.pop("aspect_ratio", None)
             kontext_params.pop("resolution", None)
-            kontext_result = await provider_router.route(TaskType.I2I, kontext_params)
+            kontext_result = await provider_router.route(
+                TaskType.I2I, kontext_params, user_tier=get_user_tier(current_user)
+            )
             result_url = _extract_url(kontext_result)
             if result_url:
                 pipeline_label = "kontext_i2i"
@@ -2615,7 +2624,8 @@ async def generate_product_scene(
             # Step 1: Remove background
             rembg_result = await provider_router.route(
                 TaskType.BACKGROUND_REMOVAL,
-                {"image_url": product_url}
+                {"image_url": product_url},
+                user_tier=get_user_tier(current_user),
             )
             if not rembg_result.get("success"):
                 raise Exception(f"Background removal failed: {rembg_result.get('error')}")
@@ -2637,7 +2647,8 @@ async def generate_product_scene(
             )
             t2i_result = await provider_router.route(
                 TaskType.T2I,
-                {"prompt": scene_prompt_refined}
+                {"prompt": scene_prompt_refined},
+                user_tier=get_user_tier(current_user),
             )
             if not t2i_result.get("success"):
                 raise Exception(f"Scene generation failed: {t2i_result.get('error')}")
@@ -3011,7 +3022,9 @@ async def _try_on_inner(
                 "width": 1024,
                 "height": 1024,
             }
-            result = await provider_router.route(TaskType.I2I, i2i_params)
+            result = await provider_router.route(
+                TaskType.I2I, i2i_params, user_tier=get_user_tier(current_user)
+            )
             if not result.get("success"):
                 await _refund_credits(db, current_user, charged, "virtual_try_on")
                 return ToolResponse(
@@ -3458,7 +3471,7 @@ async def _room_redesign_inner(
                 "model": "flux_kontext",
                 "width": 1024,
                 "height": 1024,
-            })
+            }, user_tier=get_user_tier(current_user))
             primary_error = None if result.get("success") else (result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
             result_url = _extract_image_url(result) if result.get("success") else None
 
@@ -3477,7 +3490,7 @@ async def _room_redesign_inner(
                     "prompt": magic_prompt,
                     "style": request.style or "modern",
                     "space_kind": request.space_kind,
-                })
+                }, user_tier=get_user_tier(current_user))
                 if fb.get("success"):
                     result_url = _extract_image_url(fb)
 
@@ -3732,6 +3745,7 @@ async def _room_redesign_inner(
             r = await router.route(
                 TaskType.INTERIOR,
                 route_params,
+                user_tier=get_user_tier(current_user),
             )
             url = r.get("image_url") or r.get("output_url") or (r.get("output", {}).get("image_url") if isinstance(r.get("output"), dict) else None)
             return await _persist_provider_url(url, "image", current_user)
@@ -4407,6 +4421,7 @@ async def claymation_generate(
                     "model": "seedream",
                     "aspect_ratio": request.aspect_ratio or "1:1",
                 },
+                user_tier=get_user_tier(current_user),
             )
             output_key, output_kind = "image_url", "image"
 
@@ -4423,6 +4438,7 @@ async def claymation_generate(
                     "width": 1024,
                     "height": 1024,
                 },
+                user_tier=get_user_tier(current_user),
             )
             output_key, output_kind = "image_url", "image"
 
@@ -4448,6 +4464,7 @@ async def claymation_generate(
                     # Reclaim hook — see pending_task block above.
                     "on_submit": _on_claymation_submit,
                 },
+                user_tier=get_user_tier(current_user),
             )
             output_key, output_kind = "video_url", "video"
 
@@ -4854,7 +4871,8 @@ async def upscale_image(
                 "image_url": _resolve_public_url(request.image_url),
                 "scale": request.scale,
                 "on_submit": _on_upscale_submit,
-            }
+            },
+            user_tier=get_user_tier(current_user),
         )
 
         if result.get("success"):
@@ -5041,7 +5059,7 @@ async def render_enhance(
                 "model": "flux_kontext",
                 "width": 1024,
                 "height": 1024,
-            })
+            }, user_tier=get_user_tier(current_user))
             enhanced_url = _extract_image_url(enh) if enh.get("success") else None
             if enhanced_url:
                 persisted = await _persist_provider_url(enhanced_url, "image", current_user)
@@ -5058,7 +5076,7 @@ async def render_enhance(
         result = await provider_router.route(TaskType.UPSCALE, {
             "image_url": working_url,
             "scale": request.scale,
-        })
+        }, user_tier=get_user_tier(current_user))
         if not result.get("success"):
             await _refund_credits(db, current_user, CREDIT_COST, service_type)
             return _provider_failure_response("render_enhance", result, current_user)
@@ -5210,6 +5228,7 @@ async def recolor_product(
                 "height": 1024,
                 "on_submit": _on_recolor_submit,
             },
+            user_tier=get_user_tier(current_user),
         )
 
         if result.get("success"):
@@ -6209,6 +6228,7 @@ async def _kling_video_inner(
                 "cfg_scale": request.cfg_scale,
                 "on_submit": _on_kling_submit,
             },
+            user_tier=get_user_tier(current_user),
         )
         if not result.get("success"):
             await _fail_pending(result.get("error") or "task failed")
@@ -6566,6 +6586,7 @@ async def _sora2_pro_inner(
                 "negative_prompt": final_negative,
                 "enable_audio": request.enable_audio,
             },
+            user_tier=get_user_tier(current_user),
         )
         if not result.get("success"):
             await _refund_credits(db, current_user, credit_cost_fallback, service_type)

@@ -528,6 +528,12 @@ class CreditService:
         """
         Check if user has permission to use the model for a specific service.
         Returns: (has_permission, error_message)
+
+        2026-07 policy: any ACTIVE plan (basic/pro/premium/enterprise) may use
+        every model/service — per-model credit pricing already covers the
+        upstream cost, so credits are the only gate for subscribers. Only
+        free/demo plan holders are still held to min_plan / allowed_models.
+        (Mirrors plan_gates.require_model_access, the enforcement-path gate.)
         """
         # Get service pricing
         pricing = await self.get_service_pricing(service_type)
@@ -545,8 +551,13 @@ class CreditService:
 
         user, plan = row
 
-        # Check if paid services require a specific plan. Free/zero-credit
-        # services must remain available when their credit price is 0.
+        if (plan.name or "").strip().lower() not in ("free", "demo"):
+            # Any real subscription unlocks every model — credits gate.
+            return True, ""
+
+        # Free/demo plan: keep the legacy min_plan + allowed_models floors.
+        # Free/zero-credit services must remain available when their credit
+        # price is 0.
         if pricing.min_plan and (pricing.credit_cost or 0) > 0:
             plan_order = {
                 "free": 0,

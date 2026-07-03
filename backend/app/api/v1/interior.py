@@ -23,6 +23,7 @@ from app.models.user import User
 from app.models.user_generation import UserGeneration
 from app.models.material import ToolType
 from app.providers.provider_router import TaskType, get_provider_router
+from app.services.tier_config import get_user_tier
 from app.services.interior_design_service import (
     get_interior_design_service,
     DESIGN_STYLES,
@@ -418,7 +419,11 @@ async def redesign_room(
         )
 
     provider_router = get_provider_router()
-    user_tier = "paid" if is_subscribed_user(current_user) else "starter"
+    # Real plan tier so premium subscribers keep their queue priority.
+    # Unsubscribed visitors keep the legacy "basic" params (1024px renders —
+    # dropping them to FREE_TIER's 512px would degrade the public demo);
+    # they pick no model on this endpoint, so model gating is moot here.
+    user_tier = get_user_tier(current_user) if is_subscribed_user(current_user) else "basic"
 
     # Build image URL — upload base64 to GCS if needed
     image_url = request.room_image_url
@@ -752,7 +757,7 @@ async def generate_3d_model(
                 "mesh_simplify": request.mesh_simplify,
                 "model_version": request.model_version,
             },
-            user_tier="paid",
+            user_tier=get_user_tier(current_user),
         )
     except Exception as exc:
         # provider_router.route already wraps the upstream failure in a
@@ -837,7 +842,7 @@ async def generate_3d_from_floorplan(
                 "style": request.style_id or "modern_minimalist",
                 "preserve_structure": True,
             },
-            user_tier="paid",
+            user_tier=get_user_tier(current_user),
         )
     except Exception as exc:
         # See note on /3d-model — provider_router already produces a user-
@@ -867,7 +872,7 @@ async def generate_3d_from_floorplan(
                 "image_url": rendered_url,
                 "model_version": request.model_version or "v2",
             },
-            user_tier="paid",
+            user_tier=get_user_tier(current_user),
         )
     except Exception as exc:
         raise HTTPException(

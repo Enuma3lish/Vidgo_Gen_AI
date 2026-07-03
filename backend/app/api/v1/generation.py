@@ -38,6 +38,7 @@ from app.models.material import Material, ToolType
 from app.models.user_generation import UserGeneration
 from app.services.demo_cache_service import DemoCacheService
 from app.services.plan_gates import require_model_access
+from app.services.tier_config import get_user_tier
 from app.services.gcs_storage_service import get_gcs_storage
 import logging
 
@@ -560,7 +561,8 @@ async def transfer_pattern(
                 "strength": request.blend_strength,
                 "width": 1024,
                 "height": 1024
-            }
+            },
+            user_tier=get_user_tier(current_user),
         )
 
         if result.get("success"):
@@ -611,7 +613,8 @@ async def remove_background(
     try:
         result = await provider_router.route(
             TaskType.BACKGROUND_REMOVAL,
-            {"image_url": str(request.image_url)}
+            {"image_url": str(request.image_url)},
+            user_tier=get_user_tier(current_user),
         )
 
         if result.get("success"):
@@ -686,7 +689,8 @@ async def generate_product_scene(
         # Step 1: Remove background
         rembg_result = await provider_router.route(
             TaskType.BACKGROUND_REMOVAL,
-            {"image_url": product_url}
+            {"image_url": product_url},
+            user_tier=get_user_tier(current_user),
         )
         if not rembg_result.get("success"):
             raise Exception(f"Background removal failed: {rembg_result.get('error')}")
@@ -696,7 +700,8 @@ async def generate_product_scene(
         full_prompt = f"{scene_prompt}, empty background for product placement, professional studio lighting, high-end commercial photography, 8K quality"
         t2i_result = await provider_router.route(
             TaskType.T2I,
-            {"prompt": full_prompt, "size": "1024*1024"}
+            {"prompt": full_prompt, "size": "1024*1024"},
+            user_tier=get_user_tier(current_user),
         )
         if not t2i_result.get("success"):
             raise Exception(f"Scene generation failed: {t2i_result.get('error')}")
@@ -767,7 +772,8 @@ async def enhance_product_image(
         # Use PiAPI for image enhancement via provider router
         result = await provider_router.route(
             TaskType.UPSCALE,
-            {"image_url": str(request.image_url), "scale": 2}
+            {"image_url": str(request.image_url), "scale": 2},
+            user_tier=get_user_tier(current_user),
         )
 
         if result.get("success"):
@@ -817,7 +823,8 @@ async def image_to_video(
                 "image_url": str(request.image_url),
                 "prompt": "Natural camera motion, smooth animation",
                 "duration": 5
-            }
+            },
+            user_tier=get_user_tier(current_user),
         )
 
         if result.get("success"):
@@ -1131,25 +1138,14 @@ async def get_available_models(
     if model_type:
         models = [m for m in models if m["type"] == model_type]
 
-    user_plan = None
-    if current_user and current_user.current_plan_id:
-        from sqlalchemy import select as sa_select
-        from app.models.billing import Plan
-        from app.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as db:
-            plan_result = await db.execute(
-                sa_select(Plan).where(Plan.id == current_user.current_plan_id)
-            )
-            plan = plan_result.scalar_one_or_none()
-            if plan:
-                user_plan = plan.name
-
-    plan_order = {"demo": 0, "starter": 1, "pro": 2, "pro_plus": 3}
-    user_level = plan_order.get(user_plan, 0)
-
+    # 2026-07 policy: every PAID subscriber may use every model (credits are
+    # the only gate), so availability is "has an active non-free plan" —
+    # free/demo plan rows must not advertise models the enforcement path
+    # (plan_gates / tier downgrade) still blocks. min_plan is kept in the
+    # payload for display/back-compat only.
+    subscribed = is_subscribed_user(current_user) and get_user_tier(current_user) != "free"
     for model in models:
-        required_level = plan_order.get(model.get("min_plan", "starter"), 1)
-        model["available"] = is_subscribed_user(current_user) and user_level >= required_level
+        model["available"] = subscribed
 
     return {"models": models}
 

@@ -22,6 +22,20 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Load governor — priority admission under heavy load (load_governor.py).
+    # Below SOFT_LIMIT concurrent generations everyone is admitted instantly;
+    # above it, priority_queue plans (premium/enterprise) skip the wait,
+    # other paid plans wait up to NORMAL_MAX_WAIT, free/background up to
+    # LOW_MAX_WAIT. Nobody is rejected — only delayed.
+    GEN_LOAD_SOFT_LIMIT: int = 12
+    GEN_LOAD_NORMAL_MAX_WAIT_SECONDS: int = 8
+    GEN_LOAD_LOW_MAX_WAIT_SECONDS: int = 30
+    # Must exceed the longest legitimate generation (video poll floor is
+    # 1200s and a paid retry can double that), or still-running long jobs
+    # get purged from the in-flight count and the governor under-reports
+    # load exactly when videos pile up.
+    GEN_INFLIGHT_STALE_SECONDS: int = 2700
+
     # Security
     SECRET_KEY: str = "YOUR_SECRET_KEY_HERE_CHANGE_IN_PRODUCTION"
     ALGORITHM: str = "HS256"

@@ -2,9 +2,10 @@
 Tier Configuration - Defines plan-based limits and credit costs.
 
 This module provides:
-1. FREE_TIER / BASIC_TIER / PAID_TIER configs for provider_router overrides
+1. FREE_TIER / PAID_TIER configs for provider_router overrides
 2. get_credit_cost() - Dynamic credit cost lookup by tool + user plan
 3. get_user_tier() - Determine user's tier string from their plan
+4. PRIORITY_QUEUE_TIERS - tiers whose plans sell queue priority under load
 
 Pricing Reference (VidGo 2.2 Credit Spec — 2026-06 margin pass).
 At the cheapest pack rate (heavy_pack: 850 cr / NT$999 ≈ $0.0388/credit)
@@ -64,25 +65,10 @@ FREE_TIER = {
     },
 }
 
-# Basic plan (699 TWD, default model only)
-BASIC_TIER = {
-    "max_resolution": "720p",
-    "max_duration": 5,
-    "audio_enabled": True,
-    "models": {
-        "t2i": {"resolution": "1024x1024", "size": "1024*1024"},
-        "i2i": {"resolution": "1024x1024", "size": "1024*1024"},
-        "i2v": {"resolution": "720p", "duration": 5},
-        "t2v": {"resolution": "720p", "duration": 5},
-        "interior": {"resolution": "1024x1024", "size": "1024*1024"},
-        "interior_3d": {},
-        "avatar": {"resolution": "720p", "duration": 10},
-        "bg_removal": {},
-        "effect": {"resolution": "1024x1024", "size": "1024*1024"},
-    },
-}
-
-# Pro / Premium / Enterprise
+# Basic / Pro / Premium / Enterprise — 2026-07 policy: every PAID plan gets
+# the same generation parameters and full model access; plans differ only in
+# monthly credits, per-user concurrency, and queue priority. (The old
+# BASIC_TIER 720p/5s cap contradicted the sold plan's advertised 1080p.)
 PAID_TIER = {
     "max_resolution": "1080p",
     "max_duration": 10,
@@ -158,7 +144,10 @@ CREDIT_COSTS = {
     # Premium — future expansion (e.g. Veo 3.1 / Kling Omni-tier upgrades).
 }
 
-# Map plan names → tier strings
+# Map plan names → tier strings.
+# "premium" is a distinct tier from "pro" ONLY for queue priority
+# (priority_queue plans jump the line under load) — model access and
+# generation params are identical for every paid tier.
 PLAN_TIER_MAP = {
     "demo":       "free",
     "free":       "free",
@@ -166,58 +155,85 @@ PLAN_TIER_MAP = {
     "starter":    "basic",
     "pro":        "pro",
     "test_pro_usd_1": "pro",
-    "premium":    "pro",
-    "enterprise": "pro",
+    "premium":    "premium",
+    "enterprise": "premium",
 }
 
-# Allowed model types per plan tier.
-# free/basic CANNOT select flagship variants (wan_pro / gemini_pro / veo)
-# because those upstreams cost $0.40-$1.40 per call and the cheapest pack
-# only yields $0.033/credit. Pro and above unlock the premium tiers.
+# Full model-type catalog every PAID plan may select. Margin is protected by
+# per-model credit pricing (VIDEO_CREDIT_COSTS / IMAGE_CREDIT_COSTS below):
+# a Veo call charges 80 credits no matter the plan, so any subscriber with
+# enough credits may use any model. Only the free tier (no plan / demo) is
+# pinned to the cheap default upstream.
+_ALL_PAID_MODELS = ["default", "wan_pro", "gemini_pro", "midjourney", "veo"]
+
 TIER_ALLOWED_MODELS = {
-    "free":  ["default"],
-    "basic": ["default"],
-    "pro":   ["default", "wan_pro", "gemini_pro", "midjourney", "veo"],
+    "free":    ["default"],
+    "basic":   _ALL_PAID_MODELS,
+    "pro":     _ALL_PAID_MODELS,
+    "premium": _ALL_PAID_MODELS,
 }
+
+# Caller tier strings → request priority class, consumed by
+# provider_router.route() (admission gate + PiAPI retry budget). Includes
+# legacy aliases some callers still send. Keep in lockstep with
+# DEFAULT_VIDGO_PLANS in subscriptions.py; note get_user_tier also promotes
+# any plan whose DB row has priority_queue=True to "premium", so an admin
+# toggling the flag in /admin/plans takes effect without touching this set.
+PRIORITY_QUEUE_TIERS = {"premium", "enterprise", "pro_plus"}
+PAID_CALLER_TIERS = {"basic", "pro", "starter", "paid", "test_pro_usd_1"}
 
 
 def get_tier_config(tier: str) -> dict:
     """Get the parameter config for a tier."""
     if tier == "free":
         return FREE_TIER
-    elif tier == "basic":
-        return BASIC_TIER
-    else:
-        return PAID_TIER
+    return PAID_TIER
 
 
 def get_user_tier(user) -> str:
     """
-    Determine user's tier string from their model/plan.
+    Determine user's tier string from their plan.
 
     Args:
-        user: User ORM object with current_plan_id or plan relationship
+        user: User ORM object with current_plan_id or current_plan relationship
 
     Returns:
-        Tier string: "free", "basic", or "pro"
+        Tier string: "free", "basic", "pro", or "premium"
     """
     if not user:
         return "free"
 
-    # Check if user has a plan loaded (via relationship or cached attribute)
+    plan = None
     plan_name = None
 
-    if hasattr(user, "_plan_name"):
+    if getattr(user, "_plan_name", None):
         plan_name = user._plan_name
-    elif hasattr(user, "plan") and user.plan:
-        plan_name = user.plan.name
-    elif hasattr(user, "current_plan_id") and user.current_plan_id:
+    else:
+        # deps.get_current_user eager-loads current_plan; the guard keeps us
+        # safe on code paths that fetched the user without it, where touching
+        # the relationship would raise MissingGreenlet.
+        try:
+            plan = user.current_plan
+            plan_name = plan.name if plan else None
+        except Exception:
+            plan = None
+            plan_name = None
+
+    if plan_name:
+        tier = PLAN_TIER_MAP.get(plan_name, "basic")
+        # Honor the SOLD priority flag on the plan row: an admin toggling
+        # priority_queue in /admin/plans (or a custom plan sold with
+        # priority) gets queue priority even if the name mapping says
+        # otherwise. Unknown plan name but a real plan row → treat as paid
+        # (basic), never free: custom plans must not be locked out.
+        if tier != "free" and getattr(plan, "priority_queue", False):
+            return "premium"
+        return tier
+
+    if getattr(user, "current_plan_id", None):
         # Plan is set but not loaded — assume at least basic
         return "basic"
-    else:
-        return "free"
-
-    return PLAN_TIER_MAP.get(plan_name, "free")
+    return "free"
 
 
 def get_credit_cost(tool_type: str, user=None, model_type: Optional[str] = None) -> int:
@@ -226,7 +242,8 @@ def get_credit_cost(tool_type: str, user=None, model_type: Optional[str] = None)
 
     Args:
         tool_type: Tool identifier (e.g., "text_to_image", "avatar")
-        user: Optional User object (used to determine allowed model)
+        user: Kept for call-site compatibility; no longer affects the price
+              (billing is per model actually requested, not per tier)
         model_type: Optional explicit model type override
 
     Returns:
@@ -241,19 +258,10 @@ def get_credit_cost(tool_type: str, user=None, model_type: Optional[str] = None)
     if model_type and model_type in costs:
         return costs[model_type]
 
-    # Determine user's tier and pick highest allowed model
-    if user:
-        tier = get_user_tier(user)
-        allowed = TIER_ALLOWED_MODELS.get(tier, ["default"])
-
-        # Pick the most expensive allowed model (user pays for their tier's capability)
-        best_cost = costs.get("default", 10)
-        for model in allowed:
-            if model in costs:
-                best_cost = max(best_cost, costs[model])
-        return best_cost
-
-    # No user context → return default cost
+    # No explicit model → the provider runs the DEFAULT upstream, so charge
+    # the default price. (Pre-2026-07 this charged the MOST EXPENSIVE model
+    # the tier could access — "pays for capability" — which over-billed
+    # every default-model call once all paid tiers gained the full catalog.)
     return costs.get("default", list(costs.values())[0])
 
 

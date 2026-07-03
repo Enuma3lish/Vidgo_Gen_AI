@@ -88,7 +88,10 @@ async def test_generate_3d_model_routes_to_trellis(monkeypatch: pytest.MonkeyPat
             "mesh_simplify": 0.95,
             "model_version": "v1",
         },
-        "user_tier": "paid",
+        # 2026-07: the endpoint passes the user's REAL tier (get_user_tier)
+        # instead of a hardcoded "paid"; a subscriber whose plan row isn't
+        # loaded resolves to at least "basic".
+        "user_tier": "basic",
     }
 
 

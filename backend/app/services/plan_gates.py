@@ -152,6 +152,13 @@ async def require_model_access(
     Raise HTTPException(403) if ``user``'s plan tier is below the floor for
     ``model_id``. Empty / unknown ``model_id`` is allowed through.
 
+    2026-07 policy change: EVERY active plan (basic/pro/premium/enterprise)
+    may use EVERY model — per-model credit pricing already covers the
+    upstream cost, so credits are the only gate for subscribers. Plans
+    differentiate on monthly credits, concurrency, and queue priority
+    (load_governor), not on model access. The floor table above is kept
+    only to block users with NO plan (free tier) from premium upstreams.
+
     Call this BEFORE ``_check_and_deduct_credits`` so a rejected request
     never debits the wallet.
 
@@ -178,6 +185,10 @@ async def require_model_access(
         )
         plan = result.scalar_one_or_none()
         if plan is not None:
+            plan_name = (plan.name or "").strip().lower()
+            if plan_name not in ("free", "demo"):
+                # Any real subscription unlocks every model — credits gate.
+                return
             user_plan_name = _normalise_plan_name(plan.name)
 
     floor = _normalise_plan_name(floor)

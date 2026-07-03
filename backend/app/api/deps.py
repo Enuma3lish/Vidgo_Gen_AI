@@ -5,6 +5,7 @@ from jose import jwt, JWTError
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload
 import redis.asyncio as aioredis
 
 from app.core import security
@@ -97,8 +98,15 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    # Get user from database
-    result = await db.execute(select(User).where(User.id == user_id))
+    # Get user from database. Eager-load current_plan so tier/priority
+    # detection (tier_config.get_user_tier) can read the plan name without a
+    # lazy load — async lazy loads raise MissingGreenlet, which used to make
+    # every subscriber fall back to the "basic" tier guess.
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.current_plan))
+        .where(User.id == user_id)
+    )
     user = result.scalars().first()
 
     if not user:
@@ -146,8 +154,12 @@ async def get_current_user_optional(
     except JWTError:
         raise credentials_exception
 
-    # Get user from database
-    result = await db.execute(select(User).where(User.id == user_id))
+    # Get user from database (current_plan eager-loaded for tier detection)
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.current_plan))
+        .where(User.id == user_id)
+    )
     user = result.scalars().first()
 
     if not user:
@@ -180,7 +192,11 @@ async def get_current_user_optional_lenient(
     except JWTError:
         return None
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.current_plan))
+        .where(User.id == user_id)
+    )
     return result.scalars().first()
 
 

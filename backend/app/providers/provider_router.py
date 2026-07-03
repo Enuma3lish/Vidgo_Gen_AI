@@ -288,6 +288,49 @@ class ProviderRouter:
         persist_to_gcs: bool = True,
     ) -> Dict[str, Any]:
         """
+        Route request to the appropriate provider (public entry point).
+
+        Derives the request's queue priority from the caller's plan tier and
+        holds a global load-governor slot for the duration of the generation:
+        under heavy load, priority_queue subscribers (premium/enterprise) are
+        admitted first while lower tiers wait briefly. See
+        app.services.load_governor. (2026-07)
+
+        Subscriber priority, derived from the tier the CALLER actually
+        passed, BEFORE _route_impl's None→"pro" permissive default:
+          high   — priority_queue plans (premium / enterprise): jump the
+                   admission queue under load + extra PiAPI retry budget
+          normal — other paid plans (basic / pro): full retry budget
+          low    — free tier, background pregeneration, and unmigrated
+                   callers that omit user_tier: single PiAPI attempt →
+                   immediate Pollo failover, longest wait under load
+        Consumed by piapi_provider._priority_video_attempts and the
+        load_governor admission gate.
+        """
+        from app.services.load_governor import generation_slot
+        from app.services.tier_config import PRIORITY_QUEUE_TIERS, PAID_CALLER_TIERS
+
+        _caller_tier = (user_tier or "").lower()
+        if "_priority" not in params:
+            if _caller_tier in PRIORITY_QUEUE_TIERS:
+                params["_priority"] = "high"
+            elif _caller_tier in PAID_CALLER_TIERS:
+                params["_priority"] = "normal"
+            else:
+                params["_priority"] = "low"
+
+        task_label = task_type.value if hasattr(task_type, "value") else str(task_type)
+        async with generation_slot(params["_priority"], task_label):
+            return await self._route_impl(task_type, params, user_tier, persist_to_gcs)
+
+    async def _route_impl(
+        self,
+        task_type: TaskType,
+        params: Dict[str, Any],
+        user_tier: Optional[str] = None,
+        persist_to_gcs: bool = True,
+    ) -> Dict[str, Any]:
+        """
         Route request to the appropriate provider.
         Tries: primary → backup → tertiary → fallback (REST).
         Optionally persists result to GCS.
@@ -304,20 +347,6 @@ class ProviderRouter:
         # everyone to "basic" would be a regression. The warning fires at
         # most once per process per task_type so unmigrated service-layer
         # paths don't spam logs.
-        # Subscriber priority on the rate-limited PiAPI "public" pool: derive a
-        # request priority from the tier the CALLER actually passed, BEFORE the
-        # None→"pro" permissive default below. Paying subscribers (basic/pro)
-        # get the full retry budget on the congested premium provider (esp.
-        # MiniMax-Hailuo) before failover; background pregeneration and
-        # non-subscriber calls (no/free tier) get a single attempt and fail over
-        # to Pollo immediately, leaving scarce PiAPI capacity for subscribers.
-        # See piapi_provider._priority_video_attempts. (2026-06-25)
-        _caller_tier = (user_tier or "").lower()
-        if "_priority" not in params:
-            params["_priority"] = "high" if _caller_tier in (
-                "basic", "pro", "starter", "pro_plus", "premium", "enterprise", "paid"
-            ) else "low"
-
         if user_tier is None:
             if task_type not in self._tier_warn_seen:
                 logger.warning(
@@ -331,7 +360,9 @@ class ProviderRouter:
         user_tier = user_tier.lower()
         if user_tier in ("starter",):
             user_tier = "basic"
-        if user_tier in ("pro_plus", "premium", "enterprise", "paid"):
+        if user_tier in ("enterprise",):
+            user_tier = "premium"
+        if user_tier in ("pro_plus", "paid"):
             user_tier = "pro"
 
         # Apply tier overrides BEFORE provider selection so a downgraded
@@ -625,21 +656,20 @@ class ProviderRouter:
     ) -> Dict[str, Any]:
         """Apply tier-based parameter overrides.
 
-        2026-06 margin pass: this used to be dead code (never invoked from
-        route()). Now it runs on every route() call and additionally enforces
-        TIER_ALLOWED_MODELS — a free/basic user requesting a premium model
-        (Kling 2.1-master, Veo, Nano Banana Pro, …) is silently downgraded to
-        the tier's default model rather than triggering a $0.50+ upstream
-        call we can't charge for.
+        2026-07 policy: every PAID plan (basic/pro/premium/enterprise) has
+        identical params and full model access — credits are the only gate,
+        since per-model credit pricing already covers the upstream cost.
+        Only the FREE tier is pinned to the cheap default upstream: a free
+        user requesting a premium model (Kling 2.1-master, Veo, Nano Banana
+        Pro, …) is silently downgraded rather than triggering a $0.50+
+        upstream call we can't charge for.
         """
         from app.services.tier_config import (
-            FREE_TIER, BASIC_TIER, PAID_TIER, TIER_ALLOWED_MODELS,
+            FREE_TIER, PAID_TIER, TIER_ALLOWED_MODELS,
         )
 
         if user_tier == "free":
             tier_cfg = FREE_TIER
-        elif user_tier == "basic":
-            tier_cfg = BASIC_TIER
         else:
             tier_cfg = PAID_TIER
 
@@ -661,10 +691,19 @@ class ProviderRouter:
 
         model_cfg = tier_cfg["models"].get(key, {})
 
-        if "resolution" in model_cfg:
+        # Free tier: FORCE the cheap tier resolution (margin guard). Paid
+        # tiers: honor an explicitly requested resolution — billing charges
+        # per model+resolution (resolve_video_credits), so overwriting a
+        # 720p-priced request with the tier default 1080p would serve a more
+        # expensive upstream than was paid for. Only fill the default when
+        # the caller didn't specify one.
+        if user_tier == "free":
+            if "resolution" in model_cfg:
+                params["resolution"] = model_cfg["resolution"]
+            elif "resolution" in params:
+                params["resolution"] = tier_cfg["max_resolution"]
+        elif not params.get("resolution") and "resolution" in model_cfg:
             params["resolution"] = model_cfg["resolution"]
-        elif "resolution" in params:
-            params["resolution"] = tier_cfg["max_resolution"]
 
         if "duration" in params:
             params["duration"] = min(

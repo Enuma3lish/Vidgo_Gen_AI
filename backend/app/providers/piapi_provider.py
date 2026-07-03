@@ -213,21 +213,29 @@ class PiAPIProvider(BaseProvider):
         """Tier-aware retry budget for a video submit (subscriber priority).
 
         The PiAPI "public" pool shares upstream capacity (esp. MiniMax-Hailuo),
-        which intermittently returns "too many requests / upstream busy". A
-        high-priority caller (paying subscriber) retries the SAME premium model
-        a couple of times before the router fails over to Pollo, so they stay on
-        their chosen model. A low-priority caller (background pregeneration /
-        non-subscriber) gets ONE attempt and fails over immediately — so it
-        neither waits nor piles retries onto the congested pool, leaving the
-        scarce PiAPI capacity for subscribers. A bounded internal fallback leg
-        (``_max_wait_override``) never retries (a full-timeout retry would blow
-        the parent chain's budget). ``_priority`` is set by provider_router from
-        the request's user_tier; it defaults to high so direct callers are
-        unaffected. (2026-06-25)
+        which intermittently returns "too many requests / upstream busy".
+        Three levels (2026-07, matches provider_router's _priority):
+          high / normal (all paid plans) — full base attempts on the SAME
+                 premium model before the router fails over to Pollo. Do NOT
+                 give high more than base: each attempt can poll up to the
+                 full video floor (~1200s), so base+1 would blow the client /
+                 Cloud Run request budget the base was sized against. Premium
+                 subscribers get their edge at the load_governor admission
+                 gate instead.
+          low    (free / background pregeneration) — ONE attempt and
+                 immediate Pollo failover, so it neither waits nor piles
+                 retries onto the congested pool
+        A bounded internal fallback leg (``_max_wait_override``) never retries
+        (a full-timeout retry would blow the parent chain's budget).
+        ``_priority`` is set by provider_router from the request's user_tier;
+        it defaults to normal so direct callers are unaffected.
         """
         if params.get("_max_wait_override"):
             return 1
-        return base if (params.get("_priority") or "high") == "high" else 1
+        priority = params.get("_priority") or "normal"
+        if priority == "low":
+            return 1
+        return base
 
     async def health_check(self) -> bool:
         """Check whether PiAPI is reachable without creating a billable task."""

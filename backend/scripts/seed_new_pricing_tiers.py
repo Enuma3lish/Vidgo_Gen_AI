@@ -43,9 +43,10 @@ NEW_PLAN_DATA = [
         "social_media_batch_posting": False,
         "enterprise_features": False,
         "max_concurrent_generations": 1,
-        # Conservative tier→model floor (2026-05-20). Mirrors
-        # plan_gates._PLAN_FLOOR_FOR_MODEL — keep both in sync.
-        "allowed_models": ["flux", "seedance", "z-image"],
+        # 2026-07 policy: every paid plan carries the full model catalog —
+        # credits are the only gate (per-model pricing covers upstream cost);
+        # plans differ on credits / concurrency / priority_queue.
+        "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"],
         "pollo_limit": 0,
         "goenhance_limit": 0,
         "description": "標準入門方案 — 1080p HD、無浮水印、400 點/月（NT$ 方案 350 點）"
@@ -70,7 +71,7 @@ NEW_PLAN_DATA = [
         "social_media_batch_posting": True,
         "enterprise_features": False,
         "max_concurrent_generations": 3,
-        "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan"],
+        "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"],
         "pollo_limit": 50,
         "goenhance_limit": None,
         "description": "主力方案 — 4K、無浮水印、進階模型、1,000 點/月（NT$ 方案 900 點）"
@@ -95,7 +96,7 @@ NEW_PLAN_DATA = [
         "social_media_batch_posting": True,
         "enterprise_features": False,
         "max_concurrent_generations": 5,
-        "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo"],
+        "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"],
         "pollo_limit": 100,
         "goenhance_limit": None,
         "description": "重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1、1,800 點/月（NT$ 方案 1,600 點）"

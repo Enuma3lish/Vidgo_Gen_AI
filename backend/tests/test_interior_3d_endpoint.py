@@ -110,8 +110,10 @@ async def test_piapi_trellis_3d_normalizes_model_url(monkeypatch: pytest.MonkeyP
     provider = PiAPIProvider()
     captured: dict[str, Any] = {}
 
-    async def fake_submit_and_poll(payload: dict[str, Any]) -> dict[str, Any]:
+    async def fake_submit_and_poll(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        # trellis_3d passes max_wait_seconds (TRELLIS_TIMEOUT_SEC) since 2026-07
         captured["payload"] = payload
+        captured["max_wait_seconds"] = kwargs.get("max_wait_seconds")
         return {
             "success": True,
             "task_id": "task-123",

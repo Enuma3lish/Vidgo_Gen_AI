@@ -229,9 +229,21 @@ class PiAPIProvider(BaseProvider):
         (a full-timeout retry would blow the parent chain's budget).
         ``_priority`` is set by provider_router from the request's user_tier;
         it defaults to normal so direct callers are unaffected.
+
+        ``_retry_attempts`` is an explicit per-call override (clamped to
+        1..base) for multi-stage pipelines whose TOTAL wall-clock budget is
+        the scarce resource — e.g. floor-plan growth runs Kling omni (1800s
+        floor) sequentially with a render and a Trellis leg, so even 2
+        attempts on the Kling leg could blow the Cloud Run 3600s ceiling.
         """
         if params.get("_max_wait_override"):
             return 1
+        explicit = params.get("_retry_attempts")
+        if explicit is not None:
+            try:
+                return max(1, min(int(explicit), base))
+            except (TypeError, ValueError):
+                pass
         priority = params.get("_priority") or "normal"
         if priority == "low":
             return 1
@@ -1081,7 +1093,13 @@ class PiAPIProvider(BaseProvider):
             },
         }
 
-        result = await self._submit_and_poll(payload)
+        # GLB reconstruction (esp. trellis2/v2) regularly idles past the
+        # generic 600s image floor — give it a video-class ceiling instead
+        # of failing healthy jobs (2026-07, prod issue 4️⃣ partial-3D-refunds).
+        result = await self._submit_and_poll(
+            payload,
+            max_wait_seconds=int(os.getenv("TRELLIS_TIMEOUT_SEC", "1200")),
+        )
         output = result.get("output") or {}
         if isinstance(output, dict):
             model_url = output.get("model_url") or output.get("model_file") or output.get("url")
@@ -1593,10 +1611,32 @@ class PiAPIProvider(BaseProvider):
         else:
             mode = "std"
 
+        # Upstream constraint (log-confirmed 2026-06-29): PiAPI rejects
+        # image_tail_url with mode=std unless version is EXACTLY "3.0"
+        # ('set version to "3.0" or mode to "pro"'). A first→last-frame
+        # request on the default tier (version 2.5, std) therefore 500'd
+        # after the user was already charged. Force version 3.0 and keep
+        # mode=std so the request succeeds.
+        # NOTE for billing follow-up: the caller was billed for the tier it
+        # asked for (e.g. kling_std 28cr) while the forced 3.0 upstream costs
+        # more — tail-frame requests should probably price as kling_v3_std;
+        # owner decision pending (see api-ui-parity audit).
+        _forced_v3_for_tail = False
+        if params.get("image_url") and params.get("image_tail_url") and mode == "std" and version != "3.0":
+            logger.warning(
+                "[kling] image_tail_url with mode=std requires version 3.0 — "
+                "forcing version %s → 3.0 (billing follow-up: tail-frame should "
+                "price as v3)", version,
+            )
+            version = "3.0"
+            _forced_v3_for_tail = True
+
         # Kling 3.0/Omni's whole point is the audio/lip-sync output, so flip
         # enable_audio on by default for that tier (callers can still pass
-        # enable_audio=False if they want a silent 3.0 generation).
-        if version == "3.0" and params.get("enable_audio") is None:
+        # enable_audio=False if they want a silent 3.0 generation). Do NOT
+        # auto-enable audio when 3.0 was only forced for the tail-frame
+        # constraint — the caller asked (and paid) for a std-tier silent clip.
+        if version == "3.0" and not _forced_v3_for_tail and params.get("enable_audio") is None:
             params = {**params, "enable_audio": True}
 
         input_data: Dict[str, Any] = {
@@ -1638,11 +1678,16 @@ class PiAPIProvider(BaseProvider):
         )
         max_wait = _video_poll_timeout(params, _kling_floor)
         _on_submit_kling = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
+        # 2026-07: was the _retry_transient default (3 attempts) — 3× the
+        # 1800s omni floor could hold a request for 90 min, far past the
+        # Cloud Run 3600s ceiling. Use the same tier-aware budget as I2V/T2V
+        # (paid=2, low/explicit override=1).
         result = await self._retry_transient(
             "kling_video_generation",
             lambda: self._submit_and_poll(
                 payload, max_wait_seconds=max_wait, on_submit=_on_submit_kling,
             ),
+            attempts=self._priority_video_attempts(params, base=2),
         )
         output = result.get("output") or {}
         if isinstance(output, dict):

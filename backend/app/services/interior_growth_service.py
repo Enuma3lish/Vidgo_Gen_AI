@@ -145,9 +145,16 @@ class InteriorGrowthService:
         duration: int = 5,
         model_version: str = "v2",
         language: str = "en",
+        on_video_submit=None,
     ) -> Dict[str, Any]:
         """Run the pipeline. Returns a structured dict; never raises for an
         upstream stage failure (returns ``success=False`` + ``stage`` instead).
+
+        ``on_video_submit(task_id, provider_name)`` — optional async callback
+        forwarded to the Kling leg's submit hook. The endpoint uses it to
+        register a PendingProviderTask so the worker can reclaim (or refund)
+        a growth video whose HTTP request was killed mid-poll; this service
+        stays pure orchestration (no DB access).
         """
         steps: Dict[str, str] = {}
         gemini = get_gemini_service()
@@ -257,6 +264,14 @@ class InteriorGrowthService:
                     "tier": "omni",                     # Kling 3.0 (multimodal + audio)
                     "duration": int(duration),
                     "timeout": KLING_OMNI_TIMEOUT_SEC,  # 1800s — premium tier headroom
+                    # ONE attempt only: this leg runs sequentially after the
+                    # render stage and before Trellis, and a retry would
+                    # re-poll the full 1800s floor — pushing the whole
+                    # synchronous pipeline past the Cloud Run 3600s ceiling.
+                    # A killed/overrun job is recovered by the reclaim worker
+                    # via on_video_submit instead.
+                    "_retry_attempts": 1,
+                    "on_submit": on_video_submit,
                 },
             )
         except Exception as exc:  # noqa: BLE001

@@ -1401,6 +1401,60 @@ async def _floorplan_to_video_inner(
             + growth_extra_prompt
         ).strip()
 
+    # Reclaim coverage (2026-07, prod issue 4️⃣): the Kling growth leg polls
+    # up to 1800s inside this synchronous request. If Cloud Run kills the
+    # request (or the client aborts), the upstream job used to be orphaned
+    # with the credits already deducted. The submit hook below registers a
+    # PendingProviderTask the moment PiAPI returns a task_id; the worker then
+    # re-polls the Kling task and either materializes the video or refunds.
+    # IMPORTANT: the row is created directly in "polling" state INSIDE the
+    # hook — NOT pre-created as "submitting" — because the pipeline spends
+    # minutes in the analysis/render stages before the Kling submit, and the
+    # reclaim worker abandons+refunds any "submitting" row older than its
+    # 60s foreground grace (that would double-refund a healthy request).
+    from datetime import datetime, timezone
+    from app.models.pending_provider_task import PendingProviderTask
+    growth_pending: Optional[PendingProviderTask] = None
+
+    async def _on_growth_video_submit(task_id: str, provider_name: str):
+        nonlocal growth_pending
+        try:
+            growth_pending = PendingProviderTask(
+                user_id=current_user.id,
+                tool_type="kling_video",  # already in the worker's reclaim maps
+                service_type=service_type,
+                credits_charged=cost,
+                input_params={
+                    "image_url": request.image_url,
+                    "tool": "floorplan_growth",
+                    "result_tier": request.result_tier,
+                },
+                provider_task_id=task_id,
+                provider_name=provider_name,
+                status="polling",
+                submitted_at=datetime.now(timezone.utc),
+            )
+            db.add(growth_pending)
+            await db.commit()
+            await db.refresh(growth_pending)
+        except Exception as exc:
+            growth_pending = None
+            logger.warning("floorplan_growth: failed to record pending_task %s: %s", task_id, exc)
+
+    async def _close_growth_pending(status_: str, *, result_url: Optional[str] = None, error: Optional[str] = None):
+        if growth_pending is None:
+            return
+        try:
+            growth_pending.status = status_
+            if result_url:
+                growth_pending.result_url = result_url
+            if error:
+                growth_pending.error_message = str(error)[:1000]
+            growth_pending.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+        except Exception as exc:
+            logger.warning("floorplan_growth: failed to close pending_task: %s", exc)
+
     try:
         result = await get_interior_growth_service().run(
             floorplan_url=request.image_url,
@@ -1411,8 +1465,10 @@ async def _floorplan_to_video_inner(
             duration=request.duration,
             model_version=request.model_version,
             language=request.language or "en",
+            on_video_submit=_on_growth_video_submit,
         )
     except Exception as exc:
+        await _close_growth_pending("failed", error=str(exc))
         await _refund_credits(db, current_user, cost, service_type)
         logger.error("floorplan-to-video pipeline raised: %s", exc, exc_info=True)
         # Graceful return (NOT raise) — see render-tier note above; this runs
@@ -1423,6 +1479,7 @@ async def _floorplan_to_video_inner(
         )
 
     if not result.get("success"):
+        await _close_growth_pending("failed", error=result.get("error") or f"stage={result.get('stage')}")
         await _refund_credits(db, current_user, cost, service_type)
         return FloorplanToVideoResponse(
             success=False,
@@ -1432,6 +1489,7 @@ async def _floorplan_to_video_inner(
             steps=result.get("steps"),
             error=result.get("error"),
         )
+    await _close_growth_pending("completed", result_url=result.get("video_url"))
 
     # Report the amount actually charged (ServicePricing-override aware; 0 for admins).
     credits_used = _credits_charged(current_user, cost)

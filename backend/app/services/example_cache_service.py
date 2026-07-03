@@ -48,6 +48,10 @@ def _build_provider_params(preset: Dict[str, Any], tool_type: str) -> Dict[str, 
     preset_params = preset.get("params", {})
     image_url = preset.get("image_url", "")
 
+    # 2026-07: cached examples are shown to visitors as "what VidGo can do" —
+    # always generate them with the TOP model per tool (nano-banana-pro for
+    # images, Veo for generic I2V video, pro-mode avatar), not the cheap
+    # provider defaults these params used to fall back to.
     if tool_type == "background_removal":
         params["image_url"] = image_url
 
@@ -55,10 +59,12 @@ def _build_provider_params(preset: Dict[str, Any], tool_type: str) -> Dict[str, 
         params["prompt"] = preset_params.get("prompt", "")
         params["image_url"] = image_url
         params["size"] = "1024*1024"
+        params["model"] = "nano-banana-pro"
 
     elif tool_type == "effect":
         params["prompt"] = preset_params.get("prompt", "")
         params["image_url"] = image_url
+        params["model"] = "nano-banana-pro"
 
     elif tool_type == "room_redesign":
         params["prompt"] = preset_params.get("prompt", "")
@@ -70,6 +76,7 @@ def _build_provider_params(preset: Dict[str, Any], tool_type: str) -> Dict[str, 
         params["prompt"] = preset_params.get("prompt", "")
         params["image_url"] = image_url
         params["duration"] = preset_params.get("duration", 5)
+        params["model"] = preset_params.get("model", "veo")
 
     elif tool_type == "ai_avatar":
         params["image_url"] = image_url
@@ -79,10 +86,12 @@ def _build_provider_params(preset: Dict[str, Any], tool_type: str) -> Dict[str, 
         params["voice_id"] = preset_params.get("voice_id", "xiaoxiao")
         params["duration"] = preset_params.get("duration", 30)
         params["aspect_ratio"] = preset_params.get("aspect_ratio", "9:16")
+        params["mode"] = "pro"
 
     elif tool_type == "pattern_generate":
         params["prompt"] = preset_params.get("prompt", "")
         params["size"] = preset_params.get("size", "1024*1024")
+        params["model"] = "nano-banana-pro"
 
     return params
 
@@ -177,7 +186,9 @@ class ExampleCacheService:
         result = await self.router.route(
             task_type=task_type,
             params=params,
-            user_tier="starter",
+            # "pro" so the tier gate never downgrades the top models chosen
+            # in _build_provider_params (2026-07).
+            user_tier="pro",
             persist_to_gcs=True,
         )
 

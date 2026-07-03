@@ -45,6 +45,7 @@ class AIServiceWithRescue:
         width: int = 1024,
         height: int = 1024,
         user_tier: str = "starter",
+        model: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -57,6 +58,8 @@ class AIServiceWithRescue:
             width: Image width (default 1024)
             height: Image height (default 1024)
             user_tier: User subscription tier (starter, pro, pro_plus)
+            model: Optional concrete model id (e.g. "nano-banana-pro") —
+                   None keeps the provider default (Flux schnell)
 
         Returns:
             Dict with success, image_url, service_used, rescue_used
@@ -64,12 +67,15 @@ class AIServiceWithRescue:
         logger.info(f"T2I request: {prompt[:100]}...")
 
         try:
+            t2i_params: Dict[str, Any] = {
+                "prompt": prompt,
+                "size": f"{width}*{height}",
+            }
+            if model:
+                t2i_params["model"] = model
             result = await self.router.route(
                 TaskType.T2I,
-                {
-                    "prompt": prompt,
-                    "size": f"{width}*{height}"
-                },
+                t2i_params,
                 user_tier=user_tier
             )
 

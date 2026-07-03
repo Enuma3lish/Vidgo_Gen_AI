@@ -472,7 +472,11 @@ class DemoCacheService:
                 "image_url": source_url,
                 "prompt": style_prompt,
                 "strength": 0.65,
+                # Demo output must show best-case quality (2026-07): top
+                # instruction-following image editor, not the Flux default.
+                "model": "nano-banana-pro",
             },
+            user_tier="pro",
         )
 
         if not i2i_result.get("success"):
@@ -523,7 +527,8 @@ class DemoCacheService:
             logger.info(f"[DemoCache] BG removal: generating source image...")
             t2i_result = await provider.route(
                 TaskType.T2I,
-                {"prompt": prompt, "width": 1024, "height": 1024},
+                {"prompt": prompt, "width": 1024, "height": 1024, "model": "nano-banana-pro"},
+                user_tier="pro",
             )
             if not t2i_result.get("success"):
                 return {"success": False, "error": "T2I failed"}
@@ -627,7 +632,9 @@ class DemoCacheService:
         logger.info(f"[DemoCache] Product scene: generating {topic} scene...")
         full_scene_prompt = f"{scene_prompt}, empty background for product placement, commercial photography, 8K"
         scene_result = await provider.route(
-            TaskType.T2I, {"prompt": full_scene_prompt, "width": 1024, "height": 1024}
+            TaskType.T2I,
+            {"prompt": full_scene_prompt, "width": 1024, "height": 1024, "model": "nano-banana-pro"},
+            user_tier="pro",
         )
         if not scene_result.get("success"):
             logger.warning(f"[DemoCache] scene T2I failed: {scene_result}")
@@ -693,7 +700,9 @@ class DemoCacheService:
         logger.info(f"[DemoCache] Room redesign: I2I transform (room_type={room_type}, style={style_id or topic or 'custom'})...")
         result = await provider.route(
             TaskType.I2I,
-            {"image_url": room_url, "prompt": style_prompt, "strength": 0.65},
+            # nano-banana-pro matches the paid room-redesign primary path.
+            {"image_url": room_url, "prompt": style_prompt, "strength": 0.65, "model": "nano-banana-pro"},
+            user_tier="pro",
         )
         if not result.get("success"):
             return {"success": False}
@@ -775,7 +784,11 @@ class DemoCacheService:
         else:
             prompt = effect_prompt or content_prompts.get(topic, random.choice(list(content_prompts.values())))
             logger.info(f"[DemoCache] Short video: generating source image...")
-            t2i = await provider.route(TaskType.T2I, {"prompt": prompt, "width": 1024, "height": 1024}, user_tier="pro")
+            t2i = await provider.route(
+                TaskType.T2I,
+                {"prompt": prompt, "width": 1024, "height": 1024, "model": "nano-banana-pro"},
+                user_tier="pro",
+            )
             if not t2i.get("success"):
                 return {"success": False}
             source_url = t2i.get("output", {}).get("image_url")
@@ -783,20 +796,41 @@ class DemoCacheService:
                 return {"success": False}
             i2v_prompt = prompt
 
-        # Step 2: I2V — animate the chosen frame with the chosen motion prompt,
-        # on the model the visitor picked from the dropdown when given.
+        # Step 2 — animate the chosen frame, dispatched by model family
+        # (2026-07 fix). The old code set params["model_id"], but providers
+        # read params["model"] — the visitor's pick was silently ignored and
+        # EVERY demo clip ran the cheap Seedance default. Also, kling/sora
+        # ids aren't in the generic I2V family map (unknown → Seedance), so
+        # they must route to their dedicated task types. Default (no pick) is
+        # Kling Omni — demos must show best-case quality.
+        m = (model_id or "").lower()
         logger.info(
-            "[DemoCache] Short video: I2V on %s (model=%s)...",
-            "user frame" if input_image_url else "T2I frame", model_id or "default",
+            "[DemoCache] Short video: animating %s (model=%s)...",
+            "user frame" if input_image_url else "T2I frame", m or "kling-omni default",
         )
-        i2v_params = {"image_url": source_url, "prompt": i2v_prompt}
-        if model_id:
-            i2v_params["model_id"] = model_id
-        i2v = await provider.route(TaskType.I2V, i2v_params, user_tier="pro")
-        if not i2v.get("success"):
+        if not m or "kling" in m:
+            kling_tier = "default" if (m and "omni" not in m and "v3" not in m and "3" not in m) else "omni"
+            gen = await provider.route(
+                TaskType.KLING_VIDEO,
+                {"prompt": i2v_prompt, "image_url": source_url, "tier": kling_tier, "duration": 5},
+                user_tier="pro",
+            )
+        elif "sora" in m:
+            gen = await provider.route(
+                TaskType.SORA2_VIDEO,
+                {"prompt": i2v_prompt, "image_url": source_url, "duration": 5},
+                user_tier="pro",
+            )
+        else:
+            gen = await provider.route(
+                TaskType.I2V,
+                {"image_url": source_url, "prompt": i2v_prompt, "model": model_id},
+                user_tier="pro",
+            )
+        if not gen.get("success"):
             return {"success": False}
 
-        video_url = i2v.get("output", {}).get("video_url")
+        video_url = (gen.get("output") or {}).get("video_url") or gen.get("video_url")
         if not video_url:
             return {"success": False}
 
@@ -831,7 +865,11 @@ class DemoCacheService:
         full_prompt = f"Seamless pattern design, {prompt}, tileable, high quality, 8K"
 
         logger.info(f"[DemoCache] Pattern: generating...")
-        t2i = await provider.route(TaskType.T2I, {"prompt": full_prompt, "width": 1024, "height": 1024}, user_tier="pro")
+        t2i = await provider.route(
+            TaskType.T2I,
+            {"prompt": full_prompt, "width": 1024, "height": 1024, "model": "nano-banana-pro"},
+            user_tier="pro",
+        )
         if not t2i.get("success"):
             return {"success": False}
 
@@ -1015,7 +1053,9 @@ class DemoCacheService:
                 "duration": 10,
                 "resolution": "720p",
                 "aspect_ratio": "9:16",
+                "mode": "pro",  # top avatar tier (matches pregen script)
             },
+            user_tier="pro",
         )
 
         if not result or not result.get("success"):

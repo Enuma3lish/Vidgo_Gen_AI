@@ -196,7 +196,8 @@ class DemoService:
         try:
             image_result = await self.router.route(
                 TaskType.T2I,
-                {"prompt": f"{analysis.normalized}, {style_info.get('prompt', '')}"}
+                {"prompt": f"{analysis.normalized}, {style_info.get('prompt', '')}", "model": "nano-banana-pro"},
+                user_tier="pro",
             )
         except Exception as e:
             return {
@@ -228,8 +229,10 @@ class DemoService:
                 {
                     "image_url": image_url,
                     "prompt": analysis.normalized,
-                    "duration": 5
-                }
+                    "duration": 5,
+                    "model": "veo",  # top generic-I2V model for demo quality (2026-07)
+                },
+                user_tier="pro",
             )
 
             if not video_result.get("success"):
@@ -356,7 +359,8 @@ class DemoService:
         try:
             image_result = await self.router.route(
                 TaskType.T2I,
-                {"prompt": f"{prompt}, {style_info.get('prompt', '')}"}
+                {"prompt": f"{prompt}, {style_info.get('prompt', '')}", "model": "nano-banana-pro"},
+                user_tier="pro",
             )
         except Exception as e:
             return {
@@ -444,7 +448,8 @@ class DemoService:
             try:
                 image_result = await self.router.route(
                     TaskType.T2I,
-                    {"prompt": f"{prompt}, {style_info.get('prompt', '')}"}
+                    {"prompt": f"{prompt}, {style_info.get('prompt', '')}", "model": "nano-banana-pro"},
+                    user_tier="pro",
                 )
                 image_url = image_result.get("image_url") or image_result.get("output_url")
                 if not image_url:
@@ -476,8 +481,10 @@ class DemoService:
                 {
                     "image_url": image_url,
                     "prompt": prompt,
-                    "duration": 5
-                }
+                    "duration": 5,
+                    "model": "veo",  # top generic-I2V model for demo quality (2026-07)
+                },
+                user_tier="pro",
             )
         except Exception as e:
             result["steps"][-1]["status"] = "failed"
@@ -748,7 +755,8 @@ class DemoService:
 
             image_result = await self.router.route(
                 TaskType.T2I,
-                {"prompt": f"{prompt}, {style_prompt}".strip(", ")}
+                {"prompt": f"{prompt}, {style_prompt}".strip(", "), "model": "nano-banana-pro"},
+                user_tier="pro",
             )
         except Exception as e:
             return {
@@ -771,8 +779,10 @@ class DemoService:
                 {
                     "image_url": image_url,
                     "prompt": prompt,
-                    "duration": 5
-                }
+                    "duration": 5,
+                    "model": "veo",  # top generic-I2V model for demo quality (2026-07)
+                },
+                user_tier="pro",
             )
         except Exception as e:
             return {

@@ -796,7 +796,11 @@ class MaterialGenerator:
                     image_result = await self.rescue_service.generate_image(
                         prompt=prompt_zh,
                         width=1024,
-                        height=1024
+                        height=1024,
+                        user_tier="pro",
+                        # Landing/demo material is the product's shop window —
+                        # always render with the top image model (2026-07).
+                        model="nano-banana-pro",
                     )
                     img_elapsed = time.monotonic() - img_start
                     logger.info(f"Landing {topic_key} #{idx+1} image gen: {img_elapsed:.1f}s")
@@ -815,7 +819,10 @@ class MaterialGenerator:
                         {
                             "image_url": image_url,
                             "prompt": prompt_zh,
-                            "duration": SHORT_VIDEO_LENGTH
+                            "duration": SHORT_VIDEO_LENGTH,
+                            # Top model on the generic I2V chain (Veo 3.1) —
+                            # landing material must show best-case quality.
+                            "model": "veo",
                         },
                         user_tier="pro",  # admin pre-render
                     )
@@ -883,6 +890,7 @@ class MaterialGenerator:
                                     "image_url": avatar_image,
                                     "script": avatar_script,
                                     "language": lang,
+                                    "mode": "pro",  # top avatar tier (matches pregen script)
                                 },
                                 user_tier="pro",  # admin pre-render
                             )
@@ -950,7 +958,9 @@ class MaterialGenerator:
                 result = await self.rescue_service.generate_image(
                     prompt=full_prompt,
                     width=1024,
-                    height=1024
+                    height=1024,
+                    user_tier="pro",
+                    model="nano-banana-pro",
                 )
 
                 image_url = result.get('image_url')
@@ -1000,7 +1010,9 @@ class MaterialGenerator:
                 source_result = await self.rescue_service.generate_image(
                     prompt=example['source_prompt'],
                     width=1024,
-                    height=1024
+                    height=1024,
+                    user_tier="pro",
+                    model="nano-banana-pro",
                 )
 
                 if not source_result.get('success'):
@@ -1034,7 +1046,9 @@ class MaterialGenerator:
                     effect_result = await self.rescue_service.generate_image(
                         prompt=full_prompt,
                         width=1024,
-                        height=1024
+                        height=1024,
+                        user_tier="pro",
+                        model="nano-banana-pro",
                     )
                     if effect_result.get('success'):
                         result_url = effect_result.get('image_url')
@@ -1084,7 +1098,9 @@ class MaterialGenerator:
                 image_result = await self.rescue_service.generate_image(
                     prompt=example['source_prompt'],
                     width=1024,
-                    height=1024
+                    height=1024,
+                    user_tier="pro",
+                    model="nano-banana-pro",
                 )
 
                 if not image_result.get('success'):
@@ -1102,7 +1118,8 @@ class MaterialGenerator:
                     {
                         "image_url": image_url,
                         "prompt": example['source_prompt'],
-                        "duration": SHORT_VIDEO_LENGTH
+                        "duration": SHORT_VIDEO_LENGTH,
+                        "model": "veo",
                     },
                     user_tier="pro",  # admin pre-render
                 )
@@ -1164,6 +1181,7 @@ class MaterialGenerator:
                         "image_url": example['avatar_url'],
                         "script": example['script'],
                         "language": example['language'],
+                        "mode": "pro",  # top avatar tier (matches pregen script)
                     },
                     user_tier="pro",  # admin pre-render
                 )

@@ -299,6 +299,13 @@ class PolloProvider(BaseProvider):
             "seedream_5_lite": "seedream_5_lite",
             "midjourney": "pollojourney",
             "pollojourney": "pollojourney",
+            # Instructed-edit requests (Flux Kontext on PiAPI). Pollo has no
+            # Kontext; nano-banana-2 (Gemini image) is its closest
+            # instruction-following editor — an EXPLICIT choice, not the
+            # catch-all default, so edit prompts (e.g. product recolor)
+            # keep working on the backup leg.
+            "flux_kontext": "nano_banana_2",
+            "kontext": "nano_banana_2",
         }
         key = aliases.get(m, DEFAULT_IMAGE_MODEL)
         info = POLLO_IMAGE_MODELS.get(key) or POLLO_IMAGE_MODELS[DEFAULT_IMAGE_MODEL]

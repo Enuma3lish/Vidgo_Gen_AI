@@ -5046,6 +5046,7 @@ async def render_enhance(
                 url = first if isinstance(first, str) else (first.get("url") or first.get("image_url"))
         return url
 
+    _re_pending = None
     try:
         provider_router = get_provider_router()
         working_url = _resolve_public_url(request.image_url)
@@ -5073,16 +5074,51 @@ async def render_enhance(
                 )
 
         # Stage 2 — super-resolution upscale.
+        # Reclaim parity with /upscale (2026-07): register a pending task so
+        # a client-abandoned or Cloud-Run-killed request is recovered (or
+        # refunded) by the worker instead of silently losing the charge.
+        from app.models.pending_provider_task import PendingProviderTask
+        _re_pending = PendingProviderTask(
+            user_id=current_user.id,
+            tool_type="image_upscale",
+            service_type=service_type,
+            credits_charged=CREDIT_COST,
+            input_params={"image_url": working_url, "scale": request.scale, "tool": "render_enhance"},
+            status="submitting",
+        )
+        db.add(_re_pending)
+        await db.commit()
+        await db.refresh(_re_pending)
+
+        async def _on_re_upscale_submit(task_id: str, provider_name: str):
+            try:
+                _re_pending.provider_task_id = task_id
+                _re_pending.provider_name = provider_name
+                _re_pending.status = "polling"
+                _re_pending.submitted_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception as exc:
+                logger.warning("render_enhance: failed to record pending_task %s: %s", task_id, exc)
+
         result = await provider_router.route(TaskType.UPSCALE, {
             "image_url": working_url,
             "scale": request.scale,
+            "on_submit": _on_re_upscale_submit,
         }, user_tier=get_user_tier(current_user))
         if not result.get("success"):
+            _re_pending.status = "failed"
+            _re_pending.error_message = str(result.get("error") or "upscale failed")[:1000]
+            _re_pending.completed_at = datetime.now(timezone.utc)
+            await db.commit()
             await _refund_credits(db, current_user, CREDIT_COST, service_type)
             return _provider_failure_response("render_enhance", result, current_user)
 
         image_url = await _persist_provider_url(_extract_image_url(result), "image", current_user)
         if not image_url:
+            _re_pending.status = "failed"
+            _re_pending.error_message = "provider success but no image_url"
+            _re_pending.completed_at = datetime.now(timezone.utc)
+            await db.commit()
             await _refund_credits(db, current_user, CREDIT_COST, service_type)
             return ToolResponse(success=False, message="Render enhance returned no result. Please try again.")
 
@@ -5101,6 +5137,9 @@ async def render_enhance(
         )
         generation.set_expiry()
         db.add(generation)
+        _re_pending.status = "completed"
+        _re_pending.result_url = image_url
+        _re_pending.completed_at = datetime.now(timezone.utc)
         await db.commit()
 
         return ToolResponse(
@@ -5112,6 +5151,14 @@ async def render_enhance(
         )
     except Exception as e:
         logger.error("render_enhance error: %s", e, exc_info=True)
+        if _re_pending is not None and _re_pending.status in ("submitting", "polling"):
+            try:
+                _re_pending.status = "failed"
+                _re_pending.error_message = str(e)[:1000]
+                _re_pending.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                pass
         await _refund_credits(db, current_user, CREDIT_COST, service_type)
         _notify_admin_of_tool_failure("render_enhance", e, current_user)
         return ToolResponse(success=False, message=str(e) or GENERIC_TOOL_FAILURE_MESSAGE)
@@ -5179,12 +5226,25 @@ async def recolor_product(
 
     target = (request.target_part or "").strip() or "the main product"
     color = request.target_color.strip()
-    # Instruction-style Kontext prompt; user's note is appended verbatim.
+    # Kontext has a CLOSED input schema — the positive prompt is the ONLY
+    # steering lever (no strength/negative_prompt). The old prompt buried one
+    # short change clause under a heavy "keep EXACTLY the same" stack, which
+    # biased Kontext toward a near-identity copy: users got the original
+    # color back (2026-07 prod issue 3️⃣). Lead with the change, repeat the
+    # target color, anchor it with a hex code when resolvable, and keep the
+    # preservation clause short and subordinate.
+    rgb = _parse_color(color)
+    if rgb and not color.startswith("#"):
+        color_anchor = f"{color} (hex {'#%02x%02x%02x' % rgb})"
+    else:
+        color_anchor = color
     recolor_prompt = (
-        f"Change the color of {target} to {color}. Keep the product's shape, "
-        "geometry, material texture, surface finish, logo and label text, "
-        "background, shadows and lighting EXACTLY the same — modify ONLY the "
-        "color. Do not add, remove, move or resize any object."
+        f"Recolor {target} to {color_anchor}. This is a bold, decisive color "
+        f"change: in the result, {target} must be clearly and completely "
+        f"{color_anchor}, with its original color fully replaced everywhere "
+        f"it appears. While recoloring, keep the shape, material texture, "
+        "logo and label text, background and lighting unchanged — the color "
+        "is the only thing that changes."
     )
     if request.custom_prompt and request.custom_prompt.strip():
         recolor_prompt += f" {request.custom_prompt.strip()}"

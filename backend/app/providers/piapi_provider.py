@@ -913,11 +913,20 @@ class PiAPIProvider(BaseProvider):
         # sending them risks a 400, so we never add them here. Anti-hallucination
         # for Kontext must be expressed in the POSITIVE prompt (which is also
         # how instruction-edit models like Kontext are meant to be steered).
+
+        # Kontext rejects inputs larger than 2048×2048 with a 400 ("input
+        # image size too large") — seen repeatedly in prod on 2026-07-02 for
+        # phone-camera uploads. Auto-downscale before submitting; on any
+        # resize failure the helper returns the original URL (fail-open).
+        image_url = await self._resize_image_for_trellis(
+            self._resolve_image_url(params["image_url"]), max_dim=2048
+        )
+
         payload = {
             "model": PIAPI_MODELS["flux_kontext"],
             "task_type": "kontext",
             "input": {
-                "image": self._resolve_image_url(params["image_url"]),
+                "image": image_url,
                 "prompt": params["prompt"],
                 "width": params.get("width", 1024),
                 "height": params.get("height", 768),
@@ -996,7 +1005,9 @@ class PiAPIProvider(BaseProvider):
         """
         Download image, resize to fit within max_dim × max_dim, re-upload to GCS.
         Returns a public URL of the resized image (or original if already small enough).
-        Trellis rejects images larger than 1024×1024.
+        Trellis rejects images larger than 1024×1024; Kontext rejects larger
+        than 2048×2048 (callers pass the matching max_dim). Fail-open: any
+        download/resize error returns the original URL.
         """
         try:
             from PIL import Image as PILImage
@@ -1026,7 +1037,7 @@ class PiAPIProvider(BaseProvider):
             if gcs.enabled:
                 blob_name = f"temp/trellis_resize_{uuid.uuid4().hex}.jpg"
                 resized_url = gcs.upload_public(resized_bytes, blob_name, "image/jpeg")
-                logger.info(f"[trellis_3d] Resized {w}x{h} → {new_w}x{new_h}, re-uploaded to {resized_url}")
+                logger.info(f"[image_resize] Resized {w}x{h} → {new_w}x{new_h} (max_dim={max_dim}), re-uploaded to {resized_url}")
                 return resized_url
 
             # Fallback: base64 data URL
@@ -1034,7 +1045,7 @@ class PiAPIProvider(BaseProvider):
             return f"data:image/jpeg;base64,{b64}"
 
         except Exception as exc:
-            logger.warning(f"[trellis_3d] Could not resize image {image_url}: {exc} — using original")
+            logger.warning(f"[image_resize] Could not resize image {image_url}: {exc} — using original")
             return image_url
 
     async def trellis_3d(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -1998,8 +2009,9 @@ class PiAPIProvider(BaseProvider):
 
     async def background_removal(self, params: Dict[str, Any]) -> Dict[str, Any]:
         # Calls PiAPI image-toolkit background-remove — higher quality on
-        # complex subjects (hair, fine edges) than local rembg. Router falls
-        # through to Vertex's rembg fallback on 500.
+        # complex subjects (hair, fine edges) than local rembg. The router
+        # chain has vertex_ai (local rembg) as backup since 2026-07, so a
+        # fast failure here fails over instead of hard-failing.
         # NOTE: PiAPI image-toolkit expects the input key `image` (URL or
         # base64), NOT `image_url`. The wrong key returns HTTP 500.
         self._log_request("background_removal", params)
@@ -2022,7 +2034,14 @@ class PiAPIProvider(BaseProvider):
             "input": input_block,
         }
 
-        return await self._submit_and_poll(payload)
+        # Users expect a cutout in 10-15s; do NOT inherit the generic 600s
+        # image poll floor. A stalled image-toolkit queue should fail fast so
+        # the router falls over to the local rembg backup within a minute
+        # instead of spinning for up to 10 minutes (prod issue 2026-07).
+        return await self._submit_and_poll(
+            payload,
+            max_wait_seconds=int(os.getenv("BG_REMOVAL_TIMEOUT_SEC", "60")),
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # VIDEO BACKGROUND REMOVE (Qubico video-toolkit via PiAPI)
@@ -2119,8 +2138,16 @@ class PiAPIProvider(BaseProvider):
         # bad PiAPI days. Most calls finish in seconds, but the foreground
         # request is on the hook for whatever the upstream returns; the hook
         # lets the worker recover those rare long jobs.
+        # 2026-07: cap the foreground wait well below the generic 600s image
+        # floor — the UI promises 20-30s, and the router now has a vertex_ai
+        # (PIL Lanczos) backup to fail over to. The reclaim hook still
+        # recovers a PiAPI job that completes after we stopped waiting.
         _on_submit_up = _make_on_submit_wrapper(params.get("on_submit"), "piapi")
-        return await self._submit_and_poll(payload, on_submit=_on_submit_up)
+        return await self._submit_and_poll(
+            payload,
+            max_wait_seconds=int(os.getenv("UPSCALE_TIMEOUT_SEC", "90")),
+            on_submit=_on_submit_up,
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # TEXT TO SPEECH (F5-TTS via PiAPI)

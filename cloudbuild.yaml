@@ -93,10 +93,12 @@ steps:
       - 'all-traffic'
       - '--allow-unauthenticated'
 
-  # NOTE: The frontend is served by Firebase Hosting (global CDN), not Cloud Run.
-  # Build & deploy it with: cd frontend-vue && npm run build && firebase deploy --only hosting
-  # (The old build-frontend / push-frontend / deploy-frontend Cloud Run steps were
-  # removed — they double-deployed the SPA and cost build minutes + an idle service.)
+  # NOTE (updated 2026-07-03): prod vidgo.co is served by the vidgo-frontend
+  # Cloud Run service (nginx, frontend-vue/Dockerfile.prod) — NOT Firebase
+  # Hosting; the old Firebase note here was stale and misled debugging.
+  # Deploy the frontend with: bash gcp/deploy-service.sh --frontend
+  # (Frontend steps are intentionally absent from THIS pipeline so a backend
+  # push doesn't rebuild the SPA.)
 
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_BACKEND_SERVICE}:${BUILD_ID}'

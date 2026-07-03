@@ -15,6 +15,13 @@ FROM mirror.gcr.io/library/nginx:alpine
 # Copy built files
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Docker COPY preserves source-tree permission bits. Files under public/
+# were once committed with mode 700 (owner-only), so the nginx worker
+# (non-root) got 403 on /robots.txt, /sitemap.xml and every /static_assets/*
+# in prod (found 2026-07-03). Normalize unconditionally so a contributor's
+# umask can never break static serving again.
+RUN chmod -R a+rX /usr/share/nginx/html
+
 # Remove default nginx config
 RUN rm -f /etc/nginx/conf.d/default.conf
 

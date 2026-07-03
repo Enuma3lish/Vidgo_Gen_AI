@@ -125,14 +125,16 @@ class ProviderRouter:
         TaskType.T2V: {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
 
         # Image tasks — PiAPI primary, Pollo backup.
-        # UPSCALE + BACKGROUND_REMOVAL have NO Pollo endpoint, so they run
-        # PiAPI-only and surface a clean error on failure rather than routing
-        # to a backup that cannot serve them.
+        # UPSCALE + BACKGROUND_REMOVAL have NO Pollo endpoint. 2026-07: they
+        # now fail over to vertex_ai's deterministic local implementations
+        # (rembg cutout / PIL Lanczos upscale) instead of hard-failing — the
+        # PiAPI image-toolkit queue intermittently stalls for minutes and
+        # these tools are expected to answer in seconds (prod issue 1️⃣/2️⃣).
         TaskType.T2I:                {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
         TaskType.I2I:                {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
         TaskType.EFFECTS:            {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},
-        TaskType.UPSCALE:            {"primary": "piapi", "backup": None,    "tertiary": None, "fallback": None},
-        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi", "backup": None,    "tertiary": None, "fallback": None},
+        TaskType.UPSCALE:            {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
+        TaskType.BACKGROUND_REMOVAL: {"primary": "piapi", "backup": "vertex_ai", "tertiary": None, "fallback": None},
 
         # Specialized tasks
         TaskType.INTERIOR:    {"primary": "piapi", "backup": "pollo", "tertiary": None, "fallback": None},

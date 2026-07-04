@@ -1,5 +1,28 @@
+# Extract the path portion of $request_uri (drops any ?query), used to inject
+# a server-side canonical below. Placed at http-level (conf.d/*.conf is
+# included inside the http block by the default nginx.conf).
+map $request_uri $vidgo_canonical_path {
+    "~^(?<p>[^?]*)" $p;
+    default          "/";
+}
+
+# 301 www.vidgo.co → vidgo.co. Both hosts are Cloud Run domain-mapped to the
+# same vidgo-frontend service, so without this every SPA page was reachable
+# at two URLs (identical HTML on both), and Google Search Console started
+# reporting "duplicate — Google chose a different canonical" on 2026-07-04.
+# The JS-side applySeo() emits a canonical pointing at the apex, but the raw
+# HTML has none, so a server-side redirect is the definitive fix. Redirects
+# ALL paths (assets, /api, /static, robots.txt, sitemap.xml).
 server {
     listen 80;
+    server_name www.vidgo.co;
+    # Cloud Run terminates TLS; the container only speaks HTTP internally.
+    # Hard-coded https:// keeps browsers from downgrading on the redirect hop.
+    return 301 https://vidgo.co$request_uri;
+}
+
+server {
+    listen 80 default_server;
     server_name localhost;
     root /usr/share/nginx/html;
     index index.html;
@@ -68,6 +91,16 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         expires -1;
     }
+
+    # Server-side canonical injection. The SPA's applySeo() rewrites the
+    # canonical after router.afterEach, but Google's raw HTML fetch (before
+    # JS renders) sees identical content on every path — which caused GSC
+    # "duplicate — user hasn't selected a canonical" on 2026-07-04. Injecting
+    # a path-specific canonical into the served HTML pins one URL per page
+    # even for crawlers that don't fully render JS. $vidgo_canonical_path
+    # strips any ?query so utm_source/lang variants collapse to one URL.
+    sub_filter '<meta name="robots"' '<link rel="canonical" href="https://vidgo.co$vidgo_canonical_path" /><meta name="robots"';
+    sub_filter_once on;
 
     # SPA routing - always serve index.html for non-file requests
     location / {

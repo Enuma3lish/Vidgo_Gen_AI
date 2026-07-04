@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "browserslist": [
+    "defaults",
+    "safari >= 14",
+    "ios_saf >= 14",
+    "not dead"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build",

@@ -121,7 +121,10 @@ demo_count() {  # demo material count for a tool_type (readiness probe)
 # ─────────────────────────────────────────────────────────────────────────────
 cmd_demos() {
   local MODE="smoke" TOOLS="t2i,t2v,avatar" SMOKE_LIMIT=2
-  declare -A CRED=( [t2i]=8 [t2v]=130 [avatar]=80 )
+  # Per-generation credit estimate. Function instead of `declare -A`: macOS
+  # ships bash 3.2 (no associative arrays) and the shebang is /bin/bash —
+  # the array made every local run die with "t2i: unbound variable".
+  _demo_cred() { case "$1" in t2i) echo 8 ;; t2v) echo 130 ;; avatar) echo 80 ;; *) echo "" ;; esac; }
   while [[ $# -gt 0 ]]; do case "$1" in
     --full)  MODE="full"; shift ;;
     --smoke) MODE="smoke"; shift ;;
@@ -129,13 +132,13 @@ cmd_demos() {
     --yes|-y) AUTO_YES=true; shift ;;
     *) die "demos: unknown flag '$1'" ;;
   esac; done
-  for t in ${TOOLS//,/ }; do [[ -n "${CRED[$t]:-}" ]] || die "demos: unknown tool '$t' (t2i|t2v|avatar)"; done
+  for t in ${TOOLS//,/ }; do [[ -n "$(_demo_cred "$t")" ]] || die "demos: unknown tool '$t' (t2i|t2v|avatar)"; done
 
   preflight
   local PRESET_COUNT=40 LANGS=2 per_tool total=0
   [[ "${MODE}" == "smoke" ]] && per_tool=$(( SMOKE_LIMIT * LANGS )) || per_tool=$(( PRESET_COUNT * LANGS ))
   echo; warn "demos  |  mode=${MODE}  |  writes Material DB directly (no service redeploy)"
-  for t in ${TOOLS//,/ }; do local c=$(( per_tool * CRED[$t] )); total=$(( total + c )); warn "  ${t}: ${per_tool} generations  ~${c} credits"; done
+  for t in ${TOOLS//,/ }; do local c=$(( per_tool * $(_demo_cred "$t") )); total=$(( total + c )); warn "  ${t}: ${per_tool} generations  ~${c} credits"; done
   warn "  TOTAL: ~${total} credits (idempotent — cached presets are skipped)"; echo
   confirm "Spend real credits and proceed?" || die "Cancelled."
 

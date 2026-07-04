@@ -3,6 +3,13 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  // Oldest supported browsers: Safari/iOS 14 + evergreen Chrome/Edge/Firefox.
+  // Keep in sync with "browserslist" in package.json (drives autoprefixer).
+  // IE cannot run Vue 3 at all (needs Proxy); index.html shows a notice instead.
+  build: {
+    target: ['es2019', 'safari14', 'chrome87', 'firefox78', 'edge88'],
+    cssTarget: 'safari14'
+  },
   plugins: [vue()],
   resolve: {
     alias: {

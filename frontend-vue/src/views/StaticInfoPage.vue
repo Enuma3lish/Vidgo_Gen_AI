@@ -16,7 +16,7 @@ const { L } = useLocalized()
 // window, data handling, contact, governing law).
 
 const COMPANY_NAME = 'VidGo (Enuma3lish)'
-const CONTACT_EMAIL = 'support@vidgo.ai'
+const CONTACT_EMAIL = 'vidgo168@gmail.com'
 const SITE_URL = 'https://vidgo.co'
 const LAST_UPDATED = '2026-05-07'
 

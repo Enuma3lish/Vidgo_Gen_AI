@@ -272,6 +272,8 @@ const currentAdminEmail = computed(() => authStore.user?.email || '')
   display: grid;
   grid-template-columns: 240px 1fr;
   min-height: 100vh;
+  /* iOS/iPadOS Safari: 100vh overshoots behind the toolbar; dvh tracks it */
+  min-height: 100dvh;
   background: #09090b;
   color: #f5f5fa;
 }
@@ -281,6 +283,7 @@ const currentAdminEmail = computed(() => authStore.user?.email || '')
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   background: #0c0c12;
   display: flex;
@@ -386,6 +389,7 @@ const currentAdminEmail = computed(() => authStore.user?.email || '')
   top: 0;
   z-index: 50;
   background: rgba(12, 12, 18, 0.92);
+  -webkit-backdrop-filter: blur(12px); /* Safari < 18 */
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   padding: 10px 28px;

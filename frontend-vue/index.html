@@ -26,5 +26,15 @@
   <body class="antialiased">
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
+    <!-- IE / pre-ES-module browsers skip type=module and run this instead of
+         showing a blank page. ES5 only — IE11 must be able to parse it. -->
+    <script nomodule>
+      (function () {
+        var el = document.createElement('div');
+        el.setAttribute('style', 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#1a1a2e;color:#fff;padding:16px 20px;font-family:sans-serif;font-size:14px;line-height:1.6;text-align:center;');
+        el.innerHTML = '您的瀏覽器版本過舊，無法執行 VidGo。請改用最新版 Chrome、Edge、Safari 或 Firefox。<br>Your browser is too old to run VidGo. Please use the latest Chrome, Edge, Safari, or Firefox.';
+        document.body.appendChild(el);
+      })();
+    </script>
   </body>
 </html>

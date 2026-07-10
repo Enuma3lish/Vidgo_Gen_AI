@@ -16,6 +16,7 @@
     "condition": {
       "tagState": "ANY",
       "versionNamePrefixes": [
+        "sha256:44a4a68e65959a8fbf976a1fa85c16d6275cf189609c1f0c53ccb40f",
         "sha256:7237e2427faec031f8ab3da508bd2899f42d07df5663dbb2ddfa6723c",
         "sha256:18e6d04ea7b5cc30d30ab30720ce64b137b446ca6d8a86d38b99e10ea",
         "sha256:9e767f6ae3c6759fc28ae5d275c81e9f41ce79d6ed8c0a5de3f73ddd3",

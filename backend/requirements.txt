@@ -11,6 +11,15 @@ bcrypt==4.0.1
 python-multipart>=0.0.6
 httpx>=0.28.1
 redis>=5.0.1
+# arq re-added 2026-07-10: removed on 2026-06-15 ("worker retired in favor of
+# Cloud Scheduler -> /api/v1/tasks/*") but that migration never completed —
+# the Cloud Scheduler API was never enabled and nothing calls the tasks
+# endpoints. vidgo-worker's ARQ crons (reclaim / auto-renew / monthly reset /
+# bonus cleanup) are still the ONLY scheduler in prod, and removing arq made
+# every newer backend image worker-incompatible (`exec: arq: not found`,
+# exit 127) — which is why the worker was stuck on a 2026-06-16 pinned image.
+# Keep arq until the Cloud Scheduler migration is actually finished.
+arq>=0.26.0
 
 python-decouple>=3.8
 email-validator>=2.3.0

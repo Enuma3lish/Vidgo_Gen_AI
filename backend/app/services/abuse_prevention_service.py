@@ -141,6 +141,75 @@ class AbusePreventionService:
             60,
         )
 
+    async def check_paypal_capture_ip(self, ip_address: str) -> AbuseCheckResult:
+        """Throttle the unauthenticated PayPal return-leg capture endpoint —
+        each hit costs a DB order scan + a PayPal API call, and a legitimate
+        buyer needs at most a couple of attempts."""
+        return await self._check_limit(
+            f"abuse:paypal_capture:{ip_address}",
+            10,
+            10 * 60,
+        )
+
+    # ── Demo upload (/demo/upload) ───────────────────────────────────────
+    # The endpoint stores files into PUBLIC GCS and is reachable without
+    # auth. Without limits it is a free image host + storage-cost DoS
+    # (2026-07-10 audit). It is ALSO the shared uploader for logged-in tool
+    # pages (frontend ImageUploader), so callers pass different identities
+    # and limits: anonymous → strict per-IP; authenticated → generous
+    # per-user (per-IP would collateral-block offices/CGNAT). Two count
+    # windows (burst + daily) plus a daily byte budget. Fail-open on Redis
+    # trouble, like every other check here — an outage must degrade to
+    # "no limiter", not "upload broken".
+
+    async def check_demo_upload(
+        self, ident: str, *, burst_limit: int, daily_limit: int
+    ) -> AbuseCheckResult:
+        burst = await self._check_limit(
+            f"abuse:demo_upload:10m:{ident}",
+            burst_limit,
+            10 * 60,
+        )
+        if not burst.allowed:
+            return burst
+        return await self._check_limit(
+            f"abuse:demo_upload:1d:{ident}",
+            daily_limit,
+            24 * 60 * 60,
+        )
+
+    async def consume_demo_upload_bytes(
+        self, ident: str, nbytes: int, budget_mb: int
+    ) -> AbuseCheckResult:
+        """Charge `nbytes` against the identity's rolling daily byte budget.
+
+        Called AFTER the body is read (that bandwidth is already spent) but
+        BEFORE the GCS upload, so an over-budget caller can't keep growing
+        the public bucket. The counter increments even on the denied request
+        — intentional: a blocked abuser stays blocked for the window.
+        """
+        if budget_mb <= 0 or nbytes <= 0:
+            return AbuseCheckResult(True)
+        if not self.redis:
+            logger.warning("Redis unavailable; allowing demo-upload byte check for %s", ident)
+            return AbuseCheckResult(True)
+        key = f"abuse:demo_upload:bytes:{ident}"
+        try:
+            total = await self.redis.incrby(key, int(nbytes))
+            if total == int(nbytes):
+                await self.redis.expire(key, 24 * 60 * 60)
+            ttl = await self.redis.ttl(key)
+        except Exception as exc:
+            logger.warning("Redis demo-upload byte check failed for %s: %s", ident, exc)
+            return AbuseCheckResult(True)
+        if total > int(budget_mb) * 1024 * 1024:
+            return AbuseCheckResult(
+                allowed=False,
+                message="Daily upload volume exceeded. Please try again tomorrow.",
+                retry_after_seconds=ttl if ttl and ttl > 0 else 24 * 60 * 60,
+            )
+        return AbuseCheckResult(True)
+
     async def verify_recaptcha_token(self, token: Optional[str], ip_address: Optional[str] = None) -> AbuseCheckResult:
         if not settings.RECAPTCHA_REQUIRED:
             return AbuseCheckResult(True)

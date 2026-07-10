@@ -29,6 +29,7 @@ import {
   type SurfaceCeiling,
   type SurfaceWall,
   type SimulationVariant,
+  type BatchRenderGroup,
 } from '@/api/interior'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
@@ -71,6 +72,146 @@ const videoUrl = ref<string | null>(null)
 const modelUrl = ref<string | null>(null)
 const simulationVariants = ref<SimulationVariant[]>([])
 const expandedSimUrl = ref<string | null>(null)
+
+// ─── 全屋批次 (whole-house batch, 2026-07-10 owner request) ───────────
+// Upload one overall plan + per-room plans, apply ONE shared effect to all,
+// 1-4 variants each; finished renders can be assembled into a tour video.
+const batchMode = ref(false)
+interface BatchItem { id: number; file: File; previewUrl: string; label: string }
+const batchItems = ref<BatchItem[]>([])
+let _batchIdSeq = 1
+const batchFileInput = ref<HTMLInputElement | null>(null)
+const variationCount = ref(1)
+const batchGroups = ref<BatchRenderGroup[]>([])
+const tourVideoUrl = ref<string | null>(null)
+const tourGenerating = ref(false)
+const BATCH_MAX_IMAGES = 8
+const BATCH_MAX_TOTAL = 16
+
+const roomLabelOptions = computed(() => [
+  { value: 'overall',        label: L('整體平面圖', 'Overall plan', '全体間取り図', '전체 평면도', 'Plano general') },
+  { value: 'living_room',    label: L('客廳', 'Living room', 'リビング', '거실', 'Salón') },
+  { value: 'dining_room',    label: L('餐廳', 'Dining room', 'ダイニング', '다이닝룸', 'Comedor') },
+  { value: 'kitchen',        label: L('廚房', 'Kitchen', 'キッチン', '주방', 'Cocina') },
+  { value: 'master_bedroom', label: L('主臥', 'Master bedroom', '主寝室', '안방', 'Dorm. principal') },
+  { value: 'bedroom',        label: L('臥室', 'Bedroom', '寝室', '침실', 'Dormitorio') },
+  { value: 'bathroom',       label: L('浴室', 'Bathroom', 'バスルーム', '욕실', 'Baño') },
+  { value: 'study',          label: L('書房', 'Study', '書斎', '서재', 'Estudio') },
+  { value: 'balcony',        label: L('陽台', 'Balcony', 'バルコニー', '발코니', 'Balcón') },
+  { value: 'other',          label: L('其他', 'Other', 'その他', '기타', 'Otro') },
+])
+function roomLabelText(v?: string | null): string {
+  return roomLabelOptions.value.find(o => o.value === v)?.label
+    || v
+    || L('房間', 'Room', '部屋', '방', 'Sala')
+}
+
+function onBatchFilesSelected(e: Event) {
+  const files = Array.from((e.target as HTMLInputElement).files || [])
+  for (const f of files) {
+    if (batchItems.value.length >= BATCH_MAX_IMAGES) break
+    if (!f.type.startsWith('image/')) continue
+    batchItems.value.push({
+      id: _batchIdSeq++,
+      file: f,
+      previewUrl: URL.createObjectURL(f),
+      // First plan defaults to the overall layout, the rest to rooms.
+      label: batchItems.value.length === 0 ? 'overall' : 'living_room',
+    })
+  }
+  ;(e.target as HTMLInputElement).value = ''
+}
+function removeBatchItem(id: number) {
+  const it = batchItems.value.find(b => b.id === id)
+  if (it) { try { URL.revokeObjectURL(it.previewUrl) } catch { /* noop */ } }
+  batchItems.value = batchItems.value.filter(b => b.id !== id)
+}
+
+const renderUnitCost = computed(() => {
+  const tier = tiers.value.find(tt => tt.id === 'render')
+  return tier ? tier.credits : 40
+})
+const batchCreditCost = computed(() =>
+  renderUnitCost.value * Math.max(1, batchItems.value.length) * variationCount.value
+)
+const batchOverCap = computed(() => batchItems.value.length * variationCount.value > BATCH_MAX_TOTAL)
+const batchDisabled = computed(() => {
+  if (!batchItems.value.length || batchOverCap.value) return true
+  if (magicMode.value) return !magicPrompt.value.trim()
+  return false
+})
+
+async function generateBatch() {
+  if (batchDisabled.value || isRunning.value) return
+  status.value = 'running'
+  statusText.value = L(
+    `批次生成中（${batchItems.value.length} 張 × ${variationCount.value}）… 並行處理,約 1-8 分鐘`,
+    `Batch rendering (${batchItems.value.length} plans × ${variationCount.value})… ~1-8 min`,
+    `一括生成中（${batchItems.value.length}枚 × ${variationCount.value}）… 約1〜8分`,
+    `일괄 생성 중 (${batchItems.value.length}장 × ${variationCount.value})… 약 1~8분`,
+    `Generando lote (${batchItems.value.length} × ${variationCount.value})… ~1-8 min`,
+  )
+  batchGroups.value = []
+  tourVideoUrl.value = null
+  try {
+    const images: { image_url: string; room_label?: string }[] = []
+    for (const it of batchItems.value) {
+      const up = await toolsApi.uploadImage(it.file)
+      images.push({ image_url: up.url, room_label: it.label })
+    }
+    const res = await interiorApi.floorplanBatchRender({
+      images,
+      variation_count: variationCount.value,
+      magic_mode: magicMode.value,
+      prompt: magicMode.value ? (magicPrompt.value.trim() || undefined) : undefined,
+      surface_floor: surfaceFloor.value,
+      surface_ceiling: surfaceCeiling.value,
+      surface_wall: surfaceWall.value,
+      lighting_tone: lightingTone.value,
+      language: isZh.value ? 'zh' : 'en',
+    })
+    if (res.success && res.groups?.length) {
+      batchGroups.value = res.groups
+      status.value = 'done'
+      statusText.value = L('完成', 'Done', '完了', '완료', 'Listo')
+      if (res.credits_used) creditsStore.deductCredits(res.credits_used)
+      uiStore.showSuccess(t('common.success') || 'Success')
+    } else {
+      status.value = 'error'
+      statusText.value = L('生成失敗', 'Failed', '生成失敗', '생성 실패', 'Fallo')
+      uiStore.showError(res.error || L('批次生成失敗', 'Batch rendering failed', '一括生成に失敗', '일괄 생성 실패', 'Fallo del lote'))
+    }
+  } catch (e: any) {
+    status.value = 'error'
+    statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')
+    uiStore.showError(extractApiError(e, L('批次生成失敗', 'Batch rendering failed', '一括生成に失敗', '일괄 생성 실패', 'Fallo del lote')))
+  }
+}
+
+// 全屋影片: assemble each room's FIRST result into one tour video.
+const tourReady = computed(() => batchGroups.value.filter(g => g.results.length > 0).length >= 2)
+async function generateTourVideo() {
+  if (!tourReady.value || tourGenerating.value) return
+  tourGenerating.value = true
+  try {
+    const withResults = batchGroups.value.filter(g => g.results.length > 0)
+    const res = await interiorApi.houseTourVideo(
+      withResults.map(g => g.results[0]),
+      withResults.map(g => g.room_label || 'room'),
+    )
+    if (res.success && res.video_url) {
+      tourVideoUrl.value = res.video_url
+      if (res.credits_used) creditsStore.deductCredits(res.credits_used)
+      uiStore.showSuccess(t('common.success') || 'Success')
+    } else {
+      uiStore.showError(res.error || L('影片合成失敗', 'Video assembly failed', '動画合成に失敗', '영상 합성 실패', 'Fallo del vídeo'))
+    }
+  } catch (e: any) {
+    uiStore.showError(extractApiError(e, L('影片合成失敗', 'Video assembly failed', '動画合成に失敗', '영상 합성 실패', 'Fallo del vídeo')))
+  } finally {
+    tourGenerating.value = false
+  }
+}
 
 // ─── Catalog (tiers) from the backend ────────────────────────────────
 const tiers = ref<FloorplanTier[]>([])
@@ -140,6 +281,7 @@ async function ensureImageUrl(): Promise<string | null> {
 }
 
 async function generate() {
+  if (batchMode.value) return generateBatch()
   if (disabled.value || isRunning.value) return
   status.value = 'running'
   statusText.value =
@@ -240,23 +382,29 @@ const pageSubtitle = computed(() => L(
   'Sube un plano o foto; la IA bloquea la distribución y muebles, y solo reestiliza luz + texturas. Modo mágico para escribir libremente.',
 ))
 const hasResult = computed(() => {
-  if (isSimulationTier.value) return simulationVariants.value.length > 0
-  if (isVideoTier.value) return !!videoUrl.value
-  return !!renderImageUrl.value
+  if (batchMode.value) return batchGroups.value.length > 0
+  // Tier-specific checks first, but ALWAYS fall through to "anything we
+  // hold" (D8, 2026-07-10): resultTier isn't persisted across a refresh, so
+  // recovery of a video/video_3d job landed videoUrl while resultTier was
+  // back at its 'render' default — the strict tier check returned false and
+  // the result pane stayed empty even though the video was recovered.
+  if (isSimulationTier.value && simulationVariants.value.length > 0) return true
+  if (isVideoTier.value && videoUrl.value) return true
+  return !!(renderImageUrl.value || videoUrl.value || simulationVariants.value.length > 0)
 })
 </script>
 
 <template>
   <PiapiPlayground
-    :eta-seconds="resultTier === 'render' ? 60 : resultTier === 'simulation' ? 120 : resultTier === 'video_3d' ? 1200 : 720"
+    :eta-seconds="batchMode ? 240 : resultTier === 'render' ? 60 : resultTier === 'simulation' ? 120 : resultTier === 'video_3d' ? 1200 : 720"
     :title="pageTitle"
     :subtitle="pageSubtitle"
     :status="status"
     :status-text="statusText"
-    :credit-cost="creditCost"
+    :credit-cost="batchMode ? batchCreditCost : creditCost"
     :generate-label="L('開始生成', 'Generate', '生成開始', '생성 시작', 'Generar')"
     :generate-label-running="L('生成中…', 'Generating…', '生成中…', '생성 중…', 'Generando…')"
-    :disabled="disabled"
+    :disabled="batchMode ? batchDisabled : disabled"
     @generate="generate"
   >
     <template #inputs>
@@ -273,16 +421,87 @@ const hasResult = computed(() => {
         </ul>
       </div>
 
+      <!-- 單張 / 全屋批次 mode toggle (2026-07-10 owner request) -->
       <div>
-        <label class="pp-field-label">{{ L('平面圖 / 房間照片 *', 'Floor plan / room photo *', '間取り図・部屋写真 *', '평면도 / 방 사진 *', 'Plano / foto *') }}</label>
-        <ImageUploader
-          tool-type="room_redesign"
-          v-model="imageInput"
-          :label="L('點擊或拖放圖片', 'Click or drag an image', 'クリックまたはドラッグ', '클릭 또는 드래그', 'Haz clic o arrastra')"
-        />
+        <label class="pp-field-label">{{ L('生成模式', 'Generation mode', '生成モード', '생성 모드', 'Modo') }}</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" @click="batchMode = false"
+            class="p-3 rounded-lg text-left transition-colors"
+            :style="!batchMode
+              ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
+              : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
+          >
+            <div class="text-[13px] font-semibold mb-1">{{ !batchMode ? '✓ ' : '' }}{{ L('單張', 'Single', '1枚', '단일', 'Única') }}</div>
+            <div class="text-[11px] leading-snug opacity-80">{{ L('一張圖 → 效果圖 / 模擬 / 影片 / 3D 模型。', 'One image → render / simulation / video / 3D model.', '1枚 → 効果図/シミュレーション/動画/3Dモデル。', '한 장 → 효과도/시뮬레이션/영상/3D 모델.', 'Una imagen → render / simulación / vídeo / 3D.') }}</div>
+          </button>
+          <button type="button" @click="batchMode = true"
+            class="p-3 rounded-lg text-left transition-colors"
+            :style="batchMode
+              ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
+              : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
+          >
+            <div class="text-[13px] font-semibold mb-1">{{ batchMode ? '✓ ' : '' }}{{ L('全屋批次', 'Whole house', '全戸一括', '전체 일괄', 'Casa completa') }}</div>
+            <div class="text-[11px] leading-snug opacity-80">{{ L('整體 + 各房間平面圖,同一效果一次生成,可合成全屋影片。', 'Overall + per-room plans, one shared effect, plus a whole-house tour video.', '全体+各部屋の間取り図を同一効果で一括生成、全戸動画も。', '전체+각 방 평면도를 동일 효과로 일괄 생성, 투어 영상까지.', 'Plano general + habitaciones, un solo efecto, y vídeo de la casa.') }}</div>
+          </button>
+        </div>
       </div>
 
-      <div>
+      <template v-if="!batchMode">
+        <div>
+          <label class="pp-field-label">{{ L('平面圖 / 房間照片 *', 'Floor plan / room photo *', '間取り図・部屋写真 *', '평면도 / 방 사진 *', 'Plano / foto *') }}</label>
+          <ImageUploader
+            tool-type="room_redesign"
+            v-model="imageInput"
+            :label="L('點擊或拖放圖片', 'Click or drag an image', 'クリックまたはドラッグ', '클릭 또는 드래그', 'Haz clic o arrastra')"
+          />
+        </div>
+      </template>
+
+      <template v-else>
+        <div>
+          <label class="pp-field-label">{{ L('平面配置圖（可多張）*', 'Floor plans (multiple) *', '間取り図（複数可）*', '평면도 (여러 장) *', 'Planos (varios) *') }}</label>
+          <input type="file" accept="image/*" multiple class="hidden" ref="batchFileInput" @change="onBatchFilesSelected" />
+          <button type="button" @click="batchFileInput?.click()"
+            class="w-full p-4 rounded-lg text-[13px] transition-colors"
+            style="background:#0a0a0f; border:1px dashed rgba(124,58,237,0.5); color:#c4b5fd;"
+            :disabled="batchItems.length >= BATCH_MAX_IMAGES"
+          >
+            + {{ L(`加入平面圖（可多選,最多 ${BATCH_MAX_IMAGES} 張）`, `Add floor plans (multi-select, up to ${BATCH_MAX_IMAGES})`, `間取り図を追加（最大${BATCH_MAX_IMAGES}枚）`, `평면도 추가 (최대 ${BATCH_MAX_IMAGES}장)`, `Añadir planos (hasta ${BATCH_MAX_IMAGES})`) }}
+          </button>
+          <div v-if="batchItems.length" class="mt-2 space-y-2">
+            <div v-for="it in batchItems" :key="it.id"
+              class="flex items-center gap-2 p-2 rounded-lg"
+              style="background:#0a0a0f; border:1px solid rgba(255,255,255,0.08);">
+              <img :src="it.previewUrl" class="w-14 h-14 object-cover rounded flex-shrink-0" />
+              <select v-model="it.label" class="pp-select flex-1 min-w-0">
+                <option v-for="o in roomLabelOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+              </select>
+              <button type="button" @click="removeBatchItem(it.id)" class="px-2 text-lg flex-shrink-0" style="color:#f87171;">✕</button>
+            </div>
+          </div>
+          <p class="pp-field-help">{{ L('建議:1 張整體平面圖 + 各房間平面圖(客廳、餐廳、廚房…)。所有圖片會套用下方同一組效果,確保整屋風格一致。', 'Tip: one overall plan + per-room plans (living, dining, kitchen…). Every plan uses the SAME effect below, so the whole house stays consistent.', 'ヒント:全体図1枚+各部屋の図。全て下の同一効果を適用し、家全体の統一感を保証。', '팁: 전체도 1장 + 각 방 평면도. 모두 아래 동일 효과가 적용되어 집 전체 스타일이 일치합니다.', 'Consejo: un plano general + planos por habitación. Todos usan el MISMO efecto de abajo.') }}</p>
+        </div>
+
+        <div>
+          <label class="pp-field-label">{{ L('每張圖生成數量（1-4）', 'Results per plan (1-4)', '1枚あたりの生成数（1-4）', '장당 생성 수 (1-4)', 'Resultados por plano (1-4)') }}</label>
+          <div class="grid grid-cols-4 gap-2">
+            <button v-for="n in 4" :key="n" type="button" @click="variationCount = n"
+              class="py-2 rounded-lg text-[13px] font-semibold transition-colors"
+              :style="variationCount === n
+                ? 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'
+                : 'background:#0a0a0f; color:#94949f; border:1px solid rgba(255,255,255,0.08);'"
+            >{{ n }}</button>
+          </div>
+          <p v-if="batchOverCap" class="pp-field-help" style="color:#f87171;">
+            {{ L(`張數 × 生成數不可超過 ${BATCH_MAX_TOTAL},請減少張數或生成數。`, `plans × results must be ≤ ${BATCH_MAX_TOTAL} — reduce one of them.`, `枚数×生成数は${BATCH_MAX_TOTAL}以下にしてください。`, `장수×생성수는 ${BATCH_MAX_TOTAL} 이하여야 합니다.`, `planos × resultados debe ser ≤ ${BATCH_MAX_TOTAL}.`) }}
+          </p>
+          <p v-else class="pp-field-help">
+            {{ L(`共 ${batchItems.length || 0} 張 × ${variationCount} = ${(batchItems.length || 0) * variationCount} 個渲染`, `Total: ${batchItems.length || 0} × ${variationCount} = ${(batchItems.length || 0) * variationCount} renders`, `合計 ${(batchItems.length || 0) * variationCount} レンダー`, `총 ${(batchItems.length || 0) * variationCount}개 렌더`, `Total: ${(batchItems.length || 0) * variationCount} renders`) }}
+          </p>
+        </div>
+      </template>
+
+      <div v-if="!batchMode">
         <label class="pp-field-label">{{ L('想要的結果 *', 'What result do you want? *', '希望する結果 *', '원하는 결과 *', '¿Qué resultado quieres? *') }}</label>
         <select v-model="resultTier" class="pp-select">
           <option value="render">{{ L('3D 效果圖（單張）', '3D render (single image)', '3D効果図（1枚）', '3D 효과도 (단일)', 'Render 3D (única)') }}</option>
@@ -383,8 +602,50 @@ const hasResult = computed(() => {
     </template>
 
     <template v-if="hasResult" #result>
+      <!-- 全屋批次 results: per-room groups + whole-house tour video -->
+      <template v-if="batchMode && batchGroups.length">
+        <div class="w-full max-w-[720px] space-y-4">
+          <div v-for="(g, gi) in batchGroups" :key="gi" class="space-y-1.5">
+            <div class="text-[12px] font-semibold" style="color:#ddd6fe;">
+              {{ roomLabelText(g.room_label) }}
+              <span v-if="!g.results.length" style="color:#f87171;">
+                — {{ L('生成失敗（該部分已退點）', 'failed (that portion was refunded)', '生成失敗（該当分は返却済み）', '생성 실패 (해당 부분 환불됨)', 'falló (esa parte fue reembolsada)') }}
+              </span>
+            </div>
+            <div v-if="g.results.length" class="grid grid-cols-2 gap-2">
+              <img v-for="u in g.results" :key="u" :src="u" loading="lazy"
+                class="w-full rounded-lg" style="border:1px solid rgba(124,58,237,0.25);" />
+            </div>
+          </div>
+
+          <div class="pt-3 flex flex-col items-center gap-3" style="border-top:1px solid rgba(255,255,255,0.08);">
+            <button type="button" @click="generateTourVideo"
+              :disabled="!tourReady || tourGenerating"
+              class="px-6 py-2.5 rounded-xl text-[13px] font-semibold transition-colors"
+              :style="(!tourReady || tourGenerating)
+                ? 'background:#141420; color:#94949f; border:1px solid rgba(255,255,255,0.06); opacity:0.6;'
+                : 'background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color:#fff;'"
+            >
+              {{ tourGenerating
+                ? L('全屋影片合成中…', 'Assembling tour video…', '全戸動画を合成中…', '투어 영상 합성 중…', 'Montando el vídeo…')
+                : L('🎬 生成全屋導覽影片（20 點）', '🎬 Generate whole-house tour video (20 cr)', '🎬 全戸ツアー動画を生成（20pt）', '🎬 전체 투어 영상 생성 (20크레딧)', '🎬 Generar vídeo de la casa (20 cr)') }}
+            </button>
+            <p v-if="!tourReady" class="text-[11px]" style="color:#94949f;">
+              {{ L('至少需要 2 個房間的成功渲染才能合成影片。', 'Needs successful renders for at least 2 rooms.', '2部屋以上の成功レンダーが必要です。', '최소 2개 방의 성공 렌더가 필요합니다.', 'Se necesitan al menos 2 habitaciones renderizadas.') }}
+            </p>
+            <video v-if="tourVideoUrl" :src="tourVideoUrl" controls autoplay loop
+              class="max-w-full rounded-lg" style="max-height: 400px;" />
+            <button v-if="tourVideoUrl" type="button"
+              @click="downloadAsset(tourVideoUrl!, `vidgo_house_tour_${Date.now()}.mp4`)"
+              class="text-[12px]" style="color:#a78bfa;">
+              ⬇ {{ L('下載全屋影片', 'Download tour video', 'ツアー動画をダウンロード', '투어 영상 다운로드', 'Descargar vídeo') }}
+            </button>
+          </div>
+        </div>
+      </template>
+
       <!-- Simulation tier: 4-up grid -->
-      <template v-if="isSimulationTier && simulationVariants.length">
+      <template v-else-if="isSimulationTier && simulationVariants.length">
         <div class="grid grid-cols-2 gap-2 w-full max-w-[640px]">
           <div v-for="v in simulationVariants" :key="v.image_url" class="flex flex-col items-center">
             <img :src="v.image_url" :alt="v.label" loading="lazy"

@@ -977,6 +977,17 @@ async def _refund_credits(db: AsyncSession, user, amount: int, service_type: str
             )
             remaining -= refund_this
             refunded_total += refund_this
+        # Poison the snapshot so a SECOND _refund_credits call in the same
+        # request is a no-op (2026-07-10). Several handlers refund and then
+        # run more DB work inside the same try; if THAT failed, the outer
+        # except refunded again — the stale snapshot let both succeed in
+        # full (e.g. a 300-credit avatar refund became 600). A truthy dict
+        # with zero-valued buckets keeps the "or {'subscription': amount}"
+        # fallback from resurrecting the refund.
+        try:
+            setattr(user, "_last_credit_deduction", {"refunded": 0})
+        except Exception:  # pragma: no cover - defensive
+            pass
         logger.info(f"Refunded {refunded_total} credits to user {user_id_str} for failed {service_type}")
     except Exception as e:
         logger.error(f"Failed to refund {amount} credits to user {user_id_str}: {e}")
@@ -1052,6 +1063,30 @@ async def _check_concurrent_limit(db: AsyncSession, user) -> tuple:
     return True, None
 
 
+# Service types whose deduct STARTS a long-running job — i.e. the flows that
+# write a pending_provider_tasks row and therefore occupy a concurrent slot.
+# Video models are covered by the "video_" prefix (tier_config VIDEO_CREDIT_COSTS);
+# this set lists the non-"video_"-prefixed long tools. Missing an entry fails
+# SAFE (that tool skips the gate = pre-2026-07-10 no-op behavior). Deliberately
+# NOT here: room_redesign_extra_variants (same-request top-up — counting the
+# request's own row would self-block basic users), bg_removal / image ops
+# (seconds, no row), interior design ops (single quick renders).
+_CONCURRENT_LIMITED_SERVICE_TYPES = {
+    "virtual_try_on",
+    "room_redesign",
+    "ai_avatar",
+    "image_upscale",
+    "product_recolor",
+    "claymation_video",
+    "claymation_image",
+    "interior_growth_video",
+    "interior_growth_video_3d",
+    "interior_simulation",
+    "interior_batch_render",
+    "interior_house_tour",
+}
+
+
 async def _check_and_deduct_credits(
     db: AsyncSession,
     user,
@@ -1078,10 +1113,19 @@ async def _check_and_deduct_credits(
         setattr(user, "_last_effective_credit_cost", 0)
         return True, None
 
-    # Check concurrent generation limit first
-    ok, err = await _check_concurrent_limit(db, user)
-    if not ok:
-        return False, err
+    # Concurrent-limit gate — LONG JOBS ONLY. The plan field is documented as
+    # 同時產生影片的數量限制, and check_concurrent_limit counts in-flight
+    # pending_provider_tasks rows (which only long tools create). Enforcing it
+    # on every deduct would let one in-flight video block a basic user
+    # (max_concurrent=1) from 3-credit background removals for its whole
+    # render — and the room-redesign variant TOP-UP would count the request's
+    # own just-opened row and self-block (silently collapsing multi-variant
+    # to 1 for basic users). So the gate fires only when this deduct STARTS
+    # a long job; quick image ops and same-request top-up keys skip it.
+    if service_type.startswith("video_") or service_type in _CONCURRENT_LIMITED_SERVICE_TYPES:
+        ok, err = await _check_concurrent_limit(db, user)
+        if not ok:
+            return False, err
 
     try:
         from app.services.abuse_prevention_service import AbusePreventionService
@@ -1122,7 +1166,16 @@ async def _check_and_deduct_credits(
     )
     if not success:
         return False, result.get("error", "Credit deduction failed")
-    setattr(user, "_last_credit_deduction", result.get("deducted", {}))
+    # MERGE with any earlier deduction in this request instead of overwriting
+    # (2026-07-10). Multi-deduct handlers (room-redesign variant top-up, the
+    # interior 3D delta) refund against this snapshot on total failure; the
+    # old overwrite capped the refund at the SECOND deduction only, so an
+    # all-variants-failed 80-credit charge refunded 60 and the user silently
+    # lost the first 20.
+    _prev = dict(getattr(user, "_last_credit_deduction", None) or {})
+    for _bucket, _amt in (result.get("deducted", {}) or {}).items():
+        _prev[_bucket] = int(_prev.get(_bucket) or 0) + int(_amt or 0)
+    setattr(user, "_last_credit_deduction", _prev)
     # Stash the amount actually charged (honors the ServicePricing override) so
     # callers can report an accurate `credits_used` to the UI / history instead
     # of re-deriving it from their hardcoded constant.
@@ -1151,6 +1204,84 @@ def _credits_charged(user, fallback: int) -> int:
     caller's hardcoded amount if no deduction was recorded on this user object."""
     val = getattr(user, "_last_effective_credit_cost", None)
     return int(val) if val is not None else int(fallback)
+
+
+async def _open_reclaim_row(
+    db: AsyncSession,
+    user,
+    *,
+    tool_type: str,
+    service_type: str,
+    charged: int,
+    input_params: Optional[Dict[str, Any]] = None,
+):
+    """Insert a PendingProviderTask right after deduction so a request killed
+    mid-generation is refunded by the reclaim worker instead of silently
+    keeping the charge. The killer in practice is the streamed endpoints'
+    disconnect handling: `_stream_with_heartbeat` CANCELS the worker task the
+    moment the client goes away, which skips every refund path in the handler
+    (CancelledError isn't caught by their `except Exception` blocks) — flows
+    without a reclaim row charged the user and gave back nothing (2026-07-10
+    audit: room-redesign, text-to-video, sora2, try-on prompt mode).
+
+    Rows opened here usually stay in "submitting" (provider_router.route()
+    has no on_submit hook), so the worker's orphan-submit branch refunds them
+    after the 90-min grace. Every return path of the endpoint must
+    terminal-mark the row via `_close_reclaim_row` — an insert failure is
+    non-fatal and simply leaves the flow uncovered, as before.
+    """
+    if user is None or getattr(user, "is_superuser", False):
+        return None  # nothing was charged — nothing to reclaim
+    try:
+        from app.models.pending_provider_task import PendingProviderTask
+        row = PendingProviderTask(
+            user_id=user.id,
+            tool_type=tool_type,
+            service_type=service_type,
+            credits_charged=int(charged or 0),
+            input_params=input_params or {},
+            status="submitting",
+        )
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+        return row
+    except Exception as exc:
+        logger.warning("reclaim row insert failed for %s: %s", service_type, exc)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        return None
+
+
+async def _close_reclaim_row(db: AsyncSession, row, *, status: str, result_url=None, error=None):
+    """Terminal-mark a reclaim row opened by `_open_reclaim_row`. Called on
+    every endpoint return path; on failure paths call this BEFORE
+    `_refund_credits` (terminal-first, mirroring the worker) so the endpoint
+    and the reclaim worker can never both refund the same charge. Never
+    raises; a close failure leaves the row active, worst case the worker
+    refunds a charge the endpoint already refunded — preferred over the
+    reverse (user keeps a charge for nothing).
+    """
+    if row is None:
+        return
+    try:
+        row.status = status
+        row.completed_at = datetime.now(timezone.utc)
+        if result_url:
+            row.result_url = result_url
+        if error:
+            row.error_message = str(error)[:1000]
+        await db.commit()
+    except Exception as exc:
+        logger.warning(
+            "reclaim row close failed (%s → %s): %s", getattr(row, "id", "?"), status, exc
+        )
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
 
 # Canonical tool_type → ServicePricing service_type mapping (Bug #3 credit-gateway
@@ -1297,11 +1428,11 @@ class TryOnRequest(BaseModel):
       mode="garment" (default, legacy): image+image via Kling Try-On.
           Requires garment_image_url + model.
 
-      mode="prompt" (added 2026-05-24, owner directive — Kling 3.0
-          prompt-template parity): image+text via Flux Kontext I2I on
-          the model photo. Requires prompt + model. No garment image.
-          The user's text reaches Kontext verbatim; we add only the
-          Kling-style "outfit drift" negative-prompt baseline.
+      mode="prompt" (added 2026-05-24; engine switched to Nano Banana Pro
+          2026-07-10 for identity preservation): image+text edit on the
+          model photo. Requires prompt + model. No garment image. The
+          user's text is kept and an identity guard ("same person, change
+          only the clothing") is always appended.
     """
     garment_image_url: Optional[str] = Field(None, description="Garment image URL to place on the model. Used in mode='garment'.")
     image_url: Optional[str] = Field(None, description="Alias for garment_image_url for client compatibility.")
@@ -1325,20 +1456,20 @@ class TryOnRequest(BaseModel):
         pattern="^(garment|prompt)$",
         description=(
             "'garment' (default) → Kling AI Try-On (image+image). "
-            "'prompt' → Flux Kontext I2I on the model photo (image+text). "
-            "Use 'prompt' to describe the outfit in words when you don't "
-            "have a garment photo (Kling 3.0 prompt-template style)."
+            "'prompt' → identity-preserving image edit on the model photo "
+            "(image+text, Nano Banana Pro). Use 'prompt' to describe the "
+            "outfit in words when you don't have a garment photo."
         ),
     )
     prompt: Optional[str] = Field(
         None,
         max_length=2000,
         description=(
-            "Required when mode='prompt'. Describe the new outfit. "
-            "Reaches Kontext verbatim — no Gemini rewrite, no template "
-            "wrapping. Example: 'Keep the person and pose, change outfit "
-            "to a luxurious emerald velvet evening gown with realistic "
-            "fabric folds and studio lighting'."
+            "Required when mode='prompt'. Describe the new outfit. Your "
+            "text is kept as-is and an identity guard (same person, change "
+            "only the clothing) is appended. Example: 'Keep the person and "
+            "pose, change outfit to a luxurious emerald velvet evening gown "
+            "with realistic fabric folds and studio lighting'."
         ),
     )
     negative_prompt: Optional[str] = Field(
@@ -2067,7 +2198,7 @@ async def remove_background(
             # 2026-06: provider success but no URL → refund + fail. Without
             # this the user pays for an empty gallery row.
             if not result_url:
-                await _refund_credits(db, current_user, CREDIT_COST, "bg_removal")
+                await _refund_credits(db, current_user, charged, "bg_removal")
                 logger.warning(
                     "bg_removal provider success=true but no image_url — "
                     "result keys=%s output keys=%s",
@@ -2192,11 +2323,11 @@ async def remove_background(
                 message="Background removed successfully"
             )
         else:
-            await _refund_credits(db, current_user, CREDIT_COST, "bg_removal")
+            await _refund_credits(db, current_user, charged, "bg_removal")
             return _provider_failure_response("bg_removal", result, current_user)
     except Exception as e:
         logger.error(f"Background removal error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "bg_removal")
+        await _refund_credits(db, current_user, charged, "bg_removal")
         _notify_admin_of_tool_failure("bg_removal", e, current_user)
         return ToolResponse(
             success=False,
@@ -2228,15 +2359,31 @@ async def remove_background_batch(
     if not allowed:
         raise HTTPException(status_code=403, detail=err)
 
+    # 2026-07-10: actually CHARGE the batch. The old code verified the balance
+    # and then only incremented a response-side counter — no deduction, no
+    # ledger row ever happened, so batch background removal was free for any
+    # plan with batch_processing. Charge up-front; failed images are refunded
+    # pro-rata below. Routing through _check_and_deduct_credits also applies
+    # the abuse limiter + concurrent checks the single-image endpoint gets.
     total_cost = len(request.image_urls) * 3
-    if not getattr(current_user, "is_superuser", False):
-        credit_service = CreditService(db)
-        balance = await credit_service.get_balance(str(current_user.id))
-        if balance["total"] < total_cost:
-            raise HTTPException(status_code=403, detail=f"Insufficient credits. Need {total_cost}, have {balance['total']}")
+    ok, err = await _check_and_deduct_credits(db, current_user, total_cost, "background_removal_batch")
+    if not ok:
+        raise HTTPException(status_code=403, detail=err)
+    charged = _credits_charged(current_user, total_cost)
+    per_image = (charged / len(request.image_urls)) if request.image_urls else 0.0
+
+    # Disconnect/SIGTERM coverage (2026-07-10 round 5): the batch loop runs
+    # up to 10 provider calls (+ an optional T2I background) after the
+    # up-front charge; if the request dies mid-batch nothing below refunds.
+    # The reclaim worker refunds this row instead.
+    reclaim_row = await _open_reclaim_row(
+        db, current_user,
+        tool_type="background_removal", service_type="background_removal_batch",
+        charged=charged,
+        input_params={"image_count": len(request.image_urls)},
+    )
 
     results = []
-    credits_used = 0
     provider_router = get_provider_router()
 
     # If the caller asked for an AI-generated scene, render it once and
@@ -2244,6 +2391,10 @@ async def remove_background_batch(
     # money and keeps the set visually consistent).
     _blocked = await _moderate_prompt_or_reject(request.ai_background_prompt)
     if _blocked:
+        # Moderation rejected AFTER the deduct — refund the whole charge
+        # (this return previously kept it, pre-existing leak).
+        await _close_reclaim_row(db, reclaim_row, status="failed", error="background prompt blocked by moderation")
+        await _refund_credits(db, current_user, charged, "background_removal_batch")
         return _blocked
     shared_ai_background: Optional[str] = None
     if request.ai_background_prompt:
@@ -2312,8 +2463,6 @@ async def remove_background_batch(
                     "result_url": cutout_url,
                     "success": True
                 })
-                if not getattr(current_user, "is_superuser", False):
-                    credits_used += 3
             else:
                 results.append({
                     "input_url": str(image_url),
@@ -2327,10 +2476,23 @@ async def remove_background_batch(
                 "error": str(e)
             })
 
+    # Pro-rata refund for failed images (capped by the deduction snapshot).
+    # Terminal-mark the reclaim row FIRST (worker discipline): the batch is
+    # delivered, so the worker must never also refund this charge.
+    failed_count = sum(1 for r in results if not r.get("success"))
+    refund_amount = int(round(per_image * failed_count))
+    await _close_reclaim_row(
+        db, reclaim_row,
+        status="completed",
+        result_url=next((r.get("result_url") for r in results if r.get("success")), None),
+    )
+    if refund_amount > 0:
+        await _refund_credits(db, current_user, refund_amount, "background_removal_batch")
+
     return ToolResponse(
         success=True,
         results=results,
-        credits_used=credits_used,
+        credits_used=max(0, charged - refund_amount),
         message=f"Processed {len(results)} images"
     )
 
@@ -2473,6 +2635,10 @@ async def generate_product_scene(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, "product_scene_gen")
     if not ok:
         return ToolResponse(success=False, message=err)
+    # Real charge (ServicePricing override aware, 0 for admins) — the except
+    # handler below refunds `charged`; without this binding every failure
+    # path raised NameError and the refund never ran (2026-07-10 review).
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     logger.info(f"Subscriber: Starting 3-step I2I generation for {request.product_image_url}")
 
@@ -2708,7 +2874,7 @@ async def generate_product_scene(
 
     except Exception as e:
         logger.error(f"Product scene error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "product_scene_gen")
+        await _refund_credits(db, current_user, charged, "product_scene_gen")
         _notify_admin_of_tool_failure("product_scene_gen", e, current_user)
         return ToolResponse(
             success=False,
@@ -2915,9 +3081,12 @@ async def _try_on_inner(
             request.garment_image_url = promoted_garment
         if request.image_url:
             request.image_url = promoted_garment
+    model_image_dims: Optional[tuple] = None
     if request.model_image_url:
         validate_media_url_or_raise(str(request.model_image_url), "image", "Try-on model input")
-        await validate_image_url_dimensions_or_raise(str(request.model_image_url), TRY_ON_MODEL_IMAGE_DIMENSION_RULES)
+        # Keep the (width, height) — prompt mode derives the output aspect
+        # ratio from the input photo so the result isn't recomposed.
+        model_image_dims = await validate_image_url_dimensions_or_raise(str(request.model_image_url), TRY_ON_MODEL_IMAGE_DIMENSION_RULES)
         request.model_image_url = await _ensure_public_image_url(
             str(request.model_image_url),
             user_id=str(current_user.id) if current_user else None,
@@ -2956,14 +3125,22 @@ async def _try_on_inner(
     # worker re-polls upstream and materializes the result or refunds.
     pending_task = None
 
-    # ─── PROMPT MODE (Flux Kontext I2I on the model photo) ────────────────
+    # ─── PROMPT MODE (Nano Banana Pro I2I on the model photo) ─────────────
     # Added 2026-05-24 (owner directive): PiAPI Kling Try-On has no prompt
-    # field, so the Kling-3.0-style outfit prompt formulas can't reach it.
-    # This branch routes the model image + verbatim user prompt through
-    # Kontext I2I (the same I2I model product-scene uses), which preserves
-    # the person's identity and re-paints only the outfit per the prompt.
+    # field, so text-described outfits can't reach it; this branch edits the
+    # model photo with an instruction prompt instead.
+    #
+    # 2026-07-10 identity fix (owner-approved): the edit model here MUST be
+    # subject-preserving. Flux Kontext is not — it re-synthesizes the whole
+    # canvas, and on a full-body photo the face is such a small region that
+    # it produced a DIFFERENT person on every run (three different faces for
+    # three identical prompts, prod 2026-07-09). Nano Banana Pro (Gemini
+    # image edit) holds the input person; it takes aspect_ratio/resolution
+    # instead of raw pixel dims, and the Pollo I2I backup maps the same
+    # model name to its nano-banana endpoint, so failover stays consistent.
     if request.mode == "prompt":
-        logger.info("Subscriber: Starting prompt-mode Try-On (Kontext I2I)")
+        logger.info("Subscriber: Starting prompt-mode Try-On (Nano Banana Pro I2I)")
+        _p_row = None  # reclaim row — opened just before the provider call
         try:
             model_url = None
             if request.model_image_url:
@@ -2977,20 +3154,11 @@ async def _try_on_inner(
                     message="mode='prompt' requires a valid model_image_url or model_id.",
                 )
 
-            # 2026-05-24 bug fix — Kontext I2I expects INSTRUCTION-style
-            # prompts ("change the outfit to X"). When the user typed a
-            # descriptive prompt like "紅色洋裝" / "red velvet dress" without
-            # an instruction verb, Kontext was generating a fresh image
-            # instead of editing the person's outfit (reported "result is
-            # fault"). Detect whether the prompt already contains an edit
-            # verb (keep / change / edit / 保持 / 改成 / 換成 / 把…換 / 變成);
-            # if not, prefix with a minimal "Edit this image: keep the
-            # person and pose, change the outfit to:" instruction.
-            #
-            # Negative prompt was being silently dropped because Kontext
-            # doesn't accept a negative_prompt input field. We instead bake
-            # the "don't change the person" guardrail into the instruction
-            # itself, which Kontext honors.
+            # Image-edit models expect INSTRUCTION-style prompts ("change the
+            # outfit to X"). A bare description like "紅色洋裝" / "red velvet
+            # dress" gets wrapped into one; a prompt that already contains an
+            # edit verb (keep / change / edit / 保持 / 改成 / 換成 / 把…換 /
+            # 變成) passes through as-is.
             user_text = request.prompt.strip()
             edit_verbs = (
                 "keep", "change", "edit", "replace", "transform",
@@ -2999,33 +3167,61 @@ async def _try_on_inner(
             lower = user_text.lower()
             has_edit_verb = any(v.lower() in lower for v in edit_verbs)
             if has_edit_verb:
-                final_prompt = user_text
+                base_instruction = user_text
             else:
-                final_prompt = (
-                    f"Keep the person's face, body, pose, and background "
-                    f"exactly the same. Change the outfit to: {user_text}. "
-                    f"Realistic fabric texture, natural fit, consistent "
-                    f"studio lighting."
-                )
+                base_instruction = f"Change the outfit to: {user_text}"
+            # The identity guard is ALWAYS appended (2026-07-10). It used to
+            # be skipped whenever the prompt contained an edit verb — i.e.
+            # for almost every natural-language prompt — and the prompt is
+            # the only identity mechanism this path has besides the model
+            # itself, so it must never be dropped.
+            base_instruction = base_instruction.rstrip()
+            if base_instruction and base_instruction[-1] not in ".。!！?？":
+                base_instruction += "."
+            final_prompt = (
+                f"{base_instruction} The result must show the EXACT same person as in the "
+                "input photo — identical face, facial features, age, gender, hairstyle, "
+                "skin tone, and body build, in the same pose and the same background. "
+                "Never swap in a different person or model and never beautify or restyle "
+                "the person; change ONLY the clothing described. Realistic fabric texture, "
+                "natural fit, consistent lighting."
+            )
 
-            # Kontext has no negative_prompt field, so fold the user's
-            # negatives into the positive instruction (mirrors how
-            # product-scene appends negatives to its prompt).
+            # Neither nano-banana nor the Pollo image backup exposes a native
+            # negative field on this path, so fold the user's negatives into
+            # the positive instruction (mirrors product-scene).
             if request.negative_prompt:
                 final_prompt = f"{final_prompt} Avoid: {request.negative_prompt}."
+
+            # Output aspect follows the input photo (snapped to the provider
+            # catalogue: 1:1 / 3:4 / 2:3 / …) instead of the old hardcoded
+            # 1024×1024 square, which recomposed portrait photos. Preset
+            # models are 768×1152, exactly 2:3.
+            from app.providers.piapi_provider import _aspect_from_wh
+            aspect_ratio = _aspect_from_wh(*model_image_dims) if model_image_dims else "2:3"
+
+            # Disconnect coverage: prompt mode has no on_submit hook (router
+            # path), so this row stays "submitting" and the reclaim worker
+            # refunds it if the streamed request dies mid-render.
+            _p_row = await _open_reclaim_row(
+                db, current_user,
+                tool_type="try_on", service_type="virtual_try_on", charged=charged,
+                input_params={"mode": "prompt", "image_url": model_url, "prompt": user_text[:500]},
+            )
 
             provider_router = get_provider_router()
             i2i_params = {
                 "image_url": model_url,
                 "prompt": final_prompt,
-                "model": "flux_kontext",
-                "width": 1024,
-                "height": 1024,
+                "model": "nano-banana-pro",
+                "aspect_ratio": aspect_ratio,
+                "resolution": "2K",
             }
             result = await provider_router.route(
                 TaskType.I2I, i2i_params, user_tier=get_user_tier(current_user)
             )
             if not result.get("success"):
+                await _close_reclaim_row(db, _p_row, status="failed", error=result.get("error"))
                 await _refund_credits(db, current_user, charged, "virtual_try_on")
                 return ToolResponse(
                     success=False,
@@ -3041,6 +3237,7 @@ async def _try_on_inner(
                     result_url = first if isinstance(first, str) else first.get("url") or first.get("image_url")
             result_url = await _persist_provider_url(result_url, "image", current_user)
             if not result_url:
+                await _close_reclaim_row(db, _p_row, status="failed", error="no result URL")
                 await _refund_credits(db, current_user, charged, "virtual_try_on")
                 return ToolResponse(
                     success=False,
@@ -3054,7 +3251,9 @@ async def _try_on_inner(
                 input_params={
                     "mode": "prompt",
                     "user_prompt": user_text,
-                    "kontext_prompt": final_prompt,  # post-wrapper, what reached the model
+                    "final_prompt": final_prompt,  # post-wrapper, what reached the model
+                    "i2i_model": "nano-banana-pro",
+                    "aspect_ratio": aspect_ratio,
                     "model_id": request.model_id,
                     "model_image_url": str(request.model_image_url) if request.model_image_url else None,
                 },
@@ -3063,6 +3262,10 @@ async def _try_on_inner(
             )
             user_gen.set_expiry()
             db.add(user_gen)
+            if _p_row is not None:
+                _p_row.status = "completed"
+                _p_row.result_url = result_url
+                _p_row.completed_at = datetime.now(timezone.utc)
             await db.commit()
 
             return ToolResponse(
@@ -3073,6 +3276,7 @@ async def _try_on_inner(
             )
         except Exception as e:
             logger.error(f"Try-On (prompt mode) error: {e}", exc_info=True)
+            await _close_reclaim_row(db, _p_row, status="failed", error=e)
             await _refund_credits(db, current_user, charged, "virtual_try_on")
             _notify_admin_of_tool_failure("try_on_prompt", e, current_user)
             return ToolResponse(success=False, message=GENERIC_TOOL_FAILURE_MESSAGE)
@@ -3282,7 +3486,7 @@ async def _try_on_inner(
             result_url=result_url,
             credits_used=charged,
             message=(
-                "Virtual try-on served via Kontext fallback (Kling Try-On was unavailable)."
+                "Virtual try-on served via backup engine (Kling Try-On was unavailable)."
                 if used_fallback
                 else "Virtual try-on successful"
             ),
@@ -3421,6 +3625,19 @@ async def _room_redesign_inner(
     if not ok:
         return ToolResponse(success=False, message=err)
     charged = _credits_charged(current_user, CREDIT_COST)
+    # Disconnect coverage for the streamed request (multi-variant renders run
+    # minutes): the reclaim worker refunds this row if the client disconnect
+    # cancels us mid-render. Every return path below terminal-marks it.
+    reclaim_row = await _open_reclaim_row(
+        db, current_user,
+        tool_type="room_redesign", service_type="room_redesign", charged=charged,
+        input_params={
+            "mode": request.mode,
+            "style": request.style,
+            "space_kind": request.space_kind,
+            "prompt": (request.custom_prompt or "")[:500],
+        },
+    )
 
     # ─── MAGIC REDESIGN (single plain-language prompt → Kontext I2I) ──────
     # Added 2026-05-24 (HomeDesignsAI Magic-Redesign parity). When the user
@@ -3430,7 +3647,8 @@ async def _room_redesign_inner(
     # honors prompt" expectation set by piapi.ai / pippit.ai.
     if request.mode == "magic":
         if not (request.custom_prompt and request.custom_prompt.strip()):
-            await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
+            await _close_reclaim_row(db, reclaim_row, status="failed", error="magic mode without custom_prompt")
+            await _refund_credits(db, current_user, 0, "room_redesign")
             return ToolResponse(
                 success=False,
                 message="mode='magic' requires custom_prompt describing the redesign.",
@@ -3496,7 +3714,8 @@ async def _room_redesign_inner(
 
             result_url = await _persist_provider_url(result_url, "image", current_user)
             if not result_url:
-                await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
+                await _close_reclaim_row(db, reclaim_row, status="failed", error=primary_error or "no result URL")
+                await _refund_credits(db, current_user, 0, "room_redesign")
                 # Surface the real upstream error (e.g. credit depletion) rather
                 # than a generic "no result" so the user knows what went wrong.
                 return ToolResponse(
@@ -3517,6 +3736,10 @@ async def _room_redesign_inner(
             )
             user_gen.set_expiry()
             db.add(user_gen)
+            if reclaim_row is not None:
+                reclaim_row.status = "completed"
+                reclaim_row.result_url = result_url
+                reclaim_row.completed_at = datetime.now(timezone.utc)
             await db.commit()
             return ToolResponse(
                 success=True,
@@ -3526,7 +3749,8 @@ async def _room_redesign_inner(
             )
         except Exception as exc:
             logger.error(f"Magic redesign error: {exc}", exc_info=True)
-            await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
+            await _close_reclaim_row(db, reclaim_row, status="failed", error=exc)
+            await _refund_credits(db, current_user, 0, "room_redesign")
             _notify_admin_of_tool_failure("room_redesign_magic", exc, current_user)
             return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 
@@ -3699,10 +3923,24 @@ async def _room_redesign_inner(
         n_variants = max(1, min(4, request.variation_count or 1))
         if n_variants > 1:
             additional = (n_variants - 1) * CREDIT_COST
-            ok2, err2 = await _check_and_deduct_credits(db, current_user, additional, "room_redesign")
+            # service_type deliberately differs from "room_redesign": a seeded
+            # ServicePricing row REPLACES the passed amount, so charging the
+            # (n-1)×20 top-up under the base key collapsed it to a flat 20 —
+            # a 4-variant request charged 20+20 instead of 20+60 (2026-07-10).
+            ok2, err2 = await _check_and_deduct_credits(db, current_user, additional, "room_redesign_extra_variants")
             if not ok2:
                 # Already paid for one — proceed with single result
                 n_variants = 1
+            elif reclaim_row is not None:
+                # The row must cover the TOTAL charge (base + top-up) so a
+                # disconnect mid-render refunds the extra variants too.
+                # (_last_effective_credit_cost holds only the LAST deduct.)
+                try:
+                    reclaim_row.credits_charged = charged + _credits_charged(current_user, additional)
+                    await db.commit()
+                except Exception as _rc_exc:
+                    logger.warning("room_redesign: reclaim row top-up update failed: %s", _rc_exc)
+                    await db.rollback()
 
         DIVERSIFIERS = [
             "",
@@ -3756,13 +3994,30 @@ async def _room_redesign_inner(
             return_exceptions=True,
         )
         output_urls = [u for u in rendered if isinstance(u, str) and u]
-        # Refund any failed variants
         failed = n_variants - len(output_urls)
-        if failed > 0:
-            await _refund_credits(db, current_user, failed * CREDIT_COST, "room_redesign")
 
         if not output_urls:
+            # All variants failed — terminal-mark the reclaim row BEFORE the
+            # refund (worker discipline) so it can't also refund this charge.
+            await _close_reclaim_row(db, reclaim_row, status="failed", error="all variants failed")
+            await _refund_credits(db, current_user, failed * CREDIT_COST, "room_redesign")
             return _provider_failure_response("room_redesign", {"error": "all variants failed"}, current_user)
+
+        # Refund any failed variants (partial success keeps the row open until
+        # the success close below). Shrink the row's refundable amount FIRST
+        # so a disconnect right after this partial refund can't make the
+        # reclaim worker hand back the full total on top of it.
+        if failed > 0:
+            if reclaim_row is not None:
+                try:
+                    reclaim_row.credits_charged = max(
+                        0, int(reclaim_row.credits_charged or 0) - failed * CREDIT_COST
+                    )
+                    await db.commit()
+                except Exception as _rc_exc:
+                    logger.warning("room_redesign: reclaim row partial-refund update failed: %s", _rc_exc)
+                    await db.rollback()
+            await _refund_credits(db, current_user, failed * CREDIT_COST, "room_redesign")
 
         # Persist primary result + variants as separate UserGeneration rows
         primary_url = output_urls[0]
@@ -3808,6 +4063,10 @@ async def _room_redesign_inner(
             input_params={"style": request.style, "space_kind": request.space_kind, "mode": request.mode, "prompt_refinement": prompt_refinement},
         )
 
+        if reclaim_row is not None:
+            reclaim_row.status = "completed"
+            reclaim_row.result_url = primary_url
+            reclaim_row.completed_at = datetime.now(timezone.utc)
         await db.commit()
 
         return ToolResponse(
@@ -3822,7 +4081,8 @@ async def _room_redesign_inner(
         )
     except Exception as e:
         logger.error(f"Room Redesign error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "room_redesign")
+        await _close_reclaim_row(db, reclaim_row, status="failed", error=e)
+        await _refund_credits(db, current_user, 0, "room_redesign")
         _notify_admin_of_tool_failure("room_redesign", e, current_user)
         return ToolResponse(
             success=False,
@@ -3935,6 +4195,11 @@ async def _generate_short_video_inner(
     ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, service_type)
     if not ok:
         return ToolResponse(success=False, message=err)
+    # Amount ACTUALLY charged (ServicePricing override aware, 0 for admins).
+    # The reclaim worker refunds pending_task.credits_charged verbatim, so
+    # storing the constant minted credits whenever ops retuned the price
+    # (worker refunded 160 for a 100-credit charge) — store the real charge.
+    charged = _credits_charged(current_user, CREDIT_COST)
 
     # 2026-06: insert a pending_provider_tasks row BEFORE polling so that
     # if Cloud Run kills this request mid-poll (long Kling/Veo renders
@@ -3945,7 +4210,7 @@ async def _generate_short_video_inner(
         user_id=current_user.id,
         tool_type="short_video",
         service_type=service_type,
-        credits_charged=CREDIT_COST,
+        credits_charged=charged,
         input_params={
             "image_url": _resolve_public_url(str(request.image_url)),
             "prompt": (request.prompt or "").strip(),
@@ -4180,7 +4445,7 @@ async def _generate_short_video_inner(
             )
 
         if not result.get("success"):
-            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             pending_task.status = "failed"
             pending_task.error_message = str(result.get("error") or "")[:1000]
             pending_task.completed_at = datetime.now(timezone.utc)
@@ -4243,7 +4508,7 @@ async def _generate_short_video_inner(
                 )
             )
         else:
-            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             pending_task.status = "failed"
             pending_task.error_message = "provider success=true but no video_url"
             pending_task.completed_at = datetime.now(timezone.utc)
@@ -4255,7 +4520,7 @@ async def _generate_short_video_inner(
 
     except Exception as e:
         logger.error(f"Short video error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, service_type)
+        await _refund_credits(db, current_user, charged, service_type)
         # Best-effort mark of the pending row — the reclaim worker will
         # eventually abandon+refund it if this commit also dies.
         try:
@@ -4470,14 +4735,14 @@ async def claymation_generate(
 
         else:
             # video_to_video mode removed 2026-05-31 (V2V dropped repo-wide).
-            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             return ToolResponse(
                 success=False,
                 message="Video-to-video mode has been removed. Use text-to-video for new clips.",
             )
 
         if not result.get("success"):
-            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             if pending_task is not None:
                 pending_task.status = "failed"
                 pending_task.error_message = str(result.get("error") or "")[:1000]
@@ -4546,7 +4811,7 @@ async def claymation_generate(
                             break
         url = await _persist_provider_url(url, output_kind, current_user)
         if not url:
-            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             if pending_task is not None:
                 pending_task.status = "failed"
                 pending_task.error_message = "provider success but no URL"
@@ -4597,7 +4862,7 @@ async def claymation_generate(
         )
     except Exception as exc:
         logger.error("claymation error: %s", exc, exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, service_type)
+        await _refund_credits(db, current_user, charged, service_type)
         if pending_task is not None:
             try:
                 pending_task.status = "failed"
@@ -4667,7 +4932,7 @@ async def video_background_remove(
         user_id=current_user.id,
         tool_type="video_background_remove",
         service_type="video_background_remove",
-        credits_charged=CREDIT_COST,
+        credits_charged=charged,
         input_params={
             "video_url": str(request.video_url),
             "invert_output": bool(request.invert_output),
@@ -4707,7 +4972,7 @@ async def video_background_remove(
         })
 
         if not result.get("success"):
-            await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+            await _refund_credits(db, current_user, charged, "video_background_remove")
             pending_task.status = "failed"
             pending_task.error_message = str(result.get("error") or "")[:1000]
             pending_task.completed_at = datetime.now(timezone.utc)
@@ -4721,7 +4986,7 @@ async def video_background_remove(
         video_url = output.get("video_url") or output.get("url")
         video_url = await _persist_provider_url(video_url, "video", current_user)
         if not video_url:
-            await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+            await _refund_credits(db, current_user, charged, "video_background_remove")
             pending_task.status = "failed"
             pending_task.error_message = "provider success but no URL"
             pending_task.completed_at = datetime.now(timezone.utc)
@@ -4755,7 +5020,7 @@ async def video_background_remove(
         )
     except Exception as exc:
         logger.error("video_background_remove error: %s", exc, exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "video_background_remove")
+        await _refund_credits(db, current_user, charged, "video_background_remove")
         try:
             pending_task.status = "failed"
             pending_task.error_message = str(exc)[:1000]
@@ -4835,7 +5100,7 @@ async def upscale_image(
         user_id=current_user.id,
         tool_type="image_upscale",
         service_type="image_upscale",
-        credits_charged=CREDIT_COST,
+        credits_charged=charged,
         input_params={
             "image_url": _resolve_public_url(request.image_url),
             "scale": request.scale,
@@ -4883,7 +5148,7 @@ async def upscale_image(
 
             # 2026-06: provider success but no URL → refund + fail.
             if not image_url:
-                await _refund_credits(db, current_user, CREDIT_COST, "image_upscale")
+                await _refund_credits(db, current_user, charged, "image_upscale")
                 pending_task.status = "failed"
                 pending_task.error_message = "provider success but no image_url"
                 pending_task.completed_at = datetime.now(timezone.utc)
@@ -4921,7 +5186,7 @@ async def upscale_image(
                 message=f"Image upscaled {request.scale}x successfully"
             )
         else:
-            await _refund_credits(db, current_user, CREDIT_COST, "image_upscale")
+            await _refund_credits(db, current_user, charged, "image_upscale")
             pending_task.status = "failed"
             pending_task.error_message = str(result.get("error") or "")[:1000]
             pending_task.completed_at = datetime.now(timezone.utc)
@@ -4929,7 +5194,7 @@ async def upscale_image(
             return _provider_failure_response("image_upscale", result, current_user)
     except Exception as e:
         logger.error(f"Upscale error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "image_upscale")
+        await _refund_credits(db, current_user, charged, "image_upscale")
         try:
             pending_task.status = "failed"
             pending_task.error_message = str(e)[:1000]
@@ -5082,7 +5347,7 @@ async def render_enhance(
             user_id=current_user.id,
             tool_type="image_upscale",
             service_type=service_type,
-            credits_charged=CREDIT_COST,
+            credits_charged=charged,
             input_params={"image_url": working_url, "scale": request.scale, "tool": "render_enhance"},
             status="submitting",
         )
@@ -5110,7 +5375,7 @@ async def render_enhance(
             _re_pending.error_message = str(result.get("error") or "upscale failed")[:1000]
             _re_pending.completed_at = datetime.now(timezone.utc)
             await db.commit()
-            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             return _provider_failure_response("render_enhance", result, current_user)
 
         image_url = await _persist_provider_url(_extract_image_url(result), "image", current_user)
@@ -5119,7 +5384,7 @@ async def render_enhance(
             _re_pending.error_message = "provider success but no image_url"
             _re_pending.completed_at = datetime.now(timezone.utc)
             await db.commit()
-            await _refund_credits(db, current_user, CREDIT_COST, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             return ToolResponse(success=False, message="Render enhance returned no result. Please try again.")
 
         generation = UserGeneration(
@@ -5159,7 +5424,7 @@ async def render_enhance(
                 await db.commit()
             except Exception:
                 pass
-        await _refund_credits(db, current_user, CREDIT_COST, service_type)
+        await _refund_credits(db, current_user, charged, service_type)
         _notify_admin_of_tool_failure("render_enhance", e, current_user)
         return ToolResponse(success=False, message=str(e) or GENERIC_TOOL_FAILURE_MESSAGE)
 
@@ -5254,7 +5519,7 @@ async def recolor_product(
         user_id=current_user.id,
         tool_type="product_recolor",
         service_type="product_recolor",
-        credits_charged=CREDIT_COST,
+        credits_charged=charged,
         input_params={
             "image_url": _resolve_public_url(request.image_url),
             "target_color": color,
@@ -5302,7 +5567,7 @@ async def recolor_product(
             image_url = await _persist_provider_url(image_url, "image", current_user)
 
             if not image_url:
-                await _refund_credits(db, current_user, CREDIT_COST, "product_recolor")
+                await _refund_credits(db, current_user, charged, "product_recolor")
                 pending_task.status = "failed"
                 pending_task.error_message = "provider success but no image_url"
                 pending_task.completed_at = datetime.now(timezone.utc)
@@ -5336,7 +5601,7 @@ async def recolor_product(
                 message=f"Product recolored to {color}.",
             )
 
-        await _refund_credits(db, current_user, CREDIT_COST, "product_recolor")
+        await _refund_credits(db, current_user, charged, "product_recolor")
         pending_task.status = "failed"
         pending_task.error_message = str(result.get("error") or "")[:1000]
         pending_task.completed_at = datetime.now(timezone.utc)
@@ -5344,7 +5609,7 @@ async def recolor_product(
         return _provider_failure_response("product_recolor", result, current_user)
     except Exception as e:
         logger.error(f"Recolor error: {e}", exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "product_recolor")
+        await _refund_credits(db, current_user, charged, "product_recolor")
         try:
             pending_task.status = "failed"
             pending_task.error_message = str(e)[:1000]
@@ -6067,14 +6332,14 @@ async def midjourney_imagine(
             TaskType.T2I, route_params, user_tier=get_user_tier(current_user),
         )
         if not result.get("success"):
-            await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
+            await _refund_credits(db, current_user, charged, _irow["service_type"])
             return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
 
         output = result.get("output") or {}
         image_url = output.get("image_url")
         image_url = await _persist_provider_url(image_url, "image", current_user)
         if not image_url:
-            await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
+            await _refund_credits(db, current_user, charged, _irow["service_type"])
             return ToolResponse(success=False, message="Image generation returned no result. Please try again.")
 
         return ToolResponse(
@@ -6086,7 +6351,7 @@ async def midjourney_imagine(
         )
     except Exception as exc:
         logger.error("midjourney_imagine error: %s", exc, exc_info=True)
-        await _refund_credits(db, current_user, CREDIT_COST, "image_generation_premium")
+        await _refund_credits(db, current_user, charged, _irow["service_type"])
         _notify_admin_of_tool_failure("midjourney_imagine", exc, current_user)
         # Surface the upstream message when it exists so users see "PiAPI
         # rate-limited" / "Pollo credits depleted" instead of the masked
@@ -6200,6 +6465,9 @@ async def _kling_video_inner(
     )
     if not ok:
         return ToolResponse(success=False, message=err)
+    # Real charge (ServicePricing override aware, 0 for admins) — used for the
+    # reclaim row and every refund below, instead of the tier constant.
+    charged = _credits_charged(current_user, credit_cost_fallback)
 
     # 2026-06-12 — additive faithfulness controls. The user's prompt stays
     # first and verbatim; camera move / subject lock / strict adherence are
@@ -6244,7 +6512,7 @@ async def _kling_video_inner(
         user_id=current_user.id,
         tool_type="kling_video",
         service_type=service_type,
-        credits_charged=credit_cost_fallback,
+        credits_charged=charged,
         input_params={"tier": tier, "duration": request.duration, "aspect_ratio": request.aspect_ratio},
         status="submitting",
     )
@@ -6292,7 +6560,7 @@ async def _kling_video_inner(
         )
         if not result.get("success"):
             await _fail_pending(result.get("error") or "task failed")
-            await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
 
         output = result.get("output") or {}
@@ -6300,7 +6568,7 @@ async def _kling_video_inner(
         video_url = await _persist_provider_url(video_url, "video", current_user)
         if not video_url:
             await _fail_pending("Kling returned no video URL")
-            await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+            await _refund_credits(db, current_user, charged, service_type)
             return ToolResponse(success=False, message="Kling returned no video URL. Please try again.")
 
         # Persist to the user's gallery ("My Works"). Same gap as Sora 2 Pro:
@@ -6350,7 +6618,7 @@ async def _kling_video_inner(
     except Exception as exc:
         logger.error("kling_video error: %s", exc, exc_info=True)
         await _fail_pending(exc)
-        await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+        await _refund_credits(db, current_user, charged, service_type)
         _notify_admin_of_tool_failure("kling_video", exc, current_user)
         # Surface the upstream message so users see the real reason (PiAPI
         # rate-limit, model unsupported, etc.) rather than the generic mask.
@@ -6444,6 +6712,14 @@ async def _text_to_video_inner(
     if not ok:
         return ToolResponse(success=False, message=err)
     charged = _credits_charged(current_user, credit_cost)
+    # Disconnect coverage: T2V renders run 60-300 s inside the heartbeat
+    # stream; a client disconnect cancels the worker, skipping every refund
+    # below. The reclaim worker refunds this row instead.
+    reclaim_row = await _open_reclaim_row(
+        db, current_user,
+        tool_type="short_video", service_type=service_type, charged=charged,
+        input_params={"mode": "text_to_video", "model_id": request.model_id, "prompt": (request.prompt or "")[:500]},
+    )
 
     # Additive faithfulness clauses — the user's prompt stays first and verbatim.
     final_prompt = request.prompt
@@ -6474,14 +6750,16 @@ async def _text_to_video_inner(
             user_tier=get_user_tier(current_user),
         )
         if not result.get("success"):
-            await _refund_credits(db, current_user, credit_cost, service_type)
+            await _close_reclaim_row(db, reclaim_row, status="failed", error=result.get("error"))
+            await _refund_credits(db, current_user, charged, service_type)
             return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
 
         output = result.get("output") or {}
         video_url = output.get("video_url")
         video_url = await _persist_provider_url(video_url, "video", current_user)
         if not video_url:
-            await _refund_credits(db, current_user, credit_cost, service_type)
+            await _close_reclaim_row(db, reclaim_row, status="failed", error="no video URL")
+            await _refund_credits(db, current_user, charged, service_type)
             return ToolResponse(success=False, message="Text-to-video returned no video URL. Please try again.")
 
         try:
@@ -6505,6 +6783,10 @@ async def _text_to_video_inner(
             logger.warning("text_to_video: failed to persist UserGeneration to gallery", exc_info=True)
             await db.rollback()
 
+        # The user has their video — close the row even if the gallery
+        # persist above failed (reclaim must not refund a delivered render).
+        await _close_reclaim_row(db, reclaim_row, status="completed", result_url=video_url)
+
         return ToolResponse(
             success=True,
             result_url=video_url,
@@ -6514,7 +6796,8 @@ async def _text_to_video_inner(
         )
     except Exception as exc:
         logger.error("text_to_video error: %s", exc, exc_info=True)
-        await _refund_credits(db, current_user, credit_cost, service_type)
+        await _close_reclaim_row(db, reclaim_row, status="failed", error=exc)
+        await _refund_credits(db, current_user, charged, service_type)
         _notify_admin_of_tool_failure("text_to_video", exc, current_user)
         return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 
@@ -6618,6 +6901,21 @@ async def _sora2_pro_inner(
     )
     if not ok:
         return ToolResponse(success=False, message=err)
+    # Real charge (ServicePricing override aware, 0 for admins) — defined up
+    # here so every refund path below can use it.
+    charged = _credits_charged(current_user, credit_cost_fallback)
+    # Disconnect coverage: Sora 2 Pro runs 5-15 min inside the heartbeat
+    # stream; a client disconnect cancels the worker, skipping every refund
+    # below. The reclaim worker refunds this row instead.
+    reclaim_row = await _open_reclaim_row(
+        db, current_user,
+        tool_type="sora2", service_type=service_type, charged=charged,
+        input_params={
+            "model_id": "sora2_pro",
+            "image_url": request.image_url,
+            "prompt": (request.prompt or "")[:500],
+        },
+    )
 
     # 2026-06-12 — additive faithfulness controls, mirroring /kling-video.
     final_prompt = request.prompt
@@ -6649,14 +6947,16 @@ async def _sora2_pro_inner(
             user_tier=get_user_tier(current_user),
         )
         if not result.get("success"):
-            await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+            await _close_reclaim_row(db, reclaim_row, status="failed", error=result.get("error"))
+            await _refund_credits(db, current_user, charged, service_type)
             return ToolResponse(success=False, message=result.get("error") or GENERIC_TOOL_FAILURE_MESSAGE)
 
         output = result.get("output") or {}
         video_url = output.get("video_url")
         video_url = await _persist_provider_url(video_url, "video", current_user)
         if not video_url:
-            await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+            await _close_reclaim_row(db, reclaim_row, status="failed", error="no video URL")
+            await _refund_credits(db, current_user, charged, service_type)
             return ToolResponse(success=False, message="Sora 2 Pro returned no video URL. Please try again.")
 
         # Persist to the user's gallery ("My Works"). Previously this handler
@@ -6687,6 +6987,10 @@ async def _sora2_pro_inner(
             logger.warning("sora2_pro: failed to persist UserGeneration to gallery", exc_info=True)
             await db.rollback()
 
+        # The user has their video — close the row even if the gallery
+        # persist above failed (reclaim must not refund a delivered render).
+        await _close_reclaim_row(db, reclaim_row, status="completed", result_url=video_url)
+
         return ToolResponse(
             success=True,
             result_url=video_url,
@@ -6696,7 +7000,8 @@ async def _sora2_pro_inner(
         )
     except Exception as exc:
         logger.error("sora2_pro error: %s", exc, exc_info=True)
-        await _refund_credits(db, current_user, credit_cost_fallback, service_type)
+        await _close_reclaim_row(db, reclaim_row, status="failed", error=exc)
+        await _refund_credits(db, current_user, charged, service_type)
         _notify_admin_of_tool_failure("sora2_pro", exc, current_user)
         return ToolResponse(success=False, message=str(exc) or GENERIC_TOOL_FAILURE_MESSAGE)
 

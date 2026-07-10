@@ -126,35 +126,53 @@ async def health_check_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
 
 async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Daily task to auto-renew expired subscriptions.
+    Daily task to settle subscriptions whose period has ended.
 
-    Checks for active subscriptions where:
-    - auto_renew = True
-    - plan_expires_at <= now
+    2026-07-10 rewrite: the old version extended end_date and granted a fresh
+    credit allotment for EVERY overdue active subscription without collecting
+    or verifying any payment — ECPay has no recurring mandate (one-time aio
+    payment) and PayPal was never consulted, so a single NT$399 payment
+    renewed with full credits forever, and PayPal subs whose external billing
+    had failed kept renewing locally. Credits must only ever be granted on a
+    payment signal (webhook / callback / verified gateway state).
 
-    For each, re-allocates monthly credits and extends the subscription period.
+    New behavior per overdue active subscription (end_date <= now):
+      - PayPal-billed + PayPal reports ACTIVE  → extend the local period one
+        cycle, NO credit grant (PAYMENT.SALE.COMPLETED grants per cycle).
+      - PayPal-billed + PayPal reports cancelled/suspended/expired, or any
+        non-recurring method (ECPay one-time, direct) → after a 3-day grace,
+        mark the subscription expired, and if the user has no other active
+        subscription: clear current_plan_id and zero subscription_credits
+        (with an expiry ledger row). Purchased/bonus credits untouched.
+      - PayPal lookup transient failure → skip, retry next run.
     """
-    logger.info("Starting auto-renewal check")
+    logger.info("Starting subscription settlement (auto-renew) check")
 
     from sqlalchemy import select, and_
     from app.models.user import User
-    from app.models.billing import Plan, Subscription, CreditTransaction
+    from app.models.billing import Plan, Subscription, CreditTransaction, Order as _Order
 
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    renewed_count = 0
+    GRACE = timedelta(days=3)
+    now = datetime.utcnow()
+
+    extended_count = 0
+    expired_count = 0
+    skipped_count = 0
     error_count = 0
 
     try:
         async with async_session() as db:
-            # Find expired subscriptions with auto_renew=True
+            # ALL overdue active subs — including auto_renew=False (cancel-at-
+            # period-end rows previously never transitioned out of "active",
+            # leaving plan access + monthly resets running forever).
             result = await db.execute(
                 select(Subscription).where(
                     and_(
                         Subscription.status == "active",
-                        Subscription.auto_renew == True,
-                        Subscription.end_date <= datetime.utcnow(),
+                        Subscription.end_date <= now,
                     )
                 )
             )
@@ -164,75 +182,103 @@ async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                 try:
                     user = await db.get(User, sub.user_id)
                     plan = await db.get(Plan, sub.plan_id)
-
                     if not user or not plan:
                         continue
 
-                    # Extend subscription. Yearly auto-renew adds 365 days
-                    # and grants the 11/12 prorated full-year allowance;
-                    # monthly auto-renew adds 30 days and grants one month.
-                    is_yearly = (getattr(sub, "billing_cycle", None) or "monthly") == "yearly"
-                    old_end = sub.end_date
-                    new_end = old_end + timedelta(days=365 if is_yearly else 30)
-                    sub.start_date = old_end
-                    sub.end_date = new_end
-
-                    # Update user plan dates
-                    user.plan_started_at = old_end
-                    user.plan_expires_at = new_end
-
-                    # Allocate new credits (old ones expired). Currency-aware:
-                    # ECPay (TWD) renewals grant the smaller TWD allowance, and
-                    # yearly stays 11/12-prorated — see subscription_period_credits.
-                    from app.models.billing import Order as _Order
-                    from app.services.subscription_service import (
-                        subscription_period_credits as _period_credits,
-                    )
                     _last_order = (await db.execute(
                         select(_Order)
                         .where(_Order.subscription_id == sub.id)
                         .order_by(_Order.created_at.desc())
                     )).scalars().first()
-                    _pay_method = _last_order.payment_method if _last_order else None
-                    credits = _period_credits(plan, _pay_method, getattr(sub, "billing_cycle", None) or "monthly")
-                    if credits > 0:
-                        # Expire remaining old subscription credits
+                    _pay_method = (_last_order.payment_method if _last_order else "") or ""
+                    _paypal_sub_id = ((_last_order.payment_data or {}).get("paypal_subscription_id")
+                                      if _last_order else None)
+
+                    is_yearly = (getattr(sub, "billing_cycle", None) or "monthly") == "yearly"
+
+                    # ── PayPal: trust the gateway, not the calendar ──────────
+                    if sub.auto_renew and _pay_method.lower() == "paypal" and _paypal_sub_id:
+                        try:
+                            from app.services.paypal_service import get_paypal_service
+                            pp = get_paypal_service()
+                            pp_resp = await pp.get_subscription(_paypal_sub_id)
+                            if not (pp_resp or {}).get("success"):
+                                raise RuntimeError((pp_resp or {}).get("error") or "lookup failed")
+                            pp_status = str(((pp_resp or {}).get("subscription") or {}).get("status") or "").upper()
+                        except Exception as exc:
+                            logger.warning(
+                                "auto-renew: PayPal lookup failed for sub %s (%s); retrying next run: %s",
+                                sub.id, _paypal_sub_id, exc,
+                            )
+                            skipped_count += 1
+                            continue
+
+                        if pp_status == "ACTIVE":
+                            old_end = sub.end_date
+                            new_end = old_end + timedelta(days=365 if is_yearly else 30)
+                            sub.start_date = old_end
+                            sub.end_date = new_end
+                            user.plan_started_at = old_end
+                            user.plan_expires_at = new_end
+                            extended_count += 1
+                            logger.info(
+                                "auto-renew: extended PayPal-active sub for user %s (%s) until %s "
+                                "(credits granted by SALE webhook, not here)",
+                                user.id, plan.name, new_end,
+                            )
+                            continue
+                        # Non-active at PayPal → fall through to grace/expiry.
+
+                    # ── No payment signal → expire after grace ───────────────
+                    if sub.end_date.replace(tzinfo=None) > now - GRACE:
+                        skipped_count += 1
+                        continue
+
+                    sub.status = "expired"
+                    sub.auto_renew = False
+
+                    other_active = (await db.execute(
+                        select(Subscription.id).where(
+                            and_(
+                                Subscription.user_id == user.id,
+                                Subscription.id != sub.id,
+                                Subscription.status == "active",
+                                Subscription.end_date > now,
+                            )
+                        ).limit(1)
+                    )).scalar_one_or_none()
+
+                    if other_active is None:
+                        user.current_plan_id = None
                         old_credits = user.subscription_credits or 0
                         if old_credits > 0:
-                            expiry_tx = CreditTransaction(
+                            user.subscription_credits = 0
+                            db.add(CreditTransaction(
                                 user_id=user.id,
                                 amount=-old_credits,
-                                balance_after=(user.purchased_credits or 0) + (user.bonus_credits or 0) + credits,
+                                balance_after=(user.purchased_credits or 0) + (user.bonus_credits or 0),
                                 transaction_type="expiry",
-                                description=f"Monthly subscription credits expired — {old_credits} unused",
-                            )
-                            db.add(expiry_tx)
-
-                        # Allocate fresh credits
-                        user.subscription_credits = credits
-                        user.credits_reset_at = datetime.utcnow()
-
-                        alloc_tx = CreditTransaction(
-                            user_id=user.id,
-                            amount=credits,
-                            balance_after=(user.purchased_credits or 0) + (user.bonus_credits or 0) + credits,
-                            transaction_type="subscription",
-                            description=f"Auto-renewal credit allocation — {plan.display_name or plan.name} ({credits} credits)",
-                        )
-                        db.add(alloc_tx)
-
-                    renewed_count += 1
-                    logger.info(f"Auto-renewed subscription for user {user.id}: {plan.name} until {new_end}")
+                                description=f"Subscription expired — {old_credits} unused subscription credits removed",
+                            ))
+                    expired_count += 1
+                    logger.info("auto-renew: expired unpaid sub %s (user %s, %s, method=%s)",
+                                sub.id, user.id, plan.name, _pay_method or "?")
 
                 except Exception as e:
-                    logger.error(f"Failed to auto-renew subscription {sub.id}: {e}")
+                    logger.error(f"Failed to settle subscription {sub.id}: {e}")
+                    try:
+                        await db.rollback()
+                    except Exception:
+                        pass
                     error_count += 1
 
             await db.commit()
 
         return {
             "status": "completed",
-            "renewed": renewed_count,
+            "extended": extended_count,
+            "expired": expired_count,
+            "skipped": skipped_count,
             "errors": error_count,
             "timestamp": datetime.utcnow().isoformat(),
         }
@@ -293,31 +339,67 @@ async def monthly_credit_reset_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
                     if not plan or not plan.monthly_credits:
                         continue
 
-                    # 2026-06 margin pass: yearly subscribers get a 11/12
-                    # prorated monthly grant. Without this, the worker reset
-                    # path silently undoes the credit_service.py fix.
+                    now_utc = datetime.utcnow()
+
+                    # Guard (a) 2026-07-10 — idempotency + anniversary overlap:
+                    # every grant path (activation, SALE-webhook renewal, this
+                    # task) stamps credits_reset_at. Skipping anyone refreshed
+                    # in the last 25 days prevents (1) a double-fired reset
+                    # re-filling mid-cycle spend, and (2) the calendar reset
+                    # topping users up AGAIN days after an anniversary grant.
+                    _reset_at = user.credits_reset_at
+                    if _reset_at and _reset_at.replace(tzinfo=None) > now_utc - timedelta(days=25):
+                        continue
+
+                    # Guard (b) 2026-07-10 — entitlement: current_plan_id
+                    # survives natural expiry and cancel-at-period-end, so
+                    # filtering on it alone granted full free credits to lapsed
+                    # accounts forever. Require a currently-valid subscription.
                     sub_res = await db.execute(
                         select(Subscription)
                         .where(
                             Subscription.user_id == user.id,
                             Subscription.status == "active",
+                            Subscription.end_date >= now_utc,
                         )
                         .order_by(desc(Subscription.start_date))
                         .limit(1)
                     )
                     sub = sub_res.scalar_one_or_none()
-                    is_yearly = bool(sub and (getattr(sub, "billing_cycle", None) or "monthly") == "yearly")
+                    if sub is None:
+                        continue
+                    is_yearly = (getattr(sub, "billing_cycle", None) or "monthly") == "yearly"
+
+                    # Guard (c)/(d) 2026-07-10 — monthly PayPal subs get their
+                    # allotment per-cycle from PAYMENT.SALE.COMPLETED (this
+                    # reset was a second, uncoordinated top-up for them), and
+                    # amounts are currency-aware (TWD payers previously got
+                    # the larger USD allowance every month).
+                    from app.models.billing import Order as _Order
+                    from app.services.subscription_service import (
+                        subscription_period_credits as _period_credits,
+                    )
+                    _last_order = (await db.execute(
+                        select(_Order)
+                        .where(_Order.subscription_id == sub.id)
+                        .order_by(desc(_Order.created_at))
+                    )).scalars().first()
+                    _pay_method = (_last_order.payment_method if _last_order else "") or ""
+                    if not is_yearly and _pay_method.lower() == "paypal":
+                        continue
 
                     old_credits = user.subscription_credits or 0
-                    full_credits = plan.monthly_credits
+                    month_base = _period_credits(plan, _pay_method, "monthly")
                     if is_yearly:
-                        new_credits = int(round(full_credits * 11 / 12))
+                        new_credits = int(round(month_base * 11 / 12))
                     else:
-                        new_credits = full_credits
+                        new_credits = month_base
+                    if new_credits <= 0:
+                        continue
 
                     # Reset subscription credits to plan amount
                     user.subscription_credits = new_credits
-                    user.credits_reset_at = datetime.utcnow()
+                    user.credits_reset_at = now_utc
 
                     # Record the reset as a transaction
                     # First record expiry of old credits if any
@@ -345,6 +427,10 @@ async def monthly_credit_reset_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
 
                 except Exception as e:
                     logger.error(f"Failed to reset credits for user {user.id}: {e}")
+                    try:
+                        await db.rollback()
+                    except Exception:
+                        pass
                     error_count += 1
 
             await db.commit()
@@ -475,7 +561,17 @@ async def generate_single_demo_task(
 # their status flipped to "completed"/"failed" inside that request — this
 # worker only touches rows still in "submitting"/"polling" past the grace.
 
-RECLAIM_FOREGROUND_GRACE_SEC = 60      # don't touch rows the foreground is still actively polling
+# 2026-07-10 fix: was 60s, which assumed on_submit flips the row to
+# "polling" within seconds of submit. That is only true for PiAPI/A2E.
+# Pollo (and any provider that polls internally without firing on_submit)
+# leaves the row in "submitting" for the WHOLE render (2-20 min), and the
+# foreground itself legitimately polls up to 55 min (avatar 3300s, kling
+# 1800s, I2V 1200s) — so the old 60s grace made the reclaim worker refund
+# tasks that were still being served: the user received the video AND a
+# full refund on essentially every Pollo-served generation. The grace must
+# exceed the longest legitimate foreground window; genuinely-dead requests
+# are still recovered, just 90 min later instead of 60 s.
+RECLAIM_FOREGROUND_GRACE_SEC = 5400    # 90 min > max foreground poll (avatar 3300s + pre-stages)
 RECLAIM_MAX_AGE_HOURS = 6              # after this, abandon + refund
 
 
@@ -490,6 +586,14 @@ TOOL_TYPE_KIND = {
     "image_upscale":           "image",
     "try_on":                  "image",  # Kling try-on (≤600s poll) — added 2026-06
     "kling_video":             "video",  # Kling video (≤1800s poll) — added 2026-06
+    "product_recolor":         "image",  # Kontext recolor — was missing, so reclaim
+                                         # treated it as video, found no video_url,
+                                         # and refunded delivered images (2026-07-10)
+    "room_redesign":           "image",  # disconnect-coverage rows (2026-07-10) — no
+    "sora2":                   "video",  # task_id is ever captured on these, so they
+                                         # only reach the orphan-submit refund branch;
+                                         # mapped anyway so a future on_submit wiring
+                                         # can't hit the unknown-tool warning.
 }
 
 
@@ -513,6 +617,9 @@ def _build_tool_enum_map():
         "image_upscale":           _ToolType.EFFECT,  # matches foreground choice
         "try_on":                  _ToolType.TRY_ON,
         "kling_video":             _ToolType.KLING_VIDEO,
+        "product_recolor":         _ToolType.EFFECT,  # matches foreground choice (tools.py recolor)
+        "room_redesign":           _ToolType.ROOM_REDESIGN,
+        "sora2":                   _ToolType.SORA2,
     }
 
 
@@ -654,6 +761,52 @@ async def _reclaim_check_a2e(provider_task_id: str, kind: str = "video") -> Dict
     return {"status": "running"}
 
 
+async def _finalize_pending_and_refund(db, p, *, status: str, error_message: str, now, description: str) -> bool:
+    """Flip a pending row to a terminal status FIRST (own commit), THEN refund.
+
+    Order matters: CreditService.add_credits commits internally, so refunding
+    first left a window where the refund was booked while the row was still
+    submitting/polling — the next 2-minute tick would refund it AGAIN. With
+    terminal-status-first, a crash after the status commit costs one refund
+    that ops can replay from the REFUND_FAILED marker; it can never mint
+    duplicate refunds.
+
+    Refunds land in the PURCHASED bucket (2026-07-10): the old
+    credit_type="subscription" was absolute-overwritten by every renewal /
+    monthly reset, so a refund issued near a cycle boundary silently
+    evaporated — and never-expiring purchased credits came back as expiring
+    subscription ones. The worker has no per-bucket deduction snapshot (the
+    foreground's _refund_credits does), so purchased — the one bucket nothing
+    ever overwrites — is the only safe destination.
+    """
+    p.status = status
+    p.error_message = error_message
+    p.completed_at = now
+    await db.commit()
+    if p.credits_charged and p.credits_charged > 0:
+        try:
+            await CreditService(db).add_credits(
+                user_id=str(p.user_id),
+                amount=p.credits_charged,
+                credit_type="purchased",
+                transaction_type="refund",
+                description=description,
+                metadata={"pending_task_id": str(p.id)},
+            )
+        except Exception as exc:
+            logger.error(
+                "reclaim: REFUND FAILED for %s (%s credits, user %s): %s — replay manually",
+                p.id, p.credits_charged, p.user_id, exc,
+            )
+            try:
+                p.error_message = f"{error_message} | REFUND_FAILED: {str(exc)[:120]}"
+                await db.commit()
+            except Exception:
+                await db.rollback()
+            return False
+    return True
+
+
 async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """Re-poll orphaned upstream tasks, materialise results or refund."""
     from sqlalchemy import select, and_, or_
@@ -691,48 +844,38 @@ async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, 
                 # refund the user; assume the upstream is permanently lost.
                 if p.created_at and p.created_at.replace(tzinfo=None) < abandon_cutoff:
                     try:
-                        credit_svc = CreditService(db)
-                        if p.credits_charged > 0:
-                            await credit_svc.add_credits(
-                                user_id=str(p.user_id),
-                                amount=p.credits_charged,
-                                credit_type="subscription",
-                                transaction_type="refund",
-                                description=f"Refund: abandoned {p.service_type} (reclaim age > {RECLAIM_MAX_AGE_HOURS}h)",
-                                metadata={"pending_task_id": str(p.id)},
-                            )
-                        p.status = "abandoned"
-                        p.error_message = f"reclaim age exceeded {RECLAIM_MAX_AGE_HOURS}h"
-                        p.completed_at = now
-                        await db.commit()
-                        stats["abandoned"] += 1
+                        ok = await _finalize_pending_and_refund(
+                            db, p,
+                            status="abandoned",
+                            error_message=f"reclaim age exceeded {RECLAIM_MAX_AGE_HOURS}h",
+                            now=now,
+                            description=f"Refund: abandoned {p.service_type} (reclaim age > {RECLAIM_MAX_AGE_HOURS}h)",
+                        )
+                        stats["abandoned" if ok else "errors"] += 1
                     except Exception as exc:
                         logger.warning("reclaim: abandon refund failed for %s: %s", p.id, exc)
+                        await db.rollback()
                         stats["errors"] += 1
                     continue
 
-                # Rows still in "submitting" never captured a task_id — the
-                # original request died before the upstream API responded.
-                # Nothing we can poll. Abandon + refund.
+                # Rows still in "submitting" never captured a task_id — either
+                # the original request died before the upstream API responded,
+                # or the serving provider never fires on_submit (Pollo polls
+                # internally). The 90-min grace above guarantees no live
+                # foreground still owns this row. Abandon + refund.
                 if p.status == "submitting" or not p.provider_task_id:
                     try:
-                        credit_svc = CreditService(db)
-                        if p.credits_charged > 0:
-                            await credit_svc.add_credits(
-                                user_id=str(p.user_id),
-                                amount=p.credits_charged,
-                                credit_type="subscription",
-                                transaction_type="refund",
-                                description=f"Refund: {p.service_type} never received provider task_id",
-                                metadata={"pending_task_id": str(p.id)},
-                            )
-                        p.status = "abandoned"
-                        p.error_message = "provider submit died before task_id was captured"
-                        p.completed_at = now
-                        await db.commit()
-                        stats["abandoned"] += 1
+                        ok = await _finalize_pending_and_refund(
+                            db, p,
+                            status="abandoned",
+                            error_message="provider submit died before task_id was captured",
+                            now=now,
+                            description=f"Refund: {p.service_type} never received provider task_id",
+                        )
+                        stats["abandoned" if ok else "errors"] += 1
                     except Exception as exc:
                         logger.warning("reclaim: orphan-submit refund failed for %s: %s", p.id, exc)
+                        await db.rollback()
                         stats["errors"] += 1
                     continue
 
@@ -747,8 +890,26 @@ async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, 
                     elif p.provider_name == "a2e":
                         check = await _reclaim_check_a2e(p.provider_task_id, kind=kind)
                     else:
-                        logger.warning("reclaim: unknown provider %r on task %s", p.provider_name, p.id)
-                        stats["errors"] += 1
+                        # Un-pollable provider (renamed/removed, or an
+                        # on_submit wrote a name we can't re-poll). The old
+                        # skip left the row active — it occupied the user's
+                        # concurrent-limit slot for up to 6h until the abandon
+                        # cutoff finally refunded it (2026-07-10 round 5).
+                        # Terminal-mark + refund immediately instead.
+                        logger.warning("reclaim: unknown provider %r on task %s — abandoning + refunding", p.provider_name, p.id)
+                        try:
+                            ok = await _finalize_pending_and_refund(
+                                db, p,
+                                status="abandoned",
+                                error_message=f"unknown provider '{p.provider_name}' — cannot re-poll",
+                                now=now,
+                                description=f"Refund: {p.service_type} on un-pollable provider {p.provider_name}",
+                            )
+                            stats["abandoned" if ok else "errors"] += 1
+                        except Exception as exc:
+                            logger.warning("reclaim: unknown-provider refund failed for %s: %s", p.id, exc)
+                            await db.rollback()
+                            stats["errors"] += 1
                         continue
                 except Exception as exc:
                     logger.warning("reclaim: poll exception for %s: %s", p.id, exc)
@@ -759,7 +920,11 @@ async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, 
 
                 if check["status"] == "running":
                     stats["still_running"] += 1
-                    await db.commit()
+                    try:
+                        await db.commit()
+                    except Exception as exc:
+                        logger.warning("reclaim: last_polled_at commit failed for %s: %s", p.id, exc)
+                        await db.rollback()
                     continue
 
                 if check["status"] == "completed":
@@ -773,25 +938,23 @@ async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, 
                         pass  # fall back to provider CDN (safe_persist_url already guards)
 
                     if not media_url:
-                        # completed but somehow no URL → treat as failure + refund
+                        # completed but somehow no URL → treat as failure + refund.
+                        # Terminal-first via the helper: the old order refunded
+                        # first and swallowed refund errors while still marking
+                        # the row failed — the refund was then lost forever.
                         try:
-                            credit_svc = CreditService(db)
-                            if p.credits_charged > 0:
-                                await credit_svc.add_credits(
-                                    user_id=str(p.user_id),
-                                    amount=p.credits_charged,
-                                    credit_type="subscription",
-                                    transaction_type="refund",
-                                    description=f"Refund: {p.service_type} completed without URL",
-                                    metadata={"pending_task_id": str(p.id)},
-                                )
+                            ok = await _finalize_pending_and_refund(
+                                db, p,
+                                status="failed",
+                                error_message="completed without media URL",
+                                now=now,
+                                description=f"Refund: {p.service_type} completed without URL",
+                            )
+                            stats["failed" if ok else "errors"] += 1
                         except Exception as exc:
                             logger.warning("reclaim: refund-on-empty failed for %s: %s", p.id, exc)
-                        p.status = "failed"
-                        p.error_message = "completed without video_url"
-                        p.completed_at = now
-                        await db.commit()
-                        stats["failed"] += 1
+                            await db.rollback()
+                            stats["errors"] += 1
                         continue
 
                     try:
@@ -855,29 +1018,29 @@ async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, 
                         )
                     except Exception as exc:
                         logger.error("reclaim: materialise failed for %s: %s", p.id, exc, exc_info=True)
+                        # Roll back so the poisoned transaction doesn't abort
+                        # every remaining row in this run.
+                        try:
+                            await db.rollback()
+                        except Exception:
+                            pass
                         stats["errors"] += 1
                     continue
 
-                # status == "failed" — refund and mark failed.
+                # status == "failed" — mark failed first, then refund.
                 if check["status"] == "failed":
                     try:
-                        credit_svc = CreditService(db)
-                        if p.credits_charged > 0:
-                            await credit_svc.add_credits(
-                                user_id=str(p.user_id),
-                                amount=p.credits_charged,
-                                credit_type="subscription",
-                                transaction_type="refund",
-                                description=f"Refund: {p.service_type} upstream failed (reclaim)",
-                                metadata={"pending_task_id": str(p.id)},
-                            )
-                        p.status = "failed"
-                        p.error_message = check.get("error") or "upstream failure"
-                        p.completed_at = now
-                        await db.commit()
-                        stats["failed"] += 1
+                        ok = await _finalize_pending_and_refund(
+                            db, p,
+                            status="failed",
+                            error_message=check.get("error") or "upstream failure",
+                            now=now,
+                            description=f"Refund: {p.service_type} upstream failed (reclaim)",
+                        )
+                        stats["failed" if ok else "errors"] += 1
                     except Exception as exc:
                         logger.warning("reclaim: refund-on-fail failed for %s: %s", p.id, exc)
+                        await db.rollback()
                         stats["errors"] += 1
                     continue
 

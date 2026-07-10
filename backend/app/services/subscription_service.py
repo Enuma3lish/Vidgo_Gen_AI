@@ -1526,9 +1526,14 @@ class SubscriptionService:
 
         Activates the subscription and allocates credits.
         """
-        # Find order
+        # Find order. Row-locked (2026-07-10): the status check below is
+        # read-then-act, and both the ECPay callback (which ECPay retries when
+        # the ack is slow) and webhook + admin-reprovision can deliver the same
+        # order concurrently — two racers both saw "pending" and both ran the
+        # ADDITIVE credit-pack grant, double-crediting the package. FOR UPDATE
+        # serializes them; the loser re-reads "paid" and exits idempotently.
         result = await db.execute(
-            select(Order).where(Order.order_number == order_number)
+            select(Order).where(Order.order_number == order_number).with_for_update()
         )
         order = result.scalar_one_or_none()
 
@@ -1570,9 +1575,35 @@ class SubscriptionService:
                         )
                     )
                 )
+                _new_paypal_id = (order.payment_data or {}).get("paypal_subscription_id")
                 for other in other_subs_result.scalars().all():
                     other.status = "cancelled"
                     other.auto_renew = False
+                    # 2026-07-10: ALSO cancel the superseded agreement at
+                    # PayPal. Local-only cancellation left the old agreement
+                    # billing forever; its SALE webhooks then hit a cancelled
+                    # local sub and granted nothing — the user paid for both
+                    # plans and received one. Best-effort: a PayPal hiccup
+                    # must not block activating the newly-paid plan.
+                    try:
+                        _old_order = (await db.execute(
+                            select(Order)
+                            .where(Order.subscription_id == other.id)
+                            .order_by(Order.created_at.desc())
+                        )).scalars().first()
+                        _old_paypal_id = ((_old_order.payment_data or {}).get("paypal_subscription_id")
+                                          if _old_order else None)
+                        if _old_paypal_id and _old_paypal_id != _new_paypal_id:
+                            await self.paypal.cancel_subscription(_old_paypal_id)
+                            logger.info(
+                                "Cancelled superseded PayPal agreement %s (replaced by %s)",
+                                _old_paypal_id, _new_paypal_id or order.order_number,
+                            )
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to cancel superseded PayPal agreement for sub %s: %s",
+                            other.id, exc,
+                        )
 
                 subscription.status = "active"
 
@@ -1654,6 +1685,11 @@ class SubscriptionService:
                         )
                         db.add(transaction)
                     if bonus_credits > 0:
+                        # Same dead-bucket hazard as admin grants (2026-07-10):
+                        # landing bonus credits on top of an already-expired
+                        # batch makes them invisible and wiped by cleanup.
+                        from app.services.credit_service import settle_expired_bonus
+                        settle_expired_bonus(db, user)
                         user.bonus_credits = (user.bonus_credits or 0) + bonus_credits
                         transaction = CreditTransaction(
                             user_id=user.id,

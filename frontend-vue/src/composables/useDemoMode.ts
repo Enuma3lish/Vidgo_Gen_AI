@@ -429,9 +429,19 @@ export function useDemoMode() {
     return sessionId
   }
 
-  // Initialize subscription check
+  // Initialize subscription check.
+  // 2026-07-10 (D4): gate on accessToken, NOT isAuthenticated. The latter is
+  // `token && user`, and on a hard reload the tool page can mount before
+  // auth.init() finishes fetchUser() — token present, user still null. The
+  // old code then took the else branch and stamped subscriptionChecked=true
+  // WITHOUT ever calling the subscription API, so a subscriber whose paid
+  // state lives only in has_subscription (not user.plan_type) was
+  // misclassified as a demo user for the whole session. accessToken is
+  // loaded synchronously from localStorage, and checkSubscription() fetches
+  // the user itself, so it needs no preloaded user object.
   onMounted(() => {
-    if (authStore.isAuthenticated && !subscriptionChecked.value) {
+    if (subscriptionChecked.value) return
+    if (authStore.accessToken) {
       checkSubscription()
     } else {
       subscriptionChecked.value = true

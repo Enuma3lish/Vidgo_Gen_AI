@@ -56,6 +56,51 @@ GROWTH_3D_DELTA = GROWTH_VIDEO_3D_CREDITS - GROWTH_VIDEO_CREDITS  # refunded if 
 # vs. 4× to encourage the comparison workflow).
 SIMULATION_CREDITS = RENDER_CREDITS * 4 - 20  # 140
 
+# 全屋批次 (2026-07-10): one whole-house batch = N floor plans × 1-4 variants,
+# every render locked to ONE shared effect. Per-render price follows the
+# "interior_render" ServicePricing row (fallback RENDER_CREDITS); the deduct
+# itself uses service_type "interior_batch_render" which must NEVER be seeded
+# in ServicePricing — the deduction firewall REPLACES the passed amount with a
+# seeded row's per-use price, which would collapse an N×V batch charge to one
+# render's price. Caps keep a single request bounded.
+BATCH_MAX_IMAGES = 8
+BATCH_MAX_TOTAL_RENDERS = 16
+# 全屋影片: ffmpeg tour assembled locally from the batch renders (CPU-only,
+# no provider spend) — priced as one render-equivalent via the seeded
+# "interior_house_tour" row (fallback below).
+HOUSE_TOUR_CREDITS = 20
+
+# 2026-07-10 — the standalone design/3D endpoints below ran REAL provider
+# generations (Kontext/nano-banana I2I ≈ $0.02-0.04, Trellis GLB ≈ $0.05-0.15
+# upstream) with NO deduction at all; /demo/* didn't even require login.
+# Priced against the platform's existing anchors (room_redesign=20,
+# GROWTH_3D_DELTA=150; pack revenue ≈ $0.033/credit → 15-30× cost margin).
+# Each has its own ServicePricing key so ops can retune without a redeploy.
+DESIGN_EDIT_CREDITS = 20        # redesign / generate / fusion / edit / style-transfer
+MODEL_3D_CREDITS = GROWTH_3D_DELTA            # 150 — standalone Trellis GLB
+MODEL_3D_FROM_FLOORPLAN_CREDITS = DESIGN_EDIT_CREDITS + MODEL_3D_CREDITS  # 170 — render + Trellis
+
+
+async def _charge_interior(db, current_user, amount: int, service_type: str) -> int:
+    """Login + charge gate shared by the interior endpoints. Returns the
+    actually-charged amount (ServicePricing-override aware, 0 for admins).
+    Raises 401 for anonymous callers, 402 when the balance is short."""
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login required — this tool consumes credits.",
+        )
+    from app.api.v1.tools import _check_and_deduct_credits, _credits_charged
+    ok, err = await _check_and_deduct_credits(db, current_user, amount, service_type)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=err)
+    return _credits_charged(current_user, amount)
+
+
+async def _refund_interior(db, current_user, amount: int, service_type: str) -> None:
+    from app.api.v1.tools import _refund_credits
+    await _refund_credits(db, current_user, amount, service_type)
+
 # ── Detail-mode surface presets (細化模式) — additive clauses appended to the
 # preserve render's prompt so the user can swap floor/ceiling/wall textures
 # without re-rolling style or geometry.
@@ -442,6 +487,8 @@ async def redesign_room(
     if not image_url:
         raise HTTPException(status_code=400, detail="No image URL could be resolved")
 
+    charged = await _charge_interior(db, current_user, DESIGN_EDIT_CREDITS, "interior_redesign")
+
     # 2026-05-18 — image-understanding pass to fuse user prompt with
     # what's actually in the photo. Drops the user's text when it
     # contradicts the image (e.g. "redesign as a kitchen" on a bedroom
@@ -483,12 +530,14 @@ async def redesign_room(
             user_tier=user_tier,
         )
     except Exception as exc:
+        await _refund_interior(db, current_user, charged, "interior_redesign")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Room redesign failed: {exc}"
         )
 
     if not result.get("success"):
+        await _refund_interior(db, current_user, charged, "interior_redesign")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.get("error", "Failed to redesign room")
@@ -523,15 +572,22 @@ async def generate_design(
     - "Modern minimalist bedroom with floor-to-ceiling windows"
     - "Cozy Japanese zen study with tatami and low table"
     """
+    charged = await _charge_interior(db, current_user, DESIGN_EDIT_CREDITS, "interior_generate")
+
     service = get_interior_design_service()
 
-    result = await service.generate_design(
-        prompt=request.prompt,
-        style_id=request.style_id,
-        room_type=request.room_type
-    )
+    try:
+        result = await service.generate_design(
+            prompt=request.prompt,
+            style_id=request.style_id,
+            room_type=request.room_type
+        )
+    except Exception:
+        await _refund_interior(db, current_user, charged, "interior_generate")
+        raise
 
     if not result.get("success"):
+        await _refund_interior(db, current_user, charged, "interior_generate")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.get("error", "Failed to generate design")
@@ -570,17 +626,24 @@ async def fusion_design(
             detail="Style reference image is required"
         )
 
+    charged = await _charge_interior(db, current_user, DESIGN_EDIT_CREDITS, "interior_fusion")
+
     service = get_interior_design_service()
 
-    result = await service.fusion_design(
-        room_image_base64=request.room_image_base64,
-        room_image_url=request.room_image_url,
-        style_image_base64=request.style_image_base64,
-        style_image_url=request.style_image_url,
-        prompt=request.prompt
-    )
+    try:
+        result = await service.fusion_design(
+            room_image_base64=request.room_image_base64,
+            room_image_url=request.room_image_url,
+            style_image_base64=request.style_image_base64,
+            style_image_url=request.style_image_url,
+            prompt=request.prompt
+        )
+    except Exception:
+        await _refund_interior(db, current_user, charged, "interior_fusion")
+        raise
 
     if not result.get("success"):
+        await _refund_interior(db, current_user, charged, "interior_fusion")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.get("error", "Failed to create fusion design")
@@ -622,16 +685,24 @@ async def iterative_edit(
             detail="Image is required for the first edit. Provide image_url or image_base64."
         )
 
+    # Charged PER TURN — every turn is a full image generation upstream.
+    charged = await _charge_interior(db, current_user, DESIGN_EDIT_CREDITS, "interior_edit")
+
     service = get_interior_design_service()
 
-    result = await service.iterative_edit(
-        conversation_id=conversation_id,
-        prompt=request.prompt,
-        image_base64=request.image_base64,
-        image_url=request.image_url
-    )
+    try:
+        result = await service.iterative_edit(
+            conversation_id=conversation_id,
+            prompt=request.prompt,
+            image_base64=request.image_base64,
+            image_url=request.image_url
+        )
+    except Exception:
+        await _refund_interior(db, current_user, charged, "interior_edit")
+        raise
 
     if not result.get("success"):
+        await _refund_interior(db, current_user, charged, "interior_edit")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.get("error", "Failed to apply edit")
@@ -703,15 +774,22 @@ async def style_transfer(
             detail=f"Unknown style: {request.style_id}. Available: {list(DESIGN_STYLES.keys())}"
         )
 
+    charged = await _charge_interior(db, current_user, DESIGN_EDIT_CREDITS, "interior_style_transfer")
+
     service = get_interior_design_service()
 
-    result = await service.transfer_style(
-        room_image_base64=request.room_image_base64,
-        room_image_url=request.room_image_url,
-        style_id=request.style_id
-    )
+    try:
+        result = await service.transfer_style(
+            room_image_base64=request.room_image_base64,
+            room_image_url=request.room_image_url,
+            style_id=request.style_id
+        )
+    except Exception:
+        await _refund_interior(db, current_user, charged, "interior_style_transfer")
+        raise
 
     if not result.get("success"):
+        await _refund_interior(db, current_user, charged, "interior_style_transfer")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.get("error", "Failed to apply style transfer")
@@ -728,6 +806,7 @@ async def style_transfer(
 async def generate_3d_model(
     request: Generate3DRequest,
     current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Convert a 2D room image or floor plan into an interactive GLB model.
@@ -746,6 +825,8 @@ async def generate_3d_model(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Image URL is required"
         )
+
+    charged = await _charge_interior(db, current_user, MODEL_3D_CREDITS, "interior_3d_model")
 
     provider_router = get_provider_router()
     try:
@@ -766,6 +847,7 @@ async def generate_3d_model(
         # buries the actionable text ("Service credits are currently
         # depleted." / "3D model generation is temporarily unavailable.")
         # under boilerplate, so we surface the inner message as-is.
+        await _refund_interior(db, current_user, charged, "interior_3d_model")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc) or "3D model generation failed."
@@ -774,6 +856,7 @@ async def generate_3d_model(
     output = result.get("output") or {}
     model_url = output.get("model_url") or output.get("model_file") or output.get("url")
     if not model_url:
+        await _refund_interior(db, current_user, charged, "interior_3d_model")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="3D provider completed without returning a model URL"
@@ -792,6 +875,7 @@ async def generate_3d_model(
 async def generate_3d_from_floorplan(
     request: Generate3DFromFloorplanRequest,
     current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Two-stage Floor-Plan -> 3D pipeline (subscribers + superusers).
@@ -832,6 +916,10 @@ async def generate_3d_from_floorplan(
         f"{(request.prompt or '').strip()}"
     ).strip()
 
+    charged = await _charge_interior(
+        db, current_user, MODEL_3D_FROM_FLOORPLAN_CREDITS, "interior_3d_from_floorplan"
+    )
+
     provider_router = get_provider_router()
     try:
         stage1 = await provider_router.route(
@@ -848,6 +936,7 @@ async def generate_3d_from_floorplan(
         # See note on /3d-model — provider_router already produces a user-
         # friendly message. Surface it directly so the caller sees the real
         # reason (e.g. credit depletion) instead of generic prose.
+        await _refund_interior(db, current_user, charged, "interior_3d_from_floorplan")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc) or "Floor-plan interior render failed."
@@ -859,6 +948,7 @@ async def generate_3d_from_floorplan(
         or (stage1.get("output", {}) or {}).get("image_url")
     )
     if not rendered_url:
+        await _refund_interior(db, current_user, charged, "interior_3d_from_floorplan")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Floor-plan render returned no image: {stage1.get('error', 'unknown')}"
@@ -875,6 +965,9 @@ async def generate_3d_from_floorplan(
             user_tier=get_user_tier(current_user),
         )
     except Exception as exc:
+        # The error response carries no render URL, so the user receives
+        # nothing usable — refund the FULL charge, not just the 3D delta.
+        await _refund_interior(db, current_user, charged, "interior_3d_from_floorplan")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc) or "3D reconstruction failed after floor-plan render."
@@ -883,6 +976,7 @@ async def generate_3d_from_floorplan(
     output = result.get("output") or {}
     model_url = output.get("model_url") or output.get("model_file") or output.get("url")
     if not model_url:
+        await _refund_interior(db, current_user, charged, "interior_3d_from_floorplan")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="3D provider completed without returning a model URL"
@@ -1570,6 +1664,8 @@ async def demo_redesign(
     style_id: Optional[str] = Form(None, description="Design style to apply"),
     room_type: Optional[str] = Form(None, description="Type of room"),
     image: UploadFile = File(..., description="Room image file"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
     # 2026-05-18 — ReRoom-inspired modifiers. Mirror tools.py:RoomRedesignRequest
     # so the demo upload path supports the same enhancements as the
     # URL-based subscriber endpoint.
@@ -1692,18 +1788,28 @@ async def demo_redesign(
         if match and match.get("prompt"):
             style_prompt_suffix = match["prompt"]
 
+    # 2026-07-10: "demo" ran a REAL render for anonymous callers with no
+    # limit of any kind. Same login+credit gate as /redesign, same
+    # ServicePricing knob, so there is no free side-door.
+    charged = await _charge_interior(db, current_user, DESIGN_EDIT_CREDITS, "interior_redesign")
+
     service = get_interior_design_service()
 
-    result = await service.redesign_room(
-        room_image_base64=image_base64,
-        prompt=final_prompt,
-        style_id=style_id,
-        room_type=room_type,
-        keep_layout=True,
-        style_prompt_suffix=style_prompt_suffix,
-    )
+    try:
+        result = await service.redesign_room(
+            room_image_base64=image_base64,
+            prompt=final_prompt,
+            style_id=style_id,
+            room_type=room_type,
+            keep_layout=True,
+            style_prompt_suffix=style_prompt_suffix,
+        )
+    except Exception:
+        await _refund_interior(db, current_user, charged, "interior_redesign")
+        raise
 
     if not result.get("success"):
+        await _refund_interior(db, current_user, charged, "interior_redesign")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.get("error", "Failed to redesign room")
@@ -1722,23 +1828,32 @@ async def demo_redesign(
 
 @router.post("/demo/generate", response_model=DesignResponse)
 async def demo_generate(
-    request: GenerateRequest
+    request: GenerateRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    Demo endpoint for generating designs from text (no authentication required).
+    Text-to-design generation (legacy "demo" path).
 
-    Describe the room you want and the AI will generate it.
-    Limited to demo usage.
+    2026-07-10: previously unauthenticated + uncharged while running a real
+    provider generation. Now the same login+credit gate as /generate.
     """
+    charged = await _charge_interior(db, current_user, DESIGN_EDIT_CREDITS, "interior_generate")
+
     service = get_interior_design_service()
 
-    result = await service.generate_design(
-        prompt=request.prompt,
-        style_id=request.style_id,
-        room_type=request.room_type
-    )
+    try:
+        result = await service.generate_design(
+            prompt=request.prompt,
+            style_id=request.style_id,
+            room_type=request.room_type
+        )
+    except Exception:
+        await _refund_interior(db, current_user, charged, "interior_generate")
+        raise
 
     if not result.get("success"):
+        await _refund_interior(db, current_user, charged, "interior_generate")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result.get("error", "Failed to generate design")
@@ -1749,3 +1864,460 @@ async def demo_generate(
         image_url=result.get("image_url"),
         description=result.get("description")
     )
+
+
+# ============================================================================
+# 全屋批次渲染 + 全屋影片 (2026-07-10, owner request)
+# One shared effect applied to N floor plans (整體 + 各房間), 1-4 variants
+# each, consistency enforced server-side; the finished renders can then be
+# assembled into a whole-house tour video.
+# ============================================================================
+
+class FloorplanBatchImage(BaseModel):
+    """One floor plan in a whole-house batch."""
+    image_url: str = Field(..., description="Public URL of this floor plan image.")
+    room_label: Optional[str] = Field(
+        None,
+        description="Room this plan shows: overall | living_room | dining_room | "
+                    "kitchen | master_bedroom | bedroom | bathroom | study | balcony | other",
+    )
+
+
+class FloorplanBatchRenderRequest(BaseModel):
+    """全屋批次: N floor plans rendered with ONE shared effect.
+
+    The effect fields are deliberately the same names as
+    FloorplanToVideoRequest so the frontend builds them identically. There is
+    exactly ONE set of effect knobs for the whole batch — per-image effects
+    are structurally impossible, which is the primary consistency guarantee.
+    """
+    images: List[FloorplanBatchImage] = Field(..., min_length=1, max_length=BATCH_MAX_IMAGES)
+    variation_count: int = Field(1, ge=1, le=4, description="Results per floor plan (1-4).")
+    # ── shared effect (applies to EVERY image) ──
+    style_id: Optional[str] = Field(None, description="Interior design style id.")
+    magic_mode: bool = Field(False)
+    prompt: Optional[str] = Field(None, description="Magic-mode free prompt (shared).")
+    surface_floor: Optional[str] = Field(None)
+    surface_ceiling: Optional[str] = Field(None)
+    surface_wall: Optional[str] = Field(None)
+    lighting_tone: Optional[str] = Field(None)
+    color_temperature: Optional[int] = Field(None, ge=2000, le=8000)
+    material_accent: Optional[str] = Field(None)
+    structural_fidelity: int = Field(70, ge=0, le=100)
+    style_strength: int = Field(60, ge=0, le=100)
+    language: Optional[str] = Field("en")
+
+
+class BatchRenderGroup(BaseModel):
+    room_label: Optional[str] = None
+    input_image_url: str
+    results: List[str] = []
+
+
+class FloorplanBatchRenderResponse(BaseModel):
+    success: bool
+    groups: List[BatchRenderGroup] = []
+    credits_used: int = 0
+    # The enforced whole-house design code + per-render params fingerprint —
+    # the server-side proof that every plan ran the SAME effect.
+    consistency: Dict[str, Any] = {}
+    error: Optional[str] = None
+
+
+def _batch_design_code(req: "FloorplanBatchRenderRequest") -> str:
+    """Deterministic one-line description of the shared effect. Injected into
+    every render prompt so all rooms read as one coherent home, and returned
+    to the client as the consistency receipt."""
+    style_name = ""
+    if req.style_id and req.style_id in DESIGN_STYLES:
+        style_name = DESIGN_STYLES[req.style_id].get("name") or req.style_id
+    parts = [
+        f"style={style_name or req.style_id or 'original'}",
+        f"floor={req.surface_floor or 'original'}",
+        f"walls={req.surface_wall or 'original'}",
+        f"ceiling={req.surface_ceiling or 'original'}",
+        f"lighting={req.lighting_tone or 'natural'}",
+    ]
+    if req.color_temperature:
+        parts.append(f"color_temp={req.color_temperature}K")
+    if req.material_accent:
+        parts.append(f"accent={req.material_accent}")
+    return ", ".join(parts)
+
+
+# Variant diversifiers vary ONLY the camera — never palette/material/lighting —
+# so 1-4 results per plan stay inside the same whole-house design code.
+_BATCH_VARIANT_CAMERA = [
+    "",
+    " Alternate camera: slightly wider angle from the opposite corner of the room; the design itself is identical.",
+    " Alternate camera: eye-level view from the room entrance; the design itself is identical.",
+    " Alternate camera: gentle three-quarter overview; the design itself is identical.",
+]
+
+_BATCH_ROOM_HINTS = {
+    "overall":        "This plan shows the OVERALL home layout.",
+    "living_room":    "This floor plan is the living room.",
+    "dining_room":    "This floor plan is the dining room.",
+    "kitchen":        "This floor plan is the kitchen.",
+    "master_bedroom": "This floor plan is the master bedroom.",
+    "bedroom":        "This floor plan is a bedroom.",
+    "bathroom":       "This floor plan is the bathroom.",
+    "study":          "This floor plan is the study / home office.",
+    "balcony":        "This floor plan is the balcony.",
+}
+
+
+@router.post("/floorplan/batch-render")
+async def floorplan_batch_render(
+    request: FloorplanBatchRenderRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """全屋批次渲染 — N floor plans × 1-4 variants, ONE shared effect.
+
+    Consistency contract ("每張圖同一效果、所有結果同一組合"):
+      1. The request carries exactly ONE effect block — per-image divergence
+         is impossible by construction.
+      2. Every render prompt embeds the same whole-house design code plus a
+         room hint; variants differ ONLY by camera clause.
+      3. Before rendering, the per-render parameter sets are fingerprinted
+         and compared — any mismatch aborts with a full refund; the
+         fingerprint is returned in `consistency` as the receipt.
+
+    Charged per render (interior_render price × images × variants), pro-rata
+    refund for failed renders. Streamed behind the 25 s heartbeat (up to
+    ~16 renders). Requires an active subscription.
+    """
+    if not is_subscribed_user(current_user) and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Whole-house batch rendering requires an active subscription",
+        )
+    n_images = len(request.images)
+    n_renders = n_images * request.variation_count
+    if n_renders > BATCH_MAX_TOTAL_RENDERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"images × variations must be ≤ {BATCH_MAX_TOTAL_RENDERS} (got {n_renders}). "
+                   "Reduce the variation count or split the batch.",
+        )
+    for img in request.images:
+        if not (img.image_url or "").strip().lower().startswith(("http://", "https://")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Every image_url must be a public URL")
+
+    async def _work() -> Dict[str, Any]:
+        import asyncio as _asyncio
+        import hashlib as _hashlib
+        from app.api.v1.tools import (
+            _check_and_deduct_credits, _refund_credits, _credits_charged,
+            _open_reclaim_row, _close_reclaim_row,
+        )
+
+        # Per-render price follows the seeded interior_render row so ops can
+        # retune it; the batch deduct key itself must stay UNSEEDED (see the
+        # BATCH_MAX_IMAGES comment at the top of this file).
+        per_render = RENDER_CREDITS
+        try:
+            from app.services.credit_service import CreditService
+            _row = await CreditService(db).get_service_pricing("interior_render")
+            if _row and _row.credit_cost is not None:
+                per_render = int(_row.credit_cost)
+        except Exception:
+            pass
+        total_cost = per_render * n_renders
+
+        ok, err = await _check_and_deduct_credits(db, current_user, total_cost, "interior_batch_render")
+        if not ok:
+            return FloorplanBatchRenderResponse(success=False, error=err).model_dump()
+        charged = _credits_charged(current_user, total_cost)
+
+        reclaim_row = await _open_reclaim_row(
+            db, current_user,
+            tool_type="room_redesign", service_type="interior_batch_render", charged=charged,
+            input_params={"images": n_images, "variants": request.variation_count},
+        )
+
+        design_code = _batch_design_code(request)
+        consistency_clause = (
+            f" This room is PART OF ONE HOME rendered as a series. Whole-house design code: {design_code}."
+            " Use EXACTLY the same color palette, material finishes, lighting mood and rendering style"
+            " as every other room in this series — no stylistic drift between rooms."
+        )
+
+        # Build every per-render request up front and fingerprint the shared
+        # effect params — the "must check same effect" receipt. Any mismatch
+        # (impossible unless this code regresses) aborts before spending.
+        jobs: List[tuple] = []  # (group_idx, variant_idx, FloorplanToVideoRequest)
+        fingerprints = set()
+        for gi, img in enumerate(request.images):
+            room_hint = _BATCH_ROOM_HINTS.get((img.room_label or "").strip().lower(), "")
+            for vi in range(request.variation_count):
+                user_prompt = (request.prompt or "").strip()
+                v_req = FloorplanToVideoRequest(
+                    image_url=img.image_url,
+                    result_tier="render",
+                    preserve_original=True,
+                    magic_mode=request.magic_mode,
+                    style_id=request.style_id or "modern_minimalist",
+                    room_type=(img.room_label or "living_room"),
+                    prompt=f"{user_prompt} {room_hint}{consistency_clause}{_BATCH_VARIANT_CAMERA[vi]}".strip(),
+                    surface_floor=request.surface_floor,
+                    surface_ceiling=request.surface_ceiling,
+                    surface_wall=request.surface_wall,
+                    lighting_tone=request.lighting_tone,
+                    color_temperature=request.color_temperature,
+                    material_accent=request.material_accent,
+                    structural_fidelity=request.structural_fidelity,
+                    style_strength=request.style_strength,
+                    language=request.language,
+                )
+                effect_fp = _hashlib.sha256("|".join(str(x) for x in (
+                    v_req.style_id, v_req.magic_mode, v_req.surface_floor,
+                    v_req.surface_ceiling, v_req.surface_wall, v_req.lighting_tone,
+                    v_req.color_temperature, v_req.material_accent,
+                    v_req.structural_fidelity, v_req.style_strength,
+                    design_code,
+                )).encode()).hexdigest()[:16]
+                fingerprints.add(effect_fp)
+                jobs.append((gi, vi, v_req))
+
+        if len(fingerprints) != 1:
+            # Defense in depth — a per-render effect divergence means a code
+            # regression; never spend provider money on an inconsistent set.
+            await _close_reclaim_row(db, reclaim_row, status="failed", error="effect fingerprint mismatch")
+            await _refund_credits(db, current_user, charged, "interior_batch_render")
+            return FloorplanBatchRenderResponse(
+                success=False, error="Internal consistency check failed — no charge.",
+            ).model_dump()
+        effect_fingerprint = next(iter(fingerprints))
+
+        # Render with bounded concurrency (4 at a time keeps provider queues
+        # and the load governor happy for up to 16 renders).
+        sem = _asyncio.Semaphore(4)
+
+        async def _one(job):
+            gi, vi, v_req = job
+            async with sem:
+                try:
+                    r = await _preserve_render(v_req, current_user)
+                    return (gi, vi, r.get("image_url") if r.get("success") else None)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("batch render (%d,%d) raised: %s", gi, vi, exc)
+                    return (gi, vi, None)
+
+        rendered = await _asyncio.gather(*(_one(j) for j in jobs))
+
+        groups: List[BatchRenderGroup] = [
+            BatchRenderGroup(room_label=img.room_label, input_image_url=img.image_url, results=[])
+            for img in request.images
+        ]
+        succeeded = 0
+        for gi, vi, url in sorted(rendered, key=lambda t: (t[0], t[1])):
+            if url:
+                groups[gi].results.append(url)
+                succeeded += 1
+
+        failed = n_renders - succeeded
+        if succeeded == 0:
+            await _close_reclaim_row(db, reclaim_row, status="failed", error="all batch renders failed")
+            await _refund_credits(db, current_user, charged, "interior_batch_render")
+            return FloorplanBatchRenderResponse(
+                success=False, error="Batch rendering failed. You were not charged.",
+            ).model_dump()
+
+        # Terminal-mark BEFORE the pro-rata refund (worker discipline).
+        first_url = next((g.results[0] for g in groups if g.results), None)
+        await _close_reclaim_row(db, reclaim_row, status="completed", result_url=first_url)
+        if failed > 0:
+            await _refund_credits(db, current_user, failed * per_render, "interior_batch_render")
+
+        credits_used = max(0, charged - (failed * per_render if failed else 0))
+        for g in groups:
+            for url in g.results:
+                await _record_interior_generation(
+                    db, current_user, "interior_batch_render",
+                    g.input_image_url, url, per_render,
+                    input_text=f"[{g.room_label or 'room'}] {design_code}",
+                )
+
+        return FloorplanBatchRenderResponse(
+            success=True,
+            groups=groups,
+            credits_used=credits_used,
+            consistency={
+                "enforced": True,
+                "design_code": design_code,
+                "effect_fingerprint": effect_fingerprint,
+                "renders_requested": n_renders,
+                "renders_succeeded": succeeded,
+                "note": "All renders share one effect block, one design code, and one fingerprint; "
+                        "variants differ only by camera.",
+            },
+        ).model_dump()
+
+    from app.api.v1.tools import _stream_with_heartbeat
+    return _stream_with_heartbeat(_work)
+
+
+class HouseTourVideoRequest(BaseModel):
+    """全屋影片 — assemble the batch renders into one smooth whole-house tour."""
+    image_urls: List[str] = Field(..., min_length=2, max_length=12)
+    room_labels: Optional[List[str]] = Field(None, description="Parallel labels (for gallery metadata only).")
+    seconds_per_room: float = Field(3.0, ge=2.0, le=5.0)
+
+
+@router.post("/floorplan/house-tour-video")
+async def floorplan_house_tour_video(
+    request: HouseTourVideoRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """Build the 全屋影片: a 1080p tour that pans through the rendered rooms
+    (slow zoom per room + crossfade), assembled locally with ffmpeg — zero
+    provider spend, so it stays cheap and NEVER alters the renders (the
+    consistency the batch enforced is preserved pixel-for-pixel).
+
+    Charged via the seeded "interior_house_tour" row (fallback 20 credits);
+    full refund on failure. Streamed behind the heartbeat (downloads +
+    encode can take a couple of minutes for 12 rooms).
+    """
+    if not is_subscribed_user(current_user) and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Whole-house tour video requires an active subscription",
+        )
+    for u in request.image_urls:
+        if not (u or "").strip().lower().startswith(("http://", "https://")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Every image_url must be a public URL")
+
+    async def _work() -> Dict[str, Any]:
+        import asyncio as _asyncio
+        import os as _os
+        import tempfile as _tempfile
+        import httpx as _httpx
+        from app.api.v1.tools import (
+            _check_and_deduct_credits, _refund_credits, _credits_charged,
+            _open_reclaim_row, _close_reclaim_row,
+        )
+        from app.services.gcs_storage_service import get_gcs_storage
+
+        ok, err = await _check_and_deduct_credits(db, current_user, HOUSE_TOUR_CREDITS, "interior_house_tour")
+        if not ok:
+            return {"success": False, "error": err}
+        charged = _credits_charged(current_user, HOUSE_TOUR_CREDITS)
+        reclaim_row = await _open_reclaim_row(
+            db, current_user,
+            tool_type="room_redesign", service_type="interior_house_tour", charged=charged,
+            input_params={"rooms": len(request.image_urls)},
+        )
+
+        async def _fail(msg: str) -> Dict[str, Any]:
+            await _close_reclaim_row(db, reclaim_row, status="failed", error=msg)
+            await _refund_credits(db, current_user, charged, "interior_house_tour")
+            return {"success": False, "error": msg}
+
+        gcs = get_gcs_storage()
+        if not gcs.enabled:
+            return await _fail("Video storage is not available right now. Please try again later.")
+
+        try:
+            with _tempfile.TemporaryDirectory() as td:
+                paths: List[str] = []
+                async with _httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                    for i, u in enumerate(request.image_urls):
+                        r = await client.get(u)
+                        r.raise_for_status()
+                        if len(r.content) > 25 * 1024 * 1024:
+                            return await _fail("A source image is too large.")
+                        p = _os.path.join(td, f"room_{i:02d}.img")
+                        with open(p, "wb") as fh:
+                            fh.write(r.content)
+                        paths.append(p)
+
+                n = len(paths)
+                seg = float(request.seconds_per_room)
+                fade = 0.5
+                fps = 25
+                frames = int(seg * fps)
+                filters: List[str] = []
+                for i in range(n):
+                    filters.append(
+                        f"[{i}:v]scale=1920:1080:force_original_aspect_ratio=increase,"
+                        f"crop=1920:1080,zoompan=z='min(zoom+0.0006,1.06)':d={frames}:"
+                        f"s=1920x1080:fps={fps},format=yuv420p[v{i}]"
+                    )
+                prev = "v0"
+                for k in range(1, n):
+                    out = f"x{k}"
+                    offset = round(k * (seg - fade), 2)
+                    filters.append(
+                        f"[{prev}][v{k}]xfade=transition=fade:duration={fade}:offset={offset}[{out}]"
+                    )
+                    prev = out
+                out_path = _os.path.join(td, "tour.mp4")
+                cmd = ["ffmpeg", "-y"]
+                for p in paths:
+                    cmd += ["-i", p]
+                cmd += [
+                    "-filter_complex", ";".join(filters),
+                    "-map", f"[{prev}]",
+                    "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+                    "-movflags", "+faststart",
+                    out_path,
+                ]
+                proc = await _asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=_asyncio.subprocess.PIPE,
+                    stderr=_asyncio.subprocess.PIPE,
+                )
+                try:
+                    _, err_bytes = await _asyncio.wait_for(proc.communicate(), timeout=300)
+                except _asyncio.TimeoutError:
+                    proc.kill()
+                    return await _fail("Video assembly timed out. Please try again.")
+                if proc.returncode != 0:
+                    logger.error("house tour ffmpeg failed: %s", (err_bytes or b"")[-500:])
+                    return await _fail("Video assembly failed. Please try again.")
+
+                with open(out_path, "rb") as fh:
+                    data = fh.read()
+        except Exception as exc:  # noqa: BLE001
+            logger.error("house tour video error: %s", exc, exc_info=True)
+            return await _fail("Whole-house video failed. Please try again.")
+
+        try:
+            video_url = gcs.upload_public(
+                data=data,
+                blob_name=f"generated/video/house_tour_{uuid.uuid4().hex[:10]}.mp4",
+                content_type="video/mp4",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("house tour upload failed: %s", exc)
+            return await _fail("Video upload failed. Please try again.")
+
+        try:
+            user_gen = UserGeneration(
+                user_id=current_user.id,
+                tool_type=ToolType.ROOM_REDESIGN,
+                input_image_url=request.image_urls[0],
+                input_params={
+                    "pipeline": "interior_house_tour",
+                    "rooms": request.room_labels or [],
+                    "room_count": len(request.image_urls),
+                },
+                result_video_url=video_url,
+                credits_used=charged,
+            )
+            if hasattr(user_gen, "set_expiry"):
+                user_gen.set_expiry()
+            db.add(user_gen)
+            await db.commit()
+        except Exception:
+            logger.warning("house tour: failed to persist UserGeneration", exc_info=True)
+            await db.rollback()
+
+        await _close_reclaim_row(db, reclaim_row, status="completed", result_url=video_url)
+        return {"success": True, "video_url": video_url, "credits_used": charged}
+
+    from app.api.v1.tools import _stream_with_heartbeat
+    return _stream_with_heartbeat(_work)

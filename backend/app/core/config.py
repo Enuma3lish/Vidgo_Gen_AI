@@ -206,6 +206,20 @@ class Settings(BaseSettings):
     # disable. Resets on a correct password.
     ABUSE_LOGIN_ACCOUNT_MAX_FAILURES: int = 5
     ABUSE_LOGIN_ACCOUNT_LOCKOUT_SECONDS: int = 900
+    # Demo upload (/api/v1/demo/upload) rate limits. The endpoint accepts
+    # 20 MB files without auth and returns a PUBLIC GCS URL — without limits
+    # it doubles as a free image host and a storage-cost DoS. It is ALSO the
+    # shared uploader for logged-in tool pages, so authenticated users get
+    # their own (generous, per-user) limits instead of the strict per-IP
+    # ones — per-IP alone would collateral-block offices/CGNAT. Counts are
+    # Redis fixed windows (10 min burst + 24 h daily); the MB budgets cap
+    # total bytes per day. Set any value to 0 to disable that check.
+    ABUSE_DEMO_UPLOAD_IP_PER_10MIN_LIMIT: int = 10
+    ABUSE_DEMO_UPLOAD_IP_DAILY_LIMIT: int = 40
+    ABUSE_DEMO_UPLOAD_IP_DAILY_MB: int = 200
+    ABUSE_DEMO_UPLOAD_USER_PER_10MIN_LIMIT: int = 60
+    ABUSE_DEMO_UPLOAD_USER_DAILY_LIMIT: int = 300
+    ABUSE_DEMO_UPLOAD_USER_DAILY_MB: int = 1024
 
     # Mock payment completion must never be accidentally available in production.
     PAYMENT_MOCK_COMPLETION_ENABLED: bool = False

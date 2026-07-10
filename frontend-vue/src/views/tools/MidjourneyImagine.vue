@@ -61,20 +61,35 @@ const aspectRatio = ref<'1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'>
 // Pro); subscribers send the same verbatim prompt for a real generation.
 const { options: presetOptions, promptFor: presetPromptFor } = usePromptLibrary('premium_image')
 const selectedPresetId = ref('')
+// The preset text AS APPLIED — the comparison anchor. Comparing against
+// presetPromptFor() live broke on a locale switch (D5, 2026-07-10): the
+// helper is locale-resolved, so after changing the UI language the textarea
+// still held the old-language text, usingPreset flipped false, and demo
+// users hit a silent free-trial dead-end (Generate disabled, promptId
+// dropped) even though they never edited anything.
+const appliedPresetText = ref('')
 function applyPreset() {
   if (!selectedPresetId.value) return
   prompt.value = presetPromptFor(selectedPresetId.value)
+  appliedPresetText.value = prompt.value
 }
 // Editing the prompt away from the preset text de-selects it (so it counts as a
 // custom prompt → subscribe wall, matching the backend gate).
 watch(prompt, (val) => {
-  if (selectedPresetId.value && val.trim() !== presetPromptFor(selectedPresetId.value).trim()) {
+  if (selectedPresetId.value && val.trim() !== appliedPresetText.value.trim()) {
     selectedPresetId.value = ''
+    appliedPresetText.value = ''
   }
 })
 const usingPreset = computed(() =>
-  !!selectedPresetId.value && prompt.value.trim() === presetPromptFor(selectedPresetId.value).trim()
+  !!selectedPresetId.value && prompt.value.trim() === appliedPresetText.value.trim()
 )
+// Locale switch while a preset is active: re-resolve its text in the new
+// language so the visible prompt matches the canonical text the backend
+// resolves for promptId (and the selection survives).
+watch(locale, () => {
+  if (usingPreset.value) applyPreset()
+})
 
 const status = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const statusText = ref('')

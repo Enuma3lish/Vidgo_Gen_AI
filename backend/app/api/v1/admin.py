@@ -823,6 +823,7 @@ async def adjust_user_credits(
 @router.post("/users/{user_id}/reprovision-subscription")
 async def reprovision_subscription(
     user_id: str,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
@@ -832,6 +833,12 @@ async def reprovision_subscription(
     Finds the user's most recent not-yet-paid subscription order and runs the
     normal handle_payment_success path by order_number. Idempotent: an order
     already marked paid returns 'already processed' without double-granting.
+
+    2026-07-10: the payment is now VERIFIED WITH THE GATEWAY first. This
+    endpoint used to synthesize a "completed" payload for whatever pending
+    order existed — a user who abandoned checkout could be provisioned a
+    paid plan by a fooled/fat-fingered admin. `force=true` (logged loudly)
+    remains for genuine gateway outages.
     """
     result = await db.execute(
         select(Order)
@@ -849,6 +856,64 @@ async def reprovision_subscription(
             detail="No pending subscription order found for this user.",
         )
 
+    # ── Gateway verification ─────────────────────────────────────────────
+    pdata = order.payment_data or {}
+    pm = (order.payment_method or "").lower()
+    verified = False
+    verify_note = ""
+    if not force:
+        try:
+            if pm == "paypal":
+                from app.services.paypal_service import get_paypal_service
+                pp = get_paypal_service()
+                await pp.refresh_from_db(db)
+                pp_sub_id = pdata.get("paypal_subscription_id")
+                pp_order_id = pdata.get("paypal_transaction_id")
+                if pp_sub_id:
+                    r = await pp.get_subscription(pp_sub_id)
+                    sub_status = str(((r or {}).get("subscription") or {}).get("status") or "").upper()
+                    verified = bool(r.get("success")) and sub_status == "ACTIVE"
+                    verify_note = f"paypal subscription {pp_sub_id} status={sub_status or 'unknown'}"
+                elif pp_order_id:
+                    r = await pp.get_order(pp_order_id)
+                    o_status = str(((r or {}).get("order") or {}).get("status") or "").upper()
+                    verified = bool(r.get("success")) and o_status == "COMPLETED"
+                    verify_note = f"paypal order {pp_order_id} status={o_status or 'unknown'}"
+                else:
+                    verify_note = "order has no PayPal subscription/order id to verify"
+            elif pm == "ecpay":
+                from app.api.v1.payments import _ecpay_query_confirms_paid
+                from app.services.ecpay.client import ECPayClient
+                from app.core.config import get_settings as _gs
+                _s = _gs()
+                ecpay_client = ECPayClient(
+                    merchant_id=_s.ECPAY_MERCHANT_ID,
+                    hash_key=_s.ECPAY_HASH_KEY,
+                    hash_iv=_s.ECPAY_HASH_IV,
+                    payment_url=_s.ECPAY_PAYMENT_URL,
+                )
+                verified = await _ecpay_query_confirms_paid(ecpay_client, order.order_number)
+                verify_note = f"ecpay query TradeStatus paid={verified}"
+            else:
+                verify_note = f"unknown payment_method '{pm}'"
+        except Exception as exc:
+            verify_note = f"gateway verification errored: {exc}"
+
+        if not verified:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Gateway did not confirm payment for order {order.order_number} "
+                    f"({verify_note}). Not provisioning. Use force=true only if the "
+                    "gateway is down and you have out-of-band proof of payment."
+                ),
+            )
+    else:
+        logger.warning(
+            "ADMIN FORCE-REPROVISION without gateway verification: order=%s user=%s admin=%s",
+            order.order_number, user_id, admin.id,
+        )
+
     from app.services.subscription_service import get_subscription_service
     res = await get_subscription_service().handle_payment_success(
         db,
@@ -856,6 +921,8 @@ async def reprovision_subscription(
         {
             "status": "completed",
             "manual_reprovision": True,
+            "gateway_verified": verified,
+            "gateway_verify_note": verify_note,
             "reprovisioned_by": str(admin.id),
             "reprovisioned_at": datetime.now(timezone.utc).isoformat(),
         },
@@ -877,6 +944,44 @@ async def reprovision_subscription(
         "provisioned": bool(plan_name),
         "message": res.get("message") or "Subscription re-provisioned.",
     }
+
+
+@router.post("/orders/{order_number}/mark-refunded")
+async def admin_mark_order_refunded(
+    order_number: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Claw back what a PAID order granted, after the money was refunded at
+    the gateway. This is the ECPay refund parity path (2026-07-10): ECPay
+    credit-card refunds happen in the ECPay vendor portal and send NO
+    notification to us, so the credits/subscription must be reversed by an
+    explicit admin action. Also usable for a PayPal console refund whose
+    webhook was missed. Idempotent — an already-refunded order is a no-op.
+
+    Credit packs: purchased+bonus credits are subtracted (clamped at what
+    the user still holds). Subscription orders: the subscription is
+    cancelled and plan/credits stripped under the same only-if-current rules
+    as the PayPal CANCELLED webhook.
+    """
+    result = await db.execute(select(Order).where(Order.order_number == order_number))
+    order = result.scalars().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status not in ("paid", "refunded"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Order is '{order.status}' — only paid orders can be marked refunded.",
+        )
+
+    from app.api.v1.payments import _revoke_order_grants
+    res = await _revoke_order_grants(
+        db, order,
+        reason=f"manual gateway refund confirmed by admin {admin.id}",
+        actor=f"admin:{admin.id}",
+    )
+    logger.info("Admin %s marked order %s refunded: %s", admin.id, order_number, res)
+    return res
 
 
 @router.post("/users/{user_id}/promotion-code")

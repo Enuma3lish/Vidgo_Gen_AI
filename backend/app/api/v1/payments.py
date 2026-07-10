@@ -9,10 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import cast
+from sqlalchemy import cast, String
 from sqlalchemy.dialects.postgresql import JSONB
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+from pydantic import BaseModel
 import logging
 import json
 import urllib.parse
@@ -173,6 +174,24 @@ async def create_ecpay_checkout(
     if order.status not in {"pending", "failed"}:
         raise HTTPException(status_code=400, detail=f"Order cannot be paid from status '{order.status}'")
 
+    # 2026-07-10 — cross-gateway currency guard. PayPal orders store USD
+    # amounts (19.99 / 239.88); ECPay charges the raw number as NT$. Routing
+    # a USD order through this endpoint charged NT$19 for a US$19.99 plan
+    # (~32× underpayment) and the signed callback then provisioned the full
+    # plan. ECPay checkout is only valid for orders created for TWD/ECPay.
+    _pd = order.payment_data or {}
+    if (order.payment_method or "").lower() == "paypal" or any(
+        str(k).startswith("paypal") for k in _pd.keys()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="This order was created for PayPal (USD). Please start a new checkout to pay with ECPay.",
+        )
+    if order.amount is None or order.amount != int(order.amount):
+        # NT$ amounts are whole numbers; a fractional amount means the order
+        # was priced in a foreign currency.
+        raise HTTPException(status_code=400, detail="Order amount is not a valid TWD amount for ECPay.")
+
     if not (settings.ECPAY_MERCHANT_ID and settings.ECPAY_HASH_KEY and settings.ECPAY_HASH_IV):
         raise HTTPException(status_code=503, detail="ECPay checkout is temporarily unavailable")
 
@@ -227,6 +246,18 @@ async def paypal_webhook(
     """
     body = await request.body()
 
+    # Pick up admin-editable DB credential overrides BEFORE the is_mock gate
+    # (2026-07-10). is_mock is derived from env at import time; in a
+    # deployment whose PayPal creds live only in the payment_settings row,
+    # the old order left the webhook permanently "mock" — signature
+    # verification skipped while checkout (which does refresh) worked, so
+    # anyone could post forged PAYMENT.CAPTURE.COMPLETED events. Best-effort:
+    # a DB hiccup must not drop a legitimate webhook when env creds exist.
+    try:
+        await paypal_service.refresh_from_db(db)
+    except Exception as exc:
+        logger.warning("PayPal webhook: refresh_from_db failed (using env creds): %s", exc)
+
     # Verify webhook via PayPal's verify-webhook-signature API (RSA + cert chain).
     # The HMAC fallback was insecure — PayPal does NOT sign webhooks with HMAC.
     if not paypal_service.is_mock:
@@ -235,6 +266,8 @@ async def paypal_webhook(
             logger.warning("PayPal webhook signature verification failed")
             raise HTTPException(status_code=401, detail="Invalid signature")
 
+    dedup_key = None
+    redis_client = None
     try:
         data = await request.json()
         event_type = data.get("event_type", "")
@@ -258,21 +291,44 @@ async def paypal_webhook(
 
         logger.info(f"PayPal webhook received: {event_type} id={event_id}")
 
-        if event_type in ("PAYMENT.CAPTURE.COMPLETED", "CHECKOUT.ORDER.APPROVED"):
+        if event_type == "PAYMENT.CAPTURE.COMPLETED":
             await handle_transaction_completed(db, event_data)
+        elif event_type == "CHECKOUT.ORDER.APPROVED":
+            # Approval moves NO money — the merchant must capture. Routing
+            # this into the "completed" handler (as the old code did) would
+            # grant credits without ever charging the buyer.
+            await handle_order_approved(db, event_data)
         elif event_type == "PAYMENT.SALE.COMPLETED":
             # Recurring billing capture for an active subscription.
             await handle_subscription_renewal(db, event_data)
-        elif event_type in ("PAYMENT.CAPTURE.REFUNDED", "PAYMENT.SALE.REFUNDED"):
-            logger.info(f"PayPal refund webhook acknowledged: {event_id}")
+        elif event_type == "PAYMENT.CAPTURE.REFUNDED":
+            # One-time capture (credit pack) refunded at PayPal — claw back
+            # the granted credits. Was log-only until 2026-07-10: a console
+            # refund returned the money while the user kept the credits.
+            await handle_capture_refunded(db, event_data)
+        elif event_type == "PAYMENT.SALE.REFUNDED":
+            # Subscription billing refunded — cancel the local subscription
+            # and strip this cycle's credits. Was log-only until 2026-07-10.
+            await handle_sale_refunded(db, event_data)
         elif event_type == "BILLING.SUBSCRIPTION.CREATED":
             await handle_subscription_created(db, event_data)
         elif event_type in ("BILLING.SUBSCRIPTION.ACTIVATED", "BILLING.SUBSCRIPTION.UPDATED"):
             await handle_subscription_updated(db, event_data)
+        elif event_type == "BILLING.SUBSCRIPTION.PAYMENT.FAILED":
+            # 2026-07-10: a single failed billing attempt is RETRYABLE — PayPal
+            # retries on its own schedule and sends SUSPENDED/CANCELLED if it
+            # finally gives up. The old code cancelled the local subscription
+            # immediately, so when PayPal's retry then succeeded, the SALE
+            # webhook found a cancelled sub and skipped the renewal — the user
+            # was charged and received nothing.
+            logger.warning(
+                "PayPal billing attempt failed for %s — awaiting PayPal retry / final status",
+                event_data.get("billing_agreement_id") or event_data.get("id"),
+            )
         elif event_type in (
             "BILLING.SUBSCRIPTION.CANCELLED",
             "BILLING.SUBSCRIPTION.EXPIRED",
-            "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
+            "BILLING.SUBSCRIPTION.SUSPENDED",
         ):
             await handle_subscription_canceled(db, event_data)
         else:
@@ -282,95 +338,187 @@ async def paypal_webhook(
 
     except Exception as e:
         logger.error(f"PayPal webhook error: {e}", exc_info=True)
-        # Return 200 to prevent PayPal from retrying indefinitely on app errors
-        return {"success": False, "error": str(e)}
+        # 2026-07-10: release the dedup claim and return 500 so PayPal RETRIES.
+        # The old behavior (claim first, ack 200 on error) permanently dropped
+        # a paid event on any transient DB hiccup — user charged, never
+        # provisioned (the admin reprovision tool existed to patch exactly
+        # this). Signature-verified garbage still gets acked above via the
+        # normal branches; only processing failures reach here.
+        if dedup_key and redis_client is not None:
+            try:
+                await redis_client.delete(dedup_key)
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail="Webhook processing failed; please retry")
+
+
+async def _send_paypal_invoice_email(
+    db: AsyncSession,
+    user_id,
+    transaction_id: Optional[str],
+    invoice_number: Optional[str],
+    amount: float,
+    currency: str,
+    plan_name: str,
+) -> None:
+    """Best-effort invoice email after a PayPal payment. Never raises."""
+    try:
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalars().first()
+        if not user:
+            return
+
+        invoice_result = await paypal_service.get_invoice_pdf_url(transaction_id)
+        pdf_url = invoice_result.get("pdf_url", "")
+
+        from app.services.email_service import email_service
+        await email_service.send_invoice_email(
+            to_email=user.email,
+            invoice_number=invoice_number or transaction_id or "",
+            amount=amount,
+            currency=currency,
+            plan_name=plan_name,
+            pdf_url=pdf_url,
+            username=user.full_name or user.email.split('@')[0]
+        )
+        logger.info(f"Invoice email sent to {user.email}")
+    except Exception as e:
+        logger.error(f"Failed to send invoice email: {e}")
+
+
+def _paypal_amount_from(data: dict) -> tuple:
+    """(amount, currency) from an Orders-v2 order or capture resource.
+
+    PayPal returns the amount as a decimal string (e.g. "19.99"), NOT cents.
+    """
+    amount = 0.0
+    currency = "USD"
+    try:
+        amt_obj = (
+            (data.get("purchase_units") or [{}])[0].get("amount")
+            or data.get("amount")
+            or {}
+        )
+        amount = float(amt_obj.get("value", 0) or 0)
+        currency = amt_obj.get("currency_code", "USD") or "USD"
+    except Exception:
+        pass
+    return amount, currency
 
 
 async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
-    """Handle successful payment transaction and send invoice email."""
-    custom_data = data.get("custom_data", {})
-    user_id = custom_data.get("user_id")
-    transaction_id = data.get("id")
-    if transaction_id is not None:
-        transaction_id = str(transaction_id).strip('"')
-    invoice_number = data.get("invoice_number", transaction_id)
+    """Handle PAYMENT.CAPTURE.COMPLETED — a one-time Orders-v2 capture.
 
-    if not user_id:
-        logger.warning(f"Transaction without user_id: {transaction_id}")
-        return {"success": False, "error": "no user_id"}
-    if not transaction_id:
-        logger.warning("Transaction completed webhook missing id")
+    The webhook resource here is the CAPTURE, not the order: ``data["id"]``
+    is the capture id, while the order id our checkout stored as
+    ``paypal_transaction_id`` arrives in ``supplementary_data.related_ids
+    .order_id``; buyer metadata arrives as a ``custom_id`` JSON string.
+    The old reads (``data["custom_data"]`` — a field PayPal never sends —
+    and matching orders on the capture id) matched nothing, so this handler
+    never completed a purchase end-to-end (2026-07-10 audit).
+    """
+    custom_data = _extract_paypal_custom_data(data)
+    capture_id = data.get("id")
+    if capture_id is not None:
+        capture_id = str(capture_id).strip('"')
+    related_ids = (data.get("supplementary_data") or {}).get("related_ids") or {}
+    # Capture events carry the order id in related_ids; fall back to the
+    # resource id itself so order-shaped payloads (mock mode, manual replays)
+    # still resolve.
+    order_lookup_id = str(related_ids.get("order_id") or capture_id or "")
+
+    if not order_lookup_id:
+        logger.warning("PAYMENT.CAPTURE.COMPLETED webhook missing capture/order id")
         return {"success": False, "error": "no transaction_id"}
 
-    # Find order by transaction ID (normalize to string for JSONB comparison)
-    result = await db.execute(
-        select(Order).where(
-            cast(Order.payment_data, JSONB)["paypal_transaction_id"].astext == transaction_id
-        )
-    )
-    order = result.scalars().first()
-
+    order = await _find_order_by_paypal_transaction(db, order_lookup_id)
     if not order:
-        logger.warning(f"No order found for PayPal transaction: {transaction_id}")
+        logger.warning(f"No order found for PayPal transaction: {order_lookup_id}")
         return {"success": False, "error": "order not found"}
 
-    # Idempotency: skip if already paid (duplicate webhook)
+    # Idempotency: skip if already paid (duplicate webhook, or the APPROVED
+    # webhook / return-leg capture endpoint already completed it)
     if order.status == "paid":
         logger.info(f"Order {order.order_number} already paid — ignoring duplicate webhook")
         return {"success": True, "already_processed": True}
 
     from app.services.subscription_service import get_subscription_service
-    subscription_service = get_subscription_service()
-    await subscription_service.handle_payment_success(
+    await get_subscription_service().handle_payment_success(
         db, order.order_number, data
     )
 
-    # --- Send Invoice Email ---
-    try:
-        # Get user info
-        from app.models.user import User
-        user_result = await db.execute(select(User).where(User.id == user_id))
-        user = user_result.scalars().first()
+    amount, currency = _paypal_amount_from(data)
+    await _send_paypal_invoice_email(
+        db,
+        custom_data.get("user_id") or order.user_id,
+        capture_id,
+        data.get("invoice_number", capture_id),
+        amount,
+        currency,
+        custom_data.get("plan_name")
+        or (order.payment_data or {}).get("package_name")
+        or "VidGo Purchase",
+    )
 
-        if user:
-            # Get invoice PDF URL from PayPal
-            invoice_result = await paypal_service.get_invoice_pdf_url(transaction_id)
-            pdf_url = invoice_result.get("pdf_url", "")
+    logger.info(f"Transaction completed: {order_lookup_id}")
+    return {"success": True}
 
-            # PayPal Orders v2 returns amount as a decimal string (e.g. "19.99"),
-            # NOT cents. Read it from purchase_units[0].amount or top-level amount.
-            amount = 0.0
-            currency = "USD"
-            try:
-                amt_obj = (
-                    (data.get("purchase_units") or [{}])[0].get("amount")
-                    or data.get("amount")
-                    or {}
-                )
-                amount = float(amt_obj.get("value", 0) or 0)
-                currency = amt_obj.get("currency_code", "USD") or "USD"
-            except Exception:
-                pass
-            plan_name = custom_data.get("plan_name", "VidGo Subscription")
 
-            # Send email
-            from app.services.email_service import email_service
-            await email_service.send_invoice_email(
-                to_email=user.email,
-                invoice_number=invoice_number,
-                amount=amount,
-                currency=currency,
-                plan_name=plan_name,
-                pdf_url=pdf_url,
-                username=user.full_name or user.email.split('@')[0]
-            )
-            logger.info(f"Invoice email sent to {user.email}")
+async def handle_order_approved(db: AsyncSession, data: dict) -> dict:
+    """Handle CHECKOUT.ORDER.APPROVED — buyer approved a one-time order.
 
-    except Exception as e:
-        logger.error(f"Failed to send invoice email: {e}")
-        # Don't fail the webhook for email errors
+    Approval only authorizes; the money moves when WE capture. This is the
+    webhook-driven capture path, so a credit-pack purchase completes even
+    when the buyer closes the tab instead of returning to our success page.
+    The return-leg endpoint (/paypal/capture) does the same for the fast
+    path — both are idempotent (capture_order normalizes
+    ORDER_ALREADY_CAPTURED; handle_payment_success is FOR-UPDATE +
+    already-paid guarded).
+    """
+    order_id = data.get("id")
+    if order_id is not None:
+        order_id = str(order_id).strip('"')
+    if not order_id:
+        return {"success": False, "error": "no order id"}
 
-    logger.info(f"Transaction completed: {transaction_id}")
+    order = await _find_order_by_paypal_transaction(db, order_id)
+    if not order:
+        # Not one of our one-time orders (e.g. a subscription approval
+        # travels through BILLING.SUBSCRIPTION.* instead) — acknowledge.
+        logger.info(f"CHECKOUT.ORDER.APPROVED for unknown PayPal order {order_id} — ignored")
+        return {"success": True, "ignored": True}
+    if order.status == "paid":
+        return {"success": True, "already_processed": True}
+
+    capture = await paypal_service.capture_order(order_id)
+    if not capture.get("success") or capture.get("status") != "COMPLETED":
+        # Raise → the webhook handler releases the dedup key and returns 500,
+        # so PayPal redelivers the approval and the capture is re-attempted.
+        raise RuntimeError(
+            f"PayPal capture failed for order {order.order_number}: "
+            f"{capture.get('error') or capture.get('status')}"
+        )
+
+    order_data = capture.get("order") or {}
+    from app.services.subscription_service import get_subscription_service
+    await get_subscription_service().handle_payment_success(
+        db, order.order_number, order_data
+    )
+
+    pu = (order_data.get("purchase_units") or [{}])[0]
+    cap = ((pu.get("payments") or {}).get("captures") or [{}])[0]
+    amount, currency = _paypal_amount_from(order_data)
+    await _send_paypal_invoice_email(
+        db,
+        order.user_id,
+        cap.get("id") or order_id,
+        cap.get("id") or order_id,
+        amount,
+        currency,
+        (order.payment_data or {}).get("package_name") or "VidGo Purchase",
+    )
+
+    logger.info(f"PayPal order captured via APPROVED webhook: {order.order_number}")
     return {"success": True}
 
 
@@ -497,12 +645,12 @@ async def handle_subscription_renewal(db: AsyncSession, data: dict):
         or (order.payment_data or {}).get("billing_cycle")
         or "monthly"
     )
+    from app.services.subscription_service import utc_now
     credits = subscription_period_credits(plan, order.payment_method, billing_cycle)
     if credits > 0:
         # Subscription credits are a *replacement* allotment, not additive,
         # to mirror what handle_payment_success does on the first activation.
         user.subscription_credits = credits
-        from app.services.subscription_service import utc_now
         user.credits_reset_at = utc_now()
 
         txn = CreditTransaction(
@@ -515,36 +663,354 @@ async def handle_subscription_renewal(db: AsyncSession, data: dict):
         )
         db.add(txn)
 
+    # 2026-07-10: extend the LOCAL paid-through date on every real billing
+    # capture. Previously nothing moved subscription.end_date on renewal, so
+    # the local period lapsed one cycle after activation and the daily worker
+    # blind-extended it (now it only extends what PayPal confirms). Anchor on
+    # the later of (current end_date, now) so late captures don't leave the
+    # period already expired.
+    period = timedelta(days=365 if billing_cycle == "yearly" else 30)
+    _now = utc_now()
+    anchor = subscription.end_date or _now
+    if anchor < _now:
+        anchor = _now
+    # PayPal fires SALE.COMPLETED for the INITIAL payment too (2026-07-10
+    # round 5): activation already set end_date = start + period, so blindly
+    # extending here left the local paid-through date one full cycle ahead
+    # forever. If end_date already covers (now + period − 3d slack) this SALE
+    # is the initial capture or a duplicate — the credit grant above is a
+    # replacement (harmless to repeat) but the period must NOT extend again.
+    if subscription.end_date and subscription.end_date >= _now + period - timedelta(days=3):
+        logger.info(
+            "Renewal %s: end_date %s already covers this period — initial-payment "
+            "SALE, extension skipped", paypal_sub_id, subscription.end_date,
+        )
+    else:
+        subscription.end_date = anchor + period
+        user.plan_expires_at = subscription.end_date
+
     await db.commit()
     logger.info(f"Subscription renewal processed: sub={paypal_sub_id} user={user.id} +{credits} credits")
     return {"success": True}
 
 
 async def handle_subscription_canceled(db: AsyncSession, data: dict):
-    """Handle subscription cancelled / expired / payment-failed events."""
-    paypal_sub_id = data.get("id")
-    custom_data = _extract_paypal_custom_data(data)
-    user_id = custom_data.get("user_id")
-    if not user_id and paypal_sub_id:
-        order = await _find_order_by_paypal_transaction(db, str(paypal_sub_id).strip('"'))
-        if order:
-            user_id = str(order.user_id)
+    """Handle subscription cancelled / expired / suspended events.
 
-    if user_id:
-        try:
-            from app.services.subscription_service import get_subscription_service
-            subscription_service = get_subscription_service()
-            from uuid import UUID
-            result = await subscription_service.cancel_subscription(
-                db=db,
-                user_id=UUID(user_id),
-                request_refund=False
-            )
-            logger.info(f"Subscription canceled via webhook: {paypal_sub_id} user={user_id} result={result.get('success')}")
-        except Exception as e:
-            logger.error(f"Failed to cancel subscription via webhook: {e}")
+    2026-07-10 rewrite: act on THE subscription the webhook is about, resolved
+    via the order that stored this PayPal agreement id — NOT on "the user's
+    newest active subscription". The old code cancelled by user_id, so after a
+    plan upgrade a late CANCELLED event for the OLD agreement cancelled the
+    NEW plan locally, and its no-refund path then called PayPal to cancel the
+    NEW agreement too — actively terminating the plan the user was paying for.
+    Remote paypal.cancel is never needed here: PayPal itself sent the event.
+    """
+    from app.models.billing import Subscription, CreditTransaction
+
+    paypal_sub_id = str(data.get("id") or "").strip('"')
+    if not paypal_sub_id:
+        logger.warning("Subscription-cancelled webhook without a subscription id; ignoring")
+        return
+
+    order = await _find_order_by_paypal_transaction(db, paypal_sub_id)
+    if not order or not order.subscription_id:
+        logger.warning(f"Subscription canceled but no local subscription found for {paypal_sub_id}")
+        return
+
+    sub = await db.get(Subscription, order.subscription_id)
+    if not sub or sub.status not in ("active", "pending"):
+        # Already terminal (e.g. superseded by an upgrade) — nothing to do.
+        logger.info(f"Cancel webhook for {paypal_sub_id}: local sub already {getattr(sub, 'status', 'missing')}")
+        return
+
+    sub.status = "cancelled"
+    sub.auto_renew = False
+
+    # Only touch the user's plan/credits if the cancelled sub was their
+    # CURRENT entitlement (no other active subscription remains).
+    user = await db.get(User, sub.user_id)
+    if user:
+        other_active = (await db.execute(
+            select(Subscription.id).where(
+                Subscription.user_id == user.id,
+                Subscription.id != sub.id,
+                Subscription.status == "active",
+            ).limit(1)
+        )).scalar_one_or_none()
+        if other_active is None and user.current_plan_id == sub.plan_id:
+            user.current_plan_id = None
+            old_credits = user.subscription_credits or 0
+            if old_credits > 0:
+                user.subscription_credits = 0
+                db.add(CreditTransaction(
+                    user_id=user.id,
+                    amount=-old_credits,
+                    balance_after=(user.purchased_credits or 0) + (user.bonus_credits or 0),
+                    transaction_type="expiry",
+                    description="Subscription cancelled at PayPal — unused subscription credits removed",
+                ))
+
+    await db.commit()
+    logger.info(f"Subscription canceled via webhook: {paypal_sub_id} sub={sub.id} user={sub.user_id}")
+
+
+async def _revoke_order_grants(
+    db: AsyncSession,
+    order: Order,
+    *,
+    reason: str,
+    refund_amount: Optional[float] = None,
+    actor: str = "webhook",
+) -> dict:
+    """Reverse what a PAID order granted, after the money went back.
+
+    Credit packs (no subscription_id): claw back the purchased + bonus
+    credits recorded on the order — pro-rata when `refund_amount` covers only
+    part of `order.amount`, and always clamped at what the user still holds
+    (spent credits are not driven negative). Subscription orders: cancel the
+    subscription and strip the plan/credits with the same only-if-current
+    rules as the CANCELLED webhook. Idempotent via order.status ==
+    "refunded". Shared by the PayPal refund webhooks and the admin
+    mark-refunded endpoint (the ECPay parity path — ECPay sends no refund
+    notification, so its clawback is admin-triggered after the portal
+    refund). Caller does NOT need to commit; this commits.
+    """
+    if order.status == "refunded":
+        return {"success": True, "already_processed": True}
+
+    from app.models.billing import Subscription, CreditTransaction
+
+    pdata = dict(order.payment_data or {})
+    user = await db.get(User, order.user_id)
+    revoked_purchased = revoked_bonus = revoked_subscription = 0
+
+    if order.subscription_id:
+        sub = await db.get(Subscription, order.subscription_id)
+        if sub and sub.status in ("active", "pending"):
+            sub.status = "cancelled"
+            sub.auto_renew = False
+            if user:
+                other_active = (await db.execute(
+                    select(Subscription.id).where(
+                        Subscription.user_id == user.id,
+                        Subscription.id != sub.id,
+                        Subscription.status == "active",
+                    ).limit(1)
+                )).scalar_one_or_none()
+                if other_active is None and user.current_plan_id == sub.plan_id:
+                    user.current_plan_id = None
+                    revoked_subscription = int(user.subscription_credits or 0)
+                    if revoked_subscription > 0:
+                        user.subscription_credits = 0
+                        db.add(CreditTransaction(
+                            user_id=user.id,
+                            amount=-revoked_subscription,
+                            balance_after=(user.purchased_credits or 0) + (user.bonus_credits or 0),
+                            transaction_type="refund",
+                            description=f"Refund clawback: {reason}",
+                        ))
     else:
-        logger.warning(f"Subscription canceled but no user_id in custom_data: {paypal_sub_id}")
+        granted_purchased = int(pdata.get("credits") or 0)
+        granted_bonus = int(pdata.get("bonus_credits") or 0)
+        ratio = 1.0
+        try:
+            if refund_amount is not None and float(order.amount or 0) > 0:
+                ratio = max(0.0, min(1.0, float(refund_amount) / float(order.amount)))
+        except Exception:
+            ratio = 1.0
+        if user:
+            take_p = int(round(granted_purchased * ratio))
+            take_b = int(round(granted_bonus * ratio))
+            revoked_purchased = min(take_p, int(user.purchased_credits or 0))
+            revoked_bonus = min(take_b, int(user.bonus_credits or 0))
+            if revoked_purchased > 0:
+                user.purchased_credits = int(user.purchased_credits or 0) - revoked_purchased
+            if revoked_bonus > 0:
+                user.bonus_credits = int(user.bonus_credits or 0) - revoked_bonus
+            if revoked_purchased or revoked_bonus:
+                from uuid import UUID as _UUID
+                _pkg = None
+                try:
+                    _pkg = _UUID(str(pdata.get("package_id"))) if pdata.get("package_id") else None
+                except Exception:
+                    _pkg = None
+                db.add(CreditTransaction(
+                    user_id=user.id,
+                    amount=-(revoked_purchased + revoked_bonus),
+                    balance_after=user.total_credits,
+                    transaction_type="refund",
+                    package_id=_pkg,
+                    description=f"Refund clawback: {reason}",
+                ))
+
+    order.status = "refunded"
+    pdata.update({
+        "refund_reason": reason,
+        "refund_actor": actor,
+        "refunded_at": datetime.now(timezone.utc).isoformat(),
+    })
+    order.payment_data = pdata
+    await db.commit()
+
+    logger.info(
+        "Order %s refund clawback (%s): purchased=-%d bonus=-%d subscription=-%d",
+        order.order_number, actor, revoked_purchased, revoked_bonus, revoked_subscription,
+    )
+    return {
+        "success": True,
+        "order_number": order.order_number,
+        "revoked_purchased": revoked_purchased,
+        "revoked_bonus": revoked_bonus,
+        "revoked_subscription": revoked_subscription,
+    }
+
+
+async def handle_capture_refunded(db: AsyncSession, data: dict) -> dict:
+    """PAYMENT.CAPTURE.REFUNDED — a one-time capture (credit pack) was
+    refunded at PayPal. Resolve the order and claw back the credits.
+
+    The resource is the REFUND object: the order id we stored lives in
+    supplementary_data.related_ids.order_id when present; otherwise the
+    parent capture id is in the rel="up" link, and that capture id exists
+    inside order.payment_data (merged there by handle_payment_success)."""
+    refund_amount = None
+    try:
+        v = (data.get("amount") or {}).get("value")
+        refund_amount = float(v) if v is not None else None
+    except Exception:
+        refund_amount = None
+
+    order = None
+    related = (data.get("supplementary_data") or {}).get("related_ids") or {}
+    if related.get("order_id"):
+        order = await _find_order_by_paypal_transaction(db, str(related["order_id"]))
+    if not order:
+        capture_id = None
+        for link in data.get("links") or []:
+            href = str(link.get("href") or "")
+            if link.get("rel") == "up" and "/captures/" in href:
+                capture_id = href.rstrip("/").split("/")[-1]
+                break
+        if capture_id:
+            res = await db.execute(
+                select(Order).where(cast(Order.payment_data, String).like(f"%{capture_id}%"))
+            )
+            order = res.scalars().first()
+    if not order:
+        logger.warning(f"PAYMENT.CAPTURE.REFUNDED: no local order found (refund {data.get('id')})")
+        return {"success": False, "error": "order not found"}
+
+    return await _revoke_order_grants(
+        db, order,
+        reason=f"PayPal capture refund {data.get('id')}",
+        refund_amount=refund_amount,
+    )
+
+
+async def handle_sale_refunded(db: AsyncSession, data: dict) -> dict:
+    """PAYMENT.SALE.REFUNDED — a subscription billing was refunded at PayPal.
+    Cancel the local subscription and strip the current cycle's credits."""
+    paypal_sub_id = data.get("billing_agreement_id")
+    if not paypal_sub_id:
+        logger.warning(f"PAYMENT.SALE.REFUNDED without billing_agreement_id (refund {data.get('id')})")
+        return {"success": False, "error": "no billing_agreement_id"}
+
+    order = await _find_order_by_paypal_transaction(db, str(paypal_sub_id).strip('"'))
+    if not order:
+        logger.warning(f"PAYMENT.SALE.REFUNDED: no local order for agreement {paypal_sub_id}")
+        return {"success": False, "error": "order not found"}
+
+    return await _revoke_order_grants(
+        db, order,
+        reason=f"PayPal sale refund {data.get('id')} (agreement {paypal_sub_id})",
+    )
+
+
+class PayPalCaptureRequest(BaseModel):
+    # The PayPal Orders-v2 order id — appended by PayPal to the return URL as
+    # ?token=... after the buyer approves. Same value we stored at checkout
+    # as payment_data.paypal_transaction_id.
+    token: str
+    # Our order_number from the success URL's ?order=... — optional
+    # cross-check only.
+    order: Optional[str] = None
+
+
+@router.post("/paypal/capture")
+async def paypal_capture_order(
+    body: PayPalCaptureRequest,
+    request: Request,
+    db: AsyncSession = Depends(deps.get_db),
+):
+    """Return-leg capture for one-time PayPal orders (credit packs).
+
+    The success page calls this with the ?token= PayPal appended to the
+    return URL. Deliberately unauthenticated, mirroring the success route:
+    PayPal's OAuth roundtrip can drop our access token, and the only thing
+    this can do is complete the payment of the order the token belongs to
+    (the token is the unguessable PayPal order id; amounts/credits come from
+    OUR stored order row, not the request). The CHECKOUT.ORDER.APPROVED
+    webhook performs the same capture for buyers who never come back — both
+    paths are idempotent.
+    """
+    # Per-IP throttle (2026-07-10 round 5): unauthenticated endpoint doing a
+    # DB order scan + a PayPal API call per hit — a legitimate buyer needs at
+    # most a couple of attempts. Fail-open on Redis trouble.
+    try:
+        from app.services.abuse_prevention_service import AbusePreventionService, get_client_ip
+        _rate = await AbusePreventionService(await deps.get_redis()).check_paypal_capture_ip(
+            get_client_ip(request)
+        )
+        if not _rate.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many attempts. Please try again later.",
+                headers={"Retry-After": str(_rate.retry_after_seconds or 600)},
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("paypal capture rate check skipped: %s", exc)
+
+    token = (body.token or "").strip()
+    # Subscription approvals redirect with a BA-/I- token that is not an
+    # Orders-v2 id; they are activated by the BILLING.SUBSCRIPTION webhooks.
+    if not token or len(token) > 64:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    order = await _find_order_by_paypal_transaction(db, token)
+    if not order or order.payment_method != "paypal":
+        raise HTTPException(status_code=404, detail="Order not found")
+    if body.order and body.order != order.order_number:
+        raise HTTPException(status_code=404, detail="Order not found")
+    # Only one-time credit orders are captured here; subscription orders have
+    # no Orders-v2 order behind them.
+    if order.subscription_id:
+        raise HTTPException(status_code=400, detail="Not a one-time order")
+
+    if order.status == "paid":
+        return {"success": True, "order_number": order.order_number, "already_processed": True}
+    if order.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Order is {order.status}")
+
+    capture = await paypal_service.capture_order(token)
+    if not capture.get("success") or capture.get("status") != "COMPLETED":
+        # Buyer may have bailed before approving (ORDER_NOT_APPROVED) or the
+        # webhook race already handled it. Report "not completed yet" without
+        # failing the order — the webhook path can still finish the job.
+        return {
+            "success": False,
+            "order_number": order.order_number,
+            "status": capture.get("status") or "pending",
+            "message": "Payment not confirmed yet. Credits will be added once PayPal confirms.",
+        }
+
+    from app.services.subscription_service import get_subscription_service
+    await get_subscription_service().handle_payment_success(
+        db, order.order_number, capture.get("order") or {}
+    )
+    logger.info(f"PayPal order captured via return leg: {order.order_number}")
+    return {"success": True, "order_number": order.order_number}
 
 
 @router.get("/paypal/customer-portal")
@@ -670,6 +1136,14 @@ async def ecpay_payment_callback(
                     select(Order).where(Order.order_number == order_number)
                 )
                 failed_order = order_result.scalars().first()
+                # 2026-07-10 guard: never flip an already-paid order (and its
+                # live subscription) to "failed" — a replayed/late failure
+                # callback for an order that subsequently succeeded was
+                # corrupting paid state. Mirrors the already-paid guard on the
+                # success branch.
+                if failed_order and failed_order.status == "paid":
+                    logger.info(f"ECPay failure callback ignored — order {order_number} already paid")
+                    return HTMLResponse(content="1|OK", status_code=200)
                 if failed_order:
                     failed_order.status = "failed"
                     if failed_order.subscription_id:

@@ -272,6 +272,77 @@ class PayPalService:
         }
 
     # =========================================================================
+    # ONE-TIME ORDERS (PayPal Orders v2) — credit packs
+    # =========================================================================
+
+    async def get_order(self, order_id: str) -> Dict[str, Any]:
+        """Get an Orders-v2 order (status / purchase_units / captures)."""
+        if self.is_mock:
+            return {
+                "success": True,
+                "is_mock": True,
+                "order": {"id": order_id, "status": "COMPLETED"},
+            }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/v2/checkout/orders/{order_id}",
+                    headers=await self._auth_headers(),
+                )
+                if response.status_code == 200:
+                    return {"success": True, "order": response.json()}
+                return {"success": False, "error": f"Order lookup failed: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"Get PayPal order error for {order_id}: {exc}")
+            return {"success": False, "error": str(exc)}
+
+    async def capture_order(self, order_id: str) -> Dict[str, Any]:
+        """Capture an APPROVED Orders-v2 order — the step that actually moves
+        the money. ``create_checkout_session`` only CREATES the order and the
+        buyer's approval only AUTHORIZES it; without this call PayPal never
+        charges and PAYMENT.CAPTURE.COMPLETED never fires (the credit-pack
+        flow was dormant until 2026-07-10 because nobody called it).
+
+        Safe to call twice (approval webhook + return-leg endpoint can race):
+        PayPal-Request-Id is bound to the order id, and the
+        ORDER_ALREADY_CAPTURED error is normalized to success by re-reading
+        the order.
+        """
+        if self.is_mock:
+            return {
+                "success": True,
+                "is_mock": True,
+                "status": "COMPLETED",
+                "order": {"id": order_id, "status": "COMPLETED"},
+            }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                headers = await self._auth_headers()
+                headers["PayPal-Request-Id"] = f"capture-{order_id}"
+                response = await client.post(
+                    f"{self.base_url}/v2/checkout/orders/{order_id}/capture",
+                    headers=headers,
+                    json={},
+                )
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    return {"success": True, "status": data.get("status"), "order": data}
+                if response.status_code == 422 and "ORDER_ALREADY_CAPTURED" in response.text:
+                    current = await self.get_order(order_id)
+                    order = current.get("order") or {}
+                    return {
+                        "success": bool(current.get("success")) and order.get("status") == "COMPLETED",
+                        "status": order.get("status"),
+                        "order": order,
+                        "already_captured": True,
+                    }
+                logger.error(f"PayPal capture failed for {order_id}: {response.status_code} {response.text}")
+                return {"success": False, "error": f"PayPal capture error: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"PayPal capture error for {order_id}: {exc}")
+            return {"success": False, "error": str(exc)}
+
+    # =========================================================================
     # SUBSCRIPTION MANAGEMENT (PayPal Subscriptions v1)
     # =========================================================================
 

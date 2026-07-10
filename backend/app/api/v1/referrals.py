@@ -185,8 +185,17 @@ async def apply_referral_code(
     Rules:
     - Can only be applied once (if referred_by_id is already set, reject)
     - Cannot apply own referral code
-    - Referrer receives REFERRAL_BONUS_CREDITS
+    - Referrer receives REFERRAL_BONUS_CREDITS (subject to the Plan-D
+      30-day per-promoter cap)
     - New user receives REFERRAL_WELCOME_CREDITS
+
+    2026-07-10: delegates the grants to ReferralService.apply_referral —
+    the Plan-D path already enforces the REFERRAL_SIGNUP_MONTHLY_CAP
+    per-promoter cap, dedups the welcome bonus by ledger row, tags the
+    promoter grant so it counts against the cap, settles expired bonus
+    buckets inside add_credits, and notifies the referrer. This legacy
+    endpoint used to hand-roll untagged, uncapped grants, so a promoter
+    could farm unlimited credits by cycling registrations through it.
     """
     if current_user.referred_by_id:
         raise HTTPException(
@@ -196,7 +205,8 @@ async def apply_referral_code(
 
     code = request.referral_code.strip().upper()
 
-    # Find referrer
+    # Pre-checks kept here for the precise status codes (the service
+    # re-validates but only returns a generic message).
     result = await db.execute(select(User).where(User.referral_code == code))
     referrer = result.scalars().first()
 
@@ -212,15 +222,10 @@ async def apply_referral_code(
             detail="You cannot use your own referral code."
         )
 
-    # Apply referral
-    current_user.referred_by_id = referrer.id
-    current_user.bonus_credits = (current_user.bonus_credits or 0) + settings.REFERRAL_WELCOME_CREDITS
-
-    # Reward referrer
-    referrer.bonus_credits = (referrer.bonus_credits or 0) + settings.REFERRAL_BONUS_CREDITS
-    referrer.referral_count = (referrer.referral_count or 0) + 1
-
-    await db.commit()
+    from app.services.referral_service import ReferralService
+    ok, message = await ReferralService(db).apply_referral(str(current_user.id), code)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
     return ApplyReferralResponse(
         success=True,

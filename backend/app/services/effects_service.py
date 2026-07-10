@@ -214,6 +214,20 @@ class VidGoEffectsService:
             return [s for s in VIDGO_STYLES if s["category"] == category]
         return VIDGO_STYLES
 
+    async def _resolve_cost(self, service_type: str, fallback: int) -> int:
+        """Price from the same ServicePricing row check_access validates against
+        (2026-07-10 — the deduct used to hardcode 8/10 while check_access
+        checked the seeded row, so the checked price and the charged price
+        disagreed)."""
+        try:
+            credit_service = CreditService(self.db)
+            pricing = await credit_service.get_service_pricing(service_type)
+            if pricing and pricing.credit_cost:
+                return int(pricing.credit_cost)
+        except Exception:
+            pass
+        return fallback
+
     async def apply_style(
         self,
         user_id: str,
@@ -246,6 +260,24 @@ class VidGoEffectsService:
             valid_styles = [s["id"] for s in VIDGO_STYLES]
             return False, {"error": f"Invalid style. Available: {', '.join(valid_styles)}"}
 
+        # 2026-07-10: deduct BEFORE the render and honor the result. The old
+        # deduct-after-delivery ignored the return value, so a balance drained
+        # mid-render made the deduct silently fail and the user kept the
+        # result for free (while the response still claimed credits_used=8).
+        cost = await self._resolve_cost(service_type, 8)
+        charged = 0
+        credit_service = CreditService(self.db)
+        if not await self._is_superuser(user_id):
+            ok, info = await credit_service.deduct_credits(
+                user_id=user_id,
+                amount=cost,
+                service_type=service_type,
+                description=f"VidGo Style Effects - {style_id}",
+            )
+            if not ok:
+                return False, {"error": (info or {}).get("error", "Insufficient credits")}
+            charged = cost
+
         try:
             # Use PiAPI img2img with the style's prompt from unified definition
             prompt = style_def.get("prompt", "artistic style")
@@ -260,24 +292,29 @@ class VidGoEffectsService:
 
             output_url = result.get("image_url") or result.get("output_url") or (result.get("output", {}).get("image_url") if isinstance(result.get("output"), dict) else None)
             if output_url:
-                if not await self._is_superuser(user_id):
-                    credit_service = CreditService(self.db)
-                    await credit_service.deduct_credits(
-                        user_id=user_id,
-                        amount=8,  # vidgo_style costs 8 credits
-                        service_type=service_type,
-                        description=f"VidGo Style Effects - {style_id}"
-                    )
-
                 return True, {
                     "output_url": output_url,
                     "style": style_id,
-                    "credits_used": 8
+                    "credits_used": charged
                 }
-            else:
-                return False, {"error": result.get("error", "Style transformation failed")}
+            if charged:
+                await credit_service.add_credits(
+                    user_id=user_id, amount=charged, credit_type="purchased",
+                    transaction_type="refund",
+                    description=f"Refund: VidGo Style Effects failed - {style_id}",
+                )
+            return False, {"error": result.get("error", "Style transformation failed")}
 
         except Exception as e:
+            if charged:
+                try:
+                    await credit_service.add_credits(
+                        user_id=user_id, amount=charged, credit_type="purchased",
+                        transaction_type="refund",
+                        description=f"Refund: VidGo Style Effects failed - {style_id}",
+                    )
+                except Exception:
+                    pass
             return False, {"error": str(e)}
 
     async def hd_enhance(
@@ -304,6 +341,22 @@ class VidGoEffectsService:
         if not has_access:
             return False, {"error": message}
 
+        # 2026-07-10: deduct BEFORE the render and honor the result (see
+        # apply_style note).
+        cost = await self._resolve_cost(service_type, 10)
+        charged = 0
+        credit_service = CreditService(self.db)
+        if not await self._is_superuser(user_id):
+            ok, info = await credit_service.deduct_credits(
+                user_id=user_id,
+                amount=cost,
+                service_type=service_type,
+                description=f"VidGo HD Enhance - {target_resolution}",
+            )
+            if not ok:
+                return False, {"error": (info or {}).get("error", "Insufficient credits")}
+            charged = cost
+
         try:
             # Use PiAPI for upscaling
             result = await self.router.route(
@@ -324,24 +377,29 @@ class VidGoEffectsService:
                 or result.get("output_url")
             )
             if output_url:
-                if not await self._is_superuser(user_id):
-                    credit_service = CreditService(self.db)
-                    await credit_service.deduct_credits(
-                        user_id=user_id,
-                        amount=10,  # vidgo_hd_enhance costs 10 credits
-                        service_type=service_type,
-                        description=f"VidGo HD Enhance - {target_resolution}"
-                    )
-
                 return True, {
                     "output_url": output_url,
                     "resolution": target_resolution,
-                    "credits_used": 10
+                    "credits_used": charged
                 }
-            else:
-                return False, {"error": result.get("error", "HD enhancement failed")}
+            if charged:
+                await credit_service.add_credits(
+                    user_id=user_id, amount=charged, credit_type="purchased",
+                    transaction_type="refund",
+                    description=f"Refund: VidGo HD Enhance failed - {target_resolution}",
+                )
+            return False, {"error": result.get("error", "HD enhancement failed")}
 
         except Exception as e:
+            if charged:
+                try:
+                    await credit_service.add_credits(
+                        user_id=user_id, amount=charged, credit_type="purchased",
+                        transaction_type="refund",
+                        description=f"Refund: VidGo HD Enhance failed - {target_resolution}",
+                    )
+                except Exception:
+                    pass
             return False, {"error": str(e)}
 
     async def video_enhance(

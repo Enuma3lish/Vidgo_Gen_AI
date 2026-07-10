@@ -149,9 +149,21 @@ async function loadStyles(kind: SpaceKind) {
   }
 }
 
+// Gallery "Try this example" prefills a REMOTE image URL (no File object).
+// Accept it as a valid input so the prefill isn't a dead-end (D6,
+// 2026-07-10): disabled required uploadedFile and generate() re-uploaded it,
+// so a prefilled example showed the preview but Generate stayed disabled
+// forever. Only http(s) URLs qualify — a local-file preview (blob:/data:)
+// always comes with uploadedFile set, and that path still wins.
+const prefillImageUrl = computed(() =>
+  !uploadedFile.value && /^https?:\/\//i.test(uploadedImage.value || '')
+    ? (uploadedImage.value as string)
+    : null
+)
+
 // Disable Generate when required inputs are missing.
 const disabled = computed(() => {
-  if (!uploadedFile.value) return true
+  if (!uploadedFile.value && !prefillImageUrl.value) return true
   if (mode.value === 'magic') return !customPrompt.value.trim()
   return !selectedStyle.value
 })
@@ -182,8 +194,15 @@ async function generate() {
         console.warn('[room-redesign] style reference upload failed:', e)
       }
     }
-    const uploaded = await demoApi.uploadImage(uploadedFile.value!)
-    uploadedUrl = uploaded.url
+    if (uploadedFile.value) {
+      const uploaded = await demoApi.uploadImage(uploadedFile.value)
+      uploadedUrl = uploaded.url
+    } else if (prefillImageUrl.value) {
+      // Example prefill — already a public URL; no re-upload needed.
+      uploadedUrl = prefillImageUrl.value
+    } else {
+      throw new Error('No image selected')
+    }
   } catch (e: any) {
     status.value = 'error'
     statusText.value = L('錯誤', 'Error', 'エラー', '오류', 'Error')

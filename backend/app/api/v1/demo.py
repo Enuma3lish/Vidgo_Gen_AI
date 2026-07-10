@@ -3512,7 +3512,11 @@ async def get_view_more_examples(
 # ============================================================================
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...), request: Request = None):
+async def upload_file(
+    file: UploadFile = File(...),
+    request: Request = None,
+    current_user=Depends(get_current_user_optional),
+):
     """
     General file upload endpoint for demo tools.
 
@@ -3522,9 +3526,86 @@ async def upload_file(file: UploadFile = File(...), request: Request = None):
     fit the common dimension rule. Users no longer get a 422 because
     their iPhone photo is HEIC or their panorama is 4:1 — we just fix
     it server-side.
+
+    Abuse guard (2026-07-10): stores into PUBLIC GCS and is reachable
+    without auth, so it is rate-limited — anonymous callers per IP (strict),
+    authenticated users per user id (generous — this is also the shared
+    uploader for the logged-in tool pages, and per-IP alone would
+    collateral-block offices/CGNAT). Burst (10 min) + daily count + daily
+    byte budget; see ABUSE_DEMO_UPLOAD_* settings. Admins bypass.
+    Redis-outage behavior is fail-open, matching the other abuse checks.
     """
+    # ── Rate limits, BEFORE reading the body ─────────────────────────────
+    _is_admin = bool(getattr(current_user, "is_superuser", False))
+    _abuse = None
+    _ident = "unknown"
+    _budget_mb = 0
+    if request is not None and not _is_admin:
+        try:
+            from app.api.deps import get_redis
+            from app.services.abuse_prevention_service import (
+                AbusePreventionService,
+                get_client_ip,
+            )
+            if current_user is not None:
+                _ident = f"user:{current_user.id}"
+                _burst = settings.ABUSE_DEMO_UPLOAD_USER_PER_10MIN_LIMIT
+                _daily = settings.ABUSE_DEMO_UPLOAD_USER_DAILY_LIMIT
+                _budget_mb = settings.ABUSE_DEMO_UPLOAD_USER_DAILY_MB
+            else:
+                _ident = f"ip:{get_client_ip(request)}"
+                _burst = settings.ABUSE_DEMO_UPLOAD_IP_PER_10MIN_LIMIT
+                _daily = settings.ABUSE_DEMO_UPLOAD_IP_DAILY_LIMIT
+                _budget_mb = settings.ABUSE_DEMO_UPLOAD_IP_DAILY_MB
+            _abuse = AbusePreventionService(await get_redis())
+            rate = await _abuse.check_demo_upload(_ident, burst_limit=_burst, daily_limit=_daily)
+            if not rate.allowed:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error_code": "upload_rate_limited",
+                        "message": rate.message,
+                    },
+                    headers={"Retry-After": str(rate.retry_after_seconds or 600)},
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:  # limiter must never break the upload path
+            logger.warning("Demo upload rate check skipped for %s: %s", _ident, exc)
+            _abuse = None
+
+        # Cheap oversize reject from the declared length so a 200 MB body is
+        # refused before we buffer it (the strict 20 MB check on the real
+        # bytes still runs below — this is belt, not suspenders).
+        _declared = request.headers.get("content-length")
+        if _declared and _declared.isdigit() and int(_declared) > 25 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "error_code": "upload_too_large",
+                    "message": "File is too large. Maximum size is 20 MB.",
+                },
+            )
+
     try:
         content = await file.read()
+
+        # ── Daily byte budget, AFTER read / BEFORE storing ───────────────
+        if _abuse is not None:
+            try:
+                vol = await _abuse.consume_demo_upload_bytes(_ident, len(content), _budget_mb)
+            except Exception as exc:
+                logger.warning("Demo upload byte check skipped for %s: %s", _ident, exc)
+            else:
+                if not vol.allowed:
+                    raise HTTPException(
+                        status_code=429,
+                        detail={
+                            "error_code": "upload_volume_exceeded",
+                            "message": vol.message,
+                        },
+                        headers={"Retry-After": str(vol.retry_after_seconds or 86400)},
+                    )
 
         # Try the normaliser first. If it can decode the bytes as ANY
         # image format, we accept and re-encode to a clean PNG. Falls

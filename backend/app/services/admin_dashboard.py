@@ -1086,24 +1086,34 @@ class AdminDashboardService:
         if not user:
             return False, "User not found"
 
+        # A stale (past) bonus_credits_expiry makes the whole bonus bucket
+        # dead: get_balance() displays it as 0, deduct() skips it, and the
+        # daily cleanup task wipes it. Grants used to land in that dead
+        # bucket, so the admin saw "success" while the member saw nothing
+        # (reported 2026-07-10). Settle the expired batch first — ledger row
+        # included — and clear the expiry: admin-granted credits never expire.
+        from app.services.credit_service import settle_expired_bonus
+        settle_expired_bonus(self.db, user)
+
         # Adjust credits
         if amount >= 0:
             user.bonus_credits = (user.bonus_credits or 0) + amount
         else:
             # Deduct from bonus first, then subscription credits
             to_deduct = abs(amount)
-            if user.bonus_credits >= to_deduct:
-                user.bonus_credits -= to_deduct
+            if (user.bonus_credits or 0) >= to_deduct:
+                user.bonus_credits = (user.bonus_credits or 0) - to_deduct
             else:
-                to_deduct -= user.bonus_credits
+                to_deduct -= (user.bonus_credits or 0)
                 user.bonus_credits = 0
-                user.subscription_credits = max(0, user.subscription_credits - to_deduct)
+                user.subscription_credits = max(0, (user.subscription_credits or 0) - to_deduct)
 
-        # Log transaction
+        # Log transaction. balance_after counts all three live buckets —
+        # purchased was previously omitted, understating the ledger balance.
         transaction = CreditTransaction(
             user_id=user_id,
             amount=amount,
-            balance_after=user.subscription_credits + user.bonus_credits,
+            balance_after=(user.subscription_credits or 0) + (user.purchased_credits or 0) + (user.bonus_credits or 0),
             transaction_type="admin_adjustment",
             description=f"Admin adjustment: {reason}"
         )

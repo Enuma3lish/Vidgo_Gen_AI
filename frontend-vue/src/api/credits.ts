@@ -38,6 +38,17 @@ export interface Transaction {
 }
 
 export const creditsApi = {
+  /**
+   * Return-leg capture for one-time PayPal orders (credit packs). `token` is
+   * the PayPal order id appended to the return URL as ?token=... — the
+   * backend captures the payment and credits the pack. Idempotent; the
+   * CHECKOUT.ORDER.APPROVED webhook covers buyers who never return.
+   */
+  async capturePayPalOrder(token: string, order?: string): Promise<{ success: boolean; message?: string }> {
+    const response = await apiClient.post('/api/v1/payments/paypal/capture', { token, order })
+    return response.data
+  },
+
   async getBalance(): Promise<CreditBalance> {
     const response = await apiClient.get('/api/v1/credits/balance')
     const d = response.data

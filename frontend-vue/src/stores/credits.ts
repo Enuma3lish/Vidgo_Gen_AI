@@ -87,10 +87,12 @@ export const useCreditsStore = defineStore('credits', () => {
     return pricing.value
   }
 
-  function canAfford(service: string): boolean {
-    const cost = getServiceCost(service)
-    return remainingCredits.value >= cost && weeklyRemaining.value >= cost
-  }
+  // canAfford() removed 2026-07-10 (D9): it was exported but consumed by
+  // NOTHING — affordability display lives in components/tools/CreditCost.vue
+  // (its own computed), and real enforcement is backend-side in
+  // _check_and_deduct_credits. Its weekly-cap rule was silently applied
+  // nowhere; if a weekly cap ever becomes product policy, enforce it in the
+  // backend deduction gateway, not a dead frontend helper.
 
   function deductCredits(amount: number) {
     if (balance.value) {
@@ -132,7 +134,6 @@ export const useCreditsStore = defineStore('credits', () => {
     ensurePricing,
     fetchTransactions,
     getServiceCost,
-    canAfford,
     deductCredits,
     clearError,
     clearBalance

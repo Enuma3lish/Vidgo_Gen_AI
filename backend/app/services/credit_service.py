@@ -22,11 +22,37 @@ from sqlalchemy import select, desc, func, and_, update
 
 from app.core.config import get_settings
 from app.models.user import User
-from app.models.billing import CreditTransaction, ServicePricing, CreditPackage, Generation, Plan
+from app.models.billing import CreditTransaction, ServicePricing, CreditPackage, Plan
 
 settings = get_settings()
 
 OFFICIAL_CREDIT_PACKAGE_NAMES = ("light_pack", "standard_pack", "heavy_pack")
+
+
+def settle_expired_bonus(db_session, user) -> int:
+    """Settle an already-expired bonus batch BEFORE adding new bonus credits.
+
+    A stale (past) bonus_credits_expiry makes the whole bonus bucket dead:
+    get_balance() displays it as 0, deduct() skips it, and the daily cleanup
+    task wipes it wholesale — so any grant landing on top of it is invisible
+    to the member. Zeroes the expired batch, clears the expiry, and adds the
+    offsetting "expiry" ledger row (mirroring cleanup_expired_bonus_credits_task).
+    Returns the expired amount (0 when nothing to settle). Caller commits.
+    """
+    if not (user.bonus_credits_expiry and user.bonus_credits_expiry < datetime.now(timezone.utc)):
+        return 0
+    expired_amount = user.bonus_credits or 0
+    user.bonus_credits = 0
+    user.bonus_credits_expiry = None
+    if expired_amount > 0:
+        db_session.add(CreditTransaction(
+            user_id=user.id,
+            amount=-expired_amount,
+            balance_after=(user.subscription_credits or 0) + (user.purchased_credits or 0),
+            transaction_type="expiry",
+            description=f"Bonus credits expired ({expired_amount} credits)",
+        ))
+    return expired_amount
 
 
 class CreditService:
@@ -325,6 +351,10 @@ class CreditService:
         elif credit_type == "purchased":
             user.purchased_credits = (user.purchased_credits or 0) + amount
         elif credit_type == "bonus":
+            # Settle an already-expired bonus batch before adding, otherwise
+            # the new credits land in a bucket that get_balance()/deduct()
+            # treat as 0 and the daily cleanup task wipes wholesale.
+            settle_expired_bonus(self.db, user)
             user.bonus_credits = (user.bonus_credits or 0) + amount
             if expiry:
                 user.bonus_credits_expiry = expiry
@@ -589,31 +619,55 @@ class CreditService:
         """
         Check if user has reached concurrent generation limit.
         Returns: (within_limit, error_message)
+
+        Counts ``pending_provider_tasks`` rows in an active status
+        ("submitting"/"polling"). The old implementation counted the legacy
+        ``generations`` table, which no code path writes — the limit was a
+        platform-wide no-op (2026-07-10 audit). Pending rows are written by
+        every long-running tool (short_video / kling_video / ai_avatar /
+        try_on / claymation / upscale / recolor / interior growth) right
+        after deduction, which is exactly the set worth limiting; sub-minute
+        image jobs don't create rows and stay unthrottled by design.
+
+        The count window is bounded to the reclaim worker's abandon horizon
+        (worker.RECLAIM_MAX_AGE_HOURS = 6h): if the worker is down and rows
+        rot in "submitting", they stop blocking the user after 6h.
         """
-        # Get user's plan
+        # LEFT-join the plan: users with no current_plan_id (free registrants,
+        # lapsed subscriptions holding purchased credits) must NOT be hard-
+        # rejected here — the old inner join returned "User or plan not found"
+        # for them. They get the default limit of 1 instead.
         result = await self.db.execute(
-            select(User, Plan).join(Plan, User.current_plan_id == Plan.id).where(User.id == user_id)
+            select(User, Plan)
+            .outerjoin(Plan, User.current_plan_id == Plan.id)
+            .where(User.id == user_id)
         )
         row = result.first()
 
         if not row:
-            return False, "User or plan not found"
+            return False, "User not found"
 
         user, plan = row
 
-        max_concurrent = plan.max_concurrent_generations or 1
+        max_concurrent = (plan.max_concurrent_generations if plan else None) or 1
 
-        # Count currently processing generations
+        from app.models.pending_provider_task import PendingProviderTask
+
+        window_start = datetime.now(timezone.utc) - timedelta(hours=6)
         count_result = await self.db.execute(
-            select(func.count()).select_from(Generation).where(
-                Generation.user_id == user_id,
-                Generation.status.in_(["pending", "processing"])
+            select(func.count()).select_from(PendingProviderTask).where(
+                PendingProviderTask.user_id == user.id,
+                PendingProviderTask.status.in_(["submitting", "polling"]),
+                PendingProviderTask.created_at >= window_start,
             )
         )
         current_count = count_result.scalar() or 0
 
         if current_count >= max_concurrent:
-            return False, f"Concurrent generation limit reached ({current_count}/{max_concurrent}). Please wait for current generations to complete."
+            return False, (
+                f"Concurrent generation limit reached ({current_count}/{max_concurrent}). "
+                "Please wait for current generations to complete."
+            )
 
         return True, ""
 

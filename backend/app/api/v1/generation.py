@@ -163,12 +163,29 @@ class ServiceStatusResponse(BaseModel):
 # ============================================================================
 
 @router.post("/t2i", response_model=T2IResponse)
-async def text_to_image_with_rescue(request: T2IRequest):
+async def text_to_image_with_rescue(
+    request: T2IRequest,
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Generate image from text prompt.
 
     Uses PiAPI (Wan) as primary with Gemini as backup.
+
+    2026-07-10: this endpoint (and /i2v, /interior below) was mounted with NO
+    auth and NO credit deduction — anyone could script real provider spend
+    anonymously. Now subscriber-gated and charged like every other tool.
     """
+    if not is_subscribed_user(current_user):
+        raise HTTPException(status_code=403, detail="Subscription required")
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    ok, err = await _check_and_deduct_credits(db, current_user, 5, "image_generation")
+    if not ok:
+        raise HTTPException(status_code=402, detail=err)
+    charged = _credits_charged(current_user, 5)
     try:
         result = await provider_router.route(
             TaskType.T2I,
@@ -177,6 +194,8 @@ async def text_to_image_with_rescue(request: T2IRequest):
                 "size": f"{request.width}*{request.height}"
             }
         )
+        if not result.get("success"):
+            await _refund_credits(db, current_user, charged, "image_generation")
 
         output = result.get("output", {})
         image_url = output.get("image_url") or (output.get("images", [{}])[0].get("url") if output.get("images") else None)
@@ -191,18 +210,35 @@ async def text_to_image_with_rescue(request: T2IRequest):
             error=result.get("error")
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"T2I endpoint error: {e}")
+        await _refund_credits(db, current_user, charged, "image_generation")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/i2v", response_model=I2VResponse)
-async def image_to_video_with_rescue(request: I2VRequest):
+async def image_to_video_with_rescue(
+    request: I2VRequest,
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Generate video from image.
 
     Uses PiAPI (Wan I2V) as primary with Gemini as backup.
+    Subscriber-gated + charged since 2026-07-10 (see /t2i note).
     """
+    if not is_subscribed_user(current_user):
+        raise HTTPException(status_code=403, detail="Subscription required")
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    ok, err = await _check_and_deduct_credits(db, current_user, 25, "image_to_video")
+    if not ok:
+        raise HTTPException(status_code=402, detail=err)
+    charged = _credits_charged(current_user, 25)
     try:
         result = await provider_router.route(
             TaskType.I2V,
@@ -212,6 +248,9 @@ async def image_to_video_with_rescue(request: I2VRequest):
                 "duration": request.length
             }
         )
+
+        if not result.get("success"):
+            await _refund_credits(db, current_user, charged, "image_to_video")
 
         output = result.get("output", {})
         video_url = output.get("video_url")
@@ -228,18 +267,35 @@ async def image_to_video_with_rescue(request: I2VRequest):
             error=result.get("error")
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"I2V endpoint error: {e}")
+        await _refund_credits(db, current_user, charged, "image_to_video")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/interior", response_model=InteriorResponse)
-async def interior_design_with_rescue(request: InteriorRequest):
+async def interior_design_with_rescue(
+    request: InteriorRequest,
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Generate interior design.
 
     Uses PiAPI (Wan Doodle) as primary with Gemini as backup.
+    Subscriber-gated + charged since 2026-07-10 (see /t2i note).
     """
+    if not is_subscribed_user(current_user):
+        raise HTTPException(status_code=403, detail="Subscription required")
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    ok, err = await _check_and_deduct_credits(db, current_user, 20, "interior_design")
+    if not ok:
+        raise HTTPException(status_code=402, detail=err)
+    charged = _credits_charged(current_user, 20)
     try:
         result = await provider_router.route(
             TaskType.INTERIOR,
@@ -250,6 +306,9 @@ async def interior_design_with_rescue(request: InteriorRequest):
                 "room_type": request.room_type or "living_room"
             }
         )
+
+        if not result.get("success"):
+            await _refund_credits(db, current_user, charged, "interior_design")
 
         output = result.get("output", {})
         image_url = output.get("image_url")
@@ -264,8 +323,11 @@ async def interior_design_with_rescue(request: InteriorRequest):
             error=result.get("error")
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Interior endpoint error: {e}")
+        await _refund_credits(db, current_user, charged, "interior_design")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -546,12 +608,25 @@ async def generate_pattern(
 @router.post("/pattern/transfer", response_model=GenerationResponse)
 async def transfer_pattern(
     request: PatternTransferRequest,
-    current_user=Depends(get_current_user_optional)
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Transfer pattern onto a product image.
     True I2I: uses the product image as source and applies pattern style to it.
+
+    2026-07-10: subscriber-gated + actually charged (the response used to
+    claim credits_used=8 while nothing was ever deducted).
     """
+    if not is_subscribed_user(current_user):
+        return GenerationResponse(success=False, message="Subscription required to use pattern transfer.")
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    ok, err = await _check_and_deduct_credits(db, current_user, 8, "pattern_transfer")
+    if not ok:
+        return GenerationResponse(success=False, message=err or "Insufficient credits (8 required).")
+    charged = _credits_charged(current_user, 8)
     try:
         result = await provider_router.route(
             TaskType.I2I,
@@ -576,16 +651,18 @@ async def transfer_pattern(
                 success=True,
                 result_url=images[0]["url"] if images else image_url,
                 results=images,
-                credits_used=8,
+                credits_used=charged,
                 message="Pattern transferred successfully"
             )
         else:
+            await _refund_credits(db, current_user, charged, "pattern_transfer")
             return GenerationResponse(
                 success=False,
                 message=result.get("error", "Pattern transfer failed")
             )
     except Exception as e:
         logger.error(f"Pattern transfer error: {e}")
+        await _refund_credits(db, current_user, charged, "pattern_transfer")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -609,7 +686,15 @@ async def remove_background(
     if not is_subscribed_user(current_user):
         return await _gen_demo_response(db, ToolType.BACKGROUND_REMOVAL, cta="Subscribe to process your own images.")
 
-    # Subscriber path: call real API
+    # Subscriber path: charge (2026-07-10 — the row used to record a fake
+    # credits_used=3 with no deduction), then call the real API.
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    ok, err = await _check_and_deduct_credits(db, current_user, 3, "bg_removal")
+    if not ok:
+        return GenerationResponse(success=False, message=err or "Insufficient credits (3 required).")
+    charged = _credits_charged(current_user, 3)
     try:
         result = await provider_router.route(
             TaskType.BACKGROUND_REMOVAL,
@@ -627,7 +712,7 @@ async def remove_background(
                 tool_type=ToolType.BACKGROUND_REMOVAL,
                 input_image_url=str(request.image_url),
                 result_image_url=result_url,
-                credits_used=3,
+                credits_used=charged,
             )
             db.add(generation)
             await db.commit()
@@ -635,16 +720,18 @@ async def remove_background(
             return GenerationResponse(
                 success=True,
                 result_url=result_url,
-                credits_used=3,
+                credits_used=charged,
                 message="Background removed successfully"
             )
         else:
+            await _refund_credits(db, current_user, charged, "bg_removal")
             return GenerationResponse(
                 success=False,
                 message=result.get("error", "Background removal failed")
             )
     except Exception as e:
         logger.error(f"Background removal error: {e}")
+        await _refund_credits(db, current_user, charged, "bg_removal")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -682,6 +769,16 @@ async def generate_product_scene(
         request.scene_type,
         scene_prompts["studio"]
     )
+
+    # 2026-07-10: charge for the 2-provider-call pipeline (the row used to
+    # record a fake credits_used=10 with no deduction).
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    ok, err = await _check_and_deduct_credits(db, current_user, 10, "product_scene_gen")
+    if not ok:
+        return GenerationResponse(success=False, message=err or "Insufficient credits (10 required).")
+    charged = _credits_charged(current_user, 10)
 
     try:
         product_url = str(request.product_image_url)
@@ -743,7 +840,7 @@ async def generate_product_scene(
             input_params={"scene_type": request.scene_type, "custom_prompt": request.custom_prompt},
             input_text=full_prompt,
             result_image_url=result_url,
-            credits_used=10,
+            credits_used=charged,
         )
         db.add(generation)
         await db.commit()
@@ -752,22 +849,36 @@ async def generate_product_scene(
             success=True,
             result_url=result_url,
             results=[{"url": result_url}],
-            credits_used=10,
+            credits_used=charged,
             message="Product scene generated successfully"
         )
     except Exception as e:
         logger.error(f"Product scene error: {e}")
+        await _refund_credits(db, current_user, charged, "product_scene_gen")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/product/enhance", response_model=GenerationResponse)
 async def enhance_product_image(
     request: BackgroundRemoveRequest,
-    current_user=Depends(get_current_user_optional)
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Enhance product image quality (HD upscale, color correction)
+
+    2026-07-10: subscriber-gated + actually charged (fake credits_used=5
+    with no deduction before).
     """
+    if not is_subscribed_user(current_user):
+        return GenerationResponse(success=False, message="Subscription required to enhance images.")
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    ok, err = await _check_and_deduct_credits(db, current_user, 5, "image_upscale")
+    if not ok:
+        return GenerationResponse(success=False, message=err or "Insufficient credits (5 required).")
+    charged = _credits_charged(current_user, 5)
     try:
         # Use PiAPI for image enhancement via provider router
         result = await provider_router.route(
@@ -780,16 +891,18 @@ async def enhance_product_image(
             return GenerationResponse(
                 success=True,
                 result_url=result.get("image_url"),
-                credits_used=5,
+                credits_used=charged,
                 message="Image enhanced successfully"
             )
         else:
+            await _refund_credits(db, current_user, charged, "image_upscale")
             return GenerationResponse(
                 success=False,
                 message=result.get("error", "Enhancement failed")
             )
     except Exception as e:
         logger.error(f"Enhancement error: {e}")
+        await _refund_credits(db, current_user, charged, "image_upscale")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -815,7 +928,15 @@ async def image_to_video(
     if not is_subscribed_user(current_user):
         return await _gen_demo_response(db, ToolType.SHORT_VIDEO, cta="Subscribe to generate custom videos.")
 
-    # Subscriber path: call real API
+    # Subscriber path: charge (2026-07-10 — fake credits_used=25 with no
+    # deduction before), then call the real API.
+    from app.api.v1.tools import (
+        _check_and_deduct_credits, _refund_credits, _credits_charged,
+    )
+    ok, err = await _check_and_deduct_credits(db, current_user, 25, "image_to_video")
+    if not ok:
+        return GenerationResponse(success=False, message=err or "Insufficient credits (25 required).")
+    charged = _credits_charged(current_user, 25)
     try:
         result = await provider_router.route(
             TaskType.I2V,
@@ -844,7 +965,7 @@ async def image_to_video(
                 input_image_url=str(request.image_url),
                 input_params={"motion_strength": request.motion_strength, "style": request.style},
                 result_video_url=video_url,
-                credits_used=25,
+                credits_used=charged,
             )
             db.add(generation)
             await db.commit()
@@ -852,16 +973,18 @@ async def image_to_video(
             return GenerationResponse(
                 success=True,
                 result_url=video_url,
-                credits_used=25,
+                credits_used=charged,
                 message="Video generated successfully"
             )
         else:
+            await _refund_credits(db, current_user, charged, "image_to_video")
             return GenerationResponse(
                 success=False,
                 message=result.get("error", "Video generation failed")
             )
     except Exception as e:
         logger.error(f"Image to video error: {e}")
+        await _refund_credits(db, current_user, charged, "image_to_video")
         raise HTTPException(status_code=500, detail=str(e))
 
 

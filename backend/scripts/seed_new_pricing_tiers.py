@@ -551,6 +551,138 @@ NEW_SERVICE_PRICING_DATA = [
         "allowed_models": ["gemini_flash_image"],
         "description": "室內設計 - 平面圖/房間照轉寫實 3D 效果圖 (render only)"
     },
+
+    # ── Interior standalone API endpoints (2026-07-10): these ran real
+    # generations with NO deduction (revenue leak). Priced at the platform's
+    # room_redesign anchor (20 cr ≈ $0.66 revenue vs $0.02-0.04 upstream) and
+    # the GROWTH_3D_DELTA anchor for Trellis (150 cr ≈ $4.95 vs ~$0.05-0.15).
+    {
+        "service_type": "interior_redesign",
+        "display_name": "室內重新設計 (API)",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.040"),
+        "model_type": "gemini_flash_image",
+        "tool_category": "standard",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image"],
+        "description": "室內設計 API - 房間照片重新設計 (image+text→image)"
+    },
+    {
+        "service_type": "interior_generate",
+        "display_name": "室內文字生成 (API)",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.040"),
+        "model_type": "gemini_flash_image",
+        "tool_category": "standard",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image"],
+        "description": "室內設計 API - 純文字生成室內圖 (text→image)"
+    },
+    {
+        "service_type": "interior_fusion",
+        "display_name": "風格融合 (API)",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.050"),
+        "model_type": "gemini_flash_image",
+        "tool_category": "standard",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image"],
+        "description": "室內設計 API - 房間照+風格參考圖融合 (multi-image)"
+    },
+    {
+        "service_type": "interior_edit",
+        "display_name": "多輪編輯 (API, 每輪)",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.040"),
+        "model_type": "gemini_flash_image",
+        "tool_category": "standard",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image"],
+        "description": "室內設計 API - 對話式連續編輯,每輪一次生成收費"
+    },
+    {
+        "service_type": "interior_style_transfer",
+        "display_name": "風格轉換 (API)",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.040"),
+        "model_type": "gemini_flash_image",
+        "tool_category": "standard",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": False,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image"],
+        "description": "室內設計 API - 房間照套用預設風格"
+    },
+    {
+        "service_type": "interior_3d_model",
+        "display_name": "3D 模型 GLB (Trellis)",
+        "credit_cost": 150,
+        "api_cost_usd": Decimal("0.150"),
+        "model_type": "trellis",
+        "tool_category": "premium",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "allowed_models": ["trellis"],
+        "description": "室內設計 - 單張圖片轉可旋轉 3D 模型 (.glb, Trellis)"
+    },
+    {
+        "service_type": "interior_3d_from_floorplan",
+        "display_name": "平面圖轉 3D 模型 (兩階段)",
+        "credit_cost": 170,
+        "api_cost_usd": Decimal("0.190"),
+        "model_type": "trellis",
+        "tool_category": "premium",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 0,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "allowed_models": ["gemini_flash_image", "trellis"],
+        "description": "室內設計 - 平面圖先渲染再轉 3D 模型 (render 20 + Trellis 150)"
+    },
+    # 全屋影片 (2026-07-10): ffmpeg tour assembled locally from batch renders —
+    # zero provider spend (CPU only), priced as one render-equivalent.
+    # NOTE: do NOT add a row for "interior_batch_render" — the batch deduct
+    # passes a computed total (per-render price × images × variants), and a
+    # seeded row would REPLACE that total with a single per-use price
+    # (deduction-firewall semantics). Its per-render price follows the
+    # "interior_render" row instead.
+    {
+        "service_type": "interior_house_tour",
+        "display_name": "全屋導覽影片 (批次渲染合成)",
+        "credit_cost": 20,
+        "api_cost_usd": Decimal("0.001"),
+        "model_type": "ffmpeg",
+        "tool_category": "premium",
+        "tool_type": "room_redesign",
+        "resolution": "1080p",
+        "max_duration": 60,
+        "subscribers_only": True,
+        "min_plan": "basic",
+        "allowed_models": [],
+        "description": "室內設計 - 全屋批次渲染結果合成 1080p 導覽影片 (本地 ffmpeg, 零上游成本)"
+    },
 ]
 
 

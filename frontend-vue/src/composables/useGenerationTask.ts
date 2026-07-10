@@ -186,8 +186,12 @@ export function useGenerationTask(tool: string, opts?: { route?: string; maxPoll
     try {
       const res = await submit(id)
       // Request completed (success OR soft-fail) — the caller owns the result.
+      // Do NOT also assign result.value here (2026-07-10): every tool page
+      // watches task.result AND handles the returned value directly, so the
+      // direct-path assignment made renderTaskResult run twice — deducting
+      // the displayed credit balance twice per generation on 15 pages.
+      // result.value stays reserved for the background-poll recovery path.
       phase.value = res && res.success ? 'done' : 'idle'
-      if (res && res.success) result.value = res
       clearPersisted()
       return res
     } catch (e: any) {
@@ -211,9 +215,22 @@ export function useGenerationTask(tool: string, opts?: { route?: string; maxPoll
     const t = loadPersisted()
     if (!t || !t.clientTaskId) return false
     if (Date.now() - t.startedAt > maxPollMs) { clearPersisted(); return false }
+    // The status endpoint is auth-scoped: resuming while logged out (or as a
+    // different account) polls 401/unknown forever behind a full-screen
+    // overlay (2026-07-10). Drop the stale id instead.
+    try {
+      if (!localStorage.getItem('access_token')) { clearPersisted(); return false }
+    } catch { return false }
     clientTaskId.value = t.clientTaskId
     phase.value = 'recovering'
-    void pollUntilDone(t.clientTaskId, t.startedAt)
+    void pollUntilDone(t.clientTaskId, t.startedAt).then((r) => {
+      if (r.outcome === 'gaveup') {
+        // Terminal state instead of an eternal 'recovering' spinner
+        // (2026-07-10) — pages key their overlays off phase.
+        error.value = 'Generation is taking longer than expected — check My Works later.'
+        phase.value = 'error'
+      }
+    })
     return true
   }
 

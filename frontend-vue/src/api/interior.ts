@@ -187,6 +187,61 @@ export interface SimulationVariant {
   material_accent?: InteriorMaterialAccent
 }
 
+// ── 全屋批次渲染 (2026-07-10) ─────────────────────────────────────────
+export interface FloorplanBatchImage {
+  image_url: string
+  room_label?: string   // overall | living_room | dining_room | kitchen | ...
+}
+
+export interface FloorplanBatchRenderRequest {
+  images: FloorplanBatchImage[]
+  variation_count: number          // 1-4 results per floor plan
+  // ONE shared effect for the whole batch — same field names as the
+  // single-image request so callers build them identically.
+  style_id?: string
+  magic_mode?: boolean
+  prompt?: string
+  surface_floor?: SurfaceFloor
+  surface_ceiling?: SurfaceCeiling
+  surface_wall?: SurfaceWall
+  lighting_tone?: InteriorLightingTone
+  color_temperature?: number
+  material_accent?: InteriorMaterialAccent
+  structural_fidelity?: number
+  style_strength?: number
+  language?: 'en' | 'zh'
+}
+
+export interface BatchRenderGroup {
+  room_label?: string
+  input_image_url: string
+  results: string[]
+}
+
+export interface FloorplanBatchRenderResponse {
+  success: boolean
+  groups: BatchRenderGroup[]
+  credits_used: number
+  // Server-side consistency receipt: one design code + one effect
+  // fingerprint over every render in the batch.
+  consistency?: {
+    enforced: boolean
+    design_code: string
+    effect_fingerprint: string
+    renders_requested: number
+    renders_succeeded: number
+    note?: string
+  }
+  error?: string
+}
+
+export interface HouseTourVideoResponse {
+  success: boolean
+  video_url?: string
+  credits_used?: number
+  error?: string
+}
+
 export interface FloorplanToVideoResponse {
   success: boolean
   result_tier: GrowthTier
@@ -403,6 +458,33 @@ export const interiorApi = {
     // proxies (Cloudflare / GCLB) hold the connection open in the meantime.
     const response = await apiClient.post('/api/v1/interior/floorplan-to-video', request, {
       timeout: 2_400_000, // 40 minutes
+      clientTaskId,
+    })
+    return response.data
+  },
+
+  /**
+   * 全屋批次渲染 — N floor plans × 1-4 variants, ONE shared effect enforced
+   * server-side (heartbeat-streamed; up to ~16 renders ≈ 10 min).
+   */
+  async floorplanBatchRender(request: FloorplanBatchRenderRequest, clientTaskId?: string): Promise<FloorplanBatchRenderResponse> {
+    const response = await apiClient.post('/api/v1/interior/floorplan/batch-render', request, {
+      timeout: 1_200_000, // 20 minutes
+      clientTaskId,
+    })
+    return response.data
+  },
+
+  /**
+   * 全屋影片 — assemble finished batch renders into a 1080p whole-house tour
+   * (local ffmpeg; the renders themselves are untouched).
+   */
+  async houseTourVideo(imageUrls: string[], roomLabels?: string[], clientTaskId?: string): Promise<HouseTourVideoResponse> {
+    const response = await apiClient.post('/api/v1/interior/floorplan/house-tour-video', {
+      image_urls: imageUrls,
+      room_labels: roomLabels,
+    }, {
+      timeout: 600_000, // 10 minutes
       clientTaskId,
     })
     return response.data

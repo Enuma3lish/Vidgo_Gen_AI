@@ -123,8 +123,18 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       user.value = await authApi.getMe()
       return user.value
-    } catch {
-      logout()
+    } catch (err: unknown) {
+      // Only drop the session on a REAL auth rejection (2026-07-10). This
+      // catch-all used to logout() on ANY error, and fetchUser runs on every
+      // tool-page mount — so one transient network blip / backend 5xx
+      // silently wiped both tokens and logged a paying user out mid-session.
+      // Expired tokens are already handled by the api client's refresh
+      // interceptor before this ever fires.
+      const e = err as { response?: { status?: number } }
+      const status = e.response?.status
+      if (status === 401 || status === 403) {
+        logout()
+      }
       return null
     }
   }
@@ -142,6 +152,19 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken.value = null
     safeLocalStorage.removeItem('access_token')
     safeLocalStorage.removeItem('refresh_token')
+    // 2026-07-10: clear per-account residue. In-flight generation resume keys
+    // (vidgo:gen-task:*) polled the PREVIOUS user's task ids on a shared
+    // browser — the next account got a permanent "Resuming your previous
+    // generation…" overlay on that tool page (the status endpoint is
+    // auth-scoped, so the poll never resolves).
+    try {
+      const doomed: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith('vidgo:gen-task:')) doomed.push(k)
+      }
+      doomed.forEach((k) => localStorage.removeItem(k))
+    } catch { /* storage unavailable (SSR/private mode) — nothing to clear */ }
   }
 
   function clearError() {

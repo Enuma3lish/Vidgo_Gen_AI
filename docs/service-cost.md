@@ -58,17 +58,43 @@
 
 ## 3. 每個工具的營收 vs. 上游成本
 
-> **2026-07-12 新增 — 室內設計全系列 + 全屋批次收費**（[interior.py](../backend/app/api/v1/interior.py)，seed 於 `seed_new_pricing_tiers.py`）：
+> **2026-07-12 新增 — 室內設計全系列 + 全屋批次收費**（[interior.py](../backend/app/api/v1/interior.py)，seed 於 `seed_new_pricing_tiers.py`）。**上游成本用 PiAPI 官網實際牌價**（2026-07 查證,來源見下方 §3.0）,不再是估計區間：
 >
-> | service_type | 扣點 | 營收 (heavy_pack) | 上游成本 | 評估 |
+> | service_type | 扣點 | 營收 (heavy_pack) | 上游實際成本 (PiAPI 牌價) | 毛利 |
 > |---|---|---|---|---|
-> | `interior_redesign` / `_generate` / `_fusion` / `_edit`(每輪) / `_style_transfer` | 20 | $0.66 | I2I $0.02–0.04 | ✅ 15–33× |
-> | `interior_3d_model` | 150 | $4.95 | Trellis $0.05–0.15 | ✅ 33–99× |
-> | `interior_3d_from_floorplan` | 170 | $5.61 | $0.07–0.19 | ✅ 30–80× |
-> | `interior_batch_render`(全屋批次) | 20 × 圖數 × 變體數 | 每張 $0.66 | 每張 I2I $0.02–0.04 | ✅ 每張同 redesign |
-> | `interior_house_tour`(全屋影片) | 20 | $0.66 | 本地 ffmpeg ≈ $0 | ✅ 近乎純毛利 |
+> | `interior_redesign` / `_generate` / `_fusion` / `_edit`(每輪) / `_style_transfer` | 20 | $0.66 | I2I：Flux dev **$0.015** / Nano Banana **$0.03**(依畫質 model) | ✅ **22–44×** |
+> | `interior_3d_model` | 150 | $4.95 | Trellis image→3D **$0.04**（固定） | ✅ **124×** |
+> | `interior_3d_from_floorplan` | 170 | $5.61 | 渲染 $0.03 + Trellis $0.04 = **$0.07** | ✅ **80×** |
+> | `interior_batch_render`(全屋批次) | 20 × 圖數 × 變體數 | 每張 $0.66 | 每張 I2I **$0.015–0.03** | ✅ 每張同 redesign |
+> | `interior_house_tour`(全屋影片) | 20 | $0.66 | 本地 ffmpeg（CPU）≈ **$0** | ✅ 近乎純毛利 |
 >
 > ⚠️ **`interior_batch_render` 絕不可 seed 進 ServicePricing** — 它的扣點傳入的是「算好的總額」(每張價 × 圖數 × 變體數)，seeded 的單價列會用扣點防火牆機制把總額**覆蓋成單張價**。單張價要調就調 `interior_render` 列。
+
+## 3.0 PiAPI 實際牌價參考（2026-07 官網查證,取代先前的估計區間）
+
+> 這些是從 PiAPI 官網/文件抓到的**實際牌價**（非估計）。VidGo 走 PiAPI 為主要 provider,所以這是計算毛利的權威上游成本。來源連結見本節末。
+
+| PiAPI 模型 / 任務 | 實際牌價 | VidGo 用途 |
+|---|---|---|
+| Flux.1 **schnell** | **$0.002 / 圖** | 預設 T2I/I2I（最便宜） |
+| Flux.1 **dev** | **$0.015 / 圖** | 高品質 I2I |
+| Flux.1 dev-advanced (**Kontext**) | ≈ dev 級（$0.015+） | room-redesign / interior 編輯 |
+| **Qwen Image** | **$0.015 / 圖** | 中文 prompt T2I（程式碼註解已記） |
+| **Z-Image** | **$0.004 / 圖** | 最便宜 T2I（程式碼註解已記） |
+| **Nano Banana**（Gemini 2.5 Flash Image） | **$0.03 / 圖**（一次最多 4 張） | 高品質室內渲染 / 試衣 prompt 模式 |
+| **Trellis** image→3D | **$0.04 / 次** | 3D 模型 |
+| **Kling 2.6** 5s 標準 | **$0.20 / 次** | 影片 / 試衣底層 |
+| **Kling 2.6** 5s Pro | **$0.33 / 次** | 高階影片 |
+| **Seedance 2** 720p | **$0.20/秒**（5s=$1.00） | 主力影片 720p |
+| **Seedance 2** 1080p | **$0.50/秒**（5s=$2.50） | 影片 1080p |
+| **Seedance 2 fast** 720p | **$0.16/秒** | 快速影片 |
+| **Hailuo v2.3** 6s/768p | **$0.23**；10s/768p $0.45；6s/1080p $0.40 | 最便宜影片 |
+| **Sora 2** 標準 | **$0.08/秒**（1080p,5s=$0.40） | — |
+| **Sora 2 Pro** | **$0.24/秒**（1080p,5s=**$1.20**） | sora2-pro（video_sora2 扣 80 點 ≈ $2.64 營收,✅ 2.2×） |
+| 背景去除 / image-toolkit | **$0.001 / 次** | 去背 |
+| Host-Your-Account（自帶帳號吃到飽） | $5–10 / seat / 月 | 高量時的替代計價 |
+
+**來源**：[PiAPI Flux API](https://piapi.ai/flux-api)、[Trellis 3D API](https://piapi.ai/trellis-3d-api)、[Kling 2.6](https://piapi.ai/kling-2-6)、[Seedance 2.0](https://piapi.ai/seedance-2-0)、[Hailuo](https://piapi.ai/hailuo)、[Sora 2](https://piapi.ai/sora-2)、[Nano Banana pricing blog](https://piapi.ai/blogs/free-nano-banana-api-pricing-and-key-access-2025-google-gemini-2-5-flash-via-piapi)、[Remove Background API](https://piapi.ai/docs/image-editing-api/remove-background-api)、[PiAPI Pricing](https://piapi.ai/pricing)。牌價會變動,調價前請重新查證。
 
 ### a) DB 沒有對應列、走 fallback 的工具（在 `tools.py` 內 hard-coded）
 

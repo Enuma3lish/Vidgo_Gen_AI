@@ -58,6 +58,18 @@
 
 ## 3. 每個工具的營收 vs. 上游成本
 
+> **2026-07-12 新增 — 室內設計全系列 + 全屋批次收費**（[interior.py](../backend/app/api/v1/interior.py)，seed 於 `seed_new_pricing_tiers.py`）：
+>
+> | service_type | 扣點 | 營收 (heavy_pack) | 上游成本 | 評估 |
+> |---|---|---|---|---|
+> | `interior_redesign` / `_generate` / `_fusion` / `_edit`(每輪) / `_style_transfer` | 20 | $0.66 | I2I $0.02–0.04 | ✅ 15–33× |
+> | `interior_3d_model` | 150 | $4.95 | Trellis $0.05–0.15 | ✅ 33–99× |
+> | `interior_3d_from_floorplan` | 170 | $5.61 | $0.07–0.19 | ✅ 30–80× |
+> | `interior_batch_render`(全屋批次) | 20 × 圖數 × 變體數 | 每張 $0.66 | 每張 I2I $0.02–0.04 | ✅ 每張同 redesign |
+> | `interior_house_tour`(全屋影片) | 20 | $0.66 | 本地 ffmpeg ≈ $0 | ✅ 近乎純毛利 |
+>
+> ⚠️ **`interior_batch_render` 絕不可 seed 進 ServicePricing** — 它的扣點傳入的是「算好的總額」(每張價 × 圖數 × 變體數)，seeded 的單價列會用扣點防火牆機制把總額**覆蓋成單張價**。單張價要調就調 `interior_render` 列。
+
 ### a) DB 沒有對應列、走 fallback 的工具（在 `tools.py` 內 hard-coded）
 
 | 來源行 | service_type | fallback 扣點 | 營收 (heavy_pack) | 實際上游成本 | 評估 |

@@ -5,6 +5,22 @@
 > `DemoCacheService`, which persists results to the Material DB (Postgres) and
 > uses Redis only as a warm-cache layer. Curated inputs live in a public GCS
 > bucket and never change between pregen runs.
+>
+> **2026-07-12 cache/perf audit changes:**
+> - **One canonical lookup hash** — `app.models.material.demo_lookup_hash`. The
+>   runtime lookup (`DemoCacheService`) and the pregenerator now delegate to it,
+>   so they can never diverge again. Before, three builders used different
+>   formats and the exact-pair fast path never matched a pregenerated row. The
+>   fast path fully "lights up" only after a **re-pregeneration** writes rows
+>   with the unified hash; until then the generic fallback serves correctly.
+> - **Deterministic fallback** — `_get_from_db` orders by
+>   `(featured, quality, sort_order, id)` instead of `func.random()`, so the
+>   same (tool, topic, model) selection returns the **same** clip every press
+>   (it used to flicker between results).
+> - **Redis demo buckets now have a 1h TTL** (`demo:{tool}:{topic}`) — a
+>   deactivated Material stops being served instead of lingering forever.
+> - **`prompt_cache` retention** — a daily worker cron prunes rows older than
+>   90 days with `usage_count <= 0` (the table previously grew unbounded).
 
 ## Goals
 

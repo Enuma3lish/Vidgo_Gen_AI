@@ -1,154 +1,146 @@
 # VidGo Deployment Guide
 
-> Last updated: 2026-06-12. This replaces the earlier one-off "新定價系統部署指南"
-> (the pricing rollout finished; its steps are preserved in git history).
+> Last updated: 2026-07-12. **Corrects the 2026-06 revision**, which claimed the
+> frontend was on Firebase Hosting and that background tasks ran via Cloud
+> Scheduler with no worker service. Neither is true in production — see the
+> corrections inline below.
 
-VidGo production runs on **GCP project `vidgo-ai`**, region **`asia-east1`**
-(the frontend is hosted in a separate Firebase project, `vidgo-gen-ai-prod`):
+VidGo production runs on **GCP project `vidgo-ai`**, region **`asia-east1`**.
+**All three services are Cloud Run, CPU-only (no GPU** — every model runs at an
+external provider over REST, so the services only orchestrate + stream):
 
 | Piece | Resource |
 |---|---|
-| Frontend | **Firebase Hosting** (global CDN), project `vidgo-gen-ai-prod` — built with `npm run build`, deployed via `firebase deploy --only hosting` |
-| Backend API | Cloud Run `vidgo-backend` (min 1 / max 10, **1Gi**, 3600s timeout, Direct VPC egress) |
-| Background tasks | **Cloud Scheduler → `POST /api/v1/tasks/*`** (auth via `X-Tasks-Secret`). No always-on worker service. |
-| Images | Artifact Registry `asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images` |
-| Database | Cloud SQL `prod-db` (PostgreSQL, **private IP only**), attached via `--add-cloudsql-instances` |
-| Secrets | Secret Manager (`DATABASE_URL`, `SECRET_KEY`, payment/API keys, …) — **no `REDIS_URL`** |
-| Networking | **Direct VPC egress** (`vidgo-vpc`/`vidgo-subnet`, `all-traffic`) + **static NAT IP** for Giveme/ECPay outbound whitelist. No VPC connector. |
-| Media | GCS bucket `vidgo-media-vidgo-ai` |
+| Frontend | Cloud Run **`vidgo-frontend`** (nginx serving the built SPA, 1 vCPU / 256Mi). **NOT Firebase Hosting** — vidgo.co is this Cloud Run service. |
+| Backend API | Cloud Run **`vidgo-backend`** (1 vCPU / 2Gi, 3600s timeout, Direct VPC egress) |
+| Background tasks | Cloud Run **`vidgo-worker`** — an always-on ARQ worker running the cron jobs (reclaim every 2 min, auto-renew, monthly reset, bonus/prompt-cache/stale-row cleanup). **Cloud Scheduler was never enabled**; the `/api/v1/tasks/*` HTTP endpoints exist but nothing calls them. The worker is the only scheduler in prod. |
+| Images | Artifact Registry `asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images` (backend + frontend repos; the worker shares the **backend** image) |
+| Database | Cloud SQL `prod-db` (PostgreSQL, **private IP only**) |
+| Secrets | Secret Manager (`DATABASE_URL`, `SECRET_KEY`, payment/API keys, …) |
+| Networking | Backend/worker services use **Direct VPC egress**; one-off Cloud Run **jobs** attach via the `vidgo-connector` VPC connector + `--add-cloudsql-instances`. |
+| Media | GCS bucket `vidgo-media-vidgo-ai` (generated assets are `immutable`, uuid-named) |
 
-> **2026-06 cost pass:** Memorystore Redis, the `vidgo-worker` service, and the
-> Serverless VPC Connector were all removed; the frontend moved from Cloud Run to
-> Firebase Hosting. The single canonical infra/bring-up script is now
-> [`gcp/deploy.sh`](../gcp/deploy.sh) (the old `deploy-production.sh` was folded into it).
-
-There are two supported deploy paths.
-
----
-
-## Path A — Cloud Build (CI pipeline)
-
-`cloudbuild.yaml` builds the **backend** image, pushes it, and deploys
-`vidgo-backend` in one run (E2_HIGHCPU_8, layer caching from `:latest`). The
-frontend is **not** in this pipeline — it ships to Firebase Hosting separately
-(see *Frontend* below). Trigger it manually with:
-
-```bash
-gcloud builds submit --config cloudbuild.yaml --project vidgo-ai
-```
-
-`cloudbuild.backend-only.yaml` builds + pushes the backend image only (deploy
-manually per Path B step 4).
-
-### Frontend (Firebase Hosting)
-
-```bash
-cd frontend-vue
-npm ci && npm run build
-firebase deploy --only hosting --project vidgo-gen-ai-prod
-```
-
-`bash gcp/deploy.sh --step frontend` does the same. (The legacy
-`cloudbuild.frontend-only.yaml` deployed a Cloud Run frontend and is obsolete.)
+> ### ⚠️ Two coupling rules you must not break
+> 1. **The worker shares the backend image and MUST be redeployed with the
+>    backend.** The worker runs the same task code (reclaim/refund/renewal). A
+>    new backend + an old worker means the old worker's stale logic runs against
+>    the new schema/behavior — e.g. an old 60-second reclaim grace refunding
+>    jobs that are still rendering (money leak). Always swap `vidgo-worker` to
+>    the **same digest** as `vidgo-backend`.
+> 2. **`arq` is a required runtime dependency.** It was wrongly removed from
+>    `requirements.txt` on 2026-06-15 (assuming a Cloud Scheduler migration that
+>    never completed); every image built after that failed the worker with
+>    `exec: arq: not found` (exit 127), which is why the worker was pinned to a
+>    stale image for weeks. Keep `arq>=0.26.0` in `requirements.txt`.
 
 ---
 
-## Path B — Local build + push + deploy
+## The fast path — `gcp/deploy-service.sh`
 
-Works from any **linux/amd64** Docker host (Intel Mac or `--platform linux/amd64`).
-
-### 1. Build
+Code-only re-deploy (Cloud Build image build → Artifact Registry → image-swap
+onto the existing service; keeps all env/secrets/flags/scaling):
 
 ```bash
-cd Vidgo_Gen_AI
-TS=$(date +%Y%m%d-%H%M%S)
-REG=asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images
-
-# Backend (context = repo root)
-docker build -f backend/Dockerfile \
-  -t $REG/vidgo-backend:${TS}-be -t $REG/vidgo-backend:latest .
-
-# Frontend (context = frontend-vue/, uses the production Dockerfile)
-docker build -f frontend-vue/Dockerfile.prod \
-  -t $REG/vidgo-frontend:${TS} -t $REG/vidgo-frontend:latest frontend-vue/
+bash gcp/deploy-service.sh --backend --frontend   # builds + swaps both
 ```
 
-Tag conventions: backend `YYYYMMDD-HHMMSS-be`, frontend `YYYYMMDD-HHMMSS`.
-Note: local `vue-tsc` may show bogus `TS2688 "@types/* 2"` errors from
-Finder-duplicated dirs in `node_modules` — the Docker build does a clean
-`npm ci` and is the source of truth. (The frontend image above is only for
-local/preview use — production frontend ships to Firebase Hosting, not Cloud Run.)
-
-### 2. Push
+This does **not** touch the worker. After it finishes, swap the worker to the
+**same backend digest** (see the coupling rule above):
 
 ```bash
-gcloud auth configure-docker asia-east1-docker.pkg.dev   # once per machine
-docker push --all-tags $REG/vidgo-backend
+DIGEST=$(gcloud artifacts docker images describe \
+  asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images/vidgo-backend:latest \
+  --project vidgo-ai --format='value(image_summary.digest)')
+
+gcloud run services update vidgo-worker \
+  --image asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images/vidgo-backend@${DIGEST} \
+  --project vidgo-ai --region asia-east1
 ```
 
-### 3. Apply DB migrations (when the release contains one)
-
-⚠️ **Do this BEFORE deploying the backend.** SQLAlchemy selects every mapped
-column, so deploying a model change without the columns breaks every query on
-that table.
-
-The alembic history has **multiple heads**; schema changes are applied
-manually. Migrations are written with idempotent `ADD COLUMN IF NOT EXISTS`
-SQL so they can be replayed safely. Because `prod-db` is private-IP only,
-run the SQL through a one-off **Cloud Run job** that reuses the backend's
-service account, secrets, Cloud SQL attachment, and Direct VPC egress:
+Verify the worker actually started its crons (not just "Ready"):
 
 ```bash
-gcloud run jobs create vidgo-db-migrate \
-  --project vidgo-ai --region asia-east1 \
-  --image $REG/vidgo-backend:${TS}-be \
-  --service-account vidgo-backend@vidgo-ai.iam.gserviceaccount.com \
-  --set-secrets DATABASE_URL=DATABASE_URL:latest \
-  --set-cloudsql-instances vidgo-ai:asia-east1:prod-db \
-  --network vidgo-vpc --subnet vidgo-subnet --vpc-egress all-traffic \
-  --command python \
-  --args '-c,<python snippet that runs the ALTER statements via asyncpg>'
+gcloud logging read 'resource.type="cloud_run_revision"
+  resource.labels.service_name="vidgo-worker" textPayload:"Starting worker for"' \
+  --project vidgo-ai --limit 1 --format='value(textPayload)' --freshness=5m
+# expect "Starting worker for N functions: … cron:reclaim_pending_provider_tasks_task …"
+```
 
+---
+
+## DB migrations — idempotent SQL via a Cloud Run job
+
+⚠️ **Run the migration BEFORE swapping the backend.** SQLAlchemy selects every
+mapped column, so deploying a model that references a not-yet-created column
+breaks every query on that table.
+
+The alembic history has **14 un-merged heads**, so `alembic upgrade head` is not
+usable. Schema changes ship as **idempotent raw SQL** (`ADD COLUMN IF NOT
+EXISTS`, `CREATE INDEX IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`) in a script
+under `backend/scripts/` (e.g. `migrate_perf_2026_07_12.py`), applied via a
+one-off Cloud Run **job** that reuses the backend SA + secrets + Cloud SQL +
+VPC connector. Because the migration script lives in the image, **build the new
+image first, run the migration on it, then swap the services to that digest.**
+
+```bash
+# 1. Build the new image (does NOT swap the live service)
+TAG="mig-$(date +%Y%m%d-%H%M%S)"
+gcloud builds submit . --project vidgo-ai --config - <<EOF
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build','-t','asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images/vidgo-backend:${TAG}','-f','backend/Dockerfile','.']
+  - name: gcr.io/cloud-builders/docker
+    args: ['push','asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images/vidgo-backend:${TAG}']
+images: ['asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images/vidgo-backend:${TAG}']
+EOF
+
+# 2. Run the migration on that image (reuse/clone the vidgo-db-migrate job)
+gcloud run jobs update vidgo-db-migrate \
+  --image asia-east1-docker.pkg.dev/vidgo-ai/vidgo-images/vidgo-backend:${TAG} \
+  --command python --args "-m,scripts.migrate_perf_2026_07_12" \
+  --project vidgo-ai --region asia-east1
 gcloud run jobs execute vidgo-db-migrate --project vidgo-ai --region asia-east1 --wait
+
+# 3. Swap backend + worker to the migrated image's digest (see fast path above)
 ```
 
-(If the job already exists, use `gcloud run jobs update … && gcloud run jobs execute …`.)
+Existing migration/seed jobs you can repurpose: `vidgo-db-migrate`,
+`vidgo-seed-pricing` (both already have the SA/secrets/VPC wiring — just
+`jobs update … --args` then `jobs execute`).
 
-### 4. Deploy new revisions
+---
 
-`services update --image` keeps all existing env vars / secrets / flags and
-only swaps the image:
+## Verify
 
 ```bash
-gcloud run services update vidgo-backend --image $REG/vidgo-backend:${TS}-be --project vidgo-ai --region asia-east1
+curl -s  https://vidgo-backend-38714015566.asia-east1.run.app/health   # 200
+curl -sI https://vidgo.co                                              # 200 (Cloud Run nginx)
+
+# no SQL echo in prod logs (echo is gated on SQL_ECHO, default off — do NOT
+# key it off DEBUG, prod runs DEBUG=true):
+gcloud logging read 'resource.type="cloud_run_revision"
+  resource.labels.service_name="vidgo-backend" textPayload:"sqlalchemy.engine"' \
+  --project vidgo-ai --limit 1 --freshness=5m     # expect empty
 ```
 
-(There is no `vidgo-worker` / `vidgo-frontend` service to update. Background tasks
-run via Cloud Scheduler → `/api/v1/tasks/*`; the frontend ships to Firebase Hosting.)
-
-### 5. Verify
-
-```bash
-curl -s https://vidgo-backend-38714015566.asia-east1.run.app/api/v1/health
-curl -I https://vidgo.co                                   # frontend (Firebase Hosting)
-gcloud run services logs read vidgo-backend --project vidgo-ai --region asia-east1 --limit 50
-```
-
-Roll back by pointing the service at the previous tag
-(`gcloud run services update <svc> --image <previous tag>`), or shift traffic
-with `gcloud run services update-traffic <svc> --to-revisions <rev>=100`.
+Roll back by pointing the service at the previous revision:
+`gcloud run services update-traffic <svc> --to-revisions <rev>=100 --project vidgo-ai --region asia-east1`.
 
 ---
 
 ## Release checklist
 
 1. `git push origin main` — the deployed code must be in the repo.
-2. Migration needed? → Path B step 3 first.
-3. Build + push + deploy (Path A or B).
-4. Health-check backend + frontend; tail logs for the first minutes.
-5. If `ServicePricing` / plan rows changed, run the matching seed script
-   (e.g. `backend/scripts/seed_service_pricing.py`) — credit charges fall
-   back to in-code constants until the rows exist.
+2. Migration needed? → build image → run migration job → **then** swap services.
+3. `bash gcp/deploy-service.sh --backend --frontend`, **then swap `vidgo-worker` to the same digest.**
+4. Health-check backend + frontend; confirm the worker logged "Starting worker for …".
+5. `ServicePricing` / plan rows changed? → run `backend/scripts/seed_new_pricing_tiers.py`
+   via a job (credit charges fall back to in-code constants until the rows exist).
+   Do **not** seed a `service_type` whose deduct passes a computed total
+   (e.g. `interior_batch_render`) — a seeded row REPLACES the total with a
+   single per-use price (the "deduction firewall").
+6. PayPal dashboard: the webhook must subscribe to `CHECKOUT.ORDER.APPROVED`,
+   `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`, `PAYMENT.SALE.REFUNDED`.
 
 ## Related docs
 
@@ -156,3 +148,4 @@ with `gcloud run services update-traffic <svc> --to-revisions <rev>=100`.
 - First-time DNS / payment bring-up: [setup_guide.md](./setup_guide.md),
   [dns-and-ecpay-setup.md](./dns-and-ecpay-setup.md), [PAYPAL_SETUP.md](./PAYPAL_SETUP.md)
 - Costs & margins: [service-cost.md](./service-cost.md)
+- Demo cache internals: [example-mode-cache-system.md](./example-mode-cache-system.md)

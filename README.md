@@ -112,7 +112,7 @@ Interior and exterior are strictly separated — each tool is its own page.
 | 室內設計範本 Interior Templates | `/tools/interior-templates` |
 | 平面配置圖 Floor Plan | `/tools/floor-plan` (text or sketch → clean 2D plan; vision pass reads furniture/labels from the image) |
 | 立體圖 Isometric View | `/tools/isometric` (45° dollhouse; lighting / color-temp / material knobs) |
-| 3D 效果圖 3D Render | `/tools/render-3d` (保留結構 ControlNet-depth lock or 自由改造; optional growth video + GLB model) |
+| 3D 效果圖 3D Render | `/tools/render-3d` (保留結構 ControlNet-depth lock or 自由改造; optional growth video + GLB model). **全屋批次 whole-house mode**: upload N floor plans (整體 + per-room), one shared effect applied to all with a server-side consistency fingerprint, 1–4 variants each, then assemble the renders into a 1080p **全屋導覽影片** via local ffmpeg. Floor-plan inputs are auto-detected and routed to the layout-faithful renderer (the ControlNet depth-lock is photo-only). |
 | 商業空間設計 Commercial Space | `/tools/commercial-space` |
 | 草圖轉渲染（室內）Sketch → Render | `/tools/sketch-to-render-interior` |
 | 渲染圖優化放大 Render Enhancer | `/tools/render-enhancer` |
@@ -197,8 +197,9 @@ without redeploy), runtime PayPal config.
 | Python | 3.12+ | Runtime |
 | FastAPI | 0.109+ | API framework (27 routers under `/api/v1`) |
 | SQLAlchemy 2 + asyncpg | — | Async ORM |
-| Alembic | — | Migrations (multi-head history; applied manually with idempotent SQL) |
-| Cloud Scheduler | — | Background tasks (`POST /api/v1/tasks/*`); replaced the always-on ARQ worker in prod |
+| Alembic | — | Migrations (14-head history; applied via idempotent-SQL Cloud Run jobs, not `alembic upgrade`) |
+| ARQ worker | 0.26+ | Always-on `vidgo-worker` Cloud Run service running the cron jobs (reclaim/renewals/cleanup). `arq` is a **required** runtime dep — the `/api/v1/tasks/*` HTTP endpoints exist but Cloud Scheduler was never enabled. |
+| ffmpeg | — | Local CPU media assembly (whole-house tour video) — the only in-house compute; everything else is provider REST |
 | httpx | — | Provider REST calls |
 
 ### AI Providers (all REST — MCP removed 2026-05-26)
@@ -291,14 +292,14 @@ docker compose up -d
 
 ### GCP environment (production)
 
-Backend on **GCP project `vidgo-ai`** (region `asia-east1`); frontend on
-**Firebase Hosting** (project `vidgo-gen-ai-prod`):
+**GCP project `vidgo-ai`**, region `asia-east1`. **All three tiers are Cloud
+Run, CPU-only** (no GPU — models run at external providers over REST):
 
-| Service | URL |
+| Service | URL / role |
 |---|---|
-| Frontend | https://vidgo.co (Firebase Hosting, global CDN) |
-| Backend API | https://vidgo-backend-38714015566.asia-east1.run.app |
-| Background tasks | Cloud Scheduler → `POST /api/v1/tasks/*` (no public UI, no worker service) |
+| Frontend | https://vidgo.co — Cloud Run **`vidgo-frontend`** (nginx serving the built SPA). **NOT Firebase Hosting.** |
+| Backend API | https://vidgo-backend-38714015566.asia-east1.run.app — Cloud Run `vidgo-backend` |
+| Background tasks | Cloud Run **`vidgo-worker`** — always-on ARQ worker running the cron jobs (reclaim / renewals / cleanup). **Cloud Scheduler is not enabled**; the `/api/v1/tasks/*` endpoints exist but nothing calls them. |
 
 ```bash
 # Health checks
@@ -311,11 +312,12 @@ gcloud run services logs tail vidgo-backend --project vidgo-ai --region asia-eas
 
 ⚠ **Production actions burn real credits and can charge real users.**
 
-**Deploying:** see [docs/DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md) —
-backend via Cloud Build (`cloudbuild.yaml`) or local build → Artifact Registry →
-`gcloud run services update`; frontend via `firebase deploy --only hosting`.
-Full bring-up: [`gcp/deploy.sh`](./gcp/deploy.sh). Apply DB migrations **before**
-deploying a backend that contains them.
+**Deploying:** see [docs/DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md).
+TL;DR: `bash gcp/deploy-service.sh --backend --frontend`, **then swap
+`vidgo-worker` to the same backend image digest** (the worker shares the backend
+image and must not lag behind it). Apply DB migrations **before** deploying a
+backend that contains them — via an idempotent-SQL Cloud Run job, since the
+alembic tree has 14 un-merged heads (`alembic upgrade` is not usable).
 
 ### Operational scripts (`gcp/`)
 

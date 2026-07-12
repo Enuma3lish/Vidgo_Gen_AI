@@ -109,6 +109,15 @@ _PLAN_FLOOR_FOR_MODEL: dict[str, str] = {
     "sora-2-pro":     "premium",
     "sora2-pro":      "premium",
     "sora_2_pro":     "premium",
+    # Sora 2 STD (2026-07-12 SKU split) — $0.40 upstream / 30 credits. Sits at
+    # the pro floor because subscribers pass through anyway (credits-only
+    # policy) and it's still a video generation surface we don't want to
+    # expose to free/demo. Keep BEFORE the generic "sora2" entry so the
+    # longest-match scan picks std over the pro row.
+    "sora2_std":      "pro",
+    "sora-2-std":     "pro",
+    "sora2-std":      "pro",
+    "sora_2_std":     "pro",
     "sora2":          "premium",
     "sora-2":         "premium",
     "sora_2":         "premium",

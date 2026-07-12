@@ -440,6 +440,10 @@ export const toolsApi = {
     imageUrl?: string
     negativePrompt?: string
     enableAudio?: boolean
+    // 2026-07-12 — SKU split (std = 30 credits / no audio / $0.08 s upstream,
+    // pro = 80 credits / synced audio / $0.24 s). Default 'pro' preserves the
+    // existing contract for callers that don't pass a mode.
+    mode?: 'std' | 'pro'
     // 2026-06-12 — user-chosen faithfulness controls (additive clauses).
     cameraMove?: string
     subjectLock?: boolean   // I2V: keep the start frame's subject identical
@@ -456,6 +460,7 @@ export const toolsApi = {
         image_url: params.imageUrl,
         negative_prompt: params.negativePrompt,
         enable_audio: params.enableAudio,
+        mode: params.mode ?? 'pro',
         camera_move: params.cameraMove || undefined,
         subject_lock: params.subjectLock ?? true,
         strict_prompt: params.strictPrompt ?? true,

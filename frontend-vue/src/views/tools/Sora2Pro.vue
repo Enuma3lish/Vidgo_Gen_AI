@@ -31,6 +31,11 @@ const aspectRatio = ref<'16:9' | '9:16'>('16:9')
 const startImage = ref<string | undefined>(undefined)
 const negativePrompt = ref('')
 const enableAudio = ref(true)
+// 2026-07-12 SKU split. `pro` (default) = 80 credits, synced audio, $0.24 s
+// upstream. `std` = 30 credits, no audio, $0.08 s upstream. Std forces audio
+// off since the upstream task doesn't emit it.
+const mode = ref<'std' | 'pro'>('pro')
+watch(mode, (m) => { if (m === 'std') enableAudio.value = false })
 const resultVideo = ref<string | undefined>(undefined)
 const isProcessing = ref(false)
 // 2026-06-12 — anti-hallucination controls (additive; the prompt itself
@@ -59,10 +64,10 @@ watch(locale, () => {
   if (selectedPresetId.value) prompt.value = presetPromptFor(selectedPresetId.value)
 })
 
-// Server-side billing row video_sora2 is fixed at 80 credits regardless of
-// 720p vs 1080p selection (mirrors Veo 3.1 pricing). Admin overrides in
-// /admin/models still drive the actual deduction.
-const displayCost = computed(() => 80)
+// Server-side billing rows: video_sora2 = 80 (Pro), video_sora2_std = 30 (Std).
+// Resolution doesn't affect the charge; only the mode toggle does. Admin
+// overrides in /admin/models still drive the actual deduction.
+const displayCost = computed(() => (mode.value === 'std' ? 30 : 80))
 
 // P0-2: single source of truth for the in-flight task — recovers on timeout
 // (background poll) and on page refresh (resume()).
@@ -101,7 +106,8 @@ async function handleGenerate() {
       resolution: resolution.value,
       imageUrl: startImage.value,
       negativePrompt: negativePrompt.value || undefined,
-      enableAudio: enableAudio.value,
+      enableAudio: mode.value === 'std' ? false : enableAudio.value,
+      mode: mode.value,
       cameraMove: cameraMove.value || undefined,
       subjectLock: faithLock.value,
       strictPrompt: faithLock.value,
@@ -154,7 +160,32 @@ async function handleGenerate() {
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="space-y-4">
-          <!-- Resolution toggle (720p vs 1080p; both billed at 80 credits) -->
+          <!-- SKU toggle (STD vs PRO). STD is $0.08/s upstream (30 credits, no
+               audio), PRO is $0.24/s ($1.20 for 5 s → 80 credits, synced audio).
+               Split lets users who don't need audio pay for what they use. -->
+          <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+            <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ L('模式', 'Model tier', 'モデル', '모드', 'Modo') }}</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                @click="mode = 'std'"
+                class="py-3 rounded-lg text-sm font-medium transition-all text-left px-3"
+                :style="mode === 'std' ? 'background: #1677ff; color: white;' : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.1);'"
+              >
+                <div class="font-semibold">Sora 2 STD · 30 {{ L('點', 'credits', 'クレジット', '크레딧', 'créditos') }}</div>
+                <div class="text-xs opacity-75 mt-1">{{ L('無音、快速、經濟', 'Silent, fast, economical', '無音・高速・経済的', '무음, 빠름, 경제적', 'Silente, rápido, económico') }}</div>
+              </button>
+              <button
+                @click="mode = 'pro'"
+                class="py-3 rounded-lg text-sm font-medium transition-all text-left px-3"
+                :style="mode === 'pro' ? 'background: #1677ff; color: white;' : 'background: #0d0d15; color: #9494b0; border: 1px solid rgba(255,255,255,0.1);'"
+              >
+                <div class="font-semibold">Sora 2 PRO · 80 {{ L('點', 'credits', 'クレジット', '크레딧', 'créditos') }}</div>
+                <div class="text-xs opacity-75 mt-1">{{ L('含同步音效', 'Synced audio', '同期音声', '동기 음성', 'Audio sincronizado') }}</div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Resolution toggle (720p vs 1080p; charge follows the mode toggle above) -->
           <div class="rounded-xl p-4" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <label class="block text-sm font-medium mb-2" style="color: #e8e8f0;">{{ t('sora2Pro.resolutionLabel') }}</label>
             <div class="grid grid-cols-2 gap-2">
@@ -248,8 +279,9 @@ async function handleGenerate() {
           </div>
 
           <!-- Audio toggle. Sora 2 Pro's headline feature is synchronized audio;
-               default on, but allow silent renders for ad / mute-context use cases. -->
-          <div class="rounded-xl p-4 flex items-center justify-between" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
+               default on, but allow silent renders for ad / mute-context use cases.
+               Std SKU cannot emit audio at all — the toggle is disabled there. -->
+          <div v-if="mode === 'pro'" class="rounded-xl p-4 flex items-center justify-between" style="background: #141420; border: 1px solid rgba(255,255,255,0.06);">
             <div>
               <label class="block text-sm font-medium" style="color: #e8e8f0;">{{ t('sora2Pro.audioLabel') }}</label>
               <p class="text-xs mt-1" style="color: #6b6b8a;">{{ t('sora2Pro.audioHint') }}</p>

@@ -297,6 +297,12 @@ VIDEO_CREDIT_COSTS = {
     "kling_v3_std":    {"service_type": "video_kling_v3_std",   "credits": 65,  "usd": 1.00, "label": "Kling V3.0 STD 10s"},
     "kling_v3_pro":    {"service_type": "video_kling_v3_pro",   "credits": 130, "usd": 2.00, "label": "Kling V3.0 PRO 10s 含音"},
     "veo":             {"service_type": "video_veo",            "credits": 80,  "usd": 1.20, "label": "Veo 3.1 5s 含音"},
+    # Sora 2 has two upstream SKUs at PiAPI ($0.08/s std, $0.24/s pro). Charge
+    # them separately so users who pick std don't subsidise pro (and vice versa).
+    # `sora2` stays as the pro alias for back-compat with older callers/analytics
+    # rows that hard-code the string.
+    "sora2_std":       {"service_type": "video_sora2_std",      "credits": 30,  "usd": 0.40, "label": "Sora2 STD 5s"},
+    "sora2_pro":       {"service_type": "video_sora2",          "credits": 80,  "usd": 1.20, "label": "Sora2 Pro 5s"},
     "sora2":           {"service_type": "video_sora2",          "credits": 80,  "usd": 1.20, "label": "Sora2 Pro 5s"},
 }
 
@@ -341,7 +347,12 @@ def resolve_video_credits(
     if "veo" in m:
         return VIDEO_CREDIT_COSTS["veo"]
     if "sora" in m:
-        return VIDEO_CREDIT_COSTS["sora2"]
+        # `sora2_std` / `sora-2-std` / anything containing "std" → cheap SKU.
+        # Everything else with "sora" defaults to the Pro row (back-compat with
+        # callers that only send bare "sora2").
+        if "std" in m or "standard" in m:
+            return VIDEO_CREDIT_COSTS["sora2_std"]
+        return VIDEO_CREDIT_COSTS["sora2_pro"]
     if "seedance" in m or "doubao" in m:
         if "1080" in m or "1080" in r:
             return VIDEO_CREDIT_COSTS["seedance_1080p"]

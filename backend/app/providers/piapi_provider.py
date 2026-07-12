@@ -1776,7 +1776,9 @@ class PiAPIProvider(BaseProvider):
                 "image_url": str (optional, switches to I2V),
                 "resolution": str (optional, "720p"|"1080p"; default 1080p
                                    to match the 80-credit billing row),
-                "enable_audio": bool (optional, default True),
+                "enable_audio": bool (optional, default True; ignored for std mode),
+                "mode": "pro" | "std" (optional, default "pro"; std uses the
+                        cheaper $0.08/s task_type with no audio),
             }
 
         Returns:
@@ -1793,14 +1795,25 @@ class PiAPIProvider(BaseProvider):
             requested = 4
         duration = min((4, 8, 12), key=lambda v: abs(v - requested))
 
+        # Std vs Pro SKU — pick the PiAPI task_type. Std has no audio track.
+        mode = str(params.get("mode") or "pro").strip().lower()
+        if mode not in ("pro", "std"):
+            mode = "pro"
+        task_type = (
+            PIAPI_MODELS["sora2_std_task"] if mode == "std"
+            else PIAPI_MODELS["sora2_task"]
+        )
+
         input_data: Dict[str, Any] = {
             "prompt": params["prompt"],
             "duration": duration,
             "resolution": str(params.get("resolution") or "1080p"),
         }
         # Audio is Sora 2 Pro's headline feature; default on but let callers
-        # opt out for silent renders.
-        if params.get("enable_audio") is None:
+        # opt out for silent renders. Std SKU doesn't emit audio at all.
+        if mode == "std":
+            input_data["enable_audio"] = False
+        elif params.get("enable_audio") is None:
             input_data["enable_audio"] = True
         else:
             input_data["enable_audio"] = bool(params["enable_audio"])
@@ -1818,7 +1831,7 @@ class PiAPIProvider(BaseProvider):
 
         payload = {
             "model": PIAPI_MODELS["sora2_model"],
-            "task_type": PIAPI_MODELS["sora2_task"],
+            "task_type": task_type,
             "input": input_data,
             "config": {"service_mode": "public"},
         }

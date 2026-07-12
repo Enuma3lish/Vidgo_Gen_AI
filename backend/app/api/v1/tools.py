@@ -1092,7 +1092,9 @@ async def _check_and_deduct_credits(
     user,
     amount: int,
     service_type: str,
-    redis_client=None
+    redis_client=None,
+    *,
+    model_hint: Optional[str] = None,
 ) -> tuple:
     """Check concurrent limit, check credits, and deduct.
     Returns (ok: bool, error_msg: str | None)
@@ -1103,6 +1105,17 @@ async def _check_and_deduct_credits(
     a fallback only, so ops can dial deduction weights via DB without a
     redeploy ("deduction firewall"). The caller's ``amount`` is still used
     when no ServicePricing row matches (e.g. service_types not yet seeded).
+
+    Per-model floor (2026-07-12): when the caller passes ``model_hint``
+    (typically ``request.model`` / ``request.model_id``), the resolved
+    per-model credit row acts as a FLOOR — i.e. the deduction is
+    ``max(effective_amount, resolve_*_credits(model_hint).credits)``. This
+    catches endpoints that forget to route through ``resolve_image_credits``/
+    ``resolve_video_credits`` when the user picks an expensive upstream
+    model, so a T2I call with model=nano-banana-pro can never silently
+    deduct the standard 2 credits and eat the $0.10 upstream loss. Endpoints
+    that already resolve the correct row up-front are unaffected — the
+    floor equals the amount they were about to charge anyway.
 
     Admin (superuser) accounts bypass credit checks — they can use all
     tools without needing credits. A zero-cost transaction is still
@@ -1155,6 +1168,35 @@ async def _check_and_deduct_credits(
                 )
     except Exception as exc:
         logger.warning("ServicePricing lookup failed for %s, using hardcoded %d: %s", service_type, amount, exc)
+
+    # Per-model floor (2026-07-12 SKU-split safety net). See docstring.
+    if model_hint:
+        try:
+            from app.services.tier_config import (
+                resolve_image_credits, resolve_video_credits,
+            )
+            floor_row = None
+            # Image services: text_to_image, image_to_image, kontext, nano_banana,
+            # image_transform, product_scene_gen, room_redesign, image_upscale, …
+            # anything not obviously a video row goes through resolve_image_credits.
+            if service_type.startswith("video_") or service_type in {
+                "short_video", "text_to_video", "image_to_video", "kling_video",
+            }:
+                floor_row = resolve_video_credits(model_hint)
+            else:
+                floor_row = resolve_image_credits(model_hint)
+            floor_credits = int(floor_row["credits"])
+            if floor_credits > effective_amount:
+                logger.warning(
+                    "Per-model floor lifted %s deduction: was %d, floor for %r is %d",
+                    service_type, effective_amount, model_hint, floor_credits,
+                )
+                effective_amount = floor_credits
+        except Exception as exc:
+            logger.warning(
+                "Per-model floor lookup failed for %s / %r: %s",
+                service_type, model_hint, exc,
+            )
 
     has_enough = await credit_svc.check_sufficient(str(user.id), effective_amount)
     if not has_enough:
@@ -4192,7 +4234,10 @@ async def _generate_short_video_inner(
     CREDIT_COST  = _vrow["credits"]
     service_type = _vrow["service_type"]
 
-    ok, err = await _check_and_deduct_credits(db, current_user, CREDIT_COST, service_type)
+    ok, err = await _check_and_deduct_credits(
+        db, current_user, CREDIT_COST, service_type,
+        model_hint=request.model_id,
+    )
     if not ok:
         return ToolResponse(success=False, message=err)
     # Amount ACTUALLY charged (ServicePricing override aware, 0 for admins).
@@ -6292,7 +6337,8 @@ async def midjourney_imagine(
     _irow = resolve_image_credits(request.model, getattr(request, "resolution", None))
     CREDIT_COST = _irow["credits"]
     ok, err = await _check_and_deduct_credits(
-        db, current_user, CREDIT_COST, _irow["service_type"]
+        db, current_user, CREDIT_COST, _irow["service_type"],
+        model_hint=request.model,
     )
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -6708,7 +6754,10 @@ async def _text_to_video_inner(
     _vrow = resolve_video_credits(request.model_id, getattr(request, "resolution", None))
     credit_cost = _vrow["credits"]
     service_type = _vrow["service_type"]
-    ok, err = await _check_and_deduct_credits(db, current_user, credit_cost, service_type)
+    ok, err = await _check_and_deduct_credits(
+        db, current_user, credit_cost, service_type,
+        model_hint=request.model_id,
+    )
     if not ok:
         return ToolResponse(success=False, message=err)
     charged = _credits_charged(current_user, credit_cost)
@@ -6827,6 +6876,13 @@ class Sora2ProRequest(BaseModel):
         default=None,
         description="Sora 2 Pro emits synchronized audio by default; pass false for a silent render.",
     )
+    # 2026-07-12 SKU split. Std is $0.08/s at PiAPI (~$0.40 for 5 s, 30 credits),
+    # Pro is $0.24/s (~$1.20 for 5 s, 80 credits, plus audio). Default stays
+    # "pro" so existing clients keep their contract.
+    mode: str = Field(
+        default="pro",
+        description="Sora 2 SKU: 'std' (30 credits, no audio) or 'pro' (80 credits, synced audio).",
+    )
     # 2026-06-12 — user-chosen faithfulness controls, same semantics as
     # /kling-video: additive clauses only, user prompt stays verbatim.
     camera_move: Optional[str] = Field(
@@ -6865,18 +6921,25 @@ async def _sora2_pro_inner(
     db: AsyncSession,
     current_user,
 ) -> ToolResponse:
-    """OpenAI Sora 2 Pro — flagship 5 s 1080p video with synchronized audio.
+    """OpenAI Sora 2 — 5 s video via PiAPI Sora 2 proxy.
 
-    Billing: video_sora2 row, 80 credits (same tier as Veo 3.1). Premium plan
-    or higher is required (enforced via require_model_access on the
-    ``sora2_pro`` model_id; see plan_gates._PLAN_FLOOR_FOR_MODEL).
+    Billing follows request.mode:
+      * ``std`` → video_sora2_std row (30 credits, no audio, $0.08/s upstream)
+      * ``pro`` → video_sora2 row (80 credits, synced audio, $0.24/s upstream)
+    Plan gate uses the mode-specific model_id so a free user attempting the
+    Pro SKU still hits the premium floor; std sits at the pro floor (see
+    plan_gates._PLAN_FLOOR_FOR_MODEL).
     """
     # Resolve the billing row from the central tier table so the credit
     # cost can't drift from the migration / pricing-page reference.
     from app.services.tier_config import VIDEO_CREDIT_COSTS
-    _vrow = VIDEO_CREDIT_COSTS["sora2"]
+    _mode = (request.mode or "pro").strip().lower()
+    if _mode not in ("std", "pro"):
+        _mode = "pro"
+    _vrow = VIDEO_CREDIT_COSTS["sora2_std" if _mode == "std" else "sora2_pro"]
     service_type = _vrow["service_type"]
     credit_cost_fallback = _vrow["credits"]
+    _model_id = "sora2_std" if _mode == "std" else "sora2_pro"
 
     # Custom-prompt generator → subscription + bound card required (admins
     # / test accounts bypass via _custom_prompt_gate).
@@ -6887,9 +6950,10 @@ async def _sora2_pro_inner(
     if _blocked:
         return _blocked
 
-    # Plan-tier floor: Sora 2 Pro is premium. A basic / pro user could
-    # otherwise hit this endpoint and burn 80 premium credits.
-    await require_model_access(db, current_user, "sora2_pro")
+    # Plan-tier floor: Pro is premium; Std is pro (see plan_gates). Any real
+    # subscription passes through since 2026-07 policy is credits-only, but
+    # free/demo users still hit the floor before we debit their wallet.
+    await require_model_access(db, current_user, _model_id)
 
     if request.image_url:
         request.image_url = await _ensure_public_image_url(
@@ -6897,7 +6961,8 @@ async def _sora2_pro_inner(
         )
 
     ok, err = await _check_and_deduct_credits(
-        db, current_user, credit_cost_fallback, service_type
+        db, current_user, credit_cost_fallback, service_type,
+        model_hint=_model_id,
     )
     if not ok:
         return ToolResponse(success=False, message=err)
@@ -6911,7 +6976,8 @@ async def _sora2_pro_inner(
         db, current_user,
         tool_type="sora2", service_type=service_type, charged=charged,
         input_params={
-            "model_id": "sora2_pro",
+            "model_id": _model_id,
+            "mode": _mode,
             "image_url": request.image_url,
             "prompt": (request.prompt or "")[:500],
         },
@@ -6943,6 +7009,7 @@ async def _sora2_pro_inner(
                 "image_url": request.image_url,
                 "negative_prompt": final_negative,
                 "enable_audio": request.enable_audio,
+                "mode": _mode,
             },
             user_tier=get_user_tier(current_user),
         )
@@ -6971,7 +7038,8 @@ async def _sora2_pro_inner(
                 input_image_url=str(request.image_url) if request.image_url else None,
                 input_text=final_prompt,
                 input_params={
-                    "model_id": "sora2_pro",
+                    "model_id": _model_id,
+                    "mode": _mode,
                     "duration": request.duration,
                     "resolution": request.resolution,
                     "aspect_ratio": request.aspect_ratio,
@@ -6996,7 +7064,7 @@ async def _sora2_pro_inner(
             result_url=video_url,
             video_url=video_url,
             credits_used=charged,
-            message="Video generated via Sora 2 Pro.",
+            message=f"Video generated via Sora 2 {_mode.upper()}.",
         )
     except Exception as exc:
         logger.error("sora2_pro error: %s", exc, exc_info=True)

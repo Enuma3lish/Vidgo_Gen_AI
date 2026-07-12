@@ -118,7 +118,11 @@ PIAPI_MODELS: Dict[str, str] = {
     # launch. Verified against the live API: model="sora2" with task_type
     # "sora2-pro-video" (pro) / "sora2-video" (standard) pass validation.
     "sora2_model":             os.environ.get("PIAPI_SORA2_MODEL",             "sora2"),
+    # `sora2_task` is the PRO task (audio, up to 1080p, $0.24/s). `sora2_std_task`
+    # is the standard SKU (no audio, $0.08/s) added 2026-07-12 so we can split
+    # the SKU and stop losing margin on users who happily pick std.
     "sora2_task":              os.environ.get("PIAPI_SORA2_TASK",              "sora2-pro-video"),
+    "sora2_std_task":          os.environ.get("PIAPI_SORA2_STD_TASK",          "sora2-video"),
 
     # Wan video (model="Wan"; version encoded in task_type)
     "wan_video":           os.environ.get("PIAPI_WAN_VIDEO_MODEL",     "Wan"),

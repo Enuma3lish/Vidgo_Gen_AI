@@ -1,9 +1,11 @@
 # VidGo 服務成本與毛利分析
 
+> **2026-07-12 增補（本輪落地）**：Sora 2 拆分為 **std / pro 兩檔 SKU**、`_check_and_deduct_credits` 新增 **per-model 扣點下限**。細節見 §5 新加的「已完成」區。
+>
 > **2026-06-12 增補**：本文撰寫後，影片計價已改以 `tier_config.py` 的
 > `VIDEO_CREDIT_COSTS` 為唯一對照表（hailuo 18 / wan・hunyuan 20 /
-> kling_std 28 / seedance_720p・kling_v3_std 65 / veo・**sora2 80**（06-09 新增，
-> Sora 2 Pro）/ kling_v3_pro 130 / seedance_1080p 160），且 `ai_try_on`
+> kling_std 28 / seedance_720p・kling_v3_std 65 / veo・**sora2_pro 80**（06-09 新增，
+> **sora2_std 30**新增於 07-12）/ kling_v3_pro 130 / seedance_1080p 160），且 `ai_try_on`
 > 實際扣點為 **30 點**（前端顯示已同步修正）。其餘分析仍以 2026-06-03 資料為準。
 
 > 產出日期：2026-06-03
@@ -160,93 +162,103 @@
 
 ---
 
-## 5. 建議修正（P0 → P4）
+## 5. 建議修正 — 已完成 vs. 剩餘
 
-### P0：止血（必做、可一週內完成）
+### 5.a 已完成（2026-06 到 2026-07 之間陸續落地）
 
-**P0-a. 修正 `service_type` 命名對不上 DB 的 bug**
-`backend/app/api/v1/tools.py`：
+| 項目 | 落地版本 / commit | 驗證方式 |
+|---|---|---|
+| ✅ **P0-a** `service_type` 命名對不上 DB — bg_removal / product_scene_gen / image_upscale 全數修正 | 2026-06 v2.1 遷移窗口 | [tools.py:2179](../backend/app/api/v1/tools.py#L2179)、[tools.py:2635](../backend/app/api/v1/tools.py#L2635)、[tools.py:5086](../backend/app/api/v1/tools.py#L5086) 已改用正確 key |
+| ✅ **P0-b** `tier_config.CREDIT_COSTS` fallback 大幅拉高 | 2026-06 v2.1 → 2026-07 v3.0 | [tier_config.py:97+](../backend/app/services/tier_config.py#L97)：text_to_image `{default:2, premium:3, nano_banana:8, nano_banana_4k:12}`；image_to_video `{default:18, wan_pro:65, veo:80}`；ai_try_on 30/60；ai_avatar 80；lip_sync 50；video_dubbing 60；video_extend 30 |
+| ✅ **P1（部分）** heavy_pack 1000→833 點，$32.99 不變 | [f1a2b3c4d5e6](../backend/alembic/versions/f1a2b3c4d5e6_lock_legacy_packs_and_sync_plan_models.py) 遷移 | $0.0396/credit，貼近 Basic 訂閱 $0.0444/credit |
+| ✅ **P3（部分）** VidGo 3.0 每模型扣點表 + 官方 `api_cost_usd` 種子 | [j4d5e6f7g8h9](../backend/alembic/versions/j4d5e6f7g8h9_v3_0_credit_table_and_plan_credits.py) | 影像 / 影片 15 列 service_pricing 全部落表，`/admin/costs` 有真實 margin |
+| ✅ **室內設計全系列扣點** | [interior batch memory](../.claude/projects/-Users-mlw-Desktop-Vidgo-Gen-AI/memory/interior-batch-whole-house.md) 2026-07-10 | interior_redesign 等固定 20 點、interior_3d_model 150、interior_batch_render 動態 |
+| ✅ **Sora 2 SKU 拆分**（本輪落地） | 2026-07-12 (`k7m8n9o0p1q2` migration) | `sora2_std` 30 點 / no-audio / $0.40 上游；`sora2_pro` 80 點 / 含音 / $1.20 上游 — 使用者選 std 不再幫 pro 補貼 |
+| ✅ **Per-model 扣點下限**（本輪落地） | 2026-07-12 [tools.py:1090+](../backend/app/api/v1/tools.py#L1090) | `_check_and_deduct_credits` 新增 `model_hint` 參數；任何端點忘記走 `resolve_*_credits` 或未來新增模型分支，都會被 floor guard 抬回真實扣點 + 一則 warning log |
 
-```python
-# tools.py:1724
-"background_removal" → "bg_removal"
+### 5.b 剩餘工作（依 ROI 排序）
 
-# tools.py:2117
-"product_scene" → "product_scene_gen"
+**R1 — seed_service_pricing.py 的 `api_cost_usd` 用 §3.0 PiAPI 官方牌價全面重寫（原 P3 收尾）**
+本輪已把 15 列影像 / 影片主表校正；`seed_service_pricing.py` 還有一批舊 v2.0 的 `api_cost_usd` 估值沒對齊 PiAPI 現價（Kling 2.6、Sora 2 Pro、Seedance 2 fast、Nano-Banana Pro 3K/4K、Trellis）。同一支腳本一次改完，`/admin/costs` 的 margin 才會全綠。**Idea 5** — 純資料更新，無程式風險。
 
-# tools.py:3944
-"upscale" → "image_upscale"
-```
+**R2 — Nano-Banana-Pro try-on 圖片數量硬上限**
+`try-on` 已升到 30 點 / $0.99 營收；`nano-banana-pro` 每張 $0.03，multi-image identity guard 若無限增長，5 張圖 → $0.15 → 6.6× → 仍安全。但若 identity guard 迴圈上限沒鎖，$1+ 就打平。**行動**：在 `tools.py` try-on 呼叫端硬編一個 `max_reference_images` 常數（建議 2）。
 
-否則 v2.1 的 DB 扣點防火牆永遠摸不到這 3 個工具。
+**R3 — 年付方案「買 10 送 12」隱性折扣（原 P1 尾巴）**
+若 `price_yearly = 10 × price_monthly` 且 `monthly_credits × 12` 全額配給，等於 $/credit 再打 ~17% 折。兩擇一：
+  - 年配給改為 `monthly_credits × 11`（買 10 送 11）
+  - 年價改為 `monthly_price × 11`（10% off，不是 ~17%）
+需要動 `plans` 表 + `credit_service.grant_monthly_credits`。
 
-**P0-b. 拉高 `tier_config.CREDIT_COSTS` 的 fallback 並同步寫進 DB**
+**R4 — Claymation 影片模式 20 點對上 Kling 5s Pro（$0.33）只剩 2× 毛利**
+[tools.py:3623](../backend/app/api/v1/tools.py#L3623) 建議調到 25 點，或強制走 Kling std 而非 Pro。單點改動。
 
-| tool_type | default 舊 → 新 | premium 舊 → 新 | 備註 |
-|---|---|---|---|
-| text_to_image | 1 → 1 | 3 → 5 | premium = MJ / Nano Banana Pro / Kontext |
-| i2i / style_transfer | 1 → 2 | 3 → 5 | |
-| image_translator | 1 → 2 | 3 → 5 | |
-| image_to_video | 10 → 20 | 30 → 60 | premium = Kling 旗艦 |
-| text_to_video | 10 → 20 | 30 → 60 | |
-| ai_try_on | 10 → 30 | 30 → 60 | |
-| ai_avatar | 30 → 80 | — | A2E/Kling avatar 上游 $1–3 |
-| lip_sync | 30 → 50 | — | |
-| video_dubbing | 30 → 60 | — | |
-| video_extend | 15 → 30 | — | |
+**R5 — 損益偵測 cron（新提案）**
+Worker 每晚跑一支 job：讀 `service_pricing.credit_cost × 0.033 - api_cost_usd`，任何列 < 0 或 < 2× 就寄一封 admin summary。避免未來出現當年 §2 那種「命名不對就沉默虧錢」的黑洞。與 R1 一起做 ROI 最高。
 
-調整後 `tools.py` 內各 `CREDIT_COST = N` hard-code 也要同步，並寫一支 alembic migration 把這些值寫入 `service_pricing` 表（同時補上對應 `api_cost_usd` 以利 admin dashboard 毛利計算）。
-
-### P1：縮窄 pack 套利空間
-
-- `heavy_pack` 1,000 點 / NT$999 → **850 點 / NT$999**（NT$1.175/點，USD $0.0388/點）
-  讓 pack 不再比訂閱便宜；高用量者改回買訂閱、訂閱用戶可靠 breakage（未用完）保毛利。
-- 或 → **保持 1,000 點，但漲價到 NT$1,199**
-- 年付方案：要嘛改成 11 月（不是 10 月）的折扣、要嘛年配給縮為 `monthly_credits × 11`。
-
-### P2：把 default tier 強制路由到便宜的上游模型
-
-`provider_router` 已支援 tier-based parameter override，只差「明確的 model whitelist」。
-
-- Free / Basic 的 `image_to_video` default → 強制走 Hailuo fast 或 Seedance fast（上游 ~$0.10），**絕不**碰 Kling 2.1-master。
-- 旗艦（Kling 2.1-master、Veo 3.1、Nano Banana Pro）只能透過明確選 `wan_pro` / `veo` / `premium` 階層才能呼叫；對應扣點走 §P0-b 的高階表。
-- 在 `TIER_ALLOWED_MODELS` 中強化：`free / basic` → 只能 `["default"]`，且 `default` 在 provider_router 內被映射為「最便宜的可用上游」。
-
-### P3：修正 admin dashboard 的 api_cost_usd 假設
-
-`backend/scripts/seed_service_pricing.py` 的 `api_cost_usd` 是 v1.0 時代的舊估，且**完全沒涵蓋** Nano Banana、Seedance、Hailuo、Veo、Hunyuan、Z-Image、Qwen Image、Kling 2.6 / 3.0 (Omni) 等新模型。
-
-- 為新模型補列 `service_pricing` 種子（含 `api_cost_usd`）。
-- 每季根據 PiAPI / Pollo / Vertex 帳單對齊一次。
-- 否則 `/admin/costs` 的 `margin_usd` 完全失真，看不出在虧錢。
-
-### P4：清理過時註解 / 文件
-
-- `tier_config.py` 檔頭註解寫「1 credit ≈ $0.5 cost」，是 v2.0 制定前的想像值，**請改寫成實際 PiAPI 報價**，否則下一位接手者會以為定價已經有 10× 毛利、再加碼下調。
-- `docs/vidgo-project-supplement.md` 內的 credit_cost 範例應一併校正。
+**R6 — `tier_config.py` 檔頭註解「1 credit ≈ $0.5 cost」清掉**（原 P4）
+最小改動、防後人踩雷。
 
 ---
 
-## 6. 預估影響
+## 6. 預估影響（更新）
 
 假設付費使用者使用比例為：圖片 50%、標準影片 35%、avatar/try-on/lip-sync 15%
 
-| 使用者類型 | 目前每 $1 營收的成本 | P0 + P1 + P2 後 |
-|---|---|---|
-| 純圖片使用者 | ~$0.15 | ~$0.10 |
-| 混合使用者 | ~$0.85 | ~$0.45 |
-| Avatar 重度使用者 | **>$1.20（虧損）** | ~$0.70 |
+| 使用者類型 | 2026-06 前 | 2026-07 現況（P0/P1/j4d5 遷移已上） | R1-R6 全部落地後 |
+|---|---|---|---|
+| 純圖片使用者 | ~$0.15/$1 營收 | ~$0.10 | ~$0.08 |
+| 混合使用者 | ~$0.85/$1 營收 | ~$0.55 | ~$0.40 |
+| Avatar / 試衣 / lip-sync 重度使用者 | **>$1.20（虧損）** | ~$0.75 | ~$0.60 |
+| Sora 2 使用者（本輪新拆） | — | **std 15% / pro 45%**（拆分後兩檔均勻分佈時） | 同左 |
 
-> **Avatar 重度使用者**是目前最大血洞，P0 一做完就能止血。
+> Avatar 重度使用者的血洞在 2026-06 P0-b 已止住；本輪 Sora 2 SKU 拆分是最後一個「知道的用戶會刻意選貴款」孔洞。
 
 ---
 
 ## 7. 執行清單
 
-- [ ] **P0-a** 修正 3 個 service_type 命名 (`tools.py` 3 行改動)
-- [ ] **P0-b** 改 `tier_config.CREDIT_COSTS` + `tools.py` 內 `CREDIT_COST` + alembic migration 寫進 `service_pricing`
-- [ ] **P1** 改 `credit_packages` 表（migration）+ 年付 credits 計算
-- [ ] **P2** 在 `provider_router` 增加 tier-based model whitelist；free/basic 不可觸發旗艦
-- [ ] **P3** 補齊 `seed_service_pricing.py` 的新模型列 + 校正 `api_cost_usd`
-- [ ] **P4** 改寫 `tier_config.py` 檔頭註解
-- [ ] 驗證：在 `/admin/costs` 上跑一週，確認 `margin_usd` 為正
+- [x] **P0-a** 修正 3 個 service_type 命名（tools.py 3 行改動）
+- [x] **P0-b** 改 `tier_config.CREDIT_COSTS` + `tools.py` 內 `CREDIT_COST` + alembic migration 寫進 `service_pricing`
+- [x] **P1（部分）** heavy_pack 縮到 833 點；**年付折扣仍未處理**（見 R3）
+- [~] **P2** `TIER_ALLOWED_MODELS` — 2026-07 credits-only 政策上線後這條被替換為「per-model 扣點下限」；已於本輪 [tools.py:1090+](../backend/app/api/v1/tools.py#L1090) 落地
+- [x] **本輪** Sora 2 SKU 拆分（migration `k7m8n9o0p1q2`）
+- [x] **本輪** `_check_and_deduct_credits` 新增 `model_hint` per-model 扣點下限
+- [ ] **R1** 補齊 `seed_service_pricing.py` 的新模型列 + 校正 `api_cost_usd`
+- [ ] **R2** try-on multi-image 硬上限（`max_reference_images = 2`）
+- [ ] **R3** 年付方案改為買 10 送 11
+- [ ] **R4** Claymation 影片扣點 20 → 25，或強制 Kling std
+- [ ] **R5** 損益偵測 cron（每晚 admin summary）
+- [ ] **R6** 清掉 `tier_config.py` 檔頭「1 credit ≈ $0.5 cost」錯誤註解
+- [ ] 驗證：R1 落地後在 `/admin/costs` 上跑一週，確認 `margin_usd` 全綠
+
+---
+
+## 8. 本輪（2026-07-12）落地細節
+
+### 8.1 Sora 2 std / pro SKU 拆分
+
+**動機**：Sora 2 std 上游 $0.40（$0.08 s ×5），Sora 2 Pro 上游 $1.20（$0.24 s ×5）— PiAPI 兩個 task_type 都用 model="sora2"。過去統一 80 點會讓所有 std 使用者付 6.6× 毛利、pro 使用者只付 2.2× 毛利 — 只要「懂的人」都會選 pro，最終 pro 佔比拉高後整體毛利被壓死。
+
+**改動**：
+- [`tier_config.VIDEO_CREDIT_COSTS`](../backend/app/services/tier_config.py#L300) — 新增 `sora2_std` (30 credits, $0.40) 與 `sora2_pro` (80 credits, $1.20) 兩列；`sora2` 保留當 pro 別名以維持向下相容（早期分析欄位、front-end 遺留 model_id）。
+- [`resolve_video_credits`](../backend/app/services/tier_config.py#L317) — 任何含 `"std"` / `"standard"` 的 sora 型號自動落到 std row。
+- [`model_registry.PIAPI_MODELS.sora2_std_task`](../backend/app/core/model_registry.py) — 新增 env `PIAPI_SORA2_STD_TASK` 預設 `sora2-video`（std）；既有 `sora2_task` 仍是 `sora2-pro-video`。
+- [`piapi_provider.sora2_video_generation`](../backend/app/providers/piapi_provider.py#L1760) — 接受 `params["mode"] ∈ {"std", "pro"}`；std 強制 `enable_audio=False`。
+- [`/api/v1/tools/sora2-pro`](../backend/app/api/v1/tools.py#L6853) — request 新增 `mode: str = "pro"` 欄位（back-compat 預設 pro）；`_sora2_pro_inner` 用 `_mode` 選 billing row、`_model_id`、往下傳 `mode=`。
+- [`plan_gates._PLAN_FLOOR_FOR_MODEL`](../backend/app/services/plan_gates.py#L108) — 新增 `sora2_std` 等 4 個 key，設在 `pro` floor（credits-only 政策下實際仍為訂閱通行；只擋 free/demo）。
+- [Alembic `k7m8n9o0p1q2_split_sora2_std_pro_pricing.py`](../backend/alembic/versions/k7m8n9o0p1q2_split_sora2_std_pro_pricing.py) — UPSERT `video_sora2_std` 列到 service_pricing。
+- 前端 [`Sora2Pro.vue`](../frontend-vue/src/views/tools/Sora2Pro.vue) 新增 std/pro toggle，`displayCost` 隨模式切換 30↔80，std 隱藏 audio toggle 且強制關閉。前端 [`toolsApi.sora2Pro`](../frontend-vue/src/api/tools.ts#L435) 新增 `mode` 參數。
+
+**風險 / 觀察**：既有分析 / history 用 `service_type = "video_sora2"` 追 pro；新的 `video_sora2_std` 是獨立列，pro 歷史行不受影響。若 4/5 位存量用戶已透過 API 自行呼叫此端點且沒帶 `mode`，預設 `pro` 保證不動舊行為。
+
+### 8.2 Per-model 扣點下限（credit floor guard）
+
+**動機**：現行 `_check_and_deduct_credits` 只信任呼叫端傳入的 `amount` + ServicePricing 覆蓋。當呼叫端忘記走 `resolve_*_credits(model_id)`（例如未來新加一個影像端點、或 model 分派邏輯藏在 provider 內部），使用者可能付 default 2 點卻拿到 Nano Banana Pro $0.10 上游。
+
+**改動**：
+- [`tools.py:_check_and_deduct_credits`](../backend/app/api/v1/tools.py#L1090) 新增 kwarg `model_hint: Optional[str]`。
+- 內部邏輯：`effective_amount = max(effective_amount, resolve_*_credits(model_hint).credits)`。當抬升發生時打一則 `WARNING` 級 log（便於 audit）。
+- 已在 [midjourney-imagine](../backend/app/api/v1/tools.py#L6293)、[short-video](../backend/app/api/v1/tools.py#L4195)、[text-to-video](../backend/app/api/v1/tools.py#L6711)、[sora2-pro](../backend/app/api/v1/tools.py#L6899) 四支主熱路徑接上 `model_hint=request.model_id / _model_id / request.model` — 這些端點今天原本就會走 `resolve_*_credits`，`model_hint` 在此扮演 defensive-in-depth。未來新端點只要照這個模式呼叫，就自動有下限保護。
+
+**風險**：`resolve_*_credits` 內部有 fallback 到 hailuo (最便宜)，所以未知 `model_hint` 不會誤抬扣點；只有明確可辨識為高價模型的 hint 才會觸發 floor。已用一組 assertion（本輪 CI-adjacent smoke test）覆蓋 6 個 model id 驗過。

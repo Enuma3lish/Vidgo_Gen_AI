@@ -24,11 +24,20 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, or_, select, func
 
-from app.models.material import Material, ToolType, MaterialSource, MaterialStatus
+from app.models.material import (
+    Material, ToolType, MaterialSource, MaterialStatus,
+    demo_lookup_hash, demo_extra_context,
+)
 
 logger = logging.getLogger(__name__)
 
 CACHE_PREFIX = "demo"
+# Demo bucket TTL (2026-07-12 cache audit #6): was written with NO expiry and
+# only invalidated via store_demo/admin, so a Material deactivated directly
+# (lifecycle rule, admin toggle, or a GCS object that 404s) kept being served
+# from Redis indefinitely. A 1h TTL makes the bucket self-heal — it re-warms
+# from the live DB on the next miss, exactly like the GCS blob-listing cache.
+DEMO_BUCKET_TTL_SEC = 3600
 def _cache_key(tool_type: str, topic: str = "_all") -> str:
     return f"{CACHE_PREFIX}:{tool_type}:{topic}"
 
@@ -75,10 +84,9 @@ def _request_cache_hash(
     result and the user sees the wrong model (e.g. selecting an Asian female
     model and getting a male foreign model back).
     """
-    content = (
-        f"v2|{tool_type}|{effect_or_topic or ''}|{input_url or ''}|{extra_context}"
-    )
-    return hashlib.sha256(content.encode()).hexdigest()[:64]
+    # Delegate to the canonical builder (2026-07-12 cache audit #2) so the
+    # runtime lookup and the pregenerator can never drift again.
+    return demo_lookup_hash(tool_type, effect_or_topic, input_url, extra_context)
 
 
 class DemoCacheService:
@@ -1189,7 +1197,7 @@ class DemoCacheService:
         if not items:
             return
         key = _cache_key(tool_type, topic or "_all")
-        await self.redis.set(key, json.dumps(items))
+        await self.redis.set(key, json.dumps(items), ex=DEMO_BUCKET_TTL_SEC)
 
     async def invalidate_cache(self, tool_type: str, topic: Optional[str] = None):
         if not self.redis:
@@ -1275,7 +1283,22 @@ class DemoCacheService:
             query = query.where(Material.input_params[key].astext == product_id)
         if language:
             query = query.where(Material.language == language)
-        query = query.order_by(func.random()).limit(1)
+        # DETERMINISTIC ordering (2026-07-12 cache audit #2): was func.random(),
+        # which returned a DIFFERENT stored clip on every press of the same
+        # (tool, topic, model) — the visitor "try free" demo flickered between
+        # results. Order by quality then a stable id tiebreak so the same
+        # selection consistently returns the same best clip. Variety across
+        # DIFFERENT selections still comes from topic/model filtering above.
+        from sqlalchemy import case as _sa_case
+        _featured_first = _sa_case(
+            (Material.status == MaterialStatus.FEATURED, 0), else_=1
+        )
+        query = query.order_by(
+            _featured_first,
+            Material.quality_score.desc().nullslast(),
+            Material.sort_order.asc().nullslast(),
+            Material.id.asc(),
+        ).limit(1)
         result = await self.db.execute(query)
         m = result.scalars().first()
         return self._material_to_dict(m) if m else None

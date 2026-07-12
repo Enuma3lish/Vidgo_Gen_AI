@@ -28,6 +28,14 @@ settings = get_settings()
 
 OFFICIAL_CREDIT_PACKAGE_NAMES = ("light_pack", "standard_pack", "heavy_pack")
 
+# In-process ServicePricing cache — service_type -> (expires_monotonic, snapshot).
+# 30s TTL: price retunes tolerate a sub-minute propagation delay, and this
+# removes the highest-frequency DB query in the app (one per generation).
+# Per-process by design (no invalidation hook needed — nothing writes
+# ServicePricing at runtime today). See get_service_pricing().
+_PRICING_CACHE: Dict[str, tuple] = {}
+_PRICING_CACHE_TTL_SEC = 30.0
+
 
 def settle_expired_bonus(db_session, user) -> int:
     """Settle an already-expired bonus batch BEFORE adding new bonus credits.
@@ -179,7 +187,18 @@ class CreditService:
                         generation_id, description, metadata
                     )
             else:
-                # Fallback without lock (for testing/dev)
+                # No Redis → the per-user deduct serialization lock is GONE
+                # (2026-07-12 cache audit #9). Acceptable in dev, but in prod
+                # this silently drops the only guard against two concurrent
+                # generations double-spending the same balance. The DB path
+                # (_do_deduct) still runs its own SELECT ... FOR UPDATE row
+                # lock, so a true double-spend is unlikely, but log LOUDLY so
+                # a prod Redis outage on the money path is never invisible.
+                logger.error(
+                    "credit deduct running WITHOUT Redis lock (Redis unavailable) "
+                    "for user=%s service=%s amount=%s — relying on DB row lock only",
+                    user_id, service_type, amount,
+                )
                 return await self._do_deduct(
                     user_id, amount, service_type,
                     generation_id, description, metadata
@@ -379,15 +398,40 @@ class CreditService:
 
         return new_balance
 
-    async def get_service_pricing(self, service_type: str) -> Optional[ServicePricing]:
-        """Get pricing for a specific service type."""
+    async def get_service_pricing(self, service_type: str):
+        """Get pricing for a specific service type.
+
+        Cached in-process for 30s (2026-07-12 cache audit #1): this runs on
+        EVERY deduct via tools._check_and_deduct_credits — one DB round-trip
+        per generation for a ~40-row table that only changes when ops retune
+        prices (seed script / SQL; no admin write endpoint exists). Misses
+        (unseeded service_types) are cached too — they are the common case
+        for endpoints whose hardcoded fallback price is in use. Returns a
+        detached column snapshot (SimpleNamespace), NOT a live ORM row, so a
+        cached object can never raise on attribute access after its source
+        session closes; callers only read columns.
+        """
+        import time as _time
+        now = _time.monotonic()
+        hit = _PRICING_CACHE.get(service_type)
+        if hit is not None and hit[0] > now:
+            return hit[1]
+
         result = await self.db.execute(
             select(ServicePricing).where(
                 ServicePricing.service_type == service_type,
                 ServicePricing.is_active == True
             )
         )
-        return result.scalar_one_or_none()
+        row = result.scalar_one_or_none()
+        snapshot = None
+        if row is not None:
+            from types import SimpleNamespace
+            snapshot = SimpleNamespace(**{
+                c.key: getattr(row, c.key) for c in ServicePricing.__table__.columns
+            })
+        _PRICING_CACHE[service_type] = (now + _PRICING_CACHE_TTL_SEC, snapshot)
+        return snapshot
 
     async def estimate_cost(self, service_type: str) -> int:
         """Get credit cost for a service."""

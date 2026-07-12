@@ -165,6 +165,11 @@ export const useAuthStore = defineStore('auth', () => {
       }
       doomed.forEach((k) => localStorage.removeItem(k))
     } catch { /* storage unavailable (SSR/private mode) — nothing to clear */ }
+    // Reset the shared subscription cache (audit #10) so the next account on
+    // this browser can't briefly inherit this user's subscription state.
+    import('@/composables/useDemoMode')
+      .then((m) => m.resetSubscriptionCache?.())
+      .catch(() => { /* composable not loaded — nothing to reset */ })
   }
 
   function clearError() {

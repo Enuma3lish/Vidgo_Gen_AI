@@ -11,6 +11,21 @@
         "source": "**",
         "destination": "/index.html"
       }
+    ],
+    "headers": [
+      {
+        "//": "2026-07-12 cache audit #11: prod serves via nginx (Cloud Run), which already sets these — but the deploy.sh/--firebase fallback path had NO headers, so a Firebase deploy would cache index.html forever (broken deploys) and lose immutable on hashed assets. Mirror the nginx policy here so either path is safe.",
+        "source": "/index.html",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
+      },
+      {
+        "source": "**/*.@(js|css|woff2|woff|ttf|eot|svg|png|jpg|jpeg|gif|webp|ico)",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        ]
+      }
     ]
   }
 }

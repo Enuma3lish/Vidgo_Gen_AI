@@ -15,7 +15,8 @@
  *
  * This ensures consistent demo experience and no runtime API costs.
  */
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { subscriptionApi } from '@/api/subscription'
 import apiClient from '@/api/client'
@@ -93,13 +94,35 @@ export interface DemoPresetResult {
   error?: string | null
 }
 
+// SHARED subscription state (2026-07-12 cache audit #10). These were
+// per-component refs, so EVERY tool navigation ran checkSubscription() =
+// fetchUser() + subscriptionApi.getStatus() again (two redundant calls per
+// mount). Hoisted to module scope with a TTL so navigating between tools
+// reuses the recent result, plus an in-flight promise so concurrent mounts
+// share ONE request. Reset on logout via resetSubscriptionCache() so a
+// shared browser can't leak the previous account's subscription state.
+const _hasSubscription = ref(false)
+const _subscriptionChecked = ref(false)
+const _isLoadingSubscription = ref(false)
+let _subCheckedAt = 0
+let _subInflight: Promise<void> | null = null
+const SUBSCRIPTION_TTL_MS = 60_000
+
+export function resetSubscriptionCache() {
+  _hasSubscription.value = false
+  _subscriptionChecked.value = false
+  _isLoadingSubscription.value = false
+  _subCheckedAt = 0
+  _subInflight = null
+}
+
 export function useDemoMode() {
   const authStore = useAuthStore()
 
-  // Subscription state
-  const hasSubscription = ref(false)
-  const subscriptionChecked = ref(false)
-  const isLoadingSubscription = ref(false)
+  // Subscription state (shared singletons — see module scope above)
+  const hasSubscription = _hasSubscription
+  const subscriptionChecked = _subscriptionChecked
+  const isLoadingSubscription = _isLoadingSubscription
 
   // Demo templates from database
   const demoTemplates = ref<DemoTemplate[]>([])
@@ -119,6 +142,29 @@ export function useDemoMode() {
   // (free); picking a premium model adds model_id to the generate request.
   const modelCatalog = ref<DemoModelItem[]>([])
   const selectedModelId = ref<string>('default')
+
+  // Locale-switch catalog refresh (2026-07-12 cache audit #11). The demo
+  // catalogs are fetched WITH a language param, so a mid-page locale switch
+  // left name_zh/name labels in the previously-fetched language until the
+  // page remounted. Remember the last localized load and re-run it when the
+  // UI locale changes. Non-localized loaders (inputLibrary/modelCatalog) are
+  // language-agnostic and intentionally not tracked.
+  let _lastDemoTemplatesArgs: { toolType: string; topic?: string; limit?: number } | null = null
+  let _lastEffectCatalogTool: string | null = null
+  const { locale: _uiLocale } = useI18n()
+  watch(_uiLocale, () => {
+    if (_lastDemoTemplatesArgs) {
+      void loadDemoTemplates(
+        _lastDemoTemplatesArgs.toolType,
+        _lastDemoTemplatesArgs.topic,
+        undefined,
+        _lastDemoTemplatesArgs.limit,
+      )
+    }
+    if (_lastEffectCatalogTool) {
+      void loadEffectCatalog(_lastEffectCatalogTool)
+    }
+  })
 
   const hasPaidPlan = computed(() => {
     const user = authStore.user
@@ -175,30 +221,46 @@ export function useDemoMode() {
   /**
    * Fetch subscription status for authenticated users
    */
-  async function checkSubscription() {
+  async function checkSubscription(force = false) {
     if (!authStore.accessToken) {
       subscriptionChecked.value = true
       hasSubscription.value = false
+      _subCheckedAt = Date.now()
       return
     }
+    // Reuse a recent result across tool navigations (audit #10).
+    const fresh = subscriptionChecked.value && (Date.now() - _subCheckedAt) < SUBSCRIPTION_TTL_MS
+    if (fresh && !force) return
+    // Coalesce concurrent mounts onto one request.
+    if (_subInflight) return _subInflight
 
     isLoadingSubscription.value = true
-    try {
-      const user = await authStore.fetchUser()
-      if (!user) {
+    _subInflight = (async () => {
+      try {
+        const user = await authStore.fetchUser()
+        if (!user) {
+          hasSubscription.value = false
+          return
+        }
+        const status = await subscriptionApi.getStatus()
+        hasSubscription.value = status.has_subscription
+      } catch (error) {
+        console.error('Failed to check subscription:', error)
         hasSubscription.value = false
-        return
+      } finally {
+        isLoadingSubscription.value = false
+        subscriptionChecked.value = true
+        _subCheckedAt = Date.now()
+        _subInflight = null
       }
+    })()
+    return _subInflight
+  }
 
-      const status = await subscriptionApi.getStatus()
-      hasSubscription.value = status.has_subscription
-    } catch (error) {
-      console.error('Failed to check subscription:', error)
-      hasSubscription.value = false
-    } finally {
-      isLoadingSubscription.value = false
-      subscriptionChecked.value = true
-    }
+  /** Force a fresh subscription check — call after the user subscribes so an
+   *  already-mounted app reflects the new plan without a hard reload. */
+  function refreshSubscription() {
+    return checkSubscription(true)
   }
 
   /**
@@ -207,6 +269,7 @@ export function useDemoMode() {
    * When DB is empty, backend also returns try_prompts for fixed prompt display
    */
   async function loadDemoTemplates(toolType: string, topic?: string, locale?: string, limit?: number) {
+    _lastDemoTemplatesArgs = { toolType, topic, limit }
     isLoadingTemplates.value = true
     tryPrompts.value = []
     dbEmpty.value = false
@@ -377,6 +440,7 @@ export function useDemoMode() {
    * is also part of the cache key the backend uses to dedupe repeats.
    */
   async function loadEffectCatalog(toolType: string, locale?: string) {
+    _lastEffectCatalogTool = toolType
     isLoadingEffectCatalog.value = true
     try {
       const params = { language: resolveSelectedLanguage(locale) }
@@ -473,6 +537,7 @@ export function useDemoMode() {
 
     // Methods
     checkSubscription,
+    refreshSubscription,
     loadDemoTemplates,
     getRandomDemoTemplate,
     useDemoTemplate,

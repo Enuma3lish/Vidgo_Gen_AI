@@ -1160,20 +1160,30 @@ class VidGoPreGenerator:
         input_image_url: str = None,
         extra_context: str = "",
     ) -> str:
-        """Generate unique lookup hash for Material.
+        """Generate the lookup hash for a pregenerated Material.
 
-        `extra_context` lets callers add tool-specific disambiguators that
-        aren't captured by prompt/effect_prompt/input_image_url alone.
-        For try_on this is the model_id — without it, two rows with the
-        same clothing but different models collide on the same hash and
-        get deduped, which is why regen produced only 4 try_on rows all
-        for female-1 instead of the expected N models × M clothings.
+        Delegates to the ONE canonical builder (2026-07-12 cache audit #2,
+        app.models.material.demo_lookup_hash) so the pregenerator and the
+        runtime demo lookup can never use divergent formats again. The
+        canonical key is (tool, effect_or_topic, input, extra) — the
+        decorative ``prompt`` is intentionally NOT part of it (the runtime
+        never has the exact stored prompt text, only the selection), so we
+        pass ``effect_prompt or prompt`` as the effect/topic slot.
+
+        `extra_context` still disambiguates model/preset (try_on model, etc.)
+        exactly as before. NOTE: the exact-pair fast path lights up fully only
+        once every pregen entry's ``effect_prompt``/``hash_context`` matches
+        what the runtime sends for that tool; until then the deterministic
+        generic fallback (_get_from_db, no longer func.random) guarantees a
+        stable, correct result. Correctness never depends on this fast path.
         """
-        content = (
-            f"{tool_type}:{prompt}:{effect_prompt or ''}:"
-            f"{input_image_url or ''}:{extra_context}"
+        from app.models.material import demo_lookup_hash
+        return demo_lookup_hash(
+            tool_type=tool_type,
+            effect_or_topic=(effect_prompt or prompt),
+            input_url=input_image_url,
+            extra_context=extra_context,
         )
-        return hashlib.sha256(content.encode()).hexdigest()[:64]
 
     # ========================================================================
     # AI AVATAR GENERATOR

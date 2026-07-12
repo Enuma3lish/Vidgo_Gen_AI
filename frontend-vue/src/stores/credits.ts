@@ -101,6 +101,29 @@ export const useCreditsStore = defineStore('credits', () => {
       balance.value.weekly_used += amount
       balance.value.total_credits = Math.max(0, balance.value.total_credits - amount)
     }
+    // Self-correct against the server shortly after (audit #4). One touch
+    // point covers all 20+ tools that deduct optimistically — catches
+    // partial refunds, price overrides, and cross-tab changes the optimistic
+    // math can't know. Skipped for admins (no balance object).
+    if (balance.value) reconcileBalance()
+  }
+
+  // Debounced server reconcile (2026-07-12 cache audit #4). The header badge
+  // is optimistic-only on 20+ tool pages — a failed-generation refund, a
+  // weekly reset, or a purchase in another tab never reconciled until a hard
+  // reload. Tools call this after a terminal generation state (done/error) to
+  // re-sync with the server WITHOUT flicker: the optimistic deduct already
+  // showed the right number instantly; this quietly corrects any drift a few
+  // seconds later. Debounced so a burst of results triggers a single fetch.
+  let _reconcileTimer: ReturnType<typeof setTimeout> | null = null
+  function reconcileBalance(delayMs = 1500) {
+    if (_reconcileTimer) clearTimeout(_reconcileTimer)
+    _reconcileTimer = setTimeout(() => {
+      _reconcileTimer = null
+      // Never let a reconcile failure surface as an error toast — the
+      // optimistic value stays until the next successful fetch.
+      fetchBalance().catch(() => { /* keep optimistic value */ })
+    }, delayMs)
   }
 
   function clearError() {
@@ -135,6 +158,7 @@ export const useCreditsStore = defineStore('credits', () => {
     fetchTransactions,
     getServiceCost,
     deductCredits,
+    reconcileBalance,
     clearError,
     clearBalance
   }

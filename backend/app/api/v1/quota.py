@@ -197,7 +197,14 @@ async def use_quota(request: Request, user_id: Optional[str] = None):
         await r.expire(daily_key, 86400)  # 24 hours TTL
 
         await r.incr(user_key)
-        # User quota never expires (lifetime limit)
+        # 90-day TTL (2026-07-12 cache audit #3). This was "lifetime" with NO
+        # expiry, but it is keyed per anonymous IP — so every IP that ever
+        # touched the demo left a PERMANENT Redis key, an unbounded memory
+        # leak. 90 days is far longer than any real free-trial abuse window
+        # (someone returning after 3 months is effectively a new visitor) and
+        # bounds Redis growth. Refreshed on each use so an active abuser's
+        # window doesn't reset to zero mid-spree.
+        await r.expire(user_key, 90 * 24 * 60 * 60)
 
         new_remaining = USER_FREE_TRIALS - user_used - 1
 

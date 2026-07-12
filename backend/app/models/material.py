@@ -15,6 +15,50 @@ import enum
 from app.core.database import Base
 
 
+def demo_lookup_hash(
+    tool_type: str,
+    effect_or_topic: str = None,
+    input_url: str = None,
+    extra_context: str = "",
+) -> str:
+    """Canonical demo-cache lookup hash — THE single source of truth (2026-07-12
+    cache audit #2).
+
+    A demo request's identity is the tuple the user actually chose:
+    (tool, the effect/topic selection, the input asset, a tool-specific
+    disambiguator). The decorative human-facing ``prompt`` column is NOT part
+    of the key, so the runtime lookup (which only knows the selection, never
+    the exact stored prompt text) and the pregenerator (which builds the row)
+    compute the SAME hash for the SAME selection.
+
+    Before this, three builders diverged — ``Material.generate_lookup_hash``
+    and ``main_pregenerate._generate_lookup_hash`` used ``tool:prompt:effect:
+    input:extra`` while the runtime used ``v2|tool|effect_or_topic|input|
+    extra`` — so the exact-pair fast path NEVER matched a pregenerated row and
+    every demo fell through to the generic ``func.random()`` fallback (a
+    different clip per press). Both sides now delegate here; a re-pregeneration
+    populates matching hashes. Format is versioned so a future key change is a
+    clean cache-flush, never a silent wrong-result collision.
+    """
+    import hashlib
+    content = f"v2|{tool_type}|{effect_or_topic or ''}|{input_url or ''}|{extra_context}"
+    return hashlib.sha256(content.encode()).hexdigest()[:64]
+
+
+def demo_extra_context(tool_type: str, product_id: str = None) -> str:
+    """The tool-specific disambiguator folded into demo_lookup_hash().
+
+    try_on folds the chosen MODEL, short_video the chosen video MODEL — same
+    key on both sides so a different model on the same input resolves to a
+    different cached result instead of colliding. Kept here (not duplicated in
+    the runtime and the pregenerator) so the two can never drift.
+    """
+    tt = tool_type.value if hasattr(tool_type, "value") else str(tool_type)
+    if product_id and tt in ("try_on", "short_video"):
+        return f"model={product_id}"
+    return ""
+
+
 class ToolType(str, enum.Enum):
     """Core Tools for VidGo Platform.
 

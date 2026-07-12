@@ -55,10 +55,20 @@ async def get_redis() -> aioredis.Redis:
     """Get Redis connection with connection pooling."""
     global _redis_pool
     if _redis_pool is None:
+        # Socket timeouts (2026-07-12 cache audit #9): without them a HUNG
+        # Redis (reachable TCP, no reply — not the same as "down") blocks the
+        # calling request handler on the event loop indefinitely. Every abuse
+        # check, webhook dedup, and task lock flows through this pool; the
+        # well-behaved load_governor pool already sets these, so match it.
+        # 3s is generous for a same-region Memorystore round-trip and still
+        # fails fast enough that callers' try/except fail-open paths engage.
         _redis_pool = aioredis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",
-            decode_responses=True
+            decode_responses=True,
+            socket_connect_timeout=3,
+            socket_timeout=3,
+            health_check_interval=30,
         )
     return _redis_pool
 

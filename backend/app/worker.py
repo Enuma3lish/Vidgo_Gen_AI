@@ -116,6 +116,47 @@ async def cleanup_expired_demos_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
         await engine.dispose()
 
 
+async def cleanup_prompt_cache_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """Prune the unbounded prompt_cache table (2026-07-12 cache audit #5).
+
+    prompt_cache stored demo prompt→result forever with NO cleanup — it grew
+    one row per unique demo prompt indefinitely, and the similarity search
+    only scans the top-100 rows by usage_count anyway, so the long cold tail
+    was pure dead weight. Retention: delete rows older than 90 days that were
+    never reused (usage_count <= 0). Popular rows (reused at least once) are
+    kept regardless of age — those are the ones the cache exists to serve.
+    Daily, well after the other night crons.
+    """
+    from sqlalchemy import delete as _sql_delete, and_ as _and, or_ as _or
+    from app.models.demo import PromptCache
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    cutoff = datetime.utcnow() - timedelta(days=90)
+    try:
+        async with async_session() as db:
+            res = await db.execute(
+                _sql_delete(PromptCache).where(
+                    _and(
+                        PromptCache.created_at < cutoff,
+                        _or(
+                            PromptCache.usage_count.is_(None),
+                            PromptCache.usage_count <= 0,
+                        ),
+                    )
+                )
+            )
+            await db.commit()
+            deleted = res.rowcount or 0
+            logger.info("prompt_cache cleanup: deleted %d cold rows (>90d, unused)", deleted)
+            return {"status": "completed", "deleted": deleted}
+    except Exception as e:
+        logger.error(f"prompt_cache cleanup failed: {e}")
+        return {"status": "failed", "error": str(e)}
+    finally:
+        await engine.dispose()
+
+
 async def health_check_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """Simple health check task"""
     return {
@@ -1074,6 +1115,7 @@ class WorkerSettings:
         cleanup_expired_bonus_credits_task,
         auto_renew_subscriptions_task,
         reclaim_pending_provider_tasks_task,
+        cleanup_prompt_cache_task,
     ]
 
     # Cron jobs (scheduled tasks)
@@ -1114,6 +1156,13 @@ class WorkerSettings:
             cleanup_expired_bonus_credits_task,
             hour=2,
             minute=0,
+            run_at_startup=False
+        ),
+        # Daily prompt_cache pruning — 2:30 AM UTC (after bonus cleanup)
+        cron(
+            cleanup_prompt_cache_task,
+            hour=2,
+            minute=30,
             run_at_startup=False
         ),
         # Daily auto-renewal check — 1:00 AM UTC

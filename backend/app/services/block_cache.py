@@ -321,26 +321,51 @@ class PromptBlockCache:
             logger.error(f"Failed to cache prompt result: {e}")
 
     async def _check_word_in_cache(self, word: str) -> Optional[Dict[str, Any]]:
-        """Check if a word is in the block cache"""
+        """Check if a single word is in the block cache. Kept for callers that
+        check one word; the prompt hot path uses _check_words_in_cache (batch).
+        """
+        found = await self._check_words_in_cache([word])
+        return found.get(word)
+
+    async def _check_words_in_cache(self, words) -> Dict[str, Dict[str, Any]]:
+        """Batch word lookup (2026-07-12 cache audit #7).
+
+        The old per-word path did a GET **and** a SET (to bump hit_count) for
+        EVERY word / 2-gram / 3-gram of every prompt — dozens of sequential
+        round-trips + write-amplification on the moderation hot path (this
+        runs on every generation). Now: one MGET for all words, a single
+        HINCRBY of the aggregate hit counter, and NO per-word write-back
+        (hit_count on the word row was cosmetic and the TTL refresh it did was
+        not worth a write per hit — blocked words are re-seeded/renewed by the
+        admin flow, not by read traffic).
+
+        Returns {word: cached_dict} for the words that were found blocked.
+        """
+        out: Dict[str, Dict[str, Any]] = {}
+        words = list(words)
+        if not words:
+            return out
         try:
             r = await self._get_redis()
-            word_hash = self._hash_text(word)
-            key = f"block:word:{word_hash}"
-
-            data = await r.get(key)
-            if data:
-                result = json.loads(data)
-                # Update hit count
-                await r.hincrby("block:stats", "cache_hits", 1)
-                result["hit_count"] = result.get("hit_count", 0) + 1
-                await r.set(key, json.dumps(result), ex=self.BLOCKED_WORD_TTL)
-                return result
-
-            return None
-
+            keys = [f"block:word:{self._hash_text(w)}" for w in words]
+            values = await r.mget(keys)
+            hits = 0
+            for w, data in zip(words, values):
+                if data:
+                    try:
+                        out[w] = json.loads(data)
+                        hits += 1
+                    except (ValueError, TypeError):
+                        continue
+            if hits:
+                try:
+                    await r.hincrby("block:stats", "cache_hits", hits)
+                except Exception:
+                    pass
+            return out
         except Exception as e:
-            logger.error(f"Failed to check word in cache: {e}")
-            return None
+            logger.error(f"Failed to batch-check words in cache: {e}")
+            return out
 
     async def _check_prompt_in_cache(self, prompt: str) -> Optional[Dict[str, Any]]:
         """Check if a prompt result is cached"""
@@ -400,16 +425,15 @@ class PromptBlockCache:
                 cached_at=datetime.fromisoformat(cached_result["cached_at"]) if cached_result.get("cached_at") else None
             )
 
-        # Step 2: Check individual words
+        # Step 2: Check individual words — ONE MGET for all n-grams (audit #7).
         words = self._extract_words(prompt)
         blocked_words = []
         block_reasons = []
 
-        for word in words:
-            cached_word = await self._check_word_in_cache(word)
-            if cached_word:
-                blocked_words.append(cached_word["word"])
-                block_reasons.append(cached_word["reason"])
+        found = await self._check_words_in_cache(words)
+        for cached_word in found.values():
+            blocked_words.append(cached_word["word"])
+            block_reasons.append(cached_word["reason"])
 
         if blocked_words:
             # Found blocked words in cache

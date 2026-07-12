@@ -3,6 +3,8 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { creditsApi } from '@/api'
+import { useCreditsStore } from '@/stores'
+import { useDemoMode } from '@/composables/useDemoMode'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -22,16 +24,28 @@ const captureState = ref<'confirming' | 'confirmed' | 'pending'>(
   isOrderCapture ? 'confirming' : 'confirmed',
 )
 
+const creditsStore = useCreditsStore()
+const { refreshSubscription } = useDemoMode()
+
 onMounted(async () => {
-  if (!isOrderCapture || !payPalToken) return
-  try {
-    const res = await creditsApi.capturePayPalOrder(payPalToken, orderNumber)
-    captureState.value = res.success ? 'confirmed' : 'pending'
-  } catch {
-    // 404/409/network — the CHECKOUT.ORDER.APPROVED webhook still captures
-    // server-side, so show "processing" instead of an error.
-    captureState.value = 'pending'
+  if (isOrderCapture && payPalToken) {
+    try {
+      const res = await creditsApi.capturePayPalOrder(payPalToken, orderNumber)
+      captureState.value = res.success ? 'confirmed' : 'pending'
+    } catch {
+      // 404/409/network — the CHECKOUT.ORDER.APPROVED webhook still captures
+      // server-side, so show "processing" instead of an error.
+      captureState.value = 'pending'
+    }
   }
+  // Reflect the new plan/credits immediately (audit #10): force-refresh the
+  // shared subscription cache and the balance so the header + tool gating
+  // update without a hard reload. Best-effort — never block the page.
+  refreshSubscription().catch(() => { /* non-fatal */ })
+  creditsStore.reconcileBalance(500)
+  // Subscribe flow completed — clear the pending-subscribe breadcrumb so it
+  // can't resurface on a later /pricing visit (audit #11 storage hygiene).
+  try { sessionStorage.removeItem('vidgo.pendingPaypalSubscribe') } catch { /* private mode */ }
 })
 </script>
 

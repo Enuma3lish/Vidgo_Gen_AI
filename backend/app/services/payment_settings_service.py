@@ -36,7 +36,16 @@ from app.models.payment_settings import PaymentSettings
 logger = logging.getLogger(__name__)
 
 
-_CACHE_TTL_SECONDS = 60.0
+# 10s (2026-07-12 cache audit #8): this cache is PER-PROCESS and
+# invalidate_cache() only clears the instance that served the admin write —
+# on multi-instance Cloud Run, a PayPal credential/env flip propagated to
+# OTHER instances only after the TTL, so a live capture on another instance
+# could briefly run through the old (e.g. sandbox↔prod) config. Credential
+# flips are rare and admin-initiated, so a short TTL is the pragmatic bound
+# (10s worst-case cross-instance skew) without standing up a pub/sub
+# subscriber; if sub-second convergence is ever needed, mirror
+# model_registry_pubsub here.
+_CACHE_TTL_SECONDS = 10.0
 _cache: dict[str, "ResolvedPaymentSettings | float"] = {}
 
 

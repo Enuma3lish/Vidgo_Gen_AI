@@ -921,6 +921,57 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
         except Exception:
             return None
 
+    async def classify_input_kind(self, params: Dict[str, Any]) -> Optional[str]:
+        """Classify an interior-tool input image: top-down 2D floor plan vs
+        photo/perspective render (2026-07-12).
+
+        Why: the 保留結構 path (ControlNet depth) is built for PHOTOS — a
+        top-down plan's depth map is meaningless and prod E2E showed it
+        rendering a bedroom from a kitchen floor plan. Callers route plan
+        inputs to the floor-plan-native renderer instead.
+
+        Returns "plan" | "photo" | None (error/timeout/ambiguous — callers
+        fail open to the photo path, i.e. today's behavior).
+        """
+        try:
+            client = self._get_gemini_text_client()
+            from google.genai import types
+
+            ask = (
+                "Look at this image. Is it (a) a top-down 2D architectural floor plan, "
+                "blueprint, or layout drawing viewed from directly above, or (b) a "
+                "photograph or perspective/3D render of a space? "
+                "Reply with exactly one word: plan or photo."
+            )
+            parts: list = []
+            if params.get("image_url"):
+                http = self._get_http_client()
+                img_resp = await http.get(params["image_url"])
+                parts.append(types.Part.from_bytes(data=img_resp.content, mime_type="image/jpeg"))
+            elif params.get("image_bytes"):
+                parts.append(types.Part.from_bytes(data=params["image_bytes"], mime_type="image/jpeg"))
+            else:
+                return None
+            parts.append(ask)
+
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.models.generate_content,
+                    model=self.gemini_model,
+                    contents=parts,
+                    config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=10),
+                ),
+                timeout=10.0,
+            )
+            text = (response.text or "").strip().lower()
+            if "plan" in text and "photo" not in text:
+                return "plan"
+            if "photo" in text:
+                return "photo"
+            return None
+        except Exception:
+            return None
+
     async def _interior_text_only(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback when image generation is unavailable.
 

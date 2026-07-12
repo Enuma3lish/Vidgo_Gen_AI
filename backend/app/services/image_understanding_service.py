@@ -198,6 +198,19 @@ class ImageUnderstandingService:
             f"move or alter walls, windows, doors, or the room geometry."
         )
 
+    async def classify_plan_or_photo(self, *, image_url: Optional[str] = None) -> Optional[str]:
+        """Is the input a top-down 2D floor plan or a photo/perspective render?
+
+        Returns "plan" | "photo" | None (fail-open — callers keep today's
+        photo-path behavior when classification is unavailable). Added
+        2026-07-12 after prod E2E showed the ControlNet 保留結構 path
+        rendering the wrong room from floor-plan inputs.
+        """
+        try:
+            return await self._provider.classify_input_kind({"image_url": image_url})
+        except Exception:
+            return None
+
     @staticmethod
     def _fail_open(user_prompt: str) -> ImageFusionResult:
         """When the vision call errors, fall back to the user's prompt

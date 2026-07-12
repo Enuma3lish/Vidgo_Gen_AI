@@ -1361,6 +1361,21 @@ async def _floorplan_to_video_inner(
             from copy import deepcopy
             from asyncio import gather
 
+            # 2026-07-12: same plan-vs-photo routing as the render tier —
+            # simulation forces preserve mode, which on a floor-plan input
+            # rendered the wrong room (ControlNet depth is photo-only).
+            # Classified ONCE for all 4 variants; fail-open → photo path.
+            _sim_input_is_plan = False
+            try:
+                from app.services.image_understanding_service import (
+                    get_image_understanding_service as _get_iu_sim,
+                )
+                _sim_input_is_plan = (
+                    await _get_iu_sim().classify_plan_or_photo(image_url=request.image_url)
+                ) == "plan"
+            except Exception:
+                _sim_input_is_plan = False
+
             async def _one_variant(preset: dict) -> Optional[dict]:
                 v_req = deepcopy(request)
                 v_req.result_tier = "render"
@@ -1368,7 +1383,23 @@ async def _floorplan_to_video_inner(
                 v_req.magic_mode = False
                 v_req.lighting_tone = preset["lighting_tone"]
                 v_req.material_accent = preset["material_accent"]
-                rendered = await _preserve_render(v_req, current_user)
+                if _sim_input_is_plan:
+                    _r = await get_interior_design_service().render_from_floorplan(
+                        floorplan_image_url=v_req.image_url,
+                        style_id=v_req.style_id,
+                        room_type=v_req.room_type,
+                        extra_prompt=(v_req.prompt or "").strip(),
+                        lighting_tone=v_req.lighting_tone,
+                        color_temperature=v_req.color_temperature,
+                        material_accent=v_req.material_accent,
+                    )
+                    rendered = {
+                        "success": _r.get("success"),
+                        "image_url": _r.get("image_url"),
+                        "error": _r.get("error"),
+                    }
+                else:
+                    rendered = await _preserve_render(v_req, current_user)
                 if not rendered.get("success") or not rendered.get("image_url"):
                     return None
                 return {
@@ -1424,7 +1455,25 @@ async def _floorplan_to_video_inner(
         if not ok:
             return FloorplanToVideoResponse(success=False, result_tier="render", error=err)
         try:
+            # 2026-07-12 E2E fix: 保留結構 (ControlNet depth) is built for room
+            # PHOTOS — on a top-down 2D floor plan the depth map is meaningless
+            # and prod testing rendered a BEDROOM from a kitchen plan. Classify
+            # the input (fail-open → photo path = old behavior) and send plan
+            # inputs to the floor-plan-native renderer, which preserves the
+            # plan's layout by design (that IS 保留結構 for a plan).
+            _input_is_plan = False
             if request.preserve_original:
+                try:
+                    from app.services.image_understanding_service import (
+                        get_image_understanding_service as _get_iu,
+                    )
+                    _input_is_plan = (
+                        await _get_iu().classify_plan_or_photo(image_url=request.image_url)
+                    ) == "plan"
+                except Exception:
+                    _input_is_plan = False
+
+            if request.preserve_original and not _input_is_plan:
                 # 保留結構: ControlNet (depth) hard structure lock → Gemini fallback.
                 rendered = await _preserve_render(request, current_user)
                 result = {
@@ -1433,11 +1482,14 @@ async def _floorplan_to_video_inner(
                     "error": rendered.get("error"),
                 }
             else:
+                _surface_extra = _build_surface_clause(
+                    request.surface_floor, request.surface_ceiling, request.surface_wall
+                ) if _input_is_plan else ""
                 result = await get_interior_design_service().render_from_floorplan(
                     floorplan_image_url=request.image_url,
                     style_id=request.style_id,
                     room_type=request.room_type,
-                    extra_prompt=request.prompt or "",
+                    extra_prompt=f"{request.prompt or ''}{_surface_extra}".strip(),
                     lighting_tone=request.lighting_tone,
                     color_temperature=request.color_temperature,
                     material_accent=request.material_accent,

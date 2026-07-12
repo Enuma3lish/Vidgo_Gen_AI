@@ -1,7 +1,7 @@
 """Split Sora 2 into std / pro billing rows (2026-07-12 SKU split).
 
 Revision ID: k7m8n9o0p1q2
-Revises: j4d5e6f7g8h9
+Revises: k5l6m7n8o9p0
 Create Date: 2026-07-12
 
 Sora 2 has two upstream tasks at PiAPI: ``sora2-video`` (std, $0.08/s, no audio)
@@ -28,7 +28,12 @@ import sqlalchemy as sa
 
 
 revision: str = "k7m8n9o0p1q2"
-down_revision: Union[str, None] = "j4d5e6f7g8h9"
+# Chained off the current alembic head (k5l6m7n8o9p0 widen_buyer_tax_id_intl,
+# post perf-audit-2026-07-12). Chaining off j4d5e6f7g8h9 instead would leave
+# k5l6m7n8o9p0 dangling as a second head → docker_entrypoint.sh's
+# `alembic upgrade head` throws "Multiple head revisions" and the container
+# refuses to start (verified 2026-07-12 revision 00395 startup failure).
+down_revision: Union[str, None] = "k5l6m7n8o9p0"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

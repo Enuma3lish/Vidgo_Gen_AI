@@ -25,15 +25,23 @@ const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 watch(locale, (newLocale) => {
   const normalizedLocale = persistLocale(newLocale)
   document.documentElement.lang = localeToHtmlLang(normalizedLocale)
+  // Safety net (perf audit #4): if some other code path switched to a lazy
+  // locale without pre-loading it, fetch its messages now. Worst case is a
+  // brief flash of the fallback before this resolves — the primary switch
+  // paths (LanguageSelector, geo-init) already await the load, so this only
+  // covers rare edge routes.
+  void import('@/main').then((m) => m.ensureLocaleMessages(normalizedLocale))
 }, { immediate: true })
 
-onMounted(async () => {
-  await authStore.init()
-  await initLanguage()
-  startHeartbeat()
-  // Load admin-uploaded logo/favicon/brand name once on boot. Failures
-  // here don't block — AppHeader falls back to the built-in SVG mark.
+onMounted(() => {
+  // Parallelize independent boot work (perf audit #6). initLanguage (geo/
+  // locale) and branding.fetch (header logo) don't depend on auth, so they no
+  // longer wait behind auth.init()'s getMe → getBalance chain. All three
+  // tolerate failure independently.
+  void initLanguage()
   brandingStore.fetch().catch(() => undefined)
+  void authStore.init()
+  startHeartbeat()
 })
 </script>
 

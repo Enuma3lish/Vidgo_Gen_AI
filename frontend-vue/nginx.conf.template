@@ -35,9 +35,18 @@ server {
     # /tools/product-scene, /tools/background-removal, etc.
     client_max_body_size 50m;
 
-    # Gzip compression
+    # Gzip compression (2026-07-12 perf audit #3)
+    # - gzip_comp_level was unset (nginx default 1 = weakest); 5 shrinks
+    #   JS/CSS/JSON transfer ~10-15% for negligible CPU.
+    # - added image/svg+xml (was uncompressed) + wasm + manifest.
+    # - gzip_vary so shared caches store compressed and plain variants.
+    # (brotli would beat gzip a further ~15-20% on JS but the stock
+    #  nginx:alpine base has no brotli module — a custom nginx build is the
+    #  follow-up if transfer size ever needs it.)
     gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+    gzip_comp_level 5;
+    gzip_vary on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml application/wasm application/manifest+json;
     gzip_min_length 1000;
 
     # API proxy

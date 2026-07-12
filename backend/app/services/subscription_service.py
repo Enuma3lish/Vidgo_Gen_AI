@@ -736,8 +736,10 @@ class SubscriptionService:
             await db.commit()
             return paypal_result
 
-        # Store PayPal transaction ID
+        # Store PayPal transaction ID (dual-write: JSON + indexed column that
+        # the webhook lookup uses — perf audit #7).
         order.payment_data["paypal_transaction_id"] = paypal_result.get("transaction_id")
+        order.paypal_transaction_id = paypal_result.get("transaction_id")
         await db.commit()
 
         return {

@@ -331,6 +331,7 @@ async def purchase_credits(
                     detail=paypal_result.get("error") or "PayPal checkout failed",
                 )
             order.payment_data["paypal_transaction_id"] = paypal_result.get("transaction_id")
+            order.paypal_transaction_id = paypal_result.get("transaction_id")  # indexed (perf audit #7)
             await db.commit()
             payment_url = paypal_result.get("checkout_url")
         except HTTPException:

@@ -70,11 +70,18 @@ async function copyPrompt(text: string) {
         class="rounded-xl overflow-hidden flex flex-col"
         style="background: #141420; border: 1px solid rgba(255,255,255,0.08);"
       >
-        <div
-          v-if="ex.thumbnail"
-          class="aspect-video bg-cover bg-center"
-          :style="`background-image: url('${ex.thumbnail}'); background-color: #0a0a0f;`"
-        ></div>
+        <!-- 2026-07-12 perf audit: was a CSS background-image (can't be
+             lazy-loaded, so all thumbnails fetched immediately even below the
+             fold). A real <img loading="lazy"> defers off-screen loads. -->
+        <div v-if="ex.thumbnail" class="aspect-video" style="background-color: #0a0a0f;">
+          <img
+            :src="ex.thumbnail"
+            alt=""
+            loading="lazy"
+            decoding="async"
+            class="w-full h-full object-cover"
+          />
+        </div>
         <div class="p-3 flex flex-col gap-2 flex-1">
           <span
             class="inline-block self-start px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide"

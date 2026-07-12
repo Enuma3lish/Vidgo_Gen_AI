@@ -150,7 +150,17 @@ class Order(Base):
     # silently dropped the PayPal subscription id at checkout → the webhook could
     # never find the order to activate it (paid-but-not-provisioned bug, 2026-06).
     payment_data = Column(MutableDict.as_mutable(JSON), default=dict) # Store ECPay/PayPal return data
-    
+
+    # Indexed PayPal ids (2026-07-12 perf audit #7). Previously the ONLY way to
+    # resolve an order from a webhook was casting/LIKE-scanning payment_data
+    # (a JSON blob) → a FULL SEQ SCAN of `orders` on every PayPal webhook.
+    # These mirror payment_data['paypal_transaction_id'] (the order/subscription
+    # id from checkout) and the capture id, and carry a btree index so the
+    # webhook lookups are O(log N). Dual-written at checkout/capture; the reads
+    # fall back to the JSON scan only for rows predating the backfill.
+    paypal_transaction_id = Column(String(200), nullable=True, index=True)
+    paypal_capture_id = Column(String(200), nullable=True, index=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     paid_at = Column(DateTime(timezone=True), nullable=True)
     
@@ -461,3 +471,21 @@ class Generation(Base):
 
     # Relationships
     user = relationship("app.models.user.User", backref="video_generations")
+
+
+class ProcessedWebhookEvent(Base):
+    """DB-level webhook idempotency belt (2026-07-12 perf audit #7 / #10).
+
+    PayPal webhook dedup was Redis-only — a Redis flush/outage during PayPal's
+    up-to-25× retry burst could let the same PAYMENT.SALE.COMPLETED reprocess
+    and double-grant. This table gives a durable unique guard: the handler
+    tries to INSERT the event id and treats a conflict as "already processed".
+    Additive to the Redis fast-path (Redis still short-circuits the common
+    case); this only catches the Redis-unavailable window. Pruned by the
+    prompt-cache-style retention job.
+    """
+    __tablename__ = "processed_webhook_events"
+
+    event_id = Column(String(255), primary_key=True)
+    provider = Column(String(32), nullable=True)
+    processed_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

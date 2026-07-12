@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore } from '@/stores'
 import { normalizeLocale, SUPPORTED_LOCALES } from '@/utils/locales'
+import { ensureLocaleMessages } from '@/main'
 
 const { locale } = useI18n()
 const uiStore = useUIStore()
@@ -26,8 +27,11 @@ const currentLanguage = computed(() =>
   languages.find(l => l.code === normalizeLocale(locale.value)) || languages[1]
 )
 
-function selectLanguage(code: string) {
+async function selectLanguage(code: string) {
   const normalizedLocale = normalizeLocale(code)
+  // Load the (possibly lazy) locale bundle BEFORE switching so there's no
+  // flash of the fallback language (perf audit #4).
+  await ensureLocaleMessages(normalizedLocale)
   locale.value = normalizedLocale
   uiStore.setLocale(normalizedLocale)
   isOpen.value = false

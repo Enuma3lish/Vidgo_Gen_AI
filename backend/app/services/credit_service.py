@@ -238,10 +238,23 @@ class CreditService:
         if not user:
             return False, {"error": "User not found"}
 
-        balance = await self.get_balance(user_id)
+        # Sufficiency + balance_after are computed DIRECTLY from the locked
+        # `user` row (2026-07-12 perf audit #8). This was two get_balance()
+        # calls — each an extra Plan SELECT + an UNBOUNDED monthly SUM over
+        # credit_transactions — on the single most frequent write path in the
+        # app (one per generation), neither of which the deduct decision
+        # needs. Matches get_balance's `total`: expired bonus counts as 0.
+        _now = datetime.now(timezone.utc)
 
-        if balance["total"] < amount:
-            return False, {"error": "Insufficient credits", "balance": balance}
+        def _spendable_total() -> int:
+            b = user.bonus_credits or 0
+            if user.bonus_credits_expiry and user.bonus_credits_expiry < _now:
+                b = 0
+            return (user.subscription_credits or 0) + (user.purchased_credits or 0) + b
+
+        if _spendable_total() < amount:
+            # Rare path — a full get_balance() gives the caller a rich error.
+            return False, {"error": "Insufficient credits", "balance": await self.get_balance(user_id)}
 
         remaining = amount
         deducted = {"bonus": 0, "subscription": 0, "purchased": 0}
@@ -269,14 +282,23 @@ class CreditService:
             deducted["purchased"] += deduct
             remaining -= deduct
 
-        # Get new balance
-        new_balance = await self.get_balance(user_id)
+        # Post-deduction balance from the mutated (still-locked) row — no
+        # extra query (perf audit #8). Same total semantics as get_balance.
+        new_total = _spendable_total()
+        new_balance = {
+            "subscription": user.subscription_credits or 0,
+            "purchased": user.purchased_credits or 0,
+            "bonus": (0 if (user.bonus_credits_expiry and user.bonus_credits_expiry < _now)
+                      else (user.bonus_credits or 0)),
+            "bonus_expiry": user.bonus_credits_expiry,
+            "total": new_total,
+        }
 
         # Record transaction
         transaction = CreditTransaction(
             user_id=user_id,
             amount=-amount,
-            balance_after=new_balance["total"],
+            balance_after=new_total,
             transaction_type="generation",
             service_type=service_type,
             generation_id=UUID(generation_id) if generation_id else None,

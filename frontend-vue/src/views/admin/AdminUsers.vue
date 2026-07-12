@@ -50,7 +50,15 @@ onMounted(() => {
   loadUsers()
 })
 
-watch([searchQuery, selectedPlan, sortBy, sortOrder], () => {
+// Debounce the free-text search so we don't fire a request per keystroke
+// (2026-07-12 perf audit); dropdowns switch immediately. Mirrors the
+// AdminPromotions pattern.
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(searchQuery, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => loadUsers(), 250)
+})
+watch([selectedPlan, sortBy, sortOrder], () => {
   loadUsers()
 })
 

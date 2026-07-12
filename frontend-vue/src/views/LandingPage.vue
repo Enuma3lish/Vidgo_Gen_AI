@@ -429,18 +429,33 @@ function loadGeneralScenes(): Promise<any[]> {
   return generalScenePromise
 }
 
+// Memoize per-topic preset fetches (perf audit #6). The `holiday` topic is
+// shared by 4 of the 5 seasons, so without this the same GET fired up to 4×.
+const topicPresetCache = new Map<string, Promise<any[]>>()
+function loadTopicPresets(topic: string): Promise<any[]> {
+  let p = topicPresetCache.get(topic)
+  if (!p) {
+    p = (async () => {
+      try {
+        const client = (await import('@/api/client')).default
+        const resp = await client.get(`/api/v1/demo/presets/product_scene?topic=${topic}&limit=4`)
+        return resp.data?.presets || []
+      } catch {
+        return []
+      }
+    })()
+    topicPresetCache.set(topic, p)
+  }
+  return p
+}
+
 async function loadSeasonPresets(seasonId: string) {
   const season = seasons.value.find(s => s.id === seasonId)
   if (!season || seasonData.value[seasonId]) return
   try {
-    const client = (await import('@/api/client')).default
-    const topicResults = await Promise.allSettled(
-      season.topics.map(topic => client.get(`/api/v1/demo/presets/product_scene?topic=${topic}&limit=4`))
-    )
+    const topicResults = await Promise.all(season.topics.map(loadTopicPresets))
     const seen = new Set<string>()
-    const tagged = topicResults.flatMap(result =>
-      result.status === 'fulfilled' ? (result.value.data?.presets || []) : []
-    )
+    const tagged = topicResults.flat()
     // Season-tagged presets lead; neutral studio shots backfill so the grid is
     // never left with a lone tile (or empty) for the many seasons that have no
     // dedicated material yet.
@@ -465,11 +480,19 @@ async function loadSeasonPresets(seasonId: string) {
 }
 
 async function loadAllSeasonPresets() {
+  // Load ONLY the active season on mount (perf audit #6) — the other seasons'
+  // grids are below the fold and setActiveSeason() already lazy-loads a tab
+  // when clicked. Previously all 5 loaded eagerly on the LCP page. If the
+  // default season turns out empty, THEN probe the rest to auto-switch to one
+  // that has content (preserves the original fallback behavior).
   seasonLoading.value = true
-  await Promise.all(seasons.value.map(s => loadSeasonPresets(s.id)))
-  const firstAvailable = seasons.value.find(season => (seasonData.value[season.id]?.length || 0) > 0)
-  if (firstAvailable && !seasonData.value[activeSeason.value]?.length) {
-    setActiveSeason(firstAvailable.id)
+  await loadSeasonPresets(activeSeason.value)
+  if (!seasonData.value[activeSeason.value]?.length) {
+    await Promise.all(
+      seasons.value.filter(s => s.id !== activeSeason.value).map(s => loadSeasonPresets(s.id))
+    )
+    const firstAvailable = seasons.value.find(season => (seasonData.value[season.id]?.length || 0) > 0)
+    if (firstAvailable) setActiveSeason(firstAvailable.id)
   }
   seasonLoading.value = false
 }
@@ -597,11 +620,11 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
               </div>
               <div class="hero-demo-stage">
                 <div class="hero-demo-pane">
-                  <img :src="heroExamples[activeExampleIdx]?.before || FALLBACK[activeDemoTab]?.before" alt="Before" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'before')" />
+                  <img :src="heroExamples[activeExampleIdx]?.before || FALLBACK[activeDemoTab]?.before" alt="Before" class="hero-demo-img" fetchpriority="high" decoding="async" width="512" height="512" @error="fallbackImg($event, activeDemoTab, 'before')" />
                   <span class="hero-demo-badge hero-demo-badge-before">{{ t('lp.heroDemo.before') }}</span>
                 </div>
                 <div class="hero-demo-pane">
-                  <img :src="heroExamples[activeExampleIdx]?.after || FALLBACK[activeDemoTab]?.after" alt="After" class="hero-demo-img" @error="fallbackImg($event, activeDemoTab, 'after')" />
+                  <img :src="heroExamples[activeExampleIdx]?.after || FALLBACK[activeDemoTab]?.after" alt="After" class="hero-demo-img" fetchpriority="high" decoding="async" width="512" height="512" @error="fallbackImg($event, activeDemoTab, 'after')" />
                   <span class="hero-demo-badge hero-demo-badge-after">{{ t('lp.heroDemo.after') }}</span>
                 </div>
               </div>
@@ -610,7 +633,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
                 <button v-for="(ex, exIdx) in heroExamples" :key="exIdx" type="button"
                   class="hero-demo-thumb" :class="{ 'is-active': activeExampleIdx === exIdx }"
                   @click="activeExampleIdx = exIdx" :aria-label="`Example ${exIdx + 1}`">
-                  <img :src="ex.after" alt="" @error="fallbackImg($event, activeDemoTab, 'after')" />
+                  <img loading="lazy" decoding="async" :src="ex.after" alt="" @error="fallbackImg($event, activeDemoTab, 'after')" />
                 </button>
               </div>
               <div class="hero-demo-meta">
@@ -696,6 +719,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <div class="interior-preview">
             <div class="interior-preview-pane interior-preview-before">
               <img
+                loading="lazy" decoding="async"
                 v-if="!interiorBeforeFailed"
                 src="https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/room-before.jpg"
                 :alt="t('lp.interior.beforeAlt')"
@@ -708,6 +732,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
             </div>
             <div class="interior-preview-pane interior-preview-after">
               <img
+                loading="lazy" decoding="async"
                 v-if="!interiorAfterFailed"
                 src="https://storage.googleapis.com/vidgo-media-vidgo-ai/static/landing/room-after.jpg"
                 :alt="t('lp.interior.afterAlt')"
@@ -789,7 +814,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <div class="rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1"
             style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
-              <img :src="demo('try_on', 'after') || FALLBACK.try_on.after"
+              <img loading="lazy" decoding="async" :src="demo('try_on', 'after') || FALLBACK.try_on.after"
                 alt="Fashion AI" class="w-full h-full object-cover" @error="fallbackImg($event, 'try_on', 'after')" />
               <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.fashionAI') }}</div>
@@ -816,7 +841,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <div class="rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1"
             style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
-              <img :src="demo('product_scene', 'after') || FALLBACK.product_scene.after"
+              <img loading="lazy" decoding="async" :src="demo('product_scene', 'after') || FALLBACK.product_scene.after"
                 alt="E-commerce AI" class="w-full h-full object-cover" @error="fallbackImg($event, 'product_scene', 'after')" />
               <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.ecommerceAI') }}</div>
@@ -847,7 +872,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <div class="rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1"
             style="background: var(--bg-card); border: 1px solid var(--border-subtle);">
             <div class="h-48 overflow-hidden relative">
-              <img :src="demo('room_redesign', 'after') || FALLBACK.room_redesign.after"
+              <img loading="lazy" decoding="async" :src="demo('room_redesign', 'after') || FALLBACK.room_redesign.after"
                 alt="Design AI" class="w-full h-full object-cover" @error="fallbackImg($event, 'room_redesign', 'after')" />
               <div class="absolute inset-0" style="background: linear-gradient(to top, #1c1c1c 0%, transparent 60%);"></div>
               <div class="absolute bottom-4 left-4 text-white font-bold text-lg">{{ t('lp.categories.designAI') }}</div>
@@ -875,7 +900,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <div class="lg:col-span-6">
             <div class="grid grid-cols-2 gap-3 rounded-2xl overflow-hidden" style="box-shadow: 0 10px 48px rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08);">
               <div class="relative overflow-hidden" style="aspect-ratio: 4/5; background: #141420;">
-                <img :src="demo('room_redesign', 'before') || FALLBACK.room_redesign.before"
+                <img loading="lazy" decoding="async" :src="demo('room_redesign', 'before') || FALLBACK.room_redesign.before"
                   alt="Interior before" class="w-full h-full object-cover" @error="fallbackImg($event, 'room_redesign', 'before')" />
                 <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: rgba(0,0,0,0.62); color: #ffffff;">{{ t('interior.studio.beforeLabel') }}</div>
               </div>
@@ -981,7 +1006,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <div v-for="(item, idx) in activeSeasonItems" :key="activeSeason + '-' + idx"
             class="rounded-xl overflow-hidden relative group cursor-pointer transition-all duration-300 hover:-translate-y-1"
             style="aspect-ratio: 3/4; background: #141420; border: 1px solid rgba(255,255,255,0.06);">
-            <img :src="item.url"
+            <img loading="lazy" decoding="async" :src="item.url"
               :alt="item.label"
               class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               @error="($event.target as HTMLImageElement).src = FALLBACK.product_scene.after" />
@@ -1011,13 +1036,13 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
           <div class="lg:w-1/2 w-full">
             <div class="grid grid-cols-2 gap-3 rounded-2xl overflow-hidden" style="box-shadow: 0 8px 40px rgba(0,0,0,0.5);">
               <div class="relative overflow-hidden" style="aspect-ratio: 3/4;">
-                <img :src="ddExamples(feature.cat)[deepDiveIdx[feature.key] || 0]?.before || FALLBACK[feature.cat]?.before"
+                <img loading="lazy" decoding="async" :src="ddExamples(feature.cat)[deepDiveIdx[feature.key] || 0]?.before || FALLBACK[feature.cat]?.before"
                   :alt="t('lp.deepDives.' + feature.key + '.before')" class="w-full h-full object-cover"
                   @error="fallbackImg($event, feature.cat, 'before')" />
                 <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" style="background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); color: #ffffff;">Before</div>
               </div>
               <div class="relative overflow-hidden" style="aspect-ratio: 3/4;">
-                <img :src="ddExamples(feature.cat)[deepDiveIdx[feature.key] || 0]?.after || FALLBACK[feature.cat]?.after"
+                <img loading="lazy" decoding="async" :src="ddExamples(feature.cat)[deepDiveIdx[feature.key] || 0]?.after || FALLBACK[feature.cat]?.after"
                   :alt="t('lp.deepDives.' + feature.key + '.after')" class="w-full h-full object-cover"
                   @error="fallbackImg($event, feature.cat, 'after')" />
                 <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-xs font-bold" :style="'background: ' + feature.accentColor + '; color: #ffffff;'">After</div>
@@ -1029,7 +1054,7 @@ watch(locale, () => { seasonData.value = {}; loadAllSeasonPresets() })
                 class="dd-thumb" :class="{ 'is-active': (deepDiveIdx[feature.key] || 0) === exIdx }"
                 @click="setDeepDiveIdx(feature.key, exIdx)" :aria-label="`Example ${exIdx + 1}`"
                 :style="(deepDiveIdx[feature.key] || 0) === exIdx ? ('border-color: ' + feature.accentColor) : ''">
-                <img :src="ex.after" alt="" class="w-full h-full object-cover" @error="fallbackImg($event, feature.cat, 'after')" />
+                <img loading="lazy" decoding="async" :src="ex.after" alt="" class="w-full h-full object-cover" @error="fallbackImg($event, feature.cat, 'after')" />
               </button>
             </div>
           </div>

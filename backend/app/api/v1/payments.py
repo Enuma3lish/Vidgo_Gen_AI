@@ -139,8 +139,10 @@ async def create_paypal_checkout(
     if not paypal_result.get("success"):
         raise HTTPException(status_code=500, detail=paypal_result.get("error"))
 
-    # Update order with PayPal transaction ID
+    # Update order with PayPal transaction ID (dual-write: JSON for back-compat
+    # + the indexed column the webhook lookup uses — perf audit #7).
     order.payment_data["paypal_transaction_id"] = paypal_result.get("transaction_id")
+    order.paypal_transaction_id = paypal_result.get("transaction_id")
     await db.commit()
 
     return {
@@ -288,6 +290,25 @@ async def paypal_webhook(
             except Exception as exc:
                 # Redis down: log but do NOT block payment processing.
                 logger.warning(f"PayPal webhook Redis dedup failed (continuing): {exc}")
+
+            # Durable dedup belt (perf audit #7/#10): if Redis was unavailable
+            # above, a unique INSERT on the event id still stops a reprocess.
+            # Best-effort + own transaction so it never blocks a legitimate
+            # event; a conflict means we already handled this id.
+            try:
+                from app.models.billing import ProcessedWebhookEvent
+                from sqlalchemy.dialects.postgresql import insert as _pg_insert
+                stmt = _pg_insert(ProcessedWebhookEvent).values(
+                    event_id=str(event_id), provider="paypal",
+                ).on_conflict_do_nothing(index_elements=["event_id"])
+                res = await db.execute(stmt)
+                await db.commit()
+                if (res.rowcount or 0) == 0:
+                    logger.info(f"PayPal webhook duplicate (DB belt) ignored: {event_type} id={event_id}")
+                    return {"success": True, "duplicate": True}
+            except Exception as exc:
+                await db.rollback()
+                logger.warning(f"PayPal webhook DB dedup skipped (continuing): {exc}")
 
         logger.info(f"PayPal webhook received: {event_type} id={event_id}")
 
@@ -442,6 +463,10 @@ async def handle_transaction_completed(db: AsyncSession, data: dict) -> dict:
         logger.info(f"Order {order.order_number} already paid — ignoring duplicate webhook")
         return {"success": True, "already_processed": True}
 
+    # The resource id on a CAPTURE.COMPLETED event IS the capture id — index it
+    # so a later REFUNDED webhook resolves this order directly (perf audit #7).
+    if capture_id:
+        order.paypal_capture_id = capture_id
     from app.services.subscription_service import get_subscription_service
     await get_subscription_service().handle_payment_success(
         db, order.order_number, data
@@ -500,13 +525,18 @@ async def handle_order_approved(db: AsyncSession, data: dict) -> dict:
         )
 
     order_data = capture.get("order") or {}
+    pu = (order_data.get("purchase_units") or [{}])[0]
+    cap = ((pu.get("payments") or {}).get("captures") or [{}])[0]
+    # Record the indexed capture id so a later REFUNDED webhook resolves this
+    # order without the LIKE scan (perf audit #7). Set before handle_payment_
+    # success commits.
+    if cap.get("id"):
+        order.paypal_capture_id = str(cap["id"])
     from app.services.subscription_service import get_subscription_service
     await get_subscription_service().handle_payment_success(
         db, order.order_number, order_data
     )
 
-    pu = (order_data.get("purchase_units") or [{}])[0]
-    cap = ((pu.get("payments") or {}).get("captures") or [{}])[0]
     amount, currency = _paypal_amount_from(order_data)
     await _send_paypal_invoice_email(
         db,
@@ -541,10 +571,19 @@ def _extract_paypal_custom_data(data: dict) -> dict:
 
 
 async def _find_order_by_paypal_transaction(db: AsyncSession, transaction_id: str) -> Optional[Order]:
+    # Indexed lookup first (perf audit #7) — was a full seq scan casting the
+    # payment_data JSON on every PayPal webhook. Fall back to the JSON scan
+    # only for rows created before the column backfill (rare, transitional).
+    result = await db.execute(
+        select(Order).where(Order.paypal_transaction_id == transaction_id).limit(1)
+    )
+    order = result.scalars().first()
+    if order:
+        return order
     result = await db.execute(
         select(Order).where(
             cast(Order.payment_data, JSONB)["paypal_transaction_id"].astext == transaction_id
-        )
+        ).limit(1)
     )
     return result.scalars().first()
 
@@ -892,10 +931,18 @@ async def handle_capture_refunded(db: AsyncSession, data: dict) -> dict:
                 capture_id = href.rstrip("/").split("/")[-1]
                 break
         if capture_id:
+            # Indexed capture-id lookup first (perf audit #7); the LIKE scan is
+            # kept only as a transitional fallback for rows predating the
+            # paypal_capture_id backfill.
             res = await db.execute(
-                select(Order).where(cast(Order.payment_data, String).like(f"%{capture_id}%"))
+                select(Order).where(Order.paypal_capture_id == capture_id).limit(1)
             )
             order = res.scalars().first()
+            if not order:
+                res = await db.execute(
+                    select(Order).where(cast(Order.payment_data, String).like(f"%{capture_id}%")).limit(1)
+                )
+                order = res.scalars().first()
     if not order:
         logger.warning(f"PAYMENT.CAPTURE.REFUNDED: no local order found (refund {data.get('id')})")
         return {"success": False, "error": "order not found"}
@@ -1005,9 +1052,13 @@ async def paypal_capture_order(
             "message": "Payment not confirmed yet. Credits will be added once PayPal confirms.",
         }
 
+    _cap_order = capture.get("order") or {}
+    _cap = ((( _cap_order.get("purchase_units") or [{}])[0].get("payments") or {}).get("captures") or [{}])[0]
+    if _cap.get("id"):
+        order.paypal_capture_id = str(_cap["id"])  # indexed for refund lookup (perf audit #7)
     from app.services.subscription_service import get_subscription_service
     await get_subscription_service().handle_payment_success(
-        db, order.order_number, capture.get("order") or {}
+        db, order.order_number, _cap_order
     )
     logger.info(f"PayPal order captured via return leg: {order.order_number}")
     return {"success": True, "order_number": order.order_number}

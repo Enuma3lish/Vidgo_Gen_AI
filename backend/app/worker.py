@@ -38,14 +38,27 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+# Shared worker engine (2026-07-12 perf audit #2). Every task used to build a
+# brand-new engine + pool and dispose it — reclaim runs every 2 min, so that
+# was ~720 pool-builds + TLS handshakes/day for one task alone. One process-
+# lifetime engine with pre-ping (Cloud SQL drops idle conns) + recycle is
+# far cheaper; ARQ is long-lived so the pool is reused across invocations.
+_worker_engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    pool_size=5,
+    max_overflow=10,
+)
+WorkerSessionLocal = sessionmaker(_worker_engine, class_=AsyncSession, expire_on_commit=False)
+
+
 # Database session for worker
 async def get_db_session() -> AsyncSession:
-    """Create database session for worker tasks"""
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with async_session() as session:
+    """Yield a DB session from the shared worker engine (see above)."""
+    async with WorkerSessionLocal() as session:
         yield session
-    await engine.dispose()
 
 
 # =============================================================================
@@ -59,8 +72,7 @@ async def regenerate_demos_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """
     logger.info("Starting daily demo regeneration task")
 
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = WorkerSessionLocal
 
     try:
         async with async_session() as db:
@@ -88,7 +100,7 @@ async def regenerate_demos_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "failed", "error": str(e)}
 
     finally:
-        await engine.dispose()
+        pass  # shared engine — not disposed per task (perf audit #2)
 
 
 async def cleanup_expired_demos_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -98,8 +110,7 @@ async def cleanup_expired_demos_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """
     logger.info("Starting demo cleanup task")
 
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = WorkerSessionLocal
 
     try:
         async with async_session() as db:
@@ -113,7 +124,7 @@ async def cleanup_expired_demos_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "failed", "error": str(e)}
 
     finally:
-        await engine.dispose()
+        pass  # shared engine — not disposed per task (perf audit #2)
 
 
 async def cleanup_prompt_cache_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -130,8 +141,7 @@ async def cleanup_prompt_cache_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     from sqlalchemy import delete as _sql_delete, and_ as _and, or_ as _or
     from app.models.demo import PromptCache
 
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = WorkerSessionLocal
     cutoff = datetime.utcnow() - timedelta(days=90)
     try:
         async with async_session() as db:
@@ -154,7 +164,66 @@ async def cleanup_prompt_cache_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"prompt_cache cleanup failed: {e}")
         return {"status": "failed", "error": str(e)}
     finally:
-        await engine.dispose()
+        pass  # shared engine — not disposed per task (perf audit #2)
+
+
+async def prune_stale_rows_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """Prune unbounded tables that had NO retention (2026-07-12 perf audit #9).
+
+    - pending_provider_tasks: terminal rows (completed/failed/abandoned) older
+      than 30d. Active rows are never touched (the reclaim worker owns them).
+    - material_views: view-history older than 90d (personalization only needs
+      the recent window).
+    - processed_webhook_events: dedup rows older than 30d (PayPal retries for
+      at most 3d, so 30d is a wide safety margin).
+    Daily at 03:00 UTC, after the other night crons.
+    """
+    from sqlalchemy import delete as _del, and_ as _and
+    from app.models.pending_provider_task import PendingProviderTask
+
+    async_session = WorkerSessionLocal
+    now = datetime.utcnow()
+    stats = {}
+    try:
+        async with async_session() as db:
+            # Terminal pending tasks > 30d
+            r1 = await db.execute(
+                _del(PendingProviderTask).where(
+                    _and(
+                        PendingProviderTask.status.in_(["completed", "failed", "abandoned"]),
+                        PendingProviderTask.created_at < now - timedelta(days=30),
+                    )
+                )
+            )
+            stats["pending_tasks"] = r1.rowcount or 0
+            # material_views > 90d (raw SQL — model import kept optional)
+            try:
+                r2 = await db.execute(
+                    __import__("sqlalchemy").text(
+                        "DELETE FROM material_views WHERE created_at < :cut"
+                    ),
+                    {"cut": now - timedelta(days=90)},
+                )
+                stats["material_views"] = r2.rowcount or 0
+            except Exception as exc:
+                logger.warning("material_views prune skipped: %s", exc)
+            # processed_webhook_events > 30d
+            try:
+                r3 = await db.execute(
+                    __import__("sqlalchemy").text(
+                        "DELETE FROM processed_webhook_events WHERE processed_at < :cut"
+                    ),
+                    {"cut": now - timedelta(days=30)},
+                )
+                stats["webhook_events"] = r3.rowcount or 0
+            except Exception as exc:
+                logger.warning("processed_webhook_events prune skipped: %s", exc)
+            await db.commit()
+            logger.info("prune_stale_rows: %s", stats)
+            return {"status": "completed", **stats}
+    except Exception as e:
+        logger.error(f"prune_stale_rows failed: {e}")
+        return {"status": "failed", "error": str(e)}
 
 
 async def health_check_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -193,8 +262,7 @@ async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     from app.models.user import User
     from app.models.billing import Plan, Subscription, CreditTransaction, Order as _Order
 
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = WorkerSessionLocal
 
     GRACE = timedelta(days=3)
     now = datetime.utcnow()
@@ -329,7 +397,7 @@ async def auto_renew_subscriptions_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "failed", "error": str(e)}
 
     finally:
-        await engine.dispose()
+        pass  # shared engine — not disposed per task (perf audit #2)
 
 
 # =============================================================================
@@ -350,8 +418,7 @@ async def monthly_credit_reset_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
     from app.models.user import User
     from app.models.billing import Plan, CreditTransaction, Subscription
 
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = WorkerSessionLocal
 
     reset_count = 0
     error_count = 0
@@ -489,7 +556,7 @@ async def monthly_credit_reset_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "failed", "error": str(e)}
 
     finally:
-        await engine.dispose()
+        pass  # shared engine — not disposed per task (perf audit #2)
 
 
 async def cleanup_expired_bonus_credits_task(ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -503,8 +570,7 @@ async def cleanup_expired_bonus_credits_task(ctx: Dict[str, Any]) -> Dict[str, A
     from app.models.user import User
     from app.models.billing import CreditTransaction
 
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = WorkerSessionLocal
 
     cleaned_count = 0
 
@@ -546,7 +612,7 @@ async def cleanup_expired_bonus_credits_task(ctx: Dict[str, Any]) -> Dict[str, A
         return {"status": "failed", "error": str(e)}
 
     finally:
-        await engine.dispose()
+        pass  # shared engine — not disposed per task (perf audit #2)
 
 
 # =============================================================================
@@ -564,8 +630,7 @@ async def generate_single_demo_task(
     """
     logger.info(f"Generating on-demand demo: {prompt[:50]}...")
 
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = WorkerSessionLocal
 
     try:
         async with async_session() as db:
@@ -582,7 +647,7 @@ async def generate_single_demo_task(
         return {"status": "failed", "error": str(e)}
 
     finally:
-        await engine.dispose()
+        pass  # shared engine — not disposed per task (perf audit #2)
 
 
 # =============================================================================
@@ -858,8 +923,7 @@ async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, 
 
     TOOL_TYPE_TO_ENUM = _build_tool_enum_map()
 
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = WorkerSessionLocal
 
     now = datetime.utcnow()
     grace = now - timedelta(seconds=RECLAIM_FOREGROUND_GRACE_SEC)
@@ -1092,7 +1156,7 @@ async def reclaim_pending_provider_tasks_task(ctx: Dict[str, Any]) -> Dict[str, 
         return {"status": "failed", "error": str(exc), **stats}
 
     finally:
-        await engine.dispose()
+        pass  # shared engine — not disposed per task (perf audit #2)
 
 
 # =============================================================================
@@ -1116,6 +1180,7 @@ class WorkerSettings:
         auto_renew_subscriptions_task,
         reclaim_pending_provider_tasks_task,
         cleanup_prompt_cache_task,
+        prune_stale_rows_task,
     ]
 
     # Cron jobs (scheduled tasks)
@@ -1163,6 +1228,13 @@ class WorkerSettings:
             cleanup_prompt_cache_task,
             hour=2,
             minute=30,
+            run_at_startup=False
+        ),
+        # Daily stale-row pruning — 3:00 AM UTC (perf audit #9)
+        cron(
+            prune_stale_rows_task,
+            hour=3,
+            minute=0,
             run_at_startup=False
         ),
         # Daily auto-renewal check — 1:00 AM UTC

@@ -8,7 +8,18 @@ export default defineConfig({
   // IE cannot run Vue 3 at all (needs Proxy); index.html shows a notice instead.
   build: {
     target: ['es2019', 'safari14', 'chrome87', 'firefox78', 'edge88'],
-    cssTarget: 'safari14'
+    cssTarget: 'safari14',
+    // Split rarely-changing vendor libs into their own chunk (2026-07-12 perf
+    // audit): app-code edits no longer bust the hash of vue/router/pinia/i18n/
+    // axios, so returning users keep those cached across deploys.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-vue': ['vue', 'vue-router', 'pinia', 'vue-i18n'],
+          'vendor-net': ['axios'],
+        },
+      },
+    },
   },
   plugins: [vue()],
   resolve: {

@@ -87,9 +87,12 @@ export function useGeoLanguage() {
    * Sets the locale if not already set by user
    */
   async function initLanguage(): Promise<void> {
+    const { ensureLocaleMessages } = await import('@/main')
     // Check if user has manually set a locale preference
     const userSetLocale = safeLocalStorage.getItem(LOCALE_KEY)
     if (userSetLocale) {
+      const norm = normalizeLocale(userSetLocale)
+      await ensureLocaleMessages(norm)  // load lazy locale before switching (audit #4)
       locale.value = persistLocale(userSetLocale)
       return
     }
@@ -99,6 +102,7 @@ export function useGeoLanguage() {
 
     // Only set if valid locale
     if ((SUPPORTED_LOCALES as readonly string[]).includes(detected)) {
+      await ensureLocaleMessages(normalizeLocale(detected))
       locale.value = persistLocale(detected)
     }
   }

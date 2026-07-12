@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "VidGo Gen AI"
     API_V1_STR: str = "/api/v1"
     DEBUG: bool = True
+    # SQLAlchemy statement echo (2026-07-12 perf audit #1). Dedicated flag,
+    # defaults OFF, independent of DEBUG (prod runs DEBUG=true, so the engine
+    # must NOT key echo off DEBUG or every SQL statement floods prod logs).
+    # Set SQL_ECHO=true only for local query debugging.
+    SQL_ECHO: bool = False
 
     # Admin notifications
     ADMIN_ACCOUNT: str = ""

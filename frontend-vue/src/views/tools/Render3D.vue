@@ -15,7 +15,7 @@
  *
  * Backend: POST /api/v1/interior/floorplan-to-video
  */
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore, useCreditsStore } from '@/stores'
 import { useLocalized, useGenerationTask } from '@/composables'
@@ -33,7 +33,11 @@ import {
 } from '@/api/interior'
 import PiapiPlayground from '@/components/tools/PiapiPlayground.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
-import ThreeViewer from '@/components/tools/ThreeViewer.vue'
+// three.js (~150KB gz) lives inside ThreeViewer. Load it ONLY when an
+// interactive .glb model actually needs rendering (the paid video_3d tier) —
+// otherwise every visitor to this page downloaded three.js for nothing
+// (perf audit #5). The template guards <ThreeViewer> behind `modelUrl`.
+const ThreeViewer = defineAsyncComponent(() => import('@/components/tools/ThreeViewer.vue'))
 import BeforeAfterSlider from '@/components/tools/BeforeAfterSlider.vue'
 import { extractApiError } from '@/utils/apiError'
 import { dataURItoBlob } from '@/utils/dataUri'

@@ -954,22 +954,29 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
                 return None
             parts.append(ask)
 
+            # Token headroom matters: Gemini 2.5 models spend "thinking"
+            # tokens before the answer, so a tiny max_output_tokens cap can
+            # return EMPTY text (observed in prod 2026-07-12 — the classifier
+            # silently failed open and plans kept hitting the photo path).
             response = await asyncio.wait_for(
                 asyncio.to_thread(
                     client.models.generate_content,
                     model=self.gemini_model,
                     contents=parts,
-                    config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=10),
+                    config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=300),
                 ),
-                timeout=10.0,
+                timeout=12.0,
             )
             text = (response.text or "").strip().lower()
+            verdict = None
             if "plan" in text and "photo" not in text:
-                return "plan"
-            if "photo" in text:
-                return "photo"
-            return None
-        except Exception:
+                verdict = "plan"
+            elif "photo" in text:
+                verdict = "photo"
+            logger.info("[classify_input_kind] raw=%r verdict=%s", text[:80], verdict)
+            return verdict
+        except Exception as exc:
+            logger.warning("[classify_input_kind] failed (fail-open to photo path): %s", exc)
             return None
 
     async def _interior_text_only(self, params: Dict[str, Any]) -> Dict[str, Any]:

@@ -2095,11 +2095,33 @@ async def floorplan_batch_render(
         # and the load governor happy for up to 16 renders).
         sem = _asyncio.Semaphore(4)
 
+        # Surface presets fold into the extra prompt — render_from_floorplan
+        # has no native surface params (they're a preserve-path concept).
+        _surfaces = _build_surface_clause(
+            request.surface_floor, request.surface_ceiling, request.surface_wall
+        )
+
         async def _one(job):
             gi, vi, v_req = job
             async with sem:
                 try:
-                    r = await _preserve_render(v_req, current_user)
+                    # 2026-07-12 E2E fix: use the FLOOR-PLAN-NATIVE renderer.
+                    # _preserve_render (ControlNet depth lock) is built for
+                    # room PHOTOS — a top-down 2D plan's depth map is
+                    # meaningless, and in prod testing it rendered a BEDROOM
+                    # from a kitchen floor plan. render_from_floorplan keeps
+                    # the plan's exact layout (verified: L-kitchen + island +
+                    # pantry all preserved) and is what the single-image
+                    # render tier's 自由改造 branch already uses.
+                    r = await get_interior_design_service().render_from_floorplan(
+                        floorplan_image_url=v_req.image_url,
+                        style_id=v_req.style_id,
+                        room_type=v_req.room_type,
+                        extra_prompt=f"{v_req.prompt or ''}{_surfaces}".strip(),
+                        lighting_tone=v_req.lighting_tone,
+                        color_temperature=v_req.color_temperature,
+                        material_accent=v_req.material_accent,
+                    )
                     return (gi, vi, r.get("image_url") if r.get("success") else None)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("batch render (%d,%d) raised: %s", gi, vi, exc)

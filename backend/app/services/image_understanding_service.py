@@ -211,6 +211,20 @@ class ImageUnderstandingService:
         except Exception:
             return None
 
+    async def classify_room_type(self, *, image_url: Optional[str] = None) -> Optional[str]:
+        """Which single-room type does the image show? See VertexAIProvider
+        for the returned vocabulary (matches ROOM_TYPES keys).
+
+        Returns None on error or for a whole-home multi-room plan — callers
+        fall back to today's user-hint / default. Added 2026-07-14 so
+        /tools/render-3d correctly renders a bathroom photo as a bathroom
+        instead of the legacy "living_room" default.
+        """
+        try:
+            return await self._provider.classify_room_type({"image_url": image_url})
+        except Exception:
+            return None
+
     @staticmethod
     def _fail_open(user_prompt: str) -> ImageFusionResult:
         """When the vision call errors, fall back to the user's prompt

@@ -93,14 +93,18 @@ const BATCH_MAX_IMAGES = 8
 const BATCH_MAX_TOTAL = 16
 
 const roomLabelOptions = computed(() => [
+  // 2026-07-14: 'auto' is the default. Backend classifies the image with Gemini
+  // Vision so a bathroom / kitchen / bedroom plan renders as the right room
+  // without the user having to change the dropdown per upload.
+  { value: 'auto',           label: L('🪄 自動偵測房型', '🪄 Auto-detect room', '🪄 自動判定', '🪄 자동 감지', '🪄 Detección automática') },
   { value: 'overall',        label: L('整體平面圖', 'Overall plan', '全体間取り図', '전체 평면도', 'Plano general') },
   { value: 'living_room',    label: L('客廳', 'Living room', 'リビング', '거실', 'Salón') },
   { value: 'dining_room',    label: L('餐廳', 'Dining room', 'ダイニング', '다이닝룸', 'Comedor') },
   { value: 'kitchen',        label: L('廚房', 'Kitchen', 'キッチン', '주방', 'Cocina') },
   { value: 'master_bedroom', label: L('主臥', 'Master bedroom', '主寝室', '안방', 'Dorm. principal') },
   { value: 'bedroom',        label: L('臥室', 'Bedroom', '寝室', '침실', 'Dormitorio') },
-  { value: 'bathroom',       label: L('浴室', 'Bathroom', 'バスルーム', '욕실', 'Baño') },
-  { value: 'study',          label: L('書房', 'Study', '書斎', '서재', 'Estudio') },
+  { value: 'bathroom',       label: L('浴室 / 廁所', 'Bathroom / Toilet', 'バスルーム / トイレ', '욕실 / 화장실', 'Baño / Aseo') },
+  { value: 'home_office',    label: L('書房', 'Study / Home office', '書斎', '서재', 'Estudio') },
   { value: 'balcony',        label: L('陽台', 'Balcony', 'バルコニー', '발코니', 'Balcón') },
   { value: 'other',          label: L('其他', 'Other', 'その他', '기타', 'Otro') },
 ])
@@ -119,8 +123,11 @@ function onBatchFilesSelected(e: Event) {
       id: _batchIdSeq++,
       file: f,
       previewUrl: URL.createObjectURL(f),
-      // First plan defaults to the overall layout, the rest to rooms.
-      label: batchItems.value.length === 0 ? 'overall' : 'living_room',
+      // First plan defaults to the overall layout; every subsequent one to
+      // 'auto' so the backend classifies the actual room. Prior default
+      // 'living_room' silently rendered bathrooms/kitchens/etc as living
+      // rooms whenever users didn't touch the dropdown.
+      label: batchItems.value.length === 0 ? 'overall' : 'auto',
     })
   }
   ;(e.target as HTMLInputElement).value = ''
@@ -483,7 +490,7 @@ const hasResult = computed(() => {
               <button type="button" @click="removeBatchItem(it.id)" class="px-2 text-lg flex-shrink-0" style="color:#f87171;">✕</button>
             </div>
           </div>
-          <p class="pp-field-help">{{ L('建議:1 張整體平面圖 + 各房間平面圖(客廳、餐廳、廚房…)。所有圖片會套用下方同一組效果,確保整屋風格一致。', 'Tip: one overall plan + per-room plans (living, dining, kitchen…). Every plan uses the SAME effect below, so the whole house stays consistent.', 'ヒント:全体図1枚+各部屋の図。全て下の同一効果を適用し、家全体の統一感を保証。', '팁: 전체도 1장 + 각 방 평면도. 모두 아래 동일 효과가 적용되어 집 전체 스타일이 일치합니다.', 'Consejo: un plano general + planos por habitación. Todos usan el MISMO efecto de abajo.') }}</p>
+          <p class="pp-field-help">{{ L('建議:1 張整體平面圖 + 各房間平面圖(客廳、餐廳、廚房、浴室…)。房型預設為「自動偵測」— 系統會判斷每張圖是哪種空間;所有圖片會套用下方同一組效果,確保整屋風格一致。', 'Tip: one overall plan + per-room plans (living, dining, kitchen, bathroom…). Room type defaults to Auto — the server classifies each image. Every plan uses the SAME effect below, so the whole house stays consistent.', 'ヒント:全体図1枚+各部屋の図。房型はデフォルトで自動判定、全て下の同一効果を適用し、家全体の統一感を保証。', '팁: 전체도 1장 + 각 방 평면도. 방 유형은 자동 감지가 기본이며 모두 아래 동일 효과가 적용되어 집 전체 스타일이 일치합니다.', 'Consejo: un plano general + planos por habitación. El tipo de sala se detecta automáticamente. Todos usan el MISMO efecto de abajo.') }}</p>
         </div>
 
         <div>

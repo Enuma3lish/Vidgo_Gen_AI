@@ -979,6 +979,86 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             logger.warning("[classify_input_kind] failed (fail-open to photo path): %s", exc)
             return None
 
+    async def classify_room_type(self, params: Dict[str, Any]) -> Optional[str]:
+        """Classify which kind of room a floor plan or interior photo shows.
+
+        Returns one of the interior_design_service.ROOM_TYPES keys
+        (living_room | bedroom | kitchen | bathroom | dining_room |
+        home_office | balcony), or None on error / genuinely ambiguous
+        multi-room plans. Callers fall back to today's default
+        (living_room / user-provided hint) when None is returned.
+
+        Added 2026-07-14 after a bathroom photo was rendering as a
+        living room because the frontend never passes room_type on the
+        single-image path and the backend default won.
+        """
+        try:
+            client = self._get_gemini_text_client()
+            from google.genai import types
+
+            ask = (
+                "Look at this image — either a top-down 2D floor plan of ONE room, or a "
+                "photograph / render of ONE room. Which room type is it? Reply with EXACTLY "
+                "one of these lowercase tokens and nothing else: "
+                "living_room, bedroom, kitchen, bathroom, dining_room, home_office, balcony, "
+                "multi_room, unknown. "
+                "Use 'multi_room' ONLY when the image shows the whole home's overall plan "
+                "with several distinct rooms; use 'unknown' only if you truly cannot tell."
+            )
+            parts: list = []
+            if params.get("image_url"):
+                http = self._get_http_client()
+                img_resp = await http.get(params["image_url"])
+                parts.append(types.Part.from_bytes(data=img_resp.content, mime_type="image/jpeg"))
+            elif params.get("image_bytes"):
+                parts.append(types.Part.from_bytes(data=params["image_bytes"], mime_type="image/jpeg"))
+            else:
+                return None
+            parts.append(ask)
+
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.models.generate_content,
+                    model=self.gemini_model,
+                    contents=parts,
+                    config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=300),
+                ),
+                timeout=12.0,
+            )
+            text = (response.text or "").strip().lower()
+            allowed = {
+                "living_room", "bedroom", "kitchen", "bathroom",
+                "dining_room", "home_office", "balcony",
+            }
+            verdict: Optional[str] = None
+            for token in allowed:
+                if token in text:
+                    verdict = token
+                    break
+            if verdict is None:
+                # Common aliases Gemini sometimes emits even under the strict
+                # prompt (single-word replies drop the underscore, or use a
+                # synonym). Map back to the canonical ROOM_TYPES keys.
+                aliases = {
+                    "toilet": "bathroom", "washroom": "bathroom", "restroom": "bathroom",
+                    "wc": "bathroom",
+                    "master bedroom": "bedroom", "master_bedroom": "bedroom",
+                    "guest bedroom": "bedroom", "guest_bedroom": "bedroom",
+                    "office": "home_office", "study": "home_office", "study room": "home_office",
+                    "dining": "dining_room",
+                    "living": "living_room", "lounge": "living_room", "family room": "living_room",
+                    "terrace": "balcony", "patio": "balcony",
+                }
+                for alias, canon in aliases.items():
+                    if alias in text:
+                        verdict = canon
+                        break
+            logger.info("[classify_room_type] raw=%r verdict=%s", text[:80], verdict)
+            return verdict
+        except Exception as exc:
+            logger.warning("[classify_room_type] failed (fail-open): %s", exc)
+            return None
+
     async def _interior_text_only(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback when image generation is unavailable.
 

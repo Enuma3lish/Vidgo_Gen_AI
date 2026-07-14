@@ -286,7 +286,12 @@ class FloorplanToVideoRequest(BaseModel):
     """Floor-plan → 3D-growth-video pipeline request."""
     image_url: str = Field(..., description="Public URL of the 2D architectural floor plan image.")
     style_id: Optional[str] = Field("modern_minimalist", description="Interior design style (see GET /interior/styles).")
-    room_type: Optional[str] = Field("living_room", description="Primary room type hint (see GET /interior/room-types).")
+    # 2026-07-14: default flipped from "living_room" to None so the pipeline
+    # can auto-classify the uploaded image (bathroom / kitchen / bedroom / …).
+    # The frontend has never sent this field on /tools/render-3d, so the old
+    # default silently rendered every room as a living room. Callers that
+    # DO want to pin a specific room still pass it and skip auto-detection.
+    room_type: Optional[str] = Field(None, description="Primary room type hint (see GET /interior/room-types). None or 'auto' → server auto-classifies from the image.")
     prompt: Optional[str] = Field(None, description="Optional extra request (materials, mood, dimensions).")
     result_tier: str = Field(
         "render",
@@ -1332,6 +1337,39 @@ async def _preserve_render(request: "FloorplanToVideoRequest", current_user: Use
     }
 
 
+async def _auto_room_type(image_url: str, hint: Optional[str]) -> Optional[str]:
+    """Return the effective room_type for a render — the user's hint if they
+    picked one, otherwise Gemini's classification of the uploaded image.
+
+    ``hint`` values that mean "no explicit choice": None, "", "auto",
+    "overall" (the batch-mode whole-house layout is not a single room and
+    must NOT be classified into one — leave it as None so downstream code
+    skips the per-room hint).
+
+    Returns None on classification failure so callers keep today's default
+    (living_room). Never raises.
+    """
+    if hint:
+        h = str(hint).strip().lower()
+        if h == "overall":
+            return None            # whole-plan overview → no per-room hint
+        if h and h not in ("auto", "unknown"):
+            return h               # user pinned a specific room
+    try:
+        from app.services.image_understanding_service import (
+            get_image_understanding_service,
+        )
+        detected = await get_image_understanding_service().classify_room_type(
+            image_url=image_url
+        )
+        if detected:
+            logger.info("[room_type_auto] image=%s → %s", image_url[:80], detected)
+        return detected
+    except Exception as exc:
+        logger.warning("[room_type_auto] classifier raised (fail-open): %s", exc)
+        return None
+
+
 async def _floorplan_to_video_inner(
     request: "FloorplanToVideoRequest",
     current_user: User,
@@ -1341,6 +1379,19 @@ async def _floorplan_to_video_inner(
     Returns a FloorplanToVideoResponse; the caller streams it with heartbeats.
     """
     is_admin = bool(getattr(current_user, "is_superuser", False))
+
+    # ── Auto-detect room_type ONCE for the whole request ──
+    # Bug fix 2026-07-14: the frontend never sends room_type on /tools/render-3d,
+    # so a bathroom photo used to render as a living room (Pydantic default won).
+    # Classify the image up front and mutate the request in place; every tier
+    # branch below reads request.room_type, and simulation propagates it into
+    # its 4 deep-copied variants — so one classification here fixes all paths
+    # and guarantees the 4 variants share the SAME detected room ("same effect
+    # covers all results"). Falls back to "living_room" only if the classifier
+    # can't decide, matching the previous behavior.
+    request.room_type = (
+        await _auto_room_type(request.image_url, request.room_type)
+    ) or "living_room"
 
     # Credit deduction reuses the platform's deduction firewall (admins bypass,
     # ServicePricing overrides the fallback `cost`). Imported lazily to avoid a
@@ -2014,7 +2065,10 @@ _BATCH_ROOM_HINTS = {
     "master_bedroom": "This floor plan is the master bedroom.",
     "bedroom":        "This floor plan is a bedroom.",
     "bathroom":       "This floor plan is the bathroom.",
+    # 'study' kept for legacy clients; 'home_office' is the canonical key that
+    # matches ROOM_TYPES so the auto-classifier's output routes here directly.
     "study":          "This floor plan is the study / home office.",
+    "home_office":    "This floor plan is the home office / study.",
     "balcony":        "This floor plan is the balcony.",
 }
 
@@ -2096,6 +2150,23 @@ async def floorplan_batch_render(
             " as every other room in this series — no stylistic drift between rooms."
         )
 
+        # ── Auto-detect per-image room_label ONCE, in parallel ──
+        # Bug fix 2026-07-14: batch dropdowns default new items to "living_room",
+        # so a user uploading several bathroom / kitchen plans without touching
+        # every dropdown had them all render as living rooms. When room_label
+        # is missing / "auto" (and not the special "overall" whole-house layout)
+        # we ask Gemini to classify it. The label is updated in place so the
+        # returned groups + gallery record surface the DETECTED room.
+        # Runs concurrently to keep the extra vision-call latency ≈ one call
+        # even for a full 8-image batch. Fails open per-image → the old
+        # "living_room" fallback still applies (never worse than today).
+        async def _resolve_label(img: FloorplanBatchImage) -> None:
+            detected = await _auto_room_type(img.image_url, img.room_label)
+            if detected and (img.room_label or "").strip().lower() in ("", "auto", "unknown"):
+                img.room_label = detected
+
+        await _asyncio.gather(*(_resolve_label(im) for im in request.images))
+
         # Build every per-render request up front and fingerprint the shared
         # effect params — the "must check same effect" receipt. Any mismatch
         # (impossible unless this code regresses) aborts before spending.
@@ -2105,13 +2176,19 @@ async def floorplan_batch_render(
             room_hint = _BATCH_ROOM_HINTS.get((img.room_label or "").strip().lower(), "")
             for vi in range(request.variation_count):
                 user_prompt = (request.prompt or "").strip()
+                # Sub-request room_type: "overall" is the whole-plan layout
+                # (not a single room), so we pass None to skip the per-room
+                # hint in the render prompt; otherwise use the (possibly
+                # just-detected) label.
+                _label = (img.room_label or "").strip().lower()
+                _sub_room_type = None if _label in ("", "overall", "auto") else _label
                 v_req = FloorplanToVideoRequest(
                     image_url=img.image_url,
                     result_tier="render",
                     preserve_original=True,
                     magic_mode=request.magic_mode,
                     style_id=request.style_id or "modern_minimalist",
-                    room_type=(img.room_label or "living_room"),
+                    room_type=_sub_room_type,
                     prompt=f"{user_prompt} {room_hint}{consistency_clause}{_BATCH_VARIANT_CAMERA[vi]}".strip(),
                     surface_floor=request.surface_floor,
                     surface_ceiling=request.surface_ceiling,

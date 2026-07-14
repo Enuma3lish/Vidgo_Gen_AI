@@ -443,6 +443,64 @@ async def get_room_types():
     ]
 
 
+class ClassifyRoomRequest(BaseModel):
+    """UX-only preflight: classify a floor plan / room photo BEFORE the paid
+    render kicks in so the user can correct the room dropdown for free.
+    Accepts either a public URL (typical when the file was already uploaded
+    for another operation) or a base64 blob (typical for freshly-picked
+    files that haven't been uploaded to GCS yet — no need to spend the
+    round-trip just to classify)."""
+    image_url: Optional[str] = Field(None, description="Public URL of the image to classify.")
+    image_base64: Optional[str] = Field(None, description="Base64 blob (without data: prefix). Alternative to image_url.")
+
+
+class ClassifyRoomResponse(BaseModel):
+    success: bool
+    room_type: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post("/classify-room", response_model=ClassifyRoomResponse)
+async def classify_room(
+    request: ClassifyRoomRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Preflight room-type classification for the batch UI.
+
+    Returns a ROOM_TYPES key ("kitchen", "bathroom", …) when Gemini is
+    confident, or ``room_type=None`` on genuine multi-room / ambiguous
+    plans and on classifier error (fail-open). No credit charge — this
+    endpoint exists so users can spot a misclassified upload BEFORE
+    paying for a batch render. Login required to keep it from being
+    abused as free vision inference.
+    """
+    if request.image_url:
+        u = request.image_url.strip()
+        if not u.lower().startswith(("http://", "https://")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="image_url must be a public URL")
+        detected = await _auto_room_type(u, hint=None)
+        return ClassifyRoomResponse(success=True, room_type=detected)
+    if request.image_base64:
+        # Route directly to the provider so we don't have to upload the blob
+        # just to get a URL back. Cheaper for the classifier UX use case.
+        try:
+            import base64 as _b64
+            raw = _b64.b64decode(request.image_base64)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 image payload")
+        try:
+            from app.providers.provider_router import get_provider_router
+            provider = get_provider_router()._get_provider_instance("vertex_ai")  # noqa: SLF001
+            if provider is None:
+                raise RuntimeError("vertex_ai provider unavailable")
+            detected = await provider.classify_room_type({"image_bytes": raw})
+        except Exception as exc:
+            logger.warning("[classify-room] direct classifier failed: %s", exc)
+            detected = None
+        return ClassifyRoomResponse(success=True, room_type=detected)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide image_url or image_base64")
+
+
 @router.post("/redesign", response_model=DesignResponse)
 async def redesign_room(
     request: RedesignRequest,
@@ -2144,11 +2202,34 @@ async def floorplan_batch_render(
         )
 
         design_code = _batch_design_code(request)
+        # 2026-07-14 rewrite: the previous clause was so strict that all 8
+        # renders came back near-identical (same wood floor, same daylight,
+        # same white walls) and the tour video read as "one room repeated".
+        # New version pins the shared palette/materials/lighting/mood but
+        # explicitly reminds the model that each render must reflect the
+        # ACTUAL room drawn in the plan — a kitchen must look like a kitchen,
+        # not a slightly-recoloured living room.
         consistency_clause = (
-            f" This room is PART OF ONE HOME rendered as a series. Whole-house design code: {design_code}."
-            " Use EXACTLY the same color palette, material finishes, lighting mood and rendering style"
-            " as every other room in this series — no stylistic drift between rooms."
+            f" This render is one room in a single home; whole-house design code: {design_code}."
+            " Every room in this series shares the SAME color palette, wall/floor/ceiling"
+            " materials, lighting mood and rendering style — do not drift the finishes"
+            " between rooms. But the ROOM ITSELF must match what the floor plan shows: keep"
+            " the correct room function (kitchen appliances in a kitchen, bathroom fixtures"
+            " in a bathroom, bedroom furniture in a bedroom, etc.), the correct wall layout,"
+            " and the correct door / window placement drawn in this specific plan."
         )
+        # Magic mode: the user's free prompt must be applied UNIFORMLY to every
+        # image. The plan-native renderer already reads the image and follows a
+        # dense anti-hallucination policy, which tends to swamp a short user
+        # prompt — we bracket the prompt with explicit "apply this to this room
+        # too" language so it survives per-render.
+        magic_uniform_clause = ""
+        user_prompt_raw = (request.prompt or "").strip()
+        if request.magic_mode and user_prompt_raw:
+            magic_uniform_clause = (
+                " User style directive (apply this SAME directive to every room in the"
+                f" batch, uniformly, without dilution): «{user_prompt_raw}»."
+            )
 
         # ── Auto-detect per-image room_label ONCE, in parallel ──
         # Bug fix 2026-07-14: batch dropdowns default new items to "living_room",
@@ -2175,13 +2256,17 @@ async def floorplan_batch_render(
         for gi, img in enumerate(request.images):
             room_hint = _BATCH_ROOM_HINTS.get((img.room_label or "").strip().lower(), "")
             for vi in range(request.variation_count):
-                user_prompt = (request.prompt or "").strip()
+                user_prompt = user_prompt_raw
                 # Sub-request room_type: "overall" is the whole-plan layout
                 # (not a single room), so we pass None to skip the per-room
                 # hint in the render prompt; otherwise use the (possibly
                 # just-detected) label.
                 _label = (img.room_label or "").strip().lower()
                 _sub_room_type = None if _label in ("", "overall", "auto") else _label
+                # In magic mode the user is writing the material story
+                # themselves — dropping the preset surface clauses avoids
+                # asking Gemini for "oak floor + terrazzo" at the same time.
+                # In detail mode we keep the presets: they ARE the story.
                 v_req = FloorplanToVideoRequest(
                     image_url=img.image_url,
                     result_tier="render",
@@ -2189,7 +2274,10 @@ async def floorplan_batch_render(
                     magic_mode=request.magic_mode,
                     style_id=request.style_id or "modern_minimalist",
                     room_type=_sub_room_type,
-                    prompt=f"{user_prompt} {room_hint}{consistency_clause}{_BATCH_VARIANT_CAMERA[vi]}".strip(),
+                    prompt=(
+                        f"{user_prompt} {room_hint}{consistency_clause}"
+                        f"{magic_uniform_clause}{_BATCH_VARIANT_CAMERA[vi]}"
+                    ).strip(),
                     surface_floor=request.surface_floor,
                     surface_ceiling=request.surface_ceiling,
                     surface_wall=request.surface_wall,
@@ -2226,7 +2314,11 @@ async def floorplan_batch_render(
 
         # Surface presets fold into the extra prompt — render_from_floorplan
         # has no native surface params (they're a preserve-path concept).
-        _surfaces = _build_surface_clause(
+        # Magic mode: user is writing the material story via `prompt`, so
+        # skip the preset surface clauses that would otherwise contradict it
+        # (e.g. request "japandi wabi-sabi" + preset "oak floor" = mixed
+        # signal). Detail mode: keep the presets — they ARE the story.
+        _surfaces = "" if request.magic_mode else _build_surface_clause(
             request.surface_floor, request.surface_ceiling, request.surface_wall
         )
 
@@ -2311,10 +2403,66 @@ async def floorplan_batch_render(
 
 
 class HouseTourVideoRequest(BaseModel):
-    """全屋影片 — assemble the batch renders into one smooth whole-house tour."""
-    image_urls: List[str] = Field(..., min_length=2, max_length=12)
-    room_labels: Optional[List[str]] = Field(None, description="Parallel labels (for gallery metadata only).")
+    """全屋影片 — assemble the batch renders into one smooth whole-house tour.
+
+    2026-07-14: the whole-house batch now sends ALL renders (every plan ×
+    every variant), so the upper bound has moved from 12 → 32. Labels are
+    parallel to image_urls and now get burned into the corresponding clip
+    (drawtext) so a viewer can tell "kitchen" from "living room" without
+    guessing.
+    """
+    image_urls: List[str] = Field(..., min_length=2, max_length=32)
+    room_labels: Optional[List[str]] = Field(None, description="Parallel labels; burned into each clip as a caption.")
     seconds_per_room: float = Field(3.0, ge=2.0, le=5.0)
+
+
+# ── Whole-house tour helpers ──────────────────────────────────────────────
+# Kept module-scope so both this file and its tests can import them.
+
+def _find_tour_font() -> Optional[str]:
+    """Return a font-file path for ffmpeg drawtext, or None if nothing usable
+    is installed. Probed at call time — a container without the exact preferred
+    font still produces a (label-less) tour instead of failing outright.
+    Order: CJK-capable Noto (the Docker image installs fonts-noto-cjk), then
+    common Latin fallbacks, then a macOS dev path for local runs.
+    """
+    import os as _os
+    for p in (
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+    ):
+        if _os.path.exists(p):
+            return p
+    return None
+
+
+def _tour_display_label(raw: Optional[str]) -> str:
+    """Convert a batch room_label key ("living_room") into a caption
+    ("Living Room"). Empty for placeholder values ("auto", "unknown"…) so
+    those clips render with no caption instead of a nonsense one.
+    """
+    if not raw:
+        return ""
+    r = raw.strip().lower()
+    if r in ("auto", "unknown", "other", "room", ""):
+        return ""
+    if r == "overall":
+        return "Overall"
+    return r.replace("_", " ").title()
+
+
+def _drawtext_safe(text: str) -> str:
+    """Strip caption text to a filter-safe subset so we never have to walk
+    the multi-level ffmpeg filtergraph escape rules. Ascii letters/digits/
+    spaces/hyphens only, then truncated — the caption is a hint, not a
+    document."""
+    import re as _re
+    cleaned = _re.sub(r"[^A-Za-z0-9 \-]", "", text or "")
+    return cleaned[:32]
 
 
 @router.post("/floorplan/house-tour-video")
@@ -2389,14 +2537,35 @@ async def floorplan_house_tour_video(
                 seg = float(request.seconds_per_room)
                 fade = 0.5
                 fps = 25
-                frames = int(seg * fps)
+                font_file = _find_tour_font()
+                labels_in = list(request.room_labels or [])
+                # Fit-with-pad instead of centre-crop: portrait floor-plan
+                # renders were previously scaled up until width=1920 and then
+                # the top / bottom of the plan disappeared out of the 1080-px
+                # crop. Padding keeps every room in view; the letterbox reads
+                # as intentional framing on a widescreen video.
                 filters: List[str] = []
                 for i in range(n):
-                    filters.append(
-                        f"[{i}:v]scale=1920:1080:force_original_aspect_ratio=increase,"
-                        f"crop=1920:1080,zoompan=z='min(zoom+0.0006,1.06)':d={frames}:"
-                        f"s=1920x1080:fps={fps},format=yuv420p[v{i}]"
+                    label = _tour_display_label(labels_in[i]) if i < len(labels_in) else ""
+                    vf = (
+                        f"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,"
+                        f"pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,"
+                        # -loop 1 -t {seg} makes the input a video of {seg*fps}
+                        # identical frames, so zoompan with d=1 outputs exactly
+                        # {seg*fps} frames — no more single-still zoompan quirk
+                        # that could truncate a clip to one frame.
+                        f"zoompan=z='min(zoom+0.0006,1.06)':d=1:s=1920x1080:fps={fps}"
                     )
+                    if font_file and label:
+                        vf += (
+                            f",drawtext=fontfile='{font_file}'"
+                            f":text='{_drawtext_safe(label)}'"
+                            ":fontsize=48:fontcolor=white:box=1:boxcolor=black@0.55"
+                            ":boxborderw=18:x=(w-text_w)/2:y=h-text_h-96"
+                        )
+                    vf += f",format=yuv420p[v{i}]"
+                    filters.append(vf)
+
                 prev = "v0"
                 for k in range(1, n):
                     out = f"x{k}"
@@ -2408,11 +2577,14 @@ async def floorplan_house_tour_video(
                 out_path = _os.path.join(td, "tour.mp4")
                 cmd = ["ffmpeg", "-y"]
                 for p in paths:
-                    cmd += ["-i", p]
+                    # -loop 1 -t {seg} pairs with the zoompan change above;
+                    # every input becomes a proper video stream.
+                    cmd += ["-loop", "1", "-t", str(seg), "-i", p]
                 cmd += [
                     "-filter_complex", ";".join(filters),
                     "-map", f"[{prev}]",
                     "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+                    "-pix_fmt", "yuv420p",
                     "-movflags", "+faststart",
                     out_path,
                 ]

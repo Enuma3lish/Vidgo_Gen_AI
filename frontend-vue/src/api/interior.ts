@@ -476,6 +476,21 @@ export const interiorApi = {
   },
 
   /**
+   * Preflight room-type classification — no credits charged. Lets the batch
+   * UI pre-fill the dropdown with the detected room BEFORE the paid render,
+   * so a bathroom-misread-as-living-room is a 1-click user fix instead of
+   * something they only discover after paying.
+   */
+  async classifyRoom(
+    input: { image_url?: string; image_base64?: string },
+  ): Promise<{ success: boolean; room_type?: string | null; error?: string }> {
+    const response = await apiClient.post('/api/v1/interior/classify-room', input, {
+      timeout: 20_000,
+    })
+    return response.data
+  },
+
+  /**
    * 全屋影片 — assemble finished batch renders into a 1080p whole-house tour
    * (local ffmpeg; the renders themselves are untouched).
    */

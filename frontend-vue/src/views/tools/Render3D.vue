@@ -81,7 +81,18 @@ const expandedSimUrl = ref<string | null>(null)
 // Upload one overall plan + per-room plans, apply ONE shared effect to all,
 // 1-4 variants each; finished renders can be assembled into a tour video.
 const batchMode = ref(false)
-interface BatchItem { id: number; file: File; previewUrl: string; label: string }
+interface BatchItem {
+  id: number
+  file: File
+  previewUrl: string
+  label: string
+  // Preflight classification state — the row shows a spinner while Gemini
+  // decides, and switches to a "auto-detected" chip once the dropdown
+  // has been pre-filled. Purely UX (no bearing on the server-side
+  // classifier which still runs at Generate time).
+  classifying?: boolean
+  autoDetected?: boolean
+}
 const batchItems = ref<BatchItem[]>([])
 let _batchIdSeq = 1
 const batchFileInput = ref<HTMLInputElement | null>(null)
@@ -114,23 +125,82 @@ function roomLabelText(v?: string | null): string {
     || L('房間', 'Room', '部屋', '방', 'Sala')
 }
 
+async function _fileToBase64(f: File): Promise<string | null> {
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const s = String(reader.result || '')
+        const comma = s.indexOf(',')
+        resolve(comma >= 0 ? s.slice(comma + 1) : s)
+      }
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(f)
+    })
+  } catch {
+    return null
+  }
+}
+
+// Preflight-classify a single upload so the dropdown pre-fills with what
+// Gemini sees (bathroom → "bathroom"), not the placeholder "auto". Runs in
+// the background — a failure just leaves the label at 'auto', which the
+// server will re-classify at Generate time (same behaviour as before).
+async function _preflightClassify(item: BatchItem): Promise<void> {
+  if (item.label !== 'auto') return
+  item.classifying = true
+  try {
+    const b64 = await _fileToBase64(item.file)
+    if (!b64) return
+    const res = await interiorApi.classifyRoom({ image_base64: b64 })
+    const detected = (res?.room_type || '').trim()
+    // The batch dropdown accepts a fixed set of values — only apply the
+    // detection when it maps to one; otherwise leave the label at 'auto'
+    // and the server-side pass gets another shot.
+    const allowed = new Set(roomLabelOptions.value.map(o => o.value))
+    if (detected && allowed.has(detected)) {
+      item.label = detected
+      item.autoDetected = true
+    }
+  } catch { /* fail-open — server-side classify still runs at Generate */ }
+  finally {
+    item.classifying = false
+  }
+}
+
 function onBatchFilesSelected(e: Event) {
   const files = Array.from((e.target as HTMLInputElement).files || [])
+  const newlyAdded: BatchItem[] = []
   for (const f of files) {
     if (batchItems.value.length >= BATCH_MAX_IMAGES) break
     if (!f.type.startsWith('image/')) continue
-    batchItems.value.push({
+    const item: BatchItem = {
       id: _batchIdSeq++,
       file: f,
       previewUrl: URL.createObjectURL(f),
       // First plan defaults to the overall layout; every subsequent one to
-      // 'auto' so the backend classifies the actual room. Prior default
-      // 'living_room' silently rendered bathrooms/kitchens/etc as living
-      // rooms whenever users didn't touch the dropdown.
-      label: batchItems.value.length === 0 ? 'overall' : 'auto',
-    })
+      // 'auto' so we can pre-classify below. Prior default 'living_room'
+      // silently rendered bathrooms/kitchens/etc as living rooms whenever
+      // users didn't touch the dropdown.
+      label: batchItems.value.length === 0 && newlyAdded.length === 0 ? 'overall' : 'auto',
+    }
+    batchItems.value.push(item)
+    newlyAdded.push(item)
   }
   ;(e.target as HTMLInputElement).value = ''
+  // Fire-and-forget preflight classification per new item. Bounded
+  // concurrency avoids opening 8 Gemini calls simultaneously.
+  ;(async () => {
+    const workers = 3
+    let idx = 0
+    async function next() {
+      while (idx < newlyAdded.length) {
+        const i = idx++
+        await _preflightClassify(newlyAdded[i])
+      }
+    }
+    await Promise.all(Array.from({ length: workers }, () => next()))
+  })()
 }
 function removeBatchItem(id: number) {
   const it = batchItems.value.find(b => b.id === id)
@@ -199,16 +269,28 @@ async function generateBatch() {
   }
 }
 
-// 全屋影片: assemble each room's FIRST result into one tour video.
-const tourReady = computed(() => batchGroups.value.filter(g => g.results.length > 0).length >= 2)
+// 全屋影片: assemble EVERY successful render (all groups × all variants)
+// into one tour video. Earlier revs only used g.results[0], so users who
+// picked variation_count > 1 saw only one camera per room even though they
+// paid for 2-4. Labels are parallel to the flattened URLs so the backend
+// can burn each room's caption onto the matching clip.
+type TourClip = { url: string; label: string }
+const tourClips = computed<TourClip[]>(() =>
+  batchGroups.value.flatMap(g =>
+    g.results.map(url => ({ url, label: g.room_label || 'room' }))
+  ),
+)
+const tourFailedCount = computed(() =>
+  batchGroups.value.filter(g => g.results.length === 0).length,
+)
+const tourReady = computed(() => tourClips.value.length >= 2)
 async function generateTourVideo() {
   if (!tourReady.value || tourGenerating.value) return
   tourGenerating.value = true
   try {
-    const withResults = batchGroups.value.filter(g => g.results.length > 0)
     const res = await interiorApi.houseTourVideo(
-      withResults.map(g => g.results[0]),
-      withResults.map(g => g.room_label || 'room'),
+      tourClips.value.map(c => c.url),
+      tourClips.value.map(c => c.label),
     )
     if (res.success && res.video_url) {
       tourVideoUrl.value = res.video_url
@@ -484,9 +566,20 @@ const hasResult = computed(() => {
               class="flex items-center gap-2 p-2 rounded-lg"
               style="background:#0a0a0f; border:1px solid rgba(255,255,255,0.08);">
               <img :src="it.previewUrl" class="w-14 h-14 object-cover rounded flex-shrink-0" />
-              <select v-model="it.label" class="pp-select flex-1 min-w-0">
-                <option v-for="o in roomLabelOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
+              <div class="flex-1 min-w-0 flex flex-col gap-1">
+                <select v-model="it.label" @change="it.autoDetected = false" class="pp-select w-full">
+                  <option v-for="o in roomLabelOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </select>
+                <!-- Preflight status: spinner while Gemini looks, then a
+                     chip once the dropdown was pre-filled. Cleared as soon
+                     as the user overrides the choice. -->
+                <span v-if="it.classifying" class="text-[10px]" style="color:#94949f;">
+                  🔍 {{ L('AI 判斷中…', 'Detecting…', '判定中…', '감지 중…', 'Detectando…') }}
+                </span>
+                <span v-else-if="it.autoDetected" class="text-[10px]" style="color:#a78bfa;">
+                  ✨ {{ L('AI 自動偵測 — 若不正確請手動選擇', 'Auto-detected — override if wrong', 'AIが自動判定 — 誤りは手動で変更', 'AI 자동 감지 — 틀리면 수동 선택', 'Autodetectado — corrige si es erróneo') }}
+                </span>
+              </div>
               <button type="button" @click="removeBatchItem(it.id)" class="px-2 text-lg flex-shrink-0" style="color:#f87171;">✕</button>
             </div>
           </div>
@@ -566,6 +659,18 @@ const hasResult = computed(() => {
           <option value="dramatic_spotlight">{{ L('戲劇聚光', 'Dramatic spotlight', 'ドラマチック', '드라마틱', 'Foco dramático') }}</option>
           <option value="night">{{ L('夜景', 'Night', '夜景', '야간', 'Nocturno') }}</option>
         </select>
+        <!-- Batch mode: one lighting choice is applied to every image in the
+             batch — surface presets (below) are the same story. This note
+             makes the "shared effect" contract visible instead of implicit. -->
+        <p v-if="batchMode" class="pp-field-help" style="color:#c4b5fd;">
+          🏠 {{ L(
+            '本組光線氛圍將套用到全屋所有圖片(同一組地板、天花板、牆面材質也是如此)。',
+            'This lighting is applied to every image in the batch (the floor / ceiling / wall presets below are also shared).',
+            'この照明は全画像に共通適用(下の床/天井/壁の設定も同様)。',
+            '이 조명은 배치의 모든 이미지에 동일 적용됩니다 (아래 바닥/천장/벽 설정도 동일).',
+            'Esta iluminación se aplica a cada imagen del lote (los ajustes de suelo/techo/paredes también son compartidos).',
+          ) }}
+        </p>
       </div>
 
       <!-- Surface presets (細化 mode only) -->
@@ -608,6 +713,18 @@ const hasResult = computed(() => {
           <textarea v-model="magicPrompt" rows="4" maxlength="1000" class="pp-textarea"
             :placeholder="L('描述您想要的風格、材質、氛圍。例：日式侘寂、米色亞麻、藤編家具、紙燈籠。家具配置會自動保留。', 'Describe the style, materials, mood you want. e.g.: Japandi wabi-sabi, beige linen, rattan, paper lanterns. Layout stays locked automatically.', 'スタイル・素材・雰囲気を自由に。例：和モダン、麻、籐、和紙照明。レイアウトは固定されます。', '원하는 스타일·재질·분위기. 예: 와비사비, 베이지 린넨, 라탄, 종이 등. 배치는 자동 잠금.', 'Describe estilo, materiales, atmósfera. p. ej.: japandi, lino beige, ratán, faroles. La distribución queda bloqueada.')"></textarea>
           <p class="pp-field-help">{{ L('魔法模式仍然鎖定家具與牆面配置 — 不會憑空長出新門窗或家具,只會重新風格化現有空間。', 'Magic mode still locks walls and furniture — no invented doors, windows, or pieces; only restyles what is already there.', 'マジックモードでも壁と家具は固定。新たな扉・窓・家具は生成されず、既存空間の再スタイル化のみ。', '매직 모드도 벽·가구를 잠급니다. 새 문/창/가구 생성 없이 기존 공간만 재스타일링.', 'El modo mágico bloquea muros y muebles: no inventa, solo re-estiliza lo existente.') }}</p>
+          <!-- Batch + magic: reassure the user that the ONE prompt they typed
+               is what every room sees. The backend now wraps it in an
+               explicit "apply this SAME directive to every room" clause. -->
+          <p v-if="batchMode" class="pp-field-help" style="color:#c4b5fd;">
+            ✨ {{ L(
+              '此 prompt 會以同一段文字套用到全屋每一張圖 — 光線、地板、天花板、牆面材質等,將整批一致。',
+              'This prompt is applied uniformly to every image in the batch — same lighting, floor, ceiling, and wall treatment across the whole house.',
+              'このプロンプトは全ての画像に同一の指示として適用されます — 照明・床・天井・壁の質感は全戸で統一。',
+              '이 프롬프트는 모든 이미지에 동일하게 적용됩니다 — 조명·바닥·천장·벽 재질이 전체적으로 통일됩니다.',
+              'Este prompt se aplica idénticamente a cada imagen — misma iluminación, suelo, techo y paredes en toda la casa.',
+            ) }}
+          </p>
         </div>
       </template>
     </template>
@@ -630,6 +747,20 @@ const hasResult = computed(() => {
           </div>
 
           <div class="pt-3 flex flex-col items-center gap-3" style="border-top:1px solid rgba(255,255,255,0.08);">
+            <!-- Partial-failure warning: without this the tour would silently
+                 skip failed rooms and the user would think "the video is
+                 missing my inputs". Now they see the mismatch upfront. -->
+            <div v-if="tourFailedCount > 0 && tourReady"
+              class="w-full rounded-lg px-3 py-2 text-[11px] leading-relaxed"
+              style="background: rgba(248,113,113,0.10); border:1px solid rgba(248,113,113,0.35); color:#fecaca;">
+              ⚠ {{ L(
+                `${tourFailedCount} 個房間渲染失敗,影片將只包含 ${tourClips.length} 段成功的畫面。失敗部分已退點。`,
+                `${tourFailedCount} room(s) failed to render — the tour will only include the ${tourClips.length} successful clips. Failed portion was refunded.`,
+                `${tourFailedCount}部屋の生成に失敗しました。動画は成功した${tourClips.length}カットのみを含みます。失敗分は返金済み。`,
+                `${tourFailedCount}개 방 렌더링 실패 — 영상은 성공한 ${tourClips.length}개만 포함됩니다. 실패분 환불 완료.`,
+                `${tourFailedCount} habitación(es) fallaron — el vídeo solo incluirá los ${tourClips.length} clips correctos. Se reembolsó la parte fallida.`
+              ) }}
+            </div>
             <button type="button" @click="generateTourVideo"
               :disabled="!tourReady || tourGenerating"
               class="px-6 py-2.5 rounded-xl text-[13px] font-semibold transition-colors"
@@ -639,7 +770,7 @@ const hasResult = computed(() => {
             >
               {{ tourGenerating
                 ? L('全屋影片合成中…', 'Assembling tour video…', '全戸動画を合成中…', '투어 영상 합성 중…', 'Montando el vídeo…')
-                : L('🎬 生成全屋導覽影片（20 點）', '🎬 Generate whole-house tour video (20 cr)', '🎬 全戸ツアー動画を生成（20pt）', '🎬 전체 투어 영상 생성 (20크레딧)', '🎬 Generar vídeo de la casa (20 cr)') }}
+                : L(`🎬 生成全屋導覽影片(${tourClips.length} 段,20 點)`, `🎬 Generate whole-house tour video (${tourClips.length} clips, 20 cr)`, `🎬 全戸ツアー動画(${tourClips.length}カット、20pt)`, `🎬 전체 투어 영상 (${tourClips.length}개, 20크레딧)`, `🎬 Generar vídeo (${tourClips.length} clips, 20 cr)`) }}
             </button>
             <p v-if="!tourReady" class="text-[11px]" style="color:#94949f;">
               {{ L('至少需要 2 個房間的成功渲染才能合成影片。', 'Needs successful renders for at least 2 rooms.', '2部屋以上の成功レンダーが必要です。', '최소 2개 방의 성공 렌더가 필요합니다.', 'Se necesitan al menos 2 habitaciones renderizadas.') }}

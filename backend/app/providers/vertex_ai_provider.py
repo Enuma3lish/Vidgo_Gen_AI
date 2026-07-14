@@ -996,14 +996,25 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
             client = self._get_gemini_text_client()
             from google.genai import types
 
+            # Concrete cues per room type — the previous prompt gave the label
+            # set but no signal about what to look for, and Gemini would over-
+            # promote "living_room" for anything with a sofa-ish shape. Naming
+            # the FIXTURES for each type cuts the confusion rate a lot on
+            # small / partial plans and non-English labels.
             ask = (
-                "Look at this image — either a top-down 2D floor plan of ONE room, or a "
-                "photograph / render of ONE room. Which room type is it? Reply with EXACTLY "
-                "one of these lowercase tokens and nothing else: "
-                "living_room, bedroom, kitchen, bathroom, dining_room, home_office, balcony, "
-                "multi_room, unknown. "
-                "Use 'multi_room' ONLY when the image shows the whole home's overall plan "
-                "with several distinct rooms; use 'unknown' only if you truly cannot tell."
+                "You are looking at ONE image — either a top-down 2D floor plan of a "
+                "single room, or a photograph / render of a single room. Classify the "
+                "room type based on the fixtures and furniture actually visible:\n"
+                "• bathroom — toilet, shower, bathtub, sink/vanity, or the labels 廁所 / 浴室 / トイレ\n"
+                "• kitchen — stove, sink+counter, refrigerator, cabinets, or 廚房 / キッチン\n"
+                "• bedroom — bed (single/double/king), nightstand, wardrobe, or 臥室 / 寝室 / 침실\n"
+                "• dining_room — dining table with chairs (no cooking appliances), or 餐廳\n"
+                "• living_room — sofa + coffee table + tv area, or 客廳 / リビング\n"
+                "• home_office — desk with chair + monitor / shelving, or 書房 / 서재\n"
+                "• balcony — outdoor railing, terrace, patio, or 陽台\n"
+                "• multi_room — the whole home's overall plan showing SEVERAL distinct rooms\n"
+                "• unknown — you genuinely cannot decide\n"
+                "Answer with EXACTLY one token from this list, in lowercase, and nothing else."
             )
             parts: list = []
             if params.get("image_url"):
@@ -1016,42 +1027,88 @@ Respond ONLY with JSON: {"nsfw": 0.0, "violence": 0.0, "hate": 0.0, "self_harm":
                 return None
             parts.append(ask)
 
-            response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    client.models.generate_content,
-                    model=self.gemini_model,
-                    contents=parts,
-                    config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=300),
-                ),
-                timeout=12.0,
-            )
-            text = (response.text or "").strip().lower()
-            allowed = {
+            allowed_list = [
                 "living_room", "bedroom", "kitchen", "bathroom",
                 "dining_room", "home_office", "balcony",
+            ]
+            multi_or_unknown = {"multi_room", "unknown"}
+
+            # Try Gemini's enum-constrained output first — this pins the reply
+            # to a single token from the allowed set, so the parser can't be
+            # tricked by prose like "this could be a bathroom near the living
+            # room." If the SDK build doesn't support text/x.enum for this
+            # model, fall back to the free-text path and parse defensively.
+            enum_supported = True
+            response = None
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.models.generate_content,
+                        model=self.gemini_model,
+                        contents=parts,
+                        config=types.GenerateContentConfig(
+                            temperature=0.0,
+                            max_output_tokens=30,
+                            response_mime_type="text/x.enum",
+                            response_schema={
+                                "type": "STRING",
+                                "enum": allowed_list + list(multi_or_unknown),
+                            },
+                        ),
+                    ),
+                    timeout=12.0,
+                )
+            except (TypeError, ValueError) as exc:
+                # Older SDK / model doesn't accept the enum config — fall back
+                # to freeform text and parse first-position-wins below.
+                logger.info("[classify_room_type] enum output unsupported (%s), falling back", exc)
+                enum_supported = False
+            if not enum_supported:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.models.generate_content,
+                        model=self.gemini_model,
+                        contents=parts,
+                        config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=30),
+                    ),
+                    timeout=12.0,
+                )
+
+            text = ((response and response.text) or "").strip().lower()
+
+            # First-position match: pick the token that appears EARLIEST in
+            # the reply, not the first one Python happens to iterate. Prevents
+            # "This is a bedroom near a living_room" → "living_room" bug that
+            # bit users when set iteration reordered candidates.
+            aliases = {
+                "toilet": "bathroom", "washroom": "bathroom", "restroom": "bathroom",
+                "wc": "bathroom",
+                "master bedroom": "bedroom", "master_bedroom": "bedroom",
+                "guest bedroom": "bedroom", "guest_bedroom": "bedroom",
+                "office": "home_office", "study": "home_office", "study room": "home_office",
+                "dining": "dining_room",
+                "living": "living_room", "lounge": "living_room", "family room": "living_room",
+                "terrace": "balcony", "patio": "balcony",
             }
+            # Longest-first ordering so "living_room" wins over "living" when
+            # both are present in the reply.
+            candidates: list = sorted(
+                [(t, t) for t in allowed_list] + list(aliases.items()),
+                key=lambda kv: -len(kv[0]),
+            )
             verdict: Optional[str] = None
-            for token in allowed:
-                if token in text:
-                    verdict = token
-                    break
-            if verdict is None:
-                # Common aliases Gemini sometimes emits even under the strict
-                # prompt (single-word replies drop the underscore, or use a
-                # synonym). Map back to the canonical ROOM_TYPES keys.
-                aliases = {
-                    "toilet": "bathroom", "washroom": "bathroom", "restroom": "bathroom",
-                    "wc": "bathroom",
-                    "master bedroom": "bedroom", "master_bedroom": "bedroom",
-                    "guest bedroom": "bedroom", "guest_bedroom": "bedroom",
-                    "office": "home_office", "study": "home_office", "study room": "home_office",
-                    "dining": "dining_room",
-                    "living": "living_room", "lounge": "living_room", "family room": "living_room",
-                    "terrace": "balcony", "patio": "balcony",
-                }
-                for alias, canon in aliases.items():
-                    if alias in text:
-                        verdict = canon
+            best_pos = len(text) + 1
+            for probe, canon in candidates:
+                pos = text.find(probe)
+                if 0 <= pos < best_pos:
+                    best_pos = pos
+                    verdict = canon
+            # Multi-room / unknown are informative but not usable as a single
+            # room hint — return None so callers fall back to the default.
+            if not verdict:
+                for tok in multi_or_unknown:
+                    if tok in text:
+                        verdict = None
                         break
             logger.info("[classify_room_type] raw=%r verdict=%s", text[:80], verdict)
             return verdict

@@ -3041,6 +3041,10 @@ async def admin_update_payment_settings(
         paypal_webhook_id=payload.paypal_webhook_id,
         paypal_plan_ids=payload.paypal_plan_ids,
     )
+    # Remapping plan IDs / flipping env changes which PayPal plans drive the
+    # displayed USD price — drop the live-price cache so /pricing refetches.
+    from app.services.paypal_pricing import invalidate_cache as invalidate_paypal_price_cache
+    invalidate_paypal_price_cache()
     return _serialize_payment_settings(resolved)
 
 

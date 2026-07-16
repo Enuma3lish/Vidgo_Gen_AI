@@ -25,6 +25,10 @@ export interface PlanInfo {
   // for the same tier (the NT$ price is cheaper — anti-arbitrage). NULL → use
   // monthly_credits. The Pricing page shows this to zh-locale (NT$) visitors.
   monthly_credits_twd?: number | null
+  // International (PayPal/USD) sticker price from the backend. The Pricing page
+  // prefers this over the OVERSEAS_USD_MONTHLY fallback map, so an admin editing
+  // the USD price in /admin/plans is reflected on /pricing. NULL → fall back.
+  price_usd?: number | null
   features: {
     max_video_length: number | null
     max_resolution: string | null

@@ -735,7 +735,7 @@
     "ecpayPaymentLabel": "Pago con tarjeta (ECPay)",
     "testPaymentLabel": "Pago de prueba (US$1 / aprox. NT$32)",
     "paypalPaymentLabel": "Pago internacional (PayPal)",
-    "paypalPricingStrategy": "Precio recomendado en USD (PayPal): Basic US$19.99, Pro US$49.99, Premium US$89.99. Compensa las comisiones de PayPal y la diferencia cambiaria.",
+    "paypalPricingStrategy": "Precio recomendado en USD (PayPal): Basic US$22.99, Pro US$59.99, Premium US$99.99. Compensa las comisiones de PayPal y la diferencia cambiaria.",
     "overseasUsdLabel": "USD internacional",
     "creditReference": {
       "title": "Referencia de conversión (100 créditos)",

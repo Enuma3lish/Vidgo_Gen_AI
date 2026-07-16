@@ -131,6 +131,11 @@ class PlanInfo(BaseModel):
     is_test_only: bool = False
     monthly_credits: int
     monthly_credits_twd: Optional[int] = None
+    # International (PayPal/USD) sticker price. The Pricing page reads this for
+    # non-zh visitors instead of a frontend hardcode, so admins can change the
+    # USD price in /admin/plans and have /pricing reflect it. NOT FX-converted —
+    # it's a stored literal, mirrored by DEFAULT_VIDGO_PLANS.price_usd.
+    price_usd: Optional[float] = None
     features: dict
 
 
@@ -152,9 +157,9 @@ class PlanInfo(BaseModel):
 # generation path no longer reads that column for enforcement, but update
 # the rows in /admin/plans if the display should match.
 DEFAULT_VIDGO_PLANS = [
-    {"name": "basic", "display_name": "標準版 Standard", "slug": "basic", "plan_type": "basic", "price_monthly": 399.0, "price_yearly": 3990.0, "price_twd": 399, "price_usd": 19.99, "monthly_credits": 400, "monthly_credits_twd": 350, "weekly_credits": 0, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False, "social_media_batch_posting": False, "enterprise_features": False, "max_concurrent_generations": 1, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"], "pollo_limit": 0, "goenhance_limit": 0, "description": "標準入門方案 — 1080p HD、無浮水印、400 點/月（NT$ 方案 350 點）"},
-    {"name": "pro", "display_name": "專業版 Pro", "slug": "pro", "plan_type": "pro", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "price_usd": 49.99, "monthly_credits": 1000, "monthly_credits_twd": 900, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 3, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"], "pollo_limit": 50, "goenhance_limit": None, "description": "主力方案 — 4K、無浮水印、進階模型、1,000 點/月（NT$ 方案 900 點）"},
-    {"name": "premium", "display_name": "進階版 Advanced", "slug": "premium", "plan_type": "premium", "price_monthly": 1799.0, "price_yearly": 17990.0, "price_twd": 1799, "price_usd": 89.99, "monthly_credits": 1800, "monthly_credits_twd": 1600, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 5, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"], "pollo_limit": 100, "goenhance_limit": None, "description": "重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1、1,800 點/月（NT$ 方案 1,600 點）"},
+    {"name": "basic", "display_name": "標準版 Standard", "slug": "basic", "plan_type": "basic", "price_monthly": 399.0, "price_yearly": 3990.0, "price_twd": 399, "price_usd": 22.99, "monthly_credits": 330, "monthly_credits_twd": 350, "weekly_credits": 0, "max_resolution": "1080p", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": False, "feature_batch_processing": False, "feature_custom_styles": False, "social_media_batch_posting": False, "enterprise_features": False, "max_concurrent_generations": 1, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"], "pollo_limit": 0, "goenhance_limit": 0, "description": "標準入門方案 — 1080p HD、無浮水印、330 點/月（NT$ 方案 350 點）"},
+    {"name": "pro", "display_name": "專業版 Pro", "slug": "pro", "plan_type": "pro", "price_monthly": 999.0, "price_yearly": 9990.0, "price_twd": 999, "price_usd": 59.99, "monthly_credits": 850, "monthly_credits_twd": 900, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": False, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 3, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"], "pollo_limit": 50, "goenhance_limit": None, "description": "主力方案 — 4K、無浮水印、進階模型、850 點/月（NT$ 方案 900 點）"},
+    {"name": "premium", "display_name": "進階版 Advanced", "slug": "premium", "plan_type": "premium", "price_monthly": 1799.0, "price_yearly": 17990.0, "price_twd": 1799, "price_usd": 99.99, "monthly_credits": 1400, "monthly_credits_twd": 1600, "weekly_credits": 0, "max_resolution": "4k", "has_watermark": False, "priority_queue": True, "api_access": False, "can_use_effects": True, "feature_batch_processing": True, "feature_custom_styles": False, "social_media_batch_posting": True, "enterprise_features": False, "max_concurrent_generations": 5, "allowed_models": ["flux", "seedance", "z-image", "qwen", "kling", "hailuo", "hunyuan", "wan", "kling_flagship", "kling_omni", "veo", "sora"], "pollo_limit": 100, "goenhance_limit": None, "description": "重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1、1,400 點/月（NT$ 方案 1,600 點）"},
     # Enterprise: Contact-Us tier. price_monthly=0 makes the frontend render
     # the contact CTA instead of a buy button (isContactUsPlan helper in
     # Pricing.vue). monthly_credits=0 — provisioned per contract.
@@ -279,6 +284,18 @@ async def list_available_plans(
         m = _monthly(plan)
         return m * 10.0 if m > 0 else 0.0
 
+    # International USD price is sourced LIVE from PayPal (the source of truth),
+    # so a price change in the PayPal dashboard flows to /pricing automatically.
+    # Falls back to the stored DB price_usd when PayPal is unconfigured/unreachable.
+    from app.services.paypal_pricing import get_usd_monthly_prices
+    paypal_usd = await get_usd_monthly_prices(db)
+
+    def _display_usd(plan: Plan) -> Optional[float]:
+        live = paypal_usd.get(plan.slug or plan.name)
+        if live is not None:
+            return live
+        return float(plan.price_usd) if getattr(plan, "price_usd", None) is not None else None
+
     return [
         PlanInfo(
             id=str(plan.id),
@@ -295,6 +312,7 @@ async def list_available_plans(
             is_test_only=is_test_pro_plan(plan),
             monthly_credits=plan.monthly_credits or plan.weekly_credits or 0,
             monthly_credits_twd=getattr(plan, "monthly_credits_twd", None),
+            price_usd=_display_usd(plan),
             features={
                 "max_video_length": plan.max_video_length,
                 "max_resolution": plan.max_resolution,

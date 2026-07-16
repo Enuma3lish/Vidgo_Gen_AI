@@ -770,7 +770,7 @@
     "ecpayPaymentLabel": "Credit card payment (ECPay)",
     "testPaymentLabel": "Test payment (US$1 / approx. NT$32)",
     "paypalPaymentLabel": "International payment (PayPal)",
-    "paypalPricingStrategy": "International USD pricing (PayPal): Basic US$19.99, Pro US$49.99, Premium US$89.99 — to offset PayPal fees and FX losses.",
+    "paypalPricingStrategy": "International USD pricing (PayPal): Basic US$22.99, Pro US$59.99, Premium US$99.99 — to offset PayPal fees and FX losses.",
     "overseasUsdLabel": "Overseas USD",
     "creditReference": {
       "title": "Credit Conversion Reference (100 credits)",

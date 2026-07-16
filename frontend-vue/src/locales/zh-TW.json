@@ -770,7 +770,7 @@
     "ecpayPaymentLabel": "信用卡付款 (ECPay)",
     "testPaymentLabel": "測試付款 (US$1 / 約 NT$32)",
     "paypalPaymentLabel": "國際付款 (PayPal)",
-    "paypalPricingStrategy": "國外定價建議 (PayPal/USD)：建議分別定價為 US$19.99 / US$49.99 / US$89.99，分別對應 Basic / Pro / Premium，以抵銷 PayPal 手續費與匯差。",
+    "paypalPricingStrategy": "國外定價建議 (PayPal/USD)：建議分別定價為 US$22.99 / US$59.99 / US$99.99，分別對應 Basic / Pro / Premium，以抵銷 PayPal 手續費與匯差。",
     "overseasUsdLabel": "海外收美金費用",
     "creditReference": {
       "title": "點數換算參考（100 點）",

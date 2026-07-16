@@ -638,15 +638,21 @@ class SubscriptionService:
     ) -> Dict[str, Any]:
         """Create PayPal checkout session for payment."""
         # PayPal is the USD gateway, so the local Order/invoice must record the
-        # USD price (19.99/49.99/89.99), NOT plan.price_monthly/price_yearly which
-        # hold the TWD figures (399/999/1799) — otherwise invoices and refund
-        # emails report e.g. "399.00 USD". Yearly = monthly ×12 (matches the
-        # frontend OVERSEAS_USD pricing). The actual charge still comes from the
-        # PayPal Plan ID; this only fixes the customer-facing record.
-        if billing_cycle == "yearly":
-            price = float(plan.price_usd) * 12 if plan.price_usd else float(plan.price_yearly or 0)
-        else:
-            price = float(plan.price_usd or plan.price_monthly or 0)
+        # USD amount, NOT plan.price_monthly/price_yearly which hold the TWD
+        # figures (399/999/1799) — otherwise invoices/refund emails report e.g.
+        # "399.00 USD". We source the monthly USD price from the SAME live PayPal
+        # feed as /pricing (paypal_pricing), so the recorded amount tracks the
+        # PayPal dashboard price and matches what the frontend showed; the stored
+        # plan.price_usd is the fallback when PayPal is unavailable. Yearly =
+        # monthly ×12 (matches the frontend OVERSEAS_USD pricing). NOTE: the
+        # actual recurring charge is still driven by the PayPal Plan ID itself.
+        from app.services.paypal_pricing import get_usd_monthly_prices
+        live_monthly = (await get_usd_monthly_prices(db)).get(plan.slug or plan.name)
+        monthly_usd = (
+            live_monthly if live_monthly is not None
+            else float(plan.price_usd or plan.price_monthly or 0)
+        )
+        price = monthly_usd * 12 if billing_cycle == "yearly" else monthly_usd
 
         # Create pending subscription record
         now = utc_now()

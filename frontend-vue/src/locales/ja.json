@@ -735,7 +735,7 @@
     "ecpayPaymentLabel": "クレジットカード決済 (ECPay)",
     "testPaymentLabel": "テスト決済 (US$1 / 約NT$32)",
     "paypalPaymentLabel": "国際決済 (PayPal)",
-    "paypalPricingStrategy": "海外PayPal推奨価格 (USD)：Basic US$19.99、Pro US$49.99、Premium US$89.99。PayPal手数料と為替損失をカバーします。",
+    "paypalPricingStrategy": "海外PayPal推奨価格 (USD)：Basic US$22.99、Pro US$59.99、Premium US$99.99。PayPal手数料と為替損失をカバーします。",
     "overseasUsdLabel": "海外USD",
     "creditReference": {
       "title": "クレジット換算の目安（100クレジット）",

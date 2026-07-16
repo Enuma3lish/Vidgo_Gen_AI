@@ -352,6 +352,15 @@ async def paypal_webhook(
             "BILLING.SUBSCRIPTION.SUSPENDED",
         ):
             await handle_subscription_canceled(db, event_data)
+        elif event_type.startswith("BILLING.PLAN.") or event_type.startswith("CATALOG.PRODUCT."):
+            # A plan's price / product definition changed in PayPal — drop the
+            # cached USD prices so /pricing reflects the new price immediately
+            # rather than after the TTL. Best-effort accelerator; the price
+            # cache TTL remains the guaranteed path (PayPal does not always
+            # emit these events for a pricing-scheme update).
+            from app.services.paypal_pricing import invalidate_cache as invalidate_paypal_price_cache
+            invalidate_paypal_price_cache()
+            logger.info("PayPal plan/catalog event %s — invalidated USD price cache", event_type)
         else:
             logger.info(f"PayPal webhook event ignored (not handled): {event_type}")
 

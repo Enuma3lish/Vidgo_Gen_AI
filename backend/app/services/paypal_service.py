@@ -363,6 +363,31 @@ class PayPalService:
             logger.error(f"Get PayPal subscription error: {exc}")
             return {"success": False, "error": str(exc)}
 
+    async def get_plan(self, plan_id: str, timeout: float = 15.0) -> Dict[str, Any]:
+        """Get a billing plan's details from PayPal (GET /v1/billing/plans/{id}).
+
+        Used to source the international USD sticker price live from PayPal, so
+        the /pricing page reflects whatever price is configured in the PayPal
+        dashboard. The recurring price lives in each
+        billing_cycles[].pricing_scheme.fixed_price ({value, currency_code}).
+        Returns {"success": False, "error": "mock_mode"} when PayPal creds are
+        absent so callers fall back to the stored DB price.
+        """
+        if self.is_mock:
+            return {"success": False, "error": "mock_mode"}
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/v1/billing/plans/{plan_id}",
+                    headers=await self._auth_headers(),
+                )
+                if response.status_code == 200:
+                    return {"success": True, "plan": response.json()}
+                return {"success": False, "error": f"Plan lookup failed: {response.status_code}"}
+        except Exception as exc:
+            logger.error(f"Get PayPal plan error ({plan_id}): {exc}")
+            return {"success": False, "error": str(exc)}
+
     def _mock_subscription(self, subscription_id: str) -> Dict[str, Any]:
         return {
             "success": True,

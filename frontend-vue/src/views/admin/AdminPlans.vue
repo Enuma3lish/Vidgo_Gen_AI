@@ -276,8 +276,10 @@ onMounted(loadPlans)
           <input v-model.number="editing.price_yearly" type="number" min="0" />
         </label>
 
+        <!-- 國際版美金價格由 PayPal 方案（Plan ID）決定，前台會即時呼叫 PayPal API
+             顯示，不在此編輯；改價請到 PayPal 後台。See paypal_pricing.py. -->
         <label>
-          <span>{{ L('每月點數', 'Monthly credits') }}</span>
+          <span>{{ L('每月點數（國際版 / USD）', 'Monthly credits (international / USD)') }}</span>
           <input v-model.number="editing.monthly_credits" type="number" min="0" />
         </label>
         <label>

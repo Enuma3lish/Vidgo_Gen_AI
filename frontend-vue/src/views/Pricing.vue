@@ -250,7 +250,8 @@ async function fetchPlans() {
         description: '入門首選 — 1080p HD、無浮水印',
         price_monthly: 399,
         price_yearly: 3990,
-        monthly_credits: 400,
+        price_usd: 22.99,
+        monthly_credits: 330,
         monthly_credits_twd: 350,
         features: { max_video_length: 60, max_resolution: '1080p', has_watermark: false, priority_queue: false, api_access: false, can_use_effects: true, batch_processing: false, custom_styles: false }
       },
@@ -261,7 +262,8 @@ async function fetchPlans() {
         description: '主力銷售方案 — 4K、進階模型',
         price_monthly: 999,
         price_yearly: 9990,
-        monthly_credits: 1000,
+        price_usd: 59.99,
+        monthly_credits: 850,
         monthly_credits_twd: 900,
         features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: false, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
       },
@@ -272,7 +274,8 @@ async function fetchPlans() {
         description: '重度創作者方案 — 4K、優先佇列、Kling Omni / Veo 3.1',
         price_monthly: 1799,
         price_yearly: 17990,
-        monthly_credits: 1800,
+        price_usd: 99.99,
+        monthly_credits: 1400,
         monthly_credits_twd: 1600,
         features: { max_video_length: null, max_resolution: '4k', has_watermark: false, priority_queue: true, api_access: true, can_use_effects: true, batch_processing: true, custom_styles: true }
       },
@@ -628,18 +631,17 @@ function isTestPlan(plan: PlanInfo): boolean {
   return Boolean(plan.is_test_only) || plan.name === TEST_PRO_PLAN_NAME
 }
 
-// Recommended overseas USD pricing for international PayPal checkout.
-// Keep aligned with the locale `paypalPricingStrategy` copy and PayPal Plan IDs.
-// Values mirror backend DEFAULT_VIDGO_PLANS.price_usd so the full plan grid
-// (basic / pro / premium / enterprise) shows USD on non-zh locales — without
-// enterprise, the card silently fell back to NT$15000 on EN/JA/KO/ES.
-// Hardcoded USD per plan (修正單 v2.1, 2026-05-22). Must NOT be FX-converted
-// at runtime — PayPal reads these literal values to keep the margin honest
-// when TWD/USD drifts. Match backend NEW_PLAN_DATA.price_usd exactly.
+// Fallback overseas USD pricing for international PayPal checkout.
+// 2026-07-16: the international price is now driven by the backend
+// `plan.price_usd` (see getOverseasUsdMonthly) so admins can change it in
+// /admin/plans and have /pricing reflect it. This map is only the fallback for
+// when the API omits price_usd (older rows) or is unreachable (offline UI) —
+// so it must still stay in lockstep with DEFAULT_VIDGO_PLANS.price_usd and the
+// locale `paypalPricingStrategy` copy. Still NOT FX-converted — literal values.
 const OVERSEAS_USD_MONTHLY: Record<string, number> = {
-  basic: 19.99,
-  pro: 49.99,
-  premium: 89.99,
+  basic: 22.99,
+  pro: 59.99,
+  premium: 99.99,
   enterprise: 0,  // Contact Us — render contact CTA, no buy button
 }
 
@@ -652,6 +654,14 @@ const CREDIT_PACK_USD_PRICE: Record<string, number> = {
 }
 
 function getOverseasUsdMonthly(plan: PlanInfo): number | null {
+  // Prefer the backend USD price so /admin/plans edits surface here without a
+  // code change. Fall back to OVERSEAS_USD_MONTHLY for rows missing price_usd
+  // or when offline. price_usd <= 0 (Enterprise / Contact Us) falls through to
+  // the map — which returns 0 → the template renders the contact CTA, not a
+  // "US$0.00" buy button.
+  if (typeof plan.price_usd === 'number' && plan.price_usd > 0) {
+    return plan.price_usd
+  }
   const key = (plan.name || plan.display_name || '').toLowerCase()
   return OVERSEAS_USD_MONTHLY[key] ?? null
 }

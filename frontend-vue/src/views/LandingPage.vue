@@ -406,29 +406,6 @@ function seasonLabel(preset: any, seasonId?: string): string {
   return cleaned || seasonTag || t('lp.seasonShowcase')
 }
 
-// Neutral, untagged product_scene presets used to pad a thin seasonal grid.
-// Most seasons have 0–1 topic-tagged materials, so a topic-only grid shows a
-// single tile (or the empty state) even though the section advertises four.
-// These generic studio shots are safe filler: the dropped-fallback note above
-// was about off-SEASON imagery (an autumn shot under 春季), not neutral product
-// photos — so we never borrow a sibling season's topic, only untagged scenes.
-// Fetched once and shared across every tab.
-let generalScenePromise: Promise<any[]> | null = null
-function loadGeneralScenes(): Promise<any[]> {
-  if (!generalScenePromise) {
-    generalScenePromise = (async () => {
-      try {
-        const client = (await import('@/api/client')).default
-        const resp = await client.get('/api/v1/demo/presets/product_scene?limit=8')
-        return resp.data?.presets || []
-      } catch {
-        return []
-      }
-    })()
-  }
-  return generalScenePromise
-}
-
 // Memoize per-topic preset fetches (perf audit #6). The `holiday` topic is
 // shared by 4 of the 5 seasons, so without this the same GET fired up to 4×.
 const topicPresetCache = new Map<string, Promise<any[]>>()
@@ -455,12 +432,16 @@ async function loadSeasonPresets(seasonId: string) {
   try {
     const topicResults = await Promise.all(season.topics.map(loadTopicPresets))
     const seen = new Set<string>()
+    // Only genuinely festival-tagged product scenes may appear here. We used to
+    // backfill a thin grid with neutral untagged studio shots, but seasonLabel()
+    // still stamped the festival name onto them ("農曆新年 · Hand-pour coffee…"),
+    // so a season with zero themed materials showed generic food photos falsely
+    // labelled as festival scenes — contradicting the tagline above. Now an
+    // unfilled season honestly falls through to the empty state
+    // (lp.seasonUnavailable, "行銷範例準備中") until topic-tagged product_scene
+    // materials are pregenerated (see scripts/main_pregenerate.py festival scenes).
     const tagged = topicResults.flat()
-    // Season-tagged presets lead; neutral studio shots backfill so the grid is
-    // never left with a lone tile (or empty) for the many seasons that have no
-    // dedicated material yet.
-    const presets = [...tagged, ...(await loadGeneralScenes())]
-    seasonData.value[seasonId] = presets
+    seasonData.value[seasonId] = tagged
       .filter((p: any) => p.result_watermarked_url || p.result_image_url || p.thumbnail_url)
       .filter((p: any) => {
         const key = p.id || p.result_image_url || p.thumbnail_url

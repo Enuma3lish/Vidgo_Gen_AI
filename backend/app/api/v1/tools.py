@@ -1963,7 +1963,11 @@ EXTERIOR_STYLES = [
      "prompt": "Mediterranean villa exterior with whitewashed lime plaster walls, blue wooden shutters, terracotta barrel-tile roof, climbing bougainvillea over arched entry, golden hour sunlight, photorealistic architectural visualization, no people no person no human"},
     {"id": "industrial_loft_facade", "name": "Industrial Loft", "name_zh": "工業 Loft 外觀",
      "prompt": "industrial loft exterior with exposed red brick, large black steel-framed factory windows, rooftop terrace with planter boxes, urban warehouse conversion, overcast even lighting, photorealistic architectural render, no people no person no human"},
+    # Explicit preview_url: id "tropical_resort" also exists in INTERIOR_STYLES,
+    # so the derived static/interior-styles/<id>.jpg path would collide — the
+    # interior render keeps the shared path, this one gets a namespaced file.
     {"id": "tropical_resort", "name": "Tropical Resort", "name_zh": "熱帶度假",
+     "preview_url": "https://storage.googleapis.com/vidgo-media-vidgo-ai/static/interior-styles/tropical_resort_exterior.jpg",
      "prompt": "tropical resort villa exterior, white stucco walls with teak wood accents, infinity pool reflecting palm trees, thatched accent canopy, vibrant garden landscaping, late afternoon sun, photorealistic architectural visualization, no people no person no human"},
     {"id": "midcentury_ranch", "name": "Mid-Century Ranch", "name_zh": "中世紀美式平房",
      "prompt": "mid-century modern ranch house exterior, low-pitched gable roof, exposed wood beams, butterfly carport, warm timber siding with stone accents, manicured lawn, dusk lighting, photorealistic architectural render, no people no person no human"},

@@ -648,9 +648,9 @@ const OVERSEAS_USD_MONTHLY: Record<string, number> = {
 // USD pricing for the three official credit packs (v2.1 spec).
 // Hardcoded — never auto-converted. Mirrors backend NEW_CREDIT_PACKAGE_DATA.
 const CREDIT_PACK_USD_PRICE: Record<string, number> = {
-  light_pack: 9.99,
-  standard_pack: 16.99,
-  heavy_pack: 32.99,
+  light_pack: 10.79,
+  standard_pack: 18.35,
+  heavy_pack: 35.62,
 }
 
 function getOverseasUsdMonthly(plan: PlanInfo): number | null {

@@ -52,14 +52,14 @@ const pricingFootnote = computed(() => {
 interface CreditTopUpPackage {
   id: string
   name: string
-  // Raw i18n inputs — displayName is derived at render time via packDisplayName()
-  // so it tracks locale changes after fetch (geo-detection can flip the locale
-  // from the boot-default zh-TW to en/ja/ko/es AFTER packages have been
-  // normalized, and a plain-string displayName would otherwise stay stuck in
-  // whatever language was active when the API response landed).
+  // Raw DB i18n inputs — displayName is derived at render time via
+  // packDisplayName() so it tracks locale changes after fetch. Geo-detection
+  // can flip the locale from the boot default (zh-TW) to en/ja/ko/es AFTER
+  // packages have been normalized, so we can NOT bake either a DB string
+  // (name_zh/name_en) or a t()-resolved fallback here — both would freeze in
+  // whatever language was active when the API response landed.
   nameZh: string | null
   nameEn: string | null
-  fallbackDisplayName: string
   credits: number
   price: number
   currency: string
@@ -147,7 +147,6 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
       name: 'light_pack',
       nameZh: null,
       nameEn: null,
-      fallbackDisplayName: t('pricing.creditPacks.fallbackNames.light'),
       credits: 250,
       price: 299,
       currency: 'TWD',
@@ -161,7 +160,6 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
       name: 'standard_pack',
       nameZh: null,
       nameEn: null,
-      fallbackDisplayName: t('pricing.creditPacks.fallbackNames.standard'),
       credits: 416,
       price: 499,
       currency: 'TWD',
@@ -175,7 +173,6 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
       name: 'heavy_pack',
       nameZh: null,
       nameEn: null,
-      fallbackDisplayName: t('pricing.creditPacks.fallbackNames.heavy'),
       credits: 833,
       price: 999,
       currency: 'TWD',
@@ -202,7 +199,6 @@ function normalizeCreditPackage(raw: any): CreditTopUpPackage {
     // the card but the title stays wrong.
     nameZh: raw.name_zh ?? null,
     nameEn: raw.name_en ?? raw.display_name ?? null,
-    fallbackDisplayName: fallback?.fallbackDisplayName ?? raw.name,
     credits,
     price,
     currency: 'TWD',
@@ -713,15 +709,31 @@ function getCurrencySymbol(plan: PlanInfo): string {
   return plan.currency?.toUpperCase() === 'USD' || isTestPlan(plan) ? 'US$' : 'NT$'
 }
 
+// Map official pack slug -> i18n fallback key. Used when the current locale
+// has no DB column (ja/ko/es only have name_zh/name_en) or the DB row didn't
+// carry a value — we look up t('pricing.creditPacks.fallbackNames.<key>') so
+// the title picks up the ja/ko/es translation instead of leaking English.
+const PACK_FALLBACK_KEY: Record<string, string> = {
+  light_pack: 'light',
+  standard_pack: 'standard',
+  heavy_pack: 'heavy',
+}
+
 // Resolves the pack card title against the CURRENT locale. Called from the
 // template so it re-computes when locale.value changes (see the comment on
 // CreditTopUpPackage.nameZh — geo-detection can flip the locale after fetch).
-// For ja/ko/es we prefer the i18n fallback (already localized) over the
-// English DB string, otherwise the English name leaks into those UIs.
+// Order per locale:
+//   zh-TW: DB name_zh -> i18n fallback -> DB name_en -> pkg.name
+//   en:    DB name_en -> i18n fallback -> pkg.name
+//   ja/ko/es: i18n fallback (localized) -> DB name_en -> pkg.name
+// For ja/ko/es we deliberately PREFER the i18n fallback over name_en so a
+// Japanese visitor sees "ライトパック" instead of the English "Light Pack".
 function packDisplayName(pkg: CreditTopUpPackage): string {
-  if (isZh.value) return pkg.nameZh || pkg.fallbackDisplayName || pkg.nameEn || pkg.name
-  if (isEn.value) return pkg.nameEn || pkg.fallbackDisplayName || pkg.name
-  return pkg.fallbackDisplayName || pkg.nameEn || pkg.name
+  const fallbackKey = PACK_FALLBACK_KEY[pkg.name]
+  const fallback = fallbackKey ? t(`pricing.creditPacks.fallbackNames.${fallbackKey}`) : ''
+  if (isZh.value) return pkg.nameZh || fallback || pkg.nameEn || pkg.name
+  if (isEn.value) return pkg.nameEn || fallback || pkg.name
+  return fallback || pkg.nameEn || pkg.name
 }
 
 function formatPackagePrice(pkg: CreditTopUpPackage): string {

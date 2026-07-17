@@ -52,7 +52,14 @@ const pricingFootnote = computed(() => {
 interface CreditTopUpPackage {
   id: string
   name: string
-  displayName: string
+  // Raw i18n inputs — displayName is derived at render time via packDisplayName()
+  // so it tracks locale changes after fetch (geo-detection can flip the locale
+  // from the boot-default zh-TW to en/ja/ko/es AFTER packages have been
+  // normalized, and a plain-string displayName would otherwise stay stuck in
+  // whatever language was active when the API response landed).
+  nameZh: string | null
+  nameEn: string | null
+  fallbackDisplayName: string
   credits: number
   price: number
   currency: string
@@ -138,7 +145,9 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
     {
       id: 'light_pack',
       name: 'light_pack',
-      displayName: t('pricing.creditPacks.fallbackNames.light'),
+      nameZh: null,
+      nameEn: null,
+      fallbackDisplayName: t('pricing.creditPacks.fallbackNames.light'),
       credits: 250,
       price: 299,
       currency: 'TWD',
@@ -150,7 +159,9 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
     {
       id: 'standard_pack',
       name: 'standard_pack',
-      displayName: t('pricing.creditPacks.fallbackNames.standard'),
+      nameZh: null,
+      nameEn: null,
+      fallbackDisplayName: t('pricing.creditPacks.fallbackNames.standard'),
       credits: 416,
       price: 499,
       currency: 'TWD',
@@ -162,7 +173,9 @@ function fallbackCreditPackages(): CreditTopUpPackage[] {
     {
       id: 'heavy_pack',
       name: 'heavy_pack',
-      displayName: t('pricing.creditPacks.fallbackNames.heavy'),
+      nameZh: null,
+      nameEn: null,
+      fallbackDisplayName: t('pricing.creditPacks.fallbackNames.heavy'),
       credits: 833,
       price: 999,
       currency: 'TWD',
@@ -181,18 +194,15 @@ function normalizeCreditPackage(raw: any): CreditTopUpPackage {
   return {
     id: String(raw.id ?? raw.name),
     name: String(raw.name),
-    // 2026-06-02 — DB only stores name_zh / name_en. For ja/ko/es prefer the
-    // i18n fallbackNames (already localized) over name_en, otherwise the
-    // English string would leak into the Japanese / Korean / Spanish UI.
-    displayName: (() => {
-      if (isZh.value) {
-        return raw.name_zh ?? fallback?.displayName ?? raw.display_name ?? raw.name
-      }
-      if (isEn.value) {
-        return raw.name_en ?? fallback?.displayName ?? raw.display_name ?? raw.name
-      }
-      return fallback?.displayName ?? raw.name_en ?? raw.display_name ?? raw.name
-    })(),
+    // Store the RAW i18n inputs — the actual pick between zh/en/fallback runs
+    // in packDisplayName() at render time. Baking a string here would freeze
+    // the pack title in whatever language was active when the API response
+    // landed, and if geo-detection later flips the locale from the boot
+    // default (zh-TW) to en/ja/ko/es, `t(...)` re-renders everywhere else on
+    // the card but the title stays wrong.
+    nameZh: raw.name_zh ?? null,
+    nameEn: raw.name_en ?? raw.display_name ?? null,
+    fallbackDisplayName: fallback?.fallbackDisplayName ?? raw.name,
     credits,
     price,
     currency: 'TWD',
@@ -703,6 +713,17 @@ function getCurrencySymbol(plan: PlanInfo): string {
   return plan.currency?.toUpperCase() === 'USD' || isTestPlan(plan) ? 'US$' : 'NT$'
 }
 
+// Resolves the pack card title against the CURRENT locale. Called from the
+// template so it re-computes when locale.value changes (see the comment on
+// CreditTopUpPackage.nameZh — geo-detection can flip the locale after fetch).
+// For ja/ko/es we prefer the i18n fallback (already localized) over the
+// English DB string, otherwise the English name leaks into those UIs.
+function packDisplayName(pkg: CreditTopUpPackage): string {
+  if (isZh.value) return pkg.nameZh || pkg.fallbackDisplayName || pkg.nameEn || pkg.name
+  if (isEn.value) return pkg.nameEn || pkg.fallbackDisplayName || pkg.name
+  return pkg.fallbackDisplayName || pkg.nameEn || pkg.name
+}
+
 function formatPackagePrice(pkg: CreditTopUpPackage): string {
   // Mirror the plan-card pricing rule: zh-TW visitors see NT$ (paid via
   // ECPay), everyone else sees US$ (paid via PayPal). Without this branch
@@ -1034,7 +1055,7 @@ onMounted(async () => {
 
               <div class="flex items-start justify-between gap-4 mb-5">
                 <div>
-                  <h3 class="text-xl font-semibold mb-1" style="color: #f5f5fa;">{{ pkg.displayName }}</h3>
+                  <h3 class="text-xl font-semibold mb-1" style="color: #f5f5fa;">{{ packDisplayName(pkg) }}</h3>
                   <p class="text-sm" style="color: #9494b0;">
                     {{ pkg.bonusPct > 0 ? t('pricing.creditPacks.bonusPct', { pct: pkg.bonusPct }) : t('pricing.creditPacks.flexibleTopup') }}
                   </p>
